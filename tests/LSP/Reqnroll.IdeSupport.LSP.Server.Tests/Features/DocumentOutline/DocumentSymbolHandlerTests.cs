@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.DocumentOutline;
 
-public class FeatureDocumentSymbolHandlerTests
+public class DocumentSymbolHandlerTests
 {
     private readonly IDocumentBufferService       _bufferService  = Substitute.For<IDocumentBufferService>();
     private readonly IGherkinDocumentSymbolService _symbolService  = Substitute.For<IGherkinDocumentSymbolService>();

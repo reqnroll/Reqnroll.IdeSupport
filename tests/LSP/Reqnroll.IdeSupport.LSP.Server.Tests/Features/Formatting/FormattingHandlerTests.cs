@@ -9,7 +9,7 @@ using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Formatting;
 
-public class GherkinFormattingHandlerTests
+public class FormattingHandlerTests
 {
     private const string FeatureText = "Feature: F\nScenario: S\n    Given a step\n";
 
@@ -21,7 +21,7 @@ public class GherkinFormattingHandlerTests
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    public GherkinFormattingHandlerTests()
+    public FormattingHandlerTests()
     {
         _bufferService.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>())
             .Returns(x =>

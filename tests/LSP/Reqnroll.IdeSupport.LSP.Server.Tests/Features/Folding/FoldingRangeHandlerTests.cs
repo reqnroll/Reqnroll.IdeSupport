@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Folding;
 
-public class FeatureFoldingRangeHandlerTests
+public class FoldingRangeHandlerTests
 {
     private readonly IDocumentBufferService         _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IGherkinFoldingRangeService     _foldingService = Substitute.For<IGherkinFoldingRangeService>();
