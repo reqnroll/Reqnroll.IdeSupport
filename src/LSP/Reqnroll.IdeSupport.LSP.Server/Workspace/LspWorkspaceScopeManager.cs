@@ -304,7 +304,11 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     /// <summary>Classifies whether <paramref name="uri"/> is <see cref="MembershipState.Owned"/> in the index, still <see cref="MembershipState.Pending"/> a covering project's baseline, or <see cref="MembershipState.Unowned"/>.</summary>
     public MembershipState GetMembershipState(DocumentUri uri)
     {
-        var filePath = uri.GetFileSystemPath() ?? string.Empty;
+        // Normalised once here (not just inside IsPathOwned) because filePath is also used
+        // below for the PathUtils.IsUnderFolder folder-prefix checks, which do no
+        // normalisation of their own -- unlike the membership-index lookup, which normalises
+        // internally regardless.
+        var filePath = MembershipIndex.NormaliseFilePath(uri.GetFileSystemPath() ?? string.Empty);
         if (string.IsNullOrEmpty(filePath))
             return MembershipState.Unowned;
 
