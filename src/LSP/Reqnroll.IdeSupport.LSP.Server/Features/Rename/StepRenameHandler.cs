@@ -272,25 +272,7 @@ public sealed class StepRenameHandler
         if (binding == null)
             return null;
 
-        SourceLocation bindingLocation;
-
-        // Use the binding's C# source location for FindUsages so we can find
-        // feature steps that reference this binding. For .feature-originated
-        // renames, the request path is the .feature file, not the .cs file.
-        if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) &&
-            binding.Implementation?.SourceLocation?.SourceFile != null)
-        {
-            bindingLocation = new SourceLocation(
-                binding.Implementation.SourceLocation.SourceFile,
-                binding.Implementation.SourceLocation.SourceFileLine,
-                binding.Implementation.SourceLocation.SourceFileColumn);
-            _logger.LogVerbose($"StepRenameHandler: using binding source location for FindUsages: {bindingLocation}");
-        }
-        else
-        {
-            bindingLocation = new SourceLocation(path, line, column);
-        }
-
+        var bindingLocation = ResolveBindingLocation(path, binding, line, column);
         var expression = binding.Expression ?? string.Empty;
 
         // ── 2. Resolve feature step locations ──────────────────────────────────
@@ -325,71 +307,21 @@ public sealed class StepRenameHandler
             return null;
         }
 
-        // Change-annotation negotiation (issue #70): a client that advertises both
-        // `documentChanges` and `changeAnnotationSupport` gets a grouped, labelled rename
-        // preview; everyone else (VS, per Phase 0's capability survey — see
-        // docs/Rename-ChangeAnnotations-Implementation-Plan.md) gets the legacy `Changes`
-        // shape, byte-identical to before this feature existed.
-        var workspaceEditCapability = _languageServer.ClientSettings?.Capabilities?.Workspace?.WorkspaceEdit;
-        var supportsChangeAnnotations = workspaceEditCapability is not null &&
-            workspaceEditCapability.Value.IsSupported &&
-            workspaceEditCapability.Value.Value?.DocumentChanges == true &&
-            workspaceEditCapability.Value.Value?.ChangeAnnotationSupport is not null;
+        var supportsChangeAnnotations = ClientSupportsChangeAnnotations();
 
         // A rename that touches more than one .feature file crosses file boundaries the user may
         // not have anticipated from a single step's rename prompt — ask the client to confirm
         // before applying, if it renders that confirmation (see WorkspaceEditBuilder's shape
         // negotiation; unsupported clients never see this flag).
         var featureFileCount = usages.Select(u => u.FeatureDocumentId).Distinct().Count();
-
-        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations);
-        builder.DeclareAnnotation(RenameChangeAnnotations.Feature,
-            new ChangeAnnotation
-            {
-                Label = $"Rename step usages → \"{effectiveNewName}\"",
-                NeedsConfirmation = featureFileCount > 1
-            });
-        builder.DeclareAnnotation(RenameChangeAnnotations.Binding,
-            new ChangeAnnotation { Label = "Update step-definition attribute" });
+        var builder = CreateEditBuilder(supportsChangeAnnotations, effectiveNewName, featureFileCount);
 
         // ── 4. Build .feature file edits ───────────────────────────────────────
-        foreach (var usage in usages)
-        {
-            var featureUri = DocumentUri.Parse(usage.FeatureDocumentId);
-
-            // Read the feature step text to preserve parameter values / placeholders
-            string? stepText = null;
-            if (usage.Range != null)
-            {
-                var stepRange = usage.Range.ToLspRange();
-                stepText = ReadStepText(featureUri, stepRange);
-            }
-
-            var featureNewText = FeatureStepTextBuilder.Build(effectiveNewName, sourceExpression, binding.Regex, stepText);
-            builder.Add(featureUri, usage.Range!.ToLspRange(), featureNewText, RenameChangeAnnotations.Feature);
-        }
+        AddFeatureFileEdits(builder, usages, effectiveNewName, sourceExpression, binding);
 
         // ── 5. Build .cs file edit ────────────────────────────────────────────
-        DocumentUri? csFileUri = null;
-        string? newCsText = null;
-        if (sourceLiteral != null)
-        {
-            var csEdit = _attributeLiteralResolver.BuildEdit(sourceLiteral, effectiveNewName);
-            if (csEdit != null)
-            {
-                csFileUri = path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-                    ? uri
-                    : DocumentUri.FromFileSystemPath(binding.Implementation!.SourceLocation!.SourceFile);
-                builder.Add(csFileUri, csEdit.Range, csEdit.NewText, RenameChangeAnnotations.Binding);
-
-                // Computed directly from the same Roslyn span BuildCSharpEdit used, so this is
-                // exact regardless of whether the .cs file is open or closed in the editor.
-                var sourceText = await sourceLiteral.SyntaxTree!.GetTextAsync(cancellationToken);
-                newCsText = sourceText
-                    .WithChanges(new Microsoft.CodeAnalysis.Text.TextChange(sourceLiteral.Token.Span, csEdit.NewText))
-                    .ToString();
-            }
-        }
+        var (csFileUri, newCsText) = await AddCSharpFileEditAsync(
+            builder, uri, path, binding, sourceLiteral, effectiveNewName, cancellationToken);
 
         if (builder.IsEmpty)
             return null;
@@ -418,6 +350,113 @@ public sealed class StepRenameHandler
         });
 
         return workspaceEdit;
+    }
+
+    /// <summary>
+    /// Resolves the source location to search for feature-step usages of <paramref name="binding"/>:
+    /// its own C# source location when the rename originated from a <c>.feature</c> file (the
+    /// request path isn't the <c>.cs</c> file in that case), otherwise the cursor position in the
+    /// requested <c>.cs</c> file.
+    /// </summary>
+    private SourceLocation ResolveBindingLocation(
+        string path, ProjectStepDefinitionBinding binding, int line, int column)
+    {
+        if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) &&
+            binding.Implementation?.SourceLocation?.SourceFile != null)
+        {
+            var bindingLocation = new SourceLocation(
+                binding.Implementation.SourceLocation.SourceFile,
+                binding.Implementation.SourceLocation.SourceFileLine,
+                binding.Implementation.SourceLocation.SourceFileColumn);
+            _logger.LogVerbose($"StepRenameHandler: using binding source location for FindUsages: {bindingLocation}");
+            return bindingLocation;
+        }
+
+        return new SourceLocation(path, line, column);
+    }
+
+    /// <summary>
+    /// Whether the connected client supports grouped, labelled rename previews via
+    /// <c>WorkspaceEdit.ChangeAnnotations</c> (issue #70): both <c>documentChanges</c> and
+    /// <c>changeAnnotationSupport</c> must be advertised. Everyone else (VS, per Phase 0's
+    /// capability survey — see docs/Rename-ChangeAnnotations-Implementation-Plan.md) gets the
+    /// legacy <c>Changes</c> shape, byte-identical to before this feature existed.
+    /// </summary>
+    private bool ClientSupportsChangeAnnotations()
+    {
+        var workspaceEditCapability = _languageServer.ClientSettings?.Capabilities?.Workspace?.WorkspaceEdit;
+        return workspaceEditCapability is not null &&
+            workspaceEditCapability.Value.IsSupported &&
+            workspaceEditCapability.Value.Value?.DocumentChanges == true &&
+            workspaceEditCapability.Value.Value?.ChangeAnnotationSupport is not null;
+    }
+
+    private static WorkspaceEditBuilder CreateEditBuilder(
+        bool supportsChangeAnnotations, string effectiveNewName, int featureFileCount)
+    {
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations);
+        builder.DeclareAnnotation(RenameChangeAnnotations.Feature,
+            new ChangeAnnotation
+            {
+                Label = $"Rename step usages → \"{effectiveNewName}\"",
+                NeedsConfirmation = featureFileCount > 1
+            });
+        builder.DeclareAnnotation(RenameChangeAnnotations.Binding,
+            new ChangeAnnotation { Label = "Update step-definition attribute" });
+        return builder;
+    }
+
+    private void AddFeatureFileEdits(
+        WorkspaceEditBuilder builder, IReadOnlyList<StepBindingMatch> usages,
+        string effectiveNewName, string sourceExpression, ProjectStepDefinitionBinding binding)
+    {
+        foreach (var usage in usages)
+        {
+            var featureUri = DocumentUri.Parse(usage.FeatureDocumentId);
+
+            // Read the feature step text to preserve parameter values / placeholders
+            string? stepText = null;
+            if (usage.Range != null)
+            {
+                var stepRange = usage.Range.ToLspRange();
+                stepText = ReadStepText(featureUri, stepRange);
+            }
+
+            var featureNewText = FeatureStepTextBuilder.Build(effectiveNewName, sourceExpression, binding.Regex, stepText);
+            builder.Add(featureUri, usage.Range!.ToLspRange(), featureNewText, RenameChangeAnnotations.Feature);
+        }
+    }
+
+    /// <summary>
+    /// Builds and adds the C# attribute edit to <paramref name="builder"/>, when
+    /// <paramref name="sourceLiteral"/> was resolved. Returns the edited file's URI and its full
+    /// post-edit text (computed directly from the same Roslyn span the edit used, so it's exact
+    /// regardless of whether the <c>.cs</c> file is open or closed in the editor) — both needed by
+    /// the caller to refresh server-side caches after the edit is applied.
+    /// </summary>
+    private async Task<(DocumentUri? CsFileUri, string? NewCsText)> AddCSharpFileEditAsync(
+        WorkspaceEditBuilder builder, DocumentUri uri, string path, ProjectStepDefinitionBinding binding,
+        Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax? sourceLiteral, string effectiveNewName,
+        CancellationToken cancellationToken)
+    {
+        if (sourceLiteral == null)
+            return (null, null);
+
+        var csEdit = _attributeLiteralResolver.BuildEdit(sourceLiteral, effectiveNewName);
+        if (csEdit == null)
+            return (null, null);
+
+        var csFileUri = path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            ? uri
+            : DocumentUri.FromFileSystemPath(binding.Implementation!.SourceLocation!.SourceFile);
+        builder.Add(csFileUri, csEdit.Range, csEdit.NewText, RenameChangeAnnotations.Binding);
+
+        var sourceText = await sourceLiteral.SyntaxTree!.GetTextAsync(cancellationToken);
+        var newCsText = sourceText
+            .WithChanges(new Microsoft.CodeAnalysis.Text.TextChange(sourceLiteral.Token.Span, csEdit.NewText))
+            .ToString();
+
+        return (csFileUri, newCsText);
     }
 
     // ── Custom request handlers ─────────────────────────────────────────────────
