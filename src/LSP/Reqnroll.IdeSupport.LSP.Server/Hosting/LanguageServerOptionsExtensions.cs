@@ -53,11 +53,11 @@ public static class LanguageServerOptionsExtensions
         options.AddHandler<TextDocumentSyncHandler>()
                .AddHandler<WorkspaceFoldersHandler>()
                .AddHandler<WatchedFilesHandler>()
-               .AddHandler<FeatureDefinitionHandler>()
-               .AddHandler<GherkinCompletionHandler>()
-               .AddHandler<FeatureCodeActionHandler>()
-               .AddHandler<GherkinFormattingHandler>()
-               .AddHandler<FeatureDocumentSymbolHandler>()
+               .AddHandler<DefinitionHandler>()
+               .AddHandler<CompletionHandler>()
+               .AddHandler<CodeActionHandler>()
+               .AddHandler<FormattingHandler>()
+               .AddHandler<DocumentSymbolHandler>()
                // F41: standard $/setTrace notification, letting the client change the trace
                // level at runtime.
                .AddHandler<SetTraceNotificationHandler>();
@@ -148,10 +148,10 @@ public static class LanguageServerOptionsExtensions
         // / Navigation Bar symbol source design, Option B) — distinct from
         // textDocument/documentSymbol, whose shape depends on the
         // real client's declared hierarchicalDocumentSymbolSupport capability. See remarks on
-        // FeatureDocumentSymbolHandler.HandleHierarchicalAsync.
+        // DocumentSymbolHandler.HandleHierarchicalAsync.
         options.OnRequest<DocumentSymbolParams, IReadOnlyList<DocumentSymbol>>(
             LspMethodNames.ReqnrollDocumentSymbolHierarchical,
-            (request, ct) => resolver!.Get<FeatureDocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
+            (request, ct) => resolver!.Get<DocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
 
         options.OnRequest<TextDocumentPositionParams, GoToStepDefinitionsResponse>(
             LspMethodNames.ReqnrollGoToStepDefinitions,
@@ -170,11 +170,11 @@ public static class LanguageServerOptionsExtensions
         // statically in the initialize response — see Program.ConfigureServer for why.
         options.OnRequest<InlayHintParams, InlayHintContainer?>(
             LspMethodNames.TextDocumentInlayHint,
-            (request, ct) => resolver!.Get<FeatureInlayHintHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver!.Get<InlayHintHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FoldingRangeRequestParam, Container<FoldingRange>?>(
             LspMethodNames.TextDocumentFoldingRange,
-            (request, ct) => resolver!.Get<FeatureFoldingRangeHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver!.Get<FoldingRangeHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FindUnusedStepDefinitionsParams, FindUnusedStepDefinitionsResponse>(
             LspMethodNames.ReqnrollFindUnusedStepDefinitions,

@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 /// Handles <c>textDocument/formatting</c> and <c>textDocument/rangeFormatting</c>
 /// LSP requests for <c>.feature</c> files (Document auto-formatting).
 /// </summary>
-public sealed class GherkinFormattingHandler
+public sealed class FormattingHandler
     : IDocumentFormattingHandler, IDocumentRangeFormattingHandler, IDocumentOnTypeFormattingHandler
 {
     private readonly IDocumentBufferService _documentBufferService;
@@ -37,8 +37,8 @@ public sealed class GherkinFormattingHandler
     private static readonly TextDocumentSelector FeatureSelector = new(
         new TextDocumentFilter { Scheme = "file", Pattern = "**/*.feature" });
 
-    /// <summary>Initializes a new instance of the <see cref="GherkinFormattingHandler"/> class.</summary>
-    public GherkinFormattingHandler(
+    /// <summary>Initializes a new instance of the <see cref="FormattingHandler"/> class.</summary>
+    public FormattingHandler(
         IDocumentBufferService documentBufferService,
         IEditorConfigOptionsProvider editorConfigOptionsProvider,
         IDeveroomConfigurationProvider configurationProvider,

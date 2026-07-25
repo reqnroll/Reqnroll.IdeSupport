@@ -20,7 +20,7 @@ public class FeatureDocumentSymbolHandlerTests
     private static readonly DocumentUri FeatureUri =
         DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    private FeatureDocumentSymbolHandler CreateSut() =>
+    private DocumentSymbolHandler CreateSut() =>
         new(_bufferService, _symbolService, _logger);
 
     private static DocumentSymbolParams RequestFor(DocumentUri uri) =>

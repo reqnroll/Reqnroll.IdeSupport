@@ -34,7 +34,7 @@ public class GherkinFormattingHandlerTests
             .Returns(Substitute.For<IEditorConfigOptions>());
     }
 
-    private GherkinFormattingHandler CreateSut() =>
+    private FormattingHandler CreateSut() =>
         new(_bufferService, _editorConfigOptionsProvider, _configProvider, _logger, _telemetryService);
 
     private static FormattingOptions Options() => new() { TabSize = 4, InsertSpaces = true };
@@ -77,7 +77,7 @@ public class GherkinFormattingHandlerTests
     {
         // On-type table formatting fires on every keystroke inside a table (|, tab, newline) —
         // a continuous editor feature, not a discrete user command, so it deliberately has no
-        // usage event (see FeatureCodeActionHandler/FindStepUsagesHandler for the "commands
+        // usage event (see CodeActionHandler/FindStepUsagesHandler for the "commands
         // only" telemetry scoping decision this mirrors).
         var request = new DocumentOnTypeFormattingParams
         {

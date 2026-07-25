@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
 /// <summary>
 /// LSP <c>SymbolKind</c> values used by <c>GherkinDocumentSymbolService</c> (LSP.Core) /
-/// <c>FeatureDocumentSymbolHandler</c> for Gherkin nodes. Kept in sync with the Document Outline
+/// <c>DocumentSymbolHandler</c> for Gherkin nodes. Kept in sync with the Document Outline
 /// design's mapping: Feature→Module, Background→Constructor, Rule→Namespace,
 /// Scenario/ScenarioOutline→Method, Step→Field, Examples→Array.
 /// </summary>

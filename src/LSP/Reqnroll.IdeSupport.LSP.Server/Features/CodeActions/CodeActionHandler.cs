@@ -23,7 +23,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// Registered via OmniSharp dynamic registration (<see cref="ICodeActionHandler"/>), scoped to
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
-public sealed class FeatureCodeActionHandler : ICodeActionHandler
+public sealed class CodeActionHandler : ICodeActionHandler
 {
     private readonly IBindingMatchService          _matchService;
     private readonly IStepScaffoldService          _scaffoldService;
@@ -33,8 +33,8 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureCodeActionHandler"/> class.</summary>
-    public FeatureCodeActionHandler(
+    /// <summary>Initializes a new instance of the <see cref="CodeActionHandler"/> class.</summary>
+    public CodeActionHandler(
         IBindingMatchService      matchService,
         IStepScaffoldService      scaffoldService,
         ILspWorkspaceScopeManager scopeManager,
@@ -75,7 +75,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
 
         if (!IsFeatureFile(uri))
         {
-            _logger.LogVerbose($"FeatureCodeActionHandler: ignoring non-.feature URI {uri}");
+            _logger.LogVerbose($"CodeActionHandler: ignoring non-.feature URI {uri}");
             return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
         }
 
@@ -91,7 +91,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         var allUndefined = matchSet?.Undefined.ToList() ?? new List<LSP.Core.Matching.StepBindingMatch>();
         if (allUndefined.Count == 0)
         {
-            _logger.LogVerbose($"FeatureCodeActionHandler: no undefined steps for {uri}");
+            _logger.LogVerbose($"CodeActionHandler: no undefined steps for {uri}");
             return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
         }
 
@@ -103,7 +103,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         var stepAtCursor = ResolveStepAtCursor(uri, request.Range.Start, matchSet);
         if (stepAtCursor is null || !stepAtCursor.IsUndefined)
         {
-            _logger.LogVerbose($"FeatureCodeActionHandler: no undefined step at the request position in {uri}");
+            _logger.LogVerbose($"CodeActionHandler: no undefined step at the request position in {uri}");
             return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
         }
 
@@ -179,7 +179,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
                 actions.Insert(0, new CommandOrCodeAction(singleAction));
         }
 
-        _logger.LogVerbose($"FeatureCodeActionHandler: {actions.Count} action(s) for {uri}");
+        _logger.LogVerbose($"CodeActionHandler: {actions.Count} action(s) for {uri}");
 
         // Telemetry: records that a "Define step(s)" action was *offered*, not that the user
         // accepted it — the CodeAction's WorkspaceEdit is applied entirely client-side

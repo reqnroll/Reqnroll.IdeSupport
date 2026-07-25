@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// "[When] CalculatorSteps.AddNumbers (Steps.cs:18)" rather than just "Steps.cs:18".
 /// </para>
 /// <para>
-/// The standard <c>textDocument/definition</c> handler (<see cref="FeatureDefinitionHandler"/>)
+/// The standard <c>textDocument/definition</c> handler (<see cref="DefinitionHandler"/>)
 /// is retained for generic LSP clients that do not understand this custom message.
 /// </para>
 /// </summary>

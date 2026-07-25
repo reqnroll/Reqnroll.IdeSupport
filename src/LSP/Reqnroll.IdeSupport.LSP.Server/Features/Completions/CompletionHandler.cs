@@ -31,7 +31,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 /// Registered via OmniSharp dynamic registration (<see cref="ICompletionHandler"/>), scoped to
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
-public sealed class GherkinCompletionHandler : ICompletionHandler
+public sealed class CompletionHandler : ICompletionHandler
 {
     private readonly ICompletionContextResolver    _contextResolver;
     private readonly ICompletionService            _completionService;
@@ -49,8 +49,8 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
     private const string KeywordCompletionOp = LspMethodNames.TextDocumentCompletion + "#keyword";
     private const string StepCompletionOp    = LspMethodNames.TextDocumentCompletion + "#step";
 
-    /// <summary>Initializes a new instance of the <see cref="GherkinCompletionHandler"/> class.</summary>
-    public GherkinCompletionHandler(
+    /// <summary>Initializes a new instance of the <see cref="CompletionHandler"/> class.</summary>
+    public CompletionHandler(
         ICompletionContextResolver    contextResolver,
         ICompletionService            completionService,
         ICompletionMatcher            matcher,
@@ -92,13 +92,13 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
 
         if (!IsFeatureFile(uri))
         {
-            _logger.LogVerbose($"GherkinCompletionHandler: ignoring non-.feature URI {uri}");
+            _logger.LogVerbose($"CompletionHandler: ignoring non-.feature URI {uri}");
             return Task.FromResult(new CompletionList());
         }
 
         if (!_bufferService.TryGet(uri, out var buffer) || buffer is null)
         {
-            _logger.LogVerbose($"GherkinCompletionHandler: no document buffer for {uri}");
+            _logger.LogVerbose($"CompletionHandler: no document buffer for {uri}");
             return Task.FromResult(new CompletionList());
         }
 
@@ -158,7 +158,7 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
             new Position(cursorLine, lineLength));
 
         _logger.LogVerbose(
-            $"GherkinCompletionHandler: {result.Entries.Count} step completion(s) for {uri}");
+            $"CompletionHandler: {result.Entries.Count} step completion(s) for {uri}");
         return new CompletionList(ToItems(result.Entries, stepRange));
     }
 
@@ -178,7 +178,7 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
         // the top completion. Suppress keyword completions for table rows entirely.
         if (lineText.TrimStart().StartsWith("|", StringComparison.Ordinal))
         {
-            _logger.LogVerbose("GherkinCompletionHandler: table row — suppressing keyword completions");
+            _logger.LogVerbose("CompletionHandler: table row — suppressing keyword completions");
 
             if (_clientIde.IsVisualStudio)
             {
@@ -219,7 +219,7 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
             new Position(cursorLine, kwEnd));
 
         _logger.LogVerbose(
-            $"GherkinCompletionHandler: {kwResult.Entries.Count} keyword completion(s)");
+            $"CompletionHandler: {kwResult.Entries.Count} keyword completion(s)");
         return new CompletionList(ToItems(kwResult.Entries, kwRange));
     }
 

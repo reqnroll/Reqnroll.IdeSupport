@@ -1,6 +1,6 @@
 Feature: Keyword Completion — VS Code protocol-level capability check (F7)
 
-The table-row cell-separator placeholder in GherkinCompletionHandler is a Visual Studio-only
+The table-row cell-separator placeholder in CompletionHandler is a Visual Studio-only
 workaround (VS 2022 treats an empty CompletionList for a trigger-character request as "reject
 and revert the typed character"). These scenarios start the server with --ide vscode to prove
 the workaround does not leak to VS Code, which handles an empty CompletionList correctly.

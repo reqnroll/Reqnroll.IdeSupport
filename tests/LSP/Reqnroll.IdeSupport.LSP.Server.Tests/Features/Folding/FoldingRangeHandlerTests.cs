@@ -18,7 +18,7 @@ public class FeatureFoldingRangeHandlerTests
     private static readonly DocumentUri FeatureUri =
         DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    private FeatureFoldingRangeHandler CreateSut() =>
+    private FoldingRangeHandler CreateSut() =>
         new(_bufferService, _foldingService, _logger);
 
     private static FoldingRangeRequestParam RequestFor(DocumentUri uri) =>

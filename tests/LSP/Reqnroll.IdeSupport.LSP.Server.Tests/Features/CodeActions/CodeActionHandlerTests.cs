@@ -50,7 +50,7 @@ public class FeatureCodeActionHandlerTests
                        .Returns(new DeveroomConfiguration());
     }
 
-    private FeatureCodeActionHandler CreateSut() =>
+    private CodeActionHandler CreateSut() =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _telemetryService);
 
     private static CodeActionParams RequestAt(DocumentUri uri, int line = 0) =>

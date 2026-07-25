@@ -50,7 +50,7 @@ public class FeatureDefinitionHandlerTests
         SetupBuffer(FeatureUri, FeatureText);
     }
 
-    private FeatureDefinitionHandler CreateSut() =>
+    private DefinitionHandler CreateSut() =>
         new(_matchService, _bufferService, _scopeManager, _logger);
 
     private static DefinitionParams RequestAt(DocumentUri uri, int line, int character) =>

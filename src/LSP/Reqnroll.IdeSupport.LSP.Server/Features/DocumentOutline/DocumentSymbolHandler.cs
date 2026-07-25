@@ -31,7 +31,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 /// against the flat <see cref="SymbolInformation"/> (location/containerName) shape it declared
 /// support for. VS Code/Rider are unaffected — they do declare hierarchical support.
 /// </remarks>
-public sealed class FeatureDocumentSymbolHandler : IDocumentSymbolHandler
+public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly IGherkinDocumentSymbolService _symbolService;
@@ -47,8 +47,8 @@ public sealed class FeatureDocumentSymbolHandler : IDocumentSymbolHandler
     // test constructing the handler directly) still gets the hierarchical shape by default.
     private bool _hierarchicalSupport = true;
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureDocumentSymbolHandler"/> class.</summary>
-    public FeatureDocumentSymbolHandler(
+    /// <summary>Initializes a new instance of the <see cref="DocumentSymbolHandler"/> class.</summary>
+    public DocumentSymbolHandler(
         IDocumentBufferService documentBufferService,
         IGherkinDocumentSymbolService symbolService,
         IIdeSupportLogger logger,

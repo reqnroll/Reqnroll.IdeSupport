@@ -33,7 +33,7 @@ public class FeatureInlayHintHandlerTests
                      .Returns((LspReqnrollProject?)null);
     }
 
-    private FeatureInlayHintHandler CreateSut() => new(_matchService, _scopeManager, _hintService, _logger);
+    private InlayHintHandler CreateSut() => new(_matchService, _scopeManager, _hintService, _logger);
 
     private static InlayHintParams RequestFor(DocumentUri uri, LspRange? range = null) => new()
     {

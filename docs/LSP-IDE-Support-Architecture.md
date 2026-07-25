@@ -376,7 +376,7 @@ LSP Client message
 
 The Protocol Handler is responsible for the initial synchronous state write; MediatR orchestrates the background fan-out — here, diagnostics aggregation and push — only.
 
-**`textDocument/codeAction` scope**: `FeatureCodeActionHandler` handles code actions on `.feature` files. Planned actions: "Define missing steps" (F6) and any future quick-fixes on Gherkin diagnostics. Code actions on `.cs` files (e.g., "Generate step definition from binding template") are feasible but deferred; they would be handled by a dedicated `.cs` code action handler. IDEs universally merge code actions from multiple registered language servers for the same file type — the Reqnroll server's actions will appear alongside those from the native C# server in the lightbulb menu without conflict.
+**`textDocument/codeAction` scope**: `CodeActionHandler` handles code actions on `.feature` files. Planned actions: "Define missing steps" (F6) and any future quick-fixes on Gherkin diagnostics. Code actions on `.cs` files (e.g., "Generate step definition from binding template") are feasible but deferred; they would be handled by a dedicated `.cs` code action handler. IDEs universally merge code actions from multiple registered language servers for the same file type — the Reqnroll server's actions will appear alongside those from the native C# server in the lightbulb menu without conflict.
 
 **Key protocol handler classes** (one per LSP capability group — several capabilities that a naive one-handler-per-message-type design might split apart are consolidated into a single class, noted below where relevant):
 
@@ -385,13 +385,13 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `TextDocumentSyncHandler` | `textDocument/didOpen`, `didChange`, `didClose` — a single handler covers **both** `.feature` and `.cs` documents, routed internally by file extension, rather than one handler per file type (this avoids OmniSharp's ambiguity when two `TextDocumentSyncHandlerBase` implementations claim overlapping documents) |
 | `WatchedFilesHandler` | `workspace/didChangeWatchedFiles` |
 | `SemanticTokensHandler` | `textDocument/semanticTokens/full`, `/delta` |
-| `FeatureDefinitionHandler` | `textDocument/definition` (from `.feature` cursors) |
-| `FeatureCodeActionHandler` | `textDocument/codeAction` |
-| `GherkinCompletionHandler` | `textDocument/completion`, `completionItem/resolve` |
-| `FeatureDocumentSymbolHandler` | `textDocument/documentSymbol` |
-| `FeatureFoldingRangeHandler` | `textDocument/foldingRange` |
-| `FeatureInlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FeatureFoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
-| `GherkinFormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
+| `DefinitionHandler` | `textDocument/definition` (from `.feature` cursors) |
+| `CodeActionHandler` | `textDocument/codeAction` |
+| `CompletionHandler` | `textDocument/completion`, `completionItem/resolve` |
+| `DocumentSymbolHandler` | `textDocument/documentSymbol` |
+| `FoldingRangeHandler` | `textDocument/foldingRange` |
+| `InlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
+| `FormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
 | `ReqnrollCommandHandler` | `workspace/executeCommand` |
 | `StepReferencesHandler` | `textDocument/references` (from `.cs` cursors; two-state) |
 | `FindStepUsagesHandler` | `reqnroll/findStepUsages` (custom; three-state: isBinding false / 0 usages / locations) |
@@ -622,9 +622,9 @@ For every shipped feature, each IDE's **client-side implementation** falls into 
 | F1 · Syntax Highlighting (semantic tokens) | OOB (`semanticTokenScopes` config) | **Custom** — `reqnroll/semanticTokens` push + `SemanticTokensClassificationInterceptor` + custom classifier, because VS's built-in colorizer only maps the ~23 standard token-type names and its pull is unreliable | Glue — standard pull, but a custom `TextAttributesKey` per legend name + `getTextAttributesKey` override, since Rider's default only maps standard types too | **Yes** — server only pushes `reqnroll/semanticTokens` when `--ide visualstudio` |
 | F2 · Binding/Project Discovery (`projectLoaded`/`projectFiles`/`projectUnloaded`) | Custom — `projectManager.ts` + `msbuildEvaluator.ts` shell out to `dotnet msbuild` | Custom — `VsProjectEventMonitor` via EnvDTE/CPS | Custom — `ReqnrollProjectFilesSync`/`ReqnrollRunnableProjectsListener` via Rider's backend project model | No |
 | F3/F4 · Diagnostics & Parse Errors | OOB (`textDocument/publishDiagnostics`) | OOB | OOB | No |
-| F5 · Go to Step Definition | **Custom** — `reqnroll/goToStepDefinitions` (`stepNavigation.ts`); see open question #126 on why this diverges from the other two | OOB (`textDocument/definition` via `FeatureDefinitionHandler`) | OOB — confirmed working via Rider's generic Go To Definition, no custom code | No |
+| F5 · Go to Step Definition | **Custom** — `reqnroll/goToStepDefinitions` (`stepNavigation.ts`); see open question #126 on why this diverges from the other two | OOB (`textDocument/definition` via `DefinitionHandler`) | OOB — confirmed working via Rider's generic Go To Definition, no custom code | No |
 | F6 · Define/Scaffold Steps (code action) | OOB (delegates to `editor.action.quickFix`) | OOB (native quick-fix UI; `ScaffoldTrackingInterceptor` is separate glue for a side effect — registering the newly-created file with the project-membership index — not the code action itself) | OOB — confirmed working via Rider's generic Alt+Enter quick-fix, no custom code | No |
-| F7/F8 · Keyword/Step Completion | OOB (`textDocument/completion`) | OOB | OOB | **Yes** — `GherkinCompletionHandler` special-cases VS's "empty `CompletionList` on a trigger char reverts the typed character" behavior |
+| F7/F8 · Keyword/Step Completion | OOB (`textDocument/completion`) | OOB | OOB | **Yes** — `CompletionHandler` special-cases VS's "empty `CompletionList` on a trigger char reverts the typed character" behavior |
 | F9 · Document Outline (hierarchical dropdown bar) | OOB (`textDocument/documentSymbol`, native Outline view) | **Custom** — `reqnroll/documentSymbolHierarchical` + `GherkinNavigationBarSymbolService`/`IVsDropdownBarClient`, since VS's classic dropdown bar needs a shape standard `documentSymbol` doesn't provide | **Glue** — `ReqnrollFeatureStructureViewBuilder`/`ReqnrollStructureToolWindowFactory` render a dedicated Structure View tool window (Alt+7) from the standard `documentSymbol` response, since Rider's declarative `structureViewBuilder` extension point threw `ClassCastException` on this platform version; a separate Navigation Bar/breadcrumbs implementation also ships (#161). Implemented, #163 | No |
 | F10 · Code Folding | OOB (`textDocument/foldingRange`) | OOB | Glue — `ReqnrollFeatureFoldingController` calls the standard request directly and renders via `Editor.foldingModel`, since Rider's generic client has no rendering-side consumer for folding either (#162) | No |
 | F11 · Document Auto-formatting | OOB | OOB | OOB (config opt-in: `lspFormattingSupport` property override activates the platform's generic `LspFormattingService`) | No |
@@ -807,11 +807,11 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 | `ReqnrollDiscovery` | Binding discovery completed (success/failure, step count) |
 | `CommandGoToStepDefinition` | F5 invoked |
 | `CommandGoToHook` | F17 invoked |
-| `CommandDefineSteps` | F6 invoked — **implemented** as `"DefineSteps command offered"` (`FeatureCodeActionHandler`), sent when the code action is *offered* (undefined-step count, actions-offered count). Not "action taken": the code action's `WorkspaceEdit` is applied entirely client-side (`workspace/applyEdit`), so — unlike F13's `workspace/executeCommand` round trip — the server has no signal for whether the user actually clicked it. Offered count is the closest available proxy |
+| `CommandDefineSteps` | F6 invoked — **implemented** as `"DefineSteps command offered"` (`CodeActionHandler`), sent when the code action is *offered* (undefined-step count, actions-offered count). Not "action taken": the code action's `WorkspaceEdit` is applied entirely client-side (`workspace/applyEdit`), so — unlike F13's `workspace/executeCommand` round trip — the server has no signal for whether the user actually clicked it. Offered count is the closest available proxy |
 | `CommandFindStepDefinitionUsages` | F14 invoked — **implemented** as `"FindStepDefinitionUsages command executed"` (`FindStepUsagesHandler`), with `UsagesCount` and a best-effort `IsCancelled` (`cancellationToken.IsCancellationRequested` at completion) |
 | `CommandFindUnusedStepDefinitions` | F15 invoked (unused count, files scanned) |
 | `CommandRenameStep` | F16 invoked |
-| `CommandAutoFormatDocument` | F11 invoked — **implemented** as `"AutoFormatDocument command executed"` (`GherkinFormattingHandler`), with an `IsSelectionFormatting` flag distinguishing whole-document from range formatting |
+| `CommandAutoFormatDocument` | F11 invoked — **implemented** as `"AutoFormatDocument command executed"` (`FormattingHandler`), with an `IsSelectionFormatting` flag distinguishing whole-document from range formatting |
 | `CommandAutoFormatTable` | F12 invoked — **deliberately not implemented**: on-type table formatting fires on every keystroke inside a table (`|`/tab/newline), not on a discrete user command, so it's scoped out of usage telemetry the same way the continuous editor features (semantic tokens, completion, etc.) are — perf sampling already covers it (`PerfTargets.OnTypeFormatting`) |
 | `CommandCommentUncomment` | F13 invoked |
 | `CommandAddFeatureFile` | New `.feature` item added |

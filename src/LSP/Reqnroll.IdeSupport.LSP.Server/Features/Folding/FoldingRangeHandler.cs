@@ -21,15 +21,15 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 /// window load — if the tab renders first, VS Code never re-checks for a provider for the rest
 /// of the session. Static declaration removes the race entirely.
 /// </remarks>
-public sealed class FeatureFoldingRangeHandler
+public sealed class FoldingRangeHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly IGherkinFoldingRangeService    _foldingService;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder     _recorder;
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureFoldingRangeHandler"/> class.</summary>
-    public FeatureFoldingRangeHandler(
+    /// <summary>Initializes a new instance of the <see cref="FoldingRangeHandler"/> class.</summary>
+    public FoldingRangeHandler(
         IDocumentBufferService documentBufferService,
         IGherkinFoldingRangeService foldingService,
         IIdeSupportLogger logger,
