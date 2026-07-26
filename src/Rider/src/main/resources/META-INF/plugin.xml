@@ -1,11 +1,11 @@
 <idea-plugin>
   <id>com.reqnroll.idesupport</id>
-  <name>Reqnroll</name>
+  <name>Reqnroll Extension for Rider (Preview)</name>
   <vendor url="https://github.com/reqnroll/Reqnroll.IdeSupport">Reqnroll</vendor>
 
   <description>
 <![CDATA[
-Experimental Reqnroll language support for Rider: Gherkin feature files and C# step-binding
+Preview Reqnroll language support for Rider: Gherkin feature files and C# step-binding
 navigation, backed by the Reqnroll.IdeSupport LSP server.
 ]]>
   </description>
