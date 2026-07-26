@@ -179,30 +179,7 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
         if (lineText.TrimStart().StartsWith("|", StringComparison.Ordinal))
         {
             _logger.LogVerbose("GherkinCompletionHandler: table row — suppressing keyword completions");
-
-            if (_clientIde.IsVisualStudio)
-            {
-                // VS 2022 treats an empty CompletionList for a trigger-character request as
-                // "reject and revert the typed character" — returning [] would delete the '|'
-                // from the document. Offer a no-op cell-separator item instead.
-                var insertPos = new Position(cursorLine, cursorChar);
-                return new CompletionList(new[]
-                {
-                    new CompletionItem
-                    {
-                        Label    = "| ",
-                        Detail   = "Table cell separator",
-                        Kind     = (CompletionItemKind)(int)CompletionEntryKind.Keyword,
-                        TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
-                        {
-                            Range   = new LspRange(insertPos, insertPos),
-                            NewText = "| "
-                        })
-                    }
-                });
-            }
-
-            return new CompletionList();
+            return BuildTableRowSuppressionResult(cursorLine, cursorChar);
         }
 
         var kwResult = k.ExpectedTokens.Length > 0
@@ -221,6 +198,37 @@ public sealed class GherkinCompletionHandler : ICompletionHandler
         _logger.LogVerbose(
             $"GherkinCompletionHandler: {kwResult.Entries.Count} keyword completion(s)");
         return new CompletionList(ToItems(kwResult.Entries, kwRange));
+    }
+
+    /// <summary>
+    /// Builds the result for a suppressed table-row keyword completion, per-IDE.
+    /// </summary>
+    /// <remarks>
+    /// VS 2022 treats an empty <see cref="CompletionList"/> for a trigger-character request as
+    /// "reject and revert the typed character" — returning an empty list would delete the '|'
+    /// from the document. Offer a no-op cell-separator item instead so VS accepts the character.
+    /// Every other client handles an empty list correctly, so they get the plain empty result.
+    /// </remarks>
+    private CompletionList BuildTableRowSuppressionResult(int cursorLine, int cursorChar)
+    {
+        if (!_clientIde.IsVisualStudio)
+            return new CompletionList();
+
+        var insertPos = new Position(cursorLine, cursorChar);
+        return new CompletionList(new[]
+        {
+            new CompletionItem
+            {
+                Label    = "| ",
+                Detail   = "Table cell separator",
+                Kind     = (CompletionItemKind)(int)CompletionEntryKind.Keyword,
+                TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit
+                {
+                    Range   = new LspRange(insertPos, insertPos),
+                    NewText = "| "
+                })
+            }
+        });
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
