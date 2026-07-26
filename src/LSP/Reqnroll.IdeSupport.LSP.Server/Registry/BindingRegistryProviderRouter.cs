@@ -144,17 +144,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
 
     private void OnProjectDiscovered(LspReqnrollProject project)
     {
-        var provider = new ConnectorBindingRegistryProvider(project, _logger);
-
-        // If we have an ILspTelemetryService, create a provider that can emit telemetry.
-        if (_telemetryService is not null)
-        {
-            provider = new ConnectorBindingRegistryProvider(
-                project,
-                new ConnectorDiscoveryService(_logger, new OutProcReqnrollConnectorFactory(_logger)),
-                _logger,
-                _telemetryService);
-        }
+        var provider = new ConnectorBindingRegistryProvider(project, _logger, _telemetryService);
 
         // Capture project in a named local so the closure below can reference it.
         // Store the delegate so Dispose can unsubscribe by identity.
