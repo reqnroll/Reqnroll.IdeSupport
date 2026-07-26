@@ -344,46 +344,18 @@ public record ProjectBindingRegistry
 
     /// <summary>
     /// Finds the first step-definition binding whose source location covers
-    /// <paramref name="location"/> (same file, line within leeway — see <see cref="CoversQuery"/>).
-    /// When the binding was syntax-discovered (<see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/>
-    /// is set), uses the exact attribute line for matching; otherwise falls back to a heuristic
-    /// line window to account for attributes above the method declaration.
+    /// <paramref name="location"/> (same file, line within leeway — see
+    /// <see cref="BindingLocationMatcher.CoversQuery"/>). When the binding was syntax-discovered
+    /// (<see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/> is set), uses the exact
+    /// attribute line for matching; otherwise falls back to a heuristic line window to account
+    /// for attributes above the method declaration.
     /// Returns <see langword="null"/> when no binding matches.
     /// </summary>
     public ProjectStepDefinitionBinding? FindBindingAtLocation(SourceLocation location)
     {
         return StepDefinitions
             .FirstOrDefault(b => b.Implementation.SourceLocation != null &&
-                CoversQuery(b, location));
-    }
-
-    // Mirrors BindingRegistryProviderRouter.CoversQuery — kept in sync manually.
-    // For syntax-discovered bindings (AttributeSourceLine != null), matches the exact
-    // attribute line or the method identifier line. For connector-discovered bindings,
-    // uses a 2-line heuristic window above the recorded method-location.
-    // Column is intentionally ignored: Gherkin/C# line-oriented lookups like
-    // this should match anywhere on the relevant line(s), not an exact column.
-    private static bool CoversQuery(ProjectStepDefinitionBinding binding, SourceLocation query)
-    {
-        var loc = binding.Implementation.SourceLocation;
-        if (loc == null)
-            return false;
-
-        if (!string.Equals(loc.SourceFile, query.SourceFile, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        // AST-based: when the attribute line is known, match it exactly or the method line.
-        if (binding.AttributeSourceLine.HasValue)
-        {
-            return query.SourceFileLine == binding.AttributeSourceLine.Value
-                   || query.SourceFileLine == loc.SourceFileLine;
-        }
-
-        // Fallback heuristic for connector-discovered bindings (PDB sequence points).
-        var endLine = loc.SourceFileEndLine ?? loc.SourceFileLine;
-        const int attributeLeeway = 2;
-        return query.SourceFileLine >= (loc.SourceFileLine - attributeLeeway)
-               && query.SourceFileLine <= endLine;
+                BindingLocationMatcher.CoversQuery(b, location));
     }
 
     private static string NormalizePath(string path)
