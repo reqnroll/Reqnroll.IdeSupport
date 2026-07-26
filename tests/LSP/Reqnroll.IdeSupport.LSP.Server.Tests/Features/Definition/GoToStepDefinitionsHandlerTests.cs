@@ -28,7 +28,7 @@ public class GoToStepDefinitionsHandlerTests
     private readonly IIdeSupportLogger            _logger        = Substitute.For<IIdeSupportLogger>();
     private readonly IFileSystemForIDE          _fileSystem    = new FileSystemForIDE();
 
-    // Feature layout — same as FeatureDefinitionHandlerTests:
+    // Feature layout — same as DefinitionHandlerTests:
     // Line 0: "Feature: F"         offsets  0–9  (\n at 10)
     // Line 1: "Scenario: S"        offsets 11–21 (\n at 22)
     // Line 2: "    Given a step"   offsets 23–38 (\n at 39)

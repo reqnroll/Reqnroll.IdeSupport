@@ -483,7 +483,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant FDH as FeatureDefinitionHandler
+        participant FDH as DefinitionHandler
         participant DB as Document Buffer
         participant BM as Binding Match Service
     end
@@ -533,7 +533,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant FCAH as FeatureCodeActionHandler
+        participant FCAH as CodeActionHandler
         participant BM as Binding Match Service
         participant SS as StepScaffoldService
         participant TDS as TextDocumentSyncHandler
@@ -563,7 +563,7 @@ sequenceDiagram
 
 #### Implementation notes
 
-- **Handler**: `GherkinCompletionHandler` (`LSP.Server/Handlers/ProtocolHandlers/`) implements `ICompletionHandler` and is registered via OmniSharp dynamic registration (`AddHandler<GherkinCompletionHandler>()`, document selector `**/*.feature`).
+- **Handler**: `CompletionHandler` (`LSP.Server/Handlers/ProtocolHandlers/`) implements `ICompletionHandler` and is registered via OmniSharp dynamic registration (`AddHandler<CompletionHandler>()`, document selector `**/*.feature`).
 - **Core logic**: `CompletionService.GetKeywordCompletions(TokenType[], GherkinDialect)` and `GetDefaultKeywordCompletions(GherkinDialect)` in `LSP.Core/Editor/Completions/`.
 - **Token dispatch**: `DeveroomGherkinDocument.GetExpectedTokens(line, monitoringService)` → switch on `TokenType`; fallback is the default keyword set (Feature, Scenario, steps).
 - **Keyword format**: Block keywords (FeatureLine, ScenarioLine, etc.) get `": "` appended because Gherkin dialect keywords have no trailing colon. Step keywords from the dialect already include a trailing space.
@@ -599,7 +599,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant GCH as GherkinCompletionHandler
+        participant GCH as CompletionHandler
         participant DB as Document Buffer
         participant CS as Completion Service
     end
@@ -622,7 +622,7 @@ sequenceDiagram
 
 #### Implementation notes
 
-- **Handler**: same `GherkinCompletionHandler` as F7. Step completion is dispatched when the cursor is on a step line (`DeveroomTagTypes.StepBlock` tag) and `cursorOffset >= stepTextStart` (past the keyword).
+- **Handler**: same `CompletionHandler` as F7. Step completion is dispatched when the cursor is on a step line (`DeveroomTagTypes.StepBlock` tag) and `cursorOffset >= stepTextStart` (past the keyword).
 - **Step text start**: `snapshotLine.Start + (step.Location.Column - 1) + step.Keyword.Length` (1-based Gherkin location, keyword includes trailing space).
 - **Core logic**: `CompletionService.GetStepCompletions(step, typedAfterKeyword, registry, usageCounter, matcher)` in `LSP.Core/Editor/Completions/`.
   - Filters `ProjectStepDefinitionBinding` by `ScenarioBlock` matching the step keyword.
@@ -660,7 +660,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant GCH as GherkinCompletionHandler
+        participant GCH as CompletionHandler
         participant DB as Document Buffer
         participant CS as Completion Service
         participant BR as Binding Registry
@@ -715,7 +715,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant FDSH as FeatureDocumentSymbolHandler
+        participant FDSH as DocumentSymbolHandler
         participant DB as Document Buffer
         participant SS as GherkinDocumentSymbolService
     end
@@ -730,7 +730,7 @@ sequenceDiagram
     IDE-->>IDE: Render outline panel
 ```
 
-`GherkinDocumentSymbolService` (`LSP.Core`) walks the `DeveroomTag` tree — the same tree F1's semantic tokens read — and returns a `GherkinDocumentSymbol` hierarchy as a protocol-agnostic model. `FeatureDocumentSymbolHandler` (`LSP.Server`) converts that into OmniSharp `DocumentSymbol[]` and registers via `AddHandler<>`. Symbol kind mapping: Feature→Module, Background→Constructor, Rule→Namespace, Scenario/ScenarioOutline→Method, Step→Field, Examples→Array. `DocumentSymbol.Children` is `init`-only, so children are wrapped in `Container<DocumentSymbol>` and set in the object initializer. VS Code and Rider receive the outline via this generic handler; Visual Studio's separate route is covered below.
+`GherkinDocumentSymbolService` (`LSP.Core`) walks the `DeveroomTag` tree — the same tree F1's semantic tokens read — and returns a `GherkinDocumentSymbol` hierarchy as a protocol-agnostic model. `DocumentSymbolHandler` (`LSP.Server`) converts that into OmniSharp `DocumentSymbol[]` and registers via `AddHandler<>`. Symbol kind mapping: Feature→Module, Background→Constructor, Rule→Namespace, Scenario/ScenarioOutline→Method, Step→Field, Examples→Array. `DocumentSymbol.Children` is `init`-only, so children are wrapped in `Container<DocumentSymbol>` and set in the object initializer. VS Code and Rider receive the outline via this generic handler; Visual Studio's separate route is covered below.
 
 ---
 
@@ -764,7 +764,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant FFRH as FeatureFoldingRangeHandler
+        participant FFRH as FoldingRangeHandler
         participant DB as Document Buffer
     end
 
@@ -815,7 +815,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant GFH as GherkinFormattingHandler
+        participant GFH as FormattingHandler
         participant CL as Config Loader
         participant DB as Document Buffer
         participant FS as Formatting Service
@@ -840,7 +840,7 @@ sequenceDiagram
 | `GherkinDocumentFormatter` | `LSP.Core/Editor/Services/Formatting/GherkinDocumentFormatter.cs` |
 | `GherkinFormatSettings` | `LSP.Core/Editor/Services/Formatting/GherkinFormatSettings.cs` |
 | `DocumentLinesEditBuffer` | `LSP.Core/Editor/Services/Formatting/DocumentLinesEditBuffer.cs` |
-| `GherkinFormattingHandler` | `LSP.Server/Handlers/ProtocolHandlers/GherkinFormattingHandler.cs` |
+| `FormattingHandler` | `LSP.Server/Handlers/ProtocolHandlers/FormattingHandler.cs` |
 | Unit tests | `LSP.Core.Tests/Editor/Services/Formatting/GherkinDocumentFormatterTests.cs` |
 | Spec tests | `LSP.Server.Specs/Features/Editor/DocumentFormatting.feature` |
 
@@ -884,7 +884,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant GOTFH as GherkinFormattingHandler
+        participant GOTFH as FormattingHandler
         participant FS as Formatting Service
     end
 
@@ -899,13 +899,13 @@ sequenceDiagram
 
 #### Implementation notes
 
-Implemented in the same `GherkinFormattingHandler` as F11:
+Implemented in the same `FormattingHandler` as F11:
 
 - **Trigger characters**: `|` (first), `\n` (more). `\t` was evaluated but VS 2022 routes Tab to the completion handler rather than `onTypeFormatting`, so it is omitted.
 - **Table detection**: `FindTableLineRange` scans up/down from cursor for lines whose `TrimStart()` begins with `|`. `FindTableAtLine` locates the Gherkin AST node (DataTable or Examples table) at that position for the formatter.
 - **`\n` trigger cursor handling**: When Enter is pressed, the cursor is on the new empty line below the last table row. `editEnd` is extended to `cursorLine` and the `newText` includes a trailing line-ending; the edit range end is `(cursorLine, 0)`. This is the `cursorBelowTable` pattern.
 - **Range end column**: `originalEditEndLineLength` is captured *before* calling `FormatTable` (which mutates the line array) so the range end column references the original document position.
-- **VS 2022 interaction**: VS has a built-in Gherkin language service that auto-inserts ` ` after `|` in table rows and routes `|`, ` `, `\r`, `\t` to its completion handler. When `textDocument/completion` for these triggers returns `[]`, VS reverts the typed character from the document. To prevent this, `GherkinCompletionHandler.HandleKeyword` checks `_clientIde.IsVisualStudio` (via the injected `ClientIdeContext`) and returns a single `| ` (cell separator) completion item with a zero-length insert range when the line starts with `|`. For VSCode/Rider (non-VS clients), an empty `CompletionList` is returned — the correct LSP response. VS-specific behaviour is covered by `KeywordCompletionVisualStudio.feature`; general behaviour by `KeywordCompletion.feature`. The on-type formatting edits are sent correctly by the server; VS's internal document-change pipeline may apply them with a delay or override them via its auto-insert mechanism.
+- **VS 2022 interaction**: VS has a built-in Gherkin language service that auto-inserts ` ` after `|` in table rows and routes `|`, ` `, `\r`, `\t` to its completion handler. When `textDocument/completion` for these triggers returns `[]`, VS reverts the typed character from the document. To prevent this, `CompletionHandler.HandleKeyword` checks `_clientIde.IsVisualStudio` (via the injected `ClientIdeContext`) and returns a single `| ` (cell separator) completion item with a zero-length insert range when the line starts with `|`. For VSCode/Rider (non-VS clients), an empty `CompletionList` is returned — the correct LSP response. VS-specific behaviour is covered by `KeywordCompletionVisualStudio.feature`; general behaviour by `KeywordCompletion.feature`. The on-type formatting edits are sent correctly by the server; VS's internal document-change pipeline may apply them with a delay or override them via its auto-insert mechanism.
 
 ---
 
@@ -1285,7 +1285,7 @@ sequenceDiagram
 
 #### Implementation notes
 
-- **LSP handler placement.** `StepRenameHandler` lives alongside the other OmniSharp handlers in `src/LSP/Reqnroll.IdeSupport.LSP.Server/Handlers/`. The handler registers for `textDocument/prepareRename` and `textDocument/rename` via the OmniSharp `ILanguageServer` router (same pattern as `FeatureDefinitionHandler`).
+- **LSP handler placement.** `StepRenameHandler` lives alongside the other OmniSharp handlers in `src/LSP/Reqnroll.IdeSupport.LSP.Server/Handlers/`. The handler registers for `textDocument/prepareRename` and `textDocument/rename` via the OmniSharp `ILanguageServer` router (same pattern as `DefinitionHandler`).
 - **Validator class.** The validation rules (Rules 1-8) are extracted to a shared `StepRenameValidator` in `LSP.Core/Rename/` to separate concerns from the OmniSharp handler layer and enable unit testing.
 - **Reuse existing expression parsing.** The Cucumber-expression parsing and parameter-slot extraction used by the existing VS `RenameStepCommand` lives in `Reqnroll.IdeSupport.Common/StepDefinitionExpressionParser`. The LSP server references the same library; `StepRenameValidator` delegates to it rather than reimplementing.
 - **WorkspaceEdit construction.** The `WorkspaceEdit` builder (`Changes` / `DocumentChanges` dictionary) is populated from two sources: (a) `StepDefinitionFileParser.GetAttributeStringInfo` result for the C# attribute string edit (span + replacement text with correct escaping), and (b) each matching `.feature` step location from the binding-match result (step `SourceLocation` → `TextEdit` replacing the step text).
@@ -1558,7 +1558,7 @@ Each defined step in a `.feature` file shows a dimmed, non-editable inline annot
 
 #### Implementation notes
 
-`GherkinInlayHintService` (`LSP.Core/InlayHints/`) projects a `FeatureBindingMatchSet` directly into `GherkinInlayHint`s — one per step with a `Defined`/`Ambiguous`/`Templated` result. `FeatureInlayHintHandler` (`LSP.Server/Features/InlayHints/`) resolves the requesting document's primary owner ([Q22](LSP-IDE-Support-Open-Questions.md) primary-owner rule) to key into `IBindingMatchService`, builds hints, then filters to the requested viewport. There is no per-request options object and no resolve support: the handler computes the full label *and* tooltip eagerly in one pass, and `InlayHintProvider.ResolveProvider = false` is declared statically — acceptable because the tooltip text (a method signature string, already resolved in the match set) is cheap to format with no I/O or additional lookups needed at hint-build time.
+`GherkinInlayHintService` (`LSP.Core/InlayHints/`) projects a `FeatureBindingMatchSet` directly into `GherkinInlayHint`s — one per step with a `Defined`/`Ambiguous`/`Templated` result. `InlayHintHandler` (`LSP.Server/Features/InlayHints/`) resolves the requesting document's primary owner ([Q22](LSP-IDE-Support-Open-Questions.md) primary-owner rule) to key into `IBindingMatchService`, builds hints, then filters to the requested viewport. There is no per-request options object and no resolve support: the handler computes the full label *and* tooltip eagerly in one pass, and `InlayHintProvider.ResolveProvider = false` is declared statically — acceptable because the tooltip text (a method signature string, already resolved in the match set) is cheap to format with no I/O or additional lookups needed at hint-build time.
 
 `GherkinInlayHintKind` has three values: `Binding` and `Ambiguous` cover a single row's step text resolving to one or several matches; `Templated` covers a Scenario Outline/Background step whose single merged `MatchResult` (one entry per template line, not per expanded example row) itself resolves to more than one *distinct* Defined binding across different rows, reported as `→ {n} bindings` and kept distinct from the `Ambiguous` case. There are no parameter-type hints (annotating captured-argument spans with `:type`) and no settings surface (`reqnroll.inlayHints.showBindingTarget` / `showParameterTypes`) — the feature is unconditionally on.
 

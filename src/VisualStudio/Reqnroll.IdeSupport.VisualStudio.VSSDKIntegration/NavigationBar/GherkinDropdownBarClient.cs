@@ -54,7 +54,7 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
     //
     // What the empty result actually races against: NOT step-binding computation — the Nav Bar's
     // structural symbols (Feature/Rule/Scenario/Background titles) come from
-    // FeatureDocumentSymbolHandler.GetSymbols, which only needs the document's own Gherkin tags
+    // DocumentSymbolHandler.GetSymbols, which only needs the document's own Gherkin tags
     // (GherkinDocumentTaggerService.ParseAsync) to exist; step-binding match data is a separate,
     // best-effort annotation the tagger skips gracefully when the project registry isn't ready,
     // not a precondition for structural tags. The real dependency is narrower: whether

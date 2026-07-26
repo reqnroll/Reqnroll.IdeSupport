@@ -14,7 +14,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.InlayHints;
 
-public class FeatureInlayHintHandlerTests
+public class InlayHintHandlerTests
 {
     private readonly BindingMatchService _matchService = new();
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
@@ -27,13 +27,13 @@ public class FeatureInlayHintHandlerTests
     private const string FeatureText =
         "Feature: F\nScenario: S\n    Given a step\n    And another step\n";
 
-    public FeatureInlayHintHandlerTests()
+    public InlayHintHandlerTests()
     {
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>())
                      .Returns((LspReqnrollProject?)null);
     }
 
-    private FeatureInlayHintHandler CreateSut() => new(_matchService, _scopeManager, _hintService, _logger);
+    private InlayHintHandler CreateSut() => new(_matchService, _scopeManager, _hintService, _logger);
 
     private static InlayHintParams RequestFor(DocumentUri uri, LspRange? range = null) => new()
     {

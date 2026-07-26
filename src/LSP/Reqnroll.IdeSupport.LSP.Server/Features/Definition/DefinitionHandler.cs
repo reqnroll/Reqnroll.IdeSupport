@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// <c>**/*.feature</c> files only.
 /// </para>
 /// </summary>
-public sealed class FeatureDefinitionHandler : IDefinitionHandler
+public sealed class DefinitionHandler : IDefinitionHandler
 {
     private readonly IBindingMatchService      _matchService;
     private readonly IDocumentBufferService    _bufferService;
@@ -33,8 +33,8 @@ public sealed class FeatureDefinitionHandler : IDefinitionHandler
     private readonly IOperationDurationRecorder _recorder;
     private readonly IFileSystemForIDE         _fileSystem;
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureDefinitionHandler"/> class.</summary>
-    public FeatureDefinitionHandler(
+    /// <summary>Initializes a new instance of the <see cref="DefinitionHandler"/> class.</summary>
+    public DefinitionHandler(
         IBindingMatchService      matchService,
         IDocumentBufferService    bufferService,
         ILspWorkspaceScopeManager scopeManager,
@@ -72,13 +72,13 @@ public sealed class FeatureDefinitionHandler : IDefinitionHandler
 
         if (!IsFeatureFile(uri))
         {
-            _logger.LogVerbose($"FeatureDefinitionHandler: ignoring non-.feature URI {uri}");
+            _logger.LogVerbose($"DefinitionHandler: ignoring non-.feature URI {uri}");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
         if (!_bufferService.TryGet(uri, out var buffer) || buffer is null)
         {
-            _logger.LogVerbose($"FeatureDefinitionHandler: no document buffer for {uri}");
+            _logger.LogVerbose($"DefinitionHandler: no document buffer for {uri}");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
@@ -94,14 +94,14 @@ public sealed class FeatureDefinitionHandler : IDefinitionHandler
         var docId = uri.ToString();
         if (!_matchService.TryGet(new MatchSetKey(docId, owner), out var matchSet) || matchSet is null)
         {
-            _logger.LogVerbose($"FeatureDefinitionHandler: no match set cached for {uri}");
+            _logger.LogVerbose($"DefinitionHandler: no match set cached for {uri}");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
         var step = matchSet.FindAt(offset);
         if (step is null)
         {
-            _logger.LogVerbose($"FeatureDefinitionHandler: no step at offset {offset} in {uri}");
+            _logger.LogVerbose($"DefinitionHandler: no step at offset {offset} in {uri}");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
@@ -115,12 +115,12 @@ public sealed class FeatureDefinitionHandler : IDefinitionHandler
         if (locations.Length == 0)
         {
             _logger.LogVerbose(
-                $"FeatureDefinitionHandler: step at offset {offset} in {uri} has no binding locations (undefined/ambiguous)");
+                $"DefinitionHandler: step at offset {offset} in {uri} has no binding locations (undefined/ambiguous)");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
         _logger.LogVerbose(
-            $"FeatureDefinitionHandler: {locations.Length} location(s) for step at offset {offset} in {uri}");
+            $"DefinitionHandler: {locations.Length} location(s) for step at offset {offset} in {uri}");
 
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(locations));
     }

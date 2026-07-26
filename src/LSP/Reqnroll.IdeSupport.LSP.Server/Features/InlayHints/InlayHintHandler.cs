@@ -26,7 +26,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 /// window load — if the tab renders first, VS Code never re-checks for a provider for the rest
 /// of the session. Static declaration removes the race entirely.
 /// </remarks>
-public sealed class FeatureInlayHintHandler
+public sealed class InlayHintHandler
 {
     private readonly IBindingMatchService      _matchService;
     private readonly ILspWorkspaceScopeManager _scopeManager;
@@ -34,8 +34,8 @@ public sealed class FeatureInlayHintHandler
     private readonly IIdeSupportLogger           _logger;
     private readonly IOperationDurationRecorder _recorder;
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureInlayHintHandler"/> class.</summary>
-    public FeatureInlayHintHandler(
+    /// <summary>Initializes a new instance of the <see cref="InlayHintHandler"/> class.</summary>
+    public InlayHintHandler(
         IBindingMatchService      matchService,
         ILspWorkspaceScopeManager scopeManager,
         IGherkinInlayHintService  hintService,
@@ -64,7 +64,7 @@ public sealed class FeatureInlayHintHandler
 
         if (!_matchService.TryGet(matchKey, out var matchSet) || matchSet is null)
         {
-            _logger.LogVerbose($"FeatureInlayHintHandler: no match set cached for {uri}");
+            _logger.LogVerbose($"InlayHintHandler: no match set cached for {uri}");
             return Task.FromResult<InlayHintContainer?>(new InlayHintContainer());
         }
 
@@ -73,7 +73,7 @@ public sealed class FeatureInlayHintHandler
             .Where(h => Intersects(h.Position, request.Range))
             .ToList();
 
-        _logger.LogVerbose($"FeatureInlayHintHandler: {hints.Count} hint(s) for {uri}");
+        _logger.LogVerbose($"InlayHintHandler: {hints.Count} hint(s) for {uri}");
         return Task.FromResult<InlayHintContainer?>(new InlayHintContainer(hints));
     }
 

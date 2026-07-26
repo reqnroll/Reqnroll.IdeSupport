@@ -23,7 +23,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeActions;
 
-public class FeatureCodeActionHandlerTests
+public class CodeActionHandlerTests
 {
     private readonly BindingMatchService         _matchService  = new();
     private readonly IStepScaffoldService        _scaffoldService = new StepScaffoldService();
@@ -40,7 +40,7 @@ public class FeatureCodeActionHandlerTests
     private static readonly DocumentUri FeatureUri =
         DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    public FeatureCodeActionHandlerTests()
+    public CodeActionHandlerTests()
     {
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>())
                      .Returns((LspReqnrollProject?)null);
@@ -52,7 +52,7 @@ public class FeatureCodeActionHandlerTests
                        .Returns(new DeveroomConfiguration());
     }
 
-    private FeatureCodeActionHandler CreateSut() =>
+    private CodeActionHandler CreateSut() =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem, _telemetryService);
 
     private static CodeActionParams RequestAt(DocumentUri uri, int line = 0) =>

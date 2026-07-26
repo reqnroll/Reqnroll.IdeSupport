@@ -19,7 +19,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 
-public class FeatureDefinitionHandlerTests
+public class DefinitionHandlerTests
 {
     // Use the real BindingMatchService to avoid NSubstitute out-param complexity.
     private BindingMatchService            _matchService  = new();
@@ -43,7 +43,7 @@ public class FeatureDefinitionHandlerTests
     private static readonly DocumentUri CsUri =
         DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
 
-    public FeatureDefinitionHandlerTests()
+    public DefinitionHandlerTests()
     {
         // Default: no primary owner
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>())
@@ -52,7 +52,7 @@ public class FeatureDefinitionHandlerTests
         SetupBuffer(FeatureUri, FeatureText);
     }
 
-    private FeatureDefinitionHandler CreateSut() =>
+    private DefinitionHandler CreateSut() =>
         new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem);
 
     private static DefinitionParams RequestAt(DocumentUri uri, int line, int character) =>
