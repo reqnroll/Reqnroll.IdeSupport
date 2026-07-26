@@ -22,17 +22,10 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     private readonly ConcurrentDictionary<string, LspProjectScope> _scopes
         = new(StringComparer.OrdinalIgnoreCase);
 
-    // ── Membership index (workspace scope / project membership tracking) ────
-    // path (normalised, OrdinalIgnoreCase) → { ProjectKey → ProjectFileRole }
-    private readonly Dictionary<string, Dictionary<ProjectKey, ProjectFileRole>> _membership
-        = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _membershipLock = new();
-    // project key → baseline-received flag
-    private readonly ConcurrentDictionary<ProjectKey, bool> _baselineReceived = new();
-    // project keys whose baseline arrived before the project itself registered (see
-    // HandleProjectFilesAsync / HandleProjectLoadedAsync) — the full re-scan that baseline
-    // would normally trigger is deferred here until the project actually loads.
-    private readonly ConcurrentDictionary<ProjectKey, bool> _pendingFullRescan = new();
+    // The Q17 project-membership index is a genuinely separate concern from workspace/project
+    // lifecycle tracking above; see MembershipIndex's own remarks for why it isn't fully
+    // independent (it needs FindProjectByKey, which only _scopes above can answer).
+    private readonly MembershipIndex _membershipIndex;
 
     /// <summary>Initializes a new instance of the <see cref="LspWorkspaceScopeManager"/> class.</summary>
     public LspWorkspaceScopeManager(IIdeScope ideScope, IIdeSupportLogger logger, IMediator mediator)
@@ -40,6 +33,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         _ideScope  = ideScope;
         _logger    = logger;
         _mediator  = mediator;
+        _membershipIndex = new MembershipIndex(logger, mediator, FindProjectByKey);
     }
 
     // ── Folder lifecycle ──────────────────────────────────────────────────────
@@ -138,7 +132,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         // attribute it to. Fire it now: any .cs buffers synced during the race window were
         // evaluated with zero known owners and would otherwise never be re-evaluated, silently
         // gating live Roslyn re-discovery for them until the next full build (issue #48).
-        if (_pendingFullRescan.TryRemove(MakeKey(project), out _))
+        if (_membershipIndex.TryConsumePendingFullRescan(project))
         {
             _logger.LogInfo(
                 $"[Membership] Firing deferred full re-scan for '{project.ProjectName}' now that the project has loaded.");
@@ -249,131 +243,18 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     }
 
     // ── Membership index (workspace scope / project membership tracking) ────
+    // Delegates to MembershipIndex (see its own remarks) for everything that doesn't also need
+    // _scopes-based folder-prefix fallback logic.
 
     /// <summary>Handles a <c>reqnroll/projectFiles</c> notification, applying it as a full baseline replacement or an incremental delta to the membership index.</summary>
-    public async Task HandleProjectFilesAsync(
+    public Task HandleProjectFilesAsync(
         ReqnrollProjectFilesParams parameters,
         CancellationToken cancellationToken)
-    {
-        var key = MakeKey(parameters.ProjectFile, parameters.TargetFrameworkMoniker);
-
-        if (parameters.Kind == ProjectFilesKind.Delta)
-        {
-            if (!_baselineReceived.ContainsKey(key))
-            {
-                _logger.LogVerbose(
-                    $"[Membership] Dropping delta for '{parameters.ProjectFile}': " +
-                    "no baseline received yet.");
-                return;
-            }
-            ApplyDelta(key, parameters.Files);
-
-            _logger.LogInfo(
-                $"[Membership] Applied delta for '{parameters.ProjectFile}' " +
-                $"[{parameters.TargetFrameworkMoniker}]: {parameters.Files.Length} change(s).");
-
-            // A binding-role file removed from the project (e.g. the user deletes a .cs
-            // step-definition file) must also have its stale entries purged from the project's
-            // binding registry -- otherwise the step keeps showing as bound until the next full
-            // build (issue #94). The membership index alone doesn't drive matching; the registry
-            // does, so BindingRegistryChangedHandler is handed the removed paths to reconcile.
-            var removedBindingPaths = parameters.Files
-                .Where(entry => !entry.Added && entry.Role == ProjectFileRole.Binding)
-                .Select(entry => entry.Path)
-                .ToList();
-
-            // The delta may re-attribute a file that's already open (e.g. Solution Explorer
-            // rename: the client's didClose/didOpen for the new URI typically reaches the server
-            // before this delta does, so its first parse/diagnostics pass ran with zero owners).
-            // Without this, that already-open buffer would show stale/empty diagnostics until
-            // the next full build or solution reload (issue #32).
-            var deltaProject = FindProjectByKey(key);
-            if (deltaProject is not null)
-            {
-                _ = _mediator.Publish(
-                    new BindingRegistryChangedNotification(
-                        deltaProject, false, removedBindingPaths),
-                    cancellationToken);
-            }
-            return;
-        }
-
-        // Baseline: replace this project's contribution wholesale.
-        lock (_membershipLock)
-        {
-            // Remove the project from every path it previously claimed.
-            foreach (var path in _membership.Keys.ToList())
-            {
-                var owners = _membership[path];
-                if (owners.Remove(key) && owners.Count == 0)
-                    _membership.Remove(path);
-            }
-
-            // Add all incoming paths.
-            foreach (var entry in parameters.Files)
-            {
-                var normPath = NormaliseFilePath(entry.Path);
-                if (!_membership.TryGetValue(normPath, out var owners))
-                {
-                    owners = new Dictionary<ProjectKey, ProjectFileRole>();
-                    _membership[normPath] = owners;
-                }
-                owners[key] = entry.Role;
-            }
-        }
-
-        _baselineReceived[key] = true;
-
-        _logger.LogInfo(
-            $"[Membership] Baseline received for '{parameters.ProjectFile}' " +
-            $"[{parameters.TargetFrameworkMoniker}]: {parameters.Files.Length} file(s).");
-
-        // Trigger a full re-scan for the project so diagnostics reflect the new index.
-        var project = FindProjectByKey(key);
-        if (project is not null)
-        {
-            _ = _mediator.Publish(
-                new BindingRegistryChangedNotification(project, true),
-                cancellationToken);
-        }
-        else
-        {
-            // The baseline raced ahead of `reqnroll/projectLoaded` (see issue #48): any .cs
-            // buffers already synced for this project were evaluated against zero known
-            // owners and, absent this flag, would never be re-evaluated once the project
-            // actually registers. HandleProjectLoadedAsync checks this flag and fires the
-            // deferred re-scan itself.
-            _pendingFullRescan[key] = true;
-            _logger.LogVerbose(
-                $"[Membership] No live project found for '{parameters.ProjectFile}'; " +
-                "re-scan deferred until the project loads.");
-        }
-    }
+        => _membershipIndex.HandleProjectFilesAsync(parameters, cancellationToken);
 
     /// <summary>Looks up every project that claims <paramref name="uri"/> via the membership index (does not fall back to folder-prefix matching).</summary>
     public IReadOnlyCollection<LspReqnrollProject> GetProjectsForUri(DocumentUri uri)
-    {
-        var filePath = NormaliseFilePath(uri.GetFileSystemPath() ?? string.Empty);
-        if (string.IsNullOrEmpty(filePath))
-            return [];
-
-        List<ProjectKey> keySnapshot;
-        lock (_membershipLock)
-        {
-            if (!_membership.TryGetValue(filePath, out var owners) || owners.Count == 0)
-                return [];
-            keySnapshot = owners.Keys.ToList();
-        }
-
-        var result = new List<LspReqnrollProject>(keySnapshot.Count);
-        foreach (var key in keySnapshot)
-        {
-            var project = FindProjectByKey(key);
-            if (project is not null)
-                result.Add(project);
-        }
-        return result;
-    }
+        => _membershipIndex.GetProjectsForUri(uri);
 
     /// <summary>Resolves the projects that own <paramref name="uri"/>, preferring the membership index and falling back to folder-prefix matching only while the covering project's baseline is still pending.</summary>
     public IReadOnlyCollection<LspReqnrollProject> ResolveOwners(DocumentUri uri)
@@ -423,15 +304,16 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     /// <summary>Classifies whether <paramref name="uri"/> is <see cref="MembershipState.Owned"/> in the index, still <see cref="MembershipState.Pending"/> a covering project's baseline, or <see cref="MembershipState.Unowned"/>.</summary>
     public MembershipState GetMembershipState(DocumentUri uri)
     {
-        var filePath = NormaliseFilePath(uri.GetFileSystemPath() ?? string.Empty);
+        // Normalised once here (not just inside IsPathOwned) because filePath is also used
+        // below for the PathUtils.IsUnderFolder folder-prefix checks, which do no
+        // normalisation of their own -- unlike the membership-index lookup, which normalises
+        // internally regardless.
+        var filePath = MembershipIndex.NormaliseFilePath(uri.GetFileSystemPath() ?? string.Empty);
         if (string.IsNullOrEmpty(filePath))
             return MembershipState.Unowned;
 
-        lock (_membershipLock)
-        {
-            if (_membership.ContainsKey(filePath))
-                return MembershipState.Owned;
-        }
+        if (_membershipIndex.IsPathOwned(filePath))
+            return MembershipState.Owned;
 
         // Any project that would cover this path via folder-prefix?
         var covering = _scopes.Values
@@ -458,7 +340,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         // Pending if any covering project has not yet sent a baseline.
         foreach (var project in covering)
         {
-            if (!_baselineReceived.ContainsKey(MakeKey(project)))
+            if (!_membershipIndex.HasBaselineForProject(project))
                 return MembershipState.Pending;
         }
 
@@ -467,66 +349,15 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
 
     /// <summary>Returns every file path in the membership index that <paramref name="project"/> owns with the <see cref="ProjectFileRole.Feature"/> role.</summary>
     public IReadOnlyCollection<string> GetIndexedFeatureFiles(LspReqnrollProject project)
-    {
-        var key = MakeKey(project);
-        lock (_membershipLock)
-        {
-            return _membership
-                .Where(kvp =>
-                    kvp.Value.TryGetValue(key, out var role) &&
-                    role == ProjectFileRole.Feature)
-                .Select(kvp => kvp.Key)
-                .ToList();
-        }
-    }
+        => _membershipIndex.GetIndexedFeatureFiles(project);
 
     /// <summary>Returns every file path in the membership index that <paramref name="project"/> owns with the <see cref="ProjectFileRole.Binding"/> role.</summary>
     public IReadOnlyCollection<string> GetBindingFilePathsForProject(LspReqnrollProject project)
-    {
-        var key = MakeKey(project);
-        lock (_membershipLock)
-        {
-            return _membership
-                .Where(kvp =>
-                    kvp.Value.TryGetValue(key, out var role) &&
-                    role == ProjectFileRole.Binding)
-                .Select(kvp => kvp.Key)
-                .ToList();
-        }
-    }
+        => _membershipIndex.GetBindingFilePathsForProject(project);
 
     /// <summary>Returns whether <paramref name="project"/> has received its initial full membership baseline yet.</summary>
     public bool HasBaselineForProject(LspReqnrollProject project)
-        => _baselineReceived.ContainsKey(MakeKey(project));
-
-    private void ApplyDelta(ProjectKey key, ProjectFileEntry[] entries)
-    {
-        lock (_membershipLock)
-        {
-            foreach (var entry in entries)
-            {
-                var normPath = NormaliseFilePath(entry.Path);
-                if (entry.Added)
-                {
-                    if (!_membership.TryGetValue(normPath, out var owners))
-                    {
-                        owners = new Dictionary<ProjectKey, ProjectFileRole>();
-                        _membership[normPath] = owners;
-                    }
-                    owners[key] = entry.Role;
-                }
-                else
-                {
-                    if (_membership.TryGetValue(normPath, out var owners))
-                    {
-                        owners.Remove(key);
-                        if (owners.Count == 0)
-                            _membership.Remove(normPath);
-                    }
-                }
-            }
-        }
-    }
+        => _membershipIndex.HasBaselineForProject(project);
 
     private LspReqnrollProject? FindProjectByKey(ProjectKey key)
     {
@@ -534,19 +365,10 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         return _scopes.Values
             .SelectMany(s => s.Projects)
             .FirstOrDefault(p => string.Equals(
-                NormaliseFilePath(p.ProjectFullName),
+                MembershipIndex.NormaliseFilePath(p.ProjectFullName),
                 key.ProjectFile,
                 StringComparison.OrdinalIgnoreCase));
     }
-
-    private static ProjectKey MakeKey(string projectFile, string tfm)
-        => new(NormaliseFilePath(projectFile), tfm);
-
-    private static ProjectKey MakeKey(LspReqnrollProject project)
-        => new(NormaliseFilePath(project.ProjectFullName), project.TargetFrameworkMoniker);
-
-    private static string NormaliseFilePath(string path)
-        => string.IsNullOrEmpty(path) ? path : Path.GetFullPath(path);
 
     // ── IDisposable ───────────────────────────────────────────────────────────
 
