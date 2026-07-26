@@ -116,75 +116,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
             return b.Length.CompareTo(a.Length); // longer first
         });
 
-        // Resolve overlapping tokens (LSP spec §3.16: tokens must not overlap).
-        //
-        // The canonical case is DefinedStep (function, spans full step text) containing
-        // one or more StepParameter (parameter) tokens within its span:
-        //
-        //   DefinedStep:   "I enter {string} as the username"   col 7..40
-        //   StepParameter: "admin"                              col 15..20
-        //
-        // Simple trimming (end the function token before the parameter) only works when
-        // the parameter is the LAST thing in the span.  When the parameter is in the
-        // middle — or there are multiple parameters — the remaining text after the
-        // parameter(s) would be left uncoloured.
-        //
-        // Algorithm: for each entry that has one or more later entries on the same line
-        // whose start falls strictly within its span, replace it with:
-        //   - a function-typed gap token for each non-parameter segment (if len > 0)
-        //   - the contained token(s) in place
-        //
-        // Because the list is sorted by (line, char), contained entries appear
-        // immediately after their container; the outer while-loop advances 'idx' past
-        // all entries consumed in each iteration, so each entry is emitted exactly once.
-        var resolved = new List<(int Line, int Char, int Length, int TypeIdx, int ModBits)>(
-            entries.Count * 2);
-        int idx = 0;
-        while (idx < entries.Count)
-        {
-            var (line, ch, len, type, mods) = entries[idx];
-            int spanEnd = ch + len;
-
-            // Count how many subsequent entries on the same line start inside this span.
-            int innerCount = 0;
-            for (int k = idx + 1; k < entries.Count; k++)
-            {
-                var (kLine, kCh, _, _, _) = entries[k];
-                if (kLine != line || kCh >= spanEnd) break;
-                innerCount++;
-            }
-
-            if (innerCount == 0)
-            {
-                resolved.Add((line, ch, len, type, mods));
-                idx++;
-            }
-            else
-            {
-                // Split the outer token around each inner token.
-                int cursor = ch;
-                for (int k = idx + 1; k <= idx + innerCount; k++)
-                {
-                    var (_, innerCh, innerLen, innerType, innerMods) = entries[k];
-
-                    // Gap before this inner token (may be zero-length at the very start).
-                    if (innerCh > cursor)
-                        resolved.Add((line, cursor, innerCh - cursor, type, mods));
-
-                    // The inner token itself.
-                    resolved.Add((line, innerCh, innerLen, innerType, innerMods));
-                    cursor = innerCh + innerLen;
-                }
-
-                // Trailing gap after the last inner token.
-                if (cursor < spanEnd)
-                    resolved.Add((line, cursor, spanEnd - cursor, type, mods));
-
-                // Advance past the outer entry and all consumed inner entries.
-                idx += 1 + innerCount;
-            }
-        }
-        entries = resolved;
+        entries = ResolveOverlaps(entries);
 
         var result = new List<int>(entries.Count * 5);
         int prevLine = 0, prevChar = 0;
@@ -205,6 +137,93 @@ public sealed class SemanticTokenService : ISemanticTokenService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Resolves overlapping tokens (LSP spec §3.16: tokens must not overlap) in a list already
+    /// sorted by (Line, Char) ascending, then Length descending at equal positions (a longer
+    /// outer token must sort before a shorter one it contains — <see cref="List{T}.Sort"/> is
+    /// not stable, so an inverted sort would make this method treat the outer token as
+    /// contained inside the inner one and produce inverted, nonsensical output).
+    /// <para>
+    /// The canonical case is DefinedStep (function, spans full step text) containing
+    /// one or more StepParameter (parameter) tokens within its span:
+    /// </para>
+    /// <para>
+    ///   DefinedStep:   "I enter {string} as the username"   col 7..40<br/>
+    ///   StepParameter: "admin"                              col 15..20
+    /// </para>
+    /// <para>
+    /// Simple trimming (end the function token before the parameter) only works when
+    /// the parameter is the LAST thing in the span. When the parameter is in the
+    /// middle — or there are multiple parameters — the remaining text after the
+    /// parameter(s) would be left uncoloured.
+    /// </para>
+    /// <para>
+    /// Algorithm: for each entry that has one or more later entries on the same line
+    /// whose start falls strictly within its span, replace it with:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>a function-typed gap token for each non-parameter segment (if len &gt; 0)</description></item>
+    ///   <item><description>the contained token(s) in place</description></item>
+    /// </list>
+    /// <para>
+    /// Because the list is sorted by (line, char), contained entries appear
+    /// immediately after their container; the outer while-loop advances 'idx' past
+    /// all entries consumed in each iteration, so each entry is emitted exactly once.
+    /// </para>
+    /// </summary>
+    internal static List<(int Line, int Char, int Length, int TypeIdx, int ModBits)> ResolveOverlaps(
+        List<(int Line, int Char, int Length, int TypeIdx, int ModBits)> sortedEntries)
+    {
+        var resolved = new List<(int Line, int Char, int Length, int TypeIdx, int ModBits)>(
+            sortedEntries.Count * 2);
+        int idx = 0;
+        while (idx < sortedEntries.Count)
+        {
+            var (line, ch, len, type, mods) = sortedEntries[idx];
+            int spanEnd = ch + len;
+
+            // Count how many subsequent entries on the same line start inside this span.
+            int innerCount = 0;
+            for (int k = idx + 1; k < sortedEntries.Count; k++)
+            {
+                var (kLine, kCh, _, _, _) = sortedEntries[k];
+                if (kLine != line || kCh >= spanEnd) break;
+                innerCount++;
+            }
+
+            if (innerCount == 0)
+            {
+                resolved.Add((line, ch, len, type, mods));
+                idx++;
+            }
+            else
+            {
+                // Split the outer token around each inner token.
+                int cursor = ch;
+                for (int k = idx + 1; k <= idx + innerCount; k++)
+                {
+                    var (_, innerCh, innerLen, innerType, innerMods) = sortedEntries[k];
+
+                    // Gap before this inner token (may be zero-length at the very start).
+                    if (innerCh > cursor)
+                        resolved.Add((line, cursor, innerCh - cursor, type, mods));
+
+                    // The inner token itself.
+                    resolved.Add((line, innerCh, innerLen, innerType, innerMods));
+                    cursor = innerCh + innerLen;
+                }
+
+                // Trailing gap after the last inner token.
+                if (cursor < spanEnd)
+                    resolved.Add((line, cursor, spanEnd - cursor, type, mods));
+
+                // Advance past the outer entry and all consumed inner entries.
+                idx += 1 + innerCount;
+            }
+        }
+        return resolved;
     }
 
     private static void CollectLeafTokens(

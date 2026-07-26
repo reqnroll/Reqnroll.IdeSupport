@@ -185,39 +185,7 @@ public class DeveroomTagParser : IDeveroomTagParser
                 continue;
 
             var match = bindingRegistry.MatchStep(step, scenarioDefinitionTag);
-            if (match.HasAmbiguous)
-            {
-                // Ambiguous: more than one binding matches — highlighted distinctly so the conflict
-                // is visible in the editor. Parameter tags are omitted because there is no single
-                // canonical binding whose parameters to highlight.
-                stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.AmbiguousStep,
-                    GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
-                    match));
-            }
-            else if (match.HasDefined)
-            {
-                stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.DefinedStep,
-                    GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
-                    match));
-                if (!(scenarioDefinition is ScenarioOutline) || !step.Text.Contains("<"))
-                {
-                    var parameterMatch = match.Items.First(m => m.ParameterMatch != null).ParameterMatch;
-                    AddParameterTags(fileSnapshot, parameterMatch, stepTag, step);
-                }
-            }
-
-            if (match.HasUndefined)
-                stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.UndefinedStep,
-                    GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
-                    match));
-
-            // Emit BindingError only for genuine errors (parameter-count mismatch, scope errors,
-            // etc.).  Ambiguity is already signalled by AmbiguousStep above; adding BindingError
-            // on top would cause the step to re-render as error-coloured instead of ambiguous.
-            if (match.HasErrors && !match.HasAmbiguous)
-                stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.BindingError,
-                    GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
-                    match.GetErrorMessage()));
+            AddStepBindingMatchTags(fileSnapshot, stepTag, step, scenarioDefinition, match);
         }
 
         if (scenarioDefinition is ScenarioOutline scenarioOutline)
@@ -248,6 +216,51 @@ public class DeveroomTagParser : IDeveroomTagParser
                 scenarioDefinitionTag.AddChild(hookReferenceTag);
             }
         }
+    }
+
+    /// <summary>
+    /// Adds the tag(s) reflecting a step's binding-match outcome (ambiguous/defined/undefined/
+    /// error), classified independently of the AST-walking loop that produced <paramref
+    /// name="match"/> — the four classifications aren't mutually exclusive at the type level
+    /// (e.g. a step can be both undefined-in-one-scope and erroring in another via multi-scope
+    /// matching), so each is checked separately rather than via a single switch.
+    /// </summary>
+    private void AddStepBindingMatchTags(IGherkinTextSnapshot fileSnapshot, DeveroomTag stepTag, Step step,
+        StepsContainer scenarioDefinition, MatchResult match)
+    {
+        if (match.HasAmbiguous)
+        {
+            // Ambiguous: more than one binding matches — highlighted distinctly so the conflict
+            // is visible in the editor. Parameter tags are omitted because there is no single
+            // canonical binding whose parameters to highlight.
+            stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.AmbiguousStep,
+                GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
+                match));
+        }
+        else if (match.HasDefined)
+        {
+            stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.DefinedStep,
+                GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
+                match));
+            if (!(scenarioDefinition is ScenarioOutline) || !step.Text.Contains("<"))
+            {
+                var parameterMatch = match.Items.First(m => m.ParameterMatch != null).ParameterMatch;
+                AddParameterTags(fileSnapshot, parameterMatch, stepTag, step);
+            }
+        }
+
+        if (match.HasUndefined)
+            stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.UndefinedStep,
+                GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
+                match));
+
+        // Emit BindingError only for genuine errors (parameter-count mismatch, scope errors,
+        // etc.).  Ambiguity is already signalled by AmbiguousStep above; adding BindingError
+        // on top would cause the step to re-render as error-coloured instead of ambiguous.
+        if (match.HasErrors && !match.HasAmbiguous)
+            stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.BindingError,
+                GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
+                match.GetErrorMessage()));
     }
 
     private void TagRowCells(IGherkinTextSnapshot fileSnapshot, TableRow row, DeveroomTag parentTag, string tagType)

@@ -145,6 +145,21 @@ public class FeatureStepTextBuilderTests
         result.Should().Be("hi world");
     }
 
+    [Fact]
+    public void Build_recognizes_unescaped_capturing_group_after_an_escaped_backslash()
+    {
+        // Two literal backslashes before '(' is an *escaped backslash* followed by a genuine,
+        // unescaped capturing group -- not an escaped '(' (which would be a single backslash).
+        // A naive one-character-lookback escape check misclassifies this as escaped and skips
+        // the group entirely, silently leaving the captured value un-injected (issue #273).
+        var result = FeatureStepTextBuilder.Build(
+            @"value \\(is captured)", oldExpression: null,
+            new Regex(@"^value (\d+)$"),
+            "value 42");
+
+        result.Should().Be(@"value \\42");
+    }
+
     // ── Scenario Outline with divergent step text ──────────────────────────────
     //    When the step text has been edited independently (e.g. user typed changes in
     //    the feature file), both static-segment alignment and regex may fail because

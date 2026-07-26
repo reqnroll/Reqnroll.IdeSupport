@@ -52,15 +52,21 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
     /// <summary>
     /// Creates a provider backed by the default connector-based discovery service
-    /// (generic/custom connector selected per project configuration).
+    /// (generic/custom connector selected per project configuration). This is the single place
+    /// that wiring happens, so callers (e.g. <see cref="BindingRegistryProviderRouter"/>) never
+    /// need to construct <see cref="ConnectorDiscoveryService"/>/<see cref="OutProcReqnrollConnectorFactory"/>
+    /// themselves.
     /// </summary>
-    public ConnectorBindingRegistryProvider(LspReqnrollProject project, IIdeSupportLogger logger,
-        IFileSystemForIDE? fileSystem = null)
-        : this(project,
-            new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger), fileSystem ?? new FileSystemForIDE()),
-            logger, null)
+    public ConnectorBindingRegistryProvider(
+        LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
+        ILspTelemetryService? telemetryService = null)
+        : this(project, CreateDefaultDiscoveryService(logger, fileSystem), logger, telemetryService)
     {
     }
+
+    private static IConnectorDiscoveryService CreateDefaultDiscoveryService(
+        IIdeSupportLogger logger, IFileSystemForIDE? fileSystem) =>
+        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger), fileSystem ?? new FileSystemForIDE());
 
     /// <summary>
     /// Creates a provider backed by a caller-supplied discovery service.  Used by tests to

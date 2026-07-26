@@ -121,38 +121,11 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
             foreach (var sd in registry.StepDefinitions)
             {
                 if (sd.Implementation?.SourceLocation == null) continue;
-                if (CoversQuery(sd, query))
+                if (BindingLocationMatcher.CoversQuery(sd, query))
                     return true;
             }
         }
         return false;
-    }
-
-    // Mirrors ProjectBindingRegistry.CoversQuery — kept in sync manually.
-    // For syntax-discovered bindings (AttributeSourceLine != null), matches the exact
-    // attribute line or the method identifier line. For connector-discovered bindings,
-    // uses a 2-line heuristic window above the recorded method-location.
-    private static bool CoversQuery(ProjectStepDefinitionBinding binding, SourceLocation query)
-    {
-        var loc = binding.Implementation.SourceLocation;
-        if (loc == null)
-            return false;
-
-        if (!string.Equals(loc.SourceFile, query.SourceFile, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        // AST-based: when the attribute line is known, match it exactly or the method line.
-        if (binding.AttributeSourceLine.HasValue)
-        {
-            return query.SourceFileLine == binding.AttributeSourceLine.Value
-                   || query.SourceFileLine == loc.SourceFileLine;
-        }
-
-        // Fallback heuristic for connector-discovered bindings (PDB sequence points).
-        var endLine = loc.SourceFileEndLine ?? loc.SourceFileLine;
-        const int attributeLeeway = 2;
-        return query.SourceFileLine >= (loc.SourceFileLine - attributeLeeway)
-               && query.SourceFileLine <= endLine;
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
@@ -175,17 +148,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
 
     private void OnProjectDiscovered(LspReqnrollProject project)
     {
-        var provider = new ConnectorBindingRegistryProvider(project, _logger, _fileSystem);
-
-        // If we have an ILspTelemetryService, create a provider that can emit telemetry.
-        if (_telemetryService is not null)
-        {
-            provider = new ConnectorBindingRegistryProvider(
-                project,
-                new ConnectorDiscoveryService(_logger, new OutProcReqnrollConnectorFactory(_logger), _fileSystem),
-                _logger,
-                _telemetryService);
-        }
+        var provider = new ConnectorBindingRegistryProvider(project, _logger, _fileSystem, _telemetryService);
 
         // Capture project in a named local so the closure below can reference it.
         // Store the delegate so Dispose can unsubscribe by identity.

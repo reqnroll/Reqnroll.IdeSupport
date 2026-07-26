@@ -24,6 +24,6 @@ export async function doToggleComment(client: LanguageClient): Promise<void> {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Toggle Comment failed — ${msg}`);
+    void vscode.window.showErrorMessage(`Reqnroll: Comment/Uncomment failed — ${msg}`);
   }
 }
