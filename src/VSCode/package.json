@@ -52,7 +52,7 @@
     "commands": [
       {
         "command": "reqnroll.toggleComment",
-        "title": "Reqnroll: Toggle Comment"
+        "title": "Reqnroll: Comment/Uncomment"
       },
       {
         "command": "reqnroll.findStepUsages",
