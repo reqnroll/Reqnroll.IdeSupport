@@ -133,7 +133,12 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IDeveroomTagParser, DeveroomTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch
             // whose binding expressions actually changed (BindingRegistryChangedHandler).
-            .AddSingleton<IFeatureRescanDebouncer, FeatureRescanDebouncer>();
+            .AddSingleton<IFeatureRescanDebouncer, FeatureRescanDebouncer>()
+            // Debounces MatchCacheChangedNotification-driven client refreshes (code lens, semantic
+            // tokens, inlay hints). Must be a singleton, unlike the MediatR handlers that use it —
+            // see IRefreshDebouncer's remarks for why a transient handler's own instance field
+            // can't debounce anything.
+            .AddSingleton<IRefreshDebouncer, RefreshDebouncer>();
     }
 
     /// <summary>

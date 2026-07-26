@@ -20,30 +20,34 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// Clicking a stale lens still worked (it reruns <c>findStepUsages</c> fresh), but the displayed
 /// count silently went stale until something else forced a recompute. Mirrors
 /// <see cref="SemanticTokensRefreshHandler"/>/<see cref="InlayHintRefreshHandler"/>: debounces bursts
-/// of match-cache notifications into a single refresh.
+/// of match-cache notifications into a single refresh via the shared <see cref="IRefreshDebouncer"/>
+/// singleton — not an instance field, since MediatR constructs a new handler instance per
+/// notification (see <see cref="IRefreshDebouncer"/>'s remarks), which previously meant every
+/// notification scheduled its own independent refresh instead of debouncing (issue #156).
 /// </remarks>
 public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
 {
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(500);
+    private const string DebounceKey = nameof(CodeLensRefreshHandler);
 
     private readonly ILanguageServerFacade _languageServer;
     private readonly ClientIdeContext _clientIde;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
-
-    private CancellationTokenSource? _debounceCts;
-    private readonly object _debounceLock = new object();
+    private readonly IRefreshDebouncer _debouncer;
 
     /// <summary>Initializes a new instance of the <see cref="CodeLensRefreshHandler"/> class.</summary>
     public CodeLensRefreshHandler(
         ILanguageServerFacade languageServer,
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
+        IRefreshDebouncer debouncer,
         IOperationDurationRecorder? recorder = null)
     {
         _languageServer = languageServer;
         _clientIde = clientIde;
         _logger = logger;
+        _debouncer = debouncer;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -52,34 +56,15 @@ public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNoti
     {
         _logger.LogVerbose($"MatchCacheChanged: scheduling code lens refresh for {notification.Uri} v{notification.Version}");
 
-        CancellationTokenSource newCts;
-        lock (_debounceLock)
-        {
-#pragma warning disable VSTHRD103 // Cancel() inside a lock; CancelAsync() cannot be awaited here
-            _debounceCts?.Cancel();
-#pragma warning restore VSTHRD103
-            _debounceCts?.Dispose();
-            newCts = _debounceCts = new CancellationTokenSource();
-        }
-
-        _ = SendRefreshAfterDelayAsync(newCts.Token);
+        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
         return Task.CompletedTask;
     }
 
-    private async Task SendRefreshAfterDelayAsync(CancellationToken debounceToken)
+    private async Task SendRefreshAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            await Task.Delay(DebounceDelay, debounceToken).ConfigureAwait(false);
-
-            using var _perf = _recorder.Measure(LspMethodNames.WorkspaceCodeLensRefresh);
-            await CodeLensRefreshRequester
-                .RequestRefreshAsync(_languageServer, _clientIde, _logger, projectName: string.Empty)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogVerbose("CodeLensRefreshHandler: debounce cancelled — superseded by newer notification");
-        }
+        using var _perf = _recorder.Measure(LspMethodNames.WorkspaceCodeLensRefresh);
+        await CodeLensRefreshRequester
+            .RequestRefreshAsync(_languageServer, _clientIde, _logger, projectName: string.Empty)
+            .ConfigureAwait(false);
     }
 }

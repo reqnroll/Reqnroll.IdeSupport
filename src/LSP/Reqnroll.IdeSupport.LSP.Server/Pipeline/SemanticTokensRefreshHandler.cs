@@ -16,30 +16,33 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// notification) so that it fires only after binding matches have been recomputed and
 /// the binding-overlay tags are current; refreshing earlier would re-encode pre-binding
 /// tokens. Multiple notifications can arrive in quick succession (e.g. when several files
-/// open at once, or a build replaces the registry). A debounce window collapses those
-/// bursts into a single <c>workspace/semanticTokens/refresh</c> request so the client is
-/// not flooded. The refresh is also guarded by a client-capability check: if the client
-/// did not advertise <c>workspace.semanticTokens.refreshSupport</c> the request is skipped.
+/// open at once, or a build replaces the registry). A debounce window, held in the shared
+/// <see cref="IRefreshDebouncer"/> singleton (not an instance field — MediatR constructs a new
+/// handler instance per notification, see that type's remarks), collapses those bursts into a
+/// single <c>workspace/semanticTokens/refresh</c> request so the client is not flooded. The
+/// refresh is also guarded by a client-capability check: if the client did not advertise
+/// <c>workspace.semanticTokens.refreshSupport</c> the request is skipped.
 /// </remarks>
 public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
 {
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(500);
+    private const string DebounceKey = nameof(SemanticTokensRefreshHandler);
 
     private readonly ILanguageServerFacade _languageServer;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
-
-    private CancellationTokenSource? _debounceCts;
-    private readonly object _debounceLock = new object();
+    private readonly IRefreshDebouncer _debouncer;
 
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensRefreshHandler"/> class.</summary>
     public SemanticTokensRefreshHandler(
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
+        IRefreshDebouncer debouncer,
         IOperationDurationRecorder? recorder = null)
     {
         _languageServer = languageServer;
         _logger = logger;
+        _debouncer = debouncer;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -54,27 +57,14 @@ public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChang
 
         _logger.LogVerbose($"MatchCacheChanged: scheduling semantic token refresh for {notification.Uri} v{notification.Version}");
 
-        // Debounce: cancel any pending refresh and start a new delayed one.
-        CancellationTokenSource newCts;
-        lock (_debounceLock)
-        {
-#pragma warning disable VSTHRD103 // Cancel() inside a lock; CancelAsync() cannot be awaited here
-            _debounceCts?.Cancel();
-#pragma warning restore VSTHRD103
-            _debounceCts?.Dispose();
-            newCts = _debounceCts = new CancellationTokenSource();
-        }
-
-        _ = SendRefreshAfterDelayAsync(newCts.Token);
+        _debouncer.Schedule(DebounceKey, DebounceDelay, SendRefreshAsync);
         return Task.CompletedTask;
     }
 
-    private async Task SendRefreshAfterDelayAsync(CancellationToken debounceToken)
+    private async Task SendRefreshAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await Task.Delay(DebounceDelay, debounceToken).ConfigureAwait(false);
-
             using var _perf = _recorder.Measure(LspMethodNames.WorkspaceSemanticTokensRefresh);
 
             _logger.LogVerbose("SemanticTokensRefreshHandler: sending workspace/semanticTokens/refresh");
@@ -82,10 +72,6 @@ public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChang
                 .SendRequest(WorkspaceNames.SemanticTokensRefresh)
                 .ReturningVoid(CancellationToken.None)
                 .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogVerbose("SemanticTokensRefreshHandler: debounce cancelled — superseded by newer notification");
         }
         catch (Exception ex)
         {
