@@ -29,14 +29,18 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <see cref="GetConnectionAsync"/> instead of paying launch latency on that path.
 /// </para>
 /// <para>
-/// <b>Known limitation:</b> <see cref="GetConnectionAsync"/> hands out the same cached pipe on
-/// every call. If VS activates the provider more than once in a session — the still-open
-/// multi-tab-restore duplicate-server race (VS restoring several .feature tabs at once can spawn
-/// a second LSP server process that ends up unmatched to any editor)
-/// — a second caller gets the same (already-consumed) pipe rather than a fresh process, which is
-/// different from (not necessarily better or worse than) the pre-existing behaviour of spinning up
-/// a second server. This is a deliberate scope boundary: solving the duplicate-activation race is
-/// tracked separately and was out of scope for making startup eager.
+/// <b>Issue #156:</b> <see cref="GetConnectionAsync"/> used to hand out the exact same
+/// <see cref="IDuplexPipe"/> on every call — fine as long as VS only ever calls
+/// <c>CreateServerConnectionAsync</c> once, but VS.Extensibility can and does call it again mid
+/// session (confirmed by decompiling VS's own LSP client host: it's by-design extension hot-reload
+/// support, not a VS bug). A second caller getting the same, already-in-use pipe corrupted the
+/// connection outright — <c>System.InvalidOperationException: Writing is not allowed after writer
+/// was completed</c> — the moment that happened. <see cref="GetConnectionAsync"/> now still awaits
+/// the same eagerly-started server process/pipe construction (only ever done once), but calls
+/// <see cref="LspInterceptingPipe.CreateFreshVsFacingPipe"/> fresh on every invocation, matching
+/// every Microsoft sample's <c>CreateServerConnectionAsync</c> implementation (each builds a new
+/// local duplex pipe pair per call rather than caching one). See that method's remarks for how the
+/// local relay pipe is swapped without disturbing the real, persistent server process connection.
 /// </para>
 /// </remarks>
 internal sealed class LspServerConnectionService : IDisposable
@@ -49,7 +53,9 @@ internal sealed class LspServerConnectionService : IDisposable
     // JoinableTask (not a plain Task) so GetConnectionAsync's await is JTF-aware — avoids the
     // VSTHRD003 "awaiting a foreign task" analyzer error for a task started outside the awaiting
     // method's own async context. StartAsync itself never touches the UI thread.
-    private readonly Microsoft.VisualStudio.Threading.JoinableTask<IDuplexPipe?> _startTask;
+    // Result is just success/failure now (issue #156): the actual IDuplexPipe handed to VS is no
+    // longer produced once and cached here -- see GetConnectionAsync/CreateFreshVsFacingPipe.
+    private readonly Microsoft.VisualStudio.Threading.JoinableTask<bool> _startTask;
 
     private Process? _serverProcess;
     private LspInspectorLogger? _inspectorLogger;
@@ -119,10 +125,20 @@ internal sealed class LspServerConnectionService : IDisposable
     public DocumentActivationState ActivationState => _activationState;
 
     /// <summary>
-    /// Awaits the (already-started) server process and pipe construction.
+    /// Awaits the (already-started) server process and pipe construction, then hands back a fresh
+    /// VS-facing <see cref="IDuplexPipe"/> for this call (issue #156 — see type remarks).
     /// </summary>
-    /// <returns>The VS-facing <see cref="IDuplexPipe"/>, or <c>null</c> if startup failed.</returns>
-    public Task<IDuplexPipe?> GetConnectionAsync() => _startTask.JoinAsync();
+    /// <returns>
+    /// A new <see cref="IDuplexPipe"/> each call, or <c>null</c> if server startup failed.
+    /// </returns>
+    public async Task<IDuplexPipe?> GetConnectionAsync()
+    {
+        var started = await _startTask.JoinAsync().ConfigureAwait(false);
+        if (!started || _interceptingPipe is null)
+            return null;
+
+        return _interceptingPipe.CreateFreshVsFacingPipe();
+    }
 
     /// <summary>
     /// Resolves the bundled LSP server executable path relative to the extension assembly's own
@@ -153,7 +169,7 @@ internal sealed class LspServerConnectionService : IDisposable
         "--ide visualstudio --log-level Warning --protocol-log-level Warning --trace Off";
 #endif
 
-    private async Task<IDuplexPipe?> StartAsync()
+    private async Task<bool> StartAsync()
     {
         var serverExe = ResolveServerExePath(typeof(LspServerConnectionService).Assembly.Location);
 
@@ -162,7 +178,7 @@ internal sealed class LspServerConnectionService : IDisposable
         if (!File.Exists(serverExe))
         {
             _logger.LogError("LspServerConnectionService: server executable not found at {ServerExe}.", serverExe);
-            return null;
+            return false;
         }
 
         try
@@ -273,12 +289,12 @@ internal sealed class LspServerConnectionService : IDisposable
             // own internal CTS (cancelled in Dispose) provides the shutdown signal.
             await _interceptingPipe.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
-            return _interceptingPipe.VsFacingPipe;
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "LspServerConnectionService: failed to start server.");
-            return null;
+            return false;
         }
     }
 
