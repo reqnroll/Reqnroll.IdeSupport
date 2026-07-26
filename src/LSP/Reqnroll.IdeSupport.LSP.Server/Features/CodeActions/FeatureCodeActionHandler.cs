@@ -136,24 +136,22 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         const string indent  = "    ";
         var          newLine = Environment.NewLine;
 
+        // Binds the target-file/style parameters shared by every "Define step(s)" action for
+        // this request, so the two call sites below only ever vary by title/steps — a future
+        // parameter added here (e.g. a different style per step) can't be updated in one call
+        // site and forgotten in the other.
+        CodeAction? BuildDefineStepsAction(string title, IEnumerable<LSP.Core.Matching.StepBindingMatch> steps) =>
+            BuildAction(title, steps, style, csharpConfig, className, @namespace, targetPath, indent, newLine);
+
         // Collect actions.
         var actions = new List<CommandOrCodeAction>();
 
         // ── "Define all missing steps in file" ─────────────────────────────────
         if (allUndefined.Count >= 1)
         {
-            var action = BuildAction(
-                title:          allUndefined.Count == 1
-                    ? "Define missing step"
-                    : "Define all missing steps in file",
-                steps:          allUndefined,
-                style:          style,
-                csharpConfig:   csharpConfig,
-                className:      className,
-                @namespace:     @namespace,
-                targetPath:     targetPath,
-                indent:         indent,
-                newLine:        newLine);
+            var action = BuildDefineStepsAction(
+                allUndefined.Count == 1 ? "Define missing step" : "Define all missing steps in file",
+                allUndefined);
 
             if (action is not null) actions.Add(new CommandOrCodeAction(action));
         }
@@ -164,16 +162,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         if (stepAtCursor != allUndefined[0])
         {
             var stepText = GetStepText(stepAtCursor);
-            var singleAction = BuildAction(
-                title:          $"Define step: {stepText}",
-                steps:          new[] { stepAtCursor },
-                style:          style,
-                csharpConfig:   csharpConfig,
-                className:      className,
-                @namespace:     @namespace,
-                targetPath:     targetPath,
-                indent:         indent,
-                newLine:        newLine);
+            var singleAction = BuildDefineStepsAction($"Define step: {stepText}", new[] { stepAtCursor });
 
             if (singleAction is not null)
                 actions.Insert(0, new CommandOrCodeAction(singleAction));
