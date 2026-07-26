@@ -2,8 +2,8 @@
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
     <Identity Id="Reqnroll.IdeSupport.VisualStudio.Extension.0dfcd8a9-b274-443a-b9bc-dc254ed209b9" Version="1.0" Language="en-US" Publisher="Reqnroll" />
-    <DisplayName>Reqnroll.IdeSupport.VisualStudio</DisplayName>
-    <Description>Experimental Visual Studio extension (for VS2022 and VS2026) for Reqnroll</Description>
+    <DisplayName>Reqnroll Extension for Visual Studio (Preview)</DisplayName>
+    <Description>Preview Visual Studio extension (for VS2022 and VS2026) for Reqnroll</Description>
     <Preview>true</Preview>
   </Metadata>
   <Installation ExtensionType="VSSDK+VisualStudio.Extensibility">
