@@ -25,10 +25,6 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 public class BindingImporter
 {
     private static readonly string[] EmptyParameterTypes = new string[0];
-    private static readonly string[] SingleStringParameterTypes = { TypeShortcuts.StringType };
-    private static readonly string[] DoubleStringParameterTypes = { TypeShortcuts.StringType, TypeShortcuts.StringType };
-    private static readonly string[] SingleIntParameterTypes = { TypeShortcuts.Int32Type };
-    private static readonly string[] SingleDataTableParameterTypes = { TypeShortcuts.ReqnrollTableType };
     private readonly Dictionary<string, ProjectBindingImplementation> _implementations = new();
 
     private readonly IIdeSupportLogger _logger;
@@ -210,17 +206,6 @@ public class BindingImporter
     {
         if (string.IsNullOrWhiteSpace(paramTypes))
             return EmptyParameterTypes;
-        switch (paramTypes)
-        {
-            case "s":
-                return SingleStringParameterTypes;
-            case "i":
-                return SingleIntParameterTypes;
-            case "s|s":
-                return DoubleStringParameterTypes;
-            case "st":
-                return SingleDataTableParameterTypes;
-        }
 
         var parts = paramTypes.Split('|');
         return parts.Select(ParseParameterType).ToArray();
