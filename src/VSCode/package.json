@@ -1,7 +1,7 @@
 {
   "name": "reqnroll-ide-support",
-  "displayName": "Reqnroll IDE Support",
-  "description": "[Experimental] Gherkin language support for Reqnroll — syntax highlighting, diagnostics, step navigation, completion, and more via the Reqnroll LSP server.",
+  "displayName": "Reqnroll Extension for VS Code (Preview)",
+  "description": "[Preview] Gherkin language support for Reqnroll — syntax highlighting, diagnostics, step navigation, completion, and more via the Reqnroll LSP server.",
   "version": "0.1.0",
   "publisher": "reqnroll",
   "license": "MIT",

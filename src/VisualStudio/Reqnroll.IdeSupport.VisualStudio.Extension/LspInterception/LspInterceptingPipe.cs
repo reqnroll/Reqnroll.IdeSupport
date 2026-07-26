@@ -31,6 +31,19 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <see cref="LspMessage"/>, runs the relevant interceptor list, then — if no interceptor
 /// consumed the message — re-encodes and forwards.
 /// </para>
+/// <para>
+/// <b>Issue #156:</b> VS.Extensibility can call <c>ReqnrollLanguageClient.CreateServerConnectionAsync</c>
+/// more than once in a session — decompiling VS's own LSP client host confirmed this is by design
+/// (extension hot-reload support), not a bug on VS's side, and every Microsoft sample builds a fresh
+/// <c>IDuplexPipe</c> per call rather than caching one. This type now supports that: the single,
+/// persistent <see cref="_serverPipe"/> connection to the actual server process never changes, but
+/// the local, in-memory "VS-facing" <see cref="Pipe"/> pair is recreated on every
+/// <see cref="CreateFreshVsFacingPipe"/> call. The always-running receive pump (server → VS
+/// direction) looks up the *current* VS-facing writer per frame rather than capturing one for its
+/// whole lifetime, and a fresh, session-scoped send pump (VS → server direction) is started for each
+/// new VS-facing pipe, replacing (and cancelling) the previous one. See that method's remarks for
+/// the abandoned-session cleanup.
+/// </para>
 /// </remarks>
 internal sealed class LspInterceptingPipe : IDisposable
 {
@@ -41,10 +54,14 @@ internal sealed class LspInterceptingPipe : IDisposable
     private readonly IReadOnlyList<ILspMessageInterceptor> _receiveInterceptors;
     private readonly ILogger<LspInterceptingPipe>       _logger;
 
-    // The two Pipe objects whose Reader/Writer ends form the VS-facing IDuplexPipe.
-    // VS reads from _toVsPipe.Reader; VS writes to _fromVsPipe.Writer.
-    private readonly Pipe _toVsPipe    = new Pipe();   // server → VS direction
-    private readonly Pipe _fromVsPipe  = new Pipe();   // VS → server direction
+    // The two Pipe objects whose Reader/Writer ends form the *current* VS-facing IDuplexPipe.
+    // VS reads from _toVsPipe.Reader; VS writes to _fromVsPipe.Writer. Replaced wholesale by
+    // CreateFreshVsFacingPipe on every CreateServerConnectionAsync call (issue #156) -- guarded by
+    // _vsPipeSwapLock since the persistent receive pump reads the current _toVsPipe reference
+    // concurrently with swaps happening on VS's calling thread.
+    private Pipe _toVsPipe   = new Pipe();   // server → VS direction
+    private Pipe _fromVsPipe = new Pipe();   // VS → server direction
+    private readonly object _vsPipeSwapLock = new object();
 
     // Serialises injected writes against the send pump so frames are not interleaved.
     private readonly SemaphoreSlim _injectLock = new SemaphoreSlim(1, 1);
@@ -59,8 +76,15 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private CancellationTokenSource? _linkedCts;
-    private Task? _sendPump;
-    private Task? _receivePump;
+    private CancellationToken        _lifetimeToken;
+    private Task?                    _receivePump;
+
+    // The current VS-facing session's send pump + its own cancellation, replaced on every
+    // CreateFreshVsFacingPipe call. Guarded by _vsPipeSwapLock alongside the Pipe fields above.
+    private CancellationTokenSource? _currentSendPumpCts;
+    private Task?                    _currentSendPump;
+    private int                      _sessionCounter;
+
     private bool _disposed;
 
     /// <summary>
@@ -87,74 +111,139 @@ internal sealed class LspInterceptingPipe : IDisposable
         _sendInterceptors    = sendInterceptors    ?? throw new ArgumentNullException(nameof(sendInterceptors));
         _receiveInterceptors = receiveInterceptors ?? throw new ArgumentNullException(nameof(receiveInterceptors));
         _logger              = logger              ?? throw new ArgumentNullException(nameof(logger));
-
-        // VS reads from _toVsPipe.Reader and writes to _fromVsPipe.Writer.
-        VsFacingPipe = new DuplexPipeAdapter(_toVsPipe.Reader, _fromVsPipe.Writer);
     }
 
     /// <summary>
-    /// The <see cref="IDuplexPipe"/> to hand to VS (<c>CreateServerConnectionAsync</c> return value).
-    /// </summary>
-    public IDuplexPipe VsFacingPipe { get; }
-
-    /// <summary>
-    /// Starts the two background pump tasks.  Returns immediately; pumps run until
-    /// the connection closes or <see cref="Dispose"/> is called.
+    /// Starts the persistent receive pump (server → VS direction, bound to the real server
+    /// process's stdout for the lifetime of this instance). Returns immediately; runs until the
+    /// connection closes or <see cref="Dispose"/> is called. Does <b>not</b> start a send pump or
+    /// hand back a VS-facing pipe — call <see cref="CreateFreshVsFacingPipe"/> for that, once per
+    /// <c>CreateServerConnectionAsync</c> call.
     /// </summary>
     public Task StartAsync(CancellationToken externalCancellation)
     {
-        _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, externalCancellation);
-        var ct     = _linkedCts.Token;
+        _linkedCts     = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, externalCancellation);
+        _lifetimeToken = _linkedCts.Token;
 
-        // VS writes to _fromVsPipe.Writer → SendPump reads _fromVsPipe.Reader → server stdin.
-        // lockDestination: true — this pump's destination (_serverPipe.Output) is the same
-        // stream SendNotificationToServerAsync/SendRequestToServerAsync inject into from other
-        // threads (e.g. a VS-side DTE event handler), so writes must be serialised against them.
-        _sendPump = PumpAsync(
-            source:          _fromVsPipe.Reader,
-            destination:     _serverPipe.Output,
-            interceptors:    _sendInterceptors,
-            direction:       LspMessageDirection.Send,
-            lockDestination: true,
-            ct:              ct);
-
-        // Server stdout → ReceivePump reads _serverPipe.Input → _toVsPipe.Writer → VS reads _toVsPipe.Reader.
-        // lockDestination: false — _toVsPipe.Writer has no other writer today.
-        _receivePump = PumpAsync(
-            source:          _serverPipe.Input,
-            destination:     _toVsPipe.Writer,
-            interceptors:    _receiveInterceptors,
-            direction:       LspMessageDirection.Receive,
-            lockDestination: false,
-            ct:              ct);
+        // Server stdout → ReceivePump reads _serverPipe.Input → current _toVsPipe.Writer → VS
+        // reads that pipe's Reader. The destination is looked up per frame (GetCurrentToVsWriter)
+        // rather than captured once, since CreateFreshVsFacingPipe can swap it out from under this
+        // long-running pump at any time.
+        _receivePump = ReceivePumpAsync(_lifetimeToken);
 
         return Task.CompletedTask;
     }
 
-    // ── Core pump loop ──────────────────────────────────────────────────────
+    /// <summary>
+    /// Creates a brand-new local VS-facing <see cref="Pipe"/> pair and returns the
+    /// <see cref="IDuplexPipe"/> to hand to VS as the <c>CreateServerConnectionAsync</c> result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Issue #156: VS can call <c>CreateServerConnectionAsync</c> more than once per session. The
+    /// previous implementation cached and returned the exact same <c>IDuplexPipe</c> every time,
+    /// which is fine if VS never calls twice but corrupts the connection the moment it does — a
+    /// second consumer writing to a <see cref="PipeWriter"/> the first consumer's disposal already
+    /// completed throws <c>InvalidOperationException: Writing is not allowed after writer was
+    /// completed</c>, exactly what was observed. This method instead gives every call a fresh,
+    /// never-before-used pipe pair, matching every Microsoft sample's
+    /// <c>CreateServerConnectionAsync</c> implementation (each builds a fresh
+    /// <c>FullDuplexStream.CreatePair()</c> inline, never caches).
+    /// </para>
+    /// <para>
+    /// The real server process connection (<see cref="_serverPipe"/>) is untouched by this — only
+    /// the local, in-memory relay pipes change. The previous session's send pump (VS → server) is
+    /// cancelled; its abandoned <c>_toVsPipe.Writer</c> (server → VS; ours to complete) is completed
+    /// so a lingering VS-side reader gets a clean EOF instead of an error. We don't touch the
+    /// abandoned <c>_fromVsPipe.Writer</c> (VS → server) since VS owns that end, not us.
+    /// </para>
+    /// </remarks>
+    public IDuplexPipe CreateFreshVsFacingPipe()
+    {
+        var newToVsPipe   = new Pipe();
+        var newFromVsPipe = new Pipe();
+        var newSendPumpCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeToken);
 
-    private async Task PumpAsync(
-        PipeReader                             source,
-        PipeWriter                             destination,
-        IReadOnlyList<ILspMessageInterceptor>  interceptors,
-        LspMessageDirection                    direction,
-        bool                                    lockDestination,
-        CancellationToken                      ct)
+        Pipe?                     oldToVsPipe;
+        CancellationTokenSource?  oldSendPumpCts;
+        int                       sessionId;
+
+        lock (_vsPipeSwapLock)
+        {
+            oldToVsPipe    = _toVsPipe;
+            oldSendPumpCts = _currentSendPumpCts;
+
+            _toVsPipe            = newToVsPipe;
+            _fromVsPipe          = newFromVsPipe;
+            _currentSendPumpCts  = newSendPumpCts;
+            sessionId            = ++_sessionCounter;
+        }
+
+        // Abandon the previous session: stop its send pump and let any lingering VS-side reader
+        // of the old server→VS pipe see a clean end-of-stream rather than an error.
+        oldSendPumpCts?.Cancel();
+        oldSendPumpCts?.Dispose();
+        try
+        {
+            oldToVsPipe?.Writer.Complete();
+        }
+        catch (Exception ex)
+        {
+            // Benign: e.g. already completed by a prior call, or a race with an in-flight
+            // ReceivePumpAsync write to the pipe we're abandoning right now (see that method's
+            // remarks on tolerating a stale-destination write failure).
+            _logger.LogDebug(ex, "LspInterceptingPipe: completing the abandoned server→VS pipe threw (benign).");
+        }
+
+        _logger.LogInformation(
+            "LspInterceptingPipe: CreateFreshVsFacingPipe — session #{SessionId} (issue #156: no longer " +
+            "handing back a cached, possibly-dead pipe on repeat CreateServerConnectionAsync calls).",
+            sessionId);
+
+        // VS → server direction for this session only. lockDestination: true -- this pump's
+        // destination (_serverPipe.Output) is the same stream SendNotificationToServerAsync/
+        // SendRequestToServerAsync inject into from other threads.
+        _currentSendPump = SendPumpAsync(newFromVsPipe.Reader, sessionId, newSendPumpCts.Token);
+
+        return new DuplexPipeAdapter(newToVsPipe.Reader, newFromVsPipe.Writer);
+    }
+
+    private PipeWriter GetCurrentToVsWriter()
+    {
+        lock (_vsPipeSwapLock)
+        {
+            return _toVsPipe.Writer;
+        }
+    }
+
+    // ── Pump loops ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Persistent, single-instance pump for the server → VS direction: reads
+    /// <see cref="_serverPipe"/>'s real stdout for the lifetime of this object, forwarding each
+    /// frame to whichever VS-facing pipe is <i>current</i> at that moment (see
+    /// <see cref="GetCurrentToVsWriter"/>). Must never exit while the server process is alive --
+    /// unlike <see cref="SendPumpAsync"/>, a failure here would silently stop relaying server output
+    /// to every future VS session, not just the current one. A write failure against a
+    /// possibly-stale destination (e.g. a race with <see cref="CreateFreshVsFacingPipe"/> completing
+    /// the pipe this frame was about to be written to) is therefore logged and tolerated rather than
+    /// treated as pump-ending.
+    /// </summary>
+    private async Task ReceivePumpAsync(CancellationToken ct)
     {
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                var frame = await ReadNextFrameAsync(source, ct).ConfigureAwait(false);
-
+                var frame = await ReadNextFrameAsync(_serverPipe.Input, ct).ConfigureAwait(false);
                 if (frame is null)
-                    break;
+                    break; // server process ended its stdout -- genuinely fatal, nothing more to relay.
 
                 var body = frame.Body;
                 if (body is null)
                 {
                     // Malformed JSON — forward raw bytes verbatim so the connection stays alive.
-                    await WriteFrameGuardedAsync(destination, frame.RawBytes, lockDestination, ct).ConfigureAwait(false);
+                    await ForwardToCurrentVsWriterAsync(frame.RawBytes, ct).ConfigureAwait(false);
                     continue;
                 }
 
@@ -168,33 +257,100 @@ internal sealed class LspInterceptingPipe : IDisposable
                 // and unlike an interceptor fault, this runs before LspInspectorLogger sees
                 // the message, so a silent failure here would leave no trace in the wire log.
                 var rawBytes = frame.RawBytes;
-                if (direction == LspMessageDirection.Receive)
+                try
                 {
-                    try
-                    {
-                        if (DriveLetterUriNormalizer.NormalizeInPlace(body))
-                            rawBytes = EncodeFrame(body);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex,
-                            "LspInterceptingPipe: DriveLetterUriNormalizer threw on message {Body}",
-                            body.ToString());
-                    }
+                    if (DriveLetterUriNormalizer.NormalizeInPlace(body))
+                        rawBytes = EncodeFrame(body);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "LspInterceptingPipe: DriveLetterUriNormalizer threw on message {Body}",
+                        body.ToString());
                 }
 
                 // Consume correlated responses before external interceptors so they never reach VS.
-                if (direction == LspMessageDirection.Receive && TryCompleteCorrelatedResponse(body))
+                if (TryCompleteCorrelatedResponse(body))
                     continue;
 
-                var message = new LspMessage(direction, body, DateTimeOffset.Now);
-                var result  = await RunInterceptorsAsync(message, interceptors, ct).ConfigureAwait(false);
+                var message = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.Now);
+                var result  = await RunInterceptorsAsync(message, _receiveInterceptors, ct).ConfigureAwait(false);
 
                 if (result == LspInterceptorResult.PassThrough)
-                    await WriteFrameGuardedAsync(destination, rawBytes, lockDestination, ct).ConfigureAwait(false);
+                    await ForwardToCurrentVsWriterAsync(rawBytes, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { /* normal shutdown */ }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "LspInterceptingPipe [Receive] pump faulted.");
+        }
+        finally
+        {
+            // Complete whichever VS-facing pipe is current at shutdown time; abandoned earlier
+            // sessions were already completed individually by CreateFreshVsFacingPipe.
+            try { await GetCurrentToVsWriter().CompleteAsync().ConfigureAwait(false); }
+            catch { /* best-effort at shutdown */ }
+        }
+    }
+
+    /// <summary>
+    /// Forwards one already-decoded frame to whichever VS-facing pipe is current, tolerating (log +
+    /// continue, per <see cref="ReceivePumpAsync"/>'s remarks) a write failure against a pipe a
+    /// concurrent <see cref="CreateFreshVsFacingPipe"/> call just abandoned and completed.
+    /// </summary>
+    private async Task ForwardToCurrentVsWriterAsync(byte[] rawFrame, CancellationToken ct)
+    {
+        try
+        {
+            await WriteFrameAsync(GetCurrentToVsWriter(), rawFrame, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (ObjectDisposedException) when (_disposed) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "LspInterceptingPipe [Receive]: forwarding a frame to the current VS-facing pipe failed " +
+                "(tolerated -- likely raced a CreateFreshVsFacingPipe swap; the next frame goes to " +
+                "whatever pipe is current then).");
+        }
+    }
+
+    /// <summary>
+    /// Session-scoped pump for the VS → server direction: reads one VS-facing session's
+    /// <c>_fromVsPipe.Reader</c> and forwards to the real, persistent <see cref="_serverPipe"/>
+    /// stdin. Unlike <see cref="ReceivePumpAsync"/>, ending this pump (for any reason, including an
+    /// unhandled exception) is <b>not</b> fatal to anything beyond this one session — a fresh one
+    /// replaces it on the next <see cref="CreateFreshVsFacingPipe"/> call.
+    /// </summary>
+    private async Task SendPumpAsync(PipeReader source, int sessionId, CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var frame = await ReadNextFrameAsync(source, ct).ConfigureAwait(false);
+                if (frame is null)
+                    break;
+
+                var body = frame.Body;
+                if (body is null)
+                {
+                    // Malformed JSON — forward raw bytes verbatim so the connection stays alive.
+                    await WriteFrameGuardedAsync(_serverPipe.Output, frame.RawBytes, lockDestination: true, ct)
+                        .ConfigureAwait(false);
+                    continue;
+                }
+
+                var message = new LspMessage(LspMessageDirection.Send, body, DateTimeOffset.Now);
+                var result  = await RunInterceptorsAsync(message, _sendInterceptors, ct).ConfigureAwait(false);
+
+                if (result == LspInterceptorResult.PassThrough)
+                    await WriteFrameGuardedAsync(_serverPipe.Output, frame.RawBytes, lockDestination: true, ct)
+                        .ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) { /* normal shutdown, or superseded by a fresh session */ }
         catch (ObjectDisposedException) when (_disposed)
         {
             // Expected shutdown race (issue #165): Dispose() cancels the pumps and disposes
@@ -204,16 +360,12 @@ internal sealed class LspInterceptingPipe : IDisposable
             // same Dispose() call, and the server reports a graceful exit immediately after.
             // Logged at Debug rather than Error so shutdown doesn't produce misleading noise.
             _logger.LogDebug(
-                "LspInterceptingPipe [{Direction}] pump observed a disposed semaphore during shutdown (benign).",
-                direction);
+                "LspInterceptingPipe [Send] pump (session #{SessionId}) observed a disposed semaphore " +
+                "during shutdown (benign).", sessionId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "LspInterceptingPipe [{Direction}] pump faulted.", direction);
-        }
-        finally
-        {
-            await destination.CompleteAsync().ConfigureAwait(false);
+            _logger.LogError(ex, "LspInterceptingPipe [Send] pump (session #{SessionId}) faulted.", sessionId);
         }
     }
 
@@ -388,8 +540,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// <see cref="SendNotificationToServerAsync"/>/<see cref="SendRequestToServerAsync"/> from
     /// other threads; without this, the pump's own passthrough write here could interleave with
     /// an injected write on the same unsynchronised <see cref="PipeWriter"/>, corrupting the
-    /// framing. The receive pump's destination has no other writer, so it passes
-    /// <c>lockDestination: false</c> and skips the lock.
+    /// framing.
     /// </summary>
     private async Task WriteFrameGuardedAsync(PipeWriter writer, byte[] rawFrame, bool lockDestination, CancellationToken ct)
     {
@@ -594,7 +745,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     // ── IDisposable ─────────────────────────────────────────────────────────
 
-    /// <summary>Cancels the pump tasks, faults any in-flight injected requests, and completes the VS-facing pipe.</summary>
+    /// <summary>Cancels the pump tasks, faults any in-flight injected requests, and completes the current VS-facing pipe.</summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -606,13 +757,18 @@ internal sealed class LspInterceptingPipe : IDisposable
         _cts.Dispose();
         _injectLock.Dispose();
 
+        lock (_vsPipeSwapLock)
+        {
+            _currentSendPumpCts?.Cancel();
+            _currentSendPumpCts?.Dispose();
+        }
+
         // Fault any in-flight injected requests so callers don't hang.
         foreach (var kv in _pendingRequests)
             kv.Value.TrySetCanceled();
         _pendingRequests.Clear();
 
-        _toVsPipe.Writer.Complete();
-        _fromVsPipe.Writer.Complete();
+        try { GetCurrentToVsWriter().Complete(); } catch { /* best-effort */ }
     }
 
     // ── Inner helper ────────────────────────────────────────────────────────
