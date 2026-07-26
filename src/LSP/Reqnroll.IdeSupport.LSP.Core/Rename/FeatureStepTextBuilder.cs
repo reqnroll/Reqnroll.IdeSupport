@@ -88,7 +88,7 @@ public static class FeatureStepTextBuilder
         for (int i = 0; i < newExpression.Length; i++)
         {
             // Detect start of a capturing group: unescaped '(' not followed by '?:' etc.
-            if (newExpression[i] == '(' && (i == 0 || newExpression[i - 1] != '\\'))
+            if (newExpression[i] == '(' && !IsEscaped(newExpression, i))
             {
                 if (i + 1 < newExpression.Length && newExpression[i + 1] == '?' && i + 2 < newExpression.Length)
                 {
@@ -101,8 +101,8 @@ public static class FeatureStepTextBuilder
                 int j = i + 1;
                 while (j < newExpression.Length && depth > 0)
                 {
-                    if (newExpression[j] == '(' && newExpression[j - 1] != '\\') depth++;
-                    else if (newExpression[j] == ')' && newExpression[j - 1] != '\\') depth--;
+                    if (newExpression[j] == '(' && !IsEscaped(newExpression, j)) depth++;
+                    else if (newExpression[j] == ')' && !IsEscaped(newExpression, j)) depth--;
                     j++;
                 }
 
@@ -133,6 +133,22 @@ public static class FeatureStepTextBuilder
             result.Append(newExpression, lastEnd, newExpression.Length - lastEnd);
 
         return result.Length > 0 ? result.ToString() : null;
+    }
+
+    /// <summary>
+    /// Returns whether the character at <paramref name="index"/> is escaped — preceded by an odd
+    /// number of consecutive backslashes. A single preceding backslash escapes the character; two
+    /// preceding backslashes form an escaped backslash followed by an unescaped character; and so
+    /// on by parity. Checking only the single immediately-preceding character (as a naive scan
+    /// would) misclassifies a real, unescaped <c>(</c>/<c>)</c> after an escaped backslash (e.g.
+    /// <c>\\(foo)</c> — an escaped backslash followed by a genuine capturing group).
+    /// </summary>
+    private static bool IsEscaped(string text, int index)
+    {
+        int backslashes = 0;
+        for (int i = index - 1; i >= 0 && text[i] == '\\'; i--)
+            backslashes++;
+        return backslashes % 2 != 0;
     }
 
     /// <summary>
