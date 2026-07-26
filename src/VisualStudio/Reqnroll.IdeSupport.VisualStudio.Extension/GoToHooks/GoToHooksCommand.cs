@@ -103,7 +103,7 @@ internal sealed class GoToHooksCommand : Command
             await NavigationPickerHelper.PickAndNavigateAsync(
                     targets,
                     _fileLogger,
-                    promptTitle: "Go to Hook",
+                    promptTitle: "Go to Hooks",
                     cancellationToken)
                 .ConfigureAwait(false);
         }
