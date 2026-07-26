@@ -209,7 +209,8 @@ public class Program
             // assignment sharing the same block.
             ApplyInitialTraceLevel();
             ApplySemanticTokensCapability();
-            ApplyStaticInlayHintAndFoldingCapabilities();
+            ApplyStaticInlayHintCapability();
+            ApplyStaticFoldingCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
 
@@ -240,20 +241,30 @@ public class Program
                 };
             }
 
-            // inlayHintProvider / foldingRangeProvider: declared statically (rather than left to
-            // OmniSharp's dynamic client/registerCapability negotiation) because vscode-languageclient's
-            // dynamic registration for these two races VS Code's restore of previously-open .feature
-            // tabs on window load. If the tab renders before the async client/registerCapability round
+            // inlayHintProvider: declared statically (rather than left to OmniSharp's dynamic
+            // client/registerCapability negotiation) because vscode-languageclient's dynamic
+            // registration for it races VS Code's restore of previously-open .feature tabs on
+            // window load. If the tab renders before the async client/registerCapability round
             // trip completes, VS Code never re-checks for a provider for the rest of the session —
             // closing/reopening the file or opening a different .feature file doesn't recover it. A
             // statically-declared capability is known to the client the instant initialize resolves,
-            // so there's no later round trip to lose the race against.
-            void ApplyStaticInlayHintAndFoldingCapabilities()
+            // so there's no later round trip to lose the race against. See
+            // ApplyStaticFoldingCapability for foldingRangeProvider, which hits the same race.
+            void ApplyStaticInlayHintCapability()
             {
                 response.Capabilities.InlayHintProvider = new InlayHintRegistrationOptions.StaticOptions
                 {
                     ResolveProvider = false
                 };
+            }
+
+            // foldingRangeProvider: declared statically for the same reason as
+            // ApplyStaticInlayHintCapability's inlayHintProvider — vscode-languageclient's dynamic
+            // client/registerCapability negotiation races VS Code's restore of previously-open
+            // .feature tabs on window load, and Rider hit an analogous startup race (#162) where
+            // folding stayed empty until the first post-load edit.
+            void ApplyStaticFoldingCapability()
+            {
                 response.Capabilities.FoldingRangeProvider = new FoldingRangeRegistrationOptions.StaticOptions();
             }
 
