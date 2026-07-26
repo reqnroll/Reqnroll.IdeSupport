@@ -136,6 +136,43 @@ public class RefreshDebouncerTests : IDisposable
     }
 
     [Fact]
+    public async Task Schedule_after_a_prior_run_for_the_same_key_completed_gets_a_fresh_uncancelled_token_and_runs()
+    {
+        // Simulates a transient handler instance created *after* an earlier instance's debounce
+        // window already fired and its CancellationTokenSource was disposed/removed from _pending
+        // -- as opposed to the burst scenarios above, where a later Schedule call overlaps a still-
+        // pending one and cancels it. The later call here must still get its own independent, live
+        // token rather than somehow observing the earlier (already-fired) one as cancelled.
+        var firstRan = new TaskCompletionSource();
+        var secondRan = new TaskCompletionSource();
+        CancellationToken secondToken = default;
+
+        _sut.Schedule("k", TimeSpan.FromMilliseconds(20), _ =>
+        {
+            firstRan.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        var firstCompleted = await Task.WhenAny(firstRan.Task, Task.Delay(2000));
+        firstCompleted.Should().BeSameAs(firstRan.Task, "the first scheduled run should complete before the second is scheduled");
+
+        // Give the debouncer a moment to remove and dispose its now-finished entry for "k".
+        await Task.Delay(50);
+
+        _sut.Schedule("k", TimeSpan.FromMilliseconds(20), token =>
+        {
+            secondToken = token;
+            secondRan.TrySetResult();
+            return Task.CompletedTask;
+        });
+
+        var secondCompleted = await Task.WhenAny(secondRan.Task, Task.Delay(2000));
+        secondCompleted.Should().BeSameAs(secondRan.Task, "scheduling again for the same key after the earlier run finished must still run");
+        secondToken.IsCancellationRequested.Should().BeFalse(
+            "a handler instantiated after the earlier token fired must get its own independent, non-cancelled token");
+    }
+
+    [Fact]
     public async Task Schedule_logs_a_warning_when_the_action_throws()
     {
         var attempted = new TaskCompletionSource();
