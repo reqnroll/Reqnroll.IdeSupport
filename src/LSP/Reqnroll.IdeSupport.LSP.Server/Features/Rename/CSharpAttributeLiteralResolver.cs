@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis.CSharp;
+﻿using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -117,62 +118,15 @@ internal sealed class CSharpAttributeLiteralResolver
         DocumentUri uri,
         ProjectStepDefinitionBinding binding)
     {
-        var csPath = uri.GetFileSystemPath();
-        if (string.IsNullOrEmpty(csPath))
-        {
-            if (binding?.Implementation?.SourceLocation?.SourceFile != null)
-            {
-                csPath = binding.Implementation.SourceLocation.SourceFile;
-                _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — using binding source file '{csPath}'");
-            }
-            else
-            {
-                _logger.LogVerbose("CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — csPath is null/empty");
-                return null;
-            }
-        }
-        else if (!csPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-        {
-            // When called from a .feature file, use the binding's C# source file
-            if (binding?.Implementation?.SourceLocation?.SourceFile != null)
-            {
-                csPath = binding.Implementation.SourceLocation.SourceFile;
-                _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — redirected from '{uri.GetFileSystemPath()}' to binding source '{csPath}'");
-            }
-            else
-            {
-                _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — non-cs file and no binding source: '{csPath}'");
-                return null;
-            }
-        }
+        var csPath = ResolveCSharpFilePath(uri, binding);
+        if (csPath == null)
+            return null;
 
-        // Get file text: the live .cs text cache (updated by every didOpen/didChange for this
-        // file, from any source — not just our own rename edits, see ICSharpFileTextCache), the
-        // Gherkin document buffer (never actually populated for .cs paths — kept in case that
-        // ever changes), or disk as a last resort. Without the cache, a .cs edit applied via
-        // workspace/applyEdit is never saved to disk, so re-invoking rename on the same step
-        // before saving would silently read the pre-edit text back off disk and show a stale
-        // placeholder (confirmed live).
-        string? fileText = null;
         var csUri = string.Equals(uri.GetFileSystemPath(), csPath, StringComparison.OrdinalIgnoreCase)
             ? uri
             : DocumentUri.FromFileSystemPath(csPath);
-        if (_csharpFileTextCache.TryGet(csUri, out var cachedText) && cachedText != null)
-        {
-            fileText = cachedText;
-            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from live cache ({fileText.Length} chars)");
-        }
-        else if (_documentBuffer.TryGet(csUri, out var buffer) && buffer?.Text != null)
-        {
-            fileText = buffer.Text;
-            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from buffer ({fileText.Length} chars)");
-        }
-        else if (System.IO.File.Exists(csPath))
-        {
-            fileText = await System.IO.File.ReadAllTextAsync(csPath);
-            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from disk ({fileText.Length} chars)");
-        }
 
+        var fileText = await AcquireFileTextAsync(csUri, csPath).ConfigureAwait(false);
         if (fileText == null)
         {
             _logger.LogVerbose("CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — no file text available");
@@ -182,11 +136,97 @@ internal sealed class CSharpAttributeLiteralResolver
         var tree = CSharpSyntaxTree.ParseText(fileText);
         var rootNode = await tree.GetRootAsync();
 
+        return FindAttributeLiteral(tree, rootNode, binding);
+    }
+
+    /// <summary>
+    /// Resolves the <c>.cs</c> file path to parse for <paramref name="binding"/>: the request
+    /// URI itself when it's already a <c>.cs</c> path, otherwise (a <c>.feature</c>-triggered
+    /// rename, or a request URI the server couldn't resolve to a filesystem path) the binding's
+    /// own recorded source file. Returns <see langword="null"/> when neither is available.
+    /// </summary>
+    private string? ResolveCSharpFilePath(DocumentUri uri, ProjectStepDefinitionBinding binding)
+    {
+        var csPath = uri.GetFileSystemPath();
+        if (string.IsNullOrEmpty(csPath))
+        {
+            if (binding?.Implementation?.SourceLocation?.SourceFile == null)
+            {
+                _logger.LogVerbose("CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — csPath is null/empty");
+                return null;
+            }
+
+            csPath = binding.Implementation.SourceLocation.SourceFile;
+            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — using binding source file '{csPath}'");
+            return csPath;
+        }
+
+        if (!csPath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        {
+            // When called from a .feature file, use the binding's C# source file
+            if (binding?.Implementation?.SourceLocation?.SourceFile == null)
+            {
+                _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — non-cs file and no binding source: '{csPath}'");
+                return null;
+            }
+
+            var redirected = binding.Implementation.SourceLocation.SourceFile;
+            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — redirected from '{csPath}' to binding source '{redirected}'");
+            return redirected;
+        }
+
+        return csPath;
+    }
+
+    /// <summary>
+    /// Acquires the current text of <paramref name="csPath"/>: the live <c>.cs</c> text cache
+    /// (updated by every didOpen/didChange for this file, from any source — not just our own
+    /// rename edits, see <see cref="ICSharpFileTextCache"/>), the Gherkin document buffer (never
+    /// actually populated for <c>.cs</c> paths — kept in case that ever changes), or disk as a
+    /// last resort. Without the cache, a <c>.cs</c> edit applied via <c>workspace/applyEdit</c>
+    /// is never saved to disk, so re-invoking rename on the same step before saving would
+    /// silently read the pre-edit text back off disk and show a stale placeholder (confirmed live).
+    /// </summary>
+    private async Task<string?> AcquireFileTextAsync(DocumentUri csUri, string csPath)
+    {
+        if (_csharpFileTextCache.TryGet(csUri, out var cachedText) && cachedText != null)
+        {
+            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from live cache ({cachedText.Length} chars)");
+            return cachedText;
+        }
+
+        if (_documentBuffer.TryGet(csUri, out var buffer) && buffer?.Text != null)
+        {
+            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from buffer ({buffer.Text.Length} chars)");
+            return buffer.Text;
+        }
+
+        if (System.IO.File.Exists(csPath))
+        {
+            var text = await System.IO.File.ReadAllTextAsync(csPath);
+            _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from disk ({text.Length} chars)");
+            return text;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the literal to rewrite within an already-parsed tree: an exact
+    /// <see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/> match first (unambiguous
+    /// even when a method carries several same-type attributes, which a "nearest method" search
+    /// alone cannot distinguish — the same bug class fixed for the rename-targets picker in
+    /// <see cref="RenameBindingResolver.FindBindingsAtCSharpMethod"/>, #170), falling back to the
+    /// nearest candidate method when no exact match is found (a stale build's recorded line has
+    /// drifted from the live buffer, or the binding is connector-discovered and never carried an
+    /// attribute line at all).
+    /// </summary>
+    private LiteralExpressionSyntax? FindAttributeLiteral(
+        SyntaxTree tree, SyntaxNode rootNode, ProjectStepDefinitionBinding binding)
+    {
         var stepType = binding.StepDefinitionType;
         var methods = rootNode.DescendantNodes().OfType<MethodDeclarationSyntax>().ToList();
 
-        // Exact match: an AST-derived attribute line is unambiguous even when a method carries
-        // several same-type attributes — see the remarks above.
         if (binding.AttributeSourceLine.HasValue)
         {
             var exact = methods
@@ -198,9 +238,6 @@ internal sealed class CSharpAttributeLiteralResolver
                 return exact.Literal;
         }
 
-        // Fall back to the nearest candidate method: connector-discovered bindings never carry
-        // AttributeSourceLine, and a syntax-discovered binding's recorded line can drift a few
-        // lines from the live buffer after edits since the last build.
         var candidates = methods
             .Select(m => (Method: m,
                           Line: tree.GetLineSpan(m.Identifier.Span).StartLinePosition.Line + 1)) // 1-based
