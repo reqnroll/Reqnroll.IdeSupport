@@ -1,6 +1,7 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -42,6 +43,7 @@ public sealed class StepRenameHandler
     private readonly RenameBindingResolver         _bindingResolver;
     private readonly NewNameReconciler             _nameReconciler;
     private readonly RenamePostApplyCoordinator    _postApplyCoordinator;
+    private readonly IFileSystemForIDE             _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="StepRenameHandler"/> class.</summary>
     public StepRenameHandler(
@@ -54,6 +56,7 @@ public sealed class StepRenameHandler
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         ILanguageServerFacade         languageServer,
         ClientIdeContext              clientIdeContext,
+        IFileSystemForIDE             fileSystem,
         ILspTelemetryService?         telemetryService = null,
         IOperationDurationRecorder?   recorder = null)
     {
@@ -67,9 +70,10 @@ public sealed class StepRenameHandler
         _csharpDiscoveryService = csharpDiscoveryService;
         _languageServer  = languageServer;
         _clientIdeContext = clientIdeContext;
+        _fileSystem      = fileSystem;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
-        _attributeLiteralResolver = new CSharpAttributeLiteralResolver(csharpFileTextCache, documentBuffer, logger);
+        _attributeLiteralResolver = new CSharpAttributeLiteralResolver(csharpFileTextCache, documentBuffer, logger, fileSystem);
         _bindingResolver = new RenameBindingResolver(matchService, scopeManager, _sessionManager, logger);
         _nameReconciler  = new NewNameReconciler(logger);
         _postApplyCoordinator = new RenamePostApplyCoordinator(
@@ -451,8 +455,8 @@ public sealed class StepRenameHandler
         else
         {
             var path = featureUri.GetFileSystemPath();
-            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                fileText = System.IO.File.ReadAllText(path);
+            if (!string.IsNullOrEmpty(path) && _fileSystem.File.Exists(path))
+                fileText = _fileSystem.File.ReadAllText(path);
         }
 
         if (fileText == null)

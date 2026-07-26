@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -13,6 +14,7 @@ public class BindingRegistryProviderRouterTests : IDisposable
     private readonly IMediator                 _mediator     = Substitute.For<IMediator>();
     private readonly IBindingMatchService      _matchService = Substitute.For<IBindingMatchService>();
     private readonly IIdeSupportLogger            _logger       = Substitute.For<IIdeSupportLogger>();
+    private readonly IFileSystemForIDE          _fileSystem   = new FileSystemForIDE();
     private readonly LspIdeScope               _ideScope;
     private readonly string                    _folder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
     private readonly LspReqnrollProject        _project;
@@ -32,7 +34,7 @@ public class BindingRegistryProviderRouterTests : IDisposable
     public void Dispose() => _project.Dispose();
 
     private BindingRegistryProviderRouter CreateSut() =>
-        new(_scopeManager, _mediator, _matchService, _logger);
+        new(_scopeManager, _mediator, _matchService, _logger, _fileSystem);
 
     private void RaiseProjectDiscovered(LspReqnrollProject project)
         => _scopeManager.ProjectDiscovered += Raise.Event<Action<LspReqnrollProject>>(project);

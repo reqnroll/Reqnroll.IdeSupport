@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -32,6 +33,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
     private readonly IIdeSupportLogger               _logger;
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
+    private readonly IFileSystemForIDE             _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="FeatureCodeActionHandler"/> class.</summary>
     public FeatureCodeActionHandler(
@@ -40,6 +42,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         ILspWorkspaceScopeManager scopeManager,
         IDocumentBufferService    bufferService,
         IIdeSupportLogger            logger,
+        IFileSystemForIDE         fileSystem,
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
@@ -48,6 +51,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         _scopeManager    = scopeManager;
         _bufferService   = bufferService;
         _logger          = logger;
+        _fileSystem      = fileSystem;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -121,12 +125,12 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
         var bindingPaths  = primaryOwner is not null
             ? _scopeManager.GetBindingFilePathsForProject(primaryOwner)
             : (IReadOnlyCollection<string>)Array.Empty<string>();
-        var targetFolder  = FindBestTargetFolder(bindingPaths, featurePath);
+        var targetFolder  = FindBestTargetFolder(_fileSystem, bindingPaths, featurePath);
         var targetPath = Path.Combine(targetFolder, className + ".cs");
-        if (File.Exists(targetPath))
+        if (_fileSystem.File.Exists(targetPath))
         {
             int suffix = 2;
-            while (File.Exists(Path.Combine(targetFolder, className + suffix + ".cs")))
+            while (_fileSystem.File.Exists(Path.Combine(targetFolder, className + suffix + ".cs")))
                 suffix++;
             targetPath = Path.Combine(targetFolder, className + suffix + ".cs");
         }
@@ -295,6 +299,7 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
     /// StepDefinitions/ folder or the feature file's own directory.
     /// </summary>
     private static string FindBestTargetFolder(
+        IFileSystemForIDE fileSystem,
         IReadOnlyCollection<string> bindingFiles,
         string featureFilePath)
     {
@@ -312,6 +317,6 @@ public sealed class FeatureCodeActionHandler : ICodeActionHandler
 
         var featureDir    = Path.GetDirectoryName(featureFilePath) ?? string.Empty;
         var siblingStepDefs = Path.Combine(featureDir, "StepDefinitions");
-        return Directory.Exists(siblingStepDefs) ? siblingStepDefs : featureDir;
+        return fileSystem.Directory.Exists(siblingStepDefs) ? siblingStepDefs : featureDir;
     }
 }

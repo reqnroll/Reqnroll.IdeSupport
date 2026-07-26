@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
@@ -21,15 +22,18 @@ internal sealed class CSharpAttributeLiteralResolver
     private readonly ICSharpFileTextCache   _csharpFileTextCache;
     private readonly IDocumentBufferService _documentBuffer;
     private readonly IIdeSupportLogger      _logger;
+    private readonly IFileSystemForIDE      _fileSystem;
 
     public CSharpAttributeLiteralResolver(
         ICSharpFileTextCache   csharpFileTextCache,
         IDocumentBufferService documentBuffer,
-        IIdeSupportLogger      logger)
+        IIdeSupportLogger      logger,
+        IFileSystemForIDE      fileSystem)
     {
         _csharpFileTextCache = csharpFileTextCache;
         _documentBuffer      = documentBuffer;
         _logger              = logger;
+        _fileSystem          = fileSystem;
     }
 
     /// <summary>
@@ -167,9 +171,9 @@ internal sealed class CSharpAttributeLiteralResolver
             fileText = buffer.Text;
             _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from buffer ({fileText.Length} chars)");
         }
-        else if (System.IO.File.Exists(csPath))
+        else if (_fileSystem.File.Exists(csPath))
         {
-            fileText = await System.IO.File.ReadAllTextAsync(csPath);
+            fileText = await _fileSystem.File.ReadAllTextAsync(csPath);
             _logger.LogVerbose($"CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — got text from disk ({fileText.Length} chars)");
         }
 

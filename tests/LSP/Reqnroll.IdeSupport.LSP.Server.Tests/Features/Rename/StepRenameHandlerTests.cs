@@ -3,6 +3,7 @@ using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -31,6 +32,7 @@ public class StepRenameHandlerTests
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly ILanguageServerFacade         _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly ClientIdeContext              _clientIdeContext = new(ide: null);
+    private readonly IFileSystemForIDE             _fileSystem = new FileSystemForIDE();
 
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
     private static string CsPath => CsUri.GetFileSystemPath();
@@ -56,15 +58,15 @@ public class StepRenameHandlerTests
 
     private StepRenameHandler CreateSut() =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem);
 
     private StepRenameHandler CreateSutForVisualStudio() =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, new ClientIdeContext("visualstudio"));
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, new ClientIdeContext("visualstudio"), _fileSystem);
 
     private StepRenameHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_matchService, _scopeManager, _registryLookup, _logger, _documentBuffer,
-            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, telemetry);
+            _csharpFileTextCache, _csharpDiscoveryService, _languageServer, _clientIdeContext, _fileSystem, telemetry);
 
     // reqnroll/renameTargets (issue #139) is handled by the separate RenameTargetsHandler class;
     // it shares no session state with StepRenameHandler, so a freshly-composed instance over the
@@ -72,7 +74,7 @@ public class StepRenameHandlerTests
     private RenameTargetsHandler CreateTargetsSut() =>
         new(_registryLookup,
             new RenameBindingResolver(_matchService, _scopeManager, new RenameSessionManager(), _logger),
-            new CSharpAttributeLiteralResolver(_csharpFileTextCache, _documentBuffer, _logger));
+            new CSharpAttributeLiteralResolver(_csharpFileTextCache, _documentBuffer, _logger, _fileSystem));
 
     private void SetupBuffer(string csText)
     {

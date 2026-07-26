@@ -1,6 +1,7 @@
 ﻿using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
@@ -49,6 +50,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
     private readonly IFeatureRescanDebouncer          _rescanDebouncer;
     private readonly IIdeSupportLogger                  _logger;
     private readonly IOperationDurationRecorder         _recorder;
+    private readonly IFileSystemForIDE                  _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="BindingRegistryChangedHandler"/> class.</summary>
     public BindingRegistryChangedHandler(
@@ -62,6 +64,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         IFeatureRescanDebouncer rescanDebouncer,
         IIdeSupportLogger logger,
+        IFileSystemForIDE fileSystem,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService  = documentBufferService;
@@ -74,6 +77,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         _csharpDiscoveryService = csharpDiscoveryService;
         _rescanDebouncer        = rescanDebouncer;
         _logger                 = logger;
+        _fileSystem             = fileSystem;
         _recorder               = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -191,10 +195,10 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             // Legacy fallback: project has never sent reqnroll/projectFiles (e.g. VS Code
             // interim, or startup race before the first baseline arrives).
             var projectFolder = project.ProjectFolder;
-            if (string.IsNullOrEmpty(projectFolder) || !Directory.Exists(projectFolder))
+            if (string.IsNullOrEmpty(projectFolder) || !_fileSystem.Directory.Exists(projectFolder))
                 return;
 
-            allFeatureFiles = Directory
+            allFeatureFiles = _fileSystem.Directory
                 .EnumerateFiles(projectFolder, "*.feature", SearchOption.AllDirectories)
                 .ToList();
         }
@@ -217,7 +221,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var text = await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false);
+                var text = await _fileSystem.File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false);
                 var uri  = DocumentUri.FromFileSystemPath(filePath);
                 await _taggerService.ScanClosedFileAsync(uri, text, project).ConfigureAwait(false);
             }
@@ -380,7 +384,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
                 continue; // already covered by its open buffer above
 
             DateTime mtimeUtc;
-            try { mtimeUtc = File.GetLastWriteTimeUtc(path); }
+            try { mtimeUtc = _fileSystem.File.GetLastWriteTimeUtc(path); }
             catch { continue; }
 
             if (mtimeUtc <= assemblyWriteTimeUtc.Value)
@@ -388,7 +392,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
 
             try
             {
-                result.Add((path, File.ReadAllText(path)));
+                result.Add((path, _fileSystem.File.ReadAllText(path)));
             }
             catch (Exception ex)
             {
@@ -400,12 +404,12 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         return result;
     }
 
-    private static DateTime? GetAssemblyWriteTimeUtc(LspReqnrollProject project)
+    private DateTime? GetAssemblyWriteTimeUtc(LspReqnrollProject project)
     {
         var assemblyPath = project.OutputAssemblyPath;
-        if (string.IsNullOrEmpty(assemblyPath) || !File.Exists(assemblyPath))
+        if (string.IsNullOrEmpty(assemblyPath) || !_fileSystem.File.Exists(assemblyPath))
             return null;
-        try { return File.GetLastWriteTimeUtc(assemblyPath); }
+        try { return _fileSystem.File.GetLastWriteTimeUtc(assemblyPath); }
         catch { return null; }
     }
 
@@ -420,10 +424,10 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             return _scopeManager.GetBindingFilePathsForProject(project);
 
         var folder = project.ProjectFolder;
-        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+        if (string.IsNullOrEmpty(folder) || !_fileSystem.Directory.Exists(folder))
             return [];
 
-        return Directory
+        return _fileSystem.Directory
             .EnumerateFiles(folder, "*.cs", SearchOption.AllDirectories)
             .Where(p => !IsInBuildOutput(p, folder))
             .ToList();
