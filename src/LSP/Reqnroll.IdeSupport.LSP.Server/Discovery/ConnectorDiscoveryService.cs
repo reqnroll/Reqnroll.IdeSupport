@@ -1,4 +1,5 @@
 ﻿using Microsoft.CodeAnalysis;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Connector.Models;
@@ -24,12 +25,15 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 {
     private readonly IIdeSupportLogger _logger;
     private readonly IOutProcConnectorFactory _connectorFactory;
+    private readonly IFileSystemForIDE _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="ConnectorDiscoveryService"/> class.</summary>
-    public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory)
+    public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory,
+        IFileSystemForIDE fileSystem)
     {
         _logger = logger;
         _connectorFactory = connectorFactory;
+        _fileSystem = fileSystem;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -56,13 +60,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return (lastGood, lastHash);
         }
 
-        if (!File.Exists(assemblyPath))
+        if (!_fileSystem.File.Exists(assemblyPath))
         {
             _logger.LogInfo($"[{scope.ProjectName}] Output assembly not found (project not yet built?): {assemblyPath}");
             return (lastGood, lastHash);
         }
 
-        var currentHash = ComputeHash(assemblyPath);
+        var currentHash = ComputeHash(_fileSystem, assemblyPath);
         if (currentHash == lastHash)
         {
             _logger.LogVerbose($"[{scope.ProjectName}] Assembly unchanged (hash match); skipping discovery.");
@@ -72,7 +76,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         ct.ThrowIfCancellationRequested();
 
         var connector = _connectorFactory.Create(scope);
-        var configFilePath = FindConfigFilePath(scope);
+        var configFilePath = FindConfigFilePath(_fileSystem, scope);
 
         _logger.LogInfo($"[{scope.ProjectName}] Starting binding discovery: {Path.GetFileName(assemblyPath)}");
 
@@ -110,7 +114,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
     private ProjectBindingRegistry BuildRegistry(IProjectScope scope, DiscoveryResult result)
     {
-        var importer = new BindingImporter(result.SourceFiles, result.TypeNames, _logger);
+        var importer = new BindingImporter(result.SourceFiles, result.TypeNames, _logger, _fileSystem);
 
         // Parsed once per unique source file (not per step definition) and reused below, since a
         // single binding class typically contributes many step definitions from the same file.
@@ -122,7 +126,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 // from the source file using Roslyn syntax parsing. This enables exact
                 // AST-based matching in FindBindingAtLocation instead of the heuristic
                 // line window that was the only option when AttributeSourceLine was null.
-                var attrLine = TryGetAttributeSourceLine(importer, sd, parsedFiles);
+                var attrLine = TryGetAttributeSourceLine(importer, sd, parsedFiles, _fileSystem);
                 return importer.ImportStepDefinition(sd, attrLine);
             })
             .Where(sd => sd is not null)
@@ -145,11 +149,11 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// Returns a content-change key combining the assembly path with its last-write time.
     /// Two calls with the same result mean no rebuild has happened.
     /// </summary>
-    private static string ComputeHash(string assemblyPath)
+    private static string ComputeHash(IFileSystemForIDE fileSystem, string assemblyPath)
     {
         try
         {
-            var lastWrite = File.GetLastWriteTimeUtc(assemblyPath);
+            var lastWrite = fileSystem.File.GetLastWriteTimeUtc(assemblyPath);
             return $"{assemblyPath}@{lastWrite.Ticks}";
         }
         catch
@@ -162,7 +166,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// parsing each referenced source file at most once per <see cref="BuildRegistry"/> call
     /// (<paramref name="parsedFiles"/> caches the syntax root across step definitions sharing a file).
     private static int? TryGetAttributeSourceLine(BindingImporter importer, StepDefinition sd,
-        Dictionary<string, SyntaxNode> parsedFiles)
+        Dictionary<string, SyntaxNode> parsedFiles, IFileSystemForIDE fileSystem)
     {
         var sourceFile = importer.ResolveSourceFilePath(sd.SourceLocation);
         if (sourceFile == null)
@@ -170,7 +174,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
         if (!parsedFiles.TryGetValue(sourceFile, out var root))
         {
-            root = BindingImporter.TryParseSourceFile(sourceFile);
+            root = BindingImporter.TryParseSourceFile(sourceFile, fileSystem);
             parsedFiles[sourceFile] = root;
         }
 
@@ -181,7 +185,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         return BindingImporter.TryGetAttributeSourceLine(root, sd.Method, scenarioBlock);
     }
 
-    private static string FindConfigFilePath(IProjectScope scope)
+    private static string FindConfigFilePath(IFileSystemForIDE fileSystem, IProjectScope scope)
     {
         // Search standard Reqnroll/SpecFlow config file names relative to the project folder.
         var candidates = new[]
@@ -190,7 +194,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             //Path.Combine(scope.ProjectFolder, "specflow.json"),
             //Path.Combine(scope.ProjectFolder, "app.config")
         };
-        return Array.Find(candidates, File.Exists) ?? string.Empty;
+        return Array.Find(candidates, fileSystem.File.Exists) ?? string.Empty;
     }
 
     private void LogWarningsAndErrors(IProjectScope scope, DiscoveryResult result)

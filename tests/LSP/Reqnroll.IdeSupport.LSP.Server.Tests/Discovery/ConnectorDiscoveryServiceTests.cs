@@ -1,4 +1,5 @@
-﻿using Reqnroll.IdeSupport.Common.Configuration;
+﻿using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Connector.Models;
@@ -82,7 +83,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         Hooks = []
     };
 
-    private ConnectorDiscoveryService CreateSut() => new(_logger, _factory);
+    private ConnectorDiscoveryService CreateSut() => new(_logger, _factory, new FileSystemForIDE());
 
     // ── Happy path ─────────────────────────────────────────────────────────────
 
@@ -221,7 +222,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     {
         var localFactory = Substitute.For<IOutProcConnectorFactory>();
         localFactory.Create(Arg.Any<IProjectScope>()).Returns(new FakeConnector(result));
-        var service = new ConnectorDiscoveryService(_logger, localFactory);
+        var service = new ConnectorDiscoveryService(_logger, localFactory, new FileSystemForIDE());
         var (registry, _) = service.RunDiscovery(
             MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
         return registry;

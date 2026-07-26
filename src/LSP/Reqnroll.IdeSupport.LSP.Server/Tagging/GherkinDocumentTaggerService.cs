@@ -1,4 +1,5 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 
@@ -24,6 +25,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     private readonly IIdeSupportLogger               _logger;
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly ILspWorkspaceScopeManager     _scopeManager;
+    private readonly IFileSystemForIDE             _fileSystem;
 
     /// <summary>Creates the tagger service with its collaborating document, registry, and match-set dependencies.</summary>
     public GherkinDocumentTaggerService(
@@ -33,7 +35,8 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         ISemanticTokenService         semanticTokenService,
         IBindingMatchService          bindingMatchService,
         ILspWorkspaceScopeManager     scopeManager,
-        IIdeSupportLogger               logger)
+        IIdeSupportLogger               logger,
+        IFileSystemForIDE             fileSystem)
     {
         _documentBufferService = documentBufferService;
         _tagParser             = tagParser;
@@ -42,6 +45,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         _bindingMatchService   = bindingMatchService;
         _scopeManager          = scopeManager;
         _logger                = logger;
+        _fileSystem            = fileSystem;
     }
 
     /// <inheritdoc/>
@@ -136,7 +140,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     public async Task RescanClosedFileAsync(DocumentUri uri)
     {
         var path = uri.GetFileSystemPath();
-        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        if (string.IsNullOrEmpty(path) || !_fileSystem.File.Exists(path))
         {
             _logger.LogVerbose($"RescanClosedFile: '{uri}' not found on disk; skipping.");
             return;
@@ -145,7 +149,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         string text;
         try
         {
-            text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
+            text = await _fileSystem.File.ReadAllTextAsync(path).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

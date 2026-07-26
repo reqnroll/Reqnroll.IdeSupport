@@ -1,4 +1,5 @@
-﻿using Reqnroll.IdeSupport.Common.Logging;
+﻿using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -57,13 +58,15 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// themselves.
     /// </summary>
     public ConnectorBindingRegistryProvider(
-        LspReqnrollProject project, IIdeSupportLogger logger, ILspTelemetryService? telemetryService = null)
-        : this(project, CreateDefaultDiscoveryService(logger), logger, telemetryService)
+        LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
+        ILspTelemetryService? telemetryService = null)
+        : this(project, CreateDefaultDiscoveryService(logger, fileSystem), logger, telemetryService)
     {
     }
 
-    private static IConnectorDiscoveryService CreateDefaultDiscoveryService(IIdeSupportLogger logger) =>
-        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger));
+    private static IConnectorDiscoveryService CreateDefaultDiscoveryService(
+        IIdeSupportLogger logger, IFileSystemForIDE? fileSystem) =>
+        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger), fileSystem ?? new FileSystemForIDE());
 
     /// <summary>
     /// Creates a provider backed by a caller-supplied discovery service.  Used by tests to

@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -49,6 +50,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
     private readonly IBindingMatchService      _matchService;
     private readonly IIdeSupportLogger            _logger;
     private readonly ILspTelemetryService?     _telemetryService;
+    private readonly IFileSystemForIDE         _fileSystem;
 
     // Store (provider, handler) together so Dispose can unsubscribe by the exact delegate
     // that was passed to += in OnProjectDiscovered.
@@ -63,12 +65,14 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         IMediator mediator,
         IBindingMatchService matchService,
         IIdeSupportLogger logger,
+        IFileSystemForIDE fileSystem,
         ILspTelemetryService? telemetryService = null)
     {
         _scopeManager = scopeManager;
         _mediator     = mediator;
         _matchService = matchService;
         _logger       = logger;
+        _fileSystem   = fileSystem;
         _telemetryService = telemetryService;
 
         scopeManager.ProjectDiscovered += OnProjectDiscovered;
@@ -144,7 +148,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
 
     private void OnProjectDiscovered(LspReqnrollProject project)
     {
-        var provider = new ConnectorBindingRegistryProvider(project, _logger, _telemetryService);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger, _fileSystem, _telemetryService);
 
         // Capture project in a named local so the closure below can reference it.
         // Store the delegate so Dispose can unsubscribe by identity.

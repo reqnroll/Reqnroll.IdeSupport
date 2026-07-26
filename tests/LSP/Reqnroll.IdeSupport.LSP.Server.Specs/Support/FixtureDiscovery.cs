@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
@@ -35,7 +36,7 @@ public static class FixtureDiscovery
         var logger = new SilentDeveroomLogger();
         var scope = BuildScope(logger);
         var factory = new OutProcReqnrollConnectorFactory(logger);
-        var service = new ConnectorDiscoveryService(logger, factory);
+        var service = new ConnectorDiscoveryService(logger, factory, new FileSystemForIDE());
 
         var (registry, _) = service.RunDiscovery(
             scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);

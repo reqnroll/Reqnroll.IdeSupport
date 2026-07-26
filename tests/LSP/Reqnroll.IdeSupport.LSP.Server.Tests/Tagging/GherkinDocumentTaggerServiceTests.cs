@@ -1,4 +1,5 @@
-﻿using Reqnroll.IdeSupport.Common.Logging;
+﻿using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 
 
@@ -23,6 +24,7 @@ public class GherkinDocumentTaggerServiceTests
     private readonly IBindingMatchService          _bindingMatchService  = Substitute.For<IBindingMatchService>();
     private readonly ILspWorkspaceScopeManager     _scopeManager         = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger               _logger               = Substitute.For<IIdeSupportLogger>();
+    private readonly IFileSystemForIDE             _fileSystem           = new FileSystemForIDE();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
@@ -37,7 +39,7 @@ public class GherkinDocumentTaggerServiceTests
 
     private GherkinDocumentTaggerService CreateSut() =>
         new(_bufferService, _tagParser, _registryLookup, _semanticTokenService,
-            _bindingMatchService, _scopeManager, _logger);
+            _bindingMatchService, _scopeManager, _logger, _fileSystem);
 
     private static LspReqnrollProject MakeProject(string folder = "/workspace")
     {

@@ -1,5 +1,6 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -32,6 +33,7 @@ public sealed class GoToStepDefinitionsHandler
     private readonly IIdeSupportLogger           _logger;
     private readonly ILspTelemetryService?     _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IFileSystemForIDE         _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="GoToStepDefinitionsHandler"/> class.</summary>
     public GoToStepDefinitionsHandler(
@@ -39,6 +41,7 @@ public sealed class GoToStepDefinitionsHandler
         IDocumentBufferService    bufferService,
         ILspWorkspaceScopeManager scopeManager,
         IIdeSupportLogger           logger,
+        IFileSystemForIDE         fileSystem,
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
@@ -46,6 +49,7 @@ public sealed class GoToStepDefinitionsHandler
         _bufferService = bufferService;
         _scopeManager  = scopeManager;
         _logger        = logger;
+        _fileSystem    = fileSystem;
         _telemetryService = telemetryService;
         _recorder      = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -103,7 +107,7 @@ public sealed class GoToStepDefinitionsHandler
             if (src is null || string.IsNullOrEmpty(src.SourceFile))
                 continue;
 
-            var identSrc = src.WithIdentifierLocation(binding!.Implementation?.Method);
+            var identSrc = src.WithIdentifierLocation(binding!.Implementation?.Method, _fileSystem);
             response.StepDefinitions.Add(new GoToStepDefinitionLocation
             {
                 Uri        = DocumentUri.FromFileSystemPath(identSrc.SourceFile).ToString(),
