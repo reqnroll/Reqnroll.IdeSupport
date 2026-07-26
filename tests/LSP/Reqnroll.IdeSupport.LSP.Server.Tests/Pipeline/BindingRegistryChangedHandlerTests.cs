@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
@@ -31,6 +32,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly ICSharpBindingDiscoveryService _csharpDiscovery = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly IFeatureRescanDebouncer      _rescanDebouncer = Substitute.For<IFeatureRescanDebouncer>();
     private readonly IIdeSupportLogger              _logger        = Substitute.For<IIdeSupportLogger>();
+    private readonly IFileSystemForIDE            _fileSystem    = new FileSystemForIDE();
 
     private readonly IIdeSupportLogger _ideLogger = Substitute.For<IIdeSupportLogger>();
     private readonly LspIdeScope     _ideScope;
@@ -74,7 +76,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         => CreateSut(_clientIde);
 
     private BindingRegistryChangedHandler CreateSut(ClientIdeContext clientIde)
-        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger);
+        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
 
     // ── Closed-file scanning — index-driven (baseline received) ───────────────
 
@@ -271,7 +273,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -302,7 +304,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -353,7 +355,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
 
         var featureFile = Path.Combine(_projectFolder, "A.feature");
         File.WriteAllText(featureFile, "Feature: A\n");

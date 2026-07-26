@@ -71,6 +71,9 @@ public static class ServiceCollectionExtensions
             // "protocol" file gated by the independent --protocol-log-level. Any new code that wants
             // ILogger<T> gets the correctly-configured one for free from that existing pipeline.
             .AddSingleton<IIdeScope, LspIdeScope>()
+            // Same singleton instance as IIdeScope.FileSystem, exposed directly so services that
+            // only need file-system access don't have to depend on the broader IIdeScope contract.
+            .AddSingleton<IFileSystemForIDE>(sp => sp.GetRequiredService<IIdeScope>().FileSystem)
             // Telemetry: emit telemetry/event notifications, optionally mirrored to a local JSONL
             // debug log (REQNROLL_TELEMETRY_DEBUG_LOG). The decorator wraps the real emitter; when
             // the debug log is unconfigured the sink is a no-op and it simply forwards.
@@ -130,7 +133,12 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IDeveroomTagParser, DeveroomTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch
             // whose binding expressions actually changed (BindingRegistryChangedHandler).
-            .AddSingleton<IFeatureRescanDebouncer, FeatureRescanDebouncer>();
+            .AddSingleton<IFeatureRescanDebouncer, FeatureRescanDebouncer>()
+            // Debounces MatchCacheChangedNotification-driven client refreshes (code lens, semantic
+            // tokens, inlay hints). Must be a singleton, unlike the MediatR handlers that use it —
+            // see IRefreshDebouncer's remarks for why a transient handler's own instance field
+            // can't debounce anything.
+            .AddSingleton<IRefreshDebouncer, RefreshDebouncer>();
     }
 
     /// <summary>

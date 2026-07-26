@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -30,6 +31,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly IIdeSupportLogger           _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IFileSystemForIDE         _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="DefinitionHandler"/> class.</summary>
     public DefinitionHandler(
@@ -37,12 +39,14 @@ public sealed class DefinitionHandler : IDefinitionHandler
         IDocumentBufferService    bufferService,
         ILspWorkspaceScopeManager scopeManager,
         IIdeSupportLogger           logger,
+        IFileSystemForIDE         fileSystem,
         IOperationDurationRecorder? recorder = null)
     {
         _matchService  = matchService;
         _bufferService = bufferService;
         _scopeManager  = scopeManager;
         _logger        = logger;
+        _fileSystem    = fileSystem;
         _recorder      = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -104,7 +108,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         var locations = step.Result.Items
             .Select(item => item.MatchedStepDefinition?.Implementation)
             .Where(impl => impl?.SourceLocation?.SourceFile is not (null or ""))
-            .Select(impl => impl!.SourceLocation!.WithIdentifierLocation(impl.Method))
+            .Select(impl => impl!.SourceLocation!.WithIdentifierLocation(impl.Method, _fileSystem))
             .Select(loc => new LocationOrLocationLink(loc.ToLspLocation()))
             .ToArray();
 

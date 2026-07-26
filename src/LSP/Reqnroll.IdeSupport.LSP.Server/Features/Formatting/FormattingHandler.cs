@@ -134,7 +134,7 @@ public sealed class FormattingHandler
         var allLines = SplitLines(text);
         var cursorLine = (int)request.Position.Line;
 
-        var tableRange = GherkinDocumentFormatter.FindTableLineRange(allLines, cursorLine);
+        var tableRange = GherkinTableLocator.FindTableLineRange(allLines, cursorLine);
         if (tableRange is null)
             return Task.FromResult<TextEditContainer?>(new TextEditContainer());
 
@@ -147,7 +147,7 @@ public sealed class FormattingHandler
             configuration);
 
         var gherkinDocument = ParseDocument(text);
-        var tableNode = GherkinDocumentFormatter.FindTableAtLine(gherkinDocument, tableRange.Value.Start);
+        var tableNode = GherkinTableLocator.FindTableAtLine(gherkinDocument, tableRange.Value.Start);
         if (tableNode is null)
             return Task.FromResult<TextEditContainer?>(new TextEditContainer());
 

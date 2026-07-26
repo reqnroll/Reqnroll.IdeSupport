@@ -134,7 +134,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     // Comment/Uncomment toggle (Ctrl+/ for gherkin files)
     vscode.commands.registerCommand('reqnroll.toggleComment', async () => {
       if (!client) {
-        notReady('Toggle Comment')();
+        notReady('Comment/Uncomment')();
         return;
       }
       await doToggleComment(client);

@@ -203,38 +203,70 @@ public class Program
 
         options.OnInitialized((languageServer, request, response, ct) =>
         {
+            // Each capability is configured by its own named local function below rather than
+            // inline, so a mistake in one (e.g. the VS-specific branch in
+            // ApplyTextDocumentSyncCapability) can't silently bleed into an unrelated capability
+            // assignment sharing the same block.
+            ApplyInitialTraceLevel();
+            ApplySemanticTokensCapability();
+            ApplyStaticInlayHintCapability();
+            ApplyStaticFoldingCapability();
+            ApplyTextDocumentSyncCapability();
+            ApplyRenameCapability();
+
+            return Task.CompletedTask;
+
             // F41: apply the client's requested trace level over the --trace command-line
             // default, unless the client didn't actually request one. $/setTrace
             // (SetTraceNotificationHandler) can still change the level — including back to
             // Off — at any time after this.
-            var traceService = languageServer.Services.GetRequiredService<ITraceService>();
-            traceService.Level = ResolveInitialTrace(traceService.Level, request.Trace);
-
-            var tokenService = languageServer.Services.GetRequiredService<ISemanticTokenService>();
-
-            response.Capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
+            void ApplyInitialTraceLevel()
             {
-                Legend = tokenService.Legend,
-                Full = true,
-                // VS Code's and Rider's built-in LSP clients both support range requests (used as a
-                // large-file/viewport optimization); advertise it since SemanticTokensHandler already
-                // implements textDocument/semanticTokens/range (issue #123).
-                Range = true
-            };
+                var traceService = languageServer.Services.GetRequiredService<ITraceService>();
+                traceService.Level = ResolveInitialTrace(traceService.Level, request.Trace);
+            }
 
-            // inlayHintProvider / foldingRangeProvider: declared statically (rather than left to
-            // OmniSharp's dynamic client/registerCapability negotiation) because vscode-languageclient's
-            // dynamic registration for these two races VS Code's restore of previously-open .feature
-            // tabs on window load. If the tab renders before the async client/registerCapability round
+            void ApplySemanticTokensCapability()
+            {
+                var tokenService = languageServer.Services.GetRequiredService<ISemanticTokenService>();
+
+                response.Capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
+                {
+                    Legend = tokenService.Legend,
+                    Full = true,
+                    // VS Code's and Rider's built-in LSP clients both support range requests (used as a
+                    // large-file/viewport optimization); advertise it since SemanticTokensHandler already
+                    // implements textDocument/semanticTokens/range (issue #123).
+                    Range = true
+                };
+            }
+
+            // inlayHintProvider: declared statically (rather than left to OmniSharp's dynamic
+            // client/registerCapability negotiation) because vscode-languageclient's dynamic
+            // registration for it races VS Code's restore of previously-open .feature tabs on
+            // window load. If the tab renders before the async client/registerCapability round
             // trip completes, VS Code never re-checks for a provider for the rest of the session —
             // closing/reopening the file or opening a different .feature file doesn't recover it. A
             // statically-declared capability is known to the client the instant initialize resolves,
-            // so there's no later round trip to lose the race against.
-            response.Capabilities.InlayHintProvider = new InlayHintRegistrationOptions.StaticOptions
+            // so there's no later round trip to lose the race against. See
+            // ApplyStaticFoldingCapability for foldingRangeProvider, which hits the same race.
+            void ApplyStaticInlayHintCapability()
             {
-                ResolveProvider = false
-            };
-            response.Capabilities.FoldingRangeProvider = new FoldingRangeRegistrationOptions.StaticOptions();
+                response.Capabilities.InlayHintProvider = new InlayHintRegistrationOptions.StaticOptions
+                {
+                    ResolveProvider = false
+                };
+            }
+
+            // foldingRangeProvider: declared statically for the same reason as
+            // ApplyStaticInlayHintCapability's inlayHintProvider — vscode-languageclient's dynamic
+            // client/registerCapability negotiation races VS Code's restore of previously-open
+            // .feature tabs on window load, and Rider hit an analogous startup race (#162) where
+            // folding stayed empty until the first post-load edit.
+            void ApplyStaticFoldingCapability()
+            {
+                response.Capabilities.FoldingRangeProvider = new FoldingRangeRegistrationOptions.StaticOptions();
+            }
 
             // vscode-languageclient v10 (used by VS Code and Rider) does not wire its
             // DidChangeTextDocumentFeature when textDocumentSync is absent from the static
@@ -244,8 +276,11 @@ public class Program
             // entry is only needed for non-VS clients.
             // Fine-grained selector filtering (*.feature + *.cs) still comes from OmniSharp's
             // dynamic registration once the feature infrastructure is activated.
-            if (!string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase))
+            void ApplyTextDocumentSyncCapability()
             {
+                if (string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase))
+                    return;
+
                 response.Capabilities.TextDocumentSync = new TextDocumentSyncOptions
                 {
                     Change = TextDocumentSyncKind.Full,
@@ -265,12 +300,13 @@ public class Program
             // Step" command (RenameStepCommand.cs) remains as the only way to disambiguate when a
             // cursor position matches more than one candidate binding — something plain LSP
             // rename has no protocol-level way to prompt for.
-            response.Capabilities.RenameProvider = new RenameRegistrationOptions.StaticOptions
+            void ApplyRenameCapability()
             {
-                PrepareProvider = true
-            };
-
-            return Task.CompletedTask;
+                response.Capabilities.RenameProvider = new RenameRegistrationOptions.StaticOptions
+                {
+                    PrepareProvider = true
+                };
+            }
         });
     }
 

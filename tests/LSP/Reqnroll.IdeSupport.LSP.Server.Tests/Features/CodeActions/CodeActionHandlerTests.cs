@@ -1,5 +1,6 @@
 ﻿using Gherkin;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
@@ -31,6 +32,7 @@ public class CodeActionHandlerTests
     private readonly IIdeSupportLogger             _logger        = Substitute.For<IIdeSupportLogger>();
     private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
     private readonly ILspTelemetryService        _telemetryService = Substitute.For<ILspTelemetryService>();
+    private readonly IFileSystemForIDE           _fileSystem = new FileSystemForIDE();
 
     private const string FeatureText =
         "Feature: F\nScenario: S\n    Given a step\n    When I press add\n";
@@ -51,7 +53,7 @@ public class CodeActionHandlerTests
     }
 
     private CodeActionHandler CreateSut() =>
-        new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _telemetryService);
+        new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem, _telemetryService);
 
     private static CodeActionParams RequestAt(DocumentUri uri, int line = 0) =>
         new()

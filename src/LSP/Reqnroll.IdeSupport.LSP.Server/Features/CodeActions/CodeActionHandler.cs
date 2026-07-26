@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -32,6 +33,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     private readonly IIdeSupportLogger               _logger;
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
+    private readonly IFileSystemForIDE             _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="CodeActionHandler"/> class.</summary>
     public CodeActionHandler(
@@ -40,6 +42,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         ILspWorkspaceScopeManager scopeManager,
         IDocumentBufferService    bufferService,
         IIdeSupportLogger            logger,
+        IFileSystemForIDE         fileSystem,
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
@@ -48,6 +51,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _scopeManager    = scopeManager;
         _bufferService   = bufferService;
         _logger          = logger;
+        _fileSystem      = fileSystem;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -121,12 +125,12 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var bindingPaths  = primaryOwner is not null
             ? _scopeManager.GetBindingFilePathsForProject(primaryOwner)
             : (IReadOnlyCollection<string>)Array.Empty<string>();
-        var targetFolder  = FindBestTargetFolder(bindingPaths, featurePath);
+        var targetFolder  = FindBestTargetFolder(_fileSystem, bindingPaths, featurePath);
         var targetPath = Path.Combine(targetFolder, className + ".cs");
-        if (File.Exists(targetPath))
+        if (_fileSystem.File.Exists(targetPath))
         {
             int suffix = 2;
-            while (File.Exists(Path.Combine(targetFolder, className + suffix + ".cs")))
+            while (_fileSystem.File.Exists(Path.Combine(targetFolder, className + suffix + ".cs")))
                 suffix++;
             targetPath = Path.Combine(targetFolder, className + suffix + ".cs");
         }
@@ -136,24 +140,22 @@ public sealed class CodeActionHandler : ICodeActionHandler
         const string indent  = "    ";
         var          newLine = Environment.NewLine;
 
+        // Binds the target-file/style parameters shared by every "Define step(s)" action for
+        // this request, so the two call sites below only ever vary by title/steps — a future
+        // parameter added here (e.g. a different style per step) can't be updated in one call
+        // site and forgotten in the other.
+        CodeAction? BuildDefineStepsAction(string title, IEnumerable<LSP.Core.Matching.StepBindingMatch> steps) =>
+            BuildAction(title, steps, style, csharpConfig, className, @namespace, targetPath, indent, newLine);
+
         // Collect actions.
         var actions = new List<CommandOrCodeAction>();
 
         // ── "Define all missing steps in file" ─────────────────────────────────
         if (allUndefined.Count >= 1)
         {
-            var action = BuildAction(
-                title:          allUndefined.Count == 1
-                    ? "Define missing step"
-                    : "Define all missing steps in file",
-                steps:          allUndefined,
-                style:          style,
-                csharpConfig:   csharpConfig,
-                className:      className,
-                @namespace:     @namespace,
-                targetPath:     targetPath,
-                indent:         indent,
-                newLine:        newLine);
+            var action = BuildDefineStepsAction(
+                allUndefined.Count == 1 ? "Define missing step" : "Define all missing steps in file",
+                allUndefined);
 
             if (action is not null) actions.Add(new CommandOrCodeAction(action));
         }
@@ -164,16 +166,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         if (stepAtCursor != allUndefined[0])
         {
             var stepText = GetStepText(stepAtCursor);
-            var singleAction = BuildAction(
-                title:          $"Define step: {stepText}",
-                steps:          new[] { stepAtCursor },
-                style:          style,
-                csharpConfig:   csharpConfig,
-                className:      className,
-                @namespace:     @namespace,
-                targetPath:     targetPath,
-                indent:         indent,
-                newLine:        newLine);
+            var singleAction = BuildDefineStepsAction($"Define step: {stepText}", new[] { stepAtCursor });
 
             if (singleAction is not null)
                 actions.Insert(0, new CommandOrCodeAction(singleAction));
@@ -295,6 +288,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     /// StepDefinitions/ folder or the feature file's own directory.
     /// </summary>
     private static string FindBestTargetFolder(
+        IFileSystemForIDE fileSystem,
         IReadOnlyCollection<string> bindingFiles,
         string featureFilePath)
     {
@@ -312,6 +306,6 @@ public sealed class CodeActionHandler : ICodeActionHandler
 
         var featureDir    = Path.GetDirectoryName(featureFilePath) ?? string.Empty;
         var siblingStepDefs = Path.Combine(featureDir, "StepDefinitions");
-        return Directory.Exists(siblingStepDefs) ? siblingStepDefs : featureDir;
+        return fileSystem.Directory.Exists(siblingStepDefs) ? siblingStepDefs : featureDir;
     }
 }

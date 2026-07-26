@@ -5,7 +5,7 @@ public class BindingImporterTests
     private readonly Dictionary<string, string> _sourceFiles = new();
     private readonly Dictionary<string, string> _typeNames = new();
 
-    private BindingImporter CreateSut() => new(_sourceFiles, _typeNames, new IdeSupportNullLogger());
+    private BindingImporter CreateSut() => new(_sourceFiles, _typeNames, new IdeSupportNullLogger(), new FileSystemForIDE());
 
     private StepDefinition CreateStepDefinition(string? regex = null, string? type = null, string? sourceLocation = null,
         StepScope? scope = null, string? paramTypes = null, string? method = null, string? expression = null,
@@ -432,6 +432,7 @@ public class BindingImporterTests
 
 public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
 {
+    private readonly IFileSystemForIDE _fileSystem = new FileSystemForIDE();
     private readonly string _tempDir = System.IO.Path.Combine(
         System.IO.Path.GetTempPath(), "BindingImporterTests_" + Guid.NewGuid());
 
@@ -455,7 +456,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
     {
         var missingPath = System.IO.Path.Combine(_tempDir, "does-not-exist.cs");
 
-        var result = BindingImporter.TryGetAttributeSourceLine(missingPath, "MyStep", ScenarioBlock.Given);
+        var result = BindingImporter.TryGetAttributeSourceLine(missingPath, "MyStep", ScenarioBlock.Given, _fileSystem);
 
         result.Should().BeNull();
     }
@@ -471,7 +472,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var result = BindingImporter.TryGetAttributeSourceLine(path, "NoSuchMethod", ScenarioBlock.Given);
+        var result = BindingImporter.TryGetAttributeSourceLine(path, "NoSuchMethod", ScenarioBlock.Given, _fileSystem);
 
         result.Should().BeNull();
     }
@@ -488,7 +489,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given);
+        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given, _fileSystem);
 
         // The [Given] attribute is on line 4 (1-based) of the source above.
         result.Should().Be(4);
@@ -504,7 +505,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given);
+        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given, _fileSystem);
 
         result.Should().BeNull();
     }
@@ -524,8 +525,8 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given).Should().Be(3);
-        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.When).Should().Be(4);
+        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given, _fileSystem).Should().Be(3);
+        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.When, _fileSystem).Should().Be(4);
     }
 
     [Fact]
@@ -540,9 +541,9 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given).Should().Be(3);
-        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.When).Should().Be(3);
-        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Then).Should().Be(3);
+        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given, _fileSystem).Should().Be(3);
+        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.When, _fileSystem).Should().Be(3);
+        BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Then, _fileSystem).Should().Be(3);
     }
 
     [Fact]
@@ -563,7 +564,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given);
+        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given, _fileSystem);
 
         result.Should().Be(8);
     }
@@ -581,7 +582,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given);
+        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Given, _fileSystem);
 
         result.Should().Be(3);
     }
@@ -597,7 +598,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Unknown);
+        var result = BindingImporter.TryGetAttributeSourceLine(path, "MyStep", ScenarioBlock.Unknown, _fileSystem);
 
         result.Should().Be(3);
     }
@@ -613,7 +614,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
             }
             """);
 
-        var root = BindingImporter.TryParseSourceFile(path);
+        var root = BindingImporter.TryParseSourceFile(path, _fileSystem);
         var result = BindingImporter.TryGetAttributeSourceLine(root, "MyStep", ScenarioBlock.Given);
 
         result.Should().Be(3);
@@ -624,7 +625,7 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
     {
         var missingPath = System.IO.Path.Combine(_tempDir, "does-not-exist.cs");
 
-        var result = BindingImporter.TryParseSourceFile(missingPath);
+        var result = BindingImporter.TryParseSourceFile(missingPath, _fileSystem);
 
         result.Should().BeNull();
     }

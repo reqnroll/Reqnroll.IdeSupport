@@ -1,4 +1,5 @@
 ﻿#nullable disable
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -7,7 +8,6 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.TagExpressions;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
@@ -25,40 +25,38 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 public class BindingImporter
 {
     private static readonly string[] EmptyParameterTypes = new string[0];
-    private static readonly string[] SingleStringParameterTypes = { TypeShortcuts.StringType };
-    private static readonly string[] DoubleStringParameterTypes = { TypeShortcuts.StringType, TypeShortcuts.StringType };
-    private static readonly string[] SingleIntParameterTypes = { TypeShortcuts.Int32Type };
-    private static readonly string[] SingleDataTableParameterTypes = { TypeShortcuts.ReqnrollTableType };
     private readonly Dictionary<string, ProjectBindingImplementation> _implementations = new();
 
     private readonly IIdeSupportLogger _logger;
     private readonly Dictionary<string, string> _sourceFiles;
     private readonly ReqnrollTagExpressionParser _tagExpressionParser = new();
     private readonly Dictionary<string, string> _typeNames;
+    private readonly IFileSystemForIDE _fileSystem;
 
     /// <summary>Initializes a new instance of the <see cref="BindingImporter"/> class.</summary>
     public BindingImporter(Dictionary<string, string> sourceFiles, Dictionary<string, string> typeNames,
-        IIdeSupportLogger logger)
+        IIdeSupportLogger logger, IFileSystemForIDE fileSystem)
     {
         _sourceFiles = sourceFiles;
         _typeNames = typeNames;
         _logger = logger;
+        _fileSystem = fileSystem;
     }
 
     /// <summary>Parses a C# source file into a syntax tree root, for use with the
     /// <see cref="TryGetAttributeSourceLine(SyntaxNode,string,ScenarioBlock)"/> overload. Callers that
     /// process multiple step definitions from the same file should parse once and reuse the root,
-    /// rather than calling <see cref="TryGetAttributeSourceLine(string,string,ScenarioBlock)"/>
+    /// rather than calling <see cref="TryGetAttributeSourceLine(string,string,ScenarioBlock,IFileSystemForIDE)"/>
     /// (which parses the file itself) per step definition.
     /// Returns null when the file cannot be read or parsed.</summary>
-    public static SyntaxNode TryParseSourceFile(string sourceFilePath)
+    public static SyntaxNode TryParseSourceFile(string sourceFilePath, IFileSystemForIDE fileSystem)
     {
         try
         {
-            if (!File.Exists(sourceFilePath))
+            if (!fileSystem.File.Exists(sourceFilePath))
                 return null;
 
-            var sourceText = File.ReadAllText(sourceFilePath);
+            var sourceText = fileSystem.File.ReadAllText(sourceFilePath);
             var syntaxTree = CSharpSyntaxTree.ParseText(sourceText, new CSharpParseOptions(kind: SourceCodeKind.Regular));
             return syntaxTree.GetRoot();
         }
@@ -71,9 +69,10 @@ public class BindingImporter
     /// <summary>Tries to backfill the `attributeSourceLine` for a connector-discovered step definition
     /// by parsing its source file with Roslyn and looking for the binding attribute above the method.
     /// Returns null when the source file cannot be read or no matching attribute is found.</summary>
-    public static int? TryGetAttributeSourceLine(string sourceFilePath, string methodName, ScenarioBlock scenarioBlock)
+    public static int? TryGetAttributeSourceLine(string sourceFilePath, string methodName, ScenarioBlock scenarioBlock,
+        IFileSystemForIDE fileSystem)
     {
-        var root = TryParseSourceFile(sourceFilePath);
+        var root = TryParseSourceFile(sourceFilePath, fileSystem);
         return root == null ? null : TryGetAttributeSourceLine(root, methodName, scenarioBlock);
     }
 
@@ -130,7 +129,7 @@ public class BindingImporter
         // (e.g. a CI runner, or a plugin built elsewhere), which may not exist on this machine —
         // most commonly for reflection-discovered bindings contributed by an external/dynamically
         // loaded Reqnroll plugin assembly. Treat a missing file the same as a missing location.
-        return File.Exists(sourceRef) ? sourceRef : null;
+        return _fileSystem.File.Exists(sourceRef) ? sourceRef : null;
     }
 
     /// <summary>Converts a wire-format step definition DTO into a <see cref="ProjectStepDefinitionBinding"/>, or null if it's invalid.</summary>
@@ -210,17 +209,6 @@ public class BindingImporter
     {
         if (string.IsNullOrWhiteSpace(paramTypes))
             return EmptyParameterTypes;
-        switch (paramTypes)
-        {
-            case "s":
-                return SingleStringParameterTypes;
-            case "i":
-                return SingleIntParameterTypes;
-            case "s|s":
-                return DoubleStringParameterTypes;
-            case "st":
-                return SingleDataTableParameterTypes;
-        }
 
         var parts = paramTypes.Split('|');
         return parts.Select(ParseParameterType).ToArray();

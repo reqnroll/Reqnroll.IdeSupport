@@ -2,6 +2,7 @@
 
 using System.Text.RegularExpressions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -25,6 +26,7 @@ public class GoToStepDefinitionsHandlerTests
     private readonly IDocumentBufferService     _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly ILspWorkspaceScopeManager  _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger            _logger        = Substitute.For<IIdeSupportLogger>();
+    private readonly IFileSystemForIDE          _fileSystem    = new FileSystemForIDE();
 
     // Feature layout — same as DefinitionHandlerTests:
     // Line 0: "Feature: F"         offsets  0–9  (\n at 10)
@@ -49,10 +51,10 @@ public class GoToStepDefinitionsHandlerTests
     }
 
     private GoToStepDefinitionsHandler CreateSut() =>
-        new(_matchService, _bufferService, _scopeManager, _logger);
+        new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem);
 
     private GoToStepDefinitionsHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
-        new(_matchService, _bufferService, _scopeManager, _logger, telemetry);
+        new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem, telemetry);
 
     private static TextDocumentPositionParams RequestAt(DocumentUri uri, int line, int character) =>
         new()

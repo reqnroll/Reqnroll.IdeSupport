@@ -1,10 +1,13 @@
-﻿using Reqnroll.IdeSupport.LSP.Core.Documents;
+﻿using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Documents;
 
 public class SourceLocationExtensionsTests : IDisposable
 {
+    private readonly IFileSystemForIDE _fileSystem = new FileSystemForIDE();
+
     // Temp file written in setup; every test can write its own content.
     private readonly string _tempFile = Path.GetTempFileName();
 
@@ -38,7 +41,7 @@ public class SourceLocationExtensionsTests : IDisposable
     {
         Write("line 1\npublic void Foo() {}\n");
         var loc = At(2);
-        loc.WithIdentifierLocation(null).Should().BeSameAs(loc);
+        loc.WithIdentifierLocation(null, _fileSystem).Should().BeSameAs(loc);
     }
 
     [Fact]
@@ -46,14 +49,14 @@ public class SourceLocationExtensionsTests : IDisposable
     {
         Write("line 1\npublic void Foo() {}\n");
         var loc = At(2);
-        loc.WithIdentifierLocation("").Should().BeSameAs(loc);
+        loc.WithIdentifierLocation("", _fileSystem).Should().BeSameAs(loc);
     }
 
     [Fact]
     public void WithIdentifierLocation_inaccessible_file_returns_original()
     {
         var loc = new SourceLocation(@"C:\nonexistent\file.cs", 5, 1);
-        loc.WithIdentifierLocation("SomeMethod").Should().BeSameAs(loc);
+        loc.WithIdentifierLocation("SomeMethod", _fileSystem).Should().BeSameAs(loc);
     }
 
     // ── WithIdentifierLocation — method name found on same line ──────────────
@@ -67,7 +70,7 @@ public class SourceLocationExtensionsTests : IDisposable
         Write("[Given]\npublic void GivenAStep() {\n");
         var loc = At(line: 2, col: 1);
 
-        var result = loc.WithIdentifierLocation("Steps.GivenAStep(string)");
+        var result = loc.WithIdentifierLocation("Steps.GivenAStep(string)", _fileSystem);
 
         result.SourceFileLine.Should().Be(2);
         result.SourceFileColumn.Should().Be("public void ".Length + 1); // 1-based: col 13
@@ -88,7 +91,7 @@ public class SourceLocationExtensionsTests : IDisposable
         // Connector-path body-start is line 4 (the {).
         var loc = At(line: 4, col: 1);
 
-        var result = loc.WithIdentifierLocation("CalculatorSteps.GivenAStep(string)");
+        var result = loc.WithIdentifierLocation("CalculatorSteps.GivenAStep(string)", _fileSystem);
 
         result.SourceFileLine.Should().Be(2);
         result.SourceFileColumn.Should().BeGreaterThan(1);
@@ -104,7 +107,7 @@ public class SourceLocationExtensionsTests : IDisposable
         var loc = At(line: 7, col: 1);
 
         // Falls through the 6-line window without a hit → returns original.
-        var result = loc.WithIdentifierLocation("GivenAStep");
+        var result = loc.WithIdentifierLocation("GivenAStep", _fileSystem);
         result.Should().BeSameAs(loc);
     }
 
@@ -117,7 +120,7 @@ public class SourceLocationExtensionsTests : IDisposable
         Write("[Given]\npublic void MyMethod() {\n");
         var loc = At(line: 2);
 
-        var result = loc.WithIdentifierLocation("MyMethod");
+        var result = loc.WithIdentifierLocation("MyMethod", _fileSystem);
 
         result.SourceFileLine.Should().Be(2);
         result.SourceFileColumn.Should().Be(13); // 0-based index=12 → 1-based=13

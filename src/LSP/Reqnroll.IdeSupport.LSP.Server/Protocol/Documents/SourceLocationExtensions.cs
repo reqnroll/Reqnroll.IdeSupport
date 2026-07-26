@@ -2,6 +2,7 @@
 
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -51,7 +52,8 @@ public static class SourceLocationExtensions
     /// The qualified method name from the binding, e.g. <c>"CalculatorSteps.AddNumbers(int, int)"</c>.
     /// Only the simple name after the last <c>.</c> (and before any <c>(</c>) is used for the search.
     /// </param>
-    public static SourceLocation WithIdentifierLocation(this SourceLocation loc, string? qualifiedMethod)
+    public static SourceLocation WithIdentifierLocation(this SourceLocation loc, string? qualifiedMethod,
+        IFileSystemForIDE fileSystem)
     {
         var simpleName = ExtractSimpleMethodName(qualifiedMethod);
         if (simpleName is null || string.IsNullOrEmpty(loc.SourceFile))
@@ -59,7 +61,7 @@ public static class SourceLocationExtensions
 
         try
         {
-            var lines    = File.ReadAllLines(loc.SourceFile);
+            var lines    = fileSystem.File.ReadAllLines(loc.SourceFile);
             // Convert 1-based line to 0-based array index; clamp to file bounds.
             var startIdx = Math.Min(loc.SourceFileLine - 1, lines.Length - 1);
             var endIdx   = Math.Max(0, startIdx - 6);
