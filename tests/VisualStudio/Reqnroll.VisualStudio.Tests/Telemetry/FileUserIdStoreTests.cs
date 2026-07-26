@@ -1,4 +1,4 @@
-using Reqnroll.IdeSupport.VisualStudio.SDKIntegration.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 namespace Reqnroll.VisualStudio.Tests.Telemetry;
 
 public class FileUserIdStoreTests

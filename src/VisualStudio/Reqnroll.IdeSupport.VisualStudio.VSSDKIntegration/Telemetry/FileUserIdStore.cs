@@ -2,7 +2,7 @@
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Telemetry;
 
-namespace Reqnroll.IdeSupport.VisualStudio.SDKIntegration.Telemetry;
+namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 
 
 /// <summary>

@@ -2,7 +2,7 @@ using Microsoft.Win32;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using System.ComponentModel.Composition;
 
-namespace Reqnroll.IdeSupport.VisualStudio.SDKIntegration.Telemetry;
+namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 
 /// <summary>
 /// Reads and writes the Reqnroll installation-status registry key (<c>HKCU\Software\Reqnroll\VSLSP</c>)
