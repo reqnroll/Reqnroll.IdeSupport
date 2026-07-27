@@ -97,6 +97,42 @@ public class CodeLensRefreshInterceptorTests
 
         result.Should().Be(LspInterceptorResult.PassThrough);
     }
+
+    [Fact]
+    public async Task A_refreshCodeLens_with_isFullReplacement_false_passes_through_without_invalidating()
+    {
+        // Incremental refreshes (a Roslyn patch on a .cs edit, or a .feature edit changing usage
+        // counts) must not call CodeLens.Invalidate() — same reconnect-churn reasoning as the
+        // disabled per-.cs-edit trigger (#156/#318). Testable directly (no VS host needed) since,
+        // like the disabled .cs didChange path, it no longer reaches any UI-thread call.
+        var body = new JObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"]  = "reqnroll/refreshCodeLens",
+            ["params"]  = new JObject { ["projectName"] = "Proj", ["isFullReplacement"] = false },
+        };
+
+        var result = await Create().InterceptAsync(Receive(body), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    [Fact]
+    public async Task A_refreshCodeLens_without_isFullReplacement_defaults_to_incremental_and_passes_through()
+    {
+        // Absence of the field (e.g. an older/mismatched payload) must default to the safe,
+        // non-invalidating behavior rather than assuming a full replacement.
+        var body = new JObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"]  = "reqnroll/refreshCodeLens",
+            ["params"]  = new JObject { ["projectName"] = "Proj" },
+        };
+
+        var result = await Create().InterceptAsync(Receive(body), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
 }
 
 internal static class JObjectTestExtensions

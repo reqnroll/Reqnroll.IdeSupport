@@ -18,16 +18,20 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// <see cref="StepCodeLens.GetLabelAsync"/> with fresh data.
 /// </summary>
 /// <remarks>
-/// A second trigger — invalidating just the edited file's lenses on <c>textDocument/didChange</c>
-/// for a <c>.cs</c> file — used to live here too, but is disabled (issue #156): calling the VS SDK's
-/// <c>CodeLens.Invalidate()</c> on every debounced <c>.cs</c> edit was root-caused as the trigger for
+/// Only acts when the notification's <c>isFullReplacement</c> is <see langword="true"/> (issue
+/// #156/#318): calling the VS SDK's <c>CodeLens.Invalidate()</c> was root-caused as the trigger for
 /// VS.Extensibility reactivating <c>ReqnrollLanguageClient</c>, forcing a second
 /// <c>CreateServerConnectionAsync</c> call on the same session. #310 made that survivable (a fresh
 /// pipe per call instead of the shared cached one), but the reconnect churn itself is still
-/// unnecessary and risks a transiently unresponsive client mid-swap. Step-usage counts on an
-/// already-open <c>.cs</c> file's lenses go stale until the next full refresh (e.g. after a build)
-/// instead of repainting live per edit. TODO(#318): re-enable once #156's root cause is understood
-/// or a confirmed-safe reconnect path exists.
+/// unnecessary and risks a transiently unresponsive client mid-swap. A per-<c>.cs</c>-edit trigger
+/// used to live here too and was disabled for the same reason — but the server also pushes this same
+/// notification, with <c>isFullReplacement=false</c>, for incremental Roslyn patches and
+/// <c>.feature</c>-edit usage-count changes (see <c>BindingRegistryChangedHandler</c> and
+/// <c>CodeLensRefreshHandler</c>), which would reproduce the identical reconnect churn on every
+/// settled edit if acted on. Step-usage counts on an already-open <c>.cs</c> file's lenses go stale
+/// until the next full refresh (e.g. after a build) instead of repainting live per edit. TODO(#318):
+/// act on incremental refreshes too once #156's root cause is understood or a confirmed-safe
+/// reconnect path exists.
 /// </remarks>
 internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor
 {
@@ -60,9 +64,18 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor
         {
             if (string.Equals(method, "reqnroll/refreshCodeLens", StringComparison.Ordinal))
             {
-                InvalidateAllOnUiThread();
-                _logger.LogInformation(
-                    "CodeLensRefreshInterceptor: refreshed all tracked lenses on server signal.");
+                var isFullReplacement = body["params"]?["isFullReplacement"]?.Value<bool>() ?? false;
+                if (isFullReplacement)
+                {
+                    InvalidateAllOnUiThread();
+                    _logger.LogInformation(
+                        "CodeLensRefreshInterceptor: refreshed all tracked lenses on full-replacement server signal.");
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "CodeLensRefreshInterceptor: skipped incremental refresh signal to avoid reconnect churn (#156/#318).");
+                }
             }
             return Task.FromResult(LspInterceptorResult.PassThrough);
         }

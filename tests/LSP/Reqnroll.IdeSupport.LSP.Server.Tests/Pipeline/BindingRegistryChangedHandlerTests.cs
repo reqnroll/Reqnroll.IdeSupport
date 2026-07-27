@@ -598,7 +598,32 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         _languageServer.Received(1).SendNotification(
             "reqnroll/refreshCodeLens",
-            Arg.Is<RefreshCodeLensParams>(p => p.ProjectName == _project.ProjectName));
+            Arg.Is<RefreshCodeLensParams>(p => p.ProjectName == _project.ProjectName && p.IsFullReplacement));
+    }
+
+    [Fact]
+    public async Task Incremental_debounced_action_pushes_refreshCodeLens_with_isFullReplacement_false_for_visual_studio()
+    {
+        var featureFile = Path.Combine(_projectFolder, "A.feature");
+        File.WriteAllText(featureFile, "Feature: A\n");
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { featureFile });
+
+        Func<CancellationToken, Task>? capturedRescan = null;
+        _rescanDebouncer
+            .When(d => d.ScheduleRescan(_project, Arg.Any<Func<CancellationToken, Task>>()))
+            .Do(ci => capturedRescan = ci.Arg<Func<CancellationToken, Task>>());
+
+        await CreateSut().Handle(
+            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            CancellationToken.None);
+
+        capturedRescan.Should().NotBeNull();
+        await capturedRescan!(CancellationToken.None);
+
+        _languageServer.Received(1).SendNotification(
+            "reqnroll/refreshCodeLens",
+            Arg.Is<RefreshCodeLensParams>(p => p.ProjectName == _project.ProjectName && !p.IsFullReplacement));
     }
 
     [Fact]

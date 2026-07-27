@@ -17,21 +17,24 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// </remarks>
 internal static class CodeLensRefreshRequester
 {
-    /// <summary>Sends the appropriate refresh notification/request for the connected client. <paramref name="projectName"/> is informational only (see <see cref="RefreshCodeLensParams.ProjectName"/>) and may be empty.</summary>
+    /// <summary>Sends the appropriate refresh notification/request for the connected client. <paramref name="projectName"/> is informational only (see <see cref="RefreshCodeLensParams.ProjectName"/>) and may be empty. <paramref name="isFullReplacement"/> is passed through to <see cref="RefreshCodeLensParams.IsFullReplacement"/> so the VS client can skip the reconnect-risking invalidation on incremental refreshes (issue #156/#318).</summary>
     public static async Task RequestRefreshAsync(
         ILanguageServerFacade languageServer,
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
-        string projectName)
+        string projectName,
+        bool isFullReplacement = false)
     {
         if (clientIde.IsVisualStudio)
         {
-            logger.LogInfo($"Sending reqnroll/refreshCodeLens for project '{projectName}'.");
+            logger.LogInfo(
+                $"Sending reqnroll/refreshCodeLens for project '{projectName}' " +
+                $"(isFullReplacement={isFullReplacement}).");
             try
             {
                 languageServer.SendNotification(
                     LspMethodNames.ReqnrollRefreshCodeLens,
-                    new RefreshCodeLensParams { ProjectName = projectName });
+                    new RefreshCodeLensParams { ProjectName = projectName, IsFullReplacement = isFullReplacement });
             }
             catch (Exception ex)
             {
