@@ -24,7 +24,12 @@ const enum ProjectFileRole {
 const RESEND_DEBOUNCE_MS = 500;
 
 /**
- * Finds the workspace folder that contains the given project file path.
+ * Finds the workspace folder that contains the given project file path — the deepest/longest
+ * matching folder wins, so a project inside a nested workspace folder (one folder open inside
+ * another) resolves to its own, more specific folder rather than the outer one. Case-insensitive
+ * and separator-bounded (a trailing path separator is appended to each folder before matching) so
+ * a folder name that's a plain string-prefix of a sibling's name (e.g. `Foo` vs `FooBar`) can't
+ * collide, mirroring findOwningProjectFile's matching below.
  * Falls back to the first workspace folder, or to the project file itself when there are no
  * workspace folders at all. Pure function (folders passed in) so it's directly testable without
  * a running Extension Host — see projectManager.test.ts.
@@ -32,13 +37,18 @@ const RESEND_DEBOUNCE_MS = 500;
 export function resolveWorkspaceFolder(projectFile: string, folders: readonly string[]): string {
   if (folders.length === 0) return projectFile;
 
+  const projectFileLower = projectFile.toLowerCase();
+  let best: string | undefined;
+  let bestLen = -1;
   for (const folder of folders) {
-    if (projectFile.startsWith(folder)) {
-      return folder;
+    const prefix = folder.endsWith(path.sep) ? folder : folder + path.sep;
+    if (projectFileLower.startsWith(prefix.toLowerCase()) && prefix.length > bestLen) {
+      best = folder;
+      bestLen = prefix.length;
     }
   }
 
-  return folders[0];
+  return best ?? folders[0];
 }
 
 /**
