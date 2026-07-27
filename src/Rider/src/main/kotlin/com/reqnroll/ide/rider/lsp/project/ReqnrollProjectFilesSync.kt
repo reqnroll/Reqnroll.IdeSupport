@@ -124,8 +124,16 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         }
     }
 
-    private fun findOwningProject(path: String, folders: List<Pair<String, String>>): String? =
-        folders.firstOrNull { (folder, _) -> path.startsWith(folder + File.separator) }?.second
+    /**
+     * `internal` (rather than private) purely so it's unit-testable without a `Project`/VFS
+     * fixture. Compares case-insensitively: two project folders differing only by case (or a
+     * path arriving with different casing than the folder was registered with -- e.g. via a
+     * symlink/junction) would otherwise fail this check on case-insensitive filesystems (Windows,
+     * and macOS by default) even though they refer to the same location, non-deterministically
+     * misattributing (or dropping) a file-change delta depending on how folders happen to sort.
+     */
+    internal fun findOwningProject(path: String, folders: List<Pair<String, String>>): String? =
+        folders.firstOrNull { (folder, _) -> path.startsWith(folder + File.separator, ignoreCase = true) }?.second
 
     private data class Change(val path: String, val role: Int, val added: Boolean)
 
