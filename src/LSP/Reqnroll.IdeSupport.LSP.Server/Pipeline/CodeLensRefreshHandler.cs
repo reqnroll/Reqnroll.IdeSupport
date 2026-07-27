@@ -64,7 +64,7 @@ public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNoti
     {
         using var _perf = _recorder.Measure(LspMethodNames.WorkspaceCodeLensRefresh);
         await CodeLensRefreshRequester
-            .RequestRefreshAsync(_languageServer, _clientIde, _logger, projectName: string.Empty)
+            .RequestRefreshAsync(_languageServer, _clientIde, _logger, projectName: string.Empty, isFullReplacement: false)
             .ConfigureAwait(false);
     }
 }
