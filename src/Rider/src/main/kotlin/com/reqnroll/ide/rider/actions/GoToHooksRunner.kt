@@ -25,7 +25,10 @@ object GoToHooksRunner {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.goToHooks(project, uri, line, character)
                 ReqnrollDebugLogger.info("GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned")
-                ApplicationManager.getApplication().invokeLater { showResult(project, response) }
+                ApplicationManager.getApplication().invokeLater {
+                    if (project.isDisposed) return@invokeLater
+                    showResult(project, response)
+                }
             }
         })
     }

@@ -22,7 +22,10 @@ object FindStepUsagesRunner {
             project, "Reqnroll: Finding Step Usages", true) {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.findStepUsages(project, uri, line, character)
-                ApplicationManager.getApplication().invokeLater { showResult(project, response) }
+                ApplicationManager.getApplication().invokeLater {
+                    if (project.isDisposed) return@invokeLater
+                    showResult(project, response)
+                }
             }
         })
     }

@@ -33,7 +33,10 @@ class FindUnusedStepDefinitionsAction : AnAction() {
             project, "Reqnroll: Scanning for Unused Step Definitions", true) {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.findUnusedStepDefinitions(project)
-                ApplicationManager.getApplication().invokeLater { showResult(project, response) }
+                ApplicationManager.getApplication().invokeLater {
+                    if (project.isDisposed) return@invokeLater
+                    showResult(project, response)
+                }
             }
         })
     }
