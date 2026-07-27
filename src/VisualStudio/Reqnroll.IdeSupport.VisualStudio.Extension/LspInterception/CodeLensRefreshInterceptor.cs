@@ -26,7 +26,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// pipe per call instead of the shared cached one), but the reconnect churn itself is still
 /// unnecessary and risks a transiently unresponsive client mid-swap. Step-usage counts on an
 /// already-open <c>.cs</c> file's lenses go stale until the next full refresh (e.g. after a build)
-/// instead of repainting live per edit, until issue #318 re-enables this.
+/// instead of repainting live per edit. TODO(#318): re-enable once #156's root cause is understood
+/// or a confirmed-safe reconnect path exists.
 /// </remarks>
 internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor
 {
@@ -66,8 +67,8 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor
             return Task.FromResult(LspInterceptorResult.PassThrough);
         }
 
-        // Per-.cs-edit invalidation (textDocument/didChange -> CodeLens.Invalidate() for just that
-        // file's lenses) is disabled — see the class remarks and issue #156/#318.
+        // TODO(#318): per-.cs-edit invalidation (textDocument/didChange -> CodeLens.Invalidate() for
+        // just that file's lenses) is disabled — see the class remarks and issue #156/#318.
         return Task.FromResult(LspInterceptorResult.PassThrough);
     }
 
