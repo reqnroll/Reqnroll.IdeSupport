@@ -7,7 +7,7 @@ import { ProjectManager } from './projectManager';
 import { StatusBarManager } from './statusBar';
 import { doToggleComment } from './commentToggle';
 import { doFindStepUsages, doFindUnusedStepDefinitions } from './stepUsages';
-import { doGoToHooks } from './hookNavigation';
+import { doGoToHooks } from './goToHooks';
 import { doGoToStepDefinition } from './stepNavigation';
 import { registerStepCodeLens } from './stepCodeLens';
 import {

@@ -1395,7 +1395,7 @@ sequenceDiagram
 
 #### VS Code
 
-`reqnroll.goToHooks` is available via editor context menu (`editor/context`, group `navigation@90`, `when: editorLangId == gherkin`) and the command palette, with no default keybinding. `doGoToHooks` ([`hookNavigation.ts`](../src/VSCode/src/hookNavigation.ts)) reads the active editor's cursor position and sends the custom `reqnroll/goToHooks` request with `{textDocument, position}`. A single hook navigates directly via `openAndReveal`; multiple hooks show a `vscode.window.showQuickPick` with one entry per hook (`$(symbol-event) HookType`, method name as description, `Order: N` as detail when `hookOrder !== 0`) — the VS Code-idiomatic equivalent of the VS `NavigationPickerDialog` modal described above. `navigateToHook` opens the target `.cs` file and reveals the hook method's location via the shared `openAndReveal` helper (also used by F14 and F15).
+`reqnroll.goToHooks` is available via editor context menu (`editor/context`, group `navigation@90`, `when: editorLangId == gherkin`) and the command palette, with no default keybinding. `doGoToHooks` ([`goToHooks.ts`](../src/VSCode/src/goToHooks.ts)) reads the active editor's cursor position and sends the custom `reqnroll/goToHooks` request with `{textDocument, position}`. A single hook navigates directly via `openAndReveal`; multiple hooks show a `vscode.window.showQuickPick` with one entry per hook (`$(symbol-event) HookType`, method name as description, `Order: N` as detail when `hookOrder !== 0`) — the VS Code-idiomatic equivalent of the VS `NavigationPickerDialog` modal described above. `navigateToHook` opens the target `.cs` file and reveals the hook method's location via the shared `openAndReveal` helper (also used by F14 and F15).
 
 #### Rider
 
