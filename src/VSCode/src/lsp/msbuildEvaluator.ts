@@ -145,7 +145,7 @@ async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluat
  * project's membership index cares about, deduplicated by resolved absolute path (the same
  * file can appear under more than one item type, e.g. a linked file).
  */
-function toProjectFileItems(
+export function toProjectFileItems(
   items: Partial<Record<'Compile' | 'None' | 'Content', MsbuildItem[]>>,
 ): ProjectFileItem[] {
   const seen = new Set<string>();
@@ -171,7 +171,7 @@ function toProjectFileItems(
 
 // ── Output assembly path ─────────────────────────────────────────────────
 
-function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
+export function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
   // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\)
   // AssemblyName is the file name without extension
   const projectDir = path.dirname(projectFile);
@@ -186,7 +186,7 @@ interface AssetsFile {
   libraries?: Record<string, { type?: string }>;
 }
 
-function readPackageReferences(assetsFilePath: string, tfm: string): PackageRef[] {
+export function readPackageReferences(assetsFilePath: string, tfm: string): PackageRef[] {
   if (!assetsFilePath || !fs.existsSync(assetsFilePath)) {
     return [];
   }
@@ -223,7 +223,7 @@ function readPackageReferences(assetsFilePath: string, tfm: string): PackageRef[
  * Finds the TFM target key in project.assets.json that best matches
  * the given TargetFrameworkMoniker (e.g. ".NETCoreApp,Version=v8.0" → "net8.0").
  */
-function findTargetKey(assets: AssetsFile, tfm: string): string | undefined {
+export function findTargetKey(assets: AssetsFile, tfm: string): string | undefined {
   const targets = assets.targets;
   if (!targets) return undefined;
 
@@ -242,7 +242,7 @@ function findTargetKey(assets: AssetsFile, tfm: string): string | undefined {
  * ".NETStandard,Version=v2.0" → "netstandard2.0"
  * ".NETFramework,Version=v4.8.1" → "net481"
  */
-function tfmToShort(tfm: string): string {
+export function tfmToShort(tfm: string): string {
   const match = tfm.match(
     /\.NET(?:CoreApp|Standard|Framework|Portable),Version=v(\d+(?:\.\d+)?(?:\.\d+)?)/i,
   );
