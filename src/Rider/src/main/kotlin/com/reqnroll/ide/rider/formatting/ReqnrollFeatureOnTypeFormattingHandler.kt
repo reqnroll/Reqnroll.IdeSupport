@@ -45,6 +45,11 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
         val insertSpaces = !editor.settings.isUseTabCharacter(project)
         val tabSize = editor.settings.getTabSize(project)
         val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
+        // Captured before the request fires so the edit-application step below can detect
+        // whether the document changed in the meantime (issue #326) -- the server's returned
+        // TextEdit line/character offsets are only valid against the document as it looked at
+        // this instant, not whatever it looks like once the (up to ~10s) request returns.
+        val requestModificationStamp = document.modificationStamp
 
         // charTyped runs on the EDT; ReqnrollRequestSender.onTypeFormatting uses sendRequestSync,
         // which blocks the calling thread for up to its timeout — the request must run on a
@@ -63,6 +68,13 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
 
             ApplicationManager.getApplication().invokeLater {
                 if (project.isDisposed || editor.isDisposed) return@invokeLater
+                if (editor.document.modificationStamp != requestModificationStamp) {
+                    ReqnrollDebugLogger.info(
+                        "ReqnrollFeatureOnTypeFormattingHandler: document changed since the request " +
+                            "was sent; discarding stale edits for $uri.",
+                    )
+                    return@invokeLater
+                }
                 applyEdits(project, editor.document, edits)
             }
         }
