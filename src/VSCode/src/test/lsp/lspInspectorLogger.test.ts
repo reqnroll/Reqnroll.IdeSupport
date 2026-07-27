@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { createTraceChannel, traceServerToLogLevel } from '../lspInspectorLogger';
+import { createTraceChannel, traceServerToLogLevel } from '../../lsp/lspInspectorLogger';
 
 suite('traceServerToLogLevel', () => {
   const config = vscode.workspace.getConfiguration('reqnroll');

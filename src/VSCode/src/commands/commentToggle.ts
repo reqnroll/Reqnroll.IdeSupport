@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ExecuteCommandRequest, LanguageClient } from 'vscode-languageclient/node';
-import { normalizeSelectionLines } from './selectionUtils';
+import { normalizeSelectionLines } from '../util/selectionUtils';
 
 /**
  * Toggles line comments on the active editor's selection by asking the server to compute the

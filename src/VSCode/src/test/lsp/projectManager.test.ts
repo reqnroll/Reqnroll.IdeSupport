@@ -1,8 +1,8 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { resolveWorkspaceFolder, findOwningProjectFile } from '../projectManager';
-import { ReqnrollMethods } from '../lspMethods';
+import { resolveWorkspaceFolder, findOwningProjectFile } from '../../lsp/projectManager';
+import { ReqnrollMethods } from '../../lsp/lspMethods';
 
 suite('ProjectManager', () => {
   test('ReqnrollMethods defines the LSP method names ProjectManager sends', () => {

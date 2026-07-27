@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
-import { ReqnrollMethods } from './lspMethods';
-import { openAndReveal } from './navigationUtils';
+import { ReqnrollMethods } from '../lsp/lspMethods';
+import { openAndReveal } from '../util/navigationUtils';
 
 interface FindUnusedStepDefinitionsResponse {
   items: UnusedStepDefinitionItem[];
