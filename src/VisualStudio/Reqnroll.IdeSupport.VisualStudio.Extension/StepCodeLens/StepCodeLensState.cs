@@ -29,13 +29,24 @@ internal sealed class StepCodeLensState
     /// <summary>Find Step Definition Usages renderer reused for the execute-lens FAR window display.</summary>
     public FindStepUsagesRenderer?  FindUsagesRenderer { get; set; }
 
-    // Per-file registry of method start lines (0-based).  Used by GetLabelAsync to bound the
-    // attribute-lookback to the current method's own attribute block, not the previous method's.
-    private readonly ConcurrentDictionary<string, ConcurrentBag<int>> _methodStartLines
+    // Per-file registry of method start lines (0-based), keyed as a concurrent set (the byte
+    // value is unused). Used by GetLabelAsync to bound the attribute-lookback to the current
+    // method's own attribute block, not the previous method's. Entries are removed via
+    // UnregisterMethodLine (mirroring RegisterLens/UnregisterLens below) when a StepCodeLens is
+    // disposed, so a line whose method was deleted or shifted by an edit cannot linger and be
+    // mistaken for a still-live method's boundary.
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<int, byte>> _methodStartLines
         = new(System.StringComparer.OrdinalIgnoreCase);
 
     internal void RegisterMethodLine(string fileUri, int startLine)
-        => _methodStartLines.GetOrAdd(fileUri, _ => new ConcurrentBag<int>()).Add(startLine);
+        => _methodStartLines.GetOrAdd(fileUri, _ => new ConcurrentDictionary<int, byte>())[startLine] = 0;
+
+    /// <summary>Removes a previously-registered method start line, e.g. when its <see cref="StepCodeLens"/> is disposed.</summary>
+    internal void UnregisterMethodLine(string fileUri, int startLine)
+    {
+        if (_methodStartLines.TryGetValue(fileUri, out var lines))
+            lines.TryRemove(startLine, out _);
+    }
 
     /// <summary>
     /// Returns the smallest registered method start line that is strictly greater than
@@ -46,9 +57,9 @@ internal sealed class StepCodeLensState
     /// </summary>
     internal int GetNextMethodLine(string fileUri, int currentStartLine)
     {
-        if (!_methodStartLines.TryGetValue(fileUri, out var bag))
+        if (!_methodStartLines.TryGetValue(fileUri, out var lines))
             return -1;
-        return bag.Where(l => l > currentStartLine).DefaultIfEmpty(-1).Min();
+        return lines.Keys.Where(l => l > currentStartLine).DefaultIfEmpty(-1).Min();
     }
 
     // ── Lens invalidation ────────────────────────────────────────────────────

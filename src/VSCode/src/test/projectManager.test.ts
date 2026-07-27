@@ -93,9 +93,33 @@ suite('ProjectManager', () => {
       const folders = [parent, child];
       const projectFile = path.join(child, 'Test.csproj');
 
-      // Note: current implementation returns the *first* match, not the deepest.
-      // This documents the current behaviour; a future fix could make it deepest-match.
-      assert.strictEqual(resolveWorkspaceFolder(projectFile, folders), parent);
+      assert.strictEqual(resolveWorkspaceFolder(projectFile, folders), child);
+    });
+
+    test('prefers the deepest-nested workspace folder regardless of array order', () => {
+      const parent = path.join('C:', 'work', 'Parent');
+      const child = path.join('C:', 'work', 'Parent', 'Sub');
+      const folders = [child, parent]; // deepest folder listed first this time
+      const projectFile = path.join(child, 'Test.csproj');
+
+      assert.strictEqual(resolveWorkspaceFolder(projectFile, folders), child);
+    });
+
+    test('does not let a sibling folder name that is a string-prefix of another collide', () => {
+      const foo = path.join('C:', 'work', 'Foo');
+      const fooBar = path.join('C:', 'work', 'FooBar');
+      const folders = [foo, fooBar];
+      const projectFile = path.join(fooBar, 'Test.csproj');
+
+      assert.strictEqual(resolveWorkspaceFolder(projectFile, folders), fooBar);
+    });
+
+    test('matches case-insensitively', () => {
+      const folder = path.join('C:', 'work', 'Repo');
+      const folders = [folder];
+      const projectFile = path.join('c:', 'WORK', 'repo', 'Test.csproj');
+
+      assert.strictEqual(resolveWorkspaceFolder(projectFile, folders), folder);
     });
   });
 

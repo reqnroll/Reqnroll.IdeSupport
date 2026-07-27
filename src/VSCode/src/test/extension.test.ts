@@ -8,6 +8,7 @@ import './projectManager.test';
 import './lspInspectorLogger.test';
 import './renameDisambiguation.test';
 import './tableHighlightService.test';
+import './stepNavigation.test';
 import './statusBar.test';
 
 /**
