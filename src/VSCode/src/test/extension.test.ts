@@ -8,6 +8,8 @@ import './lsp/projectManager.test';
 import './lsp/lspInspectorLogger.test';
 import './commands/renameStep.test';
 import './tableHighlightService.test';
+import './commands/stepNavigation.test';
+import './statusBar.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

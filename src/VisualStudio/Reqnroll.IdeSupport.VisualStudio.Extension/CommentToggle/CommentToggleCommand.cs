@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Microsoft.VisualStudio.Extensibility.Editor;
+using Reqnroll.IdeSupport.VisualStudio;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 
@@ -99,7 +100,10 @@ internal sealed class CommentToggleCommand : Command
             else
             {
                 startLine = startPos.GetContainingLine().LineNumber;
-                endLine   = endPos.GetContainingLine().LineNumber;
+                var endContainingLine = endPos.GetContainingLine();
+                endLine = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
+                    startLine, endContainingLine.LineNumber,
+                    endPos.Offset == endContainingLine.Text.Start.Offset);
                 _logger.LogInformation(
                     "CommentToggleCommand: selection lines [{StartLine}..{EndLine}].", startLine, endLine);
             }

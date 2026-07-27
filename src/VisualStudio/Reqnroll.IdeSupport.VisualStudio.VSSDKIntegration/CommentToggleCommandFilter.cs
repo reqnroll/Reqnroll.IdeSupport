@@ -125,8 +125,11 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
             {
                 var fileUri   = GetTextBufferFileUri(_wpfTextView);
                 var selection = _wpfTextView.Selection;
+                var endPos    = selection.End.Position;
+                var endContainingLine = endPos.GetContainingLine();
                 var startLine = selection.Start.Position.GetContainingLine().LineNumber;
-                var endLine   = selection.End.Position.GetContainingLine().LineNumber;
+                var endLine   = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
+                    startLine, endContainingLine.LineNumber, endPos == endContainingLine.Start);
 
                 _logger.LogInfo(
                     $"CommentToggleCommandFilter: redirecting command id={commandId} uri='{fileUri}' lines[{startLine}..{endLine}]");
