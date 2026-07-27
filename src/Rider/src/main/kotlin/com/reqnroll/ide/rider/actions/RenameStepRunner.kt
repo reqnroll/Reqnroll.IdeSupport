@@ -27,6 +27,11 @@ import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
 object RenameStepRunner {
     fun run(project: Project, uri: String, line: Int, character: Int) {
         ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character")
+        // Captured once, up front, so the edit-application step at the end of this flow can
+        // detect whether the document changed at any point in between -- including across the
+        // modal "Enter the new step expression" dialog, which gives the user arbitrary time to
+        // edit the file before the rename request is even sent (issue #326).
+        val requestModificationStamp = RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Renaming Step", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -48,7 +53,7 @@ object RenameStepRunner {
                 }
 
                 if (response.targets.size == 1) {
-                    continueWithTarget(project, uri, line, character, response.targets[0])
+                    continueWithTarget(project, uri, line, character, response.targets[0], requestModificationStamp)
                     return
                 }
 
@@ -65,7 +70,7 @@ object RenameStepRunner {
                         render = { it.label },
                         onChosen = { target ->
                             ApplicationManager.getApplication().executeOnPooledThread {
-                                continueWithTarget(project, uri, line, character, target)
+                                continueWithTarget(project, uri, line, character, target, requestModificationStamp)
                             }
                         },
                     )
@@ -75,7 +80,14 @@ object RenameStepRunner {
     }
 
     /** Runs on a background thread: records the selection, prompts for the new expression, sends the rename request, and applies the resulting edit. */
-    private fun continueWithTarget(project: Project, uri: String, line: Int, character: Int, target: RenameTargetItem) {
+    private fun continueWithTarget(
+        project: Project,
+        uri: String,
+        line: Int,
+        character: Int,
+        target: RenameTargetItem,
+        requestModificationStamp: Long?,
+    ) {
         ReqnrollNotificationSender.sendSelectRenameTarget(
             project, SelectRenameTargetParams(uri, version = 0, attributeIndex = target.attributeIndex))
 
@@ -98,6 +110,20 @@ object RenameStepRunner {
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
+            if (RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp != requestModificationStamp) {
+                ReqnrollDebugLogger.warn(
+                    "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
+                        "edit to avoid applying it at stale offsets.",
+                )
+                showOnEdt(project) {
+                    Messages.showErrorDialog(
+                        project,
+                        "The file changed while the rename dialog was open. Please try again.",
+                        "Rename Step",
+                    )
+                }
+                return@invokeLater
+            }
             RenameWorkspaceEditApplier.apply(project, edit)
         }
     }

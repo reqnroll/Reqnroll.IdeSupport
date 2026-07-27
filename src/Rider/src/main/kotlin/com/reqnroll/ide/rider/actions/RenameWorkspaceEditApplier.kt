@@ -34,7 +34,8 @@ object RenameWorkspaceEditApplier {
         }
     }
 
-    private fun documentForUri(uri: String): Document? {
+    /** `internal` so callers (e.g. [RenameStepRunner]) can capture/compare a document's [Document.modificationStamp] around a request, without duplicating this URI-to-Document lookup. */
+    internal fun documentForUri(uri: String): Document? {
         val file = VirtualFileManager.getInstance().findFileByUrl(uri) ?: return null
         return FileDocumentManager.getInstance().getDocument(file)
     }
