@@ -1,8 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
-import { createRenameMiddleware, getRenameTargets } from '../renameStep';
-import { ReqnrollMethods } from '../lspMethods';
+import { createRenameMiddleware, getRenameTargets } from '../../commands/renameStep';
+import { ReqnrollMethods } from '../../lsp/lspMethods';
 
 /** Minimal stand-in for LanguageClient's request/notification surface used by rename disambiguation. */
 function fakeClient(overrides: {

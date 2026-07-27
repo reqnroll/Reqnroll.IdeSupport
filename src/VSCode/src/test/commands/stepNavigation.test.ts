@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { resolveRelativePathIn } from '../stepNavigation';
+import { resolveRelativePathIn } from '../../commands/stepNavigation';
 
 // Folders/files are built with path.join off the real OS root (not hardcoded "C:\\..." literals)
 // so these tests exercise vscode.Uri#fsPath's actual, platform-specific separator convention --

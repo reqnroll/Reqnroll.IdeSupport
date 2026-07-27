@@ -4,11 +4,11 @@ import { LanguageClient, State } from 'vscode-languageclient/node';
 import { ReqnrollExtensionApi } from '../extension';
 
 // Pull in all additional test suites so the single entry-point loads them all
-import './projectManager.test';
-import './lspInspectorLogger.test';
-import './renameStep.test';
+import './lsp/projectManager.test';
+import './lsp/lspInspectorLogger.test';
+import './commands/renameStep.test';
 import './tableHighlightService.test';
-import './stepNavigation.test';
+import './commands/stepNavigation.test';
 import './statusBar.test';
 
 /**

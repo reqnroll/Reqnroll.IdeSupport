@@ -2,21 +2,21 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
-import { createTraceChannel, traceServerToLogLevel } from './lspInspectorLogger';
-import { ProjectManager } from './projectManager';
+import { createTraceChannel, traceServerToLogLevel } from './lsp/lspInspectorLogger';
+import { ProjectManager } from './lsp/projectManager';
 import { StatusBarManager } from './statusBar';
-import { doToggleComment } from './commentToggle';
-import { doFindStepUsages } from './stepUsages';
-import { doFindUnusedStepDefinitions } from './findUnusedStepDefinitions';
-import { doGoToHooks } from './goToHooks';
-import { doGoToStepDefinition } from './stepNavigation';
-import { registerStepCodeLens } from './stepCodeLens';
+import { doToggleComment } from './commands/commentToggle';
+import { doFindStepUsages } from './commands/stepUsages';
+import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinitions';
+import { doGoToHooks } from './commands/goToHooks';
+import { doGoToStepDefinition } from './commands/stepNavigation';
+import { registerStepCodeLens } from './commands/stepCodeLens';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
   isCSharpDocument,
-} from './manualDocumentSync';
-import { createRenameMiddleware } from './renameStep';
+} from './lsp/manualDocumentSync';
+import { createRenameMiddleware } from './commands/renameStep';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
 
@@ -255,7 +255,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     // vscode-languageclient's built-in sync has proven unreliable for it; this middleware
     // stops the built-in path from also emitting sync notifications for .cs documents.
     // Step Rename refactoring — prepareRename is intercepted to surface multi-attribute rename ambiguity via a
-    // QuickPick before delegating to the standard rename flow (see renameStep.ts).
+    // QuickPick before delegating to the standard rename flow (see commands/renameStep.ts).
     // `() => client` is passed rather than `client` directly because `client` isn't assigned
     // until after this object is constructed.
     middleware: {

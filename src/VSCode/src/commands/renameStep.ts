@@ -5,7 +5,7 @@ import {
   Middleware,
   PrepareRenameSignature,
 } from 'vscode-languageclient/node';
-import { ReqnrollMethods } from './lspMethods';
+import { ReqnrollMethods } from '../lsp/lspMethods';
 
 /** One renameable binding attribute at the queried position (mirrors RenameTargetItem.cs). */
 export interface RenameTargetItem {
