@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
-import { createRenameMiddleware, getRenameTargets } from '../renameDisambiguation';
+import { createRenameMiddleware, getRenameTargets } from '../renameStep';
 import { ReqnrollMethods } from '../lspMethods';
 
 /** Minimal stand-in for LanguageClient's request/notification surface used by rename disambiguation. */
@@ -15,7 +15,7 @@ function fakeClient(overrides: {
   } as unknown as LanguageClient;
 }
 
-suite('renameDisambiguation', () => {
+suite('renameStep', () => {
   suite('ReqnrollMethods', () => {
     test('defines the rename LSP method names the server implements', () => {
       // Mirrors LspMethodNames.cs — a mismatch here means the client and server drift apart.
