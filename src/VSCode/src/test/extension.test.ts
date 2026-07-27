@@ -9,6 +9,7 @@ import './lspInspectorLogger.test';
 import './renameDisambiguation.test';
 import './tableHighlightService.test';
 import './stepNavigation.test';
+import './statusBar.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.
