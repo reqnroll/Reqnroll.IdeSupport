@@ -71,19 +71,32 @@ async function navigateToStepDefinition(def: GoToStepDefinitionLocation): Promis
   await openAndReveal(vscode.Uri.parse(def.uri), def.startLine, def.startChar);
 }
 
-function uriToRelativePath(uriStr: string): string {
+/**
+ * Renders `uriStr` relative to whichever of `folderFsPaths` contains it, falling back to the bare
+ * filename when none do (or on a parse failure). Compares case-insensitively: file URIs returned
+ * by the .NET LSP server can normalize a drive letter's case (e.g. `file:///c:/...`) differently
+ * than a workspace folder's `fsPath` (cased as the user opened it), and a case-sensitive
+ * comparison would then miss a folder that genuinely contains the file — silently falling through
+ * to the less useful bare-filename label instead of erroring, so the mismatch was easy to miss
+ * (issue #324). Pure function (folder paths passed in) so it's directly testable without a
+ * running Extension Host workspace — see stepNavigation.test.ts.
+ */
+export function resolveRelativePathIn(uriStr: string, folderFsPaths: readonly string[]): string {
   try {
     const uri = vscode.Uri.parse(uriStr);
-    const folders = vscode.workspace.workspaceFolders;
-    if (folders) {
-      for (const folder of folders) {
-        if (uri.fsPath.startsWith(folder.uri.fsPath)) {
-          return path.relative(folder.uri.fsPath, uri.fsPath);
-        }
+    const fsPathLower = uri.fsPath.toLowerCase();
+    for (const folderFsPath of folderFsPaths) {
+      if (fsPathLower.startsWith(folderFsPath.toLowerCase())) {
+        return path.relative(folderFsPath, uri.fsPath);
       }
     }
     return path.basename(uri.fsPath);
   } catch {
     return uriStr;
   }
+}
+
+function uriToRelativePath(uriStr: string): string {
+  const folders = vscode.workspace.workspaceFolders;
+  return resolveRelativePathIn(uriStr, folders ? folders.map((f) => f.uri.fsPath) : []);
 }

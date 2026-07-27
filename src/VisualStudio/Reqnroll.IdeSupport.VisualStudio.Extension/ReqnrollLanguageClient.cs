@@ -169,6 +169,15 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 _stepCodeLensState.FindUsagesService  = _findStepUsagesState.Service;
                 _stepCodeLensState.FindUsagesRenderer = _findStepUsagesState.Renderer;
 
+                // VS.Extensibility can call this method more than once per session (issue #156):
+                // a second activation must not leave the first ProjectMonitor's DTE event
+                // subscriptions (SolutionEvents/BuildEvents/WindowEvents/
+                // IVsTrackProjectDocumentsEvents2) live alongside the new one — that would double
+                // every subsequent notification to the server and leak the abandoned instance's
+                // COM event-sink references for the rest of the VS session (issue #320). Dispose()
+                // is idempotent/UI-thread-safe, so this is a no-op on the first (normal) call.
+                _connectionService.ProjectMonitor?.Dispose();
+
                 _logger.LogInformation("ReqnrollLanguageClient: creating VsProjectEventMonitor.");
                 _connectionService.ProjectMonitor = new VsProjectEventMonitor(
                     interceptingPipe, _loggerFactory.CreateLogger<VsProjectEventMonitor>(), serviceProvider,

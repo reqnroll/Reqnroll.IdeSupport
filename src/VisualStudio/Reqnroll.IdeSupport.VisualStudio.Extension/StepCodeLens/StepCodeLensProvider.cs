@@ -241,6 +241,7 @@ internal sealed class StepCodeLens : InvokableCodeLens
     public override void Dispose()
     {
         _state.UnregisterLens(this, _fileUri.ToString());
+        _state.UnregisterMethodLine(_fileUri.ToString(), _methodStartLine);
     }
 
     /// <summary>

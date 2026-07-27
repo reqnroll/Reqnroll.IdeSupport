@@ -9,6 +9,7 @@ import { LanguageClient } from 'vscode-languageclient/node';
  */
 export class StatusBarManager implements vscode.Disposable {
   private readonly _item: vscode.StatusBarItem;
+  private readonly _stateListener: vscode.Disposable;
 
   constructor(client: LanguageClient) {
     this._item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -16,7 +17,7 @@ export class StatusBarManager implements vscode.Disposable {
     this._setStarting();
     this._item.show();
 
-    client.onDidChangeState((event) => {
+    this._stateListener = client.onDidChangeState((event) => {
       switch (event.newState) {
         case State.Starting:
           this._setStarting();
@@ -32,6 +33,7 @@ export class StatusBarManager implements vscode.Disposable {
   }
 
   dispose(): void {
+    this._stateListener.dispose();
     this._item.dispose();
   }
 

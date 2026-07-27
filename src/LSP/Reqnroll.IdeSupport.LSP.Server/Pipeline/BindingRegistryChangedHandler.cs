@@ -122,7 +122,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             _rescanDebouncer.ScheduleRescan(project, async ct =>
             {
                 await ScanAllFeatureFilesAsync(project, ct).ConfigureAwait(false);
-                await RequestCodeLensRefreshAsync(project).ConfigureAwait(false);
+                await RequestCodeLensRefreshAsync(project, isFullReplacement: false).ConfigureAwait(false);
             });
         }
 
@@ -134,7 +134,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         // foreground editor at startup keeps the (count-less) code lenses it rendered before the
         // server was ready, until the user navigates away and back to re-realize the view.
         if (notification.IsFullReplacement)
-            await RequestCodeLensRefreshAsync(notification.Project).ConfigureAwait(false);
+            await RequestCodeLensRefreshAsync(notification.Project, isFullReplacement: true).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -174,9 +174,10 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         }
     }
 
-    /// <summary>Asks the client to re-pull C# step code lenses after a full registry replacement. See <see cref="CodeLensRefreshRequester"/> for the VS/non-VS branching.</summary>
-    private Task RequestCodeLensRefreshAsync(LspReqnrollProject project) =>
-        CodeLensRefreshRequester.RequestRefreshAsync(_languageServer, _clientIde, _logger, project.ProjectName);
+    /// <summary>Asks the client to re-pull C# step code lenses. See <see cref="CodeLensRefreshRequester"/> for the VS/non-VS branching and <see cref="Features.CodeLens.RefreshCodeLensParams.IsFullReplacement"/> for why <paramref name="isFullReplacement"/> matters.</summary>
+    private Task RequestCodeLensRefreshAsync(LspReqnrollProject project, bool isFullReplacement) =>
+        CodeLensRefreshRequester.RequestRefreshAsync(
+            _languageServer, _clientIde, _logger, project.ProjectName, isFullReplacement);
 
     private async Task ScanAllFeatureFilesAsync(
         LspReqnrollProject project,

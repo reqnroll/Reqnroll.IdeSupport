@@ -37,6 +37,22 @@ public class StepDefinitionFileParser
     private static readonly Regex CucumberParamPattern =
         new(@"\{(\w+)\}", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    // The following four members port Reqnroll.Bindings.StepDefinitionRegexCalculator's
+    // method-name-style binding algorithm (see issue #268: an attribute with no expression,
+    // e.g. [Given] public void The_First_Number_Is_P0(int p), derives its matching text from
+    // the method name/parameters instead). Kept in sync by inspection since LSP.Core doesn't
+    // reference the Reqnroll runtime assembly.
+
+    /// <summary>Connects adjacent words/parameters: any run of non-word characters, empty allowed.</summary>
+    private const string WordConnectorPattern = @"[^\w\p{Sc}]*(?!(?<=-)\d)";
+
+    private static readonly Regex NonIdentifierRegex =
+        new(@"[^\p{Ll}\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{Nl}\p{Nd}\p{Pc}\p{Mn}\p{Mc}]", RegexOptions.Compiled);
+
+    // Matches on underscores and word-boundaries of: 0A, aA, AA, a0, A0.
+    private static readonly Regex WordBoundaryRegex =
+        new(@"_+|(?<=[\d\p{L}])(?=\p{Lu})|(?<=\p{L})(?=\d)", RegexOptions.Compiled);
+
     // Step-definition attribute (canonical name, without the "Attribute" suffix) -> the
     // scenario blocks it registers. [StepDefinition] registers for Given, When and Then.
     // Shared with BindingImporter.TryGetAttributeSourceLine, which backfills the equivalent
@@ -107,6 +123,9 @@ public class StepDefinitionFileParser
                 .Where(p => p.Type != null)
                 .Select(p => p.Type.ToString())
                 .ToArray();
+            var parameterNames = method.ParameterList.Parameters
+                .Select(p => p.Identifier.Text)
+                .ToArray();
             var implementation =
                 new ProjectBindingImplementation(FullMethodName(method), parameterTypes, sourceLocation);
 
@@ -115,7 +134,8 @@ public class StepDefinitionFileParser
                 var attributeName = GetAttributeName(attribute);
 
                 if (StepDefinitionAttributes.TryGetValue(attributeName, out var blocks))
-                    AddStepDefinitions(stepDefinitions, attribute, blocks, combinedScope, implementation);
+                    AddStepDefinitions(stepDefinitions, attribute, blocks, combinedScope, implementation,
+                        method.Identifier.Text, parameterNames);
                 else if (HookAttributes.TryGetValue(attributeName, out var hookType))
                     hooks.Add(CreateHook(attribute, hookType, combinedScope, implementation));
             }
@@ -125,21 +145,26 @@ public class StepDefinitionFileParser
     }
 
     private static void AddStepDefinitions(List<ProjectStepDefinitionBinding> target, AttributeSyntax attribute,
-        ScenarioBlock[] blocks, RawScope scope, ProjectBindingImplementation implementation)
+        ScenarioBlock[] blocks, RawScope scope, ProjectBindingImplementation implementation,
+        string methodName, IReadOnlyList<string> parameterNames)
     {
         var expression = GetStepDefinitionExpression(attribute);
-        // A regex-less binding (e.g. method-name style, or an attribute with no literal
-        // expression yet while typing) is still recorded so usage-based features can see it;
-        // it simply will not match any step until the expression is known.
-        var regex = expression == null ? null : BuildRegex(expression);
 
         // Capture the exact attribute line so FindBindingAtLocation can resolve clicks
         // on the attribute itself using AST information rather than a heuristic window.
         var attrLine = attribute.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
 
         foreach (var block in blocks)
+        {
+            // An attribute with no explicit expression is a method-name-style binding (issue
+            // #268): its matching text is derived from the method name/parameters, the same
+            // way Reqnroll's runtime StepDefinitionRegexCalculator does it. The prefix stripped
+            // (e.g. "Given") depends on which block this particular attribute registers for, so
+            // the regex is computed per-block rather than once for the whole attribute.
+            var regex = expression != null ? BuildRegex(expression) : BuildMethodNameRegex(block, methodName, parameterNames);
             target.Add(new ProjectStepDefinitionBinding(block, regex, BuildScope(scope), implementation, expression,
                 attributeSourceLine: attrLine));
+        }
     }
 
     /// <summary>
@@ -167,6 +192,88 @@ public class StepDefinitionFileParser
                 _                                        => @"(.*)"
             });
         return new Regex($"^{regexBody}$", RegexOptions.CultureInvariant);
+    }
+
+    /// <summary>
+    /// Derives a matching regex from the method name and parameters for a step-definition
+    /// attribute with no explicit expression (e.g. <c>[Given] public void
+    /// The_First_Number_Is_P0(int p)</c>) — ports Reqnroll's runtime
+    /// <c>StepDefinitionRegexCalculator.CalculateRegexFromMethod</c>. A parameter is located in
+    /// the method name either by its own name (<c>_?PARAMNAME_?</c>) or its positional
+    /// placeholder (<c>_?P{index}_?</c>); the remaining text is split on underscores and
+    /// camelCase/PascalCase word boundaries and joined with a permissive word-connector so
+    /// formatting differences between the method name and the step text don't block a match.
+    /// Unlike the runtime calculator, only the block keyword itself ("Given"/"When"/"Then") is
+    /// tried as a prefix to strip — localized Gherkin dialect keywords are not attempted, since
+    /// this is C#-source-only discovery with no feature-file/config context available.
+    /// </summary>
+    private static Regex BuildMethodNameRegex(ScenarioBlock stepDefinitionType, string methodName,
+        IReadOnlyList<string> parameterNames)
+    {
+        // A method identifier can only contain letters/digits/underscore, so this can never
+        // actually trigger for real C# source — kept for parity with the runtime calculator.
+        if (NonIdentifierRegex.IsMatch(methodName))
+            return new Regex($"^{Regex.Escape(methodName)}$", RegexOptions.CultureInvariant);
+
+        methodName = RemoveStepPrefix(stepDefinitionType, methodName);
+
+        var paramPositions = parameterNames
+            .Select((name, index) => FindParamPosition(methodName, name, index))
+            .Where(p => p.Position >= 0)
+            .OrderBy(p => p.Position);
+
+        var builder = new StringBuilder("^(?i)");
+        var processedPosition = 0;
+        foreach (var paramPosition in paramPositions)
+        {
+            if (paramPosition.Position < processedPosition)
+                continue; // overlapping match (error case) -> ignore, same as the runtime calculator
+
+            if (paramPosition.Position > processedPosition)
+            {
+                builder.Append(BuildWordRegex(methodName.Substring(processedPosition, paramPosition.Position - processedPosition)));
+                builder.Append(WordConnectorPattern);
+            }
+            builder.Append(BuildParamRegex(parameterNames[paramPosition.ParamIndex]));
+            builder.Append(WordConnectorPattern);
+            processedPosition = paramPosition.Position + paramPosition.Length;
+        }
+
+        builder.Append(BuildWordRegex(methodName.Substring(processedPosition)));
+        builder.Append(WordConnectorPattern);
+        builder.Append('$');
+
+        return new Regex(builder.ToString(), RegexOptions.CultureInvariant);
+    }
+
+    private static string RemoveStepPrefix(ScenarioBlock stepDefinitionType, string methodName)
+    {
+        var prefix = stepDefinitionType.ToString();
+        if (methodName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return methodName.Substring(prefix.Length).TrimStart('_');
+        return methodName;
+    }
+
+    private static string BuildWordRegex(string methodNamePart)
+    {
+        if (string.IsNullOrEmpty(methodNamePart))
+            return string.Empty;
+        return WordBoundaryRegex.Replace(methodNamePart.Trim('_'), _ => WordConnectorPattern);
+    }
+
+    private static string BuildParamRegex(string parameterName) =>
+        $@"(?:""(?<{parameterName}>[^""]*)""|'(?<{parameterName}>[^']*)'|(?<{parameterName}>.*?))";
+
+    private readonly record struct ParamPosition(int Position, int Length, int ParamIndex);
+
+    private static ParamPosition FindParamPosition(string methodNamePart, string parameterName, int paramIndex)
+    {
+        var upperName = parameterName.ToUpperInvariant();
+        var paramRegex = new Regex($@"_?{Regex.Escape(upperName)}_?|_?P{paramIndex}_?");
+        var match = paramRegex.Match(methodNamePart);
+        return match.Success
+            ? new ParamPosition(match.Index, match.Length, paramIndex)
+            : new ParamPosition(-1, 0, paramIndex);
     }
 
     private static ProjectHookBinding CreateHook(AttributeSyntax attribute, HookType hookType, RawScope methodScope,

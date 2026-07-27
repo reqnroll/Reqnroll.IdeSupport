@@ -8,7 +8,7 @@ import { StatusBarManager } from './statusBar';
 import { doToggleComment } from './commentToggle';
 import { doFindStepUsages } from './stepUsages';
 import { doFindUnusedStepDefinitions } from './findUnusedStepDefinitions';
-import { doGoToHooks } from './hookNavigation';
+import { doGoToHooks } from './goToHooks';
 import { doGoToStepDefinition } from './stepNavigation';
 import { registerStepCodeLens } from './stepCodeLens';
 import {
@@ -16,7 +16,7 @@ import {
   createManualSyncMiddleware,
   isCSharpDocument,
 } from './manualDocumentSync';
-import { createRenameMiddleware } from './renameDisambiguation';
+import { createRenameMiddleware } from './renameStep';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
 
@@ -255,7 +255,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     // vscode-languageclient's built-in sync has proven unreliable for it; this middleware
     // stops the built-in path from also emitting sync notifications for .cs documents.
     // Step Rename refactoring — prepareRename is intercepted to surface multi-attribute rename ambiguity via a
-    // QuickPick before delegating to the standard rename flow (see renameDisambiguation.ts).
+    // QuickPick before delegating to the standard rename flow (see renameStep.ts).
     // `() => client` is passed rather than `client` directly because `client` isn't assigned
     // until after this object is constructed.
     middleware: {

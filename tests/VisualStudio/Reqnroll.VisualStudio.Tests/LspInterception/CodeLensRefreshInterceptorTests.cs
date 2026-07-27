@@ -11,12 +11,12 @@ using Xunit;
 namespace Reqnroll.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// <see cref="CodeLensRefreshInterceptor"/> only reacts to a <c>.cs</c>
-/// <c>textDocument/didChange</c> (send) or a <c>reqnroll/refreshCodeLens</c> (receive); every
-/// other message must pass through untouched. These tests cover the pass-through branches, which
-/// return before any UI-thread lens invalidation. The invalidation branches dispatch onto the VS
-/// main thread (<c>ThreadHelper.JoinableTaskFactory</c>) and therefore require a VS host — they
-/// belong in an integration smoke test, not here.
+/// <see cref="CodeLensRefreshInterceptor"/> only reacts to a <c>reqnroll/refreshCodeLens</c>
+/// (receive); every other message, including a <c>.cs</c> <c>textDocument/didChange</c> (send) —
+/// whose own invalidation is disabled, see issue #156/#318 — must pass through untouched. The
+/// <c>reqnroll/refreshCodeLens</c> invalidation branch dispatches onto the VS main thread
+/// (<c>ThreadHelper.JoinableTaskFactory</c>) and therefore requires a VS host — it belongs in an
+/// integration smoke test, not here.
 /// </summary>
 public class CodeLensRefreshInterceptorTests
 {
@@ -52,6 +52,18 @@ public class CodeLensRefreshInterceptorTests
     }
 
     [Fact]
+    public async Task A_didChange_on_a_cs_file_passes_through_without_invalidating()
+    {
+        // Per-.cs-edit invalidation is disabled (issue #156/#318) — a .cs didChange is now just
+        // another pass-through, no different from a non-.cs file, testable directly (no VS host
+        // needed) since it no longer reaches any UI-thread CodeLens.Invalidate() call.
+        var result = await Create().InterceptAsync(
+            Send(DidChange("file:///c:/w/Steps.cs")), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    [Fact]
     public async Task A_didChange_without_a_uri_passes_through()
     {
         var body = new JObject
@@ -82,6 +94,42 @@ public class CodeLensRefreshInterceptorTests
         var result = await Create().InterceptAsync(
             Receive(new JObject { ["jsonrpc"] = "2.0", ["method"] = "window/logMessage" }),
             CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    [Fact]
+    public async Task A_refreshCodeLens_with_isFullReplacement_false_passes_through_without_invalidating()
+    {
+        // Incremental refreshes (a Roslyn patch on a .cs edit, or a .feature edit changing usage
+        // counts) must not call CodeLens.Invalidate() — same reconnect-churn reasoning as the
+        // disabled per-.cs-edit trigger (#156/#318). Testable directly (no VS host needed) since,
+        // like the disabled .cs didChange path, it no longer reaches any UI-thread call.
+        var body = new JObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"]  = "reqnroll/refreshCodeLens",
+            ["params"]  = new JObject { ["projectName"] = "Proj", ["isFullReplacement"] = false },
+        };
+
+        var result = await Create().InterceptAsync(Receive(body), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    [Fact]
+    public async Task A_refreshCodeLens_without_isFullReplacement_defaults_to_incremental_and_passes_through()
+    {
+        // Absence of the field (e.g. an older/mismatched payload) must default to the safe,
+        // non-invalidating behavior rather than assuming a full replacement.
+        var body = new JObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"]  = "reqnroll/refreshCodeLens",
+            ["params"]  = new JObject { ["projectName"] = "Proj" },
+        };
+
+        var result = await Create().InterceptAsync(Receive(body), CancellationToken.None);
 
         result.Should().Be(LspInterceptorResult.PassThrough);
     }
