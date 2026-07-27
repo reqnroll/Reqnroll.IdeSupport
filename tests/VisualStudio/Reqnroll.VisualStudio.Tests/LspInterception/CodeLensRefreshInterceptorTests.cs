@@ -11,12 +11,12 @@ using Xunit;
 namespace Reqnroll.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// <see cref="CodeLensRefreshInterceptor"/> only reacts to a <c>.cs</c>
-/// <c>textDocument/didChange</c> (send) or a <c>reqnroll/refreshCodeLens</c> (receive); every
-/// other message must pass through untouched. These tests cover the pass-through branches, which
-/// return before any UI-thread lens invalidation. The invalidation branches dispatch onto the VS
-/// main thread (<c>ThreadHelper.JoinableTaskFactory</c>) and therefore require a VS host — they
-/// belong in an integration smoke test, not here.
+/// <see cref="CodeLensRefreshInterceptor"/> only reacts to a <c>reqnroll/refreshCodeLens</c>
+/// (receive); every other message, including a <c>.cs</c> <c>textDocument/didChange</c> (send) —
+/// whose own invalidation is disabled, see issue #156/#318 — must pass through untouched. The
+/// <c>reqnroll/refreshCodeLens</c> invalidation branch dispatches onto the VS main thread
+/// (<c>ThreadHelper.JoinableTaskFactory</c>) and therefore requires a VS host — it belongs in an
+/// integration smoke test, not here.
 /// </summary>
 public class CodeLensRefreshInterceptorTests
 {
@@ -47,6 +47,18 @@ public class CodeLensRefreshInterceptorTests
     {
         var result = await Create().InterceptAsync(
             Send(DidChange("file:///c:/w/A.feature")), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    [Fact]
+    public async Task A_didChange_on_a_cs_file_passes_through_without_invalidating()
+    {
+        // Per-.cs-edit invalidation is disabled (issue #156/#318) — a .cs didChange is now just
+        // another pass-through, no different from a non-.cs file, testable directly (no VS host
+        // needed) since it no longer reaches any UI-thread CodeLens.Invalidate() call.
+        var result = await Create().InterceptAsync(
+            Send(DidChange("file:///c:/w/Steps.cs")), CancellationToken.None);
 
         result.Should().Be(LspInterceptorResult.PassThrough);
     }
