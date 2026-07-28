@@ -5,7 +5,7 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <LangVersion>10.0</LangVersion>
-    <RootNamespace>Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration</RootNamespace>
+    <RootNamespace>Reqnroll.IdeSupport.VisualStudio</RootNamespace>
     <AssemblyName>Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration</AssemblyName>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>

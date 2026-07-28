@@ -16,7 +16,6 @@ using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Package.ProjectSystem;
-using Reqnroll.IdeSupport.VisualStudio.SDKIntegration;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 

@@ -6,7 +6,7 @@ using EnvDTE;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json;
-using Reqnroll.IdeSupport.VisualStudio.SDKIntegration;
+using Reqnroll.IdeSupport.VisualStudio;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 

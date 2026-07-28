@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Classification;
 
-namespace Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration.Editor.Classification;
+namespace Reqnroll.IdeSupport.VisualStudio.Editor.Classification;
 
 /// <summary>
 /// MEF exports that register the custom Reqnroll classification types and their default

@@ -1,6 +1,6 @@
 ﻿#nullable disable
 
-namespace Reqnroll.IdeSupport.VisualStudio.Common;
+namespace Reqnroll.IdeSupport.VisualStudio;
 
 /// <summary>
 /// Helper methods for matching file paths against extensions.

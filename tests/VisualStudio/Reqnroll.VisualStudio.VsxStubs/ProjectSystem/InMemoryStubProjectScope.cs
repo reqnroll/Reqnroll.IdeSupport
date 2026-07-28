@@ -53,7 +53,7 @@ public class InMemoryStubProjectScope : IProjectScope
 
     public string[] GetProjectFiles(string extension)
     {
-        return FilesAdded.Keys.Where(f => Reqnroll.IdeSupport.VisualStudio.Common.FileSystemHelper.IsOfType(f, extension))
+        return FilesAdded.Keys.Where(f => Reqnroll.IdeSupport.VisualStudio.FileSystemHelper.IsOfType(f, extension))
             .ToArray();
     }
 
