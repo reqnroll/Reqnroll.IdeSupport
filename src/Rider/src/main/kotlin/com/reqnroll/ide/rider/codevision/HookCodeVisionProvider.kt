@@ -8,6 +8,7 @@ import com.intellij.codeInsight.codeVision.CodeVisionProvider
 import com.intellij.codeInsight.codeVision.CodeVisionRelativeOrdering
 import com.intellij.codeInsight.codeVision.CodeVisionState
 import com.intellij.openapi.components.service
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -16,8 +17,9 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.actions.GoToHooksRunner
-import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
+import org.eclipse.lsp4j.CodeLens
+import org.eclipse.lsp4j.Command
 
 /**
  * "N hooks" CodeVision lens above each `Feature:`/`Scenario:` line in `.feature` files
@@ -27,11 +29,15 @@ import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
  * client has no rendering-side consumer for it). Clicking a lens invokes the same
  * [GoToHooksRunner] "Go to Hooks" flow the dedicated action already uses.
  *
- * As of issue #372, the server no longer emits one lens per line with matching display/click
- * positions: `HookCodeLensHandler.cs` now counts only hooks native to each level (no cumulative
- * bleed) and consolidates every step's hooks into a single second lens shown on the `Scenario:`
- * line. Its click target — and an `ownLevelOnly` flag so "Go to Hooks" filters to match the
- * lens's own count — travel in `command.arguments`, not `lens.range`; see [computeEntries].
+ * As of issue #372, `HookCodeLensHandler.cs` can return *two* lenses anchored on the same
+ * `Scenario:` line: a scenario-only "N hooks" count and a second, consolidated "N step hooks"
+ * count for every step in that scenario. VS Code's CodeLens renders multiple entries at an
+ * identical range side by side, but IntelliJ's CodeVision does not support two entries from one
+ * provider on the same line (confirmed by decompiling `RangeCodeVisionModel`/
+ * `CodeVisionProvider` from the platform jar — and empirically: giving the two entries distinct
+ * `TextRange`s on the same line still only rendered the last one). So instead of trying to show
+ * two chips, [computeEntries] merges every lens on a given line into one combined entry — see its
+ * doc comment for how the combined title and click target are chosen.
  */
 class HookCodeVisionProvider : CodeVisionProvider<Unit> {
     companion object {
@@ -52,17 +58,6 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
                 codeVisionHost.invalidateProvider(CodeVisionHost.LensInvalidateSignal(editor, listOf(ID)))
             }
         }
-
-        /**
-         * Computes the offset for a lens whose display line already has [priorEntriesOnLine]
-         * entries rendered before it, so that entries sharing a display line never collide on
-         * `TextRange.equals()` (see [computeEntries]'s doc comment for why that matters).
-         * Clamped to [lineEndOffset] so the nudge never spills onto the next line.
-         * `internal` (rather than private) purely so it's unit-testable without an Editor/Document fixture.
-         */
-        internal fun dedupedOffset(
-            lineStartOffset: Int, displayCharacter: Int, priorEntriesOnLine: Int, lineEndOffset: Int,
-        ): Int = (lineStartOffset + displayCharacter + priorEntriesOnLine).coerceAtMost(lineEndOffset)
 
         /**
          * Extracts `arguments[index]` as an [Int]. LSP4J's generic `Command.arguments`
@@ -92,6 +87,24 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
                 else -> raw.toString().toBooleanStrictOrNull()
             }
         }
+
+        /**
+         * Joins every lens's title on one display line into a single combined label, e.g.
+         * `"2 hooks · 1 step hook"`. `internal` purely so it's unit-testable.
+         */
+        internal fun combinedTitle(titles: List<String>): String = titles.joinToString(" · ")
+
+        /**
+         * Picks the click target to use for a merged entry: the candidate with the highest line
+         * number. `GoToHooksHandler`'s cumulative hook sets are hierarchical (Step ⊇ Scenario ⊇
+         * Feature — see `HookMatching.GetApplicableHookTypes`), so querying at the *deepest*
+         * available position (e.g. the scenario's first step rather than the `Scenario:` line
+         * itself) with `ownLevelOnly=false` returns every hook implied by the combined title,
+         * not just whichever single lens happened to be picked. `internal` purely so it's
+         * unit-testable. [candidates] must be non-empty.
+         */
+        internal fun richestClick(candidates: List<Pair<Int, Int>>): Pair<Int, Int> =
+            candidates.maxBy { (line, _) -> line }
     }
 
     override val id: String = ID
@@ -112,63 +125,33 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
 
         val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
-        ReqnrollDebugLogger.info(
-            "HookCodeVisionProvider: raw codeLens response for $uri: " +
-                lenses.joinToString { l -> "[title=${l.command?.title}, range=${l.range}, args=${l.command?.arguments}]" },
-        )
 
         val document = editor.document
         val renderable = lenses.filter { StepUsagesCodeVisionProvider.isRenderable(it, document.lineCount) }
 
-        // Two lenses can share the exact same display position — e.g. the Scenario-only "N
-        // hooks" lens and the consolidated step-hooks lens both anchor on the Scenario: line
-        // (see HookCodeLensHandler.cs). VS Code's CodeLens renders multiple entries at an
-        // identical range side by side, but IntelliJ's CodeVision keys entries by TextRange, so
-        // two zero-length ranges at the exact same offset collide (only one survives to render,
-        // and it isn't necessarily paired with its own click handler). dedupedOffset nudges every
-        // entry after the first on a given line so their ranges stay distinct while still
-        // resolving to the same visual line.
-        val priorEntriesPerLine = HashMap<Int, Int>()
+        return renderable
+            .groupBy { it.range.start.line }
+            .map { (displayLine, lensesOnLine) -> buildCombinedEntry(project, uri, document, displayLine, lensesOnLine) }
+    }
 
-        return renderable.map { lens ->
-            val command = lens.command!!
+    private fun buildCombinedEntry(
+        project: Project, uri: String, document: Document, displayLine: Int, lensesOnLine: List<CodeLens>,
+    ): Pair<TextRange, CodeVisionEntry> {
+        val displayCharacter = lensesOnLine.first().range.start.character
+        val offset = document.getLineStartOffset(displayLine) + displayCharacter
 
-            // Display position: where the lens is anchored (Feature:/Scenario: line).
-            val displayLine = lens.range.start.line
-            val displayCharacter = lens.range.start.character
-            val priorEntriesOnLine = priorEntriesPerLine.getOrDefault(displayLine, 0)
-            priorEntriesPerLine[displayLine] = priorEntriesOnLine + 1
-            val offset = dedupedOffset(
-                document.getLineStartOffset(displayLine), displayCharacter,
-                priorEntriesOnLine, document.getLineEndOffset(displayLine),
-            )
+        val title = combinedTitle(lensesOnLine.map { it.command?.title ?: "" })
+        val (clickLine, clickCharacter) = richestClick(
+            lensesOnLine.map { lens ->
+                val arguments = lens.command?.arguments
+                (argAsInt(arguments, 1) ?: displayLine) to (argAsInt(arguments, 2) ?: displayCharacter)
+            },
+        )
 
-            // Click target + filter: HookCodeLensHandler.cs encodes
-            // (uri, line, character, ownLevelOnly) in command.arguments. The click
-            // position can differ from the display position — e.g. the consolidated
-            // step-hooks lens is *shown* on the Scenario: line but *navigates* to the
-            // scenario's first step so "Go to Hooks" resolves Step context — so this must
-            // read arguments rather than reuse lens.range. Falls back to the display
-            // position/false if arguments are absent (defensive; the server always sends
-            // all four).
-            val arguments = command.arguments
-            val clickLine = argAsInt(arguments, 1) ?: displayLine
-            val clickCharacter = argAsInt(arguments, 2) ?: displayCharacter
-            val ownLevelOnly = argAsBoolean(arguments, 3) ?: false
-            ReqnrollDebugLogger.info(
-                "HookCodeVisionProvider: arg runtime types = " +
-                    (arguments?.map { it?.javaClass?.name } ?: listOf("<null arguments>")),
-            )
-
-            val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
-                GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
-            }
-            ReqnrollDebugLogger.info(
-                "HookCodeVisionProvider: computed entry title='${entry.text}' offset=$offset " +
-                    "(displayLine=$displayLine, priorEntriesOnLine=$priorEntriesOnLine) " +
-                    "click=($clickLine,$clickCharacter) ownLevelOnly=$ownLevelOnly",
-            )
-            TextRange(offset, offset) to entry
+        val command = Command(title, "reqnroll.goToHooks", listOf(uri, clickLine, clickCharacter, false))
+        val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
+            GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly = false)
         }
+        return TextRange(offset, offset) to entry
     }
 }

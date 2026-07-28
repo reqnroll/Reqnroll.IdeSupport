@@ -6,41 +6,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class HookCodeVisionProviderTest {
-    // Regression test for a real bug: two lenses anchored on the same Scenario: line (the
-    // scenario-only "N hooks" lens and the consolidated step-hooks lens) both resolved to the
-    // exact same TextRange, so IntelliJ's CodeVision only rendered/wired up one of them.
-
-    @Test
-    fun `dedupedOffset returns the plain display offset for the first entry on a line`() {
-        val offset = HookCodeVisionProvider.dedupedOffset(
-            lineStartOffset = 100, displayCharacter = 0, priorEntriesOnLine = 0, lineEndOffset = 120,
-        )
-
-        assertEquals(100, offset)
-    }
-
-    @Test
-    fun `dedupedOffset nudges subsequent entries on the same line so ranges stay distinct`() {
-        val first = HookCodeVisionProvider.dedupedOffset(
-            lineStartOffset = 100, displayCharacter = 0, priorEntriesOnLine = 0, lineEndOffset = 120,
-        )
-        val second = HookCodeVisionProvider.dedupedOffset(
-            lineStartOffset = 100, displayCharacter = 0, priorEntriesOnLine = 1, lineEndOffset = 120,
-        )
-
-        assertEquals(100, first)
-        assertEquals(101, second)
-    }
-
-    @Test
-    fun `dedupedOffset clamps to the line end so the nudge never spills onto the next line`() {
-        val offset = HookCodeVisionProvider.dedupedOffset(
-            lineStartOffset = 100, displayCharacter = 0, priorEntriesOnLine = 50, lineEndOffset = 103,
-        )
-
-        assertEquals(103, offset)
-    }
-
     // Regression tests for a real bug: command.arguments elements from a live LSP4J response
     // turned out to be raw JsonPrimitive, not plain Number/Boolean — a direct `as? Number`/
     // `as? Boolean` cast silently failed every time, so every hook lens click fell back to the
@@ -77,5 +42,35 @@ class HookCodeVisionProviderTest {
     fun `argAsBoolean returns null for a missing index`() {
         assertNull(HookCodeVisionProvider.argAsBoolean(listOf("uri"), index = 3))
         assertNull(HookCodeVisionProvider.argAsBoolean(null, index = 3))
+    }
+
+    // Regression tests for a real platform limitation (not a coding bug): IntelliJ's CodeVision
+    // only renders one chip per line per provider, so two lenses anchored on the same Scenario:
+    // line (scenario-only + consolidated step-hooks) must be merged into a single entry.
+
+    @Test
+    fun `combinedTitle joins every lens title on a line with a middle dot`() {
+        assertEquals("2 hooks · 1 step hook", HookCodeVisionProvider.combinedTitle(listOf("2 hooks", "1 step hook")))
+    }
+
+    @Test
+    fun `combinedTitle passes a single title through unchanged`() {
+        assertEquals("1 hook", HookCodeVisionProvider.combinedTitle(listOf("1 hook")))
+    }
+
+    @Test
+    fun `richestClick picks the candidate with the highest line number`() {
+        // The step-hooks lens's click target (the scenario's first step, a later line) should
+        // win over the scenario-only lens's own (earlier) line, since GoToHooksHandler's
+        // cumulative sets are hierarchical — querying at the deepest position returns every hook
+        // implied by the combined title.
+        val result = HookCodeVisionProvider.richestClick(listOf(2 to 0, 5 to 0))
+
+        assertEquals(5 to 0, result)
+    }
+
+    @Test
+    fun `richestClick returns the only candidate when there is just one lens on the line`() {
+        assertEquals(2 to 4, HookCodeVisionProvider.richestClick(listOf(2 to 4)))
     }
 }
