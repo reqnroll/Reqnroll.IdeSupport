@@ -9,6 +9,8 @@ import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
+import com.reqnroll.ide.rider.isCsExtension
+import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.diagnostics.ReqnrollLspDiagnosticsSupport
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
@@ -80,7 +82,7 @@ class ReqnrollLspServerDescriptor(project: Project) :
 
     /** This server covers `.feature` files (Gherkin) and `.cs` files (step-definition bindings). */
     override fun isSupportedFile(file: VirtualFile): Boolean =
-        file.extension == "feature" || file.extension == "cs"
+        isFeatureExtension(file.extension) || isCsExtension(file.extension)
 
     /**
      * Wraps the platform's own handler so `workspace/inlayHint/refresh` also refreshes `.feature`
