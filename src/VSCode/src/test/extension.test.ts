@@ -6,10 +6,16 @@ import { ReqnrollExtensionApi } from '../extension';
 // Pull in all additional test suites so the single entry-point loads them all
 import './lsp/projectManager.test';
 import './lsp/lspInspectorLogger.test';
+import './lsp/msbuildEvaluator.test';
+import './resolveServerPath.test';
 import './commands/renameStep.test';
 import './tableHighlightService.test';
 import './commands/stepNavigation.test';
 import './statusBar.test';
+import './commands/stepUsages.test';
+import './commands/findUnusedStepDefinitions.test';
+import './commands/goToHooks.test';
+import './commands/commentToggle.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

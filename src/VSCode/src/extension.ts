@@ -24,38 +24,46 @@ let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
 let statusBar: StatusBarManager | undefined;
 
+/** The .NET RID for the current platform/arch combination the server is published for. */
+export function ridFor(platform: NodeJS.Platform, arch: string): string {
+  if (platform === 'win32') return arch === 'arm64' ? 'win-arm64' : 'win-x64';
+  if (platform === 'darwin') return arch === 'arm64' ? 'osx-arm64' : 'osx-x64';
+  return 'linux-x64';
+}
+
+/** The server executable's file name for the current platform (Windows needs the `.exe` suffix). */
+export function serverBinaryName(platform: NodeJS.Platform): string {
+  return platform === 'win32'
+    ? 'Reqnroll.IdeSupport.LSP.Server.exe'
+    : 'Reqnroll.IdeSupport.LSP.Server';
+}
+
 /**
  * Resolves the path to the Reqnroll LSP server binary.
  *
  * In development (VSIX not yet built), the server is located relative to
  * this source directory's build output. In production (packaged .vsix),
  * the server is bundled inside the extension under `server/<rid>/`.
+ *
+ * `existsSync` is injectable (defaulting to the real `fs.existsSync`) so the path-selection
+ * logic is testable against a fake filesystem without touching disk.
  */
-function resolveServerPath(context: vscode.ExtensionContext): string {
+export function resolveServerPath(
+  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath'>,
+  existsSync: (path: string) => boolean = fs.existsSync,
+): string {
   const isProduction = context.extensionMode === vscode.ExtensionMode.Production;
+  const rid = ridFor(process.platform, process.arch);
+  const binaryName = serverBinaryName(process.platform);
 
   if (isProduction) {
-    const rid =
-      process.platform === 'win32'
-        ? process.arch === 'arm64'
-          ? 'win-arm64'
-          : 'win-x64'
-        : process.platform === 'darwin'
-          ? process.arch === 'arm64'
-            ? 'osx-arm64'
-            : 'osx-x64'
-          : 'linux-x64';
     const serverDir = path.join(context.extensionPath, 'server', rid);
-    const binaryName =
-      process.platform === 'win32'
-        ? 'Reqnroll.IdeSupport.LSP.Server.exe'
-        : 'Reqnroll.IdeSupport.LSP.Server';
     const candidate = path.join(serverDir, binaryName);
-    if (fs.existsSync(candidate)) {
+    if (existsSync(candidate)) {
       return candidate;
     }
     const legacy = path.join(context.extensionPath, 'server', binaryName);
-    if (fs.existsSync(legacy)) {
+    if (existsSync(legacy)) {
       return legacy;
     }
     throw new Error(
@@ -63,21 +71,6 @@ function resolveServerPath(context: vscode.ExtensionContext): string {
         'Ensure the server is published (see scripts/publish-server.sh).',
     );
   }
-
-  const devRid =
-    process.platform === 'win32'
-      ? process.arch === 'arm64'
-        ? 'win-arm64'
-        : 'win-x64'
-      : process.platform === 'darwin'
-        ? process.arch === 'arm64'
-          ? 'osx-arm64'
-          : 'osx-x64'
-        : 'linux-x64';
-  const devBinaryName =
-    process.platform === 'win32'
-      ? 'Reqnroll.IdeSupport.LSP.Server.exe'
-      : 'Reqnroll.IdeSupport.LSP.Server';
 
   const localBuildOutput = path.join(
     context.extensionPath,
@@ -89,11 +82,11 @@ function resolveServerPath(context: vscode.ExtensionContext): string {
     'bin',
     'Release',
     'net10.0',
-    devRid,
+    rid,
     'publish',
-    devBinaryName,
+    binaryName,
   );
-  if (fs.existsSync(localBuildOutput)) {
+  if (existsSync(localBuildOutput)) {
     return localBuildOutput;
   }
 
@@ -101,7 +94,7 @@ function resolveServerPath(context: vscode.ExtensionContext): string {
   // build-vscode-extension job downloads the published server there (see ci.yml) but never runs
   // a local `dotnet publish` of LSP.Server, so the Extension Development Host used by `npm test`
   // (extensionMode is never Production there) would otherwise never find a server binary at all.
-  return path.join(context.extensionPath, 'server', devRid, devBinaryName);
+  return path.join(context.extensionPath, 'server', rid, binaryName);
 }
 
 /** Public surface exposed via the extension's `exports` (see `vscode.Extension.exports`), for tests. */

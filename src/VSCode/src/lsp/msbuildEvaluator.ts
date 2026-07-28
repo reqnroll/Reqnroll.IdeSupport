@@ -145,7 +145,7 @@ async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluat
  * project's membership index cares about, deduplicated by resolved absolute path (the same
  * file can appear under more than one item type, e.g. a linked file).
  */
-function toProjectFileItems(
+export function toProjectFileItems(
   items: Partial<Record<'Compile' | 'None' | 'Content', MsbuildItem[]>>,
 ): ProjectFileItem[] {
   const seen = new Set<string>();
@@ -171,12 +171,14 @@ function toProjectFileItems(
 
 // ── Output assembly path ─────────────────────────────────────────────────
 
-function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
-  // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\)
-  // AssemblyName is the file name without extension
+export function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
+  // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\). MSBuild's
+  // built-in targets emit this with literal backslashes regardless of host OS, so it must be
+  // split into segments rather than handed to `path` as a single (possibly POSIX) path piece.
+  // AssemblyName is the file name without extension.
   const projectDir = path.dirname(projectFile);
-  const relativeOutput = props.OutputPath.replace(/\\$/, ''); // strip trailing backslash
-  return path.resolve(projectDir, relativeOutput, `${props.AssemblyName}.dll`);
+  const relativeSegments = props.OutputPath.split(/[\\/]/).filter(Boolean);
+  return path.resolve(projectDir, ...relativeSegments, `${props.AssemblyName}.dll`);
 }
 
 // ── Package references from project.assets.json ──────────────────────────
@@ -186,7 +188,7 @@ interface AssetsFile {
   libraries?: Record<string, { type?: string }>;
 }
 
-function readPackageReferences(assetsFilePath: string, tfm: string): PackageRef[] {
+export function readPackageReferences(assetsFilePath: string, tfm: string): PackageRef[] {
   if (!assetsFilePath || !fs.existsSync(assetsFilePath)) {
     return [];
   }
@@ -223,7 +225,7 @@ function readPackageReferences(assetsFilePath: string, tfm: string): PackageRef[
  * Finds the TFM target key in project.assets.json that best matches
  * the given TargetFrameworkMoniker (e.g. ".NETCoreApp,Version=v8.0" → "net8.0").
  */
-function findTargetKey(assets: AssetsFile, tfm: string): string | undefined {
+export function findTargetKey(assets: AssetsFile, tfm: string): string | undefined {
   const targets = assets.targets;
   if (!targets) return undefined;
 
@@ -242,7 +244,7 @@ function findTargetKey(assets: AssetsFile, tfm: string): string | undefined {
  * ".NETStandard,Version=v2.0" → "netstandard2.0"
  * ".NETFramework,Version=v4.8.1" → "net481"
  */
-function tfmToShort(tfm: string): string {
+export function tfmToShort(tfm: string): string {
   const match = tfm.match(
     /\.NET(?:CoreApp|Standard|Framework|Portable),Version=v(\d+(?:\.\d+)?(?:\.\d+)?)/i,
   );
