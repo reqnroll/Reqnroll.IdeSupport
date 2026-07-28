@@ -151,7 +151,12 @@ public sealed class HookCodeLensHandler
     /// <summary>
     /// Adds a second lens on the <c>Scenario:</c> line for the step-level hooks (Before/AfterStep,
     /// Before/AfterScenarioBlock) shared by every step in <paramref name="scenarioTag"/> — skipped
-    /// when the scenario has no steps yet, since there is no line to navigate to on click.
+    /// when the scenario has no steps yet, since there is no line to navigate to on click. Carries
+    /// a 5th <c>true</c> argument (absent on <see cref="AddOwnLevelLens"/>'s lenses) so a client
+    /// that must render this lens via a separate CodeVision-style provider registration (Rider —
+    /// see HookCodeVisionProvider.kt/StepHooksCodeVisionProvider.kt) can tell the two lens kinds
+    /// apart reliably, rather than parsing the title text. VS Code doesn't need this: it renders
+    /// every lens from a single generic CodeLens provider and stacks same-range entries itself.
     /// </summary>
     private static void AddStepHooksLens(
         List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> lenses,
@@ -182,7 +187,7 @@ public sealed class HookCodeLensHandler
             {
                 Title     = hooks.Count == 1 ? "1 step hook" : $"{hooks.Count} step hooks",
                 Name      = "reqnroll.goToHooks",
-                Arguments = new JArray(uri.ToString(), stepLine, stepChar, true),
+                Arguments = new JArray(uri.ToString(), stepLine, stepChar, true, true),
             },
         });
     }

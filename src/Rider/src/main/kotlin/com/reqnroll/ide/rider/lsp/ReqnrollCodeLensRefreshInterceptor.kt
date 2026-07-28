@@ -4,13 +4,16 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
+import com.reqnroll.ide.rider.codevision.HookCodeVisionProvider
 import com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider
 import java.util.concurrent.CompletableFuture
 
 /**
  * Delegates every [LspServerNotificationsHandler] callback straight through to Rider's own
  * platform-provided [handler], except [refreshCodeLenses] — there it also refreshes this
- * project's "N step usages" CodeVision lens ([StepUsagesCodeVisionProvider]) before delegating.
+ * project's "N step usages" CodeVision lens ([StepUsagesCodeVisionProvider]) and the hook-match
+ * lenses ([HookCodeVisionProvider]/`StepHooksCodeVisionProvider`, invalidated together by
+ * [HookCodeVisionProvider.refreshOpenFeatureEditors]) before delegating.
  *
  * Rider's CodeVision engine has no signal of its own for "the data behind this lens changed" —
  * unlike inlay hints/semantic tokens, which at least have *a* refresh mechanism once wired (see
@@ -32,7 +35,12 @@ class ReqnrollCodeLensRefreshInterceptor(
 ) : LspServerNotificationsHandler by handler {
     override fun refreshCodeLenses(): CompletableFuture<Void> {
         ApplicationManager.getApplication().invokeLater(
-            { if (!project.isDisposed) StepUsagesCodeVisionProvider.refreshOpenCsEditors(project) },
+            {
+                if (!project.isDisposed) {
+                    StepUsagesCodeVisionProvider.refreshOpenCsEditors(project)
+                    HookCodeVisionProvider.refreshOpenFeatureEditors(project)
+                }
+            },
             ModalityState.any(),
         )
         return handler.refreshCodeLenses()

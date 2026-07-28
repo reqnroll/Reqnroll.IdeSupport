@@ -6,6 +6,7 @@ import com.intellij.platform.lsp.api.LspServerManager
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
+import com.reqnroll.ide.rider.lsp.protocol.GoToHooksRequestParams
 import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
@@ -175,10 +176,18 @@ object ReqnrollRequestSender {
         }
     }
 
-    /** Runs `reqnroll/goToHooks` for the position (uri, line, character) in a `.feature` file. Returns null if no Reqnroll LSP server is running, or on failure. */
-    fun goToHooks(project: Project, uri: String, line: Int, character: Int): GoToHooksResponse? {
+    /**
+     * Runs `reqnroll/goToHooks` for the position (uri, line, character) in a `.feature` file.
+     * [ownLevelOnly] is forwarded from the hook-count CodeVision lens's `command.arguments`
+     * (see HookCodeVisionProvider) so the response matches exactly what the lens counted; manual
+     * invocations (GoToHooksAction) leave it at the default `false` (cumulative). Returns null if
+     * no Reqnroll LSP server is running, or on failure.
+     */
+    fun goToHooks(
+        project: Project, uri: String, line: Int, character: Int, ownLevelOnly: Boolean = false,
+    ): GoToHooksResponse? {
         val server = firstRunningServer(project) ?: return null
-        val params = TextDocumentPositionParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character))
+        val params = GoToHooksRequestParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), ownLevelOnly)
         return try {
             server.sendRequestSync(GO_TO_HOOKS_TIMEOUT_MS) { languageServer ->
                 (languageServer as ReqnrollLanguageServer).goToHooks(params)
