@@ -163,12 +163,17 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             _currentLock.Release();
         }
 
-        // Skip the notification entirely when no binding's matched expression actually changed
-        // (e.g. a method-body or comment edit). Publishing here drives feature-file reparsing
-        // downstream (BindingRegistryChangedHandler), which can only produce a different result
-        // when a binding's expression was added, removed, or edited -- so there's nothing for
-        // that pipeline to do, and running it anyway would just burn CPU on every keystroke.
-        if (!ProjectBindingRegistry.HasExpressionChanges(previous, updated, file.FullName))
+        // Skip the notification entirely when no binding's matched expression/scope actually
+        // changed (e.g. a method-body or comment edit). Publishing here drives feature-file
+        // reparsing downstream (BindingRegistryChangedHandler), which can only produce a
+        // different result when a step definition's expression or a hook's scope/order was
+        // added, removed, or edited -- so there's nothing for that pipeline to do, and running
+        // it anyway would just burn CPU on every keystroke. Both checks are needed: a hook-only
+        // edit (e.g. adding [BeforeScenario]) doesn't touch any step definition, so relying on
+        // HasExpressionChanges alone left the hook-count CodeLens stale until the next full
+        // rebuild (issue #372 follow-up).
+        if (!ProjectBindingRegistry.HasExpressionChanges(previous, updated, file.FullName)
+            && !ProjectBindingRegistry.HasHookChanges(previous, updated, file.FullName))
             return;
 
         _bindingRegistryChanged?.Invoke(this, false);

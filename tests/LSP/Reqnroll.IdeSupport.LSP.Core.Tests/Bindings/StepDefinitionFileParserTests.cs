@@ -862,7 +862,111 @@ namespace S
         new(stepDefinitionType, new Regex(regex), null,
             new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)));
 
-    private static ProjectHookBinding BuildHook(HookType hookType, string method, string sourceFile) =>
+    private static ProjectHookBinding BuildHook(
+        HookType hookType, string method, string sourceFile, BindingScope? scope = null, int? hookOrder = null) =>
         new(new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)),
-            null, hookType, null, null);
+            scope, hookType, hookOrder, null);
+
+    // ── HasHookChanges ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void HasHookChanges_returns_false_when_scope_and_order_are_unchanged()
+    {
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasHookChanges_returns_true_when_a_hook_is_added()
+    {
+        // The exact scenario reported live: editing a .cs file to add a new [BeforeScenario]
+        // hook didn't refresh the feature file's hook-count CodeLens until a full rebuild,
+        // because ConnectorBindingRegistryProvider only checked HasExpressionChanges.
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(), Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasHookChanges_returns_true_when_a_hook_is_removed()
+    {
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(), Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasHookChanges_returns_true_when_a_hooks_scope_changes()
+    {
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[]
+            {
+                BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Old" }),
+            }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[]
+            {
+                BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "New" }),
+            }, projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasHookChanges_returns_true_when_a_hooks_order_changes()
+    {
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath, hookOrder: 100) }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath, hookOrder: 200) }, projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasHookChanges_ignores_changes_in_other_files()
+    {
+        const string otherFilePath = @"C:\Project\Other.cs";
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeScenario, "Other.Method", otherFilePath) }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(), Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        // The only change is to a hook owned by a different file than the one being compared.
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasHookChanges_ignores_a_step_definition_only_edit()
+    {
+        var before = new ProjectBindingRegistry(
+            new[] { BuildStepDefinition("^old$", "Steps.Method", FilePath) },
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            new[] { BuildStepDefinition("^new$", "Steps.Method", FilePath) },
+            new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeFalse();
+    }
 }

@@ -30,9 +30,9 @@
 #           ├─> build-vs-extension ─┬─> test-vs-extension ──┐  [if vs]
 #           │                       └─> test-vs-wizards ─────┴─> publish-vsix
 #           ├─> build-vscode-extension (VSIX)                 [if vscode]
-#           └─> build-rider-plugin                             [if rider]
+#           └─> build-rider-plugin ─┐                         [if rider]
 #   tsc-only (VS Code, no LSP dependency)                      [if vscode]
-#   test-rider-plugin (Rider, no LSP dependency)                [if rider]
+#   test-rider-plugin (Rider, no LSP dependency) ────────────┴─> publish-rider-plugin
 #
 # NOTE: this changes the required-status-check contexts branch protection
 # rules see (workflow name / job name pairs) — the old
@@ -523,7 +523,9 @@ jobs:
   # ---------------------------------------------------------------------------
   # Plugin build — bundles the server binaries published by the lsp job for
   # every RID and produces the plugin .zip, then runs the Plugin Verifier
-  # against it.
+  # against it. Uploads a *candidate* artifact; publish-rider-plugin below
+  # promotes it to the final artifact name once test-rider-plugin has also
+  # passed, mirroring the VS extension's build/test/publish-vsix chain.
   #
   # Gradle never invokes `dotnet` in CI: -PlspServerBuildDir tells
   # build.gradle.kts's prepareSandbox task to bundle the already-downloaded
@@ -592,10 +594,10 @@ jobs:
         run: ./gradlew verifyPlugin -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
         working-directory: ${{ env.RIDER_DIR }}
 
-      - name: Upload plugin artifact
+      - name: Upload plugin candidate artifact
         uses: actions/upload-artifact@v4
         with:
-          name: reqnroll-ide-support-rider-plugin
+          name: reqnroll-ide-support-rider-plugin-candidate
           path: ${{ env.RIDER_DIR }}/build/distributions/*.zip
           if-no-files-found: error
 
@@ -614,7 +616,8 @@ jobs:
   # nothing under src/Rider launches the LSP server yet (see
   # src/Rider/CONTRIBUTING.md); once a functional test does, give it a `needs:
   # lsp` dependency and download the server the same way build-rider-plugin
-  # does above.
+  # does above. Also runs in parallel with build-rider-plugin (neither needs
+  # the other) — publish-rider-plugin below is what actually gates on both.
   # ---------------------------------------------------------------------------
   test-rider-plugin:
     name: Kotlin Unit Tests (build skip)
@@ -640,3 +643,26 @@ jobs:
           name: rider-plugin-test-results
           path: ${{ env.RIDER_DIR }}/build/test-results/**/*.xml
           if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # Publish Rider plugin — promotes the candidate .zip built in
+  # build-rider-plugin to its final artifact name, but only once
+  # test-rider-plugin has also passed. Mirrors publish-vsix above.
+  # ---------------------------------------------------------------------------
+  publish-rider-plugin:
+    name: Publish Rider Plugin
+    needs: [build-rider-plugin, test-rider-plugin]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download plugin candidate artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: reqnroll-ide-support-rider-plugin-candidate
+          path: plugin
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reqnroll-ide-support-rider-plugin
+          path: plugin/*.zip
+          if-no-files-found: error
