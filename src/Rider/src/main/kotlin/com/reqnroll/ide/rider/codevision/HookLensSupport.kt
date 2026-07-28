@@ -96,8 +96,13 @@ internal object HookLensSupport {
                 val clickCharacter = argAsInt(arguments, 2) ?: displayCharacter
                 val ownLevelOnly = argAsBoolean(arguments, 3) ?: false
 
+                // alwaysShowPicker=true: clicking a lens always shows the picker, even for a
+                // single matching hook, so the user can see which hook it refers to rather than
+                // being jumped straight there (issue #372 follow-up, mirrors VS Code's behavior).
                 val entry = StepUsagesCodeVisionProvider.buildEntry(command, providerId) {
-                    GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
+                    GoToHooksRunner.runAndShow(
+                        project, uri, clickLine, clickCharacter, ownLevelOnly, alwaysShowPicker = true,
+                    )
                 }
                 TextRange(offset, offset) to entry
             }
