@@ -50,6 +50,17 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
                 codeVisionHost.invalidateProvider(CodeVisionHost.LensInvalidateSignal(editor, listOf(ID)))
             }
         }
+
+        /**
+         * Computes the offset for a lens whose display line already has [priorEntriesOnLine]
+         * entries rendered before it, so that entries sharing a display line never collide on
+         * `TextRange.equals()` (see [computeEntries]'s doc comment for why that matters).
+         * Clamped to [lineEndOffset] so the nudge never spills onto the next line.
+         * `internal` (rather than private) purely so it's unit-testable without an Editor/Document fixture.
+         */
+        internal fun dedupedOffset(
+            lineStartOffset: Int, displayCharacter: Int, priorEntriesOnLine: Int, lineEndOffset: Int,
+        ): Int = (lineStartOffset + displayCharacter + priorEntriesOnLine).coerceAtMost(lineEndOffset)
     }
 
     override val id: String = ID
@@ -72,33 +83,48 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
 
         val document = editor.document
-        return lenses
-            .filter { StepUsagesCodeVisionProvider.isRenderable(it, document.lineCount) }
-            .map { lens ->
-                val command = lens.command!!
+        val renderable = lenses.filter { StepUsagesCodeVisionProvider.isRenderable(it, document.lineCount) }
 
-                // Display position: where the lens is anchored (Feature:/Scenario: line).
-                val displayLine = lens.range.start.line
-                val displayCharacter = lens.range.start.character
-                val offset = document.getLineStartOffset(displayLine) + displayCharacter
+        // Two lenses can share the exact same display position — e.g. the Scenario-only "N
+        // hooks" lens and the consolidated step-hooks lens both anchor on the Scenario: line
+        // (see HookCodeLensHandler.cs). VS Code's CodeLens renders multiple entries at an
+        // identical range side by side, but IntelliJ's CodeVision keys entries by TextRange, so
+        // two zero-length ranges at the exact same offset collide (only one survives to render,
+        // and it isn't necessarily paired with its own click handler). dedupedOffset nudges every
+        // entry after the first on a given line so their ranges stay distinct while still
+        // resolving to the same visual line.
+        val priorEntriesPerLine = HashMap<Int, Int>()
 
-                // Click target + filter: HookCodeLensHandler.cs encodes
-                // (uri, line, character, ownLevelOnly) in command.arguments. The click
-                // position can differ from the display position — e.g. the consolidated
-                // step-hooks lens is *shown* on the Scenario: line but *navigates* to the
-                // scenario's first step so "Go to Hooks" resolves Step context — so this must
-                // read arguments rather than reuse lens.range. Falls back to the display
-                // position/false if arguments are absent (defensive; the server always sends
-                // all four).
-                val arguments = command.arguments
-                val clickLine = (arguments?.getOrNull(1) as? Number)?.toInt() ?: displayLine
-                val clickCharacter = (arguments?.getOrNull(2) as? Number)?.toInt() ?: displayCharacter
-                val ownLevelOnly = arguments?.getOrNull(3) as? Boolean ?: false
+        return renderable.map { lens ->
+            val command = lens.command!!
 
-                val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
-                    GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
-                }
-                TextRange(offset, offset) to entry
+            // Display position: where the lens is anchored (Feature:/Scenario: line).
+            val displayLine = lens.range.start.line
+            val displayCharacter = lens.range.start.character
+            val priorEntriesOnLine = priorEntriesPerLine.getOrDefault(displayLine, 0)
+            priorEntriesPerLine[displayLine] = priorEntriesOnLine + 1
+            val offset = dedupedOffset(
+                document.getLineStartOffset(displayLine), displayCharacter,
+                priorEntriesOnLine, document.getLineEndOffset(displayLine),
+            )
+
+            // Click target + filter: HookCodeLensHandler.cs encodes
+            // (uri, line, character, ownLevelOnly) in command.arguments. The click
+            // position can differ from the display position — e.g. the consolidated
+            // step-hooks lens is *shown* on the Scenario: line but *navigates* to the
+            // scenario's first step so "Go to Hooks" resolves Step context — so this must
+            // read arguments rather than reuse lens.range. Falls back to the display
+            // position/false if arguments are absent (defensive; the server always sends
+            // all four).
+            val arguments = command.arguments
+            val clickLine = (arguments?.getOrNull(1) as? Number)?.toInt() ?: displayLine
+            val clickCharacter = (arguments?.getOrNull(2) as? Number)?.toInt() ?: displayCharacter
+            val ownLevelOnly = arguments?.getOrNull(3) as? Boolean ?: false
+
+            val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
+                GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
             }
+            TextRange(offset, offset) to entry
+        }
     }
 }
