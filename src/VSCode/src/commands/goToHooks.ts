@@ -17,20 +17,28 @@ interface GoToHookLocation {
 }
 
 /**
- * Implements Hook Navigation ("Go to Hooks"): queries the server for hooks applicable at the
- * cursor position and navigates directly if there's exactly one, or shows a `QuickPick` to
- * choose among several.
+ * Implements Hook Navigation ("Go to Hooks"): queries the server for hooks applicable at
+ * `position` (defaulting to the active editor's cursor when omitted — the command-palette/
+ * keybinding invocation path) and navigates directly if there's exactly one, or shows a
+ * `QuickPick` to choose among several. When invoked from the hook-count CodeLens (issue #269)
+ * the server passes `[uri, line, char]` as arguments, resolved to `position` by the
+ * `reqnroll.goToHooks` command handler, the same way `reqnroll.findStepUsages` already does.
  */
-export async function doGoToHooks(client: LanguageClient): Promise<void> {
+export async function doGoToHooks(
+  client: LanguageClient,
+  position?: { uri: string; line: number; character: number },
+): Promise<void> {
   const editor = vscode.window.activeTextEditor;
-  if (!editor) return;
+  const uri = position?.uri ?? editor?.document.uri.toString();
+  const line = position?.line ?? editor?.selection.active.line;
+  const character = position?.character ?? editor?.selection.active.character;
+  if (uri === undefined || line === undefined || character === undefined) return;
 
-  const pos = editor.selection.active;
   let response: GoToHooksResponse;
   try {
     response = await client.sendRequest<GoToHooksResponse>(ReqnrollMethods.goToHooks, {
-      textDocument: { uri: editor.document.uri.toString() },
-      position: { line: pos.line, character: pos.character },
+      textDocument: { uri },
+      position: { line, character },
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
