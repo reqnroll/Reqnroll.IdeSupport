@@ -4,6 +4,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
+import com.reqnroll.ide.rider.codevision.HookCodeVisionProvider
 import com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider
 import java.util.concurrent.CompletableFuture
 
@@ -32,7 +33,12 @@ class ReqnrollCodeLensRefreshInterceptor(
 ) : LspServerNotificationsHandler by handler {
     override fun refreshCodeLenses(): CompletableFuture<Void> {
         ApplicationManager.getApplication().invokeLater(
-            { if (!project.isDisposed) StepUsagesCodeVisionProvider.refreshOpenCsEditors(project) },
+            {
+                if (!project.isDisposed) {
+                    StepUsagesCodeVisionProvider.refreshOpenCsEditors(project)
+                    HookCodeVisionProvider.refreshOpenFeatureEditors(project)
+                }
+            },
             ModalityState.any(),
         )
         return handler.refreshCodeLenses()

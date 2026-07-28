@@ -50,6 +50,7 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          requests are called directly (ReqnrollRequestSender) and rendered through IntelliJ's
          own native extension points instead. -->
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider" />
+    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.HookCodeVisionProvider" />
 
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see
