@@ -1,5 +1,6 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.TestStubs;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Matching;
@@ -186,6 +187,64 @@ public class BindingMatchServiceTests
         set.Owner.Should().Be(OwnerA);
         set.Key.Owner.Should().Be(OwnerA);
         set.Key.DocumentId.Should().Be(Uri);
+    }
+
+    // ── FromTags / Scenarios (issue #373) ───────────────────────────────────────
+
+    [Fact]
+    public void FromTags_captures_a_scenario()
+    {
+        var set = BuildSet(DefinedFeature, RegistryWith(GivenBinding("my step")));
+
+        set.Scenarios.Should().ContainSingle();
+        set.Scenarios[0].Name.Should().Be("S");
+        set.Scenarios[0].IsOutline.Should().BeFalse();
+    }
+
+    [Fact]
+    public void FromTags_excludes_background()
+    {
+        const string feature = "Feature: F\nBackground:\n    Given setup\nScenario: S\n    Given my step\n";
+        var set = BuildSet(feature, RegistryWith(GivenBinding("my step"), GivenBinding("setup")));
+
+        set.Scenarios.Should().ContainSingle("Background shares ScenarioDefinitionBlock with real scenarios but isn't independently executed/countable");
+        set.Scenarios[0].Name.Should().Be("S");
+    }
+
+    [Fact]
+    public void FromTags_marks_scenario_outline_and_counts_it_once_regardless_of_examples_row_count()
+    {
+        const string feature = "Feature: F\nScenario Outline: SO\n    Given <x>\nExamples:\n    | x |\n    | 1 |\n    | 2 |\n    | 3 |\n";
+        var set = BuildSet(feature, RegistryWith(GivenBinding("<x>")));
+
+        set.Scenarios.Should().ContainSingle("a Scenario Outline counts as one scenario definition regardless of its Examples row count (#373 decided semantics)");
+        set.Scenarios[0].IsOutline.Should().BeTrue();
+        set.Scenarios[0].Name.Should().Be("SO");
+    }
+
+    [Fact]
+    public void FromTags_scenario_context_includes_inherited_feature_tags()
+    {
+        // The scenario itself carries no tags of its own -- @foo is only declared on the
+        // enclosing Feature. A hook scoped to @foo must still match this scenario, which relies
+        // on IGherkinDocumentContext.GetTagNames() walking up to the Feature tag (see
+        // FeatureScenarioInfo's doc comment) -- this test locks in that the ScenarioTag's parent
+        // chain is actually wired for that to work, not just theoretically true of the interface.
+        const string feature = "@foo\nFeature: F\nScenario: S\n    Given my step\n";
+        var set = BuildSet(feature, RegistryWith(GivenBinding("my step")));
+
+        var context = (IGherkinDocumentContext)set.Scenarios[0].ScenarioTag;
+        context.GetTagNames().Should().Contain("@foo");
+    }
+
+    [Fact]
+    public void FromTags_two_scenarios_in_one_feature_are_both_captured()
+    {
+        const string feature = "Feature: F\nScenario: S1\n    Given my step\nScenario: S2\n    Given my step\n";
+        var set = BuildSet(feature, RegistryWith(GivenBinding("my step")));
+
+        set.Scenarios.Should().HaveCount(2);
+        set.Scenarios.Select(s => s.Name).Should().BeEquivalentTo(["S1", "S2"]);
     }
 
     // ── BindingMatchService cache (single-project, unknown owner) ──────────────

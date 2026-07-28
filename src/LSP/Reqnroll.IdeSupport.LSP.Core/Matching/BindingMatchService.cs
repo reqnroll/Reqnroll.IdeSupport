@@ -92,6 +92,21 @@ public sealed class BindingMatchService : IBindingMatchService
         return usages;
     }
 
+    /// <inheritdoc />
+    public IEnumerable<FeatureBindingMatchSet> GetAll(IReadOnlyCollection<ProjectOwner>? projectFilter = null)
+    {
+        // ConcurrentDictionary enumeration is safe under concurrent writes -- same guarantee
+        // FindUsages already relies on.
+        foreach (var pair in _cache)
+        {
+            var key = pair.Key;
+            if (projectFilter != null && key.Owner.IsKnown && !MatchesFilter(key.Owner, projectFilter))
+                continue;
+
+            yield return pair.Value;
+        }
+    }
+
     private static bool MatchesFilter(ProjectOwner owner, IReadOnlyCollection<ProjectOwner> filter)
     {
         foreach (var f in filter)
