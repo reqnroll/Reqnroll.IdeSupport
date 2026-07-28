@@ -24,7 +24,6 @@ global using Reqnroll.IdeSupport.LSP.Core.Documents;
 
 
 global using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
-global using Reqnroll.VisualStudio.VsxStubs.ProjectSystem;
 // BCL
 global using System;
 global using System.Collections;

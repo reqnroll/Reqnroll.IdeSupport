@@ -1,5 +1,4 @@
-﻿using System.Text.RegularExpressions;
-using Reqnroll.IdeSupport.Common.Telemetry;
+﻿using Reqnroll.IdeSupport.Common.Telemetry;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.Tests.VsIntegration;
 
@@ -229,29 +228,11 @@ public class WelcomeServiceTests
         /// <summary>No-op: avoid real registry writes in tests.</summary>
         protected override void CheckFileAssociation(IIdeScope ideScope) { }
 
-        /// <summary>Use stubbed changelog to test selection logic.</summary>
-        protected override string GetSelectedChangeLog(string oldExtensionVersion)
-        {
-            if (StubbedChangeLog is null)
-                return base.GetSelectedChangeLog(oldExtensionVersion);
-
-            int start = 0;
-            var newVersionMatch = Regex.Match(StubbedChangeLog,
-                @"^# v1.0.0", RegexOptions.Multiline);
-            if (newVersionMatch.Success)
-                start = newVersionMatch.Index;
-
-            int end = StubbedChangeLog.Length;
-            if (oldExtensionVersion != null)
-            {
-                var oldVersionMatch = Regex.Match(StubbedChangeLog,
-                    @"^# v" + oldExtensionVersion, RegexOptions.Multiline);
-                if (oldVersionMatch.Success)
-                    end = oldVersionMatch.Index;
-            }
-
-            if (end <= start) return string.Empty;
-            return StubbedChangeLog.Substring(start, end - start);
-        }
+        /// <summary>
+        /// Stubs the raw changelog fetch (the only step that touches disk) so
+        /// GetSelectedChangeLog's real regex/substring selection logic runs unmodified against
+        /// test-controlled input, instead of a separate copy of that logic living in the test.
+        /// </summary>
+        protected override string GetChangeLog() => StubbedChangeLog ?? base.GetChangeLog();
     }
 }

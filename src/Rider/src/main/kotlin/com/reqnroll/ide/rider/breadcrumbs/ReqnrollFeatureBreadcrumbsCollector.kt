@@ -153,17 +153,31 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
         }
 
         /** Walks from [symbols] (top-level) down through whichever child's range contains [offset] at each level. */
-        private fun buildCrumbs(document: Document, symbols: List<DocumentSymbol>, offset: Int): List<Crumb> {
-            val crumbs = mutableListOf<Crumb>()
-            var level = symbols
-            while (true) {
-                val match = level.firstOrNull { offset in document.offsetOf(it.range.start)..document.offsetOf(it.range.end) } ?: break
-                crumbs += ReqnrollBreadcrumb(document, match)
-                level = match.children.orEmpty()
-            }
-            return crumbs
-        }
+        private fun buildCrumbs(document: Document, symbols: List<DocumentSymbol>, offset: Int): List<Crumb> =
+            selectCrumbTrail(symbols, offset) { document.offsetOf(it) }.map { ReqnrollBreadcrumb(document, it) }
     }
+}
+
+/**
+ * Walks from [symbols] (top-level) down through whichever child's range contains [offset] at each
+ * level, until no child matches -- e.g. Feature -> Scenario -> Step. [offsetOf] converts an LSP
+ * `Position` to a document offset; injected (rather than requiring a live `Document`) so this
+ * descent logic is unit-testable without a `Document` fixture -- production code passes
+ * `Document.offsetOf` (see below). `internal` for the same reason.
+ */
+internal fun selectCrumbTrail(
+    symbols: List<DocumentSymbol>,
+    offset: Int,
+    offsetOf: (Position) -> Int,
+): List<DocumentSymbol> {
+    val trail = mutableListOf<DocumentSymbol>()
+    var level = symbols
+    while (true) {
+        val match = level.firstOrNull { offset in offsetOf(it.range.start)..offsetOf(it.range.end) } ?: break
+        trail += match
+        level = match.children.orEmpty()
+    }
+    return trail
 }
 
 /** Converts a 0-based LSP [Position] to a document offset, clamping defensively to the document's actual bounds. */

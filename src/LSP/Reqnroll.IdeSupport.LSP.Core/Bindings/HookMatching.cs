@@ -44,15 +44,46 @@ public static class HookMatching
             _                          => throw new ArgumentOutOfRangeException(nameof(level))
         };
 
+    // Hook types native to each level only (non-cumulative) — used by the hook-count CodeLens
+    // so that a lens shown on a Scenario/Step line counts only the hooks introduced at that
+    // level, rather than also re-counting enclosing Feature/Scenario hooks on every line.
+    private static readonly HashSet<HookType> ScenarioOnlyHooks = new HashSet<HookType>
+    {
+        HookType.BeforeScenario, HookType.AfterScenario,
+    };
+
+    private static readonly HashSet<HookType> StepOnlyHooks = new HashSet<HookType>
+    {
+        HookType.BeforeScenarioBlock, HookType.AfterScenarioBlock,
+        HookType.BeforeStep,          HookType.AfterStep,
+    };
+
+    /// <summary>
+    /// Returns the hook types native to <paramref name="level"/> only (non-cumulative) —
+    /// e.g. Step returns only Before/AfterStep and Before/AfterScenarioBlock, excluding the
+    /// enclosing Feature/Scenario hooks that <see cref="GetApplicableHookTypes"/> would include.
+    /// </summary>
+    public static HashSet<HookType> GetOwnLevelHookTypes(HookContextLevel level) =>
+        level switch
+        {
+            HookContextLevel.Feature  => FeatureLevelHooks,
+            HookContextLevel.Scenario => ScenarioOnlyHooks,
+            HookContextLevel.Step     => StepOnlyHooks,
+            _                          => throw new ArgumentOutOfRangeException(nameof(level))
+        };
+
     /// <summary>
     /// Returns every valid, applicable hook in <paramref name="registry"/> that matches
     /// <paramref name="contextTag"/>'s scope, ordered by <see cref="ProjectHookBinding.HookType"/>
-    /// then <see cref="ProjectHookBinding.HookOrder"/>.
+    /// then <see cref="ProjectHookBinding.HookOrder"/>. When <paramref name="ownLevelOnly"/> is
+    /// <see langword="true"/>, restricts to hook types native to <paramref name="level"/>
+    /// (see <see cref="GetOwnLevelHookTypes"/>) instead of the cumulative set.
     /// </summary>
     public static IReadOnlyList<ProjectHookBinding> ResolveMatchingHooks(
-        ProjectBindingRegistry registry, HookContextLevel level, DeveroomTag contextTag)
+        ProjectBindingRegistry registry, HookContextLevel level, DeveroomTag contextTag,
+        bool ownLevelOnly = false)
     {
-        var applicableTypes = GetApplicableHookTypes(level);
+        var applicableTypes = ownLevelOnly ? GetOwnLevelHookTypes(level) : GetApplicableHookTypes(level);
 
         // ProjectHookBinding.Match does not use the Scenario argument — it only uses the
         // IGherkinDocumentContext for tag/scope matching — so null is safe to pass here.
