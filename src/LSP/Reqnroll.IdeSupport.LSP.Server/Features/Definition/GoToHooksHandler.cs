@@ -2,10 +2,6 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
-using Reqnroll.IdeSupport.LSP.Core.Matching;
-
-
-using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
@@ -31,24 +27,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// </summary>
 public sealed class GoToHooksHandler
 {
-    // Hook types visible at each context level, per the Hook Navigation design doc.
-    private static readonly IReadOnlySet<HookType> FeatureLevelHooks = new HashSet<HookType>
-    {
-        HookType.BeforeTestRun,  HookType.AfterTestRun,
-        HookType.BeforeFeature,  HookType.AfterFeature,
-    };
-
-    private static readonly IReadOnlySet<HookType> ScenarioLevelHooks = new HashSet<HookType>(FeatureLevelHooks)
-    {
-        HookType.BeforeScenario, HookType.AfterScenario,
-    };
-
-    private static readonly IReadOnlySet<HookType> StepLevelHooks = new HashSet<HookType>(ScenarioLevelHooks)
-    {
-        HookType.BeforeScenarioBlock, HookType.AfterScenarioBlock,
-        HookType.BeforeStep,          HookType.AfterStep,
-    };
-
     private readonly IDocumentBufferService        _bufferService;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
@@ -101,7 +79,7 @@ public sealed class GoToHooksHandler
         var snapshot = buffer.ToGherkinTextSnapshot();
         var offset   = snapshot.ToOffset(request.Position.Line, request.Position.Character);
 
-        var (level, contextTag) = ResolveContext(buffer.Tags, offset);
+        var (level, contextTag) = HookMatching.ResolveContext(buffer.Tags, offset);
         if (level == HookContextLevel.None)
         {
             _logger.LogVerbose($"GoToHooksHandler: no Gherkin context at offset {offset} in {uri}");
@@ -115,20 +93,11 @@ public sealed class GoToHooksHandler
             return Task.FromResult(new GoToHooksResponse());
         }
 
-        var applicableTypes = GetApplicableHookTypes(level);
+        var hooks = HookMatching.ResolveMatchingHooks(registry, level, contextTag);
 
-        // ProjectHookBinding.Match does not use the Scenario argument — it only uses the
-        // IGherkinDocumentContext for tag/scope matching — so null is safe to pass here.
-        var hooks = registry.Hooks
-            .Where(h => h.IsValid && applicableTypes.Contains(h.HookType))
-            .Where(h => h.Match(null!, contextTag))
-            .OrderBy(h => h.HookType)
-            .ThenBy(h => h.HookOrder)
-            .ToArray();
+        _logger.LogVerbose($"GoToHooksHandler: {hooks.Count} hook(s) at offset {offset} in {uri}");
 
-        _logger.LogVerbose($"GoToHooksHandler: {hooks.Length} hook(s) at offset {offset} in {uri}");
-
-        var locations = new List<GoToHookLocation>(hooks.Length);
+        var locations = new List<GoToHookLocation>(hooks.Count);
         foreach (var hook in hooks)
         {
             var loc = ToLocation(hook);
@@ -141,59 +110,6 @@ public sealed class GoToHooksHandler
 
         return Task.FromResult(new GoToHooksResponse { Hooks = locations });
     }
-
-    // ── Position context resolution ───────────────────────────────────────────
-
-    /// <summary>
-    /// Determines the Gherkin context level at <paramref name="offset"/> from the flat
-    /// <paramref name="tags"/> collection (produced by <c>DeveroomTagParser</c>) and returns
-    /// the deepest matching tag for use as an <c>IGherkinDocumentContext</c> in scope matching.
-    /// </summary>
-    private static (HookContextLevel level, DeveroomTag contextTag) ResolveContext(
-        IReadOnlyCollection<DeveroomTag> tags, int offset)
-    {
-        // Check from innermost to outermost: Step → Scenario → Feature.
-        // A StepBlock hit means we're on a step line — use the enclosing ScenarioDefinitionBlock
-        // as context because steps carry no tags; only scenario and feature blocks do.
-        var stepTag = FindTag(tags, DeveroomTagTypes.StepBlock, offset);
-        if (stepTag is not null)
-        {
-            var enclosingScenario = FindTag(tags, DeveroomTagTypes.ScenarioDefinitionBlock, offset);
-            return (HookContextLevel.Step, enclosingScenario ?? stepTag);
-        }
-
-        var scenarioTag = FindTag(tags, DeveroomTagTypes.ScenarioDefinitionBlock, offset);
-        if (scenarioTag is not null)
-            return (HookContextLevel.Scenario, scenarioTag);
-
-        var featureTag = FindTag(tags, DeveroomTagTypes.FeatureBlock, offset);
-        if (featureTag is not null)
-            return (HookContextLevel.Feature, featureTag);
-
-        return (HookContextLevel.None, null!);
-    }
-
-    private static DeveroomTag? FindTag(IReadOnlyCollection<DeveroomTag> tags, string type, int offset)
-        => tags.FirstOrDefault(t => t.Type == type && ContainsOffset(t, offset));
-
-    // StepBlock/ScenarioDefinitionBlock/FeatureBlock tags are already full-line spans
-    // (DeveroomTagParser.GetBlockSpan uses GherkinRange.FromLines, so Range.End is the offset
-    // right past the last character of the block's last line). The upper bound must be
-    // inclusive so a click at end-of-line still resolves — Gherkin is line-oriented, and this
-    // is the same class of off-by-one that made Go to Definition miss in #101.
-    private static bool ContainsOffset(DeveroomTag tag, int offset)
-        => offset >= tag.Range.Start && offset <= tag.Range.End;
-
-    // ── Hook applicability ────────────────────────────────────────────────────
-
-    private static IReadOnlySet<HookType> GetApplicableHookTypes(HookContextLevel level) =>
-        level switch
-        {
-            HookContextLevel.Feature  => FeatureLevelHooks,
-            HookContextLevel.Scenario => ScenarioLevelHooks,
-            HookContextLevel.Step     => StepLevelHooks,
-            _                          => throw new ArgumentOutOfRangeException(nameof(level))
-        };
 
     // ── Location conversion ───────────────────────────────────────────────────
 
@@ -217,8 +133,4 @@ public sealed class GoToHooksHandler
 
     private static bool IsFeatureFile(DocumentUri uri) =>
         uri.Path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase);
-
-    // ── Nested types ──────────────────────────────────────────────────────────
-
-    internal enum HookContextLevel { None, Feature, Scenario, Step }
 }

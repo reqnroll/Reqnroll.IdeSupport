@@ -161,9 +161,20 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollGoToHooks,
             (request, ct) => resolver!.Get<GoToHooksHandler>().HandleAsync(request, ct));
 
+        // A single manual registration handles textDocument/codeLens for both file kinds:
+        // StepCodeLensHandler owns .cs (step usages), HookCodeLensHandler owns .feature (hook
+        // matches, issue #269) -- each returns an empty array for URIs it doesn't own, so
+        // concatenating is safe and avoids a second competing OnRequest for the same method.
         options.OnRequest<CodeLensParams, CodeLens[]>(
             LspMethodNames.TextDocumentCodeLens,
-            (request, ct) => resolver!.Get<StepCodeLensHandler>().HandleAsync(request, ct));
+            async (request, ct) =>
+            {
+                var stepLenses = await resolver!.Get<StepCodeLensHandler>().HandleAsync(request, ct);
+                var hookLenses = await resolver!.Get<HookCodeLensHandler>().HandleAsync(request, ct);
+                return stepLenses.Length == 0 ? hookLenses
+                    : hookLenses.Length == 0 ? stepLenses
+                    : stepLenses.Concat(hookLenses).ToArray();
+            });
 
         // inlayHint/foldingRange are routed manually (rather than via AddHandler's dynamic
         // registration) so that inlayHintProvider/foldingRangeProvider can be declared
