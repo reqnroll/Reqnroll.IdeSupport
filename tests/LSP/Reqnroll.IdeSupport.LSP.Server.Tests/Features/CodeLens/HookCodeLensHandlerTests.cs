@@ -1,3 +1,4 @@
+using Gherkin.Ast;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -232,6 +233,40 @@ public class HookCodeLensHandlerTests
     {
         SetupBuffer(FeatureUri, TwoStepFeatureText, TwoStepTags);
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Range!.Start.Line.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_background_block_produces_no_lens()
+    {
+        // ScenarioDefinitionBlock covers Background too (see DeveroomTagTypes doc comment) — a
+        // Background carries no scenario tags of its own, so nothing should be counted/shown for it.
+        var backgroundTag = new DeveroomTag(
+            DeveroomTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
+            new Background(new Gherkin.Ast.Location(2, 1), "Background", "B", "", Array.Empty<Step>()));
+        SetupBuffer(FeatureUri, FeatureText, new[] { FeatureBlockTag, backgroundTag, StepBlockTag });
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(
+            MakeHook(HookType.BeforeScenario), MakeHook(HookType.BeforeStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_scenario_tagged_as_Scenario_ast_node_still_produces_a_lens()
+    {
+        // Confirms the Background exclusion is keyed off tag.Data's runtime type, not just
+        // "any ScenarioDefinitionBlock tag with Data is excluded".
+        var scenarioTag = new DeveroomTag(
+            DeveroomTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
+            new Scenario(Array.Empty<Tag>(), new Gherkin.Ast.Location(2, 1), "Scenario", "S", "", Array.Empty<Step>(), Array.Empty<Examples>()));
+        SetupBuffer(FeatureUri, FeatureText, new[] { FeatureBlockTag, scenarioTag, StepBlockTag });
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 

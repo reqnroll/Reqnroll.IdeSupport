@@ -1,4 +1,5 @@
 using System.Linq;
+using Gherkin.Ast;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -21,6 +22,9 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// scenario — steps never get their own lens, since <see cref="HookMatching"/> resolves the same
 /// step-level hook set for every step in a scenario (matching only depends on the scenario's
 /// scope/tags, not on which step), so repeating the count on every step line would be redundant.
+/// <c>Background:</c>/Rule sections never get a lens (see the Background check in
+/// <see cref="HandleAsync"/> and the RuleBlock remark there) — hook scope is scenario-tag-driven,
+/// and neither a Background nor a Rule carries scenario tags of its own.
 /// Clicking a lens invokes the <c>reqnroll.goToHooks</c> client command with <c>ownLevelOnly</c>
 /// set, so the picker it opens matches exactly what the lens counted.
 /// </summary>
@@ -92,8 +96,16 @@ public sealed class HookCodeLensHandler
             {
                 AddOwnLevelLens(lenses, uri, registry, HookContextLevel.Feature, tag, clickTargetTag: tag);
             }
-            else if (tag.Type == DeveroomTagTypes.ScenarioDefinitionBlock)
+            else if (tag.Type == DeveroomTagTypes.ScenarioDefinitionBlock && tag.Data is not Background)
             {
+                // DeveroomTagTypes.ScenarioDefinitionBlock covers Background blocks too (see
+                // its doc comment), but a Background has no tags/scope of its own — which hooks
+                // apply to its steps depends entirely on whichever Scenario is currently pulling
+                // them in, so there is nothing correct to count or navigate to here. Excluded via
+                // tag.Data (the underlying Gherkin.Ast node) rather than a Type check, since
+                // Background and Scenario share the same tag Type. Rule blocks need no equivalent
+                // check: HookContextLevel/HookType have no Rule-level concept at all, so
+                // DeveroomTagTypes.RuleBlock is never matched by the `if`/`else if` above.
                 AddOwnLevelLens(lenses, uri, registry, HookContextLevel.Scenario, tag, clickTargetTag: tag);
                 AddStepHooksLens(lenses, uri, registry, tag, buffer.Tags);
             }

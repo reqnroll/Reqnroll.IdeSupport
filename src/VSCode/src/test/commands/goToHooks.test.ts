@@ -130,6 +130,72 @@ suite('goToHooks', () => {
       assert.strictEqual(quickPickItems[1].detail, undefined);
     });
 
+    test('navigates directly for a single hook when alwaysShowPicker is not set (manual invocation)', async () => {
+      const client = fakeClient(() =>
+        Promise.resolve({
+          hooks: [
+            {
+              uri: editor.document.uri.toString(),
+              startLine: 0,
+              startChar: 0,
+              hookType: 'BeforeScenario',
+              hookOrder: 0,
+              methodName: 'Setup',
+            },
+          ],
+        }),
+      );
+      let quickPickShown = false;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: () => {
+            quickPickShown = true;
+            return Promise.resolve(undefined);
+          },
+        },
+        () => doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 }),
+      );
+
+      assert.strictEqual(quickPickShown, false);
+    });
+
+    test('shows the QuickPick for a single hook when alwaysShowPicker is set (CodeLens click)', async () => {
+      const client = fakeClient(() =>
+        Promise.resolve({
+          hooks: [
+            {
+              uri: editor.document.uri.toString(),
+              startLine: 0,
+              startChar: 0,
+              hookType: 'BeforeScenario',
+              hookOrder: 0,
+              methodName: 'Setup',
+            },
+          ],
+        }),
+      );
+      let quickPickPlaceholder: string | undefined;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: (_items: unknown, options?: { placeHolder?: string }) => {
+            quickPickPlaceholder = options?.placeHolder;
+            return Promise.resolve(undefined);
+          },
+        },
+        () =>
+          doGoToHooks(client, {
+            uri: editor.document.uri.toString(),
+            line: 0,
+            character: 0,
+            alwaysShowPicker: true,
+          }),
+      );
+
+      assert.match(quickPickPlaceholder ?? '', /^1 hook found/);
+    });
+
     test('sends ownLevelOnly=false by default (manual invocation)', async () => {
       let sentParams: unknown;
       const client = capturingClient({ hooks: [] }, (_method, params) => {
