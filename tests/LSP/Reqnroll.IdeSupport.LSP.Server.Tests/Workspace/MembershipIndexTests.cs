@@ -489,4 +489,50 @@ public class MembershipIndexTests
                 n.RemovedBindingFilePaths == null || n.RemovedBindingFilePaths.Count == 0),
             Arg.Any<CancellationToken>());
     }
+
+    // ── Concurrency ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Concurrent_baselines_and_deltas_across_many_projects_are_applied_safely()
+    {
+        // _membership is a plain Dictionary guarded by _membershipLock (not a ConcurrentDictionary)
+        // specifically because HandleProjectFilesAsync's baseline path needs multi-step
+        // read-modify-write consistency; this drives real concurrent baseline + delta
+        // notifications for many distinct projects to confirm the lock actually serializes access
+        // correctly (no lost update, no corrupted _membership state) rather than just trusting the
+        // single-threaded test coverage elsewhere in this file.
+        var sut = CreateSut();
+        const int projectCount = 25;
+        var projects = Enumerable.Range(0, projectCount)
+            .Select(i => MakeProject($@"C:\Proj{i}\My.csproj"))
+            .ToArray();
+        foreach (var project in projects)
+            Register(project);
+
+        await Task.WhenAll(projects.Select(async project =>
+        {
+            var featureFile = Path.Combine(Path.GetDirectoryName(project.ProjectFullName)!, "A.feature");
+            var bindingFile = Path.Combine(Path.GetDirectoryName(project.ProjectFullName)!, "Steps.cs");
+
+            await sut.HandleProjectFilesAsync(
+                BaselineParams(project.ProjectFullName, project.TargetFrameworkMoniker,
+                    (featureFile, ProjectFileRole.Feature)),
+                CancellationToken.None);
+
+            await sut.HandleProjectFilesAsync(
+                DeltaParams(project.ProjectFullName, project.TargetFrameworkMoniker,
+                    (bindingFile, ProjectFileRole.Binding, true)),
+                CancellationToken.None);
+        }));
+
+        foreach (var project in projects)
+        {
+            var featureFile = Path.Combine(Path.GetDirectoryName(project.ProjectFullName)!, "A.feature");
+            var bindingFile = Path.Combine(Path.GetDirectoryName(project.ProjectFullName)!, "Steps.cs");
+
+            sut.GetProjectsForUri(UriFor(featureFile)).Should().ContainSingle().Which.Should().BeSameAs(project);
+            sut.IsPathOwned(bindingFile).Should().BeTrue();
+            sut.HasBaselineForProject(project).Should().BeTrue();
+        }
+    }
 }

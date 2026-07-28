@@ -1,5 +1,8 @@
 package com.reqnroll.ide.rider.lsp.protocol
 
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.TextDocumentIdentifier
+
 /**
  * Wire DTOs for the reqnroll-prefixed client-to-server notifications, mirrored field-for-field
  * (camelCase, matching the server's CamelCasePropertyNamesContractResolver) against:
@@ -120,6 +123,18 @@ data class FindStepUsageItem(
     val projectName: String? = null,
     val featureName: String? = null,
     val ruleName: String? = null,
+)
+
+/**
+ * Params for `reqnroll/goToHooks` — mirrors GoToHooksParams.cs field-for-field. `ownLevelOnly`
+ * is set only by CodeLens-sourced invocations (HookCodeVisionProvider, forwarding the
+ * server-supplied `command.arguments` flag) so the response matches exactly what the lens
+ * counted, rather than the fuller cumulative list a manual "Go to Hooks" invocation returns.
+ */
+data class GoToHooksRequestParams(
+    val textDocument: TextDocumentIdentifier,
+    val position: Position,
+    val ownLevelOnly: Boolean = false,
 )
 
 /** Response for `reqnroll/goToHooks` — mirrors GoToHooksResponse.cs field-for-field. */

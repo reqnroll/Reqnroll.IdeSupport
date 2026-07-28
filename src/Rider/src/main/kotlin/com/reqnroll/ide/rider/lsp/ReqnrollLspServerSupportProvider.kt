@@ -3,6 +3,8 @@ package com.reqnroll.ide.rider.lsp
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServerSupportProvider
+import com.reqnroll.ide.rider.isCsExtension
+import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.project.ReqnrollLspServerReadiness
 import com.reqnroll.ide.rider.lsp.project.ReqnrollProjectBaseline
@@ -19,7 +21,7 @@ class ReqnrollLspServerSupportProvider : LspServerSupportProvider {
         file: VirtualFile,
         serverStarter: LspServerSupportProvider.LspServerStarter,
     ) {
-        if (file.extension != "feature" && file.extension != "cs") {
+        if (!isFeatureExtension(file.extension) && !isCsExtension(file.extension)) {
             return
         }
 

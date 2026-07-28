@@ -201,4 +201,24 @@ public class RefreshDebouncerTests : IDisposable
         var act = () => sut.Dispose();
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task Dispose_racing_a_run_completing_at_the_same_time_does_not_throw()
+    {
+        // Regression for the exact race already fixed in the sibling FeatureRescanDebouncer.Dispose():
+        // a snapshot-then-act loop over _pending.Values can observe a CancellationTokenSource that
+        // RunAfterDelayAsync's own finally block concurrently disposes, throwing
+        // ObjectDisposedException from Cancel()/Dispose(). Scheduling with a ~0ms delay and disposing
+        // immediately from another thread, repeated, puts Dispose()'s loop and the finally block's
+        // TryRemove in direct contention on most iterations.
+        for (var i = 0; i < 200; i++)
+        {
+            var sut = CreateSut();
+            sut.Schedule($"k{i}", TimeSpan.Zero, _ => Task.CompletedTask);
+
+            var disposeTask = Task.Run(sut.Dispose);
+            var act = async () => await disposeTask;
+            await act.Should().NotThrowAsync();
+        }
+    }
 }

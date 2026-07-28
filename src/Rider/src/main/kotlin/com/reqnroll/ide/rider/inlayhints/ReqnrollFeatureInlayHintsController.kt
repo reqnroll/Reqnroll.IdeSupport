@@ -27,6 +27,7 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.JBColor
 import com.intellij.util.Alarm
 import com.intellij.util.io.URLUtil
+import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.InlayHint
@@ -79,7 +80,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
         val editor = event.editor
         val project = editor.project ?: return
         val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: return
-        if (virtualFile.extension != "feature") return
+        if (!isFeatureExtension(virtualFile.extension)) return
 
         val disposable = Disposer.newDisposable("ReqnrollFeatureInlayHints:${virtualFile.path}")
         val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
@@ -131,7 +132,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
             for (editor in EditorFactory.getInstance().allEditors) {
                 if (editor.project != project) continue
                 val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: continue
-                if (virtualFile.extension != "feature") continue
+                if (!isFeatureExtension(virtualFile.extension)) continue
                 refresh(project, editor, virtualFile)
             }
         }

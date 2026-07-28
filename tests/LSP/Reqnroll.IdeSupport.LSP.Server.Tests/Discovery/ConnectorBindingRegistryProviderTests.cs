@@ -2,6 +2,7 @@
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -207,6 +208,79 @@ namespace S
         await sut.ApplyRoslynFileUpdateAsync(bodyEdited);
 
         raised.Should().BeFalse("only the method body changed, not the binding's matched expression -- there's nothing for feature-file matching to recompute");
+    }
+
+    [Fact]
+    public async Task ApplyRoslynFileUpdate_raises_event_when_a_hook_is_added_with_no_step_definition_change()
+    {
+        // Regression test for the live-reported bug: adding a hook attribute to a .cs file
+        // didn't refresh the feature file's hook-count CodeLens until a full rebuild, because
+        // the notification gate only checked ProjectBindingRegistry.HasExpressionChanges
+        // (step definitions), never ProjectBindingRegistry.HasHookChanges.
+        var sut = CreateSut();
+
+        var original = FileDetailsFor("Hooks.cs", @"
+namespace S
+{
+    [Reqnroll.Binding]
+    public class Hooks
+    {
+    }
+}");
+        await sut.ApplyRoslynFileUpdateAsync(original);
+
+        var raised = false;
+        sut.BindingRegistryChanged += (_, _) => raised = true;
+
+        var hookAdded = FileDetailsFor("Hooks.cs", @"
+namespace S
+{
+    [Reqnroll.Binding]
+    public class Hooks
+    {
+        [Reqnroll.BeforeScenario]
+        public void SetUp() { }
+    }
+}");
+        await sut.ApplyRoslynFileUpdateAsync(hookAdded);
+
+        raised.Should().BeTrue("a hook was added even though no step definition changed");
+        sut.Current.Hooks.Should().ContainSingle().Which.HookType.Should().Be(HookType.BeforeScenario);
+    }
+
+    [Fact]
+    public async Task ApplyRoslynFileUpdate_does_not_raise_event_when_a_hooks_method_body_changes()
+    {
+        var sut = CreateSut();
+
+        var original = FileDetailsFor("Hooks.cs", @"
+namespace S
+{
+    [Reqnroll.Binding]
+    public class Hooks
+    {
+        [Reqnroll.BeforeScenario]
+        public void SetUp() { var unused = 1; }
+    }
+}");
+        await sut.ApplyRoslynFileUpdateAsync(original);
+
+        var raised = false;
+        sut.BindingRegistryChanged += (_, _) => raised = true;
+
+        var bodyEdited = FileDetailsFor("Hooks.cs", @"
+namespace S
+{
+    [Reqnroll.Binding]
+    public class Hooks
+    {
+        [Reqnroll.BeforeScenario]
+        public void SetUp() { var unused = 2; }
+    }
+}");
+        await sut.ApplyRoslynFileUpdateAsync(bodyEdited);
+
+        raised.Should().BeFalse("only the method body changed, not the hook's scope/order -- there's nothing for feature-file matching to recompute");
     }
 
     [Fact]

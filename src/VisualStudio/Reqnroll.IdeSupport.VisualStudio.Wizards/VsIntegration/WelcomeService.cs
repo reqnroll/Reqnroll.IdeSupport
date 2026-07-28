@@ -238,7 +238,7 @@ public class WelcomeService : IWelcomeService
         return changeLog.Substring(start, end - start);
     }
 
-    private string GetChangeLog()
+    protected virtual string GetChangeLog()
     {
         try
         {
