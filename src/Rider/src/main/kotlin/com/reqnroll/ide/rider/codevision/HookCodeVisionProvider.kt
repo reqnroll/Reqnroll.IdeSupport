@@ -1,5 +1,6 @@
 package com.reqnroll.ide.rider.codevision
 
+import com.google.gson.JsonPrimitive
 import com.intellij.codeInsight.codeVision.CodeVisionAnchorKind
 import com.intellij.codeInsight.codeVision.CodeVisionEntry
 import com.intellij.codeInsight.codeVision.CodeVisionHost
@@ -62,6 +63,35 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
         internal fun dedupedOffset(
             lineStartOffset: Int, displayCharacter: Int, priorEntriesOnLine: Int, lineEndOffset: Int,
         ): Int = (lineStartOffset + displayCharacter + priorEntriesOnLine).coerceAtMost(lineEndOffset)
+
+        /**
+         * Extracts `arguments[index]` as an [Int]. LSP4J's generic `Command.arguments`
+         * (`List<Any>`) is a known source of surprises: elements aren't guaranteed to already be
+         * plain boxed `java.lang.Number`/`Boolean` — the client's Gson deserialization can leave
+         * them as raw [JsonPrimitive] instead, so a direct `as? Number` cast silently fails and
+         * falls through to a default every time (confirmed via a diagnostic build: every click
+         * fell back to the *display* position instead of the server-sent click target, which is
+         * why every hook lens navigated identically regardless of which one was clicked).
+         * `internal` purely so it's unit-testable without a real LSP4J deserialization round-trip.
+         */
+        internal fun argAsInt(arguments: List<Any>?, index: Int): Int? {
+            val raw = arguments?.getOrNull(index) ?: return null
+            return when {
+                raw is Number -> raw.toInt()
+                raw is JsonPrimitive && raw.isNumber -> raw.asInt
+                else -> raw.toString().toIntOrNull()
+            }
+        }
+
+        /** [Boolean] counterpart to [argAsInt] — see its doc comment for why this can't be a plain `as? Boolean` cast. */
+        internal fun argAsBoolean(arguments: List<Any>?, index: Int): Boolean? {
+            val raw = arguments?.getOrNull(index) ?: return null
+            return when {
+                raw is Boolean -> raw
+                raw is JsonPrimitive && raw.isBoolean -> raw.asBoolean
+                else -> raw.toString().toBooleanStrictOrNull()
+            }
+        }
     }
 
     override val id: String = ID
@@ -122,9 +152,13 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
             // position/false if arguments are absent (defensive; the server always sends
             // all four).
             val arguments = command.arguments
-            val clickLine = (arguments?.getOrNull(1) as? Number)?.toInt() ?: displayLine
-            val clickCharacter = (arguments?.getOrNull(2) as? Number)?.toInt() ?: displayCharacter
-            val ownLevelOnly = arguments?.getOrNull(3) as? Boolean ?: false
+            val clickLine = argAsInt(arguments, 1) ?: displayLine
+            val clickCharacter = argAsInt(arguments, 2) ?: displayCharacter
+            val ownLevelOnly = argAsBoolean(arguments, 3) ?: false
+            ReqnrollDebugLogger.info(
+                "HookCodeVisionProvider: arg runtime types = " +
+                    (arguments?.map { it?.javaClass?.name } ?: listOf("<null arguments>")),
+            )
 
             val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
                 GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
