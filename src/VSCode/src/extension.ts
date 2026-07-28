@@ -11,6 +11,7 @@ import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinition
 import { doGoToHooks } from './commands/goToHooks';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
+import { registerHookCodeLens } from './commands/hookCodeLens';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
@@ -186,13 +187,23 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       await doFindUnusedStepDefinitions(client);
     }),
 
-    // Hook Navigation ("Go to Hooks")
-    vscode.commands.registerCommand('reqnroll.goToHooks', async () => {
+    // Hook Navigation ("Go to Hooks"; invoked from the command palette, editor context menu,
+    // or the hook-count CodeLens — issue #269). When invoked from a CodeLens the server passes
+    // [uri, line, char] as arguments, same convention as reqnroll.findStepUsages.
+    vscode.commands.registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
         notReady('Go to Hooks')();
         return;
       }
-      await doGoToHooks(client);
+      if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
+        await doGoToHooks(client, {
+          uri: args[0],
+          line: args[1],
+          character: typeof args[2] === 'number' ? args[2] : 0,
+        });
+      } else {
+        await doGoToHooks(client);
+      }
     }),
 
     // Go to Step Definition (rich picker with method name + step type)
@@ -291,6 +302,8 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       projectManager = new ProjectManager(client!);
       // Step usage count CodeLens for C# files (registered after client is running)
       registerStepCodeLens(client!, context);
+      // Hook-match count CodeLens for .feature files (issue #269)
+      registerHookCodeLens(client!, context);
       // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
       // above) instead of relying on vscode-languageclient's built-in sync feature.
       context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));

@@ -3,19 +3,16 @@ import { CodeLensRequest, LanguageClient } from 'vscode-languageclient/node';
 import { getCodeLensRefreshEvent } from './codeLensRefresh';
 
 /**
- * Registers the step-usage-count CodeLens provider for C# files, querying the server via
- * `textDocument/codeLens` and refreshing lenses when the server pushes
- * `workspace/codeLens/refresh` after a binding registry change.
+ * Registers the hook-match-count CodeLens provider for `.feature` files (issue #269), querying
+ * the server via `textDocument/codeLens` (the same request `registerStepCodeLens` uses for `.cs`
+ * files — the server tells the two apart by URI extension and returns lenses for whichever one
+ * applies) and refreshing lenses via the shared `workspace/codeLens/refresh` listener (see
+ * `getCodeLensRefreshEvent` — only one provider may register the raw `onRequest` handler).
  */
-export function registerStepCodeLens(
+export function registerHookCodeLens(
   client: LanguageClient,
   context: vscode.ExtensionContext,
 ): void {
-  // This provider is registered directly via vscode.languages.registerCodeLensProvider rather
-  // than through vscode-languageclient's own CodeLens feature (to avoid clashing with the C#
-  // extension's codeLens on .cs files), so without the shared refresh event below, VS Code would
-  // only re-query provideCodeLenses on incidental events (e.g. editor focus change) rather than
-  // promptly after a binding registry change (e.g. a rebuild or a Roslyn re-parse).
   const provider: vscode.CodeLensProvider = {
     onDidChangeCodeLenses: getCodeLensRefreshEvent(client, context),
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
@@ -42,13 +39,13 @@ export function registerStepCodeLens(
           return codeLens;
         });
       } catch (err) {
-        console.warn('StepCodeLens: textDocument/codeLens request failed', err);
+        console.warn('HookCodeLens: textDocument/codeLens request failed', err);
         return [];
       }
     },
   };
 
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider({ language: 'csharp' }, provider),
+    vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider),
   );
 }
