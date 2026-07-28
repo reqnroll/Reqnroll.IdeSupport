@@ -10,6 +10,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiFile
 import com.intellij.util.io.URLUtil
+import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.isDocumentStale
@@ -37,7 +38,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
         if (c != '|') return Result.CONTINUE
 
         val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: return Result.CONTINUE
-        if (virtualFile.extension != "feature") return Result.CONTINUE
+        if (!isFeatureExtension(virtualFile.extension)) return Result.CONTINUE
 
         val document = editor.document
         val offset = editor.caretModel.offset
