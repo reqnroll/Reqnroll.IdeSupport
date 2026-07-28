@@ -17,13 +17,17 @@ import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
  * a single applicable hook navigates directly, multiple hooks show a chooser popup.
  */
 object GoToHooksRunner {
-    /** Runs the request on a background task and navigates (or shows a chooser) once it completes. */
-    fun runAndShow(project: Project, uri: String, line: Int, character: Int) {
+    /**
+     * Runs the request on a background task and navigates (or shows a chooser) once it
+     * completes. [ownLevelOnly] is set only when invoked from the hook-count CodeVision lens
+     * (HookCodeVisionProvider), so the picker matches exactly what the lens counted.
+     */
+    fun runAndShow(project: Project, uri: String, line: Int, character: Int, ownLevelOnly: Boolean = false) {
         ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character")
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.goToHooks(project, uri, line, character)
+                val response = ReqnrollRequestSender.goToHooks(project, uri, line, character, ownLevelOnly)
                 ReqnrollDebugLogger.info("GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned")
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater

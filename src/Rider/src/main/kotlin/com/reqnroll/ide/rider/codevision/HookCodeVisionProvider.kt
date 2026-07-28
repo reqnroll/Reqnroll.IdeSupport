@@ -18,12 +18,18 @@ import com.reqnroll.ide.rider.actions.GoToHooksRunner
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 
 /**
- * "N hooks" CodeVision lens above each `Feature:`/`Scenario:`/step line in `.feature` files
+ * "N hooks" CodeVision lens above each `Feature:`/`Scenario:` line in `.feature` files
  * (issue #269) — the Rider equivalent of VS Code's hook-match CodeLens, and a sibling to
  * [StepUsagesCodeVisionProvider] (see that class's doc comment for why Rider needs a native
  * `CodeVisionProvider` at all rather than consuming generic `textDocument/codeLens`: Rider's LSP
  * client has no rendering-side consumer for it). Clicking a lens invokes the same
- * [GoToHooksRunner] "Go to Hooks" flow the dedicated action already uses, at that lens's line.
+ * [GoToHooksRunner] "Go to Hooks" flow the dedicated action already uses.
+ *
+ * As of issue #372, the server no longer emits one lens per line with matching display/click
+ * positions: `HookCodeLensHandler.cs` now counts only hooks native to each level (no cumulative
+ * bleed) and consolidates every step's hooks into a single second lens shown on the `Scenario:`
+ * line. Its click target — and an `ownLevelOnly` flag so "Go to Hooks" filters to match the
+ * lens's own count — travel in `command.arguments`, not `lens.range`; see [computeEntries].
  */
 class HookCodeVisionProvider : CodeVisionProvider<Unit> {
     companion object {
@@ -70,11 +76,27 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
             .filter { StepUsagesCodeVisionProvider.isRenderable(it, document.lineCount) }
             .map { lens ->
                 val command = lens.command!!
-                val line = lens.range.start.line
-                val character = lens.range.start.character
-                val offset = document.getLineStartOffset(line) + character
+
+                // Display position: where the lens is anchored (Feature:/Scenario: line).
+                val displayLine = lens.range.start.line
+                val displayCharacter = lens.range.start.character
+                val offset = document.getLineStartOffset(displayLine) + displayCharacter
+
+                // Click target + filter: HookCodeLensHandler.cs encodes
+                // (uri, line, character, ownLevelOnly) in command.arguments. The click
+                // position can differ from the display position — e.g. the consolidated
+                // step-hooks lens is *shown* on the Scenario: line but *navigates* to the
+                // scenario's first step so "Go to Hooks" resolves Step context — so this must
+                // read arguments rather than reuse lens.range. Falls back to the display
+                // position/false if arguments are absent (defensive; the server always sends
+                // all four).
+                val arguments = command.arguments
+                val clickLine = (arguments?.getOrNull(1) as? Number)?.toInt() ?: displayLine
+                val clickCharacter = (arguments?.getOrNull(2) as? Number)?.toInt() ?: displayCharacter
+                val ownLevelOnly = arguments?.getOrNull(3) as? Boolean ?: false
+
                 val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
-                    GoToHooksRunner.runAndShow(project, uri, line, character)
+                    GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
                 }
                 TextRange(offset, offset) to entry
             }
