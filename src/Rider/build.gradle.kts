@@ -1,4 +1,6 @@
 import org.gradle.internal.os.OperatingSystem
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 
 plugins {
     kotlin("jvm") version "2.0.21"
@@ -48,12 +50,27 @@ intellijPlatform {
         }
     }
 
-    // `recommended()` picks IDE versions from the sinceBuild/untilBuild range above.
-    // Without this block, `verifyPlugin` fails immediately with "No IDE resolved for
-    // verification" — there's nothing implicit to verify against.
+    // `recommended()` picks a couple of IDE versions from JetBrains' own heuristic -- without
+    // this block, `verifyPlugin` fails immediately with "No IDE resolved for verification".
+    // `select` adds every RELEASE-channel Rider build across the declared 243-251.* compatibility
+    // range (see issue #271) -- in practice this resolves to just the earliest and latest builds
+    // published on that channel in range (confirmed live: RD-243.28141.39/RD-251.29188.32), which
+    // is exactly the "spread across the declared range" the issue asked for. Unlike hardcoding
+    // specific build numbers, this stays correct as new patch releases land without needing manual
+    // upkeep, and RELEASE-only avoids pulling in every EAP/nightly, which would multiply this
+    // already-slow CI job (#149) for little benefit. Every API this plugin depends on
+    // (LspServerManager, LspServerDescriptor, LspServerSupportProvider) is @Experimental, so this
+    // is a cheap, static, bytecode-level early warning if one of those APIs changes or disappears
+    // somewhere in the declared range.
     pluginVerification {
         ides {
             recommended()
+            select {
+                types = listOf(IntelliJPlatformType.Rider)
+                channels = listOf(ProductRelease.Channel.RELEASE)
+                sinceBuild = providers.gradleProperty("pluginSinceBuild")
+                untilBuild = providers.gradleProperty("pluginUntilBuild")
+            }
         }
     }
 }
