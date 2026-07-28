@@ -357,4 +357,30 @@ public class HookCodeLensHandlerTests
         ((JValue)args[1]).Value.Should().Be(1);
         ((JValue)args[3]).Value.Should().Be(true);
     }
+
+    [Fact]
+    public async Task Handle_step_hooks_lens_carries_a_fifth_discriminator_argument()
+    {
+        // Rider can't render two lenses from one CodeVision provider on the same line (see
+        // HookCodeVisionProvider.kt), so it registers a separate provider for the step-hooks
+        // lens and needs to tell the two lens kinds apart reliably rather than parsing titles.
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        var args = (JArray)result[0].Command!.Arguments!;
+        args.Should().HaveCount(5);
+        ((JValue)args[4]).Value.Should().Be(true);
+    }
+
+    [Fact]
+    public async Task Handle_own_level_lens_has_no_fifth_discriminator_argument()
+    {
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        var args = (JArray)result[0].Command!.Arguments!;
+        args.Should().HaveCount(4);
+    }
 }

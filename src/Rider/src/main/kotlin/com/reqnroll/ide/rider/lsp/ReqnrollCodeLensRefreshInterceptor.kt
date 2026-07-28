@@ -11,7 +11,9 @@ import java.util.concurrent.CompletableFuture
 /**
  * Delegates every [LspServerNotificationsHandler] callback straight through to Rider's own
  * platform-provided [handler], except [refreshCodeLenses] — there it also refreshes this
- * project's "N step usages" CodeVision lens ([StepUsagesCodeVisionProvider]) before delegating.
+ * project's "N step usages" CodeVision lens ([StepUsagesCodeVisionProvider]) and the hook-match
+ * lenses ([HookCodeVisionProvider]/`StepHooksCodeVisionProvider`, invalidated together by
+ * [HookCodeVisionProvider.refreshOpenFeatureEditors]) before delegating.
  *
  * Rider's CodeVision engine has no signal of its own for "the data behind this lens changed" —
  * unlike inlay hints/semantic tokens, which at least have *a* refresh mechanism once wired (see

@@ -50,7 +50,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          requests are called directly (ReqnrollRequestSender) and rendered through IntelliJ's
          own native extension points instead. -->
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider" />
+    <!-- Two separate providers for the Scenario-only and consolidated step-hooks counts (issue
+         #372 follow-up) — a single provider can't reliably show two entries on the same
+         Scenario: line, but two separately registered providers compose side by side
+         automatically. See HookLensSupport.kt's doc comment. -->
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.HookCodeVisionProvider" />
+    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepHooksCodeVisionProvider" />
 
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see

@@ -1,9 +1,15 @@
 package com.reqnroll.ide.rider.codevision
 
 import com.google.gson.JsonPrimitive
+import org.eclipse.lsp4j.CodeLens
+import org.eclipse.lsp4j.Command
+import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class HookCodeVisionProviderTest {
     // Regression tests for a real bug: command.arguments elements from a live LSP4J response
@@ -14,63 +20,57 @@ class HookCodeVisionProviderTest {
 
     @Test
     fun `argAsInt reads a plain boxed Number`() {
-        assertEquals(3, HookCodeVisionProvider.argAsInt(listOf("uri", 3, 0, true), index = 1))
+        assertEquals(3, HookLensSupport.argAsInt(listOf("uri", 3, 0, true), index = 1))
     }
 
     @Test
     fun `argAsInt reads a JsonPrimitive number, the actual runtime shape LSP4J produces`() {
-        assertEquals(3, HookCodeVisionProvider.argAsInt(listOf("uri", JsonPrimitive(3), JsonPrimitive(0)), index = 1))
+        assertEquals(3, HookLensSupport.argAsInt(listOf("uri", JsonPrimitive(3), JsonPrimitive(0)), index = 1))
     }
 
     @Test
     fun `argAsInt returns null for a missing or out-of-range index`() {
-        assertNull(HookCodeVisionProvider.argAsInt(listOf("uri"), index = 1))
-        assertNull(HookCodeVisionProvider.argAsInt(null, index = 1))
+        assertNull(HookLensSupport.argAsInt(listOf("uri"), index = 1))
+        assertNull(HookLensSupport.argAsInt(null, index = 1))
     }
 
     @Test
     fun `argAsBoolean reads a plain boxed Boolean`() {
-        assertEquals(true, HookCodeVisionProvider.argAsBoolean(listOf("uri", 3, 0, true), index = 3))
+        assertEquals(true, HookLensSupport.argAsBoolean(listOf("uri", 3, 0, true), index = 3))
     }
 
     @Test
     fun `argAsBoolean reads a JsonPrimitive boolean, the actual runtime shape LSP4J produces`() {
-        assertEquals(true, HookCodeVisionProvider.argAsBoolean(listOf("uri", JsonPrimitive(true)), index = 1))
+        assertEquals(true, HookLensSupport.argAsBoolean(listOf("uri", JsonPrimitive(true)), index = 1))
     }
 
     @Test
     fun `argAsBoolean returns null for a missing index`() {
-        assertNull(HookCodeVisionProvider.argAsBoolean(listOf("uri"), index = 3))
-        assertNull(HookCodeVisionProvider.argAsBoolean(null, index = 3))
+        assertNull(HookLensSupport.argAsBoolean(listOf("uri"), index = 3))
+        assertNull(HookLensSupport.argAsBoolean(null, index = 3))
     }
 
-    // Regression tests for a real platform limitation (not a coding bug): IntelliJ's CodeVision
-    // only renders one chip per line per provider, so two lenses anchored on the same Scenario:
-    // line (scenario-only + consolidated step-hooks) must be merged into a single entry.
+    // Regression tests for a real platform limitation (not a coding bug, confirmed by decompiling
+    // IntelliJ's CodeVision engine and testing empirically): a single provider can't reliably show
+    // two entries on the same Scenario: line, so the Scenario-only and consolidated step-hooks
+    // lenses are split across HookCodeVisionProvider/StepHooksCodeVisionProvider — isStepHooksLens
+    // is how they tell which lens is theirs from the shared textDocument/codeLens response.
+
+    private fun lensWithArgs(args: List<Any>?) =
+        CodeLens(Range(Position(1, 0), Position(1, 0)), Command("title", "reqnroll.goToHooks", args), null)
 
     @Test
-    fun `combinedTitle joins every lens title on a line with a middle dot`() {
-        assertEquals("2 hooks · 1 step hook", HookCodeVisionProvider.combinedTitle(listOf("2 hooks", "1 step hook")))
-    }
-
-    @Test
-    fun `combinedTitle passes a single title through unchanged`() {
-        assertEquals("1 hook", HookCodeVisionProvider.combinedTitle(listOf("1 hook")))
-    }
-
-    @Test
-    fun `richestClick picks the candidate with the highest line number`() {
-        // The step-hooks lens's click target (the scenario's first step, a later line) should
-        // win over the scenario-only lens's own (earlier) line, since GoToHooksHandler's
-        // cumulative sets are hierarchical — querying at the deepest position returns every hook
-        // implied by the combined title.
-        val result = HookCodeVisionProvider.richestClick(listOf(2 to 0, 5 to 0))
-
-        assertEquals(5 to 0, result)
+    fun `isStepHooksLens is true when the 5th argument is true`() {
+        assertTrue(HookLensSupport.isStepHooksLens(lensWithArgs(listOf("uri", 1, 0, true, true))))
     }
 
     @Test
-    fun `richestClick returns the only candidate when there is just one lens on the line`() {
-        assertEquals(2 to 4, HookCodeVisionProvider.richestClick(listOf(2 to 4)))
+    fun `isStepHooksLens is false when the 5th argument is absent (own-level lens)`() {
+        assertFalse(HookLensSupport.isStepHooksLens(lensWithArgs(listOf("uri", 1, 0, true))))
+    }
+
+    @Test
+    fun `isStepHooksLens is false when there are no arguments at all`() {
+        assertFalse(HookLensSupport.isStepHooksLens(lensWithArgs(null)))
     }
 }
