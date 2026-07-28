@@ -51,10 +51,12 @@ interface ReqnrollLanguageServer : LanguageServer {
      * Hook Navigation ("Go to Hooks") — returns the hook bindings applicable at a `.feature`
      * file position (context level Feature/Scenario/Step, tag/scope-filtered — see
      * GoToHooksHandler.cs). A separate custom message from `textDocument/definition` because
-     * that message is already used by Go to Step Definition on step lines.
+     * that message is already used by Go to Step Definition on step lines. Takes
+     * [GoToHooksRequestParams] rather than the standard [TextDocumentPositionParams] so the
+     * hook-count CodeVision lens (HookCodeVisionProvider) can set `ownLevelOnly`.
      */
     @JsonRequest("reqnroll/goToHooks")
-    fun goToHooks(params: TextDocumentPositionParams): CompletableFuture<GoToHooksResponse>
+    fun goToHooks(params: GoToHooksRequestParams): CompletableFuture<GoToHooksResponse>
 
     /**
      * Hook-match-count CodeLens click action (issue #373) — the inverse of [goToHooks]: returns

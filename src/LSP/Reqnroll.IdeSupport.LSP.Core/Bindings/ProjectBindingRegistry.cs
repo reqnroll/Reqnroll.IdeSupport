@@ -327,6 +327,56 @@ public record ProjectBindingRegistry
     }
 
     /// <summary>
+    /// Compares the hook bindings for <paramref name="sourceFile"/> between
+    /// <paramref name="before"/> and <paramref name="after"/>, keyed by
+    /// <c>(HookType, Method, ParameterTypes)</c> the same way <see cref="HasExpressionChanges"/>
+    /// keys step definitions. Returns <see langword="true"/> if a hook for this file was added,
+    /// removed, or had its scope or order change; edits to method bodies, comments, or anything
+    /// else that doesn't touch a hook's scope/order report no change.
+    /// </summary>
+    /// <remarks>
+    /// Added alongside <see cref="HasExpressionChanges"/> to close a gap where hook-only edits
+    /// (e.g. adding <c>[BeforeScenario]</c>, changing its tag scope) were silently re-discovered
+    /// into the live registry by Roslyn but never triggered a
+    /// <c>BindingRegistryChangedNotification</c> — since <see cref="ConnectorBindingRegistryProvider"/>
+    /// only checked step-definition expressions, the hook-count CodeLens stayed stale until the
+    /// next full rebuild. There is no single "expression" for a hook the way there is for a step
+    /// definition, so scope (formatted via <see cref="Documents.BindingScope.ToString"/>) and
+    /// order are compared instead — the two hook properties that affect what actually fires.
+    /// </remarks>
+    public static bool HasHookChanges(
+        ProjectBindingRegistry before, ProjectBindingRegistry after, string sourceFile)
+    {
+        static string Key(ProjectHookBinding b) =>
+            $"{b.HookType}|{b.Implementation.Method}|{string.Join(",", b.Implementation.ParameterTypes)}";
+
+        static string Signature(ProjectHookBinding b) =>
+            $"{b.Scope?.ToString() ?? string.Empty}|{b.HookOrder}";
+
+        bool OwnedByFile(ProjectHookBinding b) =>
+            IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, sourceFile);
+
+        static Dictionary<string, List<string>> GroupSignaturesByKey(IEnumerable<ProjectHookBinding> bindings) =>
+            bindings.GroupBy(Key).ToDictionary(
+                g => g.Key,
+                g => g.Select(Signature).OrderBy(s => s, StringComparer.Ordinal).ToList());
+
+        var beforeByKey = GroupSignaturesByKey(before.Hooks.Where(OwnedByFile));
+        var afterByKey  = GroupSignaturesByKey(after.Hooks.Where(OwnedByFile));
+
+        if (beforeByKey.Count != afterByKey.Count)
+            return true;
+
+        foreach (var entry in beforeByKey)
+        {
+            if (!afterByKey.TryGetValue(entry.Key, out var newSignatures) || !newSignatures.SequenceEqual(entry.Value))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Compares two source-file paths for identity. The comparison normalizes the paths and is
     /// case-insensitive: the reflection connector records source paths from the PDB (often with an
     /// upper-case drive letter), while Roslyn discovery derives them from an LSP document URI (which

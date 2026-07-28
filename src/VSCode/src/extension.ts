@@ -11,6 +11,7 @@ import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinition
 import { doGoToHooks } from './commands/goToHooks';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
+import { registerHookCodeLens } from './commands/hookCodeLens';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
@@ -24,38 +25,46 @@ let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
 let statusBar: StatusBarManager | undefined;
 
+/** The .NET RID for the current platform/arch combination the server is published for. */
+export function ridFor(platform: NodeJS.Platform, arch: string): string {
+  if (platform === 'win32') return arch === 'arm64' ? 'win-arm64' : 'win-x64';
+  if (platform === 'darwin') return arch === 'arm64' ? 'osx-arm64' : 'osx-x64';
+  return 'linux-x64';
+}
+
+/** The server executable's file name for the current platform (Windows needs the `.exe` suffix). */
+export function serverBinaryName(platform: NodeJS.Platform): string {
+  return platform === 'win32'
+    ? 'Reqnroll.IdeSupport.LSP.Server.exe'
+    : 'Reqnroll.IdeSupport.LSP.Server';
+}
+
 /**
  * Resolves the path to the Reqnroll LSP server binary.
  *
  * In development (VSIX not yet built), the server is located relative to
  * this source directory's build output. In production (packaged .vsix),
  * the server is bundled inside the extension under `server/<rid>/`.
+ *
+ * `existsSync` is injectable (defaulting to the real `fs.existsSync`) so the path-selection
+ * logic is testable against a fake filesystem without touching disk.
  */
-function resolveServerPath(context: vscode.ExtensionContext): string {
+export function resolveServerPath(
+  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath'>,
+  existsSync: (path: string) => boolean = fs.existsSync,
+): string {
   const isProduction = context.extensionMode === vscode.ExtensionMode.Production;
+  const rid = ridFor(process.platform, process.arch);
+  const binaryName = serverBinaryName(process.platform);
 
   if (isProduction) {
-    const rid =
-      process.platform === 'win32'
-        ? process.arch === 'arm64'
-          ? 'win-arm64'
-          : 'win-x64'
-        : process.platform === 'darwin'
-          ? process.arch === 'arm64'
-            ? 'osx-arm64'
-            : 'osx-x64'
-          : 'linux-x64';
     const serverDir = path.join(context.extensionPath, 'server', rid);
-    const binaryName =
-      process.platform === 'win32'
-        ? 'Reqnroll.IdeSupport.LSP.Server.exe'
-        : 'Reqnroll.IdeSupport.LSP.Server';
     const candidate = path.join(serverDir, binaryName);
-    if (fs.existsSync(candidate)) {
+    if (existsSync(candidate)) {
       return candidate;
     }
     const legacy = path.join(context.extensionPath, 'server', binaryName);
-    if (fs.existsSync(legacy)) {
+    if (existsSync(legacy)) {
       return legacy;
     }
     throw new Error(
@@ -63,21 +72,6 @@ function resolveServerPath(context: vscode.ExtensionContext): string {
         'Ensure the server is published (see scripts/publish-server.sh).',
     );
   }
-
-  const devRid =
-    process.platform === 'win32'
-      ? process.arch === 'arm64'
-        ? 'win-arm64'
-        : 'win-x64'
-      : process.platform === 'darwin'
-        ? process.arch === 'arm64'
-          ? 'osx-arm64'
-          : 'osx-x64'
-        : 'linux-x64';
-  const devBinaryName =
-    process.platform === 'win32'
-      ? 'Reqnroll.IdeSupport.LSP.Server.exe'
-      : 'Reqnroll.IdeSupport.LSP.Server';
 
   const localBuildOutput = path.join(
     context.extensionPath,
@@ -89,11 +83,11 @@ function resolveServerPath(context: vscode.ExtensionContext): string {
     'bin',
     'Release',
     'net10.0',
-    devRid,
+    rid,
     'publish',
-    devBinaryName,
+    binaryName,
   );
-  if (fs.existsSync(localBuildOutput)) {
+  if (existsSync(localBuildOutput)) {
     return localBuildOutput;
   }
 
@@ -101,7 +95,7 @@ function resolveServerPath(context: vscode.ExtensionContext): string {
   // build-vscode-extension job downloads the published server there (see ci.yml) but never runs
   // a local `dotnet publish` of LSP.Server, so the Extension Development Host used by `npm test`
   // (extensionMode is never Production there) would otherwise never find a server binary at all.
-  return path.join(context.extensionPath, 'server', devRid, devBinaryName);
+  return path.join(context.extensionPath, 'server', rid, binaryName);
 }
 
 /** Public surface exposed via the extension's `exports` (see `vscode.Extension.exports`), for tests. */
@@ -186,13 +180,29 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       await doFindUnusedStepDefinitions(client);
     }),
 
-    // Hook Navigation ("Go to Hooks")
-    vscode.commands.registerCommand('reqnroll.goToHooks', async () => {
+    // Hook Navigation ("Go to Hooks"; invoked from the command palette, editor context menu,
+    // or the hook-count CodeLens — issue #269). When invoked from a CodeLens the server passes
+    // [uri, line, char, ownLevelOnly] as arguments, same convention as reqnroll.findStepUsages
+    // plus the extra ownLevelOnly flag so the picker matches exactly what the lens counted.
+    // alwaysShowPicker is set for every CodeLens-sourced call (issue #372 follow-up) so clicking
+    // a lens always shows the picker, even for a single match, rather than jumping straight
+    // there — the command-palette/keybinding path (no args) keeps the direct-navigate shortcut.
+    vscode.commands.registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
         notReady('Go to Hooks')();
         return;
       }
-      await doGoToHooks(client);
+      if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
+        await doGoToHooks(client, {
+          uri: args[0],
+          line: args[1],
+          character: typeof args[2] === 'number' ? args[2] : 0,
+          ownLevelOnly: typeof args[3] === 'boolean' ? args[3] : false,
+          alwaysShowPicker: true,
+        });
+      } else {
+        await doGoToHooks(client);
+      }
     }),
 
     // Go to Step Definition (rich picker with method name + step type)
@@ -291,6 +301,8 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       projectManager = new ProjectManager(client!);
       // Step usage count CodeLens for C# files (registered after client is running)
       registerStepCodeLens(client!, context);
+      // Hook-match count CodeLens for .feature files (issue #269)
+      registerHookCodeLens(client!, context);
       // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
       // above) instead of relying on vscode-languageclient's built-in sync feature.
       context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));

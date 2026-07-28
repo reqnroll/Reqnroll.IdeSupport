@@ -1,9 +1,6 @@
 import * as vscode from 'vscode';
-import {
-  CodeLensRefreshRequest,
-  CodeLensRequest,
-  LanguageClient,
-} from 'vscode-languageclient/node';
+import { CodeLensRequest, LanguageClient } from 'vscode-languageclient/node';
+import { getCodeLensRefreshEvent } from './codeLensRefresh';
 
 /**
  * Registers the step-usage-count CodeLens provider for C# files, querying the server via
@@ -14,16 +11,13 @@ export function registerStepCodeLens(
   client: LanguageClient,
   context: vscode.ExtensionContext,
 ): void {
-  // The server pushes workspace/codeLens/refresh after a binding registry change (e.g. a
-  // rebuild or a Roslyn re-parse), but this provider is registered directly via
-  // vscode.languages.registerCodeLensProvider rather than through vscode-languageclient's own
-  // CodeLens feature (to avoid clashing with the C# extension's codeLens on .cs files). That
-  // means the library has no built-in listener for the refresh push, so without this handler
-  // VS Code only re-queries provideCodeLenses on incidental events (e.g. editor focus change).
-  const onDidChangeCodeLensesEmitter = new vscode.EventEmitter<void>();
-
+  // This provider is registered directly via vscode.languages.registerCodeLensProvider rather
+  // than through vscode-languageclient's own CodeLens feature (to avoid clashing with the C#
+  // extension's codeLens on .cs files), so without the shared refresh event below, VS Code would
+  // only re-query provideCodeLenses on incidental events (e.g. editor focus change) rather than
+  // promptly after a binding registry change (e.g. a rebuild or a Roslyn re-parse).
   const provider: vscode.CodeLensProvider = {
-    onDidChangeCodeLenses: onDidChangeCodeLensesEmitter.event,
+    onDidChangeCodeLenses: getCodeLensRefreshEvent(client, context),
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
       try {
         const lenses = await client.sendRequest(CodeLensRequest.type, {
@@ -55,10 +49,6 @@ export function registerStepCodeLens(
   };
 
   context.subscriptions.push(
-    onDidChangeCodeLensesEmitter,
-    client.onRequest(CodeLensRefreshRequest.type, () => {
-      onDidChangeCodeLensesEmitter.fire();
-    }),
     vscode.languages.registerCodeLensProvider({ language: 'csharp' }, provider),
   );
 }
