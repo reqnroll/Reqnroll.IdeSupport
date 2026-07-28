@@ -59,11 +59,19 @@ public sealed class RefreshDebouncer : IRefreshDebouncer, IDisposable
     /// <summary>Cancels and disposes every still-pending debounce timer.</summary>
     public void Dispose()
     {
-        foreach (var cts in _pending.Values)
+        // Claim each entry via TryRemove(key, ...) rather than iterating _pending.Values and
+        // acting on whatever was there: RunAfterDelayAsync's own finally block races this method
+        // for the same CancellationTokenSource, and a snapshot-then-act loop could observe an
+        // entry that finally already disposed by the time Cancel() runs here, throwing
+        // ObjectDisposedException. Atomically removing by key means only one side ever wins the
+        // entry -- the loser sees TryRemove return false and leaves that cts alone.
+        foreach (var key in _pending.Keys.ToList())
         {
-            cts.Cancel();
-            cts.Dispose();
+            if (_pending.TryRemove(key, out var cts))
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
         }
-        _pending.Clear();
     }
 }
