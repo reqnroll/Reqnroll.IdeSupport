@@ -190,6 +190,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<GoToStepDefinitionsHandler>()
             .AddSingleton<GoToHooksHandler>()
             .AddSingleton<StepCodeLensHandler>()
+            .AddSingleton<HookCodeLensHandler>()
             .AddSingleton<CompletionHandler>()
             .AddSingleton<IStepScaffoldService, StepScaffoldService>()
             .AddSingleton<CodeActionHandler>()
