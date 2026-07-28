@@ -57,6 +57,14 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun goToHooks(params: TextDocumentPositionParams): CompletableFuture<GoToHooksResponse>
 
     /**
+     * Hook-match-count CodeLens click action (issue #373) — the inverse of [goToHooks]: returns
+     * every scenario, across the whole owning project(s), that the hook binding at a `.cs` file
+     * position matches (see GoToMatchingScenariosHandler.cs).
+     */
+    @JsonRequest("reqnroll/goToMatchingScenarios")
+    fun goToMatchingScenarios(params: TextDocumentPositionParams): CompletableFuture<GoToMatchingScenariosResponse>
+
+    /**
      * Step Rename disambiguation (issue #160) — returns every candidate binding attribute
      * renameable at a `.feature` or `.cs` file position (see RenameTargetsHandler.cs). Standard
      * `textDocument/prepareRename`/`textDocument/rename` handle the mechanical edit; this custom

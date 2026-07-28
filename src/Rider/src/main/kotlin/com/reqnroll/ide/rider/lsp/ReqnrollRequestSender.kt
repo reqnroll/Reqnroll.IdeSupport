@@ -7,6 +7,7 @@ import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
+import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetsResponse
@@ -48,6 +49,7 @@ object ReqnrollRequestSender {
     private const val ON_TYPE_FORMATTING_TIMEOUT_MS = 10_000
     private const val FOLDING_RANGE_TIMEOUT_MS = 10_000
     private const val GO_TO_HOOKS_TIMEOUT_MS = 10_000
+    private const val GO_TO_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
     private const val TOGGLE_COMMENT_TIMEOUT_MS = 10_000
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
@@ -187,6 +189,22 @@ object ReqnrollRequestSender {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("goToHooks: request failed", ex)
+            null
+        }
+    }
+
+    /** Runs `reqnroll/goToMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file (issue #373). Returns null if no Reqnroll LSP server is running, or on failure. */
+    fun goToMatchingScenarios(project: Project, uri: String, line: Int, character: Int): GoToMatchingScenariosResponse? {
+        val server = firstRunningServer(project) ?: return null
+        val params = TextDocumentPositionParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character))
+        return try {
+            server.sendRequestSync(GO_TO_MATCHING_SCENARIOS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).goToMatchingScenarios(params)
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("goToMatchingScenarios: request failed", ex)
             null
         }
     }
