@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as path from 'path';
 import {
   buildOutputPath,
   findTargetKey,
@@ -97,6 +98,8 @@ suite('msbuildEvaluator', () => {
 
   suite('buildOutputPath', () => {
     test('resolves OutputPath relative to the project directory and appends AssemblyName.dll', () => {
+      // OutputPath always comes back backslash-delimited from MSBuild, even when evaluated on
+      // a non-Windows host -- exercise that regardless of which OS this test itself runs on.
       const props = {
         TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
         OutputPath: 'bin\\Debug\\net8.0\\',
@@ -105,9 +108,11 @@ suite('msbuildEvaluator', () => {
         ProjectAssetsFile: '',
       };
 
-      const result = buildOutputPath('C:\\repo\\MyProject\\MyProject.csproj', props);
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
 
-      assert.strictEqual(result, 'C:\\repo\\MyProject\\bin\\Debug\\net8.0\\MyProject.dll');
+      const expected = path.resolve('repo', 'MyProject', 'bin', 'Debug', 'net8.0', 'MyProject.dll');
+      assert.strictEqual(result, expected);
     });
   });
 });

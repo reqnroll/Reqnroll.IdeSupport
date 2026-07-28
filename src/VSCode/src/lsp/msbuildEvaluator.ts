@@ -172,11 +172,13 @@ export function toProjectFileItems(
 // ── Output assembly path ─────────────────────────────────────────────────
 
 export function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
-  // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\)
-  // AssemblyName is the file name without extension
+  // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\). MSBuild's
+  // built-in targets emit this with literal backslashes regardless of host OS, so it must be
+  // split into segments rather than handed to `path` as a single (possibly POSIX) path piece.
+  // AssemblyName is the file name without extension.
   const projectDir = path.dirname(projectFile);
-  const relativeOutput = props.OutputPath.replace(/\\$/, ''); // strip trailing backslash
-  return path.resolve(projectDir, relativeOutput, `${props.AssemblyName}.dll`);
+  const relativeSegments = props.OutputPath.split(/[\\/]/).filter(Boolean);
+  return path.resolve(projectDir, ...relativeSegments, `${props.AssemblyName}.dll`);
 }
 
 // ── Package references from project.assets.json ──────────────────────────
