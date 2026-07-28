@@ -12,6 +12,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
+import com.reqnroll.ide.rider.lsp.isDocumentStale
 import org.eclipse.lsp4j.TextEdit
 
 /**
@@ -68,7 +69,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
 
             ApplicationManager.getApplication().invokeLater {
                 if (project.isDisposed || editor.isDisposed) return@invokeLater
-                if (editor.document.modificationStamp != requestModificationStamp) {
+                if (isDocumentStale(editor.document.modificationStamp, requestModificationStamp)) {
                     ReqnrollDebugLogger.info(
                         "ReqnrollFeatureOnTypeFormattingHandler: document changed since the request " +
                             "was sent; discarding stale edits for $uri.",
