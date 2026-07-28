@@ -1,3 +1,4 @@
+using Gherkin.Ast;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -39,6 +40,32 @@ public class HookCodeLensHandlerTests
 
     private static readonly IReadOnlyList<DeveroomTag> AllTags =
         new[] { FeatureBlockTag, ScenarioDefTag, StepBlockTag };
+
+    // Second fixture: a scenario with two steps, used to verify the step-hooks lens is only
+    // emitted once per scenario rather than once per step.
+    //   Line 0 (offset  0): "Feature: F\n"          (11 chars)
+    //   Line 1 (offset 11): "Scenario: S\n"         (12 chars)
+    //   Line 2 (offset 23): "    Given a step\n"    (17 chars)
+    //   Line 3 (offset 40): "    Then another\n"    (17 chars)
+    private const string TwoStepFeatureText =
+        "Feature: F\nScenario: S\n    Given a step\n    Then another\n";
+
+    private static readonly LspTextSnapshot TwoStepSnapshot = new(FeatureUri.ToString(), 1, TwoStepFeatureText);
+
+    private static readonly DeveroomTag TwoStepFeatureBlockTag = new(
+        DeveroomTagTypes.FeatureBlock, new GherkinRange(TwoStepSnapshot, 0, TwoStepFeatureText.Length));
+
+    private static readonly DeveroomTag TwoStepScenarioDefTag = new(
+        DeveroomTagTypes.ScenarioDefinitionBlock, new GherkinRange(TwoStepSnapshot, 11, 46));
+
+    private static readonly DeveroomTag FirstStepBlockTag = new(
+        DeveroomTagTypes.StepBlock, new GherkinRange(TwoStepSnapshot, 23, 17));
+
+    private static readonly DeveroomTag SecondStepBlockTag = new(
+        DeveroomTagTypes.StepBlock, new GherkinRange(TwoStepSnapshot, 40, 17));
+
+    private static readonly IReadOnlyList<DeveroomTag> TwoStepTags =
+        new[] { TwoStepFeatureBlockTag, TwoStepScenarioDefTag, FirstStepBlockTag, SecondStepBlockTag };
 
     public HookCodeLensHandlerTests()
     {
@@ -127,40 +154,124 @@ public class HookCodeLensHandlerTests
         result.Should().BeEmpty();
     }
 
-    // ── One lens per applicable line ─────────────────────────────────────────
+    // ── One lens per own-level line (no cumulative bleed) ────────────────────
 
     [Fact]
-    public async Task Handle_feature_scoped_hook_produces_lenses_on_all_three_lines()
+    public async Task Handle_feature_scoped_hook_produces_a_lens_only_on_the_feature_line()
     {
-        // BeforeFeature is applicable at Feature, Scenario, and Step level (cumulative).
+        // BeforeFeature no longer bleeds into the Scenario/Step lenses now that counts are
+        // own-level only.
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeFeature)));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 
-        result.Should().HaveCount(3);
-        result.Select(l => l.Range!.Start.Line).Should().BeEquivalentTo([0, 1, 2]);
+        result.Should().ContainSingle();
+        result[0].Range!.Start.Line.Should().Be(0);
     }
 
     [Fact]
-    public async Task Handle_scenario_scoped_hook_only_produces_lenses_on_scenario_and_step_lines()
+    public async Task Handle_scenario_scoped_hook_produces_a_lens_only_on_the_scenario_line()
     {
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 
-        result.Should().HaveCount(2);
-        result.Select(l => l.Range!.Start.Line).Should().BeEquivalentTo([1, 2]);
+        result.Should().ContainSingle();
+        result[0].Range!.Start.Line.Should().Be(1);
     }
 
     [Fact]
-    public async Task Handle_step_scoped_hook_only_produces_a_lens_on_the_step_line()
+    public async Task Handle_step_scoped_hook_produces_a_consolidated_lens_on_the_scenario_line()
     {
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 
         result.Should().ContainSingle();
-        result[0].Range!.Start.Line.Should().Be(2);
+        result[0].Range!.Start.Line.Should().Be(1); // shown on the Scenario: line, not the step line
+    }
+
+    [Fact]
+    public async Task Handle_scenario_block_hook_is_included_in_the_step_hooks_lens()
+    {
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenarioBlock)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Command!.Title.Should().Be("1 step hook");
+    }
+
+    [Fact]
+    public async Task Handle_feature_and_scenario_and_step_hooks_produce_two_lenses_both_on_display_lines()
+    {
+        var registry = RegistryWith(
+            MakeHook(HookType.BeforeFeature), MakeHook(HookType.BeforeScenario), MakeHook(HookType.BeforeStep));
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(registry);
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        // Feature lens on line 0; scenario-only lens + step-hooks lens both on line 1.
+        result.Should().HaveCount(3);
+        result.Select(l => l.Range!.Start.Line).Should().BeEquivalentTo([0, 1, 1]);
+    }
+
+    [Fact]
+    public async Task Handle_step_scoped_hook_produces_no_lens_when_scenario_has_no_steps()
+    {
+        var scenarioOnlyTags = new[] { FeatureBlockTag, ScenarioDefTag }; // no StepBlock tag
+        SetupBuffer(FeatureUri, FeatureText, scenarioOnlyTags);
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_step_hooks_lens_is_emitted_once_per_scenario_regardless_of_step_count()
+    {
+        SetupBuffer(FeatureUri, TwoStepFeatureText, TwoStepTags);
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Range!.Start.Line.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_background_block_produces_no_lens()
+    {
+        // ScenarioDefinitionBlock covers Background too (see DeveroomTagTypes doc comment) — a
+        // Background carries no scenario tags of its own, so nothing should be counted/shown for it.
+        var backgroundTag = new DeveroomTag(
+            DeveroomTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
+            new Background(new Gherkin.Ast.Location(2, 1), "Background", "B", "", Array.Empty<Step>()));
+        SetupBuffer(FeatureUri, FeatureText, new[] { FeatureBlockTag, backgroundTag, StepBlockTag });
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(
+            MakeHook(HookType.BeforeScenario), MakeHook(HookType.BeforeStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_scenario_tagged_as_Scenario_ast_node_still_produces_a_lens()
+    {
+        // Confirms the Background exclusion is keyed off tag.Data's runtime type, not just
+        // "any ScenarioDefinitionBlock tag with Data is excluded".
+        var scenarioTag = new DeveroomTag(
+            DeveroomTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
+            new Scenario(Array.Empty<Tag>(), new Gherkin.Ast.Location(2, 1), "Scenario", "S", "", Array.Empty<Step>(), Array.Empty<Examples>()));
+        SetupBuffer(FeatureUri, FeatureText, new[] { FeatureBlockTag, scenarioTag, StepBlockTag });
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Range!.Start.Line.Should().Be(1);
     }
 
     [Fact]
@@ -179,7 +290,7 @@ public class HookCodeLensHandlerTests
     [Fact]
     public async Task Handle_single_hook_uses_singular_title()
     {
-        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 
@@ -191,12 +302,24 @@ public class HookCodeLensHandlerTests
     public async Task Handle_multiple_hooks_uses_plural_title()
     {
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(
-            MakeHook(HookType.BeforeStep), MakeHook(HookType.AfterStep)));
+            MakeHook(HookType.BeforeScenario), MakeHook(HookType.AfterScenario)));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 
         result.Should().ContainSingle();
         result[0].Command!.Title.Should().Be("2 hooks");
+    }
+
+    [Fact]
+    public async Task Handle_step_hooks_lens_uses_distinct_title()
+    {
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(
+            MakeHook(HookType.BeforeStep), MakeHook(HookType.AfterStep)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Command!.Title.Should().Be("2 step hooks");
     }
 
     [Fact]
@@ -210,7 +333,7 @@ public class HookCodeLensHandlerTests
     }
 
     [Fact]
-    public async Task Handle_lens_command_arguments_carry_uri_line_and_character()
+    public async Task Handle_lens_command_arguments_carry_uri_click_target_and_ownLevelOnly()
     {
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeStep)));
 
@@ -218,7 +341,20 @@ public class HookCodeLensHandlerTests
 
         var args = (JArray)result[0].Command!.Arguments!;
         ((JValue)args[0]).Value.Should().Be(FeatureUri.ToString());
-        ((JValue)args[1]).Value.Should().Be(2);
+        ((JValue)args[1]).Value.Should().Be(2); // click target is the first step's line, not the display line
         ((JValue)args[2]).Value.Should().Be(0); // StepBlockTag.Range.Start is the line's start offset, not past the leading whitespace
+        ((JValue)args[3]).Value.Should().Be(true); // ownLevelOnly, so clicking shows exactly the step-only hooks counted
+    }
+
+    [Fact]
+    public async Task Handle_scenario_lens_click_target_matches_its_own_display_line()
+    {
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
+
+        var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        var args = (JArray)result[0].Command!.Arguments!;
+        ((JValue)args[1]).Value.Should().Be(1);
+        ((JValue)args[3]).Value.Should().Be(true);
     }
 }

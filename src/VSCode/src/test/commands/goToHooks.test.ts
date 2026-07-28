@@ -8,6 +8,19 @@ function fakeClient(sendRequest: () => Promise<unknown>): LanguageClient {
   return { sendRequest } as unknown as LanguageClient;
 }
 
+/** Stand-in that also captures the request payload passed to sendRequest. */
+function capturingClient(
+  response: unknown,
+  onRequest: (method: unknown, params: unknown) => void,
+): LanguageClient {
+  return {
+    sendRequest: (method: unknown, params: unknown) => {
+      onRequest(method, params);
+      return Promise.resolve(response);
+    },
+  } as unknown as LanguageClient;
+}
+
 /** Stubs a vscode.window prompt function for the duration of `fn`, restoring it afterwards. */
 async function withStubbedWindow<T>(
   overrides: Partial<{
@@ -115,6 +128,99 @@ suite('goToHooks', () => {
       assert.strictEqual(quickPickItems?.length, 2);
       assert.strictEqual(quickPickItems[0].detail, 'Order: 5');
       assert.strictEqual(quickPickItems[1].detail, undefined);
+    });
+
+    test('navigates directly for a single hook when alwaysShowPicker is not set (manual invocation)', async () => {
+      const client = fakeClient(() =>
+        Promise.resolve({
+          hooks: [
+            {
+              uri: editor.document.uri.toString(),
+              startLine: 0,
+              startChar: 0,
+              hookType: 'BeforeScenario',
+              hookOrder: 0,
+              methodName: 'Setup',
+            },
+          ],
+        }),
+      );
+      let quickPickShown = false;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: () => {
+            quickPickShown = true;
+            return Promise.resolve(undefined);
+          },
+        },
+        () => doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 }),
+      );
+
+      assert.strictEqual(quickPickShown, false);
+    });
+
+    test('shows the QuickPick for a single hook when alwaysShowPicker is set (CodeLens click)', async () => {
+      const client = fakeClient(() =>
+        Promise.resolve({
+          hooks: [
+            {
+              uri: editor.document.uri.toString(),
+              startLine: 0,
+              startChar: 0,
+              hookType: 'BeforeScenario',
+              hookOrder: 0,
+              methodName: 'Setup',
+            },
+          ],
+        }),
+      );
+      let quickPickPlaceholder: string | undefined;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: (_items: unknown, options?: { placeHolder?: string }) => {
+            quickPickPlaceholder = options?.placeHolder;
+            return Promise.resolve(undefined);
+          },
+        },
+        () =>
+          doGoToHooks(client, {
+            uri: editor.document.uri.toString(),
+            line: 0,
+            character: 0,
+            alwaysShowPicker: true,
+          }),
+      );
+
+      assert.match(quickPickPlaceholder ?? '', /^1 hook found/);
+    });
+
+    test('sends ownLevelOnly=false by default (manual invocation)', async () => {
+      let sentParams: unknown;
+      const client = capturingClient({ hooks: [] }, (_method, params) => {
+        sentParams = params;
+      });
+
+      await doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 });
+
+      assert.strictEqual((sentParams as { ownLevelOnly?: boolean })?.ownLevelOnly, false);
+    });
+
+    test('forwards ownLevelOnly=true when passed by a CodeLens click', async () => {
+      let sentParams: unknown;
+      const client = capturingClient({ hooks: [] }, (_method, params) => {
+        sentParams = params;
+      });
+
+      await doGoToHooks(client, {
+        uri: editor.document.uri.toString(),
+        line: 0,
+        character: 0,
+        ownLevelOnly: true,
+      });
+
+      assert.strictEqual((sentParams as { ownLevelOnly?: boolean })?.ownLevelOnly, true);
     });
   });
 });

@@ -182,7 +182,11 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
 
     // Hook Navigation ("Go to Hooks"; invoked from the command palette, editor context menu,
     // or the hook-count CodeLens — issue #269). When invoked from a CodeLens the server passes
-    // [uri, line, char] as arguments, same convention as reqnroll.findStepUsages.
+    // [uri, line, char, ownLevelOnly] as arguments, same convention as reqnroll.findStepUsages
+    // plus the extra ownLevelOnly flag so the picker matches exactly what the lens counted.
+    // alwaysShowPicker is set for every CodeLens-sourced call (issue #372 follow-up) so clicking
+    // a lens always shows the picker, even for a single match, rather than jumping straight
+    // there — the command-palette/keybinding path (no args) keeps the direct-navigate shortcut.
     vscode.commands.registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
         notReady('Go to Hooks')();
@@ -193,6 +197,8 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
           uri: args[0],
           line: args[1],
           character: typeof args[2] === 'number' ? args[2] : 0,
+          ownLevelOnly: typeof args[3] === 'boolean' ? args[3] : false,
+          alwaysShowPicker: true,
         });
       } else {
         await doGoToHooks(client);

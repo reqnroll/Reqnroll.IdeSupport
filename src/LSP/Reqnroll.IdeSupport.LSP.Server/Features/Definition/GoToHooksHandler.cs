@@ -50,8 +50,8 @@ public sealed class GoToHooksHandler
 
     /// <summary>Handles a <c>reqnroll/goToHooks</c> request for hook navigation.</summary>
     public Task<GoToHooksResponse> HandleAsync(
-        TextDocumentPositionParams request,
-        CancellationToken          cancellationToken)
+        GoToHooksParams    request,
+        CancellationToken  cancellationToken)
     {
         var uri = request.TextDocument.Uri;
 
@@ -93,7 +93,7 @@ public sealed class GoToHooksHandler
             return Task.FromResult(new GoToHooksResponse());
         }
 
-        var hooks = HookMatching.ResolveMatchingHooks(registry, level, contextTag);
+        var hooks = HookMatching.ResolveMatchingHooks(registry, level, contextTag, request.OwnLevelOnly);
 
         _logger.LogVerbose($"GoToHooksHandler: {hooks.Count} hook(s) at offset {offset} in {uri}");
 
