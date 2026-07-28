@@ -15,6 +15,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.actions.GoToHooksRunner
+import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 
 /**
@@ -81,6 +82,10 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
 
         val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
+        ReqnrollDebugLogger.info(
+            "HookCodeVisionProvider: raw codeLens response for $uri: " +
+                lenses.joinToString { l -> "[title=${l.command?.title}, range=${l.range}, args=${l.command?.arguments}]" },
+        )
 
         val document = editor.document
         val renderable = lenses.filter { StepUsagesCodeVisionProvider.isRenderable(it, document.lineCount) }
@@ -124,6 +129,11 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
             val entry = StepUsagesCodeVisionProvider.buildEntry(command, id) {
                 GoToHooksRunner.runAndShow(project, uri, clickLine, clickCharacter, ownLevelOnly)
             }
+            ReqnrollDebugLogger.info(
+                "HookCodeVisionProvider: computed entry title='${entry.text}' offset=$offset " +
+                    "(displayLine=$displayLine, priorEntriesOnLine=$priorEntriesOnLine) " +
+                    "click=($clickLine,$clickCharacter) ownLevelOnly=$ownLevelOnly",
+            )
             TextRange(offset, offset) to entry
         }
     }
