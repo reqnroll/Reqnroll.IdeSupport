@@ -1,3 +1,4 @@
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -14,16 +15,20 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
 /// <summary>
 /// Handles the standard <c>textDocument/codeLens</c> request for <c>.feature</c> files
-/// (hook-match count CodeLens — issue #269). Returns one lens per <c>Feature:</c>/<c>Scenario:</c>/
-/// step line that has at least one applicable hook, showing how many would fire for that specific
-/// item. Clicking the lens invokes the same <c>reqnroll.goToHooks</c> client command "Go to Hooks"
-/// already uses, at that line's position — reusing its existing navigation/disambiguation-picker
-/// behavior rather than duplicating it.
+/// (hook-match count CodeLens — issue #269). Returns one lens per <c>Feature:</c>/<c>Scenario:</c>
+/// line that has at least one hook native to that level (Feature-only / Scenario-only), plus a
+/// second lens on the <c>Scenario:</c> line for the step-level hooks shared by every step in that
+/// scenario — steps never get their own lens, since <see cref="HookMatching"/> resolves the same
+/// step-level hook set for every step in a scenario (matching only depends on the scenario's
+/// scope/tags, not on which step), so repeating the count on every step line would be redundant.
+/// Clicking a lens invokes the <c>reqnroll.goToHooks</c> client command with <c>ownLevelOnly</c>
+/// set, so the picker it opens matches exactly what the lens counted.
 /// </summary>
 /// <remarks>
 /// Applicability/matching is delegated entirely to <see cref="HookMatching"/> — the same helper
-/// <c>GoToHooksHandler</c> uses — so this lens's count can never disagree with what clicking it
-/// (or invoking Go to Hooks directly) actually shows.
+/// <c>GoToHooksHandler</c> uses — so each lens's count can never disagree with what clicking it
+/// actually shows (both use <see cref="HookMatching.GetOwnLevelHookTypes"/> for CodeLens-sourced
+/// requests, vs. the cumulative set for a manual "Go to Hooks" invocation from the cursor).
 /// </remarks>
 public sealed class HookCodeLensHandler
 {
@@ -47,7 +52,8 @@ public sealed class HookCodeLensHandler
 
     /// <summary>
     /// Handles a <c>textDocument/codeLens</c> request.
-    /// Returns one lens per Feature:/Scenario:/step line with at least one applicable hook.
+    /// Returns one lens per Feature:/Scenario: line with at least one own-level hook, plus a
+    /// second lens on the Scenario: line for the scenario's step-level hooks (see class remarks).
     /// Returns <see langword="null"/> for non-.feature files (falls through to the C# step-usage lens).
     /// Returns an empty array when there's no buffer/tags/hooks to work with yet.
     /// </summary>
@@ -79,44 +85,94 @@ public sealed class HookCodeLensHandler
         }
 
         var lenses = new List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
-        // One lens per line: a ScenarioDefinitionBlock and its first StepBlock could otherwise
-        // both resolve to the same start line for a step immediately following "Scenario:" with
-        // no blank line, so guard against emitting two lenses on one line.
-        var seenLines = new HashSet<int>();
 
         foreach (var tag in buffer.Tags)
         {
-            if (tag.Type != DeveroomTagTypes.FeatureBlock
-                && tag.Type != DeveroomTagTypes.ScenarioDefinitionBlock
-                && tag.Type != DeveroomTagTypes.StepBlock)
-                continue;
-
-            var (level, contextTag) = HookMatching.ResolveContext(buffer.Tags, tag.Range.Start);
-            if (level == HookContextLevel.None)
-                continue;
-
-            var (line, character) = tag.Range.StartLinePosition;
-            if (!seenLines.Add(line))
-                continue;
-
-            var hooks = HookMatching.ResolveMatchingHooks(registry, level, contextTag);
-            if (hooks.Count == 0)
-                continue;
-
-            lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+            if (tag.Type == DeveroomTagTypes.FeatureBlock)
             {
-                Range = new LspRange(new Position(line, character), new Position(line, character)),
-                Command = new Command
-                {
-                    Title     = hooks.Count == 1 ? "1 hook" : $"{hooks.Count} hooks",
-                    Name      = "reqnroll.goToHooks",
-                    Arguments = new JArray(uri.ToString(), line, character),
-                },
-            });
+                AddOwnLevelLens(lenses, uri, registry, HookContextLevel.Feature, tag, clickTargetTag: tag);
+            }
+            else if (tag.Type == DeveroomTagTypes.ScenarioDefinitionBlock)
+            {
+                AddOwnLevelLens(lenses, uri, registry, HookContextLevel.Scenario, tag, clickTargetTag: tag);
+                AddStepHooksLens(lenses, uri, registry, tag, buffer.Tags);
+            }
         }
 
         _logger.LogVerbose($"HookCodeLensHandler: {lenses.Count} lens(es) for {uri}");
         return Task.FromResult(lenses.ToArray());
+    }
+
+    /// <summary>
+    /// Adds a lens displayed at <paramref name="displayTag"/>'s line, counting only hooks native
+    /// to <paramref name="level"/> (see <see cref="HookMatching.GetOwnLevelHookTypes"/>). The
+    /// click target (<paramref name="clickTargetTag"/>) resolves to the same level so
+    /// <c>GoToHooksHandler</c>, given <c>ownLevelOnly</c>, shows exactly this count.
+    /// </summary>
+    private static void AddOwnLevelLens(
+        List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> lenses,
+        DocumentUri            uri,
+        ProjectBindingRegistry registry,
+        HookContextLevel       level,
+        DeveroomTag            displayTag,
+        DeveroomTag            clickTargetTag)
+    {
+        var hooks = HookMatching.ResolveMatchingHooks(registry, level, displayTag, ownLevelOnly: true);
+        if (hooks.Count == 0)
+            return;
+
+        var (displayLine, displayChar) = displayTag.Range.StartLinePosition;
+        var (clickLine, clickChar)     = clickTargetTag.Range.StartLinePosition;
+
+        lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+        {
+            Range = new LspRange(new Position(displayLine, displayChar), new Position(displayLine, displayChar)),
+            Command = new Command
+            {
+                Title     = hooks.Count == 1 ? "1 hook" : $"{hooks.Count} hooks",
+                Name      = "reqnroll.goToHooks",
+                Arguments = new JArray(uri.ToString(), clickLine, clickChar, true),
+            },
+        });
+    }
+
+    /// <summary>
+    /// Adds a second lens on the <c>Scenario:</c> line for the step-level hooks (Before/AfterStep,
+    /// Before/AfterScenarioBlock) shared by every step in <paramref name="scenarioTag"/> — skipped
+    /// when the scenario has no steps yet, since there is no line to navigate to on click.
+    /// </summary>
+    private static void AddStepHooksLens(
+        List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> lenses,
+        DocumentUri              uri,
+        ProjectBindingRegistry   registry,
+        DeveroomTag              scenarioTag,
+        IReadOnlyCollection<DeveroomTag> allTags)
+    {
+        var firstStepTag = allTags
+            .Where(t => t.Type == DeveroomTagTypes.StepBlock
+                     && t.Range.Start >= scenarioTag.Range.Start && t.Range.Start < scenarioTag.Range.End)
+            .OrderBy(t => t.Range.Start)
+            .FirstOrDefault();
+        if (firstStepTag is null)
+            return;
+
+        var hooks = HookMatching.ResolveMatchingHooks(registry, HookContextLevel.Step, scenarioTag, ownLevelOnly: true);
+        if (hooks.Count == 0)
+            return;
+
+        var (displayLine, displayChar) = scenarioTag.Range.StartLinePosition;
+        var (stepLine, stepChar)       = firstStepTag.Range.StartLinePosition;
+
+        lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+        {
+            Range = new LspRange(new Position(displayLine, displayChar), new Position(displayLine, displayChar)),
+            Command = new Command
+            {
+                Title     = hooks.Count == 1 ? "1 step hook" : $"{hooks.Count} step hooks",
+                Name      = "reqnroll.goToHooks",
+                Arguments = new JArray(uri.ToString(), stepLine, stepChar, true),
+            },
+        });
     }
 
     private static readonly global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[] Empty =

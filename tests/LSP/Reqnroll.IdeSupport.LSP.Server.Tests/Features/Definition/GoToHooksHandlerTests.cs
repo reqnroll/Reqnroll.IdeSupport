@@ -69,11 +69,12 @@ public class GoToHooksHandlerTests
     private GoToHooksHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_bufferService, _registryLookup, _logger, telemetry);
 
-    private static TextDocumentPositionParams RequestAt(DocumentUri uri, int line, int character) =>
+    private static GoToHooksParams RequestAt(DocumentUri uri, int line, int character, bool ownLevelOnly = false) =>
         new()
         {
-            TextDocument = new TextDocumentIdentifier { Uri = uri },
-            Position     = new Position(line, character)
+            TextDocument  = new TextDocumentIdentifier { Uri = uri },
+            Position      = new Position(line, character),
+            OwnLevelOnly  = ownLevelOnly,
         };
 
     private void SetupBuffer(
@@ -292,6 +293,52 @@ public class GoToHooksHandlerTests
             RequestAt(FeatureUri, 2, 7), CancellationToken.None);
 
         result.Hooks.Should().BeEmpty();
+    }
+
+    // ── ownLevelOnly (hook-count CodeLens click-through — issue #372 follow-up) ──────────
+
+    [Fact]
+    public async Task Handle_scenario_line_with_ownLevelOnly_excludes_feature_hooks_Async()
+    {
+        var registry = RegistryWith(
+            MakeHook(HookType.BeforeFeature),   // excluded: not native to Scenario level
+            MakeHook(HookType.BeforeScenario));
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(registry);
+
+        var result = await CreateSut().HandleAsync(
+            RequestAt(FeatureUri, 1, 4, ownLevelOnly: true), CancellationToken.None);
+
+        result.Hooks.Should().ContainSingle(h => h.HookType == "BeforeScenario");
+    }
+
+    [Fact]
+    public async Task Handle_step_line_with_ownLevelOnly_excludes_feature_and_scenario_hooks_Async()
+    {
+        var registry = RegistryWith(
+            MakeHook(HookType.BeforeFeature),        // excluded
+            MakeHook(HookType.BeforeScenario),        // excluded
+            MakeHook(HookType.BeforeScenarioBlock),   // included: native to Step level
+            MakeHook(HookType.BeforeStep));           // included
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(registry);
+
+        var result = await CreateSut().HandleAsync(
+            RequestAt(FeatureUri, 2, 7, ownLevelOnly: true), CancellationToken.None);
+
+        result.Hooks.Select(h => h.HookType).Should()
+            .BeEquivalentTo(["BeforeScenarioBlock", "BeforeStep"]);
+    }
+
+    [Fact]
+    public async Task Handle_feature_line_with_ownLevelOnly_is_unaffected_Async()
+    {
+        // Feature is the outermost level, so own-level and cumulative sets are identical.
+        var registry = RegistryWith(MakeHook(HookType.BeforeFeature));
+        _registryLookup.GetRegistryForUri(FeatureUri).Returns(registry);
+
+        var result = await CreateSut().HandleAsync(
+            RequestAt(FeatureUri, 0, 5, ownLevelOnly: true), CancellationToken.None);
+
+        result.Hooks.Should().ContainSingle(h => h.HookType == "BeforeFeature");
     }
 
     // ── Location conversion (1-based → 0-based) ──────────────────────────────

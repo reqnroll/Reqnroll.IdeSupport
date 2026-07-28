@@ -21,12 +21,15 @@ interface GoToHookLocation {
  * `position` (defaulting to the active editor's cursor when omitted — the command-palette/
  * keybinding invocation path) and navigates directly if there's exactly one, or shows a
  * `QuickPick` to choose among several. When invoked from the hook-count CodeLens (issue #269)
- * the server passes `[uri, line, char]` as arguments, resolved to `position` by the
- * `reqnroll.goToHooks` command handler, the same way `reqnroll.findStepUsages` already does.
+ * the server passes `[uri, line, char, ownLevelOnly]` as arguments, resolved to `position` by
+ * the `reqnroll.goToHooks` command handler, the same way `reqnroll.findStepUsages` already
+ * does. `ownLevelOnly` (set only by CodeLens-sourced invocations) asks the server to filter the
+ * result to hooks native to the resolved context level, so the picker matches exactly what the
+ * lens counted rather than the fuller cumulative list a manual invocation returns.
  */
 export async function doGoToHooks(
   client: LanguageClient,
-  position?: { uri: string; line: number; character: number },
+  position?: { uri: string; line: number; character: number; ownLevelOnly?: boolean },
 ): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   const uri = position?.uri ?? editor?.document.uri.toString();
@@ -39,6 +42,7 @@ export async function doGoToHooks(
     response = await client.sendRequest<GoToHooksResponse>(ReqnrollMethods.goToHooks, {
       textDocument: { uri },
       position: { line, character },
+      ownLevelOnly: position?.ownLevelOnly ?? false,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
