@@ -7,23 +7,11 @@
     <AssemblyOriginatorKeyFile>..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>
     <NoWarn>CS0067;VSTHRD200;MSB3277</NoWarn>
   </PropertyGroup>
-  <ItemGroup Label="Deferred - depends on unported types">
-    <!-- Editor commands, services, tagger not yet ported -->
-    <Compile Remove="Editor\**" />
-    <!-- SnippetService not yet ported -->
-    <Compile Remove="Snippets\SnippetServiceTests.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="ApprovalTestData\**" />
-    <Content Include="ApprovalTestData\**" />
-  </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="GitHubActionsTestLogger" Version="2.4.1" Condition="'$(REQNROLL_TEST_PIPELINEMODE)' == 'true'">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="ApprovalTests" Version="5.9.0" /> <!-- cannot upgrade to 6.0 because of test execution issues -->
     <PackageReference Include="System.Data.SqlClient" Version="4.8.6" />
     <PackageReference Include="System.IO.Abstractions.TestingHelpers" Version="22.1.1" />
     <PackageReference Include="NSubstitute " Version="5.3.0" />

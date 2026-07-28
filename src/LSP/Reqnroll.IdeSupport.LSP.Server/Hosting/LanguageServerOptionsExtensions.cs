@@ -157,7 +157,7 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollGoToStepDefinitions,
             (request, ct) => resolver!.Get<GoToStepDefinitionsHandler>().HandleAsync(request, ct));
 
-        options.OnRequest<TextDocumentPositionParams, GoToHooksResponse>(
+        options.OnRequest<GoToHooksParams, GoToHooksResponse>(
             LspMethodNames.ReqnrollGoToHooks,
             (request, ct) => resolver!.Get<GoToHooksHandler>().HandleAsync(request, ct));
 
