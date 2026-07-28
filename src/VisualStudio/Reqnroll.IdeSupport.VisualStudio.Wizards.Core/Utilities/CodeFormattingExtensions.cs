@@ -4,7 +4,7 @@
 // (originally imported from SpecFlow v2.4)
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.Utilities;
 
-internal static class CodeFormattingExtensions
+public static class CodeFormattingExtensions
 {
     private static readonly Regex firstWordCharRe = new(@"(?<pre>[^\p{Ll}\p{Lu}]+)(?<fc>[\p{Ll}\p{Lu}])");
     private static readonly Regex punctCharRe = new(@"[\n\.-]+");

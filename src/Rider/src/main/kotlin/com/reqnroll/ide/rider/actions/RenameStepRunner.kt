@@ -9,6 +9,7 @@ import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollNotificationSender
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
+import com.reqnroll.ide.rider.lsp.isDocumentStale
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetItem
 import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
 
@@ -110,7 +111,7 @@ object RenameStepRunner {
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
-            if (RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp != requestModificationStamp) {
+            if (isDocumentStale(RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp, requestModificationStamp)) {
                 ReqnrollDebugLogger.warn(
                     "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
                         "edit to avoid applying it at stale offsets.",

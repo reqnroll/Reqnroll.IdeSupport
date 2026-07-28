@@ -154,4 +154,26 @@ public class FeatureRescanDebouncerTests : IDisposable
         var act = () => sut.Dispose();
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task Dispose_racing_a_rescan_completing_at_the_same_time_does_not_throw()
+    {
+        // Regression for the race Dispose()'s TryRemove-by-key claiming already guards against:
+        // a snapshot-then-act loop over _pending.Values could observe a CancellationTokenSource
+        // that RunAfterDebounceAsync's own finally block concurrently disposes once the debounce
+        // window elapses, throwing ObjectDisposedException. Waiting to just under the 500ms
+        // window before racing Dispose() from another thread, repeated, puts the two paths in
+        // contention on most iterations (unlike disposing immediately after scheduling, which
+        // never lets the window elapse at all).
+        for (var i = 0; i < 10; i++)
+        {
+            var sut = CreateSut();
+            sut.ScheduleRescan(_project, _ => Task.CompletedTask);
+            await Task.Delay(490);
+
+            var disposeTask = Task.Run(sut.Dispose);
+            var act = async () => await disposeTask;
+            await act.Should().NotThrowAsync();
+        }
+    }
 }

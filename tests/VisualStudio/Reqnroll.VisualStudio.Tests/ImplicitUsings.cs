@@ -1,6 +1,3 @@
-global using ApprovalTests.Namers;
-global using ApprovalTests.Reporters;
-global using ApprovalTests;
 global using AwesomeAssertions;
 global using Gherkin.Ast;
 global using Microsoft.CodeAnalysis.CSharp;
@@ -33,12 +30,8 @@ global using Reqnroll.IdeSupport.VisualStudio;
 global using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 // Stubs project namespaces
 global using Reqnroll.VisualStudio.VsxStubs;
-global using Reqnroll.VisualStudio.VsxStubs.ProjectSystem;
 // Old interface alias: IFileSystemForVs -> IFileSystemForIDE
 global using IFileSystemForVs = Reqnroll.IdeSupport.Common.IFileSystemForIDE;
-// Deferred: Reqnroll.VisualStudio.VsxStubs.StepDefinitions (MockableDiscoveryService not yet ported)
-// Deferred: Reqnroll.VisualStudio.UI.ViewModels (UI not yet ported)
-// Deferred: Reqnroll.VisualStudio.Editor.* (editor commands/services not yet ported)
 // BCL
 global using System;
 global using System.Collections.Concurrent;

@@ -447,4 +447,38 @@ public class BindingMatchServiceTests
 
         usages.Should().HaveCount(2);
     }
+
+    // ── concurrency ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Store_InvalidateAllForDocument_and_FindUsages_are_safe_under_concurrent_access()
+    {
+        // _cache is a ConcurrentDictionary shared across the LSP server's request-handling
+        // threads: a store from one document-sync notification can race a FindUsages call (or an
+        // invalidation) for a different document. Drives real concurrent Store/FindUsages/
+        // InvalidateAllForDocument calls across many distinct documents to confirm no exception,
+        // torn read, or lost update under contention -- FindUsages' own comment claims
+        // "ConcurrentDictionary enumeration is safe under concurrent writes" but nothing exercised
+        // that claim under real concurrency before this test.
+        var sut = new BindingMatchService();
+        const int documentCount = 30;
+        var registry = RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5));
+        var docUris = Enumerable.Range(0, documentCount).Select(i => $"file:///c:/proj/f{i}.feature").ToArray();
+
+        Parallel.ForEach(docUris, docUri =>
+        {
+            for (var i = 0; i < 20; i++)
+            {
+                sut.Store(BuildSet(DefinedFeature, registry, docUri: docUri));
+                sut.FindUsages(new SourceLocation("Steps.cs", 5, 1));
+                sut.InvalidateAllForDocument(docUri);
+                sut.Store(BuildSet(DefinedFeature, registry, docUri: docUri));
+            }
+        });
+
+        // Every document was re-Stored last (after its own invalidation), so all of them should
+        // still resolve a usage -- no entry should have been lost or left invalidated.
+        var usages = sut.FindUsages(new SourceLocation("Steps.cs", 5, 1));
+        usages.Should().HaveCount(documentCount);
+    }
 }

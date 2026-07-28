@@ -22,22 +22,43 @@ import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
  * `LinkedTreeMap`) for a JSON object, so this reads it structurally via `Map<*, *>` rather than a
  * Gson-specific type, so it isn't coupled to Gson's internal representation.
  */
+/** A parsed `telemetry/event` notification, ready to hand to [RiderTelemetryTransmitter.transmit]. */
+internal data class ParsedTelemetryEvent(val eventName: String, val properties: Map<String, Any?>)
+
+/**
+ * Parses the raw `telemetry/event` payload (`{ eventName, properties }`, deserialized by
+ * lsp4j/Gson into a `Map`-like value) into a [ParsedTelemetryEvent], or `null` when [raw] isn't a
+ * map, or has no non-blank `eventName` -- either way, nothing should be transmitted. Non-`String`
+ * property keys are silently dropped rather than failing the whole event, since a malformed key
+ * doesn't invalidate the rest of the properties.
+ *
+ * `internal` (rather than private) purely so it's unit-testable without a live
+ * `LspServerNotificationsHandler` fixture -- see [ReqnrollTelemetryEventInterceptor].
+ */
+internal fun parseTelemetryEvent(raw: Any): ParsedTelemetryEvent? {
+    val params = raw as? Map<*, *> ?: return null
+    val eventName = params["eventName"] as? String
+    if (eventName.isNullOrEmpty()) return null
+
+    val properties = (params["properties"] as? Map<*, *>)
+        ?.entries
+        ?.mapNotNull { (key, value) -> (key as? String)?.let { it to value } }
+        ?.toMap()
+        ?: emptyMap()
+
+    return ParsedTelemetryEvent(eventName, properties)
+}
+
 class ReqnrollTelemetryEventInterceptor(
     private val handler: LspServerNotificationsHandler,
 ) : LspServerNotificationsHandler by handler {
     override fun telemetryEvent(`object`: Any) {
         try {
-            val params = `object` as? Map<*, *>
-            val eventName = params?.get("eventName") as? String
-            if (eventName.isNullOrEmpty()) {
+            val parsed = parseTelemetryEvent(`object`)
+            if (parsed == null) {
                 ReqnrollDebugLogger.warn("ReqnrollTelemetryEventInterceptor: telemetry/event without eventName; dropping.")
             } else {
-                val properties = (params["properties"] as? Map<*, *>)
-                    ?.entries
-                    ?.mapNotNull { (key, value) -> (key as? String)?.let { it to value } }
-                    ?.toMap()
-                    ?: emptyMap()
-                RiderTelemetryTransmitter.transmit(eventName, properties)
+                RiderTelemetryTransmitter.transmit(parsed.eventName, parsed.properties)
             }
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("ReqnrollTelemetryEventInterceptor: error forwarding telemetry/event.", ex)
