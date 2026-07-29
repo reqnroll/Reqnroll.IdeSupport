@@ -8,6 +8,8 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
+using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
@@ -53,11 +55,13 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             serviceCollection.AddSingleton<FindStepUsagesState>();
             serviceCollection.AddSingleton<FindUnusedStepDefinitionsState>();
             serviceCollection.AddSingleton<GoToHooksState>();
+            serviceCollection.AddSingleton<GoToMatchingScenariosState>();
             serviceCollection.AddSingleton<StepCodeLensState>();
             serviceCollection.AddSingleton<CommentToggleState>();
             serviceCollection.AddSingleton<RenameStepState>();
             // ExtensionPart subclasses are not auto-registered by the framework; must be explicit.
             serviceCollection.AddSingleton<StepCodeLensProvider>();
+            serviceCollection.AddSingleton<HookMatchCountCodeLensProvider>();
 
             // Owns the LSP server process + duplex pipe. Registered as a singleton; resolved
             // eagerly from OnInitializedAsync below (NOT via ReqnrollLanguageClient's own

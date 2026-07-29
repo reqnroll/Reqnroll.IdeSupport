@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
+using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
@@ -34,6 +35,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly FindStepUsagesState _findStepUsagesState;
     private readonly FindUnusedStepDefinitionsState _findUnusedStepDefinitionsState;
     private readonly GoToHooksState _goToHooksState;
+    private readonly GoToMatchingScenariosState _goToMatchingScenariosState;
     private readonly StepCodeLensState _stepCodeLensState;
     private readonly CommentToggleState _commentToggleState;
     private readonly RenameStepState _renameStepState;
@@ -49,6 +51,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         FindStepUsagesState findStepUsagesState,
         FindUnusedStepDefinitionsState findUnusedStepDefinitionsState,
         GoToHooksState goToHooksState,
+        GoToMatchingScenariosState goToMatchingScenariosState,
         StepCodeLensState stepCodeLensState,
         CommentToggleState commentToggleState,
         RenameStepState renameStepState,
@@ -60,6 +63,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         _findStepUsagesState            = findStepUsagesState;
         _findUnusedStepDefinitionsState = findUnusedStepDefinitionsState;
         _goToHooksState                 = goToHooksState;
+        _goToMatchingScenariosState     = goToMatchingScenariosState;
         _stepCodeLensState              = stepCodeLensState;
         _commentToggleState             = commentToggleState;
         _renameStepState                = renameStepState;
@@ -136,6 +140,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _findStepUsagesState.Service            = new FindStepUsagesService(interceptingPipe, _loggerFactory.CreateLogger<FindStepUsagesService>());
             _findUnusedStepDefinitionsState.Service = new FindUnusedStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindUnusedStepDefinitionsService>());
             _goToHooksState.Service                 = new GoToHooksService(interceptingPipe, _loggerFactory.CreateLogger<GoToHooksService>());
+            _goToMatchingScenariosState.Service     = new GoToMatchingScenariosService(interceptingPipe, _loggerFactory.CreateLogger<GoToMatchingScenariosService>());
             _stepCodeLensState.Service              = new StepCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<StepCodeLensService>());
             _commentToggleState.Service             = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
@@ -220,6 +225,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _findUnusedStepDefinitionsState.Service  = null;
             _findUnusedStepDefinitionsState.Renderer = null;
             _goToHooksState.Service                  = null;
+            _goToMatchingScenariosState.Service      = null;
             _stepCodeLensState.Service           = null;
             _stepCodeLensState.FindUsagesService  = null;
             _stepCodeLensState.FindUsagesRenderer = null;

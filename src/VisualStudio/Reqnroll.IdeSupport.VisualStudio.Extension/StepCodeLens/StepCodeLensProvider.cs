@@ -148,9 +148,14 @@ internal sealed class StepCodeLens : InvokableCodeLens
                 "nextMethod={NextMethod}, upperBound={UpperBound}, serverLensLines=[{ServerLensLines}]",
                 currentStartLine, nextMethod, upperBound, string.Join(",", lenses.Select(l => l.RangeLine)));
 
-            // Server lens lines are at the method-declaration line (>= currentStartLine).
+            // Server lens lines are at the method-declaration line (>= currentStartLine). Filter
+            // to step-usage lenses by command name: since #373, the combined textDocument/codeLens
+            // response for a .cs file can also carry hook-match-count lenses (reqnroll.goToMatchingScenarios)
+            // when a [Binding] class mixes step and hook methods — without this filter those would
+            // get summed into this method's step-usage count too.
             var attrLenses = lenses
                 .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound)
+                .Where(l => l.CommandName is "reqnroll.findStepUsages" or "reqnroll.noStepUsages")
                 .ToList();
 
             if (attrLenses.Count == 0)
@@ -207,19 +212,23 @@ internal sealed class StepCodeLens : InvokableCodeLens
             var nextMethod2      = _state.GetNextMethodLine(_fileUri.ToString(), currentStartLine);
             var upperBound2      = nextMethod2 >= 0 ? nextMethod2 : currentStartLine + AttributeLookahead;
 
-            // Use the first (topmost) server lens in this method's attribute block.
+            // Use the first (topmost) server lens in this method's attribute block. Filtered to
+            // step-usage lenses by command name for the same reason as GetLabelAsync above —
+            // a hook-match-count lens in the same window must never be executed as a find-usages click.
             var firstAttr = lenses
                 .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound2)
+                .Where(l => l.CommandName is "reqnroll.findStepUsages" or "reqnroll.noStepUsages")
                 .OrderBy(l => l.RangeLine)
                 .FirstOrDefault();
 
             if (firstAttr is null) return;
 
             _logger.LogInformation(
-                "StepCodeLens.ExecuteAsync: invoking find usages at {FileUri}:{ArgLine}", _fileUri, firstAttr.ArgLine);
+                "StepCodeLens.ExecuteAsync: invoking find usages at {FileUri}:{ArgLine}:{ArgChar}",
+                _fileUri, firstAttr.ArgLine, firstAttr.ArgChar);
 
             var result = await findService
-                .FindUsagesAsync(_fileUri.ToString(), firstAttr.ArgLine, 0, cancellationToken)
+                .FindUsagesAsync(_fileUri.ToString(), firstAttr.ArgLine, firstAttr.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!result.IsBinding) return;
