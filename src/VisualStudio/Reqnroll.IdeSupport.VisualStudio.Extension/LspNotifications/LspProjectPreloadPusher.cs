@@ -8,7 +8,7 @@ using EnvDTE;
 using EnvDTE80;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
-using Reqnroll.IdeSupport.VisualStudio.SDKIntegration;
+using Reqnroll.IdeSupport.VisualStudio;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 
