@@ -14,6 +14,7 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.reqnroll.ide.rider.actions.FindStepUsagesRunner
+import com.reqnroll.ide.rider.actions.GoToMatchingScenariosRunner
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.intellij.util.io.URLUtil
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -21,12 +22,20 @@ import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Command
 
 /**
- * "N step usages" CodeVision lens above each step-definition method in `.cs` files — the Rider
- * equivalent of VS Code's built-in CodeLens support for the standard `textDocument/codeLens`
- * request (see StepCodeLensHandler.cs). Rider's generic LSP client has no rendering-side
- * consumer for `textDocument/codeLens` at all (confirmed by decompiling — only capability-name
- * bookkeeping exists), so this calls the request directly via [ReqnrollRequestSender.codeLens]
- * and renders the results through IntelliJ's native CodeVision extension point instead.
+ * CodeVision lens above `.cs` binding methods showing either "N step usages" (step-definition
+ * methods, see StepCodeLensHandler.cs) or "N scenarios matched" (hook-binding methods, issue
+ * #373, see HookMatchCountCodeLensHandler.cs) — the Rider equivalent of VS Code's built-in
+ * CodeLens support for the standard `textDocument/codeLens` request. Both lens kinds share this
+ * one provider/request rather than each getting its own: Rider's generic LSP client has no
+ * rendering-side consumer for `textDocument/codeLens` at all (confirmed by decompiling — only
+ * capability-name bookkeeping exists), so this calls the request directly via
+ * [ReqnrollRequestSender.codeLens] and renders the results through IntelliJ's native CodeVision
+ * extension point instead — and since a single `.cs` file routinely mixes both binding kinds, the
+ * server already combines both lens kinds into one response (see
+ * `LanguageServerOptionsExtensions.cs`'s `textDocument/codeLens` registration), so a second
+ * provider here would just re-fetch and re-render the same combined response a second time.
+ * `computeEntries` dispatches each lens's click action by its `command.command` name instead of
+ * assuming every lens is a step-usage one.
  */
 class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
     companion object {
@@ -109,12 +118,22 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
             // across the filter/map boundary, hence the !!.
             val command = lens.command!!
             val line = lens.range.start.line
+            val character = lens.range.start.character
             val offset = document.getLineStartOffset(line)
             val entry = buildEntry(command, id) {
-                if (command.command == "reqnroll.findStepUsages")
-                    FindStepUsagesRunner.runAndShow(project, uri, line, 0)
-                else
-                    FindStepUsagesRunner.showNoUsages(project)
+                // Dispatch by command name, not just a findStepUsages/else binary: this .cs
+                // response can now also carry hook-match-count lenses (issue #373) alongside
+                // step-usage ones, since a single [Binding] class routinely mixes both kinds of
+                // methods in one file and StepCodeLensHandler/HookMatchCountCodeLensHandler are
+                // combined into the same textDocument/codeLens response. An earlier version of
+                // this dispatch treated "not reqnroll.findStepUsages" as "zero usages" -- which
+                // would have misfired on a hook-match lens (showing a bogus "no usages" message
+                // instead of the real action) now that a second command name exists here.
+                when (command.command) {
+                    "reqnroll.findStepUsages" -> FindStepUsagesRunner.runAndShow(project, uri, line, 0)
+                    "reqnroll.goToMatchingScenarios" -> GoToMatchingScenariosRunner.runAndShow(project, uri, line, character)
+                    else -> FindStepUsagesRunner.showNoUsages(project)
+                }
             }
             TextRange(offset, offset) to entry
         }

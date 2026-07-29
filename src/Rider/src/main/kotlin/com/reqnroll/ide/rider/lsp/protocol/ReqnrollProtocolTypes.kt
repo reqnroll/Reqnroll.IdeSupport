@@ -152,6 +152,20 @@ data class GoToHookLocation(
     val methodName: String = "",
 )
 
+/** Response for `reqnroll/goToMatchingScenarios` (issue #373) — mirrors GoToMatchingScenariosResponse.cs field-for-field. */
+data class GoToMatchingScenariosResponse(
+    val scenarios: List<MatchingScenarioLocation> = emptyList(),
+)
+
+/** One scenario matched by the queried hook binding's scope. */
+data class MatchingScenarioLocation(
+    val uri: String = "",
+    val startLine: Int = 0,
+    val startChar: Int = 0,
+    val scenarioName: String = "",
+    val isOutline: Boolean = false,
+)
+
 /** Response for `reqnroll/renameTargets` — mirrors RenameTargetsResponse.cs field-for-field. */
 data class RenameTargetsResponse(
     val targets: List<RenameTargetItem> = emptyList(),
