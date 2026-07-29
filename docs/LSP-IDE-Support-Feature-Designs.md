@@ -38,6 +38,8 @@
 - [F19 · New Project / Item Wizards](#f19--new-project--item-wizards)
 - [F20 · Installation & Upgrade Experience](#f20--installation--upgrade-experience)
 - [F23 · Inlay Hints (Step Binding Info)](#f23--inlay-hints-step-binding-info)
+- [F24 · Hook Match CodeLens (Feature/Scenario/Step)](#f24--hook-match-codelens-featurescenariostep)
+- [F25 · Hook Match Count CodeLens (Hook Bindings)](#f25--hook-match-count-codelens-hook-bindings)
 - [Appendix B · Deferred / Future Features](#appendix-b--deferred--future-features)
 
 ---
@@ -1571,6 +1573,83 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 
 ---
 
+### F24 · Hook Match CodeLens (Feature/Scenario/Step)
+
+**Status: Implemented** for VS Code and Rider (issue [#269](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/269); server [#369](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/369), VS Code [#370](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/370), Rider [#371](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/371); follow-ups [#383](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/383) own-level hook counts, [#385](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/385) live refresh on `.cs` edits). **Not implemented for Visual Studio** — tracked separately as [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) (open).
+
+#### End-user experience
+
+`.feature` files show a CodeLens above each `Feature:`/`Scenario:`/`Scenario Outline:` line with at least one hook native to that level (`[BeforeTestRun]`/`[AfterTestRun]`/`[BeforeFeature]`/`[AfterFeature]` on the `Feature:` line; `[BeforeScenario]`/`[AfterScenario]` on the `Scenario:` line), plus a second lens on the `Scenario:` line reporting the step-level hook count (`[BeforeStep]`/`[AfterStep]`/`[BeforeStepBlock]`/`[AfterStepBlock]`) that applies to every step in that scenario. Individual step lines do not get their own lens — matching only depends on the scenario's own tags/scope, not on which step, so `HookMatching` resolves the same step-level hook set for every step and a per-line repeat would be redundant. `Background:` and `Rule:` blocks never get a lens, since neither carries scenario tags of its own. Clicking a lens opens the same "Go to Hooks" picker as [F17](#f17--hook-navigation), filtered to just that lens's own-level hook set — but, unlike a manual F17 invocation, a lens click **always** shows the picker, even for a single match, so the click target visibly matches what the lens counted.
+
+#### IDE support matrix
+
+| VS Code | Visual Studio | Rider |
+|---------|---------------|-------|
+| Glue | ❌ Not implemented ([#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) open) | Glue |
+
+**Visual Studio note**: VS.Extensibility's `ICodeLensProvider` (used by [F18](#f18--code-lens-step-usage-counts)) fires once per C# *code element* (method); `.feature` files have no analogous per-element hook for Gherkin content, so the F18 mechanism does not carry over. [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) tracks finding an alternative rendering mechanism for VS; until it lands, VS users reach the same information through the existing "Go to Hooks" context-menu command ([F17](#f17--hook-navigation)) instead of a lens.
+
+#### LSP messages
+
+| Direction | Method | Purpose |
+|-----------|--------|---------|
+| Client → Server | `textDocument/codeLens` | Request code lens items for a `.feature` document |
+| Server → Client | `CodeLens[]` response | Hook-count annotations, one per own-level tag block plus one step-hooks lens per scenario |
+| Client → Server | `reqnroll.goToHooks` (via `workspace/executeCommand`, reusing [F17](#f17--hook-navigation)'s `reqnroll/goToHooks`) | Lens click, with `ownLevelOnly` and (for the step-hooks lens) an extra flag distinguishing it from the own-level lens |
+
+#### Implementation notes
+
+`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `GoToHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`).
+
+**VS Code**: `registerHookCodeLens` (`src/VSCode/src/commands/hookCodeLens.ts`) calls `vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider)` directly (same pattern as F18's `stepCodeLens.ts`), sending the raw `textDocument/codeLens` request. Clicks are handled by `doGoToHooks` (`src/VSCode/src/commands/goToHooks.ts`), which gates auto-navigate on `!position?.alwaysShowPicker` — set only for CodeLens-sourced clicks, so a lens click always opens the QuickPick while a manual "Go to Hooks" invocation from the cursor still auto-navigates on a single match.
+
+**Rider**: two separate `CodeVisionProvider`s — `HookCodeVisionProvider.kt` (own-level lens) and `StepHooksCodeVisionProvider.kt` (step-hooks lens, ordered after the first via `CodeVisionRelativeOrderingAfter`) — because a single `CodeVisionProvider` cannot render two independent entries on the same line. Both share matching/parsing logic in `HookLensSupport.kt`. Clicks invoke `GoToHooksRunner.runAndShow(..., alwaysShowPicker = true)`, mirroring the VS Code behavior — `GoToHooksAction`/manual invocation continues to auto-navigate on a single match.
+
+#### Known limitations
+
+- **No Visual Studio implementation.** [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) is open; the VS extension has no `.feature`-file hook CodeLens today.
+- **Step lines never get an individual lens** — by design, since the step-level hook set is scenario-wide, not step-specific (see End-user experience above).
+
+---
+
+### F25 · Hook Match Count CodeLens (Hook Bindings)
+
+**Status: Implemented**, all three IDEs (issue [#373](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/373); server [#374](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/374), VS Code [#375](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/375), Rider [#376](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/376), Visual Studio [#377](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/377); follow-ups: VS Code and Rider always-show-picker fixes, below).
+
+#### End-user experience
+
+The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): each hook-binding C# method (`[BeforeScenario]`/`[AfterScenario]`/`[BeforeStep]`/`[AfterStep]`/etc.) shows a CodeLens with the count of features/scenarios that hook currently matches, given its scope/tag expression — conceptually the same shape as [F18](#f18--code-lens-step-usage-counts)'s step-usage lens, but for hooks. `[BeforeTestRun]`/`[AfterTestRun]` hooks are excluded (not scenario-countable — they run once per test run, not per feature/scenario). Unlike F18 and F24, a hook with **zero** matches still renders "0 scenarios matched" rather than being suppressed — deliberate, since a zero-match hook (e.g. a stale tag scope that no longer matches anything) is often exactly what the user needs to notice. Clicking the lens always shows a picker/results list of the matching scenarios, never auto-navigating directly even for a single match.
+
+#### IDE support matrix
+
+| VS Code | Visual Studio | Rider |
+|---------|---------------|-------|
+| Glue | 🔧 Plugin (`ICodeLensProvider`) | Glue |
+
+**Coexistence with F18.** A single `[Binding]` class routinely mixes step-binding and hook-binding methods in one `.cs` file, so `StepCodeLensHandler` ([F18](#f18--code-lens-step-usage-counts)) and `HookMatchCountCodeLensHandler` cannot partition `.cs` files exclusively the way F18 partitions `.cs` vs. `.feature.` — a single `textDocument/codeLens` response for one `.cs` file legitimately carries lenses from both handlers. Each client mirrors this: VS registers `HookMatchCountCodeLensProvider` as a second `ICodeLensProvider` alongside `StepCodeLensProvider` (rather than folding the new lens kind into the existing provider), reusing `StepCodeLensState`'s per-file method-start-line registry for the same attribute-to-method range reconciliation F18 needed (see F18's implementation notes). Rider dispatches both lens kinds from the single existing `StepUsagesCodeVisionProvider`, distinguishing by the returned command name (`reqnroll.goToMatchingScenarios` vs. `reqnroll.findStepUsages`) rather than adding a second CodeVision provider.
+
+#### LSP messages
+
+| Direction | Method | Purpose |
+|-----------|--------|---------|
+| Client → Server | `textDocument/codeLens` | `.cs` file — combined in the same response as F18's step-usage lenses |
+| Client → Server | `reqnroll/goToMatchingScenarios` (uri, line, character) | Lens click — request matching feature/scenario locations |
+| Server → Client | `GoToMatchingScenariosResponse` (`scenarios[]`) | Matching feature/scenario locations for the picker/results list |
+
+#### Implementation notes
+
+`HookMatchCountCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookMatchCountCodeLensHandler.cs`) filters `registry.Hooks` by source file and `HookScenarioMatching.IsScenarioCountable` (excluding `[BeforeTestRun]`/`[AfterTestRun]`), then resolves matches via `IBindingMatchService.GetAll(projectFilter)` + `HookScenarioMatching.ResolveMatchingScenarios`. Its command is `reqnroll.goToMatchingScenarios`.
+
+**VS Code**: click handling in `doGoToMatchingScenarios` (`src/VSCode/src/commands/goToMatchingScenarios.ts`); the lens provider shares the same `.cs` `CodeLensProvider` registration as F18's `stepCodeLens.ts`.
+
+**Rider**: `GoToMatchingScenariosRunner` (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/actions/GoToMatchingScenariosRunner.kt`) drives navigation via `ReqnrollRequestSender.goToMatchingScenarios`; dispatch from the lens click lives in `StepUsagesCodeVisionProvider` (see Coexistence above).
+
+**Visual Studio**: `HookMatchCountCodeLensProvider` (`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/HookMatchCountCodeLens/HookMatchCountCodeLensProvider.cs`), a second `ICodeLensProvider`. Its `ExecuteAsync` reuses the Find-Usages results-window renderer (the same one [F14](#f14--find-step-definition-usages) uses) to present matches, rather than the `NavigationPickerDialog` modal F17/F24 use.
+
+**Always-show-picker fix.** Both VS Code and Rider initially auto-navigated directly when a lens click resolved to a single matching scenario; both were changed so a lens click always shows a picker/results list instead — the count itself is the useful signal, and confirming which scenario it refers to before jumping avoids a surprising jump on what looks like a passive annotation. This contrasts with F17's manual "Go to Hooks" command, which still auto-navigates on a single match since there the user explicitly asked to navigate. VS's `ExecuteAsync` always used the Find-Usages window presentation, so no equivalent fix was needed there.
+
+---
+
 ## Appendix B · Deferred / Future Features
 
 The following features were identified during planning (see [discussion #1077](https://github.com/orgs/reqnroll/discussions/1077)) as valuable but out of scope for the initial phases. They are recorded here to inform architectural decisions — implementations should avoid foreclosing these options.
@@ -1586,10 +1665,6 @@ When editing a `[Given("...")]` attribute string in C#, the regex pattern is val
 ### Scope Expression Validation
 
 `[Scope(Tag = "...")]` expressions are validated via the Tag Expression parser. Invalid tag expressions are highlighted with warning squiggle (via LSP Diagnostics; same caveats apply from above).
-
-### Hook Matching Indicators
-
-Visual indicators (e.g., a gutter icon or CodeLens annotation) in `.feature` files showing which scenarios or steps have hooks attached, providing a quick way to discover pre/post-conditions without navigating to C# code and provide a way to surface navigation links to those hooks.
 
 ### Debug Support for Feature Files
 
