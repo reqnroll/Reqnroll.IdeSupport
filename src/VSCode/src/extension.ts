@@ -9,6 +9,7 @@ import { doToggleComment } from './commands/commentToggle';
 import { doFindStepUsages } from './commands/stepUsages';
 import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinitions';
 import { doGoToHooks } from './commands/goToHooks';
+import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
 import { registerHookCodeLens } from './commands/hookCodeLens';
@@ -204,6 +205,21 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
         await doGoToHooks(client);
       }
     }),
+
+    // Hook-match-count CodeLens click action (issue #373) -- only ever invoked from a CodeLens
+    // click, with the lens's own attribute location as [uri, line, char] arguments. Deliberately
+    // absent from package.json's contributes.commands, matching reqnroll.noStepUsages: it has no
+    // command-palette/keybinding entry point.
+    vscode.commands.registerCommand(
+      'reqnroll.goToMatchingScenarios',
+      async (uri: string, line: number, character: number) => {
+        if (!client) {
+          notReady('Go to Matching Scenarios')();
+          return;
+        }
+        await doGoToMatchingScenarios(client, uri, line, character);
+      },
+    ),
 
     // Go to Step Definition (rich picker with method name + step type)
     vscode.commands.registerCommand('reqnroll.goToStepDefinition', async () => {
