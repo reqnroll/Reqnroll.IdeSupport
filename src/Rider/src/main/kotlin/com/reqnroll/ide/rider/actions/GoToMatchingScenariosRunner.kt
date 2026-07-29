@@ -48,11 +48,6 @@ object GoToMatchingScenariosRunner {
             return
         }
 
-        if (response.scenarios.size == 1) {
-            navigate(project, response.scenarios[0])
-            return
-        }
-
         ReqnrollResultPopup.show(
             project,
             "${response.scenarios.size} Matching Scenario(s)",
