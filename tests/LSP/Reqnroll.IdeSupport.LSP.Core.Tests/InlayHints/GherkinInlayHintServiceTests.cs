@@ -64,6 +64,26 @@ public class GherkinInlayHintServiceTests
     }
 
     [Fact]
+    public void Defined_step_with_a_connector_supplied_signature_embedded_in_Method_still_produces_a_clean_hint()
+    {
+        // Reflection-based connector discovery (issue #389) embeds the parameter list in Method
+        // itself, e.g. "CalculatorStepDefinitions.WhenTheThreeNumbersAreAdded(Minimal.StepDefinitions.Verb)"
+        // — the namespace-qualified parameter type's own dots must not corrupt the short-name split.
+        var registry = RegistryWith(Binding(
+            "the two numbers are added",
+            "CalculatorStepDefinitions.WhenTheThreeNumbersAreAdded(Minimal.StepDefinitions.Verb)",
+            new[] { "Minimal.StepDefinitions.Verb" }));
+        const string feature = "Feature: F\nScenario: S\n    Given the two numbers are added\n";
+
+        var hints = CreateSut().Build(MatchSetFor(feature, registry));
+
+        var hint = hints.Should().ContainSingle().Subject;
+        hint.Kind.Should().Be(GherkinInlayHintKind.Binding);
+        hint.Label.Should().Be("→ CalculatorStepDefinitions.WhenTheThreeNumbersAreAdded");
+        hint.Tooltip.Should().Be("CalculatorStepDefinitions.WhenTheThreeNumbersAreAdded(Minimal.StepDefinitions.Verb)");
+    }
+
+    [Fact]
     public void Undefined_step_produces_no_hint()
     {
         const string feature = "Feature: F\nScenario: S\n    Given step one\n";
