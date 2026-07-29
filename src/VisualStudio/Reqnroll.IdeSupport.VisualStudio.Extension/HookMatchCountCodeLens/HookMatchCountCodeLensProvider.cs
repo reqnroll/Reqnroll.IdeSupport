@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
-using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
@@ -45,23 +44,18 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
     private readonly GoToMatchingScenariosState _goToState;
     private readonly ILogger<HookMatchCountCodeLensProvider> _logger;
     private readonly ILoggerFactory _loggerFactory;
-    // NavigationPickerHelper (shared with GoToHooks) still takes IIdeSupportLogger — resolve the
-    // shared DI-registered singleton sink for that one call rather than a second ad hoc logger.
-    private readonly IIdeSupportLogger _fileLogger;
 
     /// <summary>Creates the provider over the shared runtime state holders.</summary>
     public HookMatchCountCodeLensProvider(
         StepCodeLensState                        state,
         GoToMatchingScenariosState               goToState,
         ILogger<HookMatchCountCodeLensProvider>  logger,
-        ILoggerFactory                            loggerFactory,
-        IIdeSupportLogger                          fileLogger)
+        ILoggerFactory                            loggerFactory)
     {
         _state         = state;
         _goToState     = goToState;
         _logger        = logger;
         _loggerFactory = loggerFactory;
-        _fileLogger    = fileLogger;
     }
 
     // Apply to C# files only.
@@ -91,7 +85,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
         var startLine = context.Range.Start.GetContainingLine().LineNumber;
 
         var lens = new HookMatchCountCodeLens(
-            _state, _goToState, _loggerFactory.CreateLogger<HookMatchCountCodeLens>(), _fileLogger, fileUri, startLine);
+            _state, _goToState, _loggerFactory.CreateLogger<HookMatchCountCodeLens>(), fileUri, startLine);
         return Task.FromResult<CodeLens?>(lens);
     }
 }
@@ -106,7 +100,6 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
     private readonly StepCodeLensState _state;
     private readonly GoToMatchingScenariosState _goToState;
     private readonly ILogger<HookMatchCountCodeLens> _logger;
-    private readonly IIdeSupportLogger _fileLogger;
     private readonly Uri _fileUri;
     private readonly int _methodStartLine;
 
@@ -121,14 +114,12 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
         StepCodeLensState                state,
         GoToMatchingScenariosState       goToState,
         ILogger<HookMatchCountCodeLens>  logger,
-        IIdeSupportLogger                  fileLogger,
         Uri                              fileUri,
         int                              methodStartLine)
     {
         _state           = state;
         _goToState       = goToState;
         _logger          = logger;
-        _fileLogger      = fileLogger;
         _fileUri         = fileUri;
         _methodStartLine = methodStartLine;
     }
@@ -211,10 +202,10 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
             var nextMethod = _state.GetNextMethodLine(_fileUri.ToString(), currentStartLine);
             var upperBound = nextMethod >= 0 ? nextMethod : currentStartLine + AttributeLookahead;
 
-            // Use the first (topmost) hook lens in this method's attribute block — its ArgLine is
-            // the attribute's exact line; the server resolves the exact hook by (line, col), so we
-            // use column 0 here the same way StepCodeLens does for find-usages (attributes start at
-            // column 0 in practice; ArgLine already carries any real offset the server needs).
+            // Use the first (topmost) hook lens in this method's attribute block. The server
+            // resolves the exact hook by an exact (line, column) match against the attribute's
+            // source location, so both ArgLine and ArgChar must be round-tripped verbatim —
+            // hardcoding column 0 here previously made every lookup miss (issue #373 follow-up).
             var firstHook = lenses
                 .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound)
                 .Where(l => l.CommandName == "reqnroll.goToMatchingScenarios")
@@ -224,11 +215,11 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
             if (firstHook is null) return;
 
             _logger.LogInformation(
-                "HookMatchCountCodeLens.ExecuteAsync: invoking go-to-matching-scenarios at {FileUri}:{ArgLine}",
-                _fileUri, firstHook.ArgLine);
+                "HookMatchCountCodeLens.ExecuteAsync: invoking go-to-matching-scenarios at {FileUri}:{ArgLine}:{ArgChar}",
+                _fileUri, firstHook.ArgLine, firstHook.ArgChar);
 
             var result = await goToService
-                .GoToMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, 0, cancellationToken)
+                .GoToMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, firstHook.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
             if (result.Scenarios.Count == 0)
@@ -237,12 +228,17 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
                 return;
             }
 
-            var targets = BuildTargets(result.Scenarios);
-            await Navigation.NavigationPickerHelper.PickAndNavigateAsync(
-                    targets,
-                    _fileLogger,
-                    promptTitle: "Go to Matching Scenarios",
-                    cancellationToken)
+            var renderer = _state.FindUsagesRenderer;
+            if (renderer is null) return;
+
+            // Reuse the same FAR-window rendering pipeline as StepCodeLens's find-usages action
+            // (issue #373 follow-up: a picker dialog here was inconsistent with that surface) —
+            // map to StepUsageLocation and let FeatureReferencesDataSource read the scenario's own
+            // header line from disk as the Code-column text (StepText left null).
+            var locations = BuildLocations(result.Scenarios);
+            var count     = locations.Count;
+            var label     = count == 1 ? "1 matching scenario" : $"{count} matching scenarios";
+            await renderer.RenderAsync(label, new FindStepUsages.StepUsagesResult(locations), cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -267,23 +263,19 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
         return 0;
     }
 
-    private static System.Collections.Generic.IReadOnlyList<Navigation.NavigationTarget> BuildTargets(
+    private static System.Collections.Generic.IReadOnlyList<FindStepUsages.StepUsageLocation> BuildLocations(
         System.Collections.Generic.IReadOnlyList<MatchingScenarioLocation> scenarios)
     {
-        var targets = new System.Collections.Generic.List<Navigation.NavigationTarget>(scenarios.Count);
+        var locations = new System.Collections.Generic.List<FindStepUsages.StepUsageLocation>(scenarios.Count);
         foreach (var s in scenarios)
         {
-            if (!Uri.TryCreate(s.Uri, UriKind.Absolute, out var uri) || !uri.IsFile)
-                continue;
-
-            var filePath = uri.LocalPath;
-            var fileName = System.IO.Path.GetFileName(filePath);
-            var kind     = s.IsOutline ? "Scenario Outline" : "Scenario";
-            var name     = string.IsNullOrEmpty(s.ScenarioName) ? "(untitled)" : s.ScenarioName;
-            // Display: "[Scenario] Add two numbers (Calculator.feature:5)"  (1-based line for readability)
-            var displayText = $"[{kind}] {name} ({fileName}:{s.StartLine + 1})";
-            targets.Add(new Navigation.NavigationTarget(displayText, filePath, s.StartLine, s.StartChar));
+            locations.Add(new FindStepUsages.StepUsageLocation(
+                fileUri:   s.Uri,
+                startLine: s.StartLine,
+                startChar: s.StartChar,
+                endLine:   s.StartLine,
+                endChar:   s.StartChar));
         }
-        return targets;
+        return locations;
     }
 }

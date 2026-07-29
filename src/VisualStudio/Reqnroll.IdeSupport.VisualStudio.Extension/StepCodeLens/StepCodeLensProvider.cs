@@ -224,10 +224,11 @@ internal sealed class StepCodeLens : InvokableCodeLens
             if (firstAttr is null) return;
 
             _logger.LogInformation(
-                "StepCodeLens.ExecuteAsync: invoking find usages at {FileUri}:{ArgLine}", _fileUri, firstAttr.ArgLine);
+                "StepCodeLens.ExecuteAsync: invoking find usages at {FileUri}:{ArgLine}:{ArgChar}",
+                _fileUri, firstAttr.ArgLine, firstAttr.ArgChar);
 
             var result = await findService
-                .FindUsagesAsync(_fileUri.ToString(), firstAttr.ArgLine, 0, cancellationToken)
+                .FindUsagesAsync(_fileUri.ToString(), firstAttr.ArgLine, firstAttr.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!result.IsBinding) return;

@@ -90,13 +90,15 @@ internal sealed class StepCodeLensService
 
             var command     = obj["command"] as JObject;
             var title       = command?["title"]?.Value<string>() ?? string.Empty;
-            var commandName = command?["name"]?.Value<string>() ?? string.Empty;
+            var commandName = command?["command"]?.Value<string>() ?? string.Empty;
 
-            // Arguments from the server: [fileUri, attrLine0, 0]
+            // Arguments from the server: [fileUri, attrLine0, attrChar0] — the attribute's exact
+            // position, needed verbatim by position-sensitive lookups like goToMatchingScenarios.
             var args         = command?["arguments"] as JArray;
             var argLine      = args?.Count >= 2 ? args[1].Value<int>() : rangeLine;
+            var argChar      = args?.Count >= 3 ? args[2].Value<int>() : 0;
 
-            result.Add(new StepLensItem(rangeLine, title, commandName, argLine));
+            result.Add(new StepLensItem(rangeLine, title, commandName, argLine, argChar));
         }
         return result;
     }
@@ -111,4 +113,6 @@ internal sealed record StepLensItem(
     /// <summary>Name of the command the lens invokes when clicked.</summary>
     string CommandName,
     /// <summary>0-based line of the step-binding attribute the command should target.</summary>
-    int    ArgLine);
+    int    ArgLine,
+    /// <summary>0-based column of the step-binding attribute the command should target.</summary>
+    int    ArgChar);
