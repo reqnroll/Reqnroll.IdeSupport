@@ -43,4 +43,14 @@ public interface IBindingMatchService
     IReadOnlyList<StepBindingMatch> FindUsages(
         SourceLocation bindingLocation,
         IReadOnlyCollection<ProjectOwner>? projectFilter = null);
+
+    /// <summary>
+    /// Returns every cached match set across the whole workspace (closed files included, per the
+    /// class remarks above), optionally restricted to specific owning projects. Backs the
+    /// hook-match-count CodeLens (issue #373), which needs every project scenario's tag context
+    /// to evaluate a hook's scope against, not just one document's.
+    /// <see cref="ProjectOwner.Unknown"/> entries are always included regardless of the filter,
+    /// matching <see cref="FindUsages"/>'s existing pre-baseline-placeholder convention.
+    /// </summary>
+    IEnumerable<FeatureBindingMatchSet> GetAll(IReadOnlyCollection<ProjectOwner>? projectFilter = null);
 }

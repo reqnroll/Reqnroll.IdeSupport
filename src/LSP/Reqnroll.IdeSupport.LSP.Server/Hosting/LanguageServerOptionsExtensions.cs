@@ -161,19 +161,31 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollGoToHooks,
             (request, ct) => resolver!.Get<GoToHooksHandler>().HandleAsync(request, ct));
 
-        // A single manual registration handles textDocument/codeLens for both file kinds:
-        // StepCodeLensHandler owns .cs (step usages), HookCodeLensHandler owns .feature (hook
-        // matches, issue #269) -- each returns an empty array for URIs it doesn't own, so
-        // concatenating is safe and avoids a second competing OnRequest for the same method.
+        options.OnRequest<TextDocumentPositionParams, GoToMatchingScenariosResponse>(
+            LspMethodNames.ReqnrollGoToMatchingScenarios,
+            (request, ct) => resolver!.Get<GoToMatchingScenariosHandler>().HandleAsync(request, ct));
+
+        // A single manual registration handles textDocument/codeLens for every lens kind:
+        // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches,
+        // issue #269), and HookMatchCountCodeLensHandler (.cs hook-match counts, issue #373).
+        // Each handler returns an empty array for content it doesn't own -- StepCodeLensHandler
+        // and HookMatchCountCodeLensHandler both target .cs but filter to disjoint registry
+        // collections (StepDefinitions vs Hooks), since a single [Binding] class routinely mixes
+        // both kinds of methods in one file -- so concatenating every handler's result is safe
+        // and avoids a second competing OnRequest for the same method (see the codeLensHandlers
+        // list below: adding a future lens kind only needs a new list entry, not a new branch).
+        var codeLensHandlers = new List<Func<CodeLensParams, CancellationToken, Task<CodeLens[]>>>
+        {
+            (req, ct) => resolver!.Get<StepCodeLensHandler>().HandleAsync(req, ct),
+            (req, ct) => resolver!.Get<HookCodeLensHandler>().HandleAsync(req, ct),
+            (req, ct) => resolver!.Get<HookMatchCountCodeLensHandler>().HandleAsync(req, ct),
+        };
         options.OnRequest<CodeLensParams, CodeLens[]>(
             LspMethodNames.TextDocumentCodeLens,
             async (request, ct) =>
             {
-                var stepLenses = await resolver!.Get<StepCodeLensHandler>().HandleAsync(request, ct);
-                var hookLenses = await resolver!.Get<HookCodeLensHandler>().HandleAsync(request, ct);
-                return stepLenses.Length == 0 ? hookLenses
-                    : hookLenses.Length == 0 ? stepLenses
-                    : stepLenses.Concat(hookLenses).ToArray();
+                var results = await Task.WhenAll(codeLensHandlers.Select(h => h(request, ct)));
+                return results.SelectMany(r => r).ToArray();
             });
 
         // inlayHint/foldingRange are routed manually (rather than via AddHandler's dynamic

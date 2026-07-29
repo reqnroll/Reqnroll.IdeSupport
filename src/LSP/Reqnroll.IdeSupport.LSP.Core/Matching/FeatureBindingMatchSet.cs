@@ -24,12 +24,18 @@ public sealed class FeatureBindingMatchSet
         new(string.Empty, ProjectOwner.Unknown, null, 0, Array.Empty<StepBindingMatch>());
 
     /// <summary>Initializes a new instance of the <see cref="FeatureBindingMatchSet"/> class.</summary>
+    /// <param name="scenarios">
+    /// Every Scenario/Scenario Outline definition in the document (issue #373's hook-match-count
+    /// CodeLens). Optional and defaults to empty so existing callers (tests, in particular) that
+    /// construct a set directly rather than via <see cref="FromTags"/> don't need updating.
+    /// </param>
     public FeatureBindingMatchSet(
         string documentId,
         ProjectOwner owner,
         int? documentVersion,
         int registryVersion,
-        IReadOnlyList<StepBindingMatch> steps)
+        IReadOnlyList<StepBindingMatch> steps,
+        IReadOnlyList<FeatureScenarioInfo>? scenarios = null)
     {
         Key = new MatchSetKey(
             documentId ?? throw new ArgumentNullException(nameof(documentId)),
@@ -37,6 +43,7 @@ public sealed class FeatureBindingMatchSet
         DocumentVersion = documentVersion;
         RegistryVersion = registryVersion;
         Steps           = steps ?? throw new ArgumentNullException(nameof(steps));
+        Scenarios       = scenarios ?? Array.Empty<FeatureScenarioInfo>();
     }
 
     /// <summary>The composite cache key: document URI + owning project.</summary>
@@ -56,6 +63,14 @@ public sealed class FeatureBindingMatchSet
 
     /// <summary>Gets every step binding match in this feature document.</summary>
     public IReadOnlyList<StepBindingMatch> Steps { get; }
+
+    /// <summary>
+    /// Gets every Scenario/Scenario Outline definition in this feature document (issue #373's
+    /// hook-match-count CodeLens; excludes Background blocks). Populated regardless of whether
+    /// the document is currently open, since this is the same workspace-wide cache
+    /// <c>GherkinDocumentTaggerService</c> populates for closed files.
+    /// </summary>
+    public IReadOnlyList<FeatureScenarioInfo> Scenarios { get; }
 
     /// <summary>Gets the steps with no matching binding.</summary>
     public IEnumerable<StepBindingMatch> Undefined => Steps.Where(s => s.IsUndefined);
@@ -86,6 +101,7 @@ public sealed class FeatureBindingMatchSet
         IEnumerable<DeveroomTag> tags,
         ProjectOwner owner = default)
     {
+        var tagList = tags as IReadOnlyCollection<DeveroomTag> ?? tags.ToList();
         var byStart = new Dictionary<int, StepBindingMatch>();
 
         // Short project name for the Project column (e.g. "Minimal", "Minimalnet481").
@@ -93,7 +109,7 @@ public sealed class FeatureBindingMatchSet
             ? Path.GetFileNameWithoutExtension(owner.ProjectFile)
             : null;
 
-        foreach (var tag in tags)
+        foreach (var tag in tagList)
         {
             if (tag.Type is not (DeveroomTagTypes.DefinedStep or DeveroomTagTypes.UndefinedStep or DeveroomTagTypes.AmbiguousStep))
                 continue;
@@ -136,6 +152,16 @@ public sealed class FeatureBindingMatchSet
         }
 
         var steps = byStart.Values.OrderBy(s => s.Range.Start).ToArray();
-        return new FeatureBindingMatchSet(documentId, owner, documentVersion, registryVersion, steps);
+
+        // Background shares ScenarioDefinitionBlock with real scenarios but isn't independently
+        // executed/countable, so it's excluded here (issue #373).
+        var scenarios = tagList
+            .Where(t => t.Type == DeveroomTagTypes.ScenarioDefinitionBlock)
+            .Where(t => !((IGherkinDocumentContext)t).IsBackground())
+            .Select(t => new FeatureScenarioInfo(documentId, t))
+            .OrderBy(s => s.Range.Start)
+            .ToArray();
+
+        return new FeatureBindingMatchSet(documentId, owner, documentVersion, registryVersion, steps, scenarios);
     }
 }
