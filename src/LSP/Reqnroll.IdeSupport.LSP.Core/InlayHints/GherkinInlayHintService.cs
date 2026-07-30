@@ -69,7 +69,7 @@ public sealed class GherkinInlayHintService : IGherkinInlayHintService
     /// <summary>The type/method name without the namespace prefix, e.g. "CalculatorSteps.AddNumbers".</summary>
     private static string ShortName(ProjectStepDefinitionBinding binding)
     {
-        var method = binding.Implementation?.Method ?? string.Empty;
+        var method = StripEmbeddedSignature(binding.Implementation?.Method ?? string.Empty);
         var segments = method.Split('.');
         return segments.Length >= 2
             ? $"{segments[segments.Length - 2]}.{segments[segments.Length - 1]}"
@@ -79,8 +79,22 @@ public sealed class GherkinInlayHintService : IGherkinInlayHintService
     /// <summary>The full signature shown in the tooltip, e.g. "N.CalculatorSteps.AddNumbers(int, int)".</summary>
     private static string Describe(ProjectStepDefinitionBinding binding)
     {
-        var method = binding.Implementation?.Method ?? "(unknown)";
+        var method = StripEmbeddedSignature(binding.Implementation?.Method ?? "(unknown)");
         var parameters = binding.Implementation?.ParameterTypes ?? Array.Empty<string>();
         return $"{method}({string.Join(", ", parameters)})";
+    }
+
+    /// <summary>
+    /// Some discovery sources (the reflection-based connector) embed the parameter list directly in
+    /// <see cref="ProjectBindingImplementation.Method"/> (e.g. "Type.Method(Namespace.ParamType)"),
+    /// while Roslyn live discovery leaves it as a bare "Type.Method". Stripping anything from the
+    /// first '(' lets both callers above treat Method as a bare name regardless of source, and avoids
+    /// a namespace-qualified parameter type's own dots corrupting the name-segment split in
+    /// <see cref="ShortName"/>.
+    /// </summary>
+    private static string StripEmbeddedSignature(string method)
+    {
+        var parenIndex = method.IndexOf('(');
+        return parenIndex >= 0 ? method.Substring(0, parenIndex) : method;
     }
 }
