@@ -83,6 +83,28 @@ public class CompletionServiceStepTests
         result.Entries.Select(e => e.Label).Should().ContainSingle("I press add");
     }
 
+    // ── Method-name-style bindings excluded (issue #344) ────────────────────────
+
+    [Fact]
+    public void Method_name_style_bindings_have_no_authored_expression_to_sample_and_are_excluded()
+    {
+        // No explicit attribute expression -> the binding's regex is auto-generated from the
+        // method name/parameters, not valid Gherkin step text; offering/inserting it as a
+        // completion would corrupt the .feature file (issue #344).
+        var methodNameStyle = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given,
+            new Regex(@"^(?i)The(?:[^\w\p{Sc}]*)First(?:[^\w\p{Sc}]*)Number(?:[^\w\p{Sc}]*)Is(?:[^\w\p{Sc}]*)(?<p0>.*?)(?:[^\w\p{Sc}]*)$"),
+            null,
+            new ProjectBindingImplementation("The_First_Number_Is_P0", new[] { "System.Int32" }, new SourceLocation("Steps.cs", 1, 1)));
+        var registry = RegistryWith(
+            Binding(ScenarioBlock.Given, "I press add"),
+            methodNameStyle);
+
+        var result = _sut.GetStepCompletions(MakeStep(ScenarioBlock.Given), "", registry, NoUsages, _matcher);
+
+        result.Entries.Select(e => e.Label).Should().ContainSingle("I press add");
+    }
+
     // ── Literal sample insert text ────────────────────────────────────────────
 
     [Fact]

@@ -208,7 +208,17 @@ public sealed class StepRenameHandler
             // the same one here so the placeholder shown matches what would actually be renamed.
             var matchedBinding = featureBindings[0];
             var sourceLiteral  = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, matchedBinding);
-            var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.Expression ?? string.Empty;
+            // Falls back to DisplayExpression, not matchedBinding.Expression's raw auto-generated
+            // regex, when no literal can be found (issue #344). DisplayExpression is itself null
+            // for a method-name-style binding — there is no attribute text to rename at all — so
+            // refuse rename entirely rather than seed the dialog with a null/empty placeholder,
+            // mirroring the .cs-cursor branch's "no literal found" bail-out above.
+            var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.DisplayExpression;
+            if (sourceExpression == null)
+            {
+                _logger.LogVerbose("StepRenameHandler: prepareRename — matched binding has no renameable expression (method-name-style)");
+                return null;
+            }
 
             // Known cosmetic quirk (confirmed live in VS and VS Code, issue #33 follow-up): when
             // a user pre-selects a sub-span of the concrete step text before invoking F2 (e.g.

@@ -95,7 +95,10 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
                     ProjectName: projectName,
                     ClassName: className,
                     MethodName: methodName,
-                    BindingExpression: sd.Expression,
+                    // Display-only field (shown in the Find Unused Step Definitions result list) —
+                    // uses DisplayExpression, not the `expression` identity key above, so a
+                    // method-name-style binding's raw auto-generated regex isn't shown (issue #344).
+                    BindingExpression: sd.DisplayExpression,
                     SourceFile: loc.SourceFile,
                     SourceLine: loc.SourceFileLine,
                     SourceColumn: loc.SourceFileColumn));

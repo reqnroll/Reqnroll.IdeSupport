@@ -120,6 +120,13 @@ public sealed class CompletionService : ICompletionService
             if (!sd.IsValid || sd.StepDefinitionType != step.ScenarioBlock)
                 continue;
 
+            // Method-name-style bindings (no explicit attribute expression, e.g. [Given] public
+            // void The_First_Number_Is_P0(int p)) have no authored step text to offer as a
+            // completion sample — their auto-generated regex isn't valid Gherkin step text, so
+            // inserting it would corrupt the .feature file rather than help the user (issue #344).
+            if (sd.SpecifiedExpression is null)
+                continue;
+
             var sample = sampler.GetStepDefinitionSample(sd);
             if (!seen.Add(sample))
                 continue;
