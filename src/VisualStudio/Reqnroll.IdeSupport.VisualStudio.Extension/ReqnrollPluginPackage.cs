@@ -1,11 +1,17 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.ComponentModelHost;
+using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.TextManager.Interop;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
+using IServiceProvider = System.IServiceProvider;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 
@@ -30,14 +36,19 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 // FileNotFound. The Microsoft.VisualStudio.Assembly manifest assets are not honored as
 // codebases in the VSSDK+VisualStudio.Extensibility hybrid, so a BindingPath is required.
 [ProvideBindingPath]
+// Backs HookCodeLensCommands.vsct's <CommandFlag>CommandWellOnly</CommandFlag> button (issue
+// #372): the hook-match-count CodeLens's Details popup invokes it, routed through this package's
+// IOleCommandTarget below, exactly as Microsoft's own CodeLensOopSample does.
+[ProvideMenuResource("Menus.ctmenu", 1)]
 [Guid(PackageGuidString)]
-public sealed class ReqnrollPluginPackage : AsyncPackage
+public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 {
     /// <summary>The package's GUID, as registered with VS.</summary>
     public const string PackageGuidString = "8d5fe503-e038-4079-9e45-697e0dcb3758";
 
     private IIdeSupportLogger _logger = new IdeSupportNullLogger();
     private ITelemetryTransmitter? _telemetryTransmitter;
+    private IOleCommandTarget? _nextCommandTarget;
 
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
@@ -188,6 +199,12 @@ public sealed class ReqnrollPluginPackage : AsyncPackage
 
             var sp = ServiceProvider.GlobalProvider;
 
+            // Resolve the next command target in the routing chain (issue #372): needed so this
+            // package's IOleCommandTarget override — which handles only the hook-match-count
+            // lens's own navigate-to-hook command — can forward everything else, exactly like
+            // Microsoft's own CodeLensOopSample.
+            _nextCommandTarget = await GetServiceAsync(typeof(IOleCommandTarget)) as IOleCommandTarget;
+
             // Resolve MEF services
             _logger.LogInfo("RunWelcomeServiceAsync: resolving IRegistryManager...");
             var registryManager = VsUtils.ResolveMefDependency<IRegistryManager>(sp);
@@ -290,5 +307,86 @@ public sealed class ReqnrollPluginPackage : AsyncPackage
             ThreadHelper.JoinableTaskFactory.Run(() => d.DisposeAsync().AsTask());
         }
         base.Dispose(disposing);
+    }
+
+    // ── IOleCommandTarget: hook-match-count CodeLens navigation (issue #372) ──────────────────
+    //
+    // The classic CodeLens Details popup (see HookCodeLensDataPoint.GetDetailsAsync in the
+    // VSSDKIntegration project) invokes each entry's NavigationCommand via raw OLE command
+    // routing rather than a VS.Extensibility command — CodeLensDetailEntryCommand only supports a
+    // CommandSet+CommandId pair on Windows (see Microsoft.VisualStudio.Language.CodeLens.Remoting).
+    // Mirrors Microsoft's own CodeLensOopSample (CodeLensOopProviderPackage).
+
+    int IOleCommandTarget.QueryStatus(ref Guid pguidCmdGroup, uint cCmds, OLECMD[] prgCmds, IntPtr pCmdText)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (pguidCmdGroup == HookCodeLensCommandIds.CommandSet && cCmds > 0
+            && prgCmds[0].cmdID == HookCodeLensCommandIds.NavigateToHookCommandId)
+        {
+            prgCmds[0].cmdf |= (uint)(OLECMDF.OLECMDF_SUPPORTED | OLECMDF.OLECMDF_ENABLED | OLECMDF.OLECMDF_INVISIBLE);
+            return VSConstants.S_OK;
+        }
+
+        return _nextCommandTarget?.QueryStatus(ref pguidCmdGroup, cCmds, prgCmds, pCmdText)
+               ?? (int)Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED;
+    }
+
+    int IOleCommandTarget.Exec(ref Guid pguidCmdGroup, uint nCmdID, uint nCmdexecopt, IntPtr pvaIn, IntPtr pvaOut)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (pguidCmdGroup == HookCodeLensCommandIds.CommandSet && nCmdID == HookCodeLensCommandIds.NavigateToHookCommandId)
+        {
+            if (pvaIn == IntPtr.Zero)
+                return VSConstants.S_FALSE;
+
+            var argsObject = Marshal.GetObjectForNativeVariant(pvaIn);
+            if (argsObject is string encoded)
+                NavigateToHook(encoded);
+
+            return VSConstants.S_OK;
+        }
+
+        return _nextCommandTarget?.Exec(ref pguidCmdGroup, nCmdID, nCmdexecopt, pvaIn, pvaOut)
+               ?? (int)Microsoft.VisualStudio.OLE.Interop.Constants.OLECMDERR_E_NOTSUPPORTED;
+    }
+
+    /// <summary>
+    /// Opens (or activates) the hook definition encoded as <c>"uri|line0|char0"</c> by
+    /// <c>HookCodeLensDataPoint.GetDetailsAsync</c>, then places the caret at that position.
+    /// </summary>
+    private void NavigateToHook(string encoded)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        try
+        {
+            var parts = encoded.Split('|');
+            if (parts.Length != 3
+                || !Uri.TryCreate(parts[0], UriKind.Absolute, out var uri) || !uri.IsFile
+                || !int.TryParse(parts[1], out var line0)
+                || !int.TryParse(parts[2], out var char0))
+            {
+                _logger.LogWarning($"ReqnrollPluginPackage.NavigateToHook: malformed args '{encoded}'.");
+                return;
+            }
+
+            var filePath = uri.LocalPath;
+            VsShellUtilities.OpenDocument(
+                this, filePath, VSConstants.LOGVIEWID.TextView_guid,
+                out _, out _, out var frame);
+
+            var textView = VsShellUtilities.GetTextView(frame);
+            if (textView is null)
+                return;
+
+            // IVsTextView positions are 0-based, matching line0/char0 already.
+            textView.SetCaretPos(line0, char0);
+            textView.CenterLines(line0, 1);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage.NavigateToHook: failed");
+        }
     }
 }

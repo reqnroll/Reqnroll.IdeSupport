@@ -63,6 +63,20 @@
            d:Source="Project"
            d:ProjectName="Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration"
            Path="|Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration;BuiltProjectOutputGroup|" />
+    <!-- Re-added after further live debugging (issue #372): removing this earlier was wrong. VS's
+         provider discovery for CodeLens — classic Remoting.IAsyncCodeLensDataPointProvider included —
+         goes through Microsoft.VisualStudio.CodeLens.Proxy.CodeLensDataPointProviderFactory /
+         CodeLensHubClient in this VS build, which talks to the out-of-process CodeLens ServiceHub
+         host (Microsoft.VisualStudio.CodeLens.Service.dll). That host only composes MEF parts from
+         assemblies listed via this asset. Without it, provider discovery just comes up empty (no
+         error) — confirmed live: Tools > Options > Text Editor > CodeLens never listed a
+         "Reqnroll Hook Match Count" toggle for .feature files (unlike the working .cs-side one),
+         proving the provider was never found at all, matching a diagnostic trace in
+         HookCodeLensDataPointProvider that never fired. -->
+    <Asset Type="Microsoft.VisualStudio.CodeLensComponent"
+           d:Source="Project"
+           d:ProjectName="Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration"
+           Path="|Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration;BuiltProjectOutputGroup|" />
     <!-- VSSDKIntegration is already registered above as a MefComponent, which loads it and
          puts it on the extension's binding path. A separate Microsoft.VisualStudio.Assembly
          asset for the SAME dll path duplicates the registration and makes VS fail to process

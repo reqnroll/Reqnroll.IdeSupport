@@ -84,6 +84,28 @@ public class GherkinInlayHintServiceTests
     }
 
     [Fact]
+    public void Outline_rows_resolving_to_genuinely_different_bindings_produce_a_Templated_hint_via_real_parsing()
+    {
+        // Unlike Template_step_resolving_to_multiple_distinct_bindings_across_rows_produces_a_Templated_hint
+        // (which hand-crafts the merged MatchResult), this drives the real pipeline end-to-end:
+        // DeveroomTagParser -> ProjectBindingRegistry.MatchStep -> GetScenarioOutlineStepsWithContexts
+        // substitutes each Examples row into the step text and matches it independently, so two
+        // rows that are each unambiguously bound to a *different* step definition should merge into
+        // a single "{n} bindings" Templated hint (see issue #392's investigation).
+        var rowA = Binding("the second number is 30", "N.RowA.M");
+        var rowB = Binding("the second number is five", "N.RowB.M");
+        var registry = RegistryWith(rowA, rowB);
+        const string feature = "Feature: F\nScenario Outline: SO\n\tGiven the second number is <n>\nExamples:\n\t| n |\n\t| 30 |\n\t| five |\n";
+
+        var hints = CreateSut().Build(MatchSetFor(feature, registry));
+
+        var hint = hints.Should().ContainSingle().Subject;
+        hint.Kind.Should().Be(GherkinInlayHintKind.Templated);
+        hint.Label.Should().Be("→ 2 bindings");
+        hint.Tooltip.Should().Contain("N.RowA.M").And.Contain("N.RowB.M");
+    }
+
+    [Fact]
     public void Undefined_step_produces_no_hint()
     {
         const string feature = "Feature: F\nScenario: S\n    Given step one\n";

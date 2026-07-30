@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -74,8 +75,14 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor
                 else
                 {
                     _logger.LogInformation(
-                        "CodeLensRefreshInterceptor: skipped incremental refresh signal to avoid reconnect churn (#156/#318).");
+                        "CodeLensRefreshInterceptor: skipped incremental refresh signal for the C# step-usage lens to avoid reconnect churn (#156/#318).");
                 }
+
+                // The hook-match-count lens on .feature files (issue #372) is a separate, classic
+                // (Microsoft.VisualStudio.Language.CodeLens) mechanism — its refresh is a plain
+                // ITagger<T>.TagsChanged event, not VS.Extensibility's CodeLens.Invalidate(), so it
+                // doesn't carry #156/#318's reconnect-churn risk. Safe to act on every signal.
+                HookCodeLensRedirect.InvalidateAll();
             }
             return Task.FromResult(LspInterceptorResult.PassThrough);
         }

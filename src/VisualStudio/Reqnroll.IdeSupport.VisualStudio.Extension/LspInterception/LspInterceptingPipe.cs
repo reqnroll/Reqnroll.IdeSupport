@@ -74,6 +74,21 @@ internal sealed class LspInterceptingPipe : IDisposable
     private readonly ConcurrentDictionary<string, TaskCompletionSource<JToken?>> _pendingRequests
         = new ConcurrentDictionary<string, TaskCompletionSource<JToken?>>();
 
+    // ── Peer-session response routing (issue #395) ──────────────────────────
+    // Tracks which VS-facing session sent each of VS's own outstanding requests (e.g. `shutdown`,
+    // sent by the old session as its last act before CreateFreshVsFacingPipe abandons it). Without
+    // this, a response that lands after the swap gets forwarded — via GetCurrentToVsWriter's
+    // "whichever pipe is current" policy, correct for server-pushed notifications/requests but
+    // wrong here — to the *new* session's JsonRpc, which never sent the matching request. VS's
+    // JsonRpc treats an unmatched response as a fatal protocol violation and closes the brand-new
+    // connection outright: confirmed via a captured repro, `id=143`'s "shutdown" response from the
+    // abandoned session arrived 71ms after the swap and was misdelivered to the new session, whose
+    // trace shows "RemoteProtocolViolation: A response was received without a request having been
+    // sent" followed immediately by "Connection closing". A response whose request belongs to an
+    // older, already-abandoned session is simply dropped here — nothing is listening on that old
+    // session's pipe anymore either, so there is no correct destination to route it to.
+    private readonly ConcurrentDictionary<string, int> _requestSessionsById = new(StringComparer.Ordinal);
+
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private CancellationTokenSource? _linkedCts;
     private CancellationToken        _lifetimeToken;
@@ -200,6 +215,14 @@ internal sealed class LspInterceptingPipe : IDisposable
             "handing back a cached, possibly-dead pipe on repeat CreateServerConnectionAsync calls).",
             sessionId);
 
+        // Bound _requestSessionsById's growth (issue #395): a request that's still in flight when
+        // its session gets abandoned and never receives a response (e.g. genuinely dropped, not
+        // just delayed) would otherwise leak its entry forever. Two generations is enough slack for
+        // the straggler this dictionary exists to catch — a response landing shortly after its own
+        // session was abandoned (like the shutdown response that motivated this fix) — without
+        // holding entries from sessions abandoned long ago.
+        PurgeStaleRequestSessions(minimumLiveSessionId: sessionId - 1);
+
         // VS → server direction for this session only. lockDestination: true -- this pump's
         // destination (_serverPipe.Output) is the same stream SendNotificationToServerAsync/
         // SendRequestToServerAsync inject into from other threads.
@@ -208,11 +231,30 @@ internal sealed class LspInterceptingPipe : IDisposable
         return new DuplexPipeAdapter(newToVsPipe.Reader, newFromVsPipe.Writer);
     }
 
+    /// <summary>Removes tracked request→session entries older than <paramref name="minimumLiveSessionId"/> (issue #395).</summary>
+    private void PurgeStaleRequestSessions(int minimumLiveSessionId)
+    {
+        foreach (var kvp in _requestSessionsById)
+        {
+            if (kvp.Value < minimumLiveSessionId)
+                _requestSessionsById.TryRemove(kvp.Key, out _);
+        }
+    }
+
     private PipeWriter GetCurrentToVsWriter()
     {
         lock (_vsPipeSwapLock)
         {
             return _toVsPipe.Writer;
+        }
+    }
+
+    /// <summary>The session id of the VS-facing session currently in effect (see <see cref="_sessionCounter"/>).</summary>
+    private int GetCurrentSessionId()
+    {
+        lock (_vsPipeSwapLock)
+        {
+            return _sessionCounter;
         }
     }
 
@@ -272,6 +314,23 @@ internal sealed class LspInterceptingPipe : IDisposable
                 // Consume correlated responses before external interceptors so they never reach VS.
                 if (TryCompleteCorrelatedResponse(body))
                     continue;
+
+                // Drop a response whose matching request was sent by a since-abandoned VS-facing
+                // session (issue #395) — forwarding it to whichever session is current would hand
+                // an unmatched response to a JsonRpc instance that never sent that request, which
+                // VS treats as a fatal protocol violation and closes the brand-new connection over.
+                // Nothing is listening on the abandoned session's own pipe either, so there is no
+                // destination to correctly deliver this to; dropping it is the safe outcome.
+                if (TryGetResponseId(body, out var responseId)
+                    && _requestSessionsById.TryRemove(responseId, out var owningSessionId)
+                    && owningSessionId != GetCurrentSessionId())
+                {
+                    _logger.LogInformation(
+                        "LspInterceptingPipe [Receive]: dropped response id={ResponseId} — belongs to " +
+                        "abandoned session #{OwningSessionId}, current session is #{CurrentSessionId}.",
+                        responseId, owningSessionId, GetCurrentSessionId());
+                    continue;
+                }
 
                 var message = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.Now);
                 var result  = await RunInterceptorsAsync(message, _receiveInterceptors, ct).ConfigureAwait(false);
@@ -341,6 +400,12 @@ internal sealed class LspInterceptingPipe : IDisposable
                         .ConfigureAwait(false);
                     continue;
                 }
+
+                // Record which session sent this request (issue #395), before forwarding, so a
+                // late response arriving after this session has been abandoned can be recognised
+                // and dropped instead of misdelivered to whatever session is current by then.
+                if (TryGetRequestId(body, out var requestId))
+                    _requestSessionsById[requestId] = sessionId;
 
                 var message = new LspMessage(LspMessageDirection.Send, body, DateTimeOffset.Now);
                 var result  = await RunInterceptorsAsync(message, _sendInterceptors, ct).ConfigureAwait(false);
@@ -714,9 +779,27 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Checks whether <paramref name="body"/> is a JSON-RPC response to one of our injected
-    /// requests.  If so, completes the awaiting <see cref="TaskCompletionSource{T}"/> and
-    /// returns <c>true</c> so the pump skips forwarding the frame to VS.
+    /// requests (identified purely by the <see cref="RequestIdPrefix"/> id, which only
+    /// <see cref="SendRequestToServerAsync"/> ever generates — VS's own request ids are always
+    /// plain integers). If so, completes the awaiting <see cref="TaskCompletionSource{T}"/> (when
+    /// one is still registered) and always returns <c>true</c> so the pump skips forwarding the
+    /// frame to VS.
     /// </summary>
+    /// <remarks>
+    /// Issue #401: a response must never be forwarded to VS just because
+    /// <see cref="SendRequestToServerAsync"/>'s caller already gave up on it. That method's
+    /// <c>finally</c> block removes the id from <see cref="_pendingRequests"/> as soon as its
+    /// caller's <see cref="CancellationToken"/> fires — e.g. a <see cref="StepCodeLensService"/>
+    /// request cancelled mid-reconnect — which can race the server's real response arriving a few
+    /// milliseconds later. Previously that race made this method return <see langword="false"/>
+    /// (nothing left to complete), letting the response fall through to
+    /// <see cref="ForwardToCurrentVsWriterAsync"/> and hand VS's JsonRpc a response to a request it
+    /// never sent: the same <c>RemoteProtocolViolation: A response was received without a request
+    /// having been sent</c> fatal error #395 fixed for VS's own peer-session responses, just
+    /// triggered via this side channel instead. Since the id prefix alone proves the response is
+    /// ours, it is always safe (and now always correct) to consume it here regardless of whether a
+    /// pending TCS is still around to receive it.
+    /// </remarks>
     private bool TryCompleteCorrelatedResponse(JObject body)
     {
         // A JSON-RPC response has an "id" and either "result" or "error", but no "method".
@@ -728,15 +811,62 @@ internal sealed class LspInterceptingPipe : IDisposable
         var id = idToken.Value<string>();
         if (id is null || !id.StartsWith(RequestIdPrefix, StringComparison.Ordinal)) return false;
 
-        if (!_pendingRequests.TryRemove(id, out var tcs)) return false;
+        if (_pendingRequests.TryRemove(id, out var tcs))
+        {
+            if (body.ContainsKey("error"))
+                tcs.TrySetResult(null);
+            else
+                tcs.TrySetResult(body["result"]);
 
-        if (body.ContainsKey("error"))
-            tcs.TrySetResult(null);
+            _logger.LogInformation(
+                "LspInterceptingPipe: consumed correlated response id={Id}", id);
+        }
         else
-            tcs.TrySetResult(body["result"]);
+        {
+            _logger.LogInformation(
+                "LspInterceptingPipe: dropped response id={Id} — no pending request (already " +
+                "cancelled/removed), but the {Prefix} id proves it's ours; forwarding it to VS " +
+                "would be an unmatched response and fatally close the connection (issue #401).",
+                id, RequestIdPrefix);
+        }
 
-        _logger.LogInformation(
-            "LspInterceptingPipe: consumed correlated response id={Id}", id);
+        return true;
+    }
+
+    /// <summary>
+    /// True if <paramref name="body"/> is a JSON-RPC <b>request</b> (has both <c>id</c> and
+    /// <c>method</c> — as opposed to a notification, which has no <c>id</c>, or a response, which
+    /// has no <c>method</c>). Used by <see cref="SendPumpAsync"/> to record which VS-facing session
+    /// sent each request (issue #395).
+    /// </summary>
+    private static bool TryGetRequestId(JObject body, out string id)
+    {
+        id = string.Empty;
+        if (!body.ContainsKey("method")) return false;
+
+        var idToken = body["id"];
+        var idValue = idToken?.Value<string>();
+        if (idValue is null) return false;
+
+        id = idValue;
+        return true;
+    }
+
+    /// <summary>
+    /// True if <paramref name="body"/> is a JSON-RPC <b>response</b> (has <c>id</c>, no
+    /// <c>method</c>). Mirrors <see cref="TryCompleteCorrelatedResponse"/>'s own shape check, for
+    /// VS's own (non-<see cref="RequestIdPrefix"/>) request ids.
+    /// </summary>
+    private static bool TryGetResponseId(JObject body, out string id)
+    {
+        id = string.Empty;
+        if (body.ContainsKey("method")) return false;
+
+        var idToken = body["id"];
+        var idValue = idToken?.Value<string>();
+        if (idValue is null) return false;
+
+        id = idValue;
         return true;
     }
 
