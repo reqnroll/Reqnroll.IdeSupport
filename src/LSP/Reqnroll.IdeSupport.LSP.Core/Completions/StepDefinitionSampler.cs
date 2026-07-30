@@ -20,6 +20,15 @@ public sealed class StepDefinitionSampler
     /// <summary>Builds a human-readable sample string for the given binding's regex expression, substituting parameter placeholders for capturing groups.</summary>
     public string GetStepDefinitionSample(ProjectStepDefinitionBinding binding)
     {
+        // Method-name-style bindings (no explicit attribute expression) have no authored step
+        // text to sample from — their regex is auto-generated from the method name/parameters and
+        // isn't valid Gherkin step text. Callers should filter these out before offering them as
+        // completions (see CompletionService); this is a defensive fallback so a future caller
+        // can't accidentally surface the raw regex (issue #344). Empty rather than a placeholder
+        // string, since there is no valid Gherkin step text to offer at all.
+        if (binding.SpecifiedExpression is null)
+            return string.Empty;
+
         var expression = binding.Expression;
         var analyzed   = _analyzer.Parse(expression);
 

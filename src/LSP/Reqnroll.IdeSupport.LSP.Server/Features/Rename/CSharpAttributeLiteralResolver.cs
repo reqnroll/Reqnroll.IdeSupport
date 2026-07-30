@@ -122,6 +122,18 @@ internal sealed class CSharpAttributeLiteralResolver
         DocumentUri uri,
         ProjectStepDefinitionBinding binding)
     {
+        // A method-name-style binding (issue #344) has no string-literal attribute argument
+        // anywhere, by definition — [Given] with no expression. Without this early exit,
+        // FindAttributeLiteral's "nearest candidate method" fallback below has nothing of this
+        // binding's own to find and silently snaps to a geometrically nearby *unrelated* method
+        // that does have a literal, misattributing that method's expression to this rename.
+        if (binding.IsMethodNameStyle)
+        {
+            _logger.LogVerbose(
+                "CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — method-name-style binding has no literal to find");
+            return null;
+        }
+
         var csPath = ResolveCSharpFilePath(uri, binding);
         if (csPath == null)
             return null;
