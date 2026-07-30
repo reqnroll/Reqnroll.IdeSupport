@@ -78,18 +78,20 @@ public sealed class RenameTargetsHandler
         int idx = 0;
         foreach (var b in allBindings)
         {
-            // Prefer the live source expression (preserves Cucumber parameter types); fall back to
-            // a friendly display expression rather than b.Expression's raw auto-generated regex
-            // for method-name-style bindings (issue #344).
+            // Prefer the live source expression (preserves Cucumber parameter types); falls back
+            // to null (not b.Expression's raw auto-generated regex) for method-name-style bindings
+            // (issue #344) — the Label below omits the expression entirely in that case rather
+            // than show a placeholder, since all entries here are attributes on the same method.
             var sourceLiteral = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, b);
             var expression = sourceLiteral?.Token.ValueText ?? b.DisplayExpression;
+            var expressionPart = expression is null ? "" : $" {expression}";
 
             var scopeTag = b.Scope?.Tag?.ToString();
             var scopeSuffix = !string.IsNullOrEmpty(scopeTag) ? $" [@{scopeTag}]" : "";
             response.Targets.Add(new RenameTargetItem
             {
-                Label = $"{b.StepDefinitionType} {expression}{scopeSuffix}",
-                Expression = expression,
+                Label = $"{b.StepDefinitionType}{expressionPart}{scopeSuffix}",
+                Expression = expression ?? "",
                 AttributeIndex = idx,
                 StartLine = (b.Implementation.SourceLocation?.SourceFileLine ?? line) - 1,
                 StartChar = 1,
@@ -123,10 +125,14 @@ public sealed class RenameTargetsHandler
             // labels diverge, so only the last two dot-segments are kept.
             var method = ShortenMethodQualifier(b.Implementation?.Method);
             var methodSuffix = !string.IsNullOrEmpty(method) ? $" — {method}" : "";
+            // b.DisplayExpression is null for method-name-style bindings (issue #344) — omit the
+            // expression from the Label entirely rather than show a placeholder; methodSuffix
+            // (always present here) is what actually identifies the binding in that case.
+            var expressionPart = b.DisplayExpression is null ? "" : $" {b.DisplayExpression}";
             response.Targets.Add(new RenameTargetItem
             {
-                Label = $"{b.StepDefinitionType} {b.DisplayExpression}{methodSuffix}",
-                Expression = b.DisplayExpression,
+                Label = $"{b.StepDefinitionType}{expressionPart}{methodSuffix}",
+                Expression = b.DisplayExpression ?? "",
                 AttributeIndex = idx,
                 StartLine = 0, StartChar = 0, EndLine = 0, EndChar = 200
             });

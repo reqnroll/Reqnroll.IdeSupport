@@ -41,15 +41,22 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     public string Expression => SpecifiedExpression ?? GetSpecifiedExpressionFromRegex();
 
     /// <summary>
-    /// A user-facing expression for surfaces that display this binding (diagnostics, completions,
-    /// rename UI, unused-step-definitions lists): <see cref="SpecifiedExpression"/> when the
-    /// binding was authored with an explicit attribute string, otherwise a short indicator instead
-    /// of <see cref="Expression"/>'s raw auto-generated regex. Method-name-style bindings (e.g.
-    /// <c>[Given] public void The_First_Number_Is_P0(int p)</c>) derive a regex from the method
-    /// name/parameters that is correct for matching but often unreadable — dumping it verbatim
-    /// into UI is the bug reported in issue #344.
+    /// True when this binding has no explicit attribute expression — a method-name-style binding
+    /// (e.g. <c>[Given] public void The_First_Number_Is_P0(int p)</c>) that derives a matching
+    /// regex from the method name/parameters instead. That regex is correct for matching but often
+    /// unreadable — dumping it verbatim into UI is the bug reported in issue #344.
     /// </summary>
-    public string DisplayExpression => SpecifiedExpression ?? "(method-name pattern)";
+    public bool IsMethodNameStyle => SpecifiedExpression is null;
+
+    /// <summary>
+    /// A user-facing expression for surfaces that display this binding (diagnostics, completions,
+    /// rename UI, unused-step-definitions lists): <see cref="SpecifiedExpression"/> when known,
+    /// otherwise <see langword="null"/> — callers should omit the expression from their display
+    /// entirely for a <see cref="IsMethodNameStyle"/> binding (the method name in
+    /// <see cref="ProjectBinding.Implementation"/> already identifies it) rather than show a
+    /// placeholder or <see cref="Expression"/>'s raw auto-generated regex (issue #344).
+    /// </summary>
+    public string DisplayExpression => SpecifiedExpression;
 
     private string GetSpecifiedExpressionFromRegex()
     {
@@ -103,8 +110,11 @@ public class ProjectStepDefinitionBinding : ProjectBinding
         return new ParameterMatch(matchedStepParameters, step.Argument, Implementation.ParameterTypes);
     }
 
-    /// <summary>Returns a short description including the step type, expression, and implementation.</summary>
-    public override string ToString() => $"[{StepDefinitionType}({DisplayExpression})]: {Implementation}";
+    /// <summary>Returns a short description including the step type, expression (if authored), and implementation.</summary>
+    public override string ToString() =>
+        DisplayExpression is null
+            ? $"[{StepDefinitionType}]: {Implementation}"
+            : $"[{StepDefinitionType}({DisplayExpression})]: {Implementation}";
 
     /// <summary>Returns a copy of this binding with its expression (and derived regex) replaced.</summary>
     public ProjectStepDefinitionBinding WithSpecifiedExpression(string expression)

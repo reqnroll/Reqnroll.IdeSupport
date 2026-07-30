@@ -75,11 +75,13 @@ public class StepDefinitionSamplerTests
     }
 
     [Fact]
-    public void Falls_back_to_display_expression_for_method_name_style_bindings()
+    public void Falls_back_to_empty_for_method_name_style_bindings()
     {
         // Issue #344: a method-name-style binding (no explicit attribute expression) derives a
         // regex from the method name/parameters that's correct for matching but not valid Gherkin
         // step text — sampling it would offer/insert garbage, so it's short-circuited instead.
+        // (In practice CompletionService filters these out before ever calling this method — see
+        // CompletionServiceStepTests — this only covers the defensive fallback itself.)
         // specifiedExpression intentionally omitted
         var binding = new ProjectStepDefinitionBinding(
             ScenarioBlock.Given,
@@ -89,7 +91,7 @@ public class StepDefinitionSamplerTests
 
         var result = _sut.GetStepDefinitionSample(binding);
 
-        result.Should().Be("(method-name pattern)");
+        result.Should().BeEmpty();
     }
 
     [Theory]

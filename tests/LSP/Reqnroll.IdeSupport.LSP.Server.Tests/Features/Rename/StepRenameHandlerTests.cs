@@ -132,7 +132,7 @@ public class StepRenameHandlerTests
     private static ProjectStepDefinitionBinding MakeBinding(
         ScenarioBlock type,
         Regex         regex,
-        string        specifiedExpression,
+        string?       specifiedExpression,
         int           line,
         int           column = 9,
         ProjectBindingImplementation? sharedImpl = null,
@@ -756,6 +756,56 @@ public class StepRenameHandlerTests
             "the range must start at the step text, excluding the keyword and indentation");
         range.End.Character.Should().NotBe(200,
             "a synthetic whole-line range was the bug this regression guards against");
+    }
+
+    // ── Regression (issue #344 follow-up): confirmed live in VS — a .feature step bound to a
+    //    method-name-style binding (a bare [Given], no explicit expression) has no attribute
+    //    literal to rename at all. Before this fix, CSharpAttributeLiteralResolver's "nearest
+    //    candidate method" fallback (finding no literal for THIS binding) silently snapped to a
+    //    geometrically nearby, unrelated method that did have a literal — the rename box then
+    //    showed that unrelated method's expression as the placeholder. prepareRename must now
+    //    refuse the rename entirely (return null) rather than seed the dialog with a wrong or
+    //    empty placeholder. ─────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task PrepareRename_from_feature_refuses_when_the_matched_binding_is_method_name_style()
+    {
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"^(?i)The(?:[^\w\p{Sc}]*)First(?:[^\w\p{Sc}]*)Number(?:[^\w\p{Sc}]*)Is(?:[^\w\p{Sc}]*)(?<p0>.*?)(?:[^\w\p{Sc}]*)$"),
+            specifiedExpression: null,
+            line: 8, column: 9,
+            method: "Steps.The_First_Number_Is_P0()");
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var project = MakeTestProject();
+        _scopeManager.ResolveOwners(featureUri).Returns(new[] { project });
+        _scopeManager.GetProjectForUri(featureUri).Returns(project);
+
+        var matchSet = MakeFeatureMatchSet(
+            featureUri.ToString(), binding,
+            "Given", "the first number is 50", stepLine: 2, stepChar: 5);
+        _matchService.TryGet(Arg.Any<MatchSetKey>(), out Arg.Any<FeatureBindingMatchSet>())
+            .Returns(ci =>
+            {
+                ci[1] = matchSet;
+                return true;
+            });
+
+        // No .cs file text is ever set up (no SetupBuffer call) — irrelevant, since a
+        // method-name-style binding must be refused before any file is even parsed.
+        var result = await CreateSut().HandlePrepareRenameAsync(
+            new PrepareRenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = featureUri },
+                Position = new Position(2, 10)
+            },
+            CancellationToken.None);
+
+        result.Should().BeNull(
+            "a method-name-style binding has no attribute literal to rename, so the dialog must not open at all");
     }
 
     // ── Regression (#82 follow-up): confirmed live in VS — after a successful rename, invoking
