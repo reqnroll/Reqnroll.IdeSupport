@@ -39,6 +39,14 @@ public sealed class DefineStepsSteps
                 .Select(ca => $"'{ca.CodeAction!.Title}'")));
     }
 
+    [Then(@"no code action titled ""(.*)"" is available")]
+    public void ThenNoCodeActionTitledIsAvailable(string title)
+    {
+        (_ctx.LastCodeActions ?? []).Should().NotContain(
+            ca => ca.IsCodeAction && ca.CodeAction!.Title == title,
+            $"a code action titled '{title}' should not be offered when there is nothing to define");
+    }
+
     [Then("the code action edit creates a new C# file")]
     public void ThenTheCodeActionEditCreatesANewCSharpFile()
     {

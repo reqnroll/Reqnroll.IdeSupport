@@ -83,3 +83,25 @@ Scenario: A bulk action is offered when there are multiple undefined steps
         """
     And code actions are requested for "Multi.feature" at line 2
     Then a code action titled "Define all missing steps in file" is available
+
+# ── No-op when nothing to define ────────────────────────────────────────────────
+
+Scenario: No code action is offered when all steps are already bound
+    When the project is announced with output assembly "Sample.dll" for "AllBound.feature"
+    And the C# step definition file "BoundSteps.cs" is opened with
+        """
+        using Reqnroll;
+        namespace Sample { [Binding] public class BoundSteps {
+            [When("this step is bound")]
+            public void WhenThisStepIsBound() { }
+        } }
+        """
+    And the feature file "AllBound.feature" is opened with
+        """
+        Feature: AllBound
+        Scenario: S
+            When this step is bound
+        """
+    And code actions are requested for "AllBound.feature" at line 2
+    Then no code action titled "Define missing step" is available
+    And no code action titled "Define all missing steps in file" is available
