@@ -1620,7 +1620,7 @@ The classic `Microsoft.VisualStudio.Language.CodeLens` API (`ITagger<ICodeLensTa
 | `HookCodeLensTag` | `devenv.exe` (in-process) | Implements `ICodeLensTag2` (not just `ICodeLensTag`) so its `DescriptorContextProvider` is discoverable — required for the same reason as above. |
 | `HookElementDescription` | Shared (encoded in-process, decoded out-of-process) | Encodes `line/navLine/navChar/ownLevelOnly` into `ICodeLensDescriptor.ElementDescription`, the one field the classic remoting contract forwards from tagger to data-point provider — the data-point side otherwise has no buffer/span access at all. |
 | `HookCodeLensDataPointProvider` | CodeLens ServiceHub host (out-of-process) | Classic `IAsyncCodeLensDataPointProvider`. `CanCreateDataPointAsync` only checks the descriptor decodes structurally (whether the server actually has data resolves later, via the callback round-trip below). Discovered by the OOP host only because the manifest also registers it under the `Microsoft.VisualStudio.CodeLensComponent` asset — the ordinary `MefComponent` asset alone (which *does* correctly compose the in-process tagger) is not sufficient for OOP discovery here, despite this provider type's own SDK doc comment implying otherwise. |
-| `HookCodeLensDataPoint` | CodeLens ServiceHub host (out-of-process) | Resolves the rendered label (`GetDataAsync`) and Details-popup content (`GetDetailsAsync`) by calling back into `devenv.exe` via `ICodeLensCallbackService`, since it cannot reach `HookCodeLensRedirect` directly. |
+| `HookCodeLensDataPoint` | CodeLens ServiceHub host (out-of-process) | Resolves the rendered label (`GetDataAsync`) and Details-popup content (`GetDetailsAsync`) by calling back into `devenv.exe` via `ICodeLensCallbackService`, since it cannot reach `HookCodeLensRedirect` directly. `GetDataAsync` also pre-fetches and caches the Details-popup content, so `GetDetailsAsync` returns it with no further callback — see requirement 5 below for why. |
 | `HookCodeLensCallbackListener` | `devenv.exe` (in-process MEF part) | `ICodeLensCallbackListener` — the devenv-side JSON-RPC target the OOP data point calls back into (`ICodeLensCallbackService.InvokeAsync`), over the *same* duplex stream the ServiceHub connection already uses. Delegates to `HookCodeLensRedirect`, same as the tagger. Must carry `[ContentType("reqnroll-gherkin")]` metadata — VS's devenv-side `CodeLensHubClient` filters callback listeners by content type before wiring them onto the RPC target list at all; without it, the listener composes as a valid MEF part but is never actually reachable, and every callback fails with `RemoteMethodNotFoundException`. |
 | `HookCodeLensRedirect` | `devenv.exe` (in-process, `static`) | The actual LSP bridge, mirroring `CommentToggleRedirect`/`NavigationBarRedirect`. Populated by `ReqnrollLanguageClient` once the LSP connection is live. Used directly by the in-process tagger, and indirectly (via the callback listener) on behalf of the out-of-process data point. |
 | `HookFeatureCodeLensService` | `devenv.exe` (in-process) | Sends `textDocument/codeLens` over `LspInterceptingPipe` and parses the response into `HookFeatureLensEntry[]`. |
@@ -1634,6 +1634,7 @@ The classic `Microsoft.VisualStudio.Language.CodeLens` API (`ITagger<ICodeLensTa
 2. A tag's descriptor must implement `ICodeLensDescriptorContextProvider` and the tag itself `ICodeLensTag2` — the plain `ICodeLensDescriptor`/`ICodeLensTag` the interfaces' own doc comments describe has no context-resolution path in this VS build and always throws `"Unsupported CodeLens descriptor"`.
 3. The data-point provider and its data points run **out-of-process**; a `static` bridge (correct everywhere else in this repo) is invisible there. Use `ICodeLensCallbackService`/`ICodeLensCallbackListener` instead.
 4. The callback listener needs `[ContentType(...)]` metadata matching the buffer's content type, or VS composes it as a valid MEF part but never wires it onto the RPC target list, and every callback fails with `RemoteMethodNotFoundException` even though the method genuinely exists.
+5. **`GetDetailsAsync` must not make its own callback round-trip.** VS's `CodeLensDataPointPresenter.OnShowDetailsExecuted` blocks the UI thread synchronously on `GetDetailsAsync` via `JoinableTask.CompleteOnCurrentThread`, using a `NoMessagePumpSyncContext` — i.e. without pumping the WPF message queue while it waits. `ICodeLensCallbackService` dispatches back into `devenv.exe` via a `SynchronizationContext.Post` onto that same UI thread, which needs the message queue pumped to run — a real deadlock, confirmed live via a captured process dump (`procdump` + `dotnet-dump analyze ... -c "clrstack"` on a hung Experimental Instance; the stack showed the exact `NoMessagePumpSyncContext.Wait` frame under `OnShowDetailsExecuted`). Fixed by having `GetDataAsync` — which always runs first, on a normal async path, since the lens must render before it's clickable — pre-fetch and cache the Details-popup content, so `GetDetailsAsync` returns it with zero further cross-process calls on the normal click path.
 
 **Execution flow — rendering a lens**
 
@@ -1650,6 +1651,7 @@ sequenceDiagram
 
     box LightBlue LSP Server
         participant HCH as HookCodeLensHandler
+        participant GTH as GoToHooksHandler
     end
 
     User->>IDE: Opens / scrolls a .feature file
@@ -1671,6 +1673,14 @@ sequenceDiagram
     IDE->>HCH: textDocument/codeLens (HookCodeLensRedirect, same bridge the tagger used)
     HCH-->>IDE: CodeLens list
     IDE-->>DP: HookFeatureLensEntry list (JSON-RPC result)
+
+    Note over DP,IDE: GetDataAsync also eagerly fetches and caches the Details-popup content here (requirement 5 above)
+    DP->>IDE: ICodeLensCallbackService.InvokeAsync GetHookDetails(fileUri, navLine, navChar, ownLevelOnly)
+    IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to GoToHooksService
+    IDE->>GTH: reqnroll/goToHooks (ownLevelOnly)
+    GTH-->>IDE: matching hooks
+    IDE-->>DP: HookDetailEntry list, cached on the data point instance
+
     DP-->>Wrap: CodeLensDataPointDescriptor with Description "N hooks"
     Wrap-->>User: "N hooks" lens rendered above the Feature/Scenario line
 ```
@@ -1686,16 +1696,8 @@ sequenceDiagram
         participant DP as HookCodeLensDataPoint
     end
 
-    box LightBlue LSP Server
-        participant GTH as GoToHooksHandler
-    end
-
     User->>DP: Clicks the lens (opens Details popup)
-    DP->>IDE: ICodeLensCallbackService.InvokeAsync GetHookDetails(fileUri, navLine, navChar, ownLevelOnly)
-    IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to GoToHooksService
-    IDE->>GTH: reqnroll/goToHooks (ownLevelOnly)
-    GTH-->>IDE: matching hooks
-    IDE-->>DP: HookDetailEntry list
+    Note over DP: GetDetailsAsync returns the cached hook list from GetDataAsync - no further cross-process call
     DP-->>User: Details popup lists each hook, each entry bound to a NavigateToHook command
 
     User->>IDE: Clicks a hook entry
