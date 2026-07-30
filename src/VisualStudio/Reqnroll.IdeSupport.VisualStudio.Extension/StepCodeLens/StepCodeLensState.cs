@@ -8,6 +8,18 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
 /// <summary>
+/// Implemented by any VS.Extensibility <c>CodeLens</c> that wants to participate in
+/// <see cref="StepCodeLensState"/>'s shared invalidation registry (issue #400) — currently
+/// <c>StepCodeLens</c> and <c>HookMatchCountCodeLens</c>, both of which live in the same combined
+/// <c>textDocument/codeLens</c> response for a <c>.cs</c> file.
+/// </summary>
+internal interface IInvalidatableLens
+{
+    /// <summary>Triggers a fresh call to the lens's <c>GetLabelAsync</c> on VS's next paint cycle.</summary>
+    void InvalidateLabel();
+}
+
+/// <summary>
 /// Container-registered singleton holder for the runtime-created Step Code Lens components.
 /// </summary>
 /// <remarks>
@@ -64,25 +76,25 @@ internal sealed class StepCodeLensState
 
     // ── Lens invalidation ────────────────────────────────────────────────────
     //
-    // Track StepCodeLens instances so they can be invalidated when the binding
-    // registry changes (triggering VS to re-call GetLabelAsync).  Without this,
-    // the codeLens count would only refresh when the user navigates away and
-    // back to the .cs file.
+    // Track IInvalidatableLens instances (StepCodeLens and HookMatchCountCodeLens, issue #400) so
+    // they can be invalidated when the binding registry changes (triggering VS to re-call
+    // GetLabelAsync).  Without this, the codeLens count would only refresh when the user navigates
+    // away and back to the .cs file.
 
-    private readonly ConcurrentDictionary<string, List<WeakReference<StepCodeLens>>> _lensesByFile
+    private readonly ConcurrentDictionary<string, List<WeakReference<IInvalidatableLens>>> _lensesByFile
         = new(System.StringComparer.OrdinalIgnoreCase);
     private readonly object _lensesLock = new();
 
-    internal void RegisterLens(StepCodeLens lens, string fileUri)
+    internal void RegisterLens(IInvalidatableLens lens, string fileUri)
     {
         lock (_lensesLock)
         {
-            var list = _lensesByFile.GetOrAdd(fileUri, _ => new List<WeakReference<StepCodeLens>>());
-            list.Add(new WeakReference<StepCodeLens>(lens));
+            var list = _lensesByFile.GetOrAdd(fileUri, _ => new List<WeakReference<IInvalidatableLens>>());
+            list.Add(new WeakReference<IInvalidatableLens>(lens));
         }
     }
 
-    internal void UnregisterLens(StepCodeLens lens, string fileUri)
+    internal void UnregisterLens(IInvalidatableLens lens, string fileUri)
     {
         lock (_lensesLock)
         {
@@ -97,7 +109,7 @@ internal sealed class StepCodeLensState
 
     /// <summary>
     /// Invalidates all tracked code lenses for <paramref name="fileUri"/>, causing
-    /// VS to re-call <see cref="StepCodeLens.GetLabelAsync"/> on the next paint cycle.
+    /// VS to re-call each lens's <c>GetLabelAsync</c> on the next paint cycle.
     /// Safe to call from any thread.
     /// </summary>
     internal void InvalidateLensesForFile(string fileUri)
@@ -108,7 +120,7 @@ internal sealed class StepCodeLensState
                 return;
 
             // Snapshot and sweep dead references
-            var alive = new List<WeakReference<StepCodeLens>>(list.Count);
+            var alive = new List<WeakReference<IInvalidatableLens>>(list.Count);
             foreach (var w in list)
             {
                 if (w.TryGetTarget(out var lens))
@@ -122,10 +134,10 @@ internal sealed class StepCodeLensState
     }
 
     /// <summary>
-    /// Invalidates every tracked code lens across all files, causing VS to re-call
-    /// <see cref="StepCodeLens.GetLabelAsync"/> for each. Used when the server signals a full
-    /// binding-registry replacement (e.g. startup connector discovery): the lenses for any open
-    /// <c>.cs</c> file were rendered before the server had usage counts, so they all need a re-pull.
+    /// Invalidates every tracked code lens across all files, causing VS to re-call each lens's
+    /// <c>GetLabelAsync</c>. Used when the server signals a full binding-registry replacement
+    /// (e.g. startup connector discovery): the lenses for any open <c>.cs</c> file were rendered
+    /// before the server had usage counts, so they all need a re-pull.
     /// Safe to call from any thread.
     /// </summary>
     internal void InvalidateAllTrackedLenses()

@@ -95,7 +95,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
 /// matched" label for whichever hook-binding attributes fall within a window just above the
 /// method declaration, and navigates to the matching scenarios on click.
 /// </summary>
-internal sealed class HookMatchCountCodeLens : InvokableCodeLens
+internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatableLens
 {
     private readonly StepCodeLensState _state;
     private readonly GoToMatchingScenariosState _goToState;
@@ -109,7 +109,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
     // maintaining a second, duplicate registry.
     private const int AttributeLookahead = 5;
 
-    /// <summary>Creates the lens for a specific method.</summary>
+    /// <summary>Creates the lens for a specific method and registers it with the shared state for later invalidation.</summary>
     public HookMatchCountCodeLens(
         StepCodeLensState                state,
         GoToMatchingScenariosState       goToState,
@@ -122,6 +122,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
         _logger          = logger;
         _fileUri         = fileUri;
         _methodStartLine = methodStartLine;
+        _state.RegisterLens(this, fileUri.ToString());
     }
 
     /// <summary>
@@ -261,7 +262,14 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
     /// <inheritdoc />
     public override void Dispose()
     {
+        _state.UnregisterLens(this, _fileUri.ToString());
     }
+
+    /// <summary>
+    /// Called by <see cref="StepCodeLensState.InvalidateLensesForFile"/> to trigger a
+    /// fresh call to <see cref="GetLabelAsync"/> on VS's next paint cycle.
+    /// </summary>
+    public void InvalidateLabel() => Invalidate();
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
