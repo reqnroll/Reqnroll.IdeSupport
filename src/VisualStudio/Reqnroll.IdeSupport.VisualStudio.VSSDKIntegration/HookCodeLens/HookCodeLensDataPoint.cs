@@ -91,7 +91,13 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
         // see this type's remarks for why GetDetailsAsync must not make its own callback round-trip.
         _cachedHooks = await FetchHooksAsync(token).ConfigureAwait(false);
 
-        var entry = lenses.FirstOrDefault(e => e.Line == _line);
+        // Match on the full (Line, NavLine, NavChar) identity, not just Line — a Scenario: line can
+        // carry two lens entries at once (its own-level hooks lens and the step-hooks lens added by
+        // HookCodeLensHandler.AddStepHooksLens), which share Line but target different nav positions.
+        // Matching on Line alone would resolve both data points to whichever entry sorts first,
+        // showing the same (wrong, for one of them) title on both lenses (issue #400 live-test
+        // finding — the tagger-side half of this bug is HookCodeLensTagger's key).
+        var entry = lenses.FirstOrDefault(e => e.Line == _line && e.NavLine == _navLine && e.NavChar == _navChar);
 
         return new CodeLensDataPointDescriptor { Description = entry?.Title ?? string.Empty };
     }

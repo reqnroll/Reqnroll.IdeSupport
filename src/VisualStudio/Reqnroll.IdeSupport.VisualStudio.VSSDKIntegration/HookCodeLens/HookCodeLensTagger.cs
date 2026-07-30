@@ -24,17 +24,23 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
     private readonly string _filePath;
     private readonly string _fileUri;
 
-    // Keyed by line so GetTags returns the *same* ICodeLensTag instance across repaint/scroll
-    // calls between refreshes, rather than a fresh one every time — the classic CodeLens host
-    // (like IntelliJ's Structure View tree, see [[rider-structure-view-gotchas]]) tracks tags by
-    // identity; handing back a new instance per call would make it treat every call as "new tags"
-    // and needlessly tear down/recreate data points on every scroll.
-    private volatile IReadOnlyDictionary<int, HookCodeLensTag> _tagsByLine = EmptyTags;
+    // Keyed by (Line, NavLine, NavChar) — not just Line — so GetTags returns the *same* ICodeLensTag
+    // instance across repaint/scroll calls between refreshes, rather than a fresh one every time —
+    // the classic CodeLens host (like IntelliJ's Structure View tree, see
+    // [[rider-structure-view-gotchas]]) tracks tags by identity; handing back a new instance per
+    // call would make it treat every call as "new tags" and needlessly tear down/recreate data
+    // points on every scroll. Line alone is not a unique key: a Scenario: line carries up to two
+    // lenses at once (its own-level hooks lens and, from AddStepHooksLens, a second lens for the
+    // scenario's step-level hooks) — keying by Line alone collapsed them into one Dictionary slot,
+    // silently dropping whichever entry HookCodeLensHandler emitted second (issue #400 live-test
+    // finding). NavLine/NavChar reliably distinguish the two: the own-level lens's click target is
+    // the Scenario: tag itself, the step-hooks lens's is the scenario's first step.
+    private volatile IReadOnlyDictionary<(int Line, int NavLine, int NavChar), HookCodeLensTag> _tagsByLine = EmptyTags;
     private int _refreshInFlight;
     private bool _disposed;
 
-    private static readonly IReadOnlyDictionary<int, HookCodeLensTag> EmptyTags =
-        new Dictionary<int, HookCodeLensTag>();
+    private static readonly IReadOnlyDictionary<(int Line, int NavLine, int NavChar), HookCodeLensTag> EmptyTags =
+        new Dictionary<(int, int, int), HookCodeLensTag>();
 
     public HookCodeLensTagger(ITextBuffer buffer, string filePath, string fileUri)
     {
@@ -59,7 +65,7 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
 
         foreach (var kvp in _tagsByLine)
         {
-            var line0 = kvp.Key;
+            var line0 = kvp.Key.Line;
             if (line0 < 0 || line0 >= lineCount)
                 continue;
 
@@ -95,18 +101,19 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
 
             var snapshot = _buffer.CurrentSnapshot;
             var previous = _tagsByLine;
-            var next     = new Dictionary<int, HookCodeLensTag>(lenses.Count);
+            var next     = new Dictionary<(int Line, int NavLine, int NavChar), HookCodeLensTag>(lenses.Count);
 
             foreach (var entry in lenses)
             {
+                var key = (entry.Line, entry.NavLine, entry.NavChar);
                 var elementDescription = HookElementDescription.Encode(entry);
 
-                // Reuse the previous refresh's tag instance when this line's data hasn't actually
+                // Reuse the previous refresh's tag instance when this entry's data hasn't actually
                 // changed, so an unrelated line's count changing doesn't churn every lens.
-                if (previous.TryGetValue(entry.Line, out var existing)
+                if (previous.TryGetValue(key, out var existing)
                     && existing.Descriptor.ElementDescription == elementDescription)
                 {
-                    next[entry.Line] = existing;
+                    next[key] = existing;
                     continue;
                 }
 
@@ -118,7 +125,7 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
                     : new Span(line.Start, 0);
 
                 var descriptor = new HookCodeLensDescriptor(_filePath, span, elementDescription);
-                next[entry.Line] = new HookCodeLensTag(descriptor);
+                next[key] = new HookCodeLensTag(descriptor);
             }
 
             // Tags for lines that no longer have a lens are gone — let the host know.
