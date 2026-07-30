@@ -11,11 +11,13 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 #pragma warning disable VSEXTPREVIEW_LSP
 
@@ -41,6 +43,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly RenameStepState _renameStepState;
     private readonly LspServerConnectionService _connectionService;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
+    private HookFeatureCodeLensService? _hookFeatureCodeLensService;
 
     /// <summary>Creates the language client, resolving the shared state holders and the already-launching connection service.</summary>
     public ReqnrollLanguageClient(
@@ -143,6 +146,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _commentToggleState.Service             = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
             _navigationBarSymbolService              = new GherkinNavigationBarSymbolService(interceptingPipe, _loggerFactory.CreateLogger<GherkinNavigationBarSymbolService>());
+            _hookFeatureCodeLensService               = new HookFeatureCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<HookFeatureCodeLensService>());
 
             // Set the VSSDK command filter redirect so the keyboard shortcut interception
             // for Edit.CommentSelection/UncommentSelection/ToggleLineComment calls our service.
@@ -151,6 +155,27 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             // Set the VSSDK drop-down bar client redirect so the
             // Navigation Bar can fetch the Feature/Scenario/Step symbol tree.
             NavigationBarRedirect.FetchDocumentSymbolsAsync = _navigationBarSymbolService.FetchSymbolsAsync;
+
+            // Set the classic hook-match-count CodeLens bridge (issue #372, unblocking #269 for
+            // Visual Studio) — GetHookDetailsAsync reuses the same GoToHooksService the
+            // reqnroll.goToHooks command uses, so a lens's Details popup always matches what a
+            // manual "Go to Hooks" invocation with ownLevelOnly would return.
+            HookCodeLensRedirect.GetLensesAsync      = _hookFeatureCodeLensService.GetLensesAsync;
+            HookCodeLensRedirect.GetHookDetailsAsync = async (fileUri, line, ch, ownLevelOnly, ct) =>
+            {
+                // Read defensively: a Details-popup click can race Dispose() clearing
+                // _goToHooksState.Service (e.g. the language client shutting down mid-request).
+                var service = _goToHooksState.Service;
+                if (service is null)
+                    return Array.Empty<HookDetailEntry>();
+
+                var result = await service
+                    .GoToHooksAsync(fileUri, line, ch, ownLevelOnly, ct)
+                    .ConfigureAwait(false);
+                return result.Hooks
+                    .Select(h => new HookDetailEntry(h.HookType, h.MethodName, h.HookOrder, h.Uri, h.StartLine, h.StartChar))
+                    .ToArray();
+            };
 
             try
             {
@@ -231,6 +256,9 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _renameStepState.Service = null;
             _navigationBarSymbolService = null;
             NavigationBarRedirect.FetchDocumentSymbolsAsync = null;
+            _hookFeatureCodeLensService = null;
+            HookCodeLensRedirect.GetLensesAsync      = null;
+            HookCodeLensRedirect.GetHookDetailsAsync = null;
 
             // _connectionService itself is NOT disposed here: it's a DI-owned singleton whose
             // lifetime spans the whole extension session, not just this provider instance.

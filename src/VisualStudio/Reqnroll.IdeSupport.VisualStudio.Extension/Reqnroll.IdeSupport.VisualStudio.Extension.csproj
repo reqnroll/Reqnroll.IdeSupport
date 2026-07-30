@@ -54,6 +54,14 @@
           <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </Content>
   </ItemGroup>
+
+  <ItemGroup>
+      <!-- Registers the hook-match-count CodeLens's Details-popup navigation command (issue #372),
+           routed through ReqnrollPluginPackage.IOleCommandTarget — see HookCodeLensCommands.vsct. -->
+      <VSCTCompile Include="HookFeatureCodeLens\HookCodeLensCommands.vsct">
+          <ResourceName>Menus.ctmenu</ResourceName>
+      </VSCTCompile>
+  </ItemGroup>
     
   <ItemGroup>
     <ProjectReference Include="..\Reqnroll.IdeSupport.VisualStudio.ItemTemplates\Reqnroll.IdeSupport.VisualStudio.ItemTemplates.csproj">

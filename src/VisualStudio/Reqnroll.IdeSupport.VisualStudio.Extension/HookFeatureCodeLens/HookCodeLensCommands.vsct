@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+
+  <!--
+    Registers the "navigate to hook" command the hook-match-count CodeLens's Details popup invokes
+    on Windows (issue #372, unblocking #269 for Visual Studio). CommandWellOnly: never shown on any
+    menu — invoked only programmatically by the classic CodeLens host via
+    ReqnrollPluginPackage.IOleCommandTarget, exactly as Microsoft's own CodeLensOopSample does for
+    its equivalent "navigate to commit" command.
+  -->
+
+  <Extern href="stdidcmd.h"/>
+  <Extern href="vsshlids.h"/>
+
+  <Commands package="guidReqnrollPluginPackage">
+    <Groups>
+      <Group guid="guidHookCodeLensCmdSet" id="HookCodeLensMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_TOOLS"/>
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidHookCodeLensCmdSet" id="cmdidNavigateToHook" priority="0x0100" type="Button">
+        <Parent guid="guidHookCodeLensCmdSet" id="HookCodeLensMenuGroup" />
+        <CommandFlag>AllowParams</CommandFlag>
+        <CommandFlag>CommandWellOnly</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <Strings>
+          <ButtonText>Navigate To Hook</ButtonText>
+          <CanonicalName>Reqnroll.NavigateToHook</CanonicalName>
+          <LocCanonicalName>Reqnroll.NavigateToHook</LocCanonicalName>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <Symbols>
+    <!-- Must match ReqnrollPluginPackage.PackageGuidString. -->
+    <GuidSymbol name="guidReqnrollPluginPackage" value="{8d5fe503-e038-4079-9e45-697e0dcb3758}" />
+
+    <!-- Must match HookCodeLensCommandIds.CommandSet / NavigateToHookCommandId. -->
+    <GuidSymbol name="guidHookCodeLensCmdSet" value="{F7A6B3C2-8E5D-4A1B-9C3E-2D6F1A8B4C7E}">
+      <IDSymbol name="HookCodeLensMenuGroup" value="0x1020" />
+      <IDSymbol name="cmdidNavigateToHook" value="0x1000" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>
