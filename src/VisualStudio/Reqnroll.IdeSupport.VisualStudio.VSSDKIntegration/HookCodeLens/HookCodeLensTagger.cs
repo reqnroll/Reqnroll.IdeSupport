@@ -18,29 +18,30 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// <see cref="HookCodeLensRedirect"/>. An ordinary <see cref="ITagger{T}"/>, content-type scoped —
 /// unlike VS.Extensibility's <c>ICodeLensProvider</c>, this needs no Roslyn/code-element source.
 /// </summary>
+/// <remarks>
+/// Exactly one tag per line, even when the server reports two lens kinds for it (a Scenario: line
+/// carries both an own-level hooks lens and a step-hooks lens). Classic CodeLens renders one
+/// adornment row per location and lets every registered provider contribute an indicator to it —
+/// see <see cref="HookElementDescription"/>'s remarks for why emitting a tag per lens instead does
+/// not work.
+/// </remarks>
 internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
 {
     private readonly ITextBuffer _buffer;
     private readonly string _filePath;
     private readonly string _fileUri;
 
-    // Keyed by (Line, NavLine, NavChar) — not just Line — so GetTags returns the *same* ICodeLensTag
-    // instance across repaint/scroll calls between refreshes, rather than a fresh one every time —
-    // the classic CodeLens host (like IntelliJ's Structure View tree, see
-    // [[rider-structure-view-gotchas]]) tracks tags by identity; handing back a new instance per
-    // call would make it treat every call as "new tags" and needlessly tear down/recreate data
-    // points on every scroll. Line alone is not a unique key: a Scenario: line carries up to two
-    // lenses at once (its own-level hooks lens and, from AddStepHooksLens, a second lens for the
-    // scenario's step-level hooks) — keying by Line alone collapsed them into one Dictionary slot,
-    // silently dropping whichever entry HookCodeLensHandler emitted second (issue #400 live-test
-    // finding). NavLine/NavChar reliably distinguish the two: the own-level lens's click target is
-    // the Scenario: tag itself, the step-hooks lens's is the scenario's first step.
-    private volatile IReadOnlyDictionary<(int Line, int NavLine, int NavChar), (HookCodeLensTag Tag, int ColumnOffset)> _tagsByLine = EmptyTags;
+    // Keyed by 0-based line so GetTags returns the *same* ICodeLensTag instance across
+    // repaint/scroll calls between refreshes, rather than a fresh one every time — the classic
+    // CodeLens host (like IntelliJ's Structure View tree, see [[rider-structure-view-gotchas]])
+    // tracks tags by identity; handing back a new instance per call would make it treat every call
+    // as "new tags" and needlessly tear down/recreate data points on every scroll.
+    private volatile IReadOnlyDictionary<int, HookCodeLensTag> _tagsByLine = EmptyTags;
     private int _refreshInFlight;
     private bool _disposed;
 
-    private static readonly IReadOnlyDictionary<(int Line, int NavLine, int NavChar), (HookCodeLensTag Tag, int ColumnOffset)> EmptyTags =
-        new Dictionary<(int, int, int), (HookCodeLensTag, int)>();
+    private static readonly IReadOnlyDictionary<int, HookCodeLensTag> EmptyTags =
+        new Dictionary<int, HookCodeLensTag>();
 
     public HookCodeLensTagger(ITextBuffer buffer, string filePath, string fileUri)
     {
@@ -65,21 +66,16 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
 
         foreach (var kvp in _tagsByLine)
         {
-            var line0 = kvp.Key.Line;
+            var line0 = kvp.Key;
             if (line0 < 0 || line0 >= lineCount)
                 continue;
 
             var line = snapshot.GetLineFromLineNumber(line0);
-            // Must match the offset baked into the tag's own HookCodeLensDescriptor.ApplicableSpan
-            // (see RefreshAsync) — otherwise the two same-line lens kinds would report identical
-            // positions here even though their descriptors disagree, defeating the whole point of
-            // the offset (issue #400 live-test, round 3).
-            var position = Math.Min(line.Start.Position + kvp.Value.ColumnOffset, line.End.Position);
-            var span = new SnapshotSpan(snapshot, position, 0);
+            var span = new SnapshotSpan(snapshot, line.Start, 0);
             if (!spans.Any(s => s.IntersectsWith(span) || s.Contains(span.Start)))
                 continue;
 
-            yield return new TagSpan<ICodeLensTag>(span, kvp.Value.Tag);
+            yield return new TagSpan<ICodeLensTag>(span, kvp.Value);
         }
     }
 
@@ -106,48 +102,39 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
 
             var snapshot = _buffer.CurrentSnapshot;
             var previous = _tagsByLine;
-            var next     = new Dictionary<(int Line, int NavLine, int NavChar), (HookCodeLensTag Tag, int ColumnOffset)>(lenses.Count);
+            var next     = new Dictionary<int, HookCodeLensTag>();
 
-            foreach (var entry in lenses)
+            // Collapse the server's per-lens entries to one tag per line — both lens kinds on a
+            // Scenario: line share the single tag, and the two data point providers each pick out
+            // their own kind from a live fetch (see HookElementDescription's remarks).
+            foreach (var group in lenses.GroupBy(e => e.Line))
             {
-                var key = (entry.Line, entry.NavLine, entry.NavChar);
-                var elementDescription = HookElementDescription.Encode(entry);
+                var elementDescription = HookElementDescription.Encode(group.Key, group);
 
-                // Two lens kinds can share a line (own-level + step-hooks). Splitting them across
-                // two IAsyncCodeLensDataPointProvider exports (issue #400 live-test) wasn't enough on
-                // its own — VS's own tag/location aggregation appears to key a Scenario: line's
-                // codelens location by *span*, collapsing same-span tags into one before any
-                // provider is even consulted, regardless of how many providers are registered or
-                // what each tag's opaque ElementDescription says. Offsetting the step-hooks tag's
-                // span by one character (still the same line, so it renders in the same adornment
-                // row) gives it a distinct location identity so both survive independently.
-                var columnOffset = entry.AlwaysShowPicker ? 1 : 0;
-
-                // Reuse the previous refresh's tag instance when this entry's data hasn't actually
+                // Reuse the previous refresh's tag instance when this line's data hasn't actually
                 // changed, so an unrelated line's count changing doesn't churn every lens.
-                if (previous.TryGetValue(key, out var existing)
-                    && existing.Tag.Descriptor.ElementDescription == elementDescription)
+                if (previous.TryGetValue(group.Key, out var existing)
+                    && existing.Descriptor.ElementDescription == elementDescription)
                 {
-                    next[key] = existing;
+                    next[group.Key] = existing;
                     continue;
                 }
 
-                var line = entry.Line >= 0 && entry.Line < snapshot.LineCount
-                    ? snapshot.GetLineFromLineNumber(entry.Line)
+                var line = group.Key >= 0 && group.Key < snapshot.LineCount
+                    ? snapshot.GetLineFromLineNumber(group.Key)
                     : (ITextSnapshotLine?)null;
-
                 var span = line is null
                     ? new Span(0, 0)
-                    : new Span(Math.Min(line.Start.Position + columnOffset, line.End.Position), 0);
+                    : new Span(line.Start, 0);
 
                 var descriptor = new HookCodeLensDescriptor(_filePath, span, elementDescription);
-                next[key] = (new HookCodeLensTag(descriptor), columnOffset);
+                next[group.Key] = new HookCodeLensTag(descriptor);
             }
 
             // Tags for lines that no longer have a lens are gone — let the host know.
             foreach (var kvp in previous)
                 if (!next.ContainsKey(kvp.Key))
-                    kvp.Value.Tag.RaiseDisconnected();
+                    kvp.Value.RaiseDisconnected();
 
             _tagsByLine = next;
 

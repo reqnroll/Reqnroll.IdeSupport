@@ -13,9 +13,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// <summary>
 /// Classic <see cref="IAsyncCodeLensDataPointProvider"/> supplying the step-hooks lens (the second
 /// lens <c>HookCodeLensHandler.AddStepHooksLens</c> puts on a Scenario: line, for the scenario's
-/// step-level hooks) — the counterpart to <see cref="HookCodeLensDataPointProvider"/>, which claims
-/// every other hook-match-count entry. See <see cref="HookCodeLensDataPointProvider"/>'s remarks for
-/// why the two lens kinds need separate providers rather than one provider handling both.
+/// step-level hooks) — the counterpart to <see cref="HookCodeLensDataPointProvider"/>, which renders
+/// every other hook-match-count lens. Two providers sharing one tag per line is what lets both
+/// indicators appear on a Scenario: line at once; see <see cref="HookElementDescription"/>'s remarks.
 /// </summary>
 [Export(typeof(IAsyncCodeLensDataPointProvider))]
 [Name(Id)]
@@ -34,20 +34,21 @@ internal sealed class StepHooksCodeLensDataPointProvider : IAsyncCodeLensDataPoi
     }
 
     /// <inheritdoc />
+    /// <remarks>See <see cref="HookCodeLensDataPointProvider.CanCreateDataPointAsync"/>'s remarks — a
+    /// descriptor identifies a line, so whether that line carries a step-hooks lens is resolved in
+    /// <see cref="HookCodeLensDataPoint.GetDataAsync"/>, not here.</remarks>
     public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token) =>
-        Task.FromResult(
-            HookElementDescription.TryDecode(descriptor.ElementDescription, out _, out _, out _, out _, out var isStepHooksLens)
-            && isStepHooksLens);
+        Task.FromResult(HookElementDescription.TryDecode(descriptor.ElementDescription, out _));
 
     /// <inheritdoc />
     public Task<IAsyncCodeLensDataPoint> CreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        HookElementDescription.TryDecode(descriptor.ElementDescription, out var line, out var navLine, out var navChar, out var ownLevelOnly, out _);
+        HookElementDescription.TryDecode(descriptor.ElementDescription, out var line);
 
         var fileUri = HookCodeLensDataPointProvider.TryGetFileUri(descriptor.FilePath) ?? descriptor.FilePath;
 
         IAsyncCodeLensDataPoint dataPoint =
-            new HookCodeLensDataPoint(descriptor, _callbackService, fileUri, line, navLine, navChar, ownLevelOnly);
+            new HookCodeLensDataPoint(descriptor, _callbackService, fileUri, line, isStepHooksLens: true);
         return Task.FromResult(dataPoint);
     }
 }
