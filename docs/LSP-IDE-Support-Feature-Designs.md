@@ -1575,7 +1575,7 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 
 ### F24 · Hook Match CodeLens (Feature/Scenario/Step)
 
-**Status: Implemented** for VS Code and Rider (issue [#269](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/269); server [#369](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/369), VS Code [#370](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/370), Rider [#371](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/371); follow-ups [#383](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/383) own-level hook counts, [#385](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/385) live refresh on `.cs` edits). **Not implemented for Visual Studio** — tracked separately as [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) (open).
+**Status: Implemented**, all three IDEs (issue [#269](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/269); server [#369](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/369), VS Code [#370](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/370), Rider [#371](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/371); follow-ups [#383](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/383) own-level hook counts, [#385](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/385) live refresh on `.cs` edits). **Visual Studio** shipped separately and much later, via issue [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372)/PR [#398](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/398), once VS.Extensibility was confirmed to have no viable extension point (see the Visual Studio subsection below) — a **classic (non-Roslyn) CodeLens API** bridge instead.
 
 #### End-user experience
 
@@ -1585,9 +1585,9 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| Glue | ❌ Not implemented ([#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) open) | Glue |
+| Glue | 🔧 Plugin — classic (non-Roslyn) CodeLens API | Glue |
 
-**Visual Studio note**: VS.Extensibility's `ICodeLensProvider` (used by [F18](#f18--code-lens-step-usage-counts)) fires once per C# *code element* (method); `.feature` files have no analogous per-element hook for Gherkin content, so the F18 mechanism does not carry over. [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) tracks finding an alternative rendering mechanism for VS; until it lands, VS users reach the same information through the existing "Go to Hooks" context-menu command ([F17](#f17--hook-navigation)) instead of a lens.
+**Visual Studio note**: VS.Extensibility's `ICodeLensProvider` (used by [F18](#f18--code-lens-step-usage-counts)) fires once per C# *code element* (method); `.feature` files have no analogous per-element hook for Gherkin content, and decompiling `Microsoft.VisualStudio.Extensibility.Editor.Contracts.dll` confirmed the consumer-only contract has no producer-side extension point for a custom language at all — the F18 mechanism cannot be made to carry over. #372 instead bridges through the older, still-supported classic `Microsoft.VisualStudio.Language.CodeLens` API, which is driven by ordinary `[ContentType(...)]`-scoped MEF composition rather than a code-element model. See **Visual Studio — architecture and execution flow** below for the full component inventory and flow diagrams; this turned out to be substantially more involved than the SDK's own documentation suggests, requiring four separate live-debugging fixes found only by decompiling VS 18's actual editor assemblies against real failures.
 
 #### LSP messages
 
@@ -1599,16 +1599,115 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 
 #### Implementation notes
 
-`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `GoToHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`).
+`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `GoToHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`). This server-side piece is unchanged by the Visual Studio work below — it was already shipped for VS Code/Rider.
 
 **VS Code**: `registerHookCodeLens` (`src/VSCode/src/commands/hookCodeLens.ts`) calls `vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider)` directly (same pattern as F18's `stepCodeLens.ts`), sending the raw `textDocument/codeLens` request. Clicks are handled by `doGoToHooks` (`src/VSCode/src/commands/goToHooks.ts`), which gates auto-navigate on `!position?.alwaysShowPicker` — set only for CodeLens-sourced clicks, so a lens click always opens the QuickPick while a manual "Go to Hooks" invocation from the cursor still auto-navigates on a single match.
 
 **Rider**: two separate `CodeVisionProvider`s — `HookCodeVisionProvider.kt` (own-level lens) and `StepHooksCodeVisionProvider.kt` (step-hooks lens, ordered after the first via `CodeVisionRelativeOrderingAfter`) — because a single `CodeVisionProvider` cannot render two independent entries on the same line. Both share matching/parsing logic in `HookLensSupport.kt`. Clicks invoke `GoToHooksRunner.runAndShow(..., alwaysShowPicker = true)`, mirroring the VS Code behavior — `GoToHooksAction`/manual invocation continues to auto-navigate on a single match.
 
+#### Visual Studio — architecture and execution flow
+
+The classic `Microsoft.VisualStudio.Language.CodeLens` API (`ITagger<ICodeLensTag>` + `IAsyncCodeLensDataPointProvider`) is old enough, and thinly enough documented, that its actual runtime behavior in VS 18 (2026) diverges from what the SDK doc comments describe in several load-bearing ways — each found only by decompiling VS's own editor assemblies against a live failure, not from documentation. They are called out inline below and summarized in **Platform requirements found only by live debugging**.
+
+**The central complication**: the tagger (`HookCodeLensTaggerProvider`/`HookCodeLensTagger`) runs in-process, in `devenv.exe` — an ordinary content-type-scoped MEF part, like dozens of others in this repo. But the data-point provider (`HookCodeLensDataPointProvider`/`HookCodeLensDataPoint`) runs **out-of-process**, in a separate CodeLens ServiceHub host process (confirmed live: `tasklist` resolved the invoking PID to `ServiceHub.Host.netfx.Any`, not `devenv.exe`). Every other classic VSSDK component in this repo (`CommentToggleRedirect`, `NavigationBarRedirect`, the tagger side of this very feature) is genuinely in-process and reaches the LSP server through a `static` bridge class populated by `ReqnrollLanguageClient`. That pattern silently does not work for an out-of-process component — each process has its own independent copy of static state — which is why the data-point side needs its own, separate callback mechanism (`HookCodeLensCallbackListener`, below) rather than reusing the bridge directly.
+
+**Component inventory**
+
+| Component | Process | Responsibility |
+|-----------|---------|-----------------|
+| `HookCodeLensTaggerProvider` / `HookCodeLensTagger` | `devenv.exe` (in-process MEF `ITaggerProvider`) | Fetches hook-match lens locations via `HookCodeLensRedirect.GetLensesAsync`; creates one `HookCodeLensTag` per `Feature:`/`Scenario:` line reported by the server and raises `TagsChanged` on refresh. Caches tag instances per line across `GetTags` calls so an unchanged line's tag keeps its identity — the classic CodeLens host tracks tags by identity, not value, so a fresh instance every call looks like "always new" and churns data points on every scroll. |
+| `HookCodeLensDescriptor` | Constructed in-process; read from both processes | Implements `ICodeLensDescriptor` **and** `ICodeLensDescriptorContextProvider`. The latter is load-bearing, not decorative: VS's descriptor-context resolution (`CodeLensRpcDataPointProviderWrapper.TryCreateDataPointAsync` → `ExtensionMethods.TryGetDescriptorContextAsync`) has no fallback for a plain `ICodeLensDescriptor` in this VS build and unconditionally throws `InvalidOperationException: "Unsupported CodeLens descriptor"` without it. |
+| `HookCodeLensTag` | `devenv.exe` (in-process) | Implements `ICodeLensTag2` (not just `ICodeLensTag`) so its `DescriptorContextProvider` is discoverable — required for the same reason as above. |
+| `HookElementDescription` | Shared (encoded in-process, decoded out-of-process) | Encodes `line/navLine/navChar/ownLevelOnly` into `ICodeLensDescriptor.ElementDescription`, the one field the classic remoting contract forwards from tagger to data-point provider — the data-point side otherwise has no buffer/span access at all. |
+| `HookCodeLensDataPointProvider` | CodeLens ServiceHub host (out-of-process) | Classic `IAsyncCodeLensDataPointProvider`. `CanCreateDataPointAsync` only checks the descriptor decodes structurally (whether the server actually has data resolves later, via the callback round-trip below). Discovered by the OOP host only because the manifest also registers it under the `Microsoft.VisualStudio.CodeLensComponent` asset — the ordinary `MefComponent` asset alone (which *does* correctly compose the in-process tagger) is not sufficient for OOP discovery here, despite this provider type's own SDK doc comment implying otherwise. |
+| `HookCodeLensDataPoint` | CodeLens ServiceHub host (out-of-process) | Resolves the rendered label (`GetDataAsync`) and Details-popup content (`GetDetailsAsync`) by calling back into `devenv.exe` via `ICodeLensCallbackService`, since it cannot reach `HookCodeLensRedirect` directly. |
+| `HookCodeLensCallbackListener` | `devenv.exe` (in-process MEF part) | `ICodeLensCallbackListener` — the devenv-side JSON-RPC target the OOP data point calls back into (`ICodeLensCallbackService.InvokeAsync`), over the *same* duplex stream the ServiceHub connection already uses. Delegates to `HookCodeLensRedirect`, same as the tagger. Must carry `[ContentType("reqnroll-gherkin")]` metadata — VS's devenv-side `CodeLensHubClient` filters callback listeners by content type before wiring them onto the RPC target list at all; without it, the listener composes as a valid MEF part but is never actually reachable, and every callback fails with `RemoteMethodNotFoundException`. |
+| `HookCodeLensRedirect` | `devenv.exe` (in-process, `static`) | The actual LSP bridge, mirroring `CommentToggleRedirect`/`NavigationBarRedirect`. Populated by `ReqnrollLanguageClient` once the LSP connection is live. Used directly by the in-process tagger, and indirectly (via the callback listener) on behalf of the out-of-process data point. |
+| `HookFeatureCodeLensService` | `devenv.exe` (in-process) | Sends `textDocument/codeLens` over `LspInterceptingPipe` and parses the response into `HookFeatureLensEntry[]`. |
+| `GoToHooksService` (`ownLevelOnly` overload) | `devenv.exe` (in-process) | Sends `reqnroll/goToHooks` for the Details popup — reused from [F17](#f17--hook-navigation) so a lens's Details popup always matches what a manual "Go to Hooks" invocation with the same `ownLevelOnly` would return. |
+| `ReqnrollPluginPackage` (`IOleCommandTarget`) / `HookCodeLensCommands.vsct` / `HookCodeLensCommandIds` | `devenv.exe` (in-process) | Routes the Details popup's navigate-to-hook command. `CodeLensDetailEntryCommand` only supports a `CommandSet`+`CommandId` pair on Windows, not a VS.Extensibility command, so this mirrors Microsoft's own `CodeLensOopSample` sample rather than the VS.Extensibility command pattern used elsewhere in this repo. |
+| `HookCodeLensHandler` / `GoToHooksHandler` | LSP Server | Pre-existing (#269 / F17); unchanged by this work. |
+
+**Platform requirements found only by live debugging** (none apparent from the classic CodeLens SDK docs, which describe an older/simpler model this VS build has partially superseded):
+
+1. The manifest must register the provider's assembly under **both** `Microsoft.VisualStudio.MefComponent` *and* `Microsoft.VisualStudio.CodeLensComponent` — the former alone silently leaves the out-of-process data-point provider undiscovered (no error; Tools → Options → Text Editor → CodeLens simply never lists it as a toggle).
+2. A tag's descriptor must implement `ICodeLensDescriptorContextProvider` and the tag itself `ICodeLensTag2` — the plain `ICodeLensDescriptor`/`ICodeLensTag` the interfaces' own doc comments describe has no context-resolution path in this VS build and always throws `"Unsupported CodeLens descriptor"`.
+3. The data-point provider and its data points run **out-of-process**; a `static` bridge (correct everywhere else in this repo) is invisible there. Use `ICodeLensCallbackService`/`ICodeLensCallbackListener` instead.
+4. The callback listener needs `[ContentType(...)]` metadata matching the buffer's content type, or VS composes it as a valid MEF part but never wires it onto the RPC target list, and every callback fails with `RemoteMethodNotFoundException` even though the method genuinely exists.
+
+**Execution flow — rendering a lens**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant IDE as devenv.exe (in-process)
+
+    box LightYellow CodeLens ServiceHub host (out-of-process)
+        participant Wrap as VS CodeLens platform
+        participant Prov as HookCodeLensDataPointProvider
+        participant DP as HookCodeLensDataPoint
+    end
+
+    box LightBlue LSP Server
+        participant HCH as HookCodeLensHandler
+    end
+
+    User->>IDE: Opens / scrolls a .feature file
+    IDE->>IDE: HookCodeLensTaggerProvider creates HookCodeLensTagger, a MEF ITaggerProvider
+    IDE->>HCH: textDocument/codeLens (HookCodeLensRedirect to HookFeatureCodeLensService)
+    HCH-->>IDE: CodeLens list - own-level plus step-hooks lenses
+    IDE->>IDE: Tagger builds one HookCodeLensTag per lens, raises TagsChanged
+
+    Note over IDE,Wrap: VS platform asks for a data point per tag
+    Wrap->>IDE: Resolve descriptor context via DescriptorContextProvider
+    IDE-->>Wrap: CodeLensDescriptorContext (ApplicableSpan)
+    Wrap->>Prov: CanCreateDataPointAsync / CreateDataPointAsync
+    Prov-->>Wrap: HookCodeLensDataPoint
+
+    Wrap->>DP: GetDataAsync
+    DP->>IDE: ICodeLensCallbackService.InvokeAsync GetLenses(fileUri)
+    Note over DP,IDE: same ServiceHub JsonRpc channel, reverse direction
+    IDE->>IDE: HookCodeLensCallbackListener (ContentType reqnroll-gherkin) receives the callback
+    IDE->>HCH: textDocument/codeLens (HookCodeLensRedirect, same bridge the tagger used)
+    HCH-->>IDE: CodeLens list
+    IDE-->>DP: HookFeatureLensEntry list (JSON-RPC result)
+    DP-->>Wrap: CodeLensDataPointDescriptor with Description "N hooks"
+    Wrap-->>User: "N hooks" lens rendered above the Feature/Scenario line
+```
+
+**Execution flow — Details popup and navigation**
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant IDE as devenv.exe (in-process)
+
+    box LightYellow CodeLens ServiceHub host (out-of-process)
+        participant DP as HookCodeLensDataPoint
+    end
+
+    box LightBlue LSP Server
+        participant GTH as GoToHooksHandler
+    end
+
+    User->>DP: Clicks the lens (opens Details popup)
+    DP->>IDE: ICodeLensCallbackService.InvokeAsync GetHookDetails(fileUri, navLine, navChar, ownLevelOnly)
+    IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to GoToHooksService
+    IDE->>GTH: reqnroll/goToHooks (ownLevelOnly)
+    GTH-->>IDE: matching hooks
+    IDE-->>DP: HookDetailEntry list
+    DP-->>User: Details popup lists each hook, each entry bound to a NavigateToHook command
+
+    User->>IDE: Clicks a hook entry
+    IDE->>IDE: IOleCommandTarget on ReqnrollPluginPackage routes the HookCodeLensCommands.vsct command
+    IDE->>IDE: VsShellUtilities.OpenDocument plus IVsTextView.SetCaretPos
+    IDE-->>User: Editor jumps to the hook method
+```
+
 #### Known limitations
 
-- **No Visual Studio implementation.** [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372) is open; the VS extension has no `.feature`-file hook CodeLens today.
 - **Step lines never get an individual lens** — by design, since the step-level hook set is scenario-wide, not step-specific (see End-user experience above).
+- **Visual Studio's data point never raises `InvalidatedAsync`** — a hook-match count can only change label-side (the tag's own position/text doesn't move), and the classic API gives data points no disposal hook to safely unsubscribe from a shared invalidation source. Labels still refresh naturally whenever CodeLens re-creates data points (e.g. on a document edit); this is a minor staleness window, not a correctness gap.
 
 ---
 
