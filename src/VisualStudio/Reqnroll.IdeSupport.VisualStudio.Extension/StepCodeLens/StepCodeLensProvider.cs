@@ -84,7 +84,7 @@ internal sealed class StepCodeLensProvider : ExtensionPart, ICodeLensProvider
 /// A single step-usage code lens created for a C# method.  Aggregates usage counts for all
 /// step-binding attributes that fall within a window just above the method declaration.
 /// </summary>
-internal sealed class StepCodeLens : InvokableCodeLens
+internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
 {
     private readonly StepCodeLensState _state;
     private readonly ILogger<StepCodeLens> _logger;
@@ -257,7 +257,7 @@ internal sealed class StepCodeLens : InvokableCodeLens
     /// Called by <see cref="StepCodeLensState.InvalidateLensesForFile"/> to trigger a
     /// fresh call to <see cref="GetLabelAsync"/> on VS's next paint cycle.
     /// </summary>
-    internal void InvalidateLabel() => Invalidate();
+    public void InvalidateLabel() => Invalidate();
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

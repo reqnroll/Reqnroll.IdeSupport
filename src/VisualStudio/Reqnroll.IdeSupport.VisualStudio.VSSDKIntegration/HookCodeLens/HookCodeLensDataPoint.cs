@@ -43,21 +43,22 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
     private readonly ICodeLensCallbackService _callbackService;
     private readonly string _fileUri;
     private readonly int    _line;
-    private readonly int    _navLine;
-    private readonly int    _navChar;
-    private readonly bool   _ownLevelOnly;
+    private readonly bool   _isStepHooksLens;
 
     private IReadOnlyList<HookDetailEntry>? _cachedHooks;
 
-    public HookCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, int navLine, int navChar, bool ownLevelOnly)
+    /// <param name="isStepHooksLens">
+    /// Which of the two lens kinds this data point renders. Supplied by the owning provider, not
+    /// decoded from the descriptor: a tag marks a whole line, and both providers share it (see
+    /// <see cref="HookElementDescription"/>'s remarks).
+    /// </param>
+    public HookCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, bool isStepHooksLens)
     {
         Descriptor       = descriptor;
         _callbackService = callbackService;
         _fileUri         = fileUri;
         _line            = line;
-        _navLine         = navLine;
-        _navChar         = navChar;
-        _ownLevelOnly    = ownLevelOnly;
+        _isStepHooksLens = isStepHooksLens;
     }
 
     /// <inheritdoc />
@@ -87,22 +88,36 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
             lenses = Array.Empty<HookFeatureLensEntry>();
         }
 
+        // Both providers get a data point for every tag, because a tag marks a line rather than an
+        // individual lens (see HookElementDescription's remarks) and neither provider can know in
+        // advance whether its own kind is present. Pick out this data point's kind here; when the
+        // line has no lens of this kind, the empty Description leaves this provider contributing no
+        // indicator while the other one still renders normally.
+        var entry = lenses.FirstOrDefault(e => e.Line == _line && e.AlwaysShowPicker == _isStepHooksLens);
+        if (entry is null)
+        {
+            _cachedHooks = Array.Empty<HookDetailEntry>();
+            return new CodeLensDataPointDescriptor { Description = string.Empty };
+        }
+
         // Pre-fetch and cache the Details-popup content now, while still on a normal async path —
         // see this type's remarks for why GetDetailsAsync must not make its own callback round-trip.
-        _cachedHooks = await FetchHooksAsync(token).ConfigureAwait(false);
+        // The nav target comes from the resolved entry: the two lens kinds on a Scenario: line point
+        // at different places (own-level at the Scenario: tag, step-hooks at its first step), and the
+        // descriptor no longer carries per-lens nav info.
+        _cachedHooks = await FetchHooksAsync(entry.NavLine, entry.NavChar, entry.OwnLevelOnly, token).ConfigureAwait(false);
 
-        var entry = lenses.FirstOrDefault(e => e.Line == _line);
-
-        return new CodeLensDataPointDescriptor { Description = entry?.Title ?? string.Empty };
+        return new CodeLensDataPointDescriptor { Description = entry.Title };
     }
 
     /// <inheritdoc />
     public async Task<CodeLensDetailsDescriptor> GetDetailsAsync(CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        // Expected to already be populated by GetDataAsync (see this type's remarks). The fallback
-        // fetch below only runs in the unexpected case GetDetailsAsync is invoked first — on the
-        // normal click path this returns synchronously with no further cross-process call.
-        var hooks = _cachedHooks ?? await FetchHooksAsync(token).ConfigureAwait(false);
+        // Always populated by GetDataAsync (see this type's remarks), which must run first for the
+        // lens to be clickable at all — so on the normal click path this returns with no further
+        // cross-process call, which is what keeps the UI thread from deadlocking. An empty list is
+        // the correct answer when this line has no lens of this data point's kind.
+        var hooks = _cachedHooks ?? Array.Empty<HookDetailEntry>();
 
         var headers = new[]
         {
@@ -135,12 +150,12 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
         };
     }
 
-    private async Task<IReadOnlyList<HookDetailEntry>> FetchHooksAsync(CancellationToken token)
+    private async Task<IReadOnlyList<HookDetailEntry>> FetchHooksAsync(int navLine, int navChar, bool ownLevelOnly, CancellationToken token)
     {
         try
         {
             return await _callbackService
-                .InvokeAsync<IReadOnlyList<HookDetailEntry>>(this, HookCodeLensCallbackListener.GetHookDetailsMethod, new object[] { _fileUri, _navLine, _navChar, _ownLevelOnly }, token)
+                .InvokeAsync<IReadOnlyList<HookDetailEntry>>(this, HookCodeLensCallbackListener.GetHookDetailsMethod, new object[] { _fileUri, navLine, navChar, ownLevelOnly }, token)
                 .ConfigureAwait(false);
         }
         catch (Exception) when (!token.IsCancellationRequested)
