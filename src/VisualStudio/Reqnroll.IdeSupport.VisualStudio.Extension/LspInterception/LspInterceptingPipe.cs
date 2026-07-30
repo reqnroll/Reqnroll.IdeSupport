@@ -779,9 +779,27 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Checks whether <paramref name="body"/> is a JSON-RPC response to one of our injected
-    /// requests.  If so, completes the awaiting <see cref="TaskCompletionSource{T}"/> and
-    /// returns <c>true</c> so the pump skips forwarding the frame to VS.
+    /// requests (identified purely by the <see cref="RequestIdPrefix"/> id, which only
+    /// <see cref="SendRequestToServerAsync"/> ever generates — VS's own request ids are always
+    /// plain integers). If so, completes the awaiting <see cref="TaskCompletionSource{T}"/> (when
+    /// one is still registered) and always returns <c>true</c> so the pump skips forwarding the
+    /// frame to VS.
     /// </summary>
+    /// <remarks>
+    /// Issue #401: a response must never be forwarded to VS just because
+    /// <see cref="SendRequestToServerAsync"/>'s caller already gave up on it. That method's
+    /// <c>finally</c> block removes the id from <see cref="_pendingRequests"/> as soon as its
+    /// caller's <see cref="CancellationToken"/> fires — e.g. a <see cref="StepCodeLensService"/>
+    /// request cancelled mid-reconnect — which can race the server's real response arriving a few
+    /// milliseconds later. Previously that race made this method return <see langword="false"/>
+    /// (nothing left to complete), letting the response fall through to
+    /// <see cref="ForwardToCurrentVsWriterAsync"/> and hand VS's JsonRpc a response to a request it
+    /// never sent: the same <c>RemoteProtocolViolation: A response was received without a request
+    /// having been sent</c> fatal error #395 fixed for VS's own peer-session responses, just
+    /// triggered via this side channel instead. Since the id prefix alone proves the response is
+    /// ours, it is always safe (and now always correct) to consume it here regardless of whether a
+    /// pending TCS is still around to receive it.
+    /// </remarks>
     private bool TryCompleteCorrelatedResponse(JObject body)
     {
         // A JSON-RPC response has an "id" and either "result" or "error", but no "method".
@@ -793,15 +811,25 @@ internal sealed class LspInterceptingPipe : IDisposable
         var id = idToken.Value<string>();
         if (id is null || !id.StartsWith(RequestIdPrefix, StringComparison.Ordinal)) return false;
 
-        if (!_pendingRequests.TryRemove(id, out var tcs)) return false;
+        if (_pendingRequests.TryRemove(id, out var tcs))
+        {
+            if (body.ContainsKey("error"))
+                tcs.TrySetResult(null);
+            else
+                tcs.TrySetResult(body["result"]);
 
-        if (body.ContainsKey("error"))
-            tcs.TrySetResult(null);
+            _logger.LogInformation(
+                "LspInterceptingPipe: consumed correlated response id={Id}", id);
+        }
         else
-            tcs.TrySetResult(body["result"]);
+        {
+            _logger.LogInformation(
+                "LspInterceptingPipe: dropped response id={Id} — no pending request (already " +
+                "cancelled/removed), but the {Prefix} id proves it's ours; forwarding it to VS " +
+                "would be an unmatched response and fatally close the connection (issue #401).",
+                id, RequestIdPrefix);
+        }
 
-        _logger.LogInformation(
-            "LspInterceptingPipe: consumed correlated response id={Id}", id);
         return true;
     }
 

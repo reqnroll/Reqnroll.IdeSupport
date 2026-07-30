@@ -87,6 +87,50 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_late_response_for_a_cancelled_owned_request_is_dropped_not_delivered_to_vs()
+    {
+        // Regression coverage for issue #401: SendRequestToServerAsync (used by StepCodeLensService,
+        // FindStepUsagesService, etc.) removes its pending-request entry as soon as its caller's
+        // CancellationToken fires — e.g. cancelled mid-reconnect, same as the captured repro. If the
+        // server's real response for that id arrives afterward, TryCompleteCorrelatedResponse must
+        // still recognise and drop it purely from the "reqnroll-rpc-" id prefix (proof it's ours),
+        // rather than letting it fall through to VS's JsonRpc — which never sent that request and
+        // would treat it as the same fatal "unmatched response" protocol violation #395 fixed for
+        // VS's own peer-session responses.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session1 = _pipe.CreateFreshVsFacingPipe();
+
+        using var requestCts = new CancellationTokenSource();
+        var requestTask = _pipe.SendRequestToServerAsync("textDocument/codeLens", null, requestCts.Token);
+
+        // Confirm the request actually reached "the server" (and capture its generated id) before
+        // cancelling, so the test exercises the real race rather than a request that never left.
+        var forwarded = await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        forwarded.Should().Contain("textDocument/codeLens");
+        var id = ExtractId(forwarded);
+        id.Should().StartWith("reqnroll-rpc-");
+
+        // Cancel it — mirrors the caller (e.g. StepCodeLensService) being torn down mid-reconnect —
+        // which removes the pending-request entry via SendRequestToServerAsync's finally block.
+        requestCts.Cancel();
+        (await requestTask).Should().BeNull();
+
+        // The server's real response for that same id arrives anyway, shortly after cancellation —
+        // exactly like the captured repro (server replied ~25ms after we'd already cancelled).
+        await WriteFrameAsync(serverSide.ServerSideStdout, $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":[]}}");
+
+        // It must not reach VS — forwarding it would hand VS's JsonRpc an unmatched response and
+        // fatally close the connection.
+        var deliveredToVs = await TryReadFrameAsync(session1.Input, TimeSpan.FromMilliseconds(500));
+        deliveredToVs.Should().BeNull();
+    }
+
+    [Fact]
     public async Task A_response_for_the_current_sessions_request_is_still_delivered_normally()
     {
         var serverSide = new FakeServerPipe();
@@ -108,6 +152,17 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     }
 
     // ── Minimal LSP frame read/write helpers (Content-Length: N\r\n\r\nBODY) ──────────────────
+
+    /// <summary>Pulls the <c>"id":"..."</c> value out of a raw JSON-RPC frame body.</summary>
+    private static string ExtractId(string json)
+    {
+        const string marker = "\"id\":\"";
+        var start = json.IndexOf(marker, StringComparison.Ordinal);
+        start.Should().BeGreaterThan(-1, "the frame should carry a string id");
+        start += marker.Length;
+        var end = json.IndexOf('"', start);
+        return json.Substring(start, end - start);
+    }
 
     private static async Task WriteFrameAsync(PipeWriter writer, string json)
     {
