@@ -36,6 +36,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// deliberately diverging from #269's "skip empty" convention: a hook matching nothing is likely
 /// a bug (dead code, a typo'd tag expression), so it's the most actionable case, not the least.
 /// </para>
+/// <para>
+/// An unscoped hook (no <c>[Scope]</c> at all) matches every scenario in the project — a count
+/// here would be technically correct but unbounded and uninformative, so the lens shows the
+/// static label "all scenarios" instead and skips the corpus walk entirely (issue #403). The
+/// click action is unaffected: <c>reqnroll/goToMatchingScenarios</c> still resolves and returns
+/// the full scenario list on demand.
+/// </para>
 /// </remarks>
 public sealed class HookMatchCountCodeLensHandler
 {
@@ -114,8 +121,20 @@ public sealed class HookMatchCountCodeLensHandler
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
-            var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
-            var count = scenarios.Count;
+            // Unscoped hooks (no [Scope] at all) match every scenario in the project: skip the
+            // corpus walk and show a static label rather than an unbounded, uninformative count
+            // (issue #403).
+            string title;
+            if (hook.Scope is null)
+            {
+                title = "all scenarios";
+            }
+            else
+            {
+                var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
+                var count = scenarios.Count;
+                title = count == 1 ? "1 scenario matched" : $"{count} scenarios matched";
+            }
 
             // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
             var line = src.SourceFileLine   - 1;
@@ -126,7 +145,7 @@ public sealed class HookMatchCountCodeLensHandler
                 Range = new LspRange(new Position(line, col), new Position(line, col)),
                 Command = new Command
                 {
-                    Title     = count == 1 ? "1 scenario matched" : $"{count} scenarios matched",
+                    Title     = title,
                     Name      = "reqnroll.goToMatchingScenarios",
                     Arguments = new JArray(uri.ToString(), line, col),
                 },

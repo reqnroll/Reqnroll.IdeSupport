@@ -48,6 +48,16 @@ public class HookMatchCountCodeLensHandlerTests
             new ProjectBindingImplementation("MyHook", parameterTypes: null, new SourceLocation(csFile, csLine, csColumn)),
             scope: null, hookType, hookOrder: null, error: null);
 
+    // A scoped-but-matches-everything hook: distinct from MakeHook's unscoped (Scope == null)
+    // case, which now renders "all scenarios" instead of a count (issue #403). Scoping to the
+    // "F" feature title used throughout these fixtures matches every scenario without needing a
+    // real tag on the feature.
+    private static ProjectHookBinding MakeScopedHook(
+        HookType hookType, string csFile = "/workspace/Hooks.cs", int csLine = 5, int csColumn = 1)
+        => new(
+            new ProjectBindingImplementation("MyHook", parameterTypes: null, new SourceLocation(csFile, csLine, csColumn)),
+            scope: new BindingScope { FeatureTitle = "F" }, hookType, hookOrder: null, error: null);
+
     private FeatureBindingMatchSet BuildMatchSet(string text, ProjectBindingRegistry registry, string docId)
     {
         var parser = new DeveroomTagParser(_parserLogger, _parserTelemetry, _configProvider);
@@ -89,7 +99,7 @@ public class HookMatchCountCodeLensHandlerTests
     [Fact]
     public async Task Handle_hook_matching_one_scenario_reports_singular_title()
     {
-        var hook = MakeHook(HookType.BeforeScenario);
+        var hook = MakeScopedHook(HookType.BeforeScenario);
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
         _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
         var matchSet = BuildMatchSet("Feature: F\nScenario: S\n    Given a step\n", registry, FeatureUri.ToString());
@@ -104,7 +114,7 @@ public class HookMatchCountCodeLensHandlerTests
     [Fact]
     public async Task Handle_hook_matching_multiple_scenarios_reports_plural_title()
     {
-        var hook = MakeHook(HookType.BeforeScenario);
+        var hook = MakeScopedHook(HookType.BeforeScenario);
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
         _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
         const string feature = "Feature: F\nScenario: S1\n    Given a step\nScenario: S2\n    Given a step\n";
@@ -135,6 +145,25 @@ public class HookMatchCountCodeLensHandlerTests
 
         result.Should().ContainSingle();
         result[0].Command!.Title.Should().Be("0 scenarios matched");
+    }
+
+    [Fact]
+    public async Task Handle_unscoped_hook_shows_all_scenarios_label_instead_of_a_count()
+    {
+        // #403: an unscoped hook (no [Scope] at all) matches every scenario in the project, so a
+        // count would be unbounded/uninformative -- show a static label and skip the corpus walk.
+        var hook = MakeHook(HookType.BeforeScenario);
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+        var matchSet = BuildMatchSet("Feature: F\nScenario: S\n    Given a step\n", registry, FeatureUri.ToString());
+        _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(new[] { matchSet });
+
+        var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Command!.Title.Should().Be("all scenarios");
+        result[0].Command!.Name.Should().Be("reqnroll.goToMatchingScenarios",
+            "the click action must still resolve the full scenario list on demand");
     }
 
     [Fact]
