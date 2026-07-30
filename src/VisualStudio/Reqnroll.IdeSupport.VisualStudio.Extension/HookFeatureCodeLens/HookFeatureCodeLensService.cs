@@ -71,7 +71,12 @@ internal sealed class HookFeatureCodeLensService
         return $"{{\"textDocument\":{{\"uri\":{escapedUri}}}}}";
     }
 
-    private static List<HookFeatureLensEntry> ParseItems(JArray array)
+    /// <summary>
+    /// Maps the server's <c>CodeLens[]</c> for a <c>.feature</c> file into lens entries. Internal
+    /// rather than private so it can be unit-tested without a live pipe, matching
+    /// <c>GoToHooksService.MapResult</c> and the other client-side mapping seams.
+    /// </summary>
+    internal static List<HookFeatureLensEntry> ParseItems(JArray array)
     {
         var result = new List<HookFeatureLensEntry>(array.Count);
         foreach (var token in array)
