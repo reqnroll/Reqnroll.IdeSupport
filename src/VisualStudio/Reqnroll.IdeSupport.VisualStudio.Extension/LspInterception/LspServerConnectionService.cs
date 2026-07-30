@@ -62,6 +62,7 @@ internal sealed class LspServerConnectionService : IDisposable
     private LspInterceptingPipe? _interceptingPipe;
     private ChildProcessJob? _childJob;
     private ShutdownHandshakeInterceptor? _shutdownHandshakeInterceptor;
+    private CodeLensRefreshInterceptor? _codeLensRefreshInterceptor;
     private bool _disposed;
 
     // How long to wait for the server to self-terminate after a graceful `exit` before falling
@@ -249,9 +250,9 @@ internal sealed class LspServerConnectionService : IDisposable
             var scaffoldInterceptor = new ScaffoldTrackingInterceptor(
                 () => ProjectMonitor, _loggerFactory.CreateLogger<ScaffoldTrackingInterceptor>());
 
-            // Watches textDocument/didChange on .cs files and invalidates code lenses
-            // so VS re-queries the server for updated usage counts after a binding edit.
-            var codeLensRefreshInterceptor = new CodeLensRefreshInterceptor(
+            // Watches the server's reqnroll/refreshCodeLens push and invalidates the C# code
+            // lenses so VS re-queries updated usage/match counts after a binding edit or build.
+            _codeLensRefreshInterceptor = new CodeLensRefreshInterceptor(
                 _stepCodeLensState, _loggerFactory.CreateLogger<CodeLensRefreshInterceptor>());
 
             // Drives DocumentActivationState's didOpen/didClose transitions (issue #85) and, in
@@ -266,21 +267,23 @@ internal sealed class LspServerConnectionService : IDisposable
             _shutdownHandshakeInterceptor = new ShutdownHandshakeInterceptor(
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
-            // Send pipeline:   VS → [logger, semanticTokens, scaffold, codeLensRefresh, documentActivation, shutdownHandshake] → Server
+            // Send pipeline:   VS → [logger, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
             // Receive pipeline: Server → [logger, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
-            // codeLensRefresh is on both pipelines: send watches .cs didChange; receive watches the
-            // server's reqnroll/refreshCodeLens push after a full registry replacement.
+            // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
+            // push. It used to sit on the send pipeline as well, watching .cs didChange to invalidate
+            // per edit, but that path was removed for issue #156 and the class has been a no-op on
+            // send ever since; the server-pushed signal (issue #343) covers the same need.
             // shutdownHandshake is on both pipelines: send captures the outgoing shutdown request id;
             // receive watches for the matching response.
             var sendInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, codeLensRefreshInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
+                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.
             var telemetryInterceptor = new TelemetryEventInterceptor(
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             var receiveInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, codeLensRefreshInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
+                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
             _interceptingPipe = new LspInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());
@@ -319,6 +322,11 @@ internal sealed class LspServerConnectionService : IDisposable
         var inspectorLogger              = _inspectorLogger;
         var serverProcess                = _serverProcess;
         var childJob                     = _childJob;
+
+        // Stops the pending debounce timer so a queued CodeLens invalidation can't fire against
+        // torn-down state after the connection is gone.
+        _codeLensRefreshInterceptor?.Dispose();
+        _codeLensRefreshInterceptor = null;
 
         _interceptingPipe = null;
         _inspectorLogger  = null;
