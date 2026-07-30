@@ -135,8 +135,6 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         var interceptingPipe = _connectionService.InterceptingPipe;
         if (interceptingPipe is not null)
         {
-            // GoToHooksService and FindStepUsagesService use only
-            // LspInterceptingPipe + ILogger<T> — no COM, safe here.
             _findStepUsagesState.Service            = new FindStepUsagesService(interceptingPipe, _loggerFactory.CreateLogger<FindStepUsagesService>());
             _findUnusedStepDefinitionsState.Service = new FindUnusedStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindUnusedStepDefinitionsService>());
             _goToHooksState.Service                 = new GoToHooksService(interceptingPipe, _loggerFactory.CreateLogger<GoToHooksService>());
