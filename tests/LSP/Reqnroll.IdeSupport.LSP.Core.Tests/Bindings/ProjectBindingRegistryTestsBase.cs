@@ -32,7 +32,31 @@ public abstract class ProjectBindingRegistryTestsBase
             Implementations.Add(methodName, implementation);
         }
 
-        return new ProjectStepDefinitionBinding(scenarioBlock, new Regex("^" + regex + "$"), scope, implementation);
+        // specifiedExpression mirrors regex: these bindings represent an authored expression
+        // (e.g. [Given(@"...")]), not a method-name-style binding (issue #344 gave
+        // SpecifiedExpression == null a real meaning — see CreateMethodNameStyleStepDefinitionBinding).
+        return new ProjectStepDefinitionBinding(scenarioBlock, new Regex("^" + regex + "$"), scope, implementation,
+            specifiedExpression: regex);
+    }
+
+    /// <summary>
+    /// Creates a method-name-style binding — no explicit attribute expression, mirroring
+    /// <c>[Given] public void The_First_Number_Is_P0(int p)</c> — for tests asserting on issue
+    /// #344's DisplayExpression fallback in ambiguous-match diagnostics.
+    /// </summary>
+    protected ProjectStepDefinitionBinding CreateMethodNameStyleStepDefinitionBinding(string regex,
+        ScenarioBlock scenarioBlock = ScenarioBlock.Given, string? methodName = null)
+    {
+        methodName = methodName ?? "MyMethod" + Guid.NewGuid().ToString("N");
+        if (!Implementations.TryGetValue(methodName, out var implementation))
+        {
+            implementation =
+                new ProjectBindingImplementation(methodName, null,
+                    new SourceLocation("MyClass.cs", 2, 5));
+            Implementations.Add(methodName, implementation);
+        }
+
+        return new ProjectStepDefinitionBinding(scenarioBlock, new Regex("^" + regex + "$"), null, implementation);
     }
 
     protected StepArgument CreateDocString() => new DocString(new GherkinLocation(0, 0), null, "some text");

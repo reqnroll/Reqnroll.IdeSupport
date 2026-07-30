@@ -78,9 +78,11 @@ public sealed class RenameTargetsHandler
         int idx = 0;
         foreach (var b in allBindings)
         {
-            // Prefer the live source expression (preserves Cucumber parameter types)
+            // Prefer the live source expression (preserves Cucumber parameter types); fall back to
+            // a friendly display expression rather than b.Expression's raw auto-generated regex
+            // for method-name-style bindings (issue #344).
             var sourceLiteral = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, b);
-            var expression = sourceLiteral?.Token.ValueText ?? b.Expression ?? "(unknown)";
+            var expression = sourceLiteral?.Token.ValueText ?? b.DisplayExpression;
 
             var scopeTag = b.Scope?.Tag?.ToString();
             var scopeSuffix = !string.IsNullOrEmpty(scopeTag) ? $" [@{scopeTag}]" : "";
@@ -123,8 +125,8 @@ public sealed class RenameTargetsHandler
             var methodSuffix = !string.IsNullOrEmpty(method) ? $" — {method}" : "";
             response.Targets.Add(new RenameTargetItem
             {
-                Label = $"{b.StepDefinitionType} {b.Expression ?? "(unknown)"}{methodSuffix}",
-                Expression = b.Expression ?? "",
+                Label = $"{b.StepDefinitionType} {b.DisplayExpression}{methodSuffix}",
+                Expression = b.DisplayExpression,
                 AttributeIndex = idx,
                 StartLine = 0, StartChar = 0, EndLine = 0, EndChar = 200
             });

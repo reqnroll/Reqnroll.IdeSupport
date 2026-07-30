@@ -208,7 +208,10 @@ public sealed class StepRenameHandler
             // the same one here so the placeholder shown matches what would actually be renamed.
             var matchedBinding = featureBindings[0];
             var sourceLiteral  = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, matchedBinding);
-            var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.Expression ?? string.Empty;
+            // Falls back to a friendly display expression, not matchedBinding.Expression's raw
+            // auto-generated regex, when no literal can be found (issue #344) — this is only the
+            // placeholder text shown in the rename box, not the mechanics HandleRenameAsync uses.
+            var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.DisplayExpression;
 
             // Known cosmetic quirk (confirmed live in VS and VS Code, issue #33 follow-up): when
             // a user pre-selects a sub-span of the concrete step text before invoking F2 (e.g.

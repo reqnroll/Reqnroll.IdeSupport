@@ -40,6 +40,17 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     /// <summary>The expression to display for this binding: <see cref="SpecifiedExpression"/> if known, otherwise derived from <see cref="Regex"/>.</summary>
     public string Expression => SpecifiedExpression ?? GetSpecifiedExpressionFromRegex();
 
+    /// <summary>
+    /// A user-facing expression for surfaces that display this binding (diagnostics, completions,
+    /// rename UI, unused-step-definitions lists): <see cref="SpecifiedExpression"/> when the
+    /// binding was authored with an explicit attribute string, otherwise a short indicator instead
+    /// of <see cref="Expression"/>'s raw auto-generated regex. Method-name-style bindings (e.g.
+    /// <c>[Given] public void The_First_Number_Is_P0(int p)</c>) derive a regex from the method
+    /// name/parameters that is correct for matching but often unreadable — dumping it verbatim
+    /// into UI is the bug reported in issue #344.
+    /// </summary>
+    public string DisplayExpression => SpecifiedExpression ?? "(method-name pattern)";
+
     private string GetSpecifiedExpressionFromRegex()
     {
         var result = Regex?.ToString();
@@ -93,7 +104,7 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     }
 
     /// <summary>Returns a short description including the step type, expression, and implementation.</summary>
-    public override string ToString() => $"[{StepDefinitionType}({Expression})]: {Implementation}";
+    public override string ToString() => $"[{StepDefinitionType}({DisplayExpression})]: {Implementation}";
 
     /// <summary>Returns a copy of this binding with its expression (and derived regex) replaced.</summary>
     public ProjectStepDefinitionBinding WithSpecifiedExpression(string expression)

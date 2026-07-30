@@ -4,11 +4,15 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Completions;
 
 public class StepDefinitionSamplerTests
 {
+    // specifiedExpression mirrors regex here so these bindings represent an authored expression
+    // (issue #344 gave SpecifiedExpression == null a real meaning: "method-name-style binding" —
+    // see the dedicated test below for that case).
     private static ProjectStepDefinitionBinding Binding(string regex, params string[] parameterTypes)
         => new(ScenarioBlock.Given,
                new Regex("^" + regex + "$"),
                null,
-               new ProjectBindingImplementation("M1", parameterTypes, null!));
+               new ProjectBindingImplementation("M1", parameterTypes, null!),
+               specifiedExpression: regex);
 
     private readonly StepDefinitionSampler _sut = new();
 
@@ -68,6 +72,24 @@ public class StepDefinitionSamplerTests
     {
         var result = _sut.GetStepDefinitionSample(Binding(regex, "System.Int32"));
         result.Should().Be(regex);
+    }
+
+    [Fact]
+    public void Falls_back_to_display_expression_for_method_name_style_bindings()
+    {
+        // Issue #344: a method-name-style binding (no explicit attribute expression) derives a
+        // regex from the method name/parameters that's correct for matching but not valid Gherkin
+        // step text — sampling it would offer/insert garbage, so it's short-circuited instead.
+        // specifiedExpression intentionally omitted
+        var binding = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given,
+            new Regex(@"^(?i)The(?:[^\w\p{Sc}]*)First(?:[^\w\p{Sc}]*)Number(?:[^\w\p{Sc}]*)Is(?:[^\w\p{Sc}]*)(?<p0>.*?)(?:[^\w\p{Sc}]*)$"),
+            null,
+            new ProjectBindingImplementation("The_First_Number_Is_P0", new[] { "System.Int32" }, null!));
+
+        var result = _sut.GetStepDefinitionSample(binding);
+
+        result.Should().Be("(method-name pattern)");
     }
 
     [Theory]

@@ -77,7 +77,15 @@ internal class DiscoveryResultTransformer
             Method = GetMethodReference(stepDefinitionData.Source?.Method),
             ParamTypes = GetParamTypes(stepDefinitionData.ParamTypes, getTypeNameKey),
             Scope = GetScope(stepDefinitionData.Scope),
-            Expression = GetSourceExpression(stepDefinitionData),
+            // Pass the raw (possibly null) authored expression through verbatim — do NOT collapse
+            // a missing expression into a regex-derived fallback here. A null Expression is the
+            // signal that this is a method-name-style binding (no explicit attribute string);
+            // ProjectStepDefinitionBinding on the server already derives the same fallback text
+            // from Regex when needed for matching, and issue #344's display fix depends on this
+            // signal surviving the wire so ProjectStepDefinitionBinding.SpecifiedExpression is
+            // null for these bindings the same way syntax-based (Roslyn) discovery already leaves
+            // it null.
+            Expression = stepDefinitionData.Expression,
             Error = stepDefinitionData.Error,
             SourceLocation = getSourceLocation(stepDefinitionData.Source)
         };
@@ -146,21 +154,5 @@ internal class DiscoveryResultTransformer
             ScenarioTitle = scopeData.ScenarioTitle,
             Error = scopeData.Error
         };
-    }
-
-    private string? GetSourceExpression(StepDefinitionData stepDefinitionData)
-        => stepDefinitionData.Expression ?? GetSpecifiedExpressionFromRegex(stepDefinitionData);
-
-    private string? GetSpecifiedExpressionFromRegex(StepDefinitionData stepDefinitionData)
-    {
-        if (stepDefinitionData.Regex == null)
-            return null;
-
-        string regexString = stepDefinitionData.Regex;
-        if (regexString.StartsWith("^"))
-            regexString = regexString.Substring(1);
-        if (regexString.EndsWith("$"))
-            regexString = regexString.Substring(0, regexString.Length - 1);
-        return regexString;
     }
 }

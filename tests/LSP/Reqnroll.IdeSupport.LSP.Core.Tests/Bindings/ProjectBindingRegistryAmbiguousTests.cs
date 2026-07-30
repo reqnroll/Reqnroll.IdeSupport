@@ -90,6 +90,27 @@ public class ProjectBindingRegistryAmbiguousTests : ProjectBindingRegistryTestsB
         result.Items[0].MatchedStepDefinition.Implementation.Method.Should().Be(methodName);
     }
 
+    [Fact]
+    public void Error_shows_display_expression_not_raw_regex_for_method_name_style_bindings()
+    {
+        // Issue #344: VS's Error List rendered the auto-generated regex for method-name-style
+        // bindings verbatim, making ambiguous-match diagnostics unreadable. The combined error
+        // message must use DisplayExpression (via ToString()), not the raw Expression/regex.
+        _stepDefinitionBindings.Add(CreateMethodNameStyleStepDefinitionBinding(
+            @"(?i)The(?:[^\w\p{Sc}]*)First(?:[^\w\p{Sc}]*)Number(?:[^\w\p{Sc}]*)Is(?:[^\w\p{Sc}]*)(?<p0>.*?)(?:[^\w\p{Sc}]*)",
+            methodName: "The_First_Number_Is_P0"));
+        _stepDefinitionBindings.Add(CreateStepDefinitionBinding(".*", methodName: "OtherMatch"));
+        var sut = CreateSut();
+
+        var result = sut.MatchStep(CreateStep(text: "The first number is 5"), StubGherkinDocument.Instance);
+
+        result.HasAmbiguous.Should().BeTrue();
+        result.Errors.Should().Contain(m => m.Contains("(method-name pattern)"));
+        result.Errors.Should().Contain(m => m.Contains("The_First_Number_Is_P0"));
+        result.Errors.Should().NotContain(m => m.Contains("(?:[^\\w"),
+            "the raw auto-generated regex should never leak into the diagnostic text");
+    }
+
     private ProjectStepDefinitionBinding CreateStepDefinitionBindingWithScope(string stepRegex, string scopeText, string methodName)
     {
         var scope = new BindingScope() { Tag = new ReqnrollTagExpressionParser().Parse(scopeText) };
