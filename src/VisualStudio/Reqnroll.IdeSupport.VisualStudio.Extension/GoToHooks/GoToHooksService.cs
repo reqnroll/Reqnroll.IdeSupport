@@ -37,13 +37,28 @@ internal sealed class GoToHooksService
     /// Queries the LSP server for applicable hooks at <paramref name="line0"/> /
     /// <paramref name="char0"/> in <paramref name="fileUri"/> (all 0-based).
     /// </summary>
+    public Task<GoToHooksResult> GoToHooksAsync(
+        string            fileUri,
+        int               line0,
+        int               char0,
+        CancellationToken cancellationToken) =>
+        GoToHooksAsync(fileUri, line0, char0, ownLevelOnly: false, cancellationToken);
+
+    /// <summary>
+    /// Queries the LSP server for applicable hooks at <paramref name="line0"/> /
+    /// <paramref name="char0"/> in <paramref name="fileUri"/> (all 0-based), optionally restricted
+    /// to hooks native to the resolved context level — set by the hook-match-count CodeLens
+    /// (classic-CodeLens bridge, issue #372) so its Details popup shows exactly the hooks the lens
+    /// counted, matching what <c>reqnroll.goToHooks</c>-invoking clients already do.
+    /// </summary>
     public async Task<GoToHooksResult> GoToHooksAsync(
         string            fileUri,
         int               line0,
         int               char0,
+        bool              ownLevelOnly,
         CancellationToken cancellationToken)
     {
-        var paramsJson = BuildParams(fileUri, line0, char0);
+        var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly);
 
         _logger.LogInformation(
             "GoToHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
@@ -84,10 +99,11 @@ internal sealed class GoToHooksService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int line0, int char0)
+    private static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly)
     {
         var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}},\"position\":{{\"line\":{line0},\"character\":{char0}}}}}";
+        var ownLevelOnlyJson = ownLevelOnly ? "true" : "false";
+        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}},\"position\":{{\"line\":{line0},\"character\":{char0}}},\"ownLevelOnly\":{ownLevelOnlyJson}}}";
     }
 
     private static IReadOnlyList<HookLocation> ParseHooks(JArray array)
