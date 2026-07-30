@@ -16,22 +16,29 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// A single hook-match-count CodeLens data point (issue #372): resolves the label ("N hooks") and,
 /// on request, the Details popup listing each matching hook with a navigation command.
 /// </summary>
+/// <remarks>
+/// Runs out-of-process (see <see cref="HookCodeLensDataPointProvider"/>'s remarks) — reaches the LSP
+/// bridge via <see cref="ICodeLensCallbackService"/> calling back into
+/// <see cref="HookCodeLensCallbackListener"/>, not the static <see cref="HookCodeLensRedirect"/>.
+/// </remarks>
 internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
 {
+    private readonly ICodeLensCallbackService _callbackService;
     private readonly string _fileUri;
     private readonly int    _line;
     private readonly int    _navLine;
     private readonly int    _navChar;
     private readonly bool   _ownLevelOnly;
 
-    public HookCodeLensDataPoint(CodeLensDescriptor descriptor, string fileUri, int line, int navLine, int navChar, bool ownLevelOnly)
+    public HookCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, int navLine, int navChar, bool ownLevelOnly)
     {
-        Descriptor    = descriptor;
-        _fileUri      = fileUri;
-        _line         = line;
-        _navLine      = navLine;
-        _navChar      = navChar;
-        _ownLevelOnly = ownLevelOnly;
+        Descriptor       = descriptor;
+        _callbackService = callbackService;
+        _fileUri         = fileUri;
+        _line            = line;
+        _navLine         = navLine;
+        _navChar         = navChar;
+        _ownLevelOnly    = ownLevelOnly;
     }
 
     /// <inheritdoc />
@@ -49,12 +56,19 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
     /// <inheritdoc />
     public async Task<CodeLensDataPointDescriptor> GetDataAsync(CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        var fetch = HookCodeLensRedirect.GetLensesAsync;
-        if (fetch is null)
-            return new CodeLensDataPointDescriptor { Description = string.Empty };
+        IReadOnlyList<HookFeatureLensEntry> lenses;
+        try
+        {
+            lenses = await _callbackService
+                .InvokeAsync<IReadOnlyList<HookFeatureLensEntry>>(this, HookCodeLensCallbackListener.GetLensesMethod, new object[] { _fileUri }, token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            lenses = Array.Empty<HookFeatureLensEntry>();
+        }
 
-        var lenses = await fetch(_fileUri, token).ConfigureAwait(false);
-        var entry  = lenses.FirstOrDefault(e => e.Line == _line);
+        var entry = lenses.FirstOrDefault(e => e.Line == _line);
 
         return new CodeLensDataPointDescriptor { Description = entry?.Title ?? string.Empty };
     }
@@ -62,10 +76,17 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
     /// <inheritdoc />
     public async Task<CodeLensDetailsDescriptor> GetDetailsAsync(CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        var fetch = HookCodeLensRedirect.GetHookDetailsAsync;
-        var hooks = fetch is null
-            ? Array.Empty<HookDetailEntry>()
-            : await fetch(_fileUri, _navLine, _navChar, _ownLevelOnly, token).ConfigureAwait(false);
+        IReadOnlyList<HookDetailEntry> hooks;
+        try
+        {
+            hooks = await _callbackService
+                .InvokeAsync<IReadOnlyList<HookDetailEntry>>(this, HookCodeLensCallbackListener.GetHookDetailsMethod, new object[] { _fileUri, _navLine, _navChar, _ownLevelOnly }, token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            hooks = Array.Empty<HookDetailEntry>();
+        }
 
         var headers = new[]
         {

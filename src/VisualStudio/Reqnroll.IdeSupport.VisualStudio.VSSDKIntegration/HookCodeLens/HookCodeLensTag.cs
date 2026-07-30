@@ -10,14 +10,23 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// An ordinary editor tag — <see cref="ICodeLensTag"/> requires no code-element/Roslyn model, only
 /// an <see cref="Microsoft.VisualStudio.Text.Tagging.ITagger{T}"/> targeting the buffer's content type.
 /// </summary>
-internal sealed class HookCodeLensTag : ICodeLensTag
+/// <remarks>
+/// Implements <see cref="ICodeLensTag2"/>, not just <see cref="ICodeLensTag"/> — see
+/// <see cref="HookCodeLensDescriptor"/>'s remarks for why the plain v1 interface never resolves a
+/// data point in this VS build.
+/// </remarks>
+internal sealed class HookCodeLensTag : ICodeLensTag2
 {
-    public HookCodeLensTag(ICodeLensDescriptor descriptor)
+    private readonly HookCodeLensDescriptor _descriptor;
+
+    public HookCodeLensTag(HookCodeLensDescriptor descriptor)
     {
-        Descriptor = descriptor;
+        _descriptor = descriptor;
     }
 
-    public ICodeLensDescriptor Descriptor { get; }
+    public ICodeLensDescriptor Descriptor => _descriptor;
+
+    public ICodeLensDescriptorContextProvider DescriptorContextProvider => _descriptor;
 
     /// <inheritdoc />
     public event EventHandler? Disconnected;

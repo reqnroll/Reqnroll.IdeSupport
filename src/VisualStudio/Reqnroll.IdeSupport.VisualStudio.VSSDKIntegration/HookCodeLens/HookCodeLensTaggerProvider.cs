@@ -42,6 +42,6 @@ internal sealed class HookCodeLensTaggerProvider : ITaggerProvider
 
         return buffer.Properties.GetOrCreateSingletonProperty(
             typeof(HookCodeLensTagger),
-            () => new HookCodeLensTagger(buffer, fileUri)) as ITagger<T>;
+            () => new HookCodeLensTagger(buffer, doc.FilePath, fileUri)) as ITagger<T>;
     }
 }

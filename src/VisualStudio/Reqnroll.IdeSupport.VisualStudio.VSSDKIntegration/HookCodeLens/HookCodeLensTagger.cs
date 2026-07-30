@@ -21,6 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
 {
     private readonly ITextBuffer _buffer;
+    private readonly string _filePath;
     private readonly string _fileUri;
 
     // Keyed by line so GetTags returns the *same* ICodeLensTag instance across repaint/scroll
@@ -35,10 +36,11 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
     private static readonly IReadOnlyDictionary<int, HookCodeLensTag> EmptyTags =
         new Dictionary<int, HookCodeLensTag>();
 
-    public HookCodeLensTagger(ITextBuffer buffer, string fileUri)
+    public HookCodeLensTagger(ITextBuffer buffer, string filePath, string fileUri)
     {
-        _buffer  = buffer;
-        _fileUri = fileUri;
+        _buffer   = buffer;
+        _filePath = filePath;
+        _fileUri  = fileUri;
         HookCodeLensRedirect.RegisterTagger(this, fileUri);
         RequestRefresh();
     }
@@ -115,7 +117,7 @@ internal sealed class HookCodeLensTagger : ITagger<ICodeLensTag>, IDisposable
                     ? new Span(0, 0)
                     : new Span(line.Start, 0);
 
-                var descriptor = new HookCodeLensDescriptor(_fileUri, span, elementDescription);
+                var descriptor = new HookCodeLensDescriptor(_filePath, span, elementDescription);
                 next[entry.Line] = new HookCodeLensTag(descriptor);
             }
 
