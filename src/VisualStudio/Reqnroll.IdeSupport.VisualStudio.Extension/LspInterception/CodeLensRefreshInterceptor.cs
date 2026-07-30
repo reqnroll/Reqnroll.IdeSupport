@@ -63,6 +63,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
 
     private readonly StepCodeLensState _state;
     private readonly ILogger<CodeLensRefreshInterceptor> _logger;
+    private readonly Action _invalidate;
 
     private readonly object _gate = new();
     private Timer? _debounceTimer;
@@ -72,10 +73,19 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
     private bool _disposed;
 
     /// <summary>Creates the interceptor over the shared step-code-lens state.</summary>
-    public CodeLensRefreshInterceptor(StepCodeLensState state, ILogger<CodeLensRefreshInterceptor> logger)
+    /// <param name="invalidateOverride">
+    /// Replaces the UI-thread invalidation dispatch. Exists so the debounce and rate-guard
+    /// bookkeeping — which is ordinary logic — can be tested without a VS host; production callers
+    /// omit it and get <see cref="InvalidateAllOnUiThread"/>.
+    /// </param>
+    public CodeLensRefreshInterceptor(
+        StepCodeLensState state,
+        ILogger<CodeLensRefreshInterceptor> logger,
+        Action? invalidateOverride = null)
     {
-        _state  = state;
-        _logger = logger;
+        _state      = state;
+        _logger     = logger;
+        _invalidate = invalidateOverride ?? InvalidateAllOnUiThread;
     }
 
     /// <inheritdoc />
@@ -167,7 +177,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
             _invalidationsThisWindow++;
         }
 
-        InvalidateAllOnUiThread();
+        _invalidate();
         _logger.LogInformation("CodeLensRefreshInterceptor: invalidated all tracked C# lenses.");
     }
 

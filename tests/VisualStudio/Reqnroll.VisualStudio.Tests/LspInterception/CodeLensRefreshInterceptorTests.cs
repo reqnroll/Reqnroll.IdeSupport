@@ -13,18 +13,50 @@ namespace Reqnroll.VisualStudio.Tests.LspInterception;
 /// <summary>
 /// <see cref="CodeLensRefreshInterceptor"/> only reacts to a <c>reqnroll/refreshCodeLens</c>
 /// (receive); every other message, including a <c>.cs</c> <c>textDocument/didChange</c> (send) —
-/// whose own invalidation is disabled, see issue #156/#318 — must pass through untouched. The
-/// <c>reqnroll/refreshCodeLens</c> invalidation branch dispatches onto the VS main thread
-/// (<c>ThreadHelper.JoinableTaskFactory</c>) and therefore requires a VS host — it belongs in an
-/// integration smoke test, not here.
+/// whose per-edit invalidation was removed for issue #156/#318 — must pass through untouched.
 /// </summary>
+/// <remarks>
+/// Every message is expected to return <see cref="LspInterceptorResult.PassThrough"/>, so asserting
+/// only that says nothing about whether an invalidation was scheduled. These tests therefore inject
+/// the invalidation action (see the constructor's <c>invalidateOverride</c>) and assert on it
+/// directly — the real dispatch hops to the VS main thread and needs a host, but the debounce and
+/// rate-guard bookkeeping around it is ordinary logic.
+/// </remarks>
 public class CodeLensRefreshInterceptorTests
 {
-    private static CodeLensRefreshInterceptor Create() =>
-        new(new StepCodeLensState(), NullLogger<CodeLensRefreshInterceptor>.Instance);
+    // Comfortably longer than the interceptor's 400ms debounce window.
+    private const int DebounceSettleMs = 1_500;
+
+    private static CodeLensRefreshInterceptor Create(Action? onInvalidate = null) =>
+        new(new StepCodeLensState(), NullLogger<CodeLensRefreshInterceptor>.Instance, onInvalidate);
 
     private static LspMessage Send(JObject body)    => new(LspMessageDirection.Send,    body, DateTimeOffset.Now);
     private static LspMessage Receive(JObject body) => new(LspMessageDirection.Receive, body, DateTimeOffset.Now);
+
+    private static JObject RefreshCodeLens(bool? isFullReplacement)
+    {
+        var @params = new JObject { ["projectName"] = "Proj" };
+        if (isFullReplacement is not null)
+            @params["isFullReplacement"] = isFullReplacement.Value;
+
+        return new JObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"]  = "reqnroll/refreshCodeLens",
+            ["params"]  = @params,
+        };
+    }
+
+    /// <summary>Counts invalidations, and lets a test wait for the first one instead of sleeping blind.</summary>
+    private sealed class InvalidationSpy
+    {
+        private readonly ManualResetEventSlim _fired = new(false);
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+        public Action Action => () => { Interlocked.Increment(ref _count); _fired.Set(); };
+        public bool WaitForFirst(int ms = DebounceSettleMs) => _fired.Wait(ms);
+    }
 
     private static JObject DidChange(string uri) => new()
     {
@@ -98,40 +130,90 @@ public class CodeLensRefreshInterceptorTests
         result.Should().Be(LspInterceptorResult.PassThrough);
     }
 
-    [Fact]
-    public async Task A_refreshCodeLens_with_isFullReplacement_false_passes_through_without_invalidating()
-    {
-        // Incremental refreshes (a Roslyn patch on a .cs edit, or a .feature edit changing usage
-        // counts) must not call CodeLens.Invalidate() — same reconnect-churn reasoning as the
-        // disabled per-.cs-edit trigger (#156/#318). Testable directly (no VS host needed) since,
-        // like the disabled .cs didChange path, it no longer reaches any UI-thread call.
-        var body = new JObject
-        {
-            ["jsonrpc"] = "2.0",
-            ["method"]  = "reqnroll/refreshCodeLens",
-            ["params"]  = new JObject { ["projectName"] = "Proj", ["isFullReplacement"] = false },
-        };
+    // ── Invalidation scheduling (issue #343) ──────────────────────────────────
 
-        var result = await Create().InterceptAsync(Receive(body), CancellationToken.None);
+    [Theory]
+    [InlineData(true)]   // rebuild / full binding-registry replacement
+    [InlineData(false)]  // incremental Roslyn patch — acted on since #343
+    [InlineData(null)]   // field absent, e.g. an older/mismatched payload
+    public async Task A_refreshCodeLens_eventually_invalidates_regardless_of_isFullReplacement(bool? isFullReplacement)
+    {
+        var spy = new InvalidationSpy();
+        using var sut = Create(spy.Action);
+
+        var result = await sut.InterceptAsync(Receive(RefreshCodeLens(isFullReplacement)), CancellationToken.None);
 
         result.Should().Be(LspInterceptorResult.PassThrough);
+        spy.WaitForFirst().Should().BeTrue("a refresh signal must reach the lenses");
+        spy.Count.Should().Be(1);
     }
 
     [Fact]
-    public async Task A_refreshCodeLens_without_isFullReplacement_defaults_to_incremental_and_passes_through()
+    public async Task Invalidation_is_deferred_rather_than_synchronous()
     {
-        // Absence of the field (e.g. an older/mismatched payload) must default to the safe,
-        // non-invalidating behavior rather than assuming a full replacement.
-        var body = new JObject
-        {
-            ["jsonrpc"] = "2.0",
-            ["method"]  = "reqnroll/refreshCodeLens",
-            ["params"]  = new JObject { ["projectName"] = "Proj" },
-        };
+        // The debounce is what keeps a burst of per-project signals from becoming a burst of
+        // CodeLens.Invalidate() calls, each of which can provoke the #156 client reconnect.
+        var spy = new InvalidationSpy();
+        using var sut = Create(spy.Action);
 
-        var result = await Create().InterceptAsync(Receive(body), CancellationToken.None);
+        await sut.InterceptAsync(Receive(RefreshCodeLens(false)), CancellationToken.None);
+
+        spy.Count.Should().Be(0, "the invalidation should be queued behind the debounce window");
+    }
+
+    [Fact]
+    public async Task A_burst_of_refresh_signals_collapses_into_a_single_invalidation()
+    {
+        // Observed live: one user edit produced 16 refresh signals across projects, which the
+        // debounce coalesced into far fewer invalidations.
+        var spy = new InvalidationSpy();
+        using var sut = Create(spy.Action);
+
+        for (var i = 0; i < 10; i++)
+            await sut.InterceptAsync(Receive(RefreshCodeLens(i % 2 == 0)), CancellationToken.None);
+
+        spy.WaitForFirst().Should().BeTrue();
+        await Task.Delay(300);
+        spy.Count.Should().Be(1, "the whole burst should settle into one invalidation");
+    }
+
+    [Fact]
+    public async Task Disposing_cancels_a_queued_invalidation()
+    {
+        // A queued invalidation must not fire against a torn-down connection.
+        var spy = new InvalidationSpy();
+        var sut = Create(spy.Action);
+
+        await sut.InterceptAsync(Receive(RefreshCodeLens(true)), CancellationToken.None);
+        sut.Dispose();
+
+        await Task.Delay(DebounceSettleMs);
+        spy.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_refresh_arriving_after_disposal_is_ignored()
+    {
+        var spy = new InvalidationSpy();
+        var sut = Create(spy.Action);
+        sut.Dispose();
+
+        var result = await sut.InterceptAsync(Receive(RefreshCodeLens(true)), CancellationToken.None);
 
         result.Should().Be(LspInterceptorResult.PassThrough);
+        await Task.Delay(DebounceSettleMs);
+        spy.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Disposing_twice_does_not_throw()
+    {
+        var sut = Create(() => { });
+        await sut.InterceptAsync(Receive(RefreshCodeLens(true)), CancellationToken.None);
+
+        var act = () => { sut.Dispose(); sut.Dispose(); };
+
+        act.Should().NotThrow();
     }
 }
 
