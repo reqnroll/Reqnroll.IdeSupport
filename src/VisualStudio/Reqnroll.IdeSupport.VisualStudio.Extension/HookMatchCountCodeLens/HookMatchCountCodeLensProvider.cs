@@ -154,8 +154,19 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
             if (hookLenses.Count == 0)
                 return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
 
-            var totalScenarios = hookLenses.Select(l => ParseCount(l.Title)).Sum();
-            var text    = totalScenarios == 1 ? "1 scenario matched" : $"{totalScenarios} scenarios matched";
+            // An unscoped hook (server label "all scenarios", issue #403) matches everything, so
+            // it dominates any other count in the same aggregation window — show it as-is rather
+            // than folding it into ParseCount's numeric sum (which would silently read it as 0).
+            string text;
+            if (hookLenses.Any(l => l.Title == AllScenariosLabel))
+            {
+                text = AllScenariosLabel;
+            }
+            else
+            {
+                var totalScenarios = hookLenses.Select(l => ParseCount(l.Title)).Sum();
+                text = totalScenarios == 1 ? "1 scenario matched" : $"{totalScenarios} scenarios matched";
+            }
             var tooltip = "Reqnroll scenarios matched by this hook";
 
             _logger.LogInformation(
@@ -254,9 +265,14 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    // Server-side static label for unscoped hooks (issue #403) — not a "N scenarios matched" count.
+    private const string AllScenariosLabel = "all scenarios";
+
     private static int ParseCount(string title)
     {
-        // Title formats: "1 scenario matched" or "N scenarios matched" or "0 scenarios matched"
+        // Title formats: "1 scenario matched" or "N scenarios matched" or "0 scenarios matched".
+        // "all scenarios" (unscoped hooks, issue #403) is handled separately by the caller before
+        // this is reached.
         var space = title.IndexOf(' ');
         if (space > 0 && int.TryParse(title.Substring(0, space), out var n))
             return n;
