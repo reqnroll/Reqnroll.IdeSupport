@@ -210,6 +210,15 @@ grabbed it and however their machine happened to be set up that day:
    `<page-name>/<ide>[-<variant>].<ext>` following the convention above
    rather than dropping the file wherever's convenient.
 
+**Exception — the landing page hero carousel** (`ide-support/index.md`):
+its three `TODO(media)` notes each live inside a `` :::{div} reqnroll-hero-slide` ``
+block that the carousel JS depends on. Keep that wrapper (and its `:name:`)
+intact — just add the image line inside it, above the caption text, the
+same as any other slide's content. Don't restructure the div nesting or
+rename the `reqnroll-hero-carousel`/`reqnroll-hero-slide` classes; the
+`<style>`/`<script>` immediately following the carousel target those
+class names directly.
+
 ### Tab-set pattern for per-IDE media
 
 Wherever a feature's screenshot/gif differs by IDE, the media lives in a
