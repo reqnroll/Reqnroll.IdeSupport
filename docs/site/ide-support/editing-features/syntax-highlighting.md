@@ -7,9 +7,33 @@ colors, matching your IDE's color theme. Colors update as you type — no
 save required. Steps with no matching binding render in a distinct
 "undefined step" color once a binding registry is available.
 
-TODO(media): 📷 screenshot showing colored Gherkin keywords/steps, with a
-matched (bound) step and an unmatched step side by side so the color
-difference is visible.
+:::{tab-set}
+
+```{tab-item} Visual Studio
+:sync: vs
+
+TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
+Visual Studio, with a matched (bound) step and an unmatched step side by
+side so the color difference is visible.
+```
+
+```{tab-item} VS Code
+:sync: vscode
+
+TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
+VS Code, with a matched (bound) step and an unmatched step side by side so
+the color difference is visible.
+```
+
+```{tab-item} Rider
+:sync: rider
+
+TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
+Rider, with a matched (bound) step and an unmatched step side by side so
+the color difference is visible.
+```
+
+:::
 
 ## Non-English (dialect) keywords
 

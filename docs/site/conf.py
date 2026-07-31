@@ -6,6 +6,13 @@
 # file exists so contributors can build and preview the pages from this repo
 # without checking out reqnroll/Reqnroll. Keep MyST settings here in sync
 # with reqnroll/Reqnroll's docs/conf.py so preview rendering matches production.
+#
+# NOTE: 'sphinx_design' below is not currently in reqnroll/Reqnroll's own
+# conf.py/requirements.txt. It's needed for the per-IDE tabbed screenshots/
+# gifs used throughout ide-support/ (see tab-set usage, e.g.
+# ide-support/editing-features/syntax-highlighting.md) — add it there too
+# as part of the sync, or the tabs will fail to render / raise an unknown
+# directive error on that build.
 
 project = 'Reqnroll IDE Support'
 copyright = '2024-2026, Reqnroll'
@@ -14,6 +21,7 @@ author = 'Reqnroll'
 extensions = [
     'myst_parser',
     'sphinx_copybutton',
+    'sphinx_design',
 ]
 
 templates_path = ['_templates']

@@ -3,3 +3,4 @@ myst_parser
 furo
 sphinx-copybutton
 sphinx-autobuild
+sphinx-design

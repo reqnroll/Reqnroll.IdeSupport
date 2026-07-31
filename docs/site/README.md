@@ -59,6 +59,48 @@ that workflow exists, publishing is a manual copy.
 
 Per-page `TODO(media)` notes mark where a screenshot or gif still needs to be
 captured against a real IDE session — see the outline in issue #63 for the
-full media-need summary. Drop captured assets under `_static/` and reference
-them with standard Markdown image syntax; update the `TODO(media)` note to a
-real `![...](...)` embed once captured.
+full media-need summary.
+
+Wherever a feature's screenshot/gif differs by IDE, the media lives in a
+**synced tab set** (via the `sphinx_design` extension) so a reader picks
+their IDE once and every subsequent page remembers it — see
+`ide-support/editing-features/syntax-highlighting.md` for the reference
+example. The pattern:
+
+`````markdown
+:::{tab-set}
+
+````{tab-item} Visual Studio
+:sync: vs
+
+![...](../../_static/screenshot.png)
+````
+
+````{tab-item} VS Code
+:sync: vscode
+
+![...](../../_static/screenshot.png)
+````
+
+````{tab-item} Rider
+:sync: rider
+
+![...](../../_static/screenshot.png)
+````
+
+:::
+`````
+
+Always use exactly these three `:sync:` keys (`vs`, `vscode`, `rider`) so
+every tab-set on the site shares one selection — no `:sync-group:` override
+needed, they default to the same group. The selection is remembered via
+`sessionStorage` (per browser tab, cleared when the tab closes — not a
+permanent per-visitor preference), which is enough to carry a choice across
+every page in one reading session.
+
+Drop captured assets under `_static/` and reference them with standard
+Markdown image syntax inside the relevant tab; update the `TODO(media)` note
+to a real `![...](...)` embed once captured. Since `reqnroll/Reqnroll`'s own
+`conf.py` doesn't currently load `sphinx_design`, add it there as part of
+whatever change first syncs a tab-set into that repo, or the build will
+raise an unknown-directive error.
