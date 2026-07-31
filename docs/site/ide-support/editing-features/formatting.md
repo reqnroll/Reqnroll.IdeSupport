@@ -32,7 +32,8 @@ service is intercepting the on-type formatting request.
 ```{admonition} Rider table formatting
 :class: note
 
-Rider has on-type table-column realignment implemented. Full-document
-format-on-save parity with VS/VS Code should be confirmed before this page
-claims it as fully complete for Rider.
+Both whole-document Format and on-type `|` table-column realignment are
+implemented in Rider — Format Document works through the platform's
+built-in formatting service, and on-type table realignment through
+dedicated plugin code, matching the behavior described above.
 ```
