@@ -11,40 +11,44 @@ all of them: syntax highlighting, diagnostics, completion, navigation
 between steps and bindings, refactoring, and more. Whichever IDE you use,
 you get the same capabilities and the same editing experience.
 
-::::{div} reqnroll-hero-carousel
+:::::{div} reqnroll-hero-carousel
 :name: reqnroll-hero-carousel
 
-:::{div} reqnroll-hero-slide is-active
+::::{div} reqnroll-hero-slide is-active
 :name: reqnroll-hero-slide-vs
 
-TODO(media): 📷 hero screenshot — Visual Studio with a `.feature` file
-open, showing syntax highlighting/diagnostics/CodeLens together (a wide
-"here's what it looks like" shot, not a cropped feature close-up — see
-README.md's capture conventions for the full-window exception).
-**Target:** `index/vs.png`
-
-Visual Studio
+:::{div} reqnroll-hero-media
+![Reqnroll IDE Support in Visual Studio](index/vs.png)
 :::
 
-:::{div} reqnroll-hero-slide
+Visual Studio
+::::
+
+::::{div} reqnroll-hero-slide
 :name: reqnroll-hero-slide-vscode
+
+:::{div} reqnroll-hero-media
 
 TODO(media): 📷 hero screenshot — the same, in VS Code.
 **Target:** `index/vscode.png`
-
-VS Code
 :::
 
-:::{div} reqnroll-hero-slide
+VS Code
+::::
+
+::::{div} reqnroll-hero-slide
 :name: reqnroll-hero-slide-rider
+
+:::{div} reqnroll-hero-media
 
 TODO(media): 📷 hero screenshot — the same, in Rider.
 **Target:** `index/rider.png`
-
-Rider
 :::
 
+Rider
 ::::
+
+:::::
 
 ```{raw} html
 <style>
@@ -76,13 +80,30 @@ Rider
   opacity: 1;
   pointer-events: auto;
 }
-.reqnroll-hero-slide img {
-  max-width: 100%;
-  max-height: calc(100% - 2rem);
+/* Wrapper has no intrinsic aspect ratio of its own, so it correctly
+   participates in flex-grow/shrink; the img is then absolutely
+   positioned to fill it and object-fit does the rest. Without this
+   wrapper, a flex item that's a replaced element with an intrinsic
+   aspect ratio (an <img>) can ignore flex-basis/min-height:0 sizing
+   entirely and just render at its own aspect-ratio-derived size,
+   overflowing the fixed-height carousel and getting clipped. */
+.reqnroll-hero-media {
+  position: relative;
+  flex: 1 1 0%;
+  min-height: 0;
+  width: 100%;
+}
+.reqnroll-hero-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   border-radius: 0.25rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
 }
 .reqnroll-hero-slide p:last-child {
+  flex: 0 0 auto;
   margin: 0;
   font-weight: 600;
   color: var(--color-foreground-secondary);

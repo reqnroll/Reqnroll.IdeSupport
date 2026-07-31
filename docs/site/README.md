@@ -211,13 +211,43 @@ grabbed it and however their machine happened to be set up that day:
    rather than dropping the file wherever's convenient.
 
 **Exception — the landing page hero carousel** (`ide-support/index.md`):
-its three `TODO(media)` notes each live inside a `` :::{div} reqnroll-hero-slide` ``
-block that the carousel JS depends on. Keep that wrapper (and its `:name:`)
-intact — just add the image line inside it, above the caption text, the
-same as any other slide's content. Don't restructure the div nesting or
-rename the `reqnroll-hero-carousel`/`reqnroll-hero-slide` classes; the
-`<style>`/`<script>` immediately following the carousel target those
-class names directly.
+each slide is a `reqnroll-hero-slide` div containing a nested
+`reqnroll-hero-media` div (which wraps just the image) plus a caption line.
+The `reqnroll-hero-media` wrapper is load-bearing, not decorative: an
+`<img>` is a replaced element with its own intrinsic aspect ratio, and a
+bare `<img>` as a direct flex item can ignore `flex-basis`/`min-height: 0`
+sizing entirely and render at its own aspect-ratio-derived size — which is
+exactly what happened the first time this was built, silently overflowing
+the fixed-height carousel and getting clipped by its `overflow: hidden`.
+Wrapping the image in a plain div (no intrinsic ratio of its own) that
+correctly participates in the flex layout, then absolutely-positioning the
+`<img>` inside it with `object-fit: contain`, is what actually fixes that.
+
+When filling in one of the three `TODO(media)` notes: keep both wrapper
+divs (and the `:name:`s) intact, and put the image inside the
+`reqnroll-hero-media` div specifically — not loose in the slide alongside
+the caption. For example, Visual Studio's slide should end up as:
+
+`````markdown
+::::{div} reqnroll-hero-slide is-active
+:name: reqnroll-hero-slide-vs
+
+:::{div} reqnroll-hero-media
+![Reqnroll IDE Support in Visual Studio](index/vs.png)
+:::
+
+Visual Studio
+::::
+`````
+
+Don't rename the `reqnroll-hero-carousel`/`reqnroll-hero-slide`/
+`reqnroll-hero-media` classes or restructure the nesting — the
+`<style>`/`<script>` immediately following the carousel targets those
+class names directly. Also note the colon-fence lengths step *down* by one
+per nesting level (carousel `:::::`, slide `::::`, media `:::`) — MyST
+requires an outer fence to be *longer* than what it contains, backwards
+from what's visually intuitive; getting this backwards silently drops
+content instead of erroring.
 
 ### Tab-set pattern for per-IDE media
 
