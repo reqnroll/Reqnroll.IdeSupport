@@ -119,6 +119,83 @@ editing-features/diagnostics/vs-fix.gif
 This scheme is deliberately boring: given a page and an IDE, the file's
 path and name are fully determined, never a judgment call.
 
+### Capture conventions
+
+Beyond file placement/naming, follow these so every capture looks like it
+belongs to the same documentation set rather than a patchwork of whoever
+grabbed it and however their machine happened to be set up that day:
+
+**Environment**
+
+- **Windows for all three IDEs.** Rider and VS Code are cross-platform;
+  mixing a macOS-titlebar Rider capture next to a Windows VS Code capture
+  in the same tab trio looks inconsistent when a reader flips between
+  them. Visual Studio is Windows-only anyway, so this keeps all three
+  uniform.
+- **A named light theme per IDE, not "whatever the default happens to
+  be."** IDE defaults don't agree with each other — VS Code actually
+  ships dark by default (Dark Modern), Visual Studio's is a mid-tone blue,
+  Rider's genuinely is light. Rather than "default," use a specific light
+  theme per IDE so results are reproducible and consistent across
+  captures: **VS Code — "Light+ (default light)"**; **Visual Studio —
+  "Blue" theme (or "Light")**; **Rider — "Light"** (this one already is
+  Rider's real default). Light was chosen because squiggles, CodeLens
+  text, and inlay hints all read more clearly at small embed sizes
+  against a light background than a dark one.
+- **Default window/menu layout** — no custom panel arrangements, no
+  personal toolbar customizations. A reader with a stock install should
+  recognize the layout.
+- **Fixed OS display scaling (100%) and the IDE's default editor font
+  size**, unless the feature being documented specifically concerns font
+  size or DPI. Keeps proportions consistent across captures taken at
+  different times.
+- **The shared [Reqnroll Quickstart sample project](https://github.com/reqnroll/Quickstart)**
+  as the fixture for every capture, rather than an ad hoc feature file
+  per screenshot — a reader who worked through the Quickstart guide
+  recognizes the same scenarios throughout this site, and it keeps
+  file/project names in title bars and breadcrumbs generic (no real
+  usernames or local machine paths leaking into a screenshot).
+
+**Framing**
+
+- **Crop to the relevant editor pane plus just enough chrome for
+  orientation — not a literal whole-window screenshot, and not an
+  extreme close-up either.** A full IDE window shrunk to a ~700px-wide
+  doc column makes small things (a squiggle, one CodeLens annotation, a
+  single inlay hint) illegible; that defeats the point of having the
+  screenshot at all. Reserve genuine full-window captures for
+  install/settings pages where the surrounding chrome (the Options
+  dialog, the Marketplace panel, the status bar widget) *is* the subject.
+- **Split editor view when a capture needs to show cause-and-effect
+  across a `.feature` file and its `.cs` binding** — e.g. a CodeLens
+  count updating after a `.cs` edit, or Rename updating both sides at
+  once. Use each IDE's native split (VS: New Vertical Tab Group; VS Code:
+  Split Editor Right; Rider: Split Vertically). Let the split be uneven
+  rather than a strict 50/50 if one side needs more width to stay
+  readable.
+- **Turn off every toggleable overlay except on the page demonstrating
+  it** — inlay hints and CodeLens both add extra inline content that
+  shifts line layout and clutters an unrelated screenshot. Enable only
+  the one this specific page is about.
+- **A consistent maximum embed width** across the site (resize down to
+  it rather than embedding at native resolution) so images don't vary
+  wildly in size/proportion from page to page.
+
+**Gifs specifically**
+
+- **Enlarge the mouse pointer**, and turn on click-highlighting (a
+  burst/ripple on click) if your capture tool supports it (ScreenToGif,
+  Kap, LICEcap all do) — many of these captures are "right-click → menu
+  item," and without a click indicator it's hard to tell exactly where
+  and when the click landed.
+- **Pause briefly on the payoff frame** (the popup fully open, the jump
+  landed, the count updated) before the loop restarts, so a reader who
+  glances over mid-loop still catches the point.
+- **Keep them short and compressed** (gifsicle or ffmpeg) before
+  committing — a few seconds of relevant motion, not a leisurely
+  narrated walkthrough, and small enough that the docs repo doesn't
+  bloat.
+
 ### Fulfilling a `TODO(media)` note
 
 1. Capture the screenshot/gif against a live IDE session.
