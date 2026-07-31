@@ -12,10 +12,7 @@ save required. Steps with no matching binding render in a distinct
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
-Visual Studio, with a matched (bound) step and an unmatched step side by
-side so the color difference is visible.
-**Target:** `syntax-highlighting/vs.png`
+![](syntax-highlighting/vs.png)
 ```
 
 ```{tab-item} VS Code

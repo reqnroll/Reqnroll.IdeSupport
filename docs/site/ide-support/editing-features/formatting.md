@@ -21,10 +21,7 @@ also be re-aligned by running Format Document. A row missing its trailing
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 🎬 gif — before/after auto-format on save or on-type, and the
-table column-alignment behavior as you type. This is a "watch the text
-reflow" feature; screenshots lose the point.
-**Target:** `formatting/vs.gif`
+![](formatting/vs.gif)
 ```
 
 ```{tab-item} VS Code

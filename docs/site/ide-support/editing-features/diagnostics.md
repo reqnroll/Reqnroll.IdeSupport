@@ -16,9 +16,7 @@ step turn green once you add the matching binding.
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 📷 screenshot — a squiggle under an unmatched step in Visual
-Studio, plus the matching Error List entry.
-**Target:** `diagnostics/vs-squiggle.png`
+![](diagnostics/vs-squiggle.png)
 
 TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
 matching binding is added. Nice to have; the screenshot above already

@@ -19,10 +19,7 @@ the full step text on selection.
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 🎬 gif — typing a keyword or step, the completion popup
-appearing, and selecting an item. Completion is a live typing/filtering
-interaction that a screenshot can't convey the trigger/filter behavior of.
-**Target:** `completion/vs.gif`
+![](completion/vs.gif)
 ```
 
 ```{tab-item} VS Code
