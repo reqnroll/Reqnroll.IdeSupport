@@ -26,20 +26,20 @@ matrix says otherwise. Ratings:
 | [Code Lens — Step Usage Counts](editing-features/code-lens.md) | ✅ | 🔧 | ⚠️ |
 | [Code Lens — Hook Matches](editing-features/code-lens.md) | ✅ | 🔧 | ✅ |
 | [Inlay Hints — Bound Step Info](editing-features/inlay-hints.md) | ✅ | ✅ | ✅ |
+| [Rename Step](editing-features/rename-step.md) | ✅¹ | ✅ | ✅ |
 | [Go to Step Definition](navigation-features/go-to-definition.md) | ✅ | ✅ | ✅ |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | ⚠️ | ⚠️ | ⚠️ |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | 🔧 | 🔧 | 🔧 |
 | [Hook Navigation ("Go to Hooks")](navigation-features/hook-navigation.md) | 🔧 | 🔧 | 🔧 |
-| [Rename Step](navigation-features/rename-step.md) | ✅¹ | ✅ | ✅ |
 | [Step Definition Scaffolding](defining-steps.md) | ✅ | ✅ | ✅ |
-| [New Project / Item Templates](defining-steps.md) | ❌² | 🔧 | ❌² |
+| [New Project / Item Templates](new-project-templates.md) | ❌² | 🔧 | ❌² |
 
 ¹ VS Code's rename does not yet support disambiguating a step bound to more
-than one candidate binding — see [Rename Step](navigation-features/rename-step.md)
+than one candidate binding — see [Rename Step](editing-features/rename-step.md)
 for the workaround. Rider and Visual Studio both handle disambiguation.
 
 ² VS Code and Rider don't have an equivalent wizard; use snippets / live
-templates instead, per [Defining Steps](defining-steps.md).
+templates instead, per [New Project / Item Templates](new-project-templates.md).
 
 ```{admonition} Preview status
 :class: note

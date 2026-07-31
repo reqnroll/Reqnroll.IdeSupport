@@ -9,6 +9,7 @@
 * [Document Outline](document-outline.md)
 * [Code Lens — Step & Hook Usage Counts](code-lens.md)
 * [Inlay Hints — Bound Step Info](inlay-hints.md)
+* [Rename Step](rename-step.md)
 
 ```{toctree}
 :hidden:
@@ -22,4 +23,5 @@ code-folding
 document-outline
 code-lens
 inlay-hints
+rename-step
 ```

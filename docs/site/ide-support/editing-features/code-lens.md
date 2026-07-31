@@ -10,9 +10,6 @@ annotation above its attribute reporting how many `.feature` steps
 currently match it (e.g. "3 usages"). Clicking it opens the same results as
 [Find Step Definition Usages](../navigation-features/find-usages.md).
 
-TODO(media): 📷 screenshot — "N usages" annotation above a step definition
-method.
-
 ## Hook match counts, by feature/scenario/step (`.feature` side)
 
 Above each `Feature:`, `Scenario:`, and `Scenario Outline:` line, a lens
@@ -36,6 +33,28 @@ exactly what you need to notice. A hook with no `[Scope]` at all shows the
 static label "all scenarios" instead of a count, since it matches
 everything. Clicking always shows a results list of the matching scenarios.
 
-TODO(media): 📷 screenshot — two shots: the native CodeLens rendering
-(VS Code / Visual Studio) and Rider's CodeVision rendering of the same
-annotation, since they look visually different.
+:::{tab-set}
+
+```{tab-item} Visual Studio
+:sync: vs
+
+TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
+as rendered by Visual Studio's classic CodeLens API.
+```
+
+```{tab-item} VS Code
+:sync: vscode
+
+TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
+as rendered by VS Code's native CodeLens.
+```
+
+```{tab-item} Rider
+:sync: rider
+
+TODO(media): 📷 screenshot — the same three lenses as rendered by Rider's
+CodeVision — visibly different presentation from the native CodeLens shown
+in the other two tabs.
+```
+
+:::

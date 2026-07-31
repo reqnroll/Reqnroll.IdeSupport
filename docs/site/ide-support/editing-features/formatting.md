@@ -16,9 +16,34 @@ table pads the columns so the pipes stay aligned as you type. A table can
 also be re-aligned by running Format Document. A row missing its trailing
 `|` gets one appended automatically.
 
+:::{tab-set}
+
+```{tab-item} Visual Studio
+:sync: vs
+
 TODO(media): 🎬 gif — before/after auto-format on save or on-type, and the
 table column-alignment behavior as you type. This is a "watch the text
 reflow" feature; screenshots lose the point.
+```
+
+```{tab-item} VS Code
+:sync: vscode
+
+TODO(media): 🎬 gif — before/after auto-format on save or on-type, and the
+table column-alignment behavior as you type.
+```
+
+```{tab-item} Rider
+:sync: rider
+
+TODO(media): 🎬 gif — before/after Format Document, and the on-type `|`
+table-column realignment behavior as you type. See the note below on
+what's confirmed to work in Rider — capture once
+[#415](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/415) settles
+the Enter/Tab-trigger question.
+```
+
+:::
 
 ```{admonition} Visual Studio 2022 — built-in Gherkin formatter conflict
 :class: warning
@@ -35,5 +60,8 @@ service is intercepting the on-type formatting request.
 Both whole-document Format and on-type `|` table-column realignment are
 implemented in Rider — Format Document works through the platform's
 built-in formatting service, and on-type table realignment through
-dedicated plugin code, matching the behavior described above.
+dedicated plugin code, matching the behavior described above. Live
+cross-IDE confirmation (including whether Rider's Enter/Tab-triggered
+realignment works, not just `|`) is tracked in
+[#415](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/415).
 ```

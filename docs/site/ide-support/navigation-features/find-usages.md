@@ -1,22 +1,63 @@
 # Find Step Definition Usages
 
-Invoking **Find All References** on a C# step binding method (a method
+Invoking **Find Step Usages** on a C# step binding method (a method
 decorated with `[Given]`, `[When]`, or `[Then]`) finds every `.feature`
 step that matches that binding and lists them in your IDE's references
 panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 
+:::{tab-set}
+
+```{tab-item} Visual Studio
+:sync: vs
+
+Place the cursor in (or right-click) the binding method in a `.cs` file,
+then either:
+
+- Right-click → **Find Step Usages** (in the code editor context menu,
+  next to "Find All References"), or
+- **Extensions → Reqnroll → Find Step Usages**.
+
+Results open in the standard Find All References window.
+
 TODO(media): 🎬 gif — invoking Find Usages from a `.cs` binding method and
 seeing results across `.feature` files.
+```
+
+```{tab-item} VS Code
+:sync: vscode
+
+Place the cursor in the binding method in a `.cs` file, then either:
+
+- Right-click → **Reqnroll: Find Step Usages**, or
+- Command Palette → **Reqnroll: Find Step Usages**.
+
+Results appear in a Quick Pick list — selecting an entry jumps to that
+step in its `.feature` file.
+
+TODO(media): 🎬 gif — invoking Find Usages from a `.cs` binding method and
+seeing results across `.feature` files.
+```
+
+```{tab-item} Rider
+:sync: rider
+
+Place the cursor in the binding method in a `.cs` file, then either:
+
+- Right-click → **Find Step Usages**, or
+- **Tools → Reqnroll → Find Step Usages**.
 
 TODO(media): 🎬 gif — Rider's results, captured separately; Rider's find
 usages includes the Feature/Rule name for Rule-nested scenarios and its
 results popup differs visually from VS/VS Code's.
+```
+
+:::
 
 ```{admonition} Visual Studio — native "Find All References" doesn't reach this
 :class: warning
 
 Visual Studio's built-in **Find All References** (Shift+F12) does not route
-to Reqnroll bindings. Use the entry point documented above instead — invoke
-Find Usages from the step binding method specifically, not through VS's
-generic Roslyn-only command.
+to Reqnroll bindings — it only searches C# symbol references. Use
+**Find Step Usages** instead (see the Visual Studio tab above), not the
+native command.
 ```

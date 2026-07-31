@@ -16,13 +16,34 @@ links, binding discovery overrides, and so on) — it applies unchanged here.
 Where you go to change a *host IDE* setting (as opposed to a Reqnroll
 project setting in `reqnroll.json`) differs per IDE:
 
-| IDE | Where |
-|---|---|
-| **Visual Studio** | Tools → Options → (Reqnroll-specific pages, mirroring the existing extension's Options pages) |
-| **VS Code** | `.vscode/settings.json`, or the Settings UI, under the Reqnroll extension's contributed settings |
-| **Rider** | Settings → Languages & Frameworks → Reqnroll (or the equivalent Reqnroll settings page) |
+:::{tab-set}
+
+```{tab-item} Visual Studio
+:sync: vs
+
+**Tools → Options →** the Reqnroll-specific pages, mirroring the existing
+extension's Options pages.
 
 TODO(media): 📷 screenshot — the Visual Studio Options page.
+```
+
+```{tab-item} VS Code
+:sync: vscode
+
+`.vscode/settings.json`, or the Settings UI, under the Reqnroll
+extension's contributed settings.
 
 TODO(media): 📷 screenshot — the VS Code settings UI, filtered to the
 Reqnroll extension's contributed settings.
+```
+
+```{tab-item} Rider
+:sync: rider
+
+**Settings → Languages & Frameworks → Reqnroll** (or the equivalent
+Reqnroll settings page).
+
+TODO(media): 📷 screenshot — the Rider settings page for Reqnroll.
+```
+
+:::

@@ -9,12 +9,24 @@ large feature file without scrolling.
 * **Rider**: shown in a dedicated **Reqnroll Structure View** tool window
   (default shortcut `Alt+7`).
 
+:::{tab-set}
+
+```{tab-item} VS Code
+:sync: vscode
+
 TODO(media): 📷 screenshot — VS Code's native Outline panel listing a
 Feature/Scenario/Steps tree.
+```
+
+```{tab-item} Rider
+:sync: rider
 
 TODO(media): 📷 screenshot — Rider's dedicated Structure View tool window
 showing the same tree. Capture separately from VS Code's — they look
 visually different.
+```
+
+:::
 
 ```{admonition} Visual Studio does not show a Gherkin outline
 :class: warning

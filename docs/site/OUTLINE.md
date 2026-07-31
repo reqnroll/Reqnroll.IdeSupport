@@ -56,15 +56,18 @@ ide-support/
 │   ├── code-folding.md              §5f (F10)
 │   ├── document-outline.md          §5g (F9)
 │   ├── code-lens.md                 §5h (F18 + F24 + F25 — revised)
-│   └── inlay-hints.md               §5i (F23)
+│   ├── inlay-hints.md               §5i (F23)
+│   └── rename-step.md               §6e (F16) — moved here from
+│                                       navigation-features/; it's an
+│                                       editing-time refactor, not navigation
 ├── navigation-features/
 │   ├── index.md
 │   ├── go-to-definition.md          §6a (F5)
 │   ├── find-usages.md               §6b (F14)
 │   ├── find-unused.md               §6c (F15)
-│   ├── hook-navigation.md           §6d (F17)
-│   └── rename-step.md               §6e (F16)
-├── defining-steps.md                §7 (F6, F19)
+│   └── hook-navigation.md           §6d (F17)
+├── defining-steps.md                §7a (F6)
+├── new-project-templates.md         §7b (F19) — split into its own page
 ├── settings.md                      §8
 ├── editorconfig.md                  §9
 └── troubleshooting.md               §10

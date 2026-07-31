@@ -16,7 +16,7 @@ the two listings apart in the Marketplace.
   route to Reqnroll step bindings; use the dedicated entry point instead.
   See [Find Step Definition Usages](navigation-features/find-usages.md).
 * **VS Code** — Rename doesn't yet support disambiguating a step bound to
-  more than one candidate binding. See [Rename Step](navigation-features/rename-step.md)
+  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
   for the workaround (Rider and Visual Studio both handle this case).
 
 ## How do I report a bug?
