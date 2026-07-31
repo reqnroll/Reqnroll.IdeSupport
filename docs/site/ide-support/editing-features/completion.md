@@ -57,4 +57,6 @@ completion as fully supported. Tracked in
 
 Completions are sourced from the active Gherkin dialect in the project's
 `reqnroll.json`. A project configured with `"language": "de"` offers
-`Gegeben`, `Wenn`, `Dann` rather than `Given`, `When`, `Then`.
+`Gegeben`, `Wenn`, `Dann` rather than `Given`, `When`, `Then`. See
+[Feature Language](https://docs.reqnroll.net/latest/gherkin/feature-language.html)
+in the main Reqnroll docs for the full list of supported languages.

@@ -39,4 +39,7 @@ the color difference is visible.
 
 Highlighting works the same for non-English Gherkin dialects (e.g. German,
 French, Dutch) — the active dialect is read from the project's
-`reqnroll.json` (default: `en`).
+`reqnroll.json` (default: `en`). See
+[Feature Language](https://docs.reqnroll.net/latest/gherkin/feature-language.html)
+in the main Reqnroll docs for the full list of supported languages and how
+to set one.

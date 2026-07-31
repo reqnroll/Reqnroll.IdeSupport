@@ -34,7 +34,19 @@ published here once finalized.
 * [New Project / Item Templates](new-project-templates.md) — Visual Studio project/item wizards
 * [Extension Settings](settings.md) — configure the extension per IDE
 * [Gherkin Formatting with EditorConfig](editorconfig.md) — consistent formatting via `.editorconfig`
+* [Keyboard Shortcuts](keyboard-shortcuts.md) — every Reqnroll command's shortcut/menu location, one table per IDE
 * [Troubleshooting / FAQ](troubleshooting.md) — known per-IDE limitations, coexistence, reporting bugs
+
+```{admonition} New to Reqnroll itself?
+:class: tip
+
+This site covers the IDE extensions only. If you're new to Reqnroll as a
+BDD framework, start with the main
+[Reqnroll Quickstart guide](https://docs.reqnroll.net/latest/quickstart/index.html)
+instead — it walks through writing your first feature file and step
+definitions from scratch. Come back here once you're looking for IDE-
+specific editing/navigation help.
+```
 
 ```{toctree}
 :hidden:
@@ -48,5 +60,6 @@ defining-steps
 new-project-templates
 settings
 editorconfig
+keyboard-shortcuts
 troubleshooting
 ```

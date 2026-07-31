@@ -17,7 +17,16 @@ an upgrade — short, since it's a one-time UI moment users won't otherwise see.
 
 ## Release notes
 
-Where to find release notes / a changelog differs per IDE — link out to
-each IDE's native mechanism (VS: the "What's New" panel above; VS Code: the
-Walkthrough / Marketplace changelog tab; Rider: the plugin change-notes
-panel / JetBrains Marketplace page).
+The authoritative, always-up-to-date changelog for all three IDEs is the
+[Reqnroll.IdeSupport GitHub Releases page](https://github.com/reqnroll/Reqnroll.IdeSupport/releases)
+— every release lists what changed, cross-linked to the issues/PRs that
+shipped it. Each IDE also surfaces a version-appropriate subset natively:
+
+* **Visual Studio** — the "What's New" panel above.
+* **VS Code** — the Walkthrough, or the Marketplace listing's "Version
+  History" / Changelog tab.
+* **Rider** — the plugin's own change-notes panel, or the JetBrains
+  Marketplace listing's changelog tab.
+
+If a native panel seems out of date or you want the full history, check
+GitHub Releases directly.
