@@ -44,3 +44,10 @@ myst_heading_anchors = 3
 html_theme = "furo"
 html_static_path = ['_static']
 html_title = '%s Documentation (Preview)' % project
+
+# Site-wide click-to-zoom lightbox for content screenshots/gifs (see
+# _static/lightbox.{css,js}). Plain static assets, not a Sphinx extension,
+# so nothing new needs adding to requirements.txt when this syncs into
+# reqnroll/Reqnroll.
+html_css_files = ['lightbox.css']
+html_js_files = ['lightbox.js']

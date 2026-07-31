@@ -196,6 +196,26 @@ grabbed it and however their machine happened to be set up that day:
   narrated walkthrough, and small enough that the docs repo doesn't
   bloat.
 
+### Click-to-zoom lightbox
+
+Every content image is click-to-zoom automatically, site-wide — no markup
+needed per page. `_static/lightbox.css`/`_static/lightbox.js`, registered
+via `html_css_files`/`html_js_files` in `conf.py`, attach a click handler to
+every `<img>` under `[role="main"]` that opens it near-full-size over a dark
+overlay; dismiss with another click, the close button, or <kbd>Esc</kbd>.
+This exists because embed width is capped for the three-column tab layout
+(see "Framing" above), so a reader who wants to actually read fine detail —
+a squiggle, a single inlay hint — needs a way to see the capture at (closer
+to) its native resolution.
+
+Deliberately a plain static JS/CSS pair, not a Sphinx extension: it's just
+two files under `html_static_path`, so nothing new needs adding to
+`requirements.txt` when this syncs into `reqnroll/Reqnroll` (unlike
+`sphinx_design`, noted at the top of `conf.py`) — copy the two files over
+and add the two `conf.py` lines and it works under whatever theme that repo
+uses, since `[role="main"]` is the standard Sphinx/docutils main-content
+landmark, not theme-specific markup.
+
 ### Fulfilling a `TODO(media)` note
 
 1. Capture the screenshot/gif against a live IDE session.
