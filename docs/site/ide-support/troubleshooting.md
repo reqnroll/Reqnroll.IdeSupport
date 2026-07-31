@@ -10,9 +10,8 @@ same `.feature` files.
 
 If you have both installed, disable one: **Extensions → Manage
 Extensions**, select the extension you're not using, and click
-**Disable**. See
-[Install for Visual Studio](installation/visual-studio.md) for how to tell
-the two listings apart in the Marketplace.
+**Disable**. See [Installation](installation/index.md) (Visual Studio tab)
+for how to tell the two listings apart in the Marketplace.
 
 ## Known per-IDE limitations
 

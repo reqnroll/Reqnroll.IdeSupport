@@ -40,10 +40,10 @@ image(s) needed · **🎬 gif** = short animated capture needed.
 ide-support/
 ├── index.md                         §1 Landing page
 ├── installation/
-│   ├── index.md
-│   ├── visual-studio.md             §2a
-│   ├── vscode.md                    §2b
-│   └── rider.md                     §2c
+│   └── index.md                     §2a/§2b/§2c — one page, synced tabs
+│                                       (was 3 separate pages; consolidated
+│                                       once the site adopted the tab-set
+│                                       pattern)
 ├── upgrading.md                     §3
 ├── feature-overview.md              §4
 ├── editing-features/
