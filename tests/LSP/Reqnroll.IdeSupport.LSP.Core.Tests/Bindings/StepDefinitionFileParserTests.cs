@@ -387,6 +387,61 @@ namespace TestProject
     }
 
     [Fact]
+    public async Task Literal_dollar_sign_before_a_placeholder_is_matched_verbatim()
+    {
+        // Reproduces the live bug: [Then("the basket price should be ${float}")] has a
+        // literal '$' immediately before the placeholder. Only {float} was substituted;
+        // the literal '$' was spliced into the pattern unescaped, so it was interpreted as
+        // a regex end-of-string anchor mid-pattern instead of matching a literal '$'. That
+        // made the binding permanently unmatchable — even though the connector's own
+        // runtime-computed regex matched fine — so the step stayed flagged "Step
+        // definition not found" forever, no matter how many times bindings were
+        // rediscovered.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Then(""the basket price should be ${float}"")]
+              public void Method(decimal value) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue();
+        binding.Regex!.IsMatch("the basket price should be $180.0").Should().BeTrue(
+            "the literal '$' should be matched verbatim, not treated as an end-of-string anchor");
+    }
+
+    [Fact]
+    public async Task Literal_regex_metacharacters_around_a_placeholder_are_escaped()
+    {
+        // Once a {param} placeholder makes this a Cucumber expression, a literal '.' in the
+        // surrounding text must not act as a regex wildcard matching any character — it
+        // should only match a literal dot, same as the '$' case above.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the price is 3.5{int} dollars"")]
+              public void Method(int cents) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue();
+        binding.Regex!.IsMatch("the price is 3.599 dollars").Should().BeTrue();
+        binding.Regex!.IsMatch("the price is 3X599 dollars").Should().BeFalse(
+            "a literal '.' must not act as a wildcard matching any character");
+    }
+
+    [Fact]
+    public async Task Expression_with_no_placeholder_is_still_used_as_a_plain_regex()
+    {
+        // Guards the other half of the contract: an expression with no {param} at all keeps
+        // being treated as an already-valid raw regex, unescaped — e.g. an existing binding
+        // written as [Given("the number is (\\d+)")] must keep working as a capturing group,
+        // not be turned into literal parenthesis text.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the number is (\\d+)"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue();
+        binding.Regex!.ToString().Should().Be(@"^the number is (\d+)$");
+        binding.Regex!.IsMatch("the number is 42").Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Custom_cucumber_param_type_falls_back_to_wildcard_and_matches_step()
     {
         // Reproduces the live bug: [When("the two numbers {Verb} added")] uses a custom

@@ -176,10 +176,34 @@ public class StepDefinitionFileParser
     /// though the precise regex is not statically derivable without a semantic model.
     /// For plain-regex expressions the substitution is a no-op (no <c>{...}</c> present).
     /// </summary>
+    /// <remarks>
+    /// An expression with no <c>{param}</c> placeholder at all is treated as a plain, already
+    /// regex-ready pattern and passed through unescaped (e.g. <c>"the firs number is (.*)"</c>
+    /// stays a real capturing group) — this is the "plain regex" half of the contract described
+    /// above, and existing bindings rely on it.
+    /// <para/>
+    /// Once at least one placeholder is present, the expression is being authored as a Cucumber
+    /// expression, where <c>{param}</c> is the only syntax with special meaning — every other
+    /// character, including regex metacharacters like <c>$</c> <c>.</c> <c>(</c> <c>)</c>, is
+    /// literal text the step author expects to match verbatim. So in that case the literal
+    /// segments between placeholders are <see cref="Regex.Escape(string)"/>-d before being
+    /// spliced into the pattern. Without this, a literal <c>$</c> outside a placeholder — e.g.
+    /// <c>"the basket price should be ${float}"</c> — is interpreted as a regex end-of-string
+    /// anchor mid-pattern instead of a literal dollar sign, making the binding permanently
+    /// unmatchable instead of matching its literal text.
+    /// </remarks>
     private static Regex BuildRegex(string expression)
     {
-        var regexBody = CucumberParamPattern.Replace(expression, m =>
-            m.Groups[1].Value switch
+        var matches = CucumberParamPattern.Matches(expression);
+        if (matches.Count == 0)
+            return new Regex($"^{expression}$", RegexOptions.CultureInvariant);
+
+        var regexBody = new StringBuilder();
+        var lastIndex = 0;
+        foreach (Match m in matches)
+        {
+            regexBody.Append(Regex.Escape(expression.Substring(lastIndex, m.Index - lastIndex)));
+            regexBody.Append(m.Groups[1].Value switch
             {
                 "int" or "byte" or "short" or "long"    => @"(-?\d+)",
                 "float" or "double"                      => @"(-?\d*(?:\.\d+)?)",
@@ -191,6 +215,9 @@ public class StepDefinitionFileParser
                 // back to (.*) — the same pattern the connector produces for them at runtime.
                 _                                        => @"(.*)"
             });
+            lastIndex = m.Index + m.Length;
+        }
+        regexBody.Append(Regex.Escape(expression.Substring(lastIndex)));
         return new Regex($"^{regexBody}$", RegexOptions.CultureInvariant);
     }
 
