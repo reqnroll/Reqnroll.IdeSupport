@@ -56,3 +56,10 @@ and selecting a result.
 ```
 
 :::
+
+```{tip}
+You don't always need to invoke this explicitly — [Code Lens](../editing-features/code-lens.md)
+shows hook-match counts inline above `Feature:`/`Scenario:` lines while
+you're reading the code, and clicking one opens the same picker filtered
+to that lens's own hook set.
+```

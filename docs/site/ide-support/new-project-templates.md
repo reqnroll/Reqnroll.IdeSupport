@@ -17,6 +17,6 @@ TODO(media): 📷 screenshot — the Add New Item templates.
 VS Code and Rider don't have an equivalent project wizard — use snippets
 (VS Code) or live templates (Rider) as the equivalent entry point for
 scaffolding a new `.feature` file or step definitions class. See
-[Defining Steps](defining-steps.md) for scaffolding a single missing step
+[Defining Steps](editing-features/defining-steps.md) for scaffolding a single missing step
 binding, which works the same way across all three IDEs.
 ```

@@ -265,7 +265,6 @@ published here once finalized.
 * [Feature Overview](feature-overview.md) — every feature, with a per-IDE support matrix
 * [Editing Features](editing-features/index.md) — syntax highlighting, diagnostics, completion, formatting
 * [Navigation Features](navigation-features/index.md) — jump between steps, bindings, and hooks
-* [Defining Steps](defining-steps.md) — scaffolding a missing step definition
 * [New Project / Item Templates](new-project-templates.md) — Visual Studio project/item wizards
 * [Extension Settings](settings.md) — configure the extension per IDE
 * [Gherkin Formatting with EditorConfig](editorconfig.md) — consistent formatting via `.editorconfig`
@@ -291,7 +290,6 @@ upgrading
 feature-overview
 editing-features/index
 navigation-features/index
-defining-steps
 new-project-templates
 settings
 editorconfig

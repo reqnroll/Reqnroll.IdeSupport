@@ -45,6 +45,6 @@ this auto-negotiates via the platform's generic LSP code-action support
 states Rider support definitively.
 ```
 
-See also [New Project / Item Templates](new-project-templates.md) for
+See also [New Project / Item Templates](../new-project-templates.md) for
 scaffolding a brand-new `.feature` file or step definitions class (as
 opposed to a single missing step).

@@ -55,18 +55,20 @@ ide-support/
 │   ├── comment-uncomment.md         §5e (F13)
 │   ├── code-folding.md              §5f (F10)
 │   ├── document-outline.md          §5g (F9)
+│   ├── defining-steps.md            §7a (F6) — moved here from ide-support/
+│   │                                   root; editing-time, grouped with the
+│   │                                   rest of Editing Features
+│   ├── rename-step.md               §6e (F16) — moved here from
+│   │                                   navigation-features/; it's an
+│   │                                   editing-time refactor, not navigation
 │   ├── code-lens.md                 §5h (F18 + F24 + F25 — revised)
-│   ├── inlay-hints.md               §5i (F23)
-│   └── rename-step.md               §6e (F16) — moved here from
-│                                       navigation-features/; it's an
-│                                       editing-time refactor, not navigation
+│   └── inlay-hints.md               §5i (F23)
 ├── navigation-features/
 │   ├── index.md
 │   ├── go-to-definition.md          §6a (F5)
 │   ├── find-usages.md               §6b (F14)
 │   ├── find-unused.md               §6c (F15)
 │   └── hook-navigation.md           §6d (F17)
-├── defining-steps.md                §7a (F6)
 ├── new-project-templates.md         §7b (F19) — split into its own page
 ├── settings.md                      §8
 ├── editorconfig.md                  §9

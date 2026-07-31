@@ -64,3 +64,9 @@ to Reqnroll bindings — it only searches C# symbol references. Use
 **Find Step Usages** instead (see the Visual Studio tab above), not the
 native command.
 ```
+
+```{tip}
+You don't always need to invoke this explicitly — [Code Lens](../editing-features/code-lens.md)
+shows the same usage count inline above every step binding method while
+you're reading the code, and clicking it opens these same results.
+```

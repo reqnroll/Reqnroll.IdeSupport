@@ -18,7 +18,7 @@ menu instead — see the linked feature page for the full how-to.
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Right-click → Find Step Usages, or Extensions → Reqnroll → Find Step Usages |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Extensions → Reqnroll → Find Unused Step Definitions |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Go to Hooks |
-| [Define Missing Steps](defining-steps.md) (quick-fix) | Ctrl+. (lightbulb) *(native VS default)* | — |
+| [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (lightbulb) *(native VS default)* | — |
 
 TODO(media): 📷 screenshot of the Extensions → Reqnroll submenu, showing
 all three commands hosted there in one place.
@@ -37,7 +37,7 @@ all three commands hosted there in one place.
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Right-click → Reqnroll: Find Step Usages, or Command Palette |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Command Palette → Reqnroll: Find Unused Step Definitions |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Go to Hooks, or Command Palette |
-| [Define Missing Steps](defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | — |
+| [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | — |
 | [Toggle inlay hints](editing-features/inlay-hints.md) | Hold Ctrl (⌥ on macOS) *(only in an `...UnlessPressed` mode)* | — |
 ````
 
