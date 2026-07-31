@@ -4,11 +4,12 @@ hide-toc: true
 
 # Reqnroll IDE Support (Preview)
 
-**Reqnroll IDE Support** is a single [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
-(LSP) server behind three thin IDE clients — Visual Studio, Visual Studio
-Code, and JetBrains Rider — providing consistent Gherkin editing, navigation,
-and refactoring features across all three, instead of maintaining separate
-per-IDE implementations of the same logic.
+The Reqnroll team now provides **Reqnroll IDE Support** for all three major
+IDEs used by Reqnroll developers — **Visual Studio**, **Visual Studio
+Code**, and **JetBrains Rider** — with the same advanced feature set across
+all of them: syntax highlighting, diagnostics, completion, navigation
+between steps and bindings, refactoring, and more. Whichever IDE you use,
+you get the same capabilities and the same editing experience.
 
 ```{admonition} Preview status
 :class: important
