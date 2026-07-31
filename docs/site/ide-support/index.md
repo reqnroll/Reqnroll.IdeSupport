@@ -13,12 +13,15 @@ per-IDE implementations of the same logic.
 ```{admonition} Preview status
 :class: important
 
-This extension is currently in **Preview**. It coexists with the existing
-[Reqnroll for Visual Studio](https://docs.reqnroll.net/latest/ide-integrations/visual-studio/index.html)
-extension — installing one does not remove or disable the other, and there
-is no automatic migration between them. It is intended to eventually replace
-the legacy Visual Studio extension once feature parity and stability
-criteria are met; those criteria will be published here once finalized.
+This extension is currently in **Preview**. It can be installed alongside
+the existing [Reqnroll for Visual Studio](https://docs.reqnroll.net/latest/ide-integrations/visual-studio/index.html)
+extension — installing one does not remove the other, and there is no
+automatic migration between them — but running both **enabled** at once is
+not a supported configuration; see
+[Troubleshooting / FAQ](troubleshooting.md#can-i-have-both-extensions-installed-at-once).
+It is intended to eventually replace the legacy Visual Studio extension
+once feature parity and stability criteria are met; those criteria will be
+published here once finalized.
 ```
 
 * [Installation](installation/index.md) — install the extension for your IDE

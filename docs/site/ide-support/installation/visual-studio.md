@@ -23,18 +23,16 @@ the existing "Reqnroll.VisualStudio" entry.
 
 3. Install, then restart Visual Studio when prompted.
 
-## Installing both extensions side by side
+## Only enable one at a time
 
 The Preview extension and the existing Reqnroll for Visual Studio extension
-can both be installed at the same time — installing one does not disable or
-remove the other. You might want the Preview extension installed alongside
-the existing one to:
+can both be **installed** at the same time — installing one does not
+remove the other. But running both **enabled** together is **not a
+supported configuration**: you'll get duplicate/conflicting behavior (e.g.
+two sets of diagnostics, two CodeLens annotations) for the same `.feature`
+files.
 
-* try LSP-based navigation, refactoring, and CodeLens features ahead of
-  general availability;
-* compare behavior against the existing extension while migrating a large
-  solution;
-* report Preview-specific issues without losing your existing setup.
-
-See [Troubleshooting / FAQ](../troubleshooting.md) for what to expect when
-both extensions are active in the same solution.
+If you install the Preview extension to try it alongside your existing
+setup, go to **Extensions → Manage Extensions** and **disable** whichever
+one you're not actively using. See [Troubleshooting / FAQ](../troubleshooting.md#can-i-have-both-extensions-installed-at-once)
+for more.

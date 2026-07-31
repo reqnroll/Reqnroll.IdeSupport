@@ -2,9 +2,15 @@
 
 ## Can I have both extensions installed at once?
 
-Yes — Reqnroll IDE Support (Preview) and the existing Reqnroll for Visual
-Studio extension can be installed side by side; installing or using one
-does not disable the other. See
+Both **can** be installed side by side — installing one doesn't remove the
+other. But running both **enabled** at the same time is **not a supported
+configuration**: with both active, you'll get duplicate/conflicting
+behavior (e.g. two sets of diagnostics, two CodeLens annotations) for the
+same `.feature` files.
+
+If you have both installed, disable one: **Extensions → Manage
+Extensions**, select the extension you're not using, and click
+**Disable**. See
 [Install for Visual Studio](installation/visual-studio.md) for how to tell
 the two listings apart in the Marketplace.
 
