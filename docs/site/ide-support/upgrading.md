@@ -20,4 +20,4 @@ an upgrade — short, since it's a one-time UI moment users won't otherwise see.
 Where to find release notes / a changelog differs per IDE — link out to
 each IDE's native mechanism (VS: the "What's New" panel above; VS Code: the
 Walkthrough / Marketplace changelog tab; Rider: the plugin change-notes
-panel / JetBrains Marketplace page once published).
+panel / JetBrains Marketplace page).
