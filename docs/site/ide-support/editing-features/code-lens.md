@@ -40,6 +40,7 @@ everything. Clicking always shows a results list of the matching scenarios.
 
 TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
 as rendered by Visual Studio's classic CodeLens API.
+**Target:** `code-lens/vs.png`
 ```
 
 ```{tab-item} VS Code
@@ -47,6 +48,7 @@ as rendered by Visual Studio's classic CodeLens API.
 
 TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
 as rendered by VS Code's native CodeLens.
+**Target:** `code-lens/vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -55,6 +57,7 @@ as rendered by VS Code's native CodeLens.
 TODO(media): 📷 screenshot — the same three lenses as rendered by Rider's
 CodeVision — visibly different presentation from the native CodeLens shown
 in the other two tabs.
+**Target:** `code-lens/rider.png`
 ```
 
 :::

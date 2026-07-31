@@ -21,6 +21,7 @@ rename.
 
 TODO(media): 🎬 gif — renaming a step definition in Visual Studio and
 watching every matching `.feature` step update.
+**Target:** `rename-step/vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -33,6 +34,7 @@ right-click → **Reqnroll: Rename Step** or the Command Palette.
 
 TODO(media): 🎬 gif — renaming a step definition in VS Code and watching
 every matching `.feature` step update.
+**Target:** `rename-step/vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -50,6 +52,7 @@ than one candidate attribute.
 TODO(media): 🎬 gif — renaming a step definition in Rider, capturing its
 disambiguation picker specifically (see the note below) — not just a port
 of the VS/VS Code capture.
+**Target:** `rename-step/rider.gif`
 ```
 
 :::

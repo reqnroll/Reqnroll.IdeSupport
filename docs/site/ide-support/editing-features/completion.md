@@ -22,6 +22,7 @@ the full step text on selection.
 TODO(media): 🎬 gif — typing a keyword or step, the completion popup
 appearing, and selecting an item. Completion is a live typing/filtering
 interaction that a screenshot can't convey the trigger/filter behavior of.
+**Target:** `completion/vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -29,6 +30,7 @@ interaction that a screenshot can't convey the trigger/filter behavior of.
 
 TODO(media): 🎬 gif — typing a keyword or step, the completion popup
 appearing, and selecting an item.
+**Target:** `completion/vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -38,6 +40,7 @@ TODO(media): 🎬 gif — typing a keyword or step, the completion popup
 appearing, and selecting an item — capture only once
 [#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414) confirms
 Rider completion actually works; see the admonition below.
+**Target:** `completion/rider.gif`
 ```
 
 :::

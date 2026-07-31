@@ -16,6 +16,7 @@ discoverable menu command:
 
 TODO(media): 🎬 gif (optional, low priority) — simple enough that this
 screenshot-free text description is likely sufficient on its own.
+**Target:** `comment-uncomment/vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -25,6 +26,7 @@ screenshot-free text description is likely sufficient on its own.
 → **Reqnroll: Comment/Uncomment**, or the Command Palette.
 
 TODO(media): 🎬 gif (optional, low priority).
+**Target:** `comment-uncomment/vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -34,6 +36,7 @@ TODO(media): 🎬 gif (optional, low priority).
 **Comment/Uncomment**, or **Tools → Reqnroll → Comment/Uncomment**.
 
 TODO(media): 🎬 gif (optional, low priority).
+**Target:** `comment-uncomment/rider.gif`
 ```
 
 :::

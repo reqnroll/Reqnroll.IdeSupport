@@ -14,6 +14,7 @@ welcome content on every update.
 
 TODO(media): 🎬 gif of the Visual Studio "What's New" panel appearing after
 an upgrade — short, since it's a one-time UI moment users won't otherwise see.
+**Target:** `upgrading/vs.gif`
 
 ## Release notes
 

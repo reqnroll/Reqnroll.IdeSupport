@@ -13,6 +13,7 @@ signatures and parameter types inferred from the step text.
 
 TODO(media): 🎬 gif — invoking the quick-fix on an unmatched step in
 Visual Studio and seeing the generated binding method.
+**Target:** `defining-steps/vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -20,6 +21,7 @@ Visual Studio and seeing the generated binding method.
 
 TODO(media): 🎬 gif — invoking the quick-fix on an unmatched step in
 VS Code and seeing the generated binding method.
+**Target:** `defining-steps/vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -28,6 +30,7 @@ VS Code and seeing the generated binding method.
 TODO(media): 🎬 gif — invoking the quick-fix in Rider, once
 [#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414)-style
 verification confirms it's actually wired up — see the note below.
+**Target:** `defining-steps/rider.gif`
 ```
 
 :::

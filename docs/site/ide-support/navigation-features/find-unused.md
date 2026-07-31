@@ -17,6 +17,7 @@ editor context-menu placement or keybinding for this one — it's a
 workspace-wide scan, not tied to a specific line.
 
 TODO(media): 📷 screenshot — the command's results list of unused bindings.
+**Target:** `find-unused/vs.png`
 ```
 
 ```{tab-item} VS Code
@@ -26,6 +27,7 @@ Command Palette → **Reqnroll: Find Unused Step Definitions**. No
 context-menu placement or default keybinding.
 
 TODO(media): 📷 screenshot — the command's results list of unused bindings.
+**Target:** `find-unused/vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -36,6 +38,7 @@ context-menu placement or keybinding.
 
 TODO(media): 📷 screenshot — Rider's results popup, captured separately
 alongside VS/VS Code's.
+**Target:** `find-unused/rider.png`
 ```
 
 :::

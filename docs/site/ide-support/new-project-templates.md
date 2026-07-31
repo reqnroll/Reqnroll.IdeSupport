@@ -6,8 +6,10 @@ blank `.feature` file template and a step definitions class template.
 
 TODO(media): 📷 screenshot — the New Project dialog with the Reqnroll
 template and test-framework picker.
+**Target:** `new-project-templates/vs-new-project.png`
 
 TODO(media): 📷 screenshot — the Add New Item templates.
+**Target:** `new-project-templates/vs-add-item.png`
 
 ```{admonition} Visual Studio only
 :class: note

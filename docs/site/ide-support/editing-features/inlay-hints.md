@@ -22,18 +22,21 @@ TODO(media): 📷 screenshot — a `.feature` file in Visual Studio showing the
 `→ ClassName.MethodName` hint after a defined step, the `→ N matches` and
 `→ N bindings` variants, and an undefined step showing no hint, all visible
 together if possible.
+**Target:** `inlay-hints/vs.png`
 ```
 
 ```{tab-item} VS Code
 :sync: vscode
 
 TODO(media): 📷 screenshot — the same, in VS Code.
+**Target:** `inlay-hints/vscode.png`
 ```
 
 ```{tab-item} Rider
 :sync: rider
 
 TODO(media): 📷 screenshot — the same, in Rider.
+**Target:** `inlay-hints/rider.png`
 ```
 
 :::

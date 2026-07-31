@@ -15,6 +15,7 @@ save required. Steps with no matching binding render in a distinct
 TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
 Visual Studio, with a matched (bound) step and an unmatched step side by
 side so the color difference is visible.
+**Target:** `syntax-highlighting/vs.png`
 ```
 
 ```{tab-item} VS Code
@@ -23,6 +24,7 @@ side so the color difference is visible.
 TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
 VS Code, with a matched (bound) step and an unmatched step side by side so
 the color difference is visible.
+**Target:** `syntax-highlighting/vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -31,6 +33,7 @@ the color difference is visible.
 TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
 Rider, with a matched (bound) step and an unmatched step side by side so
 the color difference is visible.
+**Target:** `syntax-highlighting/rider.png`
 ```
 
 :::

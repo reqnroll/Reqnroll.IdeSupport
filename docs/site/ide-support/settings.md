@@ -25,6 +25,7 @@ project setting in `reqnroll.json`) differs per IDE:
 extension's Options pages.
 
 TODO(media): 📷 screenshot — the Visual Studio Options page.
+**Target:** `settings/vs.png`
 ```
 
 ```{tab-item} VS Code
@@ -35,6 +36,7 @@ extension's contributed settings.
 
 TODO(media): 📷 screenshot — the VS Code settings UI, filtered to the
 Reqnroll extension's contributed settings.
+**Target:** `settings/vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -44,6 +46,7 @@ Reqnroll extension's contributed settings.
 Reqnroll settings page).
 
 TODO(media): 📷 screenshot — the Rider settings page for Reqnroll.
+**Target:** `settings/rider.png`
 ```
 
 :::
