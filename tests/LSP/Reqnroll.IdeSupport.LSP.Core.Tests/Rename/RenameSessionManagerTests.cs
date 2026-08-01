@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Rename;
@@ -7,6 +8,12 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Rename;
 public class RenameSessionManagerTests
 {
     private static RenameSessionManager CreateSut() => new();
+
+    private sealed class FakeClock
+    {
+        public DateTime UtcNow { get; set; } = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        public DateTime Now() => UtcNow;
+    }
 
     [Fact]
     public void SetSession_then_TryConsume_returns_correct_attributeIndex()
@@ -72,14 +79,6 @@ public class RenameSessionManagerTests
         indexB.Should().Be(20);
     }
 
-    /// <summary>
-    /// Sessions expire after 30 seconds via the internal Cleanup method.
-    /// Since we cannot fast-forward time in a unit test, this test verifies
-    /// that a session is NOT prematurely removed by consuming immediately
-    /// after setting (which succeeds). The 30-second expiry behaviour is
-    /// covered by the implementation's Cleanup method, which is invoked
-    /// on every SetSession and TryConsume call.
-    /// </summary>
     [Fact]
     public void TryConsume_immediately_after_set_succeeds()
     {
@@ -90,6 +89,55 @@ public class RenameSessionManagerTests
 
         consumed.Should().BeTrue();
         attributeIndex.Should().Be(5);
+    }
+
+    [Fact]
+    public void TryConsume_just_before_expiry_succeeds()
+    {
+        var clock = new FakeClock();
+        var sut = new RenameSessionManager(clock.Now);
+
+        sut.SetSession("test.cs", 1, 5);
+        clock.UtcNow = clock.UtcNow.AddSeconds(30).AddMilliseconds(-1);
+        var consumed = sut.TryConsume("test.cs", 1, out var attributeIndex);
+
+        consumed.Should().BeTrue();
+        attributeIndex.Should().Be(5);
+    }
+
+    [Fact]
+    public void TryConsume_after_30_second_expiry_returns_false()
+    {
+        var clock = new FakeClock();
+        var sut = new RenameSessionManager(clock.Now);
+
+        sut.SetSession("test.cs", 1, 5);
+        clock.UtcNow = clock.UtcNow.AddSeconds(30);
+        var consumed = sut.TryConsume("test.cs", 1, out _);
+
+        consumed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Cleanup_evicts_expired_sessions_so_a_later_SetSession_does_not_see_them()
+    {
+        var clock = new FakeClock();
+        var sut = new RenameSessionManager(clock.Now);
+
+        sut.SetSession("file-a.cs", 1, 5);
+        clock.UtcNow = clock.UtcNow.AddSeconds(31);
+
+        // Cleanup() runs as a side effect of SetSession/TryConsume; setting a second,
+        // unrelated session should sweep the expired first one so it can never be consumed,
+        // even though TryConsume itself would also independently reject it.
+        sut.SetSession("file-b.cs", 2, 9);
+
+        var consumedExpired = sut.TryConsume("file-a.cs", 1, out _);
+        var consumedFresh = sut.TryConsume("file-b.cs", 2, out var freshIndex);
+
+        consumedExpired.Should().BeFalse();
+        consumedFresh.Should().BeTrue();
+        freshIndex.Should().Be(9);
     }
 
     [Fact]
@@ -186,5 +234,29 @@ public class RenameSessionManagerTests
 
         second.Should().BeTrue();
         secondIndex.Should().Be(2);
+    }
+
+    [Fact]
+    public void SetSession_with_malformed_percent_encoding_does_not_throw()
+    {
+        var sut = CreateSut();
+
+        // "%ZZ" is not a valid percent-encoded sequence; Uri.UnescapeDataString throws for it,
+        // which NormalizeUri's catch-all falls back from by using the raw (still-escaped) value.
+        var act = () => sut.SetSession("file:///project/%ZZ/Steps.cs", 0, 1);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void TryConsume_with_malformed_percent_encoding_does_not_throw_and_is_consumable_with_matching_raw_uri()
+    {
+        var sut = CreateSut();
+
+        sut.SetSession("file:///project/%ZZ/Steps.cs", 0, 1);
+        var consumed = sut.TryConsume("file:///project/%ZZ/Steps.cs", 0, out var attributeIndex);
+
+        consumed.Should().BeTrue();
+        attributeIndex.Should().Be(1);
     }
 }

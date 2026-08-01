@@ -13,15 +13,28 @@ namespace Reqnroll.IdeSupport.LSP.Core.Rename;
 public class RenameSessionManager
 {
     private static readonly TimeSpan SessionDuration = TimeSpan.FromSeconds(30);
-    
+
+    private readonly Func<DateTime> _utcNow;
+
     // Key: (uri, documentVersion) → (attributeIndex, expiresAt)
     private readonly ConcurrentDictionary<(string Uri, int Version), (int AttributeIndex, DateTime ExpiresAt)> _sessions = new();
+
+    /// <summary>Initializes a new instance of the <see cref="RenameSessionManager"/> class using the real system clock.</summary>
+    public RenameSessionManager() : this(() => DateTime.UtcNow)
+    {
+    }
+
+    /// <summary>Initializes a new instance of the <see cref="RenameSessionManager"/> class with an injectable clock, allowing tests to control session expiry.</summary>
+    public RenameSessionManager(Func<DateTime> utcNow)
+    {
+        _utcNow = utcNow ?? throw new ArgumentNullException(nameof(utcNow));
+    }
 
     /// <summary>Stores a pending rename session with a 30-second expiry.</summary>
     public void SetSession(string uri, int version, int attributeIndex)
     {
         var key = (NormalizeUri(uri), version);
-        _sessions[key] = (attributeIndex, DateTime.UtcNow + SessionDuration);
+        _sessions[key] = (attributeIndex, _utcNow() + SessionDuration);
         Cleanup();
     }
 
@@ -38,7 +51,7 @@ public class RenameSessionManager
         var key = (NormalizeUri(uri), version);
         if (_sessions.TryRemove(key, out var entry))
         {
-            if (entry.ExpiresAt > DateTime.UtcNow)
+            if (entry.ExpiresAt > _utcNow())
             {
                 attributeIndex = entry.AttributeIndex;
                 return true;
@@ -74,7 +87,7 @@ public class RenameSessionManager
     /// <summary>Removes expired sessions on a best-effort basis.</summary>
     private void Cleanup()
     {
-        var now = DateTime.UtcNow;
+        var now = _utcNow();
         foreach (var kvp in _sessions)
         {
             if (kvp.Value.ExpiresAt <= now)
