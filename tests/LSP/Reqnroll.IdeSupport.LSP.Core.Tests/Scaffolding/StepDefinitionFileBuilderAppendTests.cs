@@ -74,6 +74,61 @@ public class StepDefinitionFileBuilderAppendTests
     }
 
     [Fact]
+    public void Does_not_double_indent_the_appended_method_file_scoped()
+    {
+        // Regression test: the target file's detected member indent (4 spaces here, matching the
+        // snippet's own baked-in indent unit) must not be added *on top of* that baked-in indent.
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "[Binding]\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    [Given(@\"a step\")]\r\n" +
+            "    public void GivenAStep()\r\n" +
+            "    {\r\n" +
+            "        throw new PendingStepException();\r\n" +
+            "    }\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("\r\n    [When(@\"I press add\")]\r\n");
+        result.Should().Contain("\r\n    public void WhenIPressAdd()\r\n");
+        result.Should().Contain("\r\n    {\r\n        throw new PendingStepException();\r\n    }\r\n");
+        result.Should().NotContain("        [When(@\"I press add\")]"); // would indicate doubled (8-space) indent
+    }
+
+    [Fact]
+    public void Matches_existing_two_level_indent_when_appending_to_a_block_scoped_namespace()
+    {
+        // Block-scoped files conventionally indent members two levels (namespace + class), unlike
+        // file-scoped ones (one level). The appended method must match that, not the snippet's own
+        // single baked-in level.
+        var existing =
+            "namespace MyNamespace.MyProject\r\n" +
+            "{\r\n" +
+            "    [Binding]\r\n" +
+            "    public class CalculatorStepDefinitions\r\n" +
+            "    {\r\n" +
+            "        [Given(@\"a step\")]\r\n" +
+            "        public void GivenAStep()\r\n" +
+            "        {\r\n" +
+            "            throw new PendingStepException();\r\n" +
+            "        }\r\n" +
+            "    }\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("\r\n        [When(@\"I press add\")]\r\n");
+        result.Should().Contain("\r\n        public void WhenIPressAdd()\r\n");
+        result.Should().Contain("\r\n        {\r\n            throw new PendingStepException();\r\n        }\r\n");
+    }
+
+    [Fact]
     public void Appends_into_an_empty_class_body()
     {
         var existing =

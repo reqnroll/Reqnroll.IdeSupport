@@ -116,7 +116,14 @@ public static class StepDefinitionFileBuilder
         sb.Append(existingContent, 0, insertAt);
         sb.Append(newLine);
         if (bodyHasMembers) sb.Append(newLine);
-        AppendSnippets(sb, snippets, newLine, classIndent);
+        // Snippets already carry one baked-in `indent` unit per line (the class-member level —
+        // see BuildNewFile's file-scoped branch). AppendSnippets treats its classIndent as an
+        // *additional* prefix on top of that, which is right for BuildNewFile (0 or 1 extra level
+        // depending on namespace style) but wrong here: classIndent is the file's *actual* member
+        // indent, not an extra level, so appending it as a prefix on top of the snippet's own
+        // baked-in indent doubles it. Re-indent instead: strip the baked-in unit, then apply the
+        // detected indent as the sole prefix.
+        AppendReindentedSnippets(sb, snippets, newLine, indent, classIndent);
         sb.Append(newLine);
         sb.Append(existingContent, closeBraceIndex, existingContent.Length - closeBraceIndex);
 
@@ -275,6 +282,49 @@ public static class StepDefinitionFileBuilder
             }
 
             // Blank line between methods, but not after the last one.
+            if (i < snippets.Count - 1)
+                sb.Append(newLine);
+        }
+    }
+
+    /// <summary>
+    /// Like <see cref="AppendSnippets"/>, but for the append-to-existing-file path: each snippet
+    /// line's baked-in <paramref name="sourceIndentUnit"/> prefix is stripped and replaced with
+    /// <paramref name="targetIndent"/> (the indentation actually used by the target file's
+    /// existing members) instead of being added on top of it.
+    /// </summary>
+    private static void AppendReindentedSnippets(
+        StringBuilder          sb,
+        IReadOnlyList<string>  snippets,
+        string                 newLine,
+        string                 sourceIndentUnit,
+        string                 targetIndent)
+    {
+        for (int i = 0; i < snippets.Count; i++)
+        {
+            var normalized = snippets[i].Replace("\r\n", "\n").Replace("\r", "\n");
+            var lines = normalized.Split('\n');
+
+            int end = lines.Length;
+            while (end > 0 && lines[end - 1].Length == 0)
+                end--;
+
+            for (int j = 0; j < end; j++)
+            {
+                var line = lines[j];
+                if (line.Length == 0)
+                {
+                    sb.Append(newLine);
+                    continue;
+                }
+
+                var content = line.StartsWith(sourceIndentUnit, StringComparison.Ordinal)
+                    ? line.Substring(sourceIndentUnit.Length)
+                    : line.TrimStart(' ', '\t');
+
+                sb.Append(targetIndent).Append(content).Append(newLine);
+            }
+
             if (i < snippets.Count - 1)
                 sb.Append(newLine);
         }
