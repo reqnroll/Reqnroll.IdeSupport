@@ -198,15 +198,23 @@ public sealed class CodeActionHandler : ICodeActionHandler
 
             bool multiTarget = successfulAppends.Count > 0; // +1 for the always-present new-file target
 
+            // Exactly one action per group is marked IsPreferred — the top-ranked append candidate
+            // when one exists, otherwise the new-file fallback. Some clients (VS in particular)
+            // don't preserve the server's array order in the lightbulb menu and instead lean on
+            // this signal (or fall back to their own sort, e.g. alphabetical by title) to decide
+            // what to show first, so relying on ordering alone isn't enough to keep "append to the
+            // existing file" as the default choice.
             var actionsForTitle = new List<CodeAction>(successfulAppends.Count + 1);
+            bool isFirst = true;
             foreach (var (path, existingContent, appendedContent) in successfulAppends)
             {
                 var title = multiTarget ? $"{baseTitle} → {Path.GetFileName(path)}" : baseTitle;
-                actionsForTitle.Add(BuildAppendCodeAction(title, path, existingContent, appendedContent));
+                actionsForTitle.Add(BuildAppendCodeAction(title, path, existingContent, appendedContent, isPreferred: isFirst));
+                isFirst = false;
             }
 
             var newFileTitle = multiTarget ? $"{baseTitle} → new file" : baseTitle;
-            actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, targetPath));
+            actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, targetPath, isPreferred: isFirst));
 
             return actionsForTitle.Select(a => new CommandOrCodeAction(a)).ToList();
         }
@@ -258,7 +266,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /// <summary>Builds a "Define step(s)" action that creates a brand-new step-definition file with the given content.</summary>
-    private static CodeAction BuildCreateCodeAction(string title, string fileContent, string targetPath)
+    private static CodeAction BuildCreateCodeAction(string title, string fileContent, string targetPath, bool isPreferred)
     {
         var targetUri = DocumentUri.FromFileSystemPath(targetPath);
 
@@ -285,7 +293,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
                 }))
         };
 
-        return BuildCodeAction(title, edit, targetUri);
+        return BuildCodeAction(title, edit, targetUri, isPreferred);
     }
 
     /// <summary>
@@ -296,7 +304,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     /// surfaces files that already contain a step definition matched to this feature — so, unlike
     /// a newly created file, no <c>[Binding]</c>-attribute check is needed before offering it.
     /// </summary>
-    private static CodeAction BuildAppendCodeAction(string title, string targetPath, string existingContent, string appendedContent)
+    private static CodeAction BuildAppendCodeAction(string title, string targetPath, string existingContent, string appendedContent, bool isPreferred)
     {
         var targetUri = DocumentUri.FromFileSystemPath(targetPath);
 
@@ -318,10 +326,16 @@ public sealed class CodeActionHandler : ICodeActionHandler
                 }))
         };
 
-        return BuildCodeAction(title, edit, targetUri);
+        return BuildCodeAction(title, edit, targetUri, isPreferred);
     }
 
-    private static CodeAction BuildCodeAction(string title, WorkspaceEdit edit, DocumentUri targetUri) =>
+    /// <summary>
+    /// Builds the shared <see cref="CodeAction"/> shape. <paramref name="isPreferred"/> should be
+    /// <see langword="true"/> for exactly one action per title group — the client-facing signal
+    /// for "this is the one to pick" (e.g. VS/VS Code bubble the preferred action to the top of
+    /// the lightbulb menu instead of relying on array order, which some clients don't preserve).
+    /// </summary>
+    private static CodeAction BuildCodeAction(string title, WorkspaceEdit edit, DocumentUri targetUri, bool isPreferred) =>
         new()
         {
             Title       = title,
@@ -335,7 +349,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
                 Name      = "vscode.open",
                 Arguments = new JArray(targetUri.ToString())
             },
-            IsPreferred = true
+            IsPreferred = isPreferred
         };
 
     private List<string>? RenderSnippets(

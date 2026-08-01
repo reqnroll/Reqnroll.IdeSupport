@@ -306,6 +306,12 @@ public class CodeActionHandlerTests
             // New-file action: still creates a brand-new file as before.
             var newFileChanges = newFileAction.Edit!.DocumentChanges!.ToList();
             newFileChanges.Should().Contain(c => c.IsCreateFile);
+
+            // The append action is the intended default choice, so it — not the new-file
+            // fallback — must carry IsPreferred: some clients (VS in particular) don't preserve
+            // the server's array order in the lightbulb menu and lean on this signal instead.
+            appendAction.IsPreferred.Should().BeTrue();
+            newFileAction.IsPreferred.Should().BeFalse();
         }
         finally
         {
@@ -338,6 +344,7 @@ public class CodeActionHandlerTests
             actions.Should().HaveCount(1);
             actions[0].Title.Should().Be("Define missing step"); // plain title: only one target ever resolved
             actions[0].Edit!.DocumentChanges!.Should().Contain(c => c.IsCreateFile);
+            actions[0].IsPreferred.Should().BeTrue(); // sole surviving action must still be preferred
         }
         finally
         {
