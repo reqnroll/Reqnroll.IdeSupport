@@ -134,4 +134,56 @@ public class ReqnrollProjectTemplateWizardTests
 
         _context.ReplacementsDictionary.Should().NotContainKey("$globalUsings$");
     }
+
+    [Fact]
+    public void RunStarted_cleans_a_leading_digit_project_name_to_a_valid_identifier_for_rootnamespace()
+    {
+        // "1Project" is not a valid identifier (leading digit) → cleaned to "_1Project"
+        SetupContext(projectName: "1Project");
+        _dialogService.ShowAddNewProjectDialog()
+            .Returns(new AddNewProjectWizardResult("net8.0", "MSTest"));
+
+        CreateSut().RunStarted(_context);
+
+        _context.ReplacementsDictionary["$rootnamespace$"].Should().Be("_1Project");
+    }
+
+    [Fact]
+    public void RunStarted_adds_globalUsings_for_NUnit_net8_target()
+    {
+        SetupContext();
+        _dialogService.ShowAddNewProjectDialog()
+            .Returns(new AddNewProjectWizardResult("net8.0", "NUnit"));
+
+        CreateSut().RunStarted(_context);
+
+        _context.ReplacementsDictionary.Should().ContainKey("$globalUsings$");
+        _context.ReplacementsDictionary["$globalUsings$"].Should().Contain("NUnit.Framework");
+    }
+
+    [Fact]
+    public void RunStarted_adds_globalUsings_for_xUnit_v3_net8_target()
+    {
+        SetupContext();
+        _dialogService.ShowAddNewProjectDialog()
+            .Returns(new AddNewProjectWizardResult("net8.0", "xUnit.v3"));
+
+        CreateSut().RunStarted(_context);
+
+        _context.ReplacementsDictionary.Should().ContainKey("$globalUsings$");
+        _context.ReplacementsDictionary["$globalUsings$"].Should().Contain("Xunit");
+    }
+
+    [Fact]
+    public void RunStarted_adds_an_empty_globalUsings_for_TUnit_net8_target()
+    {
+        SetupContext();
+        _dialogService.ShowAddNewProjectDialog()
+            .Returns(new AddNewProjectWizardResult("net8.0", "TUnit"));
+
+        CreateSut().RunStarted(_context);
+
+        _context.ReplacementsDictionary.Should().ContainKey("$globalUsings$");
+        _context.ReplacementsDictionary["$globalUsings$"].Should().BeEmpty();
+    }
 }
