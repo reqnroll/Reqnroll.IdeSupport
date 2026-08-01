@@ -265,6 +265,124 @@ public class CodeActionHandlerTests
         }
     }
 
+    // ── Append-candidate targeting ───────────────────────────────────────────
+
+    private const string ValidBindingClass =
+        "using System;\r\nusing Reqnroll;\r\n\r\nnamespace Test;\r\n\r\n[Binding]\r\npublic class CandidateSteps\r\n{\r\n}\r\n";
+
+    [Fact]
+    public async Task Offers_append_action_alongside_new_file_when_a_candidate_exists()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var featurePath  = Path.Combine(tempDir, "calculator.feature");
+            var featureUri   = DocumentUri.FromFileSystemPath(featurePath);
+            var candidatePath = Path.Combine(tempDir, "CandidateSteps.cs");
+            File.WriteAllText(candidatePath, ValidBindingClass);
+
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            _scopeManager.ResolvePrimaryOwner(featureUri).Returns((LspReqnrollProject?)null);
+            SeedMatchServiceFor(featureUri,
+                DefinedMatch("a step", ScenarioBlock.Given, featureUri, candidatePath, lineOffset: 23),
+                UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41));
+
+            var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
+
+            var actions = result!.Select(a => a.CodeAction!).ToList();
+            actions.Should().HaveCount(2);
+
+            var appendAction = actions.Should().ContainSingle(a => a.Title.EndsWith("CandidateSteps.cs")).Subject;
+            var newFileAction = actions.Should().ContainSingle(a => a.Title.EndsWith("new file")).Subject;
+
+            // Append action: no CreateFile op, targets the existing candidate file, keeps its content.
+            var appendChanges = appendAction.Edit!.DocumentChanges!.ToList();
+            appendChanges.Should().NotContain(c => c.IsCreateFile);
+            var appendEdit = appendChanges.Single(c => c.IsTextDocumentEdit).TextDocumentEdit!;
+            appendEdit.TextDocument.Uri.Path.Should().Be(DocumentUri.FromFileSystemPath(candidatePath).Path);
+            appendEdit.Edits.First().NewText.Should().Contain("WhenIPressAdd").And.Contain("[Binding]");
+
+            // New-file action: still creates a brand-new file as before.
+            var newFileChanges = newFileAction.Edit!.DocumentChanges!.ToList();
+            newFileChanges.Should().Contain(c => c.IsCreateFile);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Falls_back_to_plain_new_file_action_when_the_only_candidate_cannot_be_parsed()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var featurePath  = Path.Combine(tempDir, "calculator.feature");
+            var featureUri   = DocumentUri.FromFileSystemPath(featurePath);
+            var candidatePath = Path.Combine(tempDir, "CandidateSteps.cs");
+            // No "class" keyword at all -> AppendToFile bails out (returns null).
+            File.WriteAllText(candidatePath, "// not a real step definition file\r\n");
+
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            _scopeManager.ResolvePrimaryOwner(featureUri).Returns((LspReqnrollProject?)null);
+            SeedMatchServiceFor(featureUri,
+                DefinedMatch("a step", ScenarioBlock.Given, featureUri, candidatePath, lineOffset: 23),
+                UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41));
+
+            var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
+
+            var actions = result!.Select(a => a.CodeAction!).ToList();
+            actions.Should().HaveCount(1);
+            actions[0].Title.Should().Be("Define missing step"); // plain title: only one target ever resolved
+            actions[0].Edit!.DocumentChanges!.Should().Contain(c => c.IsCreateFile);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Caps_total_actions_at_six_when_many_candidates_exist()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var featurePath = Path.Combine(tempDir, "calculator.feature");
+            var featureUri  = DocumentUri.FromFileSystemPath(featurePath);
+
+            var definedMatches = new List<StepBindingMatch>();
+            for (int i = 0; i < 8; i++)
+            {
+                var candidatePath = Path.Combine(tempDir, $"CandidateSteps{i}.cs");
+                File.WriteAllText(candidatePath, ValidBindingClass);
+                // Give each candidate a distinct step count so they rank deterministically and all differ.
+                // lineOffset is irrelevant to ranking here (only the source file matters), so reuse 0
+                // for every match to stay within the short fixture feature text's bounds.
+                for (int j = 0; j <= i; j++)
+                    definedMatches.Add(DefinedMatch($"defined step {i}-{j}", ScenarioBlock.Given, featureUri, candidatePath, lineOffset: 0));
+            }
+
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            _scopeManager.ResolvePrimaryOwner(featureUri).Returns((LspReqnrollProject?)null);
+
+            var allMatches = definedMatches.Append(UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41)).ToArray();
+            SeedMatchServiceFor(featureUri, allMatches);
+
+            var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
+
+            result!.Should().HaveCount(6); // 5 append candidates (MaxAppendCandidates) + 1 new-file fallback
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
     // ── Telemetry ─────────────────────────────────────────────────────────────
 
     [Fact]
@@ -367,5 +485,30 @@ public class CodeActionHandlerTests
         return new StepBindingMatch(
             FeatureUri.ToString(), range, MatchResult.CreateMultiMatch(items),
             "Given", "S", null);
+    }
+
+    /// <summary>Builds a defined <see cref="StepBindingMatch"/> whose binding lives in <paramref name="sourceFile"/> (feeds the append-candidate ranker).</summary>
+    private static StepBindingMatch DefinedMatch(string text, ScenarioBlock block, DocumentUri uri, string sourceFile, int lineOffset)
+    {
+        var binding = new ProjectStepDefinitionBinding(
+            block,
+            new Regex($"^{Regex.Escape(text)}$"),
+            null,
+            new ProjectBindingImplementation("Handle", null, new SourceLocation(sourceFile, 1, 1)));
+
+        var item   = MatchResultItem.CreateMatch(binding, ParameterMatch.NotMatch);
+        var result = MatchResult.CreateMultiMatch(new[] { item });
+
+        var snapshot = new LspTextSnapshot(uri.ToString(), 1, FeatureText);
+        var range    = GherkinRange.FromPoint(snapshot, lineOffset, text.Length);
+
+        var keyword = block switch
+        {
+            ScenarioBlock.Given => "Given",
+            ScenarioBlock.When  => "When",
+            _                   => "Then"
+        };
+
+        return new StepBindingMatch(uri.ToString(), range, result, keyword, "S", null);
     }
 }

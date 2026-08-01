@@ -70,6 +70,184 @@ public static class StepDefinitionFileBuilder
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Inserts <paramref name="snippets"/> as new methods into the body of the first class found
+    /// in <paramref name="existingContent"/>, immediately before its closing brace.
+    /// </summary>
+    /// <remarks>
+    /// Uses a lightweight heuristic scan (not a full C# parser): string/char literals and comments
+    /// are masked out before locating the class's braces, so brace characters inside them don't
+    /// confuse the scan. Returns <see langword="null"/> when the scan can't confidently locate a
+    /// class body (no <c>class</c> keyword, unterminated literal/comment, or unbalanced braces) —
+    /// callers should fall back to creating a new file rather than risk corrupting a hand-written
+    /// one. Member indentation is detected from the first existing member line inside the class
+    /// body; <paramref name="indent"/> is used only as a fallback for an empty class body.
+    /// </remarks>
+    public static string? AppendToFile(
+        string                 existingContent,
+        IReadOnlyList<string>  snippets,
+        string                 indent,
+        string                 newLine)
+    {
+        if (snippets.Count == 0) return existingContent;
+
+        var masked = MaskLiteralsAndComments(existingContent);
+        if (masked is null) return null;
+
+        var classMatch = System.Text.RegularExpressions.Regex.Match(masked, @"\bclass\b");
+        if (!classMatch.Success) return null;
+
+        var openBraceIndex = masked.IndexOf('{', classMatch.Index);
+        if (openBraceIndex < 0) return null;
+
+        var closeBraceIndex = FindMatchingCloseBrace(masked, openBraceIndex);
+        if (closeBraceIndex < 0) return null;
+
+        var classIndent = DetectMemberIndent(existingContent, openBraceIndex, closeBraceIndex, indent);
+
+        // Trim trailing whitespace back from the closing brace so repeated appends don't
+        // accumulate blank lines between the last member and the brace.
+        var insertAt = closeBraceIndex;
+        while (insertAt > openBraceIndex + 1 && char.IsWhiteSpace(existingContent[insertAt - 1]))
+            insertAt--;
+        bool bodyHasMembers = insertAt > openBraceIndex + 1;
+
+        var sb = new StringBuilder(existingContent.Length + 256);
+        sb.Append(existingContent, 0, insertAt);
+        sb.Append(newLine);
+        if (bodyHasMembers) sb.Append(newLine);
+        AppendSnippets(sb, snippets, newLine, classIndent);
+        sb.Append(newLine);
+        sb.Append(existingContent, closeBraceIndex, existingContent.Length - closeBraceIndex);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns a same-length copy of <paramref name="content"/> with every string/char literal and
+    /// comment replaced by spaces (newlines preserved), so brace-matching on the result ignores
+    /// braces that appear inside literals or comments. Returns <see langword="null"/> if a literal
+    /// or comment is left unterminated (malformed/unparseable source — bail rather than guess).
+    /// </summary>
+    private static string? MaskLiteralsAndComments(string content)
+    {
+        var mask = content.ToCharArray();
+        int i = 0;
+        while (i < content.Length)
+        {
+            char c = content[i];
+
+            if (c == '/' && i + 1 < content.Length && content[i + 1] == '/')
+            {
+                int start = i;
+                while (i < content.Length && content[i] != '\n') i++;
+                Clear(mask, start, i);
+                continue;
+            }
+
+            if (c == '/' && i + 1 < content.Length && content[i + 1] == '*')
+            {
+                int start = i;
+                int end = content.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                if (end < 0) return null;
+                i = end + 2;
+                Clear(mask, start, i);
+                continue;
+            }
+
+            if (c == '@' && i + 1 < content.Length && content[i + 1] == '"')
+            {
+                int start = i;
+                i += 2;
+                while (true)
+                {
+                    int q = content.IndexOf('"', i);
+                    if (q < 0) return null;
+                    if (q + 1 < content.Length && content[q + 1] == '"') { i = q + 2; continue; }
+                    i = q + 1;
+                    break;
+                }
+                Clear(mask, start, i);
+                continue;
+            }
+
+            if (c == '"')
+            {
+                int start = i;
+                i++;
+                while (i < content.Length && content[i] != '"')
+                {
+                    if (content[i] == '\\' && i + 1 < content.Length) i++;
+                    i++;
+                }
+                if (i >= content.Length) return null;
+                i++;
+                Clear(mask, start, i);
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                int start = i;
+                i++;
+                while (i < content.Length && content[i] != '\'')
+                {
+                    if (content[i] == '\\' && i + 1 < content.Length) i++;
+                    i++;
+                }
+                if (i >= content.Length) return null;
+                i++;
+                Clear(mask, start, i);
+                continue;
+            }
+
+            i++;
+        }
+
+        return new string(mask);
+
+        static void Clear(char[] buffer, int start, int end)
+        {
+            for (int j = start; j < end; j++)
+                if (buffer[j] != '\n') buffer[j] = ' ';
+        }
+    }
+
+    /// <summary>Finds the index of the <c>}</c> that closes the <c>{</c> at <paramref name="openBraceIndex"/> by depth counting.</summary>
+    private static int FindMatchingCloseBrace(string maskedContent, int openBraceIndex)
+    {
+        int depth = 0;
+        for (int i = openBraceIndex; i < maskedContent.Length; i++)
+        {
+            if (maskedContent[i] == '{') depth++;
+            else if (maskedContent[i] == '}')
+            {
+                depth--;
+                if (depth == 0) return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>Returns the leading whitespace of the first non-blank line strictly between the two brace indices, or <paramref name="fallback"/> if the body is empty.</summary>
+    private static string DetectMemberIndent(string content, int openBraceIndex, int closeBraceIndex, string fallback)
+    {
+        int i = openBraceIndex + 1;
+        while (i < closeBraceIndex)
+        {
+            int lineEnd = content.IndexOf('\n', i);
+            if (lineEnd < 0 || lineEnd > closeBraceIndex) lineEnd = closeBraceIndex;
+
+            var line = content.Substring(i, lineEnd - i);
+            var trimmed = line.Trim(' ', '\t', '\r');
+            if (trimmed.Length > 0)
+                return line.Substring(0, line.Length - line.TrimStart(' ', '\t').Length);
+
+            i = lineEnd + 1;
+        }
+        return fallback;
+    }
+
     private static void AppendSnippets(
         StringBuilder          sb,
         IReadOnlyList<string>  snippets,
