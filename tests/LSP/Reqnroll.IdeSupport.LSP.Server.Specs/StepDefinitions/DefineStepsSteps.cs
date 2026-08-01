@@ -78,6 +78,31 @@ public sealed class DefineStepsSteps
             "the generated file should contain a class declaration");
     }
 
+    [Then(@"the code action titled ""(.*)"" appends to the existing C# file")]
+    public void ThenTheCodeActionTitledAppendsToTheExistingFile(string title)
+    {
+        _ctx.LastCodeActions.Should().NotBeNull("code actions should have been requested first");
+        var match = _ctx.LastCodeActions!.FirstOrDefault(ca => ca.IsCodeAction && ca.CodeAction!.Title == title);
+        match.Should().NotBeNull($"a code action titled '{title}' should be present");
+        var action = match!.CodeAction!;
+
+        action.Edit.Should().NotBeNull("the code action should carry an inline workspace edit");
+        action.Edit!.DocumentChanges.Should().NotContain(
+            d => d.CreateFile != null,
+            "an append action must not create a new file — it replaces the existing one's content");
+
+        var textEditChange = action.Edit.DocumentChanges!.FirstOrDefault(d => d.TextDocumentEdit != null);
+        textEditChange.TextDocumentEdit.Should().NotBeNull("the workspace edit should include a TextDocumentEdit");
+
+        var content = textEditChange.TextDocumentEdit!.Edits
+            .Should().NotBeEmpty("there should be at least one text edit")
+            .And.Subject.First().NewText;
+
+        content.Should().Contain("WhenTheFirstStepIsBound",
+            "the existing step definition method must be preserved, not overwritten");
+        content.Should().Contain("[Binding]");
+    }
+
     [Then(@"the code action has a ""(.*)"" command to open the new file")]
     public void ThenTheCodeActionHasACommand(string commandName)
     {

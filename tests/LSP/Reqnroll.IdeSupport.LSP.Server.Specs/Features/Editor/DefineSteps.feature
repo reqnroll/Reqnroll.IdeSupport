@@ -84,6 +84,34 @@ Scenario: A bulk action is offered when there are multiple undefined steps
     And code actions are requested for "Multi.feature" at line 2
     Then a code action titled "Define all missing steps in file" is available
 
+# ── Append to an existing binding file ──────────────────────────────────────────
+
+Scenario: The code action offers to append to an existing binding file that already covers this feature
+    When the project is announced with output assembly "Sample.dll" for "AppendCandidate.feature"
+    And the C# step definition file "CalculatorSteps.cs" is opened and saved to disk with
+        """
+        using Reqnroll;
+        namespace Sample {
+            [Binding]
+            public class CalculatorSteps
+            {
+                [When("the first step is bound")]
+                public void WhenTheFirstStepIsBound() { }
+            }
+        }
+        """
+    And the feature file "AppendCandidate.feature" is opened with
+        """
+        Feature: AppendCandidate
+        Scenario: S
+            When the first step is bound
+            And this step needs scaffolding
+        """
+    And code actions are requested for "AppendCandidate.feature" at line 3
+    Then a code action titled "Define missing step → CalculatorSteps.cs" is available
+    And a code action titled "Define missing step → new file" is available
+    And the code action titled "Define missing step → CalculatorSteps.cs" appends to the existing C# file
+
 # ── No-op when nothing to define ────────────────────────────────────────────────
 
 Scenario: No code action is offered when all steps are already bound
