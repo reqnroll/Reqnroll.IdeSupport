@@ -36,8 +36,9 @@ function captureProvider(client: LanguageClient): vscode.CodeLensProvider {
   try {
     registerStepCodeLens(client, fakeContext());
   } finally {
-    (vscode.languages as unknown as { registerCodeLensProvider: unknown }).registerCodeLensProvider =
-      original;
+    (
+      vscode.languages as unknown as { registerCodeLensProvider: unknown }
+    ).registerCodeLensProvider = original;
   }
 
   assert.ok(captured, 'registerCodeLensProvider should have been called');
@@ -59,10 +60,7 @@ suite('stepCodeLens', () => {
       const provider = captureProvider(client);
 
       const document = { uri: vscode.Uri.parse('file:///Steps.cs') } as vscode.TextDocument;
-      const lenses = await provider.provideCodeLenses(
-        document,
-        {} as vscode.CancellationToken,
-      );
+      const lenses = await provider.provideCodeLenses(document, {} as vscode.CancellationToken);
 
       assert.strictEqual(lenses?.length, 1);
       assert.strictEqual(lenses[0].command?.title, '2 usages');
@@ -75,10 +73,7 @@ suite('stepCodeLens', () => {
       const provider = captureProvider(client);
 
       const document = { uri: vscode.Uri.parse('file:///Steps.cs') } as vscode.TextDocument;
-      const lenses = await provider.provideCodeLenses(
-        document,
-        {} as vscode.CancellationToken,
-      );
+      const lenses = await provider.provideCodeLenses(document, {} as vscode.CancellationToken);
 
       assert.deepStrictEqual(lenses, []);
     });
@@ -109,10 +104,7 @@ suite('stepCodeLens', () => {
 
         try {
           const document = { uri: vscode.Uri.parse('file:///Steps.cs') } as vscode.TextDocument;
-          const lenses = await provider.provideCodeLenses(
-            document,
-            {} as vscode.CancellationToken,
-          );
+          const lenses = await provider.provideCodeLenses(document, {} as vscode.CancellationToken);
 
           assert.deepStrictEqual(lenses, []);
           assert.ok(warned, 'console.warn should be called on request failure');
