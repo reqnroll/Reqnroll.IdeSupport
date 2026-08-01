@@ -1,6 +1,10 @@
 # F6 — Define Steps (Scaffolding): Design & Build Plan
 
-**Phase 2 · Status: Design**
+**Phase 2 · Status: Implemented.** v1 (new-file-only scaffolding) shipped as designed below.
+v2 — per-feature candidate-file ranking and append-to-existing-file support, resolving the v1
+deferred items OQ-4/OQ-6 — shipped 2026-08-01
+([#417](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/417)). See §11 for the as-built
+delta from this original design.
 
 ---
 
@@ -353,6 +357,10 @@ Appending to an existing file is more complex because the server must:
 For the initial implementation, **only new-file creation** is supported. Appending to existing
 files is deferred as a follow-on (see Open Questions §7).
 
+> **As-built (v2, 2026-08-01):** superseded — see §11. The target is now chosen per-feature (which
+> existing file already has the most bindings matched to *this* feature's steps) rather than
+> project-wide, and appending to an existing file is implemented.
+
 ### 5.4 Namespace Derivation
 
 The namespace for the generated class is derived from:
@@ -569,14 +577,20 @@ file placement in `StepDefinitions/`) become Phase 2b scenarios gated on Option 
 
 ## 7. Open Questions
 
+| # | Question | Impact | Resolution |
+|---|---|---|---|
+| OQ-1 | Does VS 2022's lightbulb mechanism fire for `.feature` files? Needs a manual smoke test in VS with a pre-release build of the extension. If not, Option B becomes mandatory for VS. | High | **Confirmed live 2026-08-01**: yes, dynamic registration + Ctrl+. both work in VS once the server is fully initialized. An earlier "no lightbulb at all" report on the same day turned out to be the known post-fresh-build LSP-not-fully-wired-up state — restarting the experimental instance resolved it, not a code issue. Option B not needed. |
+| OQ-2 | Does VS `workspace/applyEdit` support `CreateFile` resource operations? If not, the server cannot create new `.cs` files via the standard code-action path for VS; the VS extension would need to create the file via DTE. | High (VS only) | **Confirmed working** — verified live via the VS inspector log 2026-08-01 (`CreateFile` document change applied, new file opened via the `vscode.open` command). |
+| OQ-3 | Should "Define step" also fire for **ambiguous** steps (multiple matches)? The VS extension only targets undefined steps. Leaving ambiguous steps out of scope for now. | Low | Still out of scope; unchanged. |
+| OQ-4 | Appending stubs to an **existing** step definitions file: requires parsing the target `.cs` file to find the insertion point. Defer to a follow-on feature; Phase 1 only creates new files. | Medium | **Resolved, implemented** in v2 ([#417](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/417)) — see §11. |
+| OQ-5 | How is `ProjectDefaultNamespace` surfaced to the LSP server? The `reqnroll/projectLoaded` notification carries project metadata — confirm it includes default namespace, or add it. | Medium | Resolved in v1 — `LspReqnrollProject.DefaultNamespace` is populated and read directly in `CodeActionHandler.Handle`. |
+| OQ-6 | The VS extension's "Selected step definition skeletons saved to `StepDefinitions/` folder" scenario requires directory-awareness. In the LSP path, the server must inspect the workspace to detect a `StepDefinitions/` folder. Confirm this is feasible with the current `ILspWorkspaceScopeManager` API. | Low | **Resolved, implemented** in v2 — superseded by per-feature candidate ranking (§11), which is a stronger signal than folder detection alone; the folder heuristic is kept only as the last-resort fallback. |
+
+**New, v2-only open item:**
+
 | # | Question | Impact |
 |---|---|---|
-| OQ-1 | Does VS 2022's lightbulb mechanism fire for `.feature` files? Needs a manual smoke test in VS with a pre-release build of the extension. If not, Option B becomes mandatory for VS. | High |
-| OQ-2 | Does VS `workspace/applyEdit` support `CreateFile` resource operations? If not, the server cannot create new `.cs` files via the standard code-action path for VS; the VS extension would need to create the file via DTE. | High (VS only) |
-| OQ-3 | Should "Define step" also fire for **ambiguous** steps (multiple matches)? The VS extension only targets undefined steps. Leaving ambiguous steps out of scope for now. | Low |
-| OQ-4 | Appending stubs to an **existing** step definitions file: requires parsing the target `.cs` file to find the insertion point. Defer to a follow-on feature; Phase 1 only creates new files. | Medium |
-| OQ-5 | How is `ProjectDefaultNamespace` surfaced to the LSP server? The `reqnroll/projectLoaded` notification carries project metadata — confirm it includes default namespace, or add it. | Medium |
-| OQ-6 | The VS extension's "Selected step definition skeletons saved to `StepDefinitions/` folder" scenario requires directory-awareness. In the LSP path, the server must inspect the workspace to detect a `StepDefinitions/` folder. Confirm this is feasible with the current `ILspWorkspaceScopeManager` API. | Low |
+| OQ-7 | VS's built-in LSP client re-sorts same-priority `CodeAction`s alphabetically by title (see §11.3), so it cannot express our append-candidate ranking across *multiple* append targets — only "append is preferred over new-file" survives, not the relative order among several append candidates. Fixing this would require a custom serializer to emit VS's `_vs_priority` extension field (OmniSharp's `CodeAction` model has no extension-data hook for it). Deliberately not pursued: VS Code and Rider already order correctly, and this is cosmetic (all offered actions still work), not a correctness issue. | Low (VS only, cosmetic) |
 
 ---
 
@@ -617,14 +631,114 @@ file placement in `StepDefinitions/`) become Phase 2b scenarios gated on Option 
 
 ## 10. Success Criteria
 
-- [ ] "Define step: X" code action appears in VS Code lightbulb for any undefined step
-- [ ] "Define all missing steps in file" appears when ≥ 2 undefined steps exist
-- [ ] Selecting an action creates `<FeatureName>StepDefinitions.cs` with correct content
-- [ ] Generated class respects `stepDefinitionSkeletonStyle` from `reqnroll.json`
-- [ ] Generated class respects namespace declaration style (block vs. file-scoped)
-- [ ] Duplicate step skeletons are collapsed to one stub
-- [ ] Special characters are correctly escaped in the generated expression
-- [ ] After file creation, the binding registry refreshes and the step is no longer highlighted as undefined
-- [ ] No code action is returned for feature files where all steps are defined
-- [ ] VS Code, Rider: all of the above pass via generic LSP code action path
-- [ ] Visual Studio: lightbulb verified working; if not, Option B path documented as next action
+- [x] "Define step: X" code action appears in VS Code lightbulb for any undefined step
+- [x] "Define all missing steps in file" appears when ≥ 2 undefined steps exist
+- [x] Selecting an action creates `<FeatureName>StepDefinitions.cs` with correct content
+- [x] Generated class respects `stepDefinitionSkeletonStyle` from `reqnroll.json`
+- [x] Generated class respects namespace declaration style (block vs. file-scoped)
+- [x] Duplicate step skeletons are collapsed to one stub
+- [x] Special characters are correctly escaped in the generated expression
+- [x] After file creation, the binding registry refreshes and the step is no longer highlighted as undefined
+- [x] No code action is returned for feature files where all steps are defined
+- [x] VS Code, Rider: all of the above pass via generic LSP code action path
+- [x] Visual Studio: lightbulb verified working live 2026-08-01 (Ctrl+. and passive lightbulb both fire); Option B not needed
+
+**v2 additions (2026-08-01, [#417](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/417)):**
+
+- [x] "Define step(s)" offers an append-to-existing-file action when an existing binding file already covers steps in this feature
+- [x] Append action is skipped (falls back to new-file only) when the target file's structure can't be confidently parsed
+- [x] New-file fallback's folder derives from the top-ranked candidate's directory, not a project-wide heuristic, when any candidate exists
+- [x] Total offered actions capped at 6 (5 append candidates + 1 new-file fallback)
+- [x] Exactly one action per title group is marked `isPreferred`
+- [x] VS Code renders append-before-new-file in the expected order; Visual Studio does not (§11.3, OQ-7, accepted as a cosmetic VS-only limitation)
+
+---
+
+## 11. As-Built (v2, 2026-08-01) — Candidate-File Ranking and Append Support
+
+This section records what actually shipped for [#417](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/417), which resolves this doc's deferred OQ-4 (append) and OQ-6 (directory-awareness). It stays entirely within Option A (standard `textDocument/codeAction`) — no protocol change, no client-side work in any IDE.
+
+### 11.1 Component and naming corrections vs. the original plan
+
+The handler shipped as `CodeActionHandler` in
+`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/CodeActionHandler.cs` — **not**
+`FeatureCodeActionHandler` under `Handlers/ProtocolHandlers/` as §5.1/§6/§8 originally named it.
+The scaffolding types (`StepSkeletonDescriptor`, `StepSkeletonRenderer`, `IStepScaffoldService`,
+`StepScaffoldService`, `StepDefinitionFileBuilder`) live in
+`src/LSP/Reqnroll.IdeSupport.LSP.Core/Scaffolding/` (not `Editor/Scaffolding/`). Two new files were
+added for v2 in that same folder:
+
+- `CandidateStepDefinitionFileRanker.cs`
+- (no new file for append — `StepDefinitionFileBuilder.AppendToFile` was added to the existing file)
+
+### 11.2 Target selection, as built
+
+1. **Rank candidates** (`CandidateStepDefinitionFileRanker.RankCandidateFiles`): group the
+   feature's `FeatureBindingMatchSet.Defined` steps by the `.cs` file each one's matched binding
+   lives in (`StepBindingMatch.BindingLocations` → `SourceLocation.SourceFile`), order descending
+   by count. This answers "which existing file already has the most bindings matched to *this
+   feature's* steps" — a per-feature signal, unlike the v1 `FindBestTargetFolder` heuristic (still
+   present, now only a last-resort fallback), which only knew "which folder has the most binding
+   files anywhere in the project."
+2. **Filter to existing files** and cap at 5 (`MaxAppendCandidates` in `CodeActionHandler`).
+3. **Attempt append** for each candidate via `StepDefinitionFileBuilder.AppendToFile` (§11.4). Only
+   candidates that succeed are offered as append actions.
+4. **New-file fallback**: always offered. Its target folder is
+   `Path.GetDirectoryName(topRankedCandidate)` when at least one ranked candidate exists (even if
+   that specific file was declined for append), or the v1 `FindBestTargetFolder` heuristic when the
+   feature has zero `Defined` steps to rank from at all (e.g. a brand-new feature).
+5. **Action fan-out**: one `CodeAction` per successful append candidate, plus the new-file
+   fallback — capped at 6 total (`MaxTargetedActions`). Titles stay exactly as v1 produced them
+   (e.g. `"Define missing step"`) when only one target resolves; a `" → <target>"` suffix (filename,
+   or literally `"new file"`) is added only when more than one target is actually offered, so the
+   common case (no existing candidate) is visually unchanged from v1.
+
+### 11.3 `AppendToFile` and the VS ordering quirk (OQ-7)
+
+`StepDefinitionFileBuilder.AppendToFile` uses a lightweight heuristic — not a full C#/Roslyn
+parse — accepted as sufficient after evaluating both:
+
+1. Mask out string/char literals and comments (same-length replacement, preserving newlines) so
+   brace-counting isn't confused by braces inside them.
+2. Find the first `class` keyword in the masked text, then its opening `{`, then the matching
+   closing `}` by depth-counting.
+3. Detect member indentation from the first non-blank line inside the class body (falls back to
+   the caller's default indent for an empty body).
+4. Insert the new snippet(s) immediately before the closing brace.
+
+Returns `null` (caller falls back to new-file-only) on: no `class` keyword found, an unterminated
+string/comment, or unbalanced braces — i.e. anything the heuristic can't confidently resolve, so a
+malformed or unusually-structured hand-written file is never corrupted.
+
+**Every append candidate is guaranteed to already carry `[Binding]`** by construction — it only
+ever comes from the ranker, which requires an existing *matched* binding in that file — so no
+separate `[Binding]`-presence check was needed before offering it (this was OQ-3-adjacent scope
+explicitly confirmed out of need, not an oversight).
+
+**Only the top-ranked action in each title group is marked `isPreferred: true`** (the top append
+candidate, or the new-file action when no append candidate survives) — not every action, which was
+an initial mistake (all actions defaulted to `isPreferred: true`, a holdover from when there was
+only ever one action). Confirmed live 2026-08-01 that this alone does **not** control VS's display
+order: `CodeActionResultComparer` in VS's own
+`Microsoft.VisualStudio.LanguageServer.Client.Implementation.dll` sorts by the VS-only
+`VSInternalCodeAction.Priority` extension field (`_vs_priority` on the wire — a distinct field from
+standard `isPreferred`) first, and only falls back to `OrdinalIgnoreCase` title comparison when
+that's absent for both sides — which it always is here, since OmniSharp's `CodeAction` model (used
+server-side) has no extension-data hook to add it. VS Code and Rider don't do this — they render
+the array in server order. Net effect: VS Code shows append-before-new-file correctly; VS shows
+whichever title sorts alphabetically first (title-dependent, not actually wrong, just not
+guaranteed to match the append-first intent). Filed as OQ-7 above and deliberately not fixed —
+fixing it for VS specifically would need a custom JSON serializer just for that one field, for a
+purely cosmetic ordering issue that doesn't affect correctness in any client.
+
+### 11.4 Files
+
+| Path | Change |
+|---|---|
+| `src/LSP/Reqnroll.IdeSupport.LSP.Core/Scaffolding/CandidateStepDefinitionFileRanker.cs` | New |
+| `src/LSP/Reqnroll.IdeSupport.LSP.Core/Scaffolding/StepDefinitionFileBuilder.cs` | Added `AppendToFile` + supporting brace-scan helpers |
+| `src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/CodeActionHandler.cs` | Candidate ranking, action fan-out, per-group `isPreferred` |
+| `tests/LSP/Reqnroll.IdeSupport.LSP.Core.Tests/Scaffolding/CandidateStepDefinitionFileRankerTests.cs` | New |
+| `tests/LSP/Reqnroll.IdeSupport.LSP.Core.Tests/Scaffolding/StepDefinitionFileBuilderAppendTests.cs` | New |
+| `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Features/CodeActions/CodeActionHandlerTests.cs` | Multi-candidate + `isPreferred` scenarios |
+| `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs/Features/Editor/DefineSteps.feature` + `StepDefinitions/DefineStepsSteps.cs` | Append-to-existing-file integration scenario |
