@@ -19,9 +19,23 @@ disambiguation note below), use **Extensions → Reqnroll → Rename Step**
 instead — it opens a dialog with a picker to choose which binding to
 rename.
 
-TODO(media): 🎬 gif — renaming a step definition in Visual Studio and
-watching every matching `.feature` step update.
-**Target:** `rename-step/vs.gif`
+**Renaming from the feature file**
+
+![Renaming a step from the .feature file in Visual Studio](rename-step/vs-feature.gif)
+
+**Renaming from the binding expression**
+
+TODO(media): 🎬 gif — cursor in the `[Given("...")]`/`[When("...")]`/`[Then("...")]`
+attribute string in a `.cs` file, invoking rename (F2), typing a new
+expression, and watching every matching `.feature` step update.
+**Target:** `rename-step/vs-cs.gif`
+
+**Renaming an ambiguously bound step**
+
+TODO(media): 🎬 gif — invoking rename on a step/method with more than one
+candidate binding attribute, showing the **Rename Step** picker dialog
+(Extensions → Reqnroll → Rename Step) and selecting a candidate to rename.
+**Target:** `rename-step/vs-picker.gif`
 ```
 
 ```{tab-item} VS Code
@@ -32,9 +46,22 @@ on the attribute string (in a `.cs` file) and use the standard **Rename
 Symbol** gesture. On the `.feature` side, F2 is also available via
 right-click → **Reqnroll: Rename Step** or the Command Palette.
 
-TODO(media): 🎬 gif — renaming a step definition in VS Code and watching
-every matching `.feature` step update.
-**Target:** `rename-step/vscode.gif`
+**Renaming from the feature file**
+
+TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
+rename (F2), typing a new step text, and watching the C# attribute string
+update to match.
+**Target:** `rename-step/vscode-feature.gif`
+
+**Renaming from the binding expression**
+
+TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
+invoking rename (F2), typing a new expression, and watching every matching
+`.feature` step update.
+**Target:** `rename-step/vscode-cs.gif`
+
+VS Code doesn't yet support a disambiguation picker for ambiguously bound
+steps — see the note below — so there's no third capture for this tab.
 ```
 
 ```{tab-item} Rider
@@ -49,10 +76,27 @@ every matching `.feature` step update.
 Both surfaces handle disambiguation via a picker when the binding has more
 than one candidate attribute.
 
-TODO(media): 🎬 gif — renaming a step definition in Rider, capturing its
-disambiguation picker specifically (see the note below) — not just a port
-of the VS/VS Code capture.
-**Target:** `rename-step/rider.gif`
+**Renaming from the feature file**
+
+TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
+rename (Shift+F6), typing a new step text, and watching the C# attribute
+string update to match.
+**Target:** `rename-step/rider-feature.gif`
+
+**Renaming from the binding expression**
+
+TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
+invoking **Rename Step (Reqnroll)**, typing a new expression, and watching
+every matching `.feature` step update.
+**Target:** `rename-step/rider-cs.gif`
+
+**Renaming an ambiguously bound step**
+
+TODO(media): 🎬 gif — invoking rename on a step/method with more than one
+candidate binding attribute, showing Rider's disambiguation picker and
+selecting a candidate to rename — not just a port of the VS capture, since
+Rider's picker UI differs visually.
+**Target:** `rename-step/rider-picker.gif`
 ```
 
 :::
