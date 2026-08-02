@@ -22,7 +22,7 @@ Extensions menu placement for this one — it's editor-context-menu only.
 
 TODO(media): 🎬 gif — short jump-to-hook interaction, invoking Go to Hooks
 and selecting a result.
-**Target:** `hook-navigation/vs.gif`
+**Target:** `hook-navigation/hook-navigation-vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -37,7 +37,7 @@ No default keybinding.
 
 TODO(media): 🎬 gif — short jump-to-hook interaction, invoking Go to Hooks
 and selecting a result.
-**Target:** `hook-navigation/vscode.gif`
+**Target:** `hook-navigation/hook-navigation-vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -52,7 +52,7 @@ No default keybinding.
 
 TODO(media): 🎬 gif — short jump-to-hook interaction, invoking Go to Hooks
 and selecting a result.
-**Target:** `hook-navigation/rider.gif`
+**Target:** `hook-navigation/hook-navigation-rider.gif`
 ```
 
 :::

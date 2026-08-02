@@ -21,7 +21,7 @@ also be re-aligned by running Format Document. A row missing its trailing
 ```{tab-item} Visual Studio
 :sync: vs
 
-![](formatting/vs.gif)
+![](formatting/formatting-vs.gif)
 ```
 
 ```{tab-item} VS Code
@@ -29,7 +29,7 @@ also be re-aligned by running Format Document. A row missing its trailing
 
 TODO(media): 🎬 gif — before/after auto-format on save or on-type, and the
 table column-alignment behavior as you type.
-**Target:** `formatting/vscode.gif`
+**Target:** `formatting/formatting-vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -40,7 +40,7 @@ table-column realignment behavior as you type. See the note below on
 what's confirmed to work in Rider — capture once
 [#415](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/415) settles
 the Enter/Tab-trigger question.
-**Target:** `formatting/rider.gif`
+**Target:** `formatting/formatting-rider.gif`
 ```
 
 :::

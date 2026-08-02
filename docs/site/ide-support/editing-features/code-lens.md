@@ -41,7 +41,7 @@ everything. Clicking the lens shows a results list of the matching scenarios.
 From a csharp binding file, clicking on the 'step usage' or 'scenario matched' Code Lens will display matches in a results window from which you can navigate to one of the matched feature elements.
 From a feature file, clicking on a 'hook' Code Lens will result in a pop-up with the matching binding methods. Double clicking an entry will navigate you to that method.
 
-![](code-lens/vs.gif)
+![](code-lens/code-lens-vs.gif)
 ```
 
 ```{tab-item} VS Code
@@ -49,7 +49,7 @@ From a feature file, clicking on a 'hook' Code Lens will result in a pop-up with
 
 TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
 as rendered by VS Code's native CodeLens.
-**Target:** `code-lens/vscode.png`
+**Target:** `code-lens/code-lens-vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -58,7 +58,7 @@ as rendered by VS Code's native CodeLens.
 TODO(media): 📷 screenshot — the same three lenses as rendered by Rider's
 CodeVision — visibly different presentation from the native CodeLens shown
 in the other two tabs.
-**Target:** `code-lens/rider.png`
+**Target:** `code-lens/code-lens-rider.png`
 ```
 
 :::

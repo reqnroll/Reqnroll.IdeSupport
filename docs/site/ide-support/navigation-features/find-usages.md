@@ -21,7 +21,7 @@ Results open in the standard Find All References window.
 
 TODO(media): 🎬 gif — invoking Find Usages from a `.cs` binding method and
 seeing results across `.feature` files.
-**Target:** `find-usages/vs.gif`
+**Target:** `find-usages/find-usages-vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -37,7 +37,7 @@ step in its `.feature` file.
 
 TODO(media): 🎬 gif — invoking Find Usages from a `.cs` binding method and
 seeing results across `.feature` files.
-**Target:** `find-usages/vscode.gif`
+**Target:** `find-usages/find-usages-vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -51,7 +51,7 @@ Place the cursor in the binding method in a `.cs` file, then either:
 TODO(media): 🎬 gif — Rider's results, captured separately; Rider's find
 usages includes the Feature/Rule name for Rule-nested scenarios and its
 results popup differs visually from VS/VS Code's.
-**Target:** `find-usages/rider.gif`
+**Target:** `find-usages/find-usages-rider.gif`
 ```
 
 :::

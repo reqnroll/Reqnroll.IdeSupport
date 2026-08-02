@@ -16,11 +16,11 @@ handles the common, unambiguous case directly.
 
 **Renaming from the feature file**
 
-![Renaming a step from the .feature file in Visual Studio](rename-step/vs-feature.gif)
+![Renaming a step from the .feature file in Visual Studio](rename-step/rename-step-vs-feature.gif)
 
 **Renaming from the binding expression**
 
-![](rename-step/vs-cs.gif)
+![](rename-step/rename-step-vs-cs.gif)
 
 **Renaming an ambiguously bound step**
 
@@ -28,7 +28,7 @@ If a binding method has more than one candidate attribute, use
 **Extensions → Reqnroll → Rename Step** instead — it opens a dialog with a
 picker to choose which binding to rename.
 
-![](rename-step/vs-picker.gif)
+![](rename-step/rename-step-vs-picker.gif)
 ```
 
 ```{tab-item} VS Code
@@ -44,14 +44,14 @@ right-click → **Reqnroll: Rename Step** or the Command Palette.
 TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
 rename (F2), typing a new step text, and watching the C# attribute string
 update to match.
-**Target:** `rename-step/vscode-feature.gif`
+**Target:** `rename-step/rename-step-vscode-feature.gif`
 
 **Renaming from the binding expression**
 
 TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
 invoking rename (F2), typing a new expression, and watching every matching
 `.feature` step update.
-**Target:** `rename-step/vscode-cs.gif`
+**Target:** `rename-step/rename-step-vscode-cs.gif`
 
 VS Code doesn't yet support a disambiguation picker for ambiguously bound
 steps, so there's no third capture for this tab — see the note below.
@@ -89,14 +89,14 @@ than one candidate attribute.
 TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
 rename (Shift+F6), typing a new step text, and watching the C# attribute
 string update to match.
-**Target:** `rename-step/rider-feature.gif`
+**Target:** `rename-step/rename-step-rider-feature.gif`
 
 **Renaming from the binding expression**
 
 TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
 invoking **Rename Step (Reqnroll)**, typing a new expression, and watching
 every matching `.feature` step update.
-**Target:** `rename-step/rider-cs.gif`
+**Target:** `rename-step/rename-step-rider-cs.gif`
 
 **Renaming an ambiguously bound step**
 
@@ -104,7 +104,7 @@ TODO(media): 🎬 gif — invoking rename on a step/method with more than one
 candidate binding attribute, showing Rider's disambiguation picker and
 selecting a candidate to rename — not just a port of the VS capture, since
 Rider's picker UI differs visually.
-**Target:** `rename-step/rider-picker.gif`
+**Target:** `rename-step/rename-step-rider-picker.gif`
 ```
 
 ::::

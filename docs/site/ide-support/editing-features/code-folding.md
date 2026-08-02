@@ -9,21 +9,21 @@ C#. Folding regions update automatically as you edit the document.
 ```{tab-item} Visual Studio
 :sync: vs
 
-![](code-folding/vs.gif)
+![](code-folding/code-folding-vs.gif)
 ```
 
 ```{tab-item} VS Code
 :sync: vscode
 
 TODO(media): 📷 screenshot — the same, in VS Code.
-**Target:** `code-folding/vscode.gif`
+**Target:** `code-folding/code-folding-vscode.gif`
 ```
 
 ```{tab-item} Rider
 :sync: rider
 
 TODO(media): 📷 screenshot — the same, in Rider.
-**Target:** `code-folding/rider.png`
+**Target:** `code-folding/code-folding-rider.png`
 ```
 
 :::

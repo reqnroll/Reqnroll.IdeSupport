@@ -16,7 +16,7 @@ large feature file without scrolling.
 
 TODO(media): 📷 screenshot — VS Code's native Outline panel listing a
 Feature/Scenario/Steps tree.
-**Target:** `document-outline/vscode.png`
+**Target:** `document-outline/document-outline-vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -25,7 +25,7 @@ Feature/Scenario/Steps tree.
 TODO(media): 📷 screenshot — Rider's dedicated Structure View tool window
 showing the same tree. Capture separately from VS Code's — they look
 visually different.
-**Target:** `document-outline/rider.png`
+**Target:** `document-outline/document-outline-rider.png`
 ```
 
 :::

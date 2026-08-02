@@ -19,7 +19,7 @@ the full step text on selection.
 ```{tab-item} Visual Studio
 :sync: vs
 
-![](completion/vs.gif)
+![](completion/completion-vs.gif)
 ```
 
 ```{tab-item} VS Code
@@ -27,7 +27,7 @@ the full step text on selection.
 
 TODO(media): 🎬 gif — typing a keyword or step, the completion popup
 appearing, and selecting an item.
-**Target:** `completion/vscode.gif`
+**Target:** `completion/completion-vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -37,7 +37,7 @@ TODO(media): 🎬 gif — typing a keyword or step, the completion popup
 appearing, and selecting an item — capture only once
 [#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414) confirms
 Rider completion actually works; see the admonition below.
-**Target:** `completion/rider.gif`
+**Target:** `completion/completion-rider.gif`
 ```
 
 :::

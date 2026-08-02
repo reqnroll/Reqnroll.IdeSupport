@@ -13,7 +13,7 @@ method in the C# binding class. If more than one binding matches
 TODO(media): 🎬 gif — cursor placed on a step, then jumping to the bound
 C# method. Navigation-over-time is the whole point here, a screenshot loses
 it.
-**Target:** `go-to-definition/vs.gif`
+**Target:** `go-to-definition/go-to-definition-vs.gif`
 ```
 
 ```{tab-item} VS Code
@@ -21,7 +21,7 @@ it.
 
 TODO(media): 🎬 gif — cursor placed on a step, then jumping to the bound
 C# method.
-**Target:** `go-to-definition/vscode.gif`
+**Target:** `go-to-definition/go-to-definition-vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -29,7 +29,7 @@ C# method.
 
 TODO(media): 🎬 gif — Rider's jump animation, captured separately; it looks
 different from VS/VS Code's.
-**Target:** `go-to-definition/rider.gif`
+**Target:** `go-to-definition/go-to-definition-rider.gif`
 ```
 
 :::

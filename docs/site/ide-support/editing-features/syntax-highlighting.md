@@ -12,7 +12,7 @@ save required. Steps with no matching binding render in a distinct
 ```{tab-item} Visual Studio
 :sync: vs
 
-![](syntax-highlighting/vs.png)
+![](syntax-highlighting/syntax-highlighting-vs.png)
 ```
 
 ```{tab-item} VS Code
@@ -21,7 +21,7 @@ save required. Steps with no matching binding render in a distinct
 TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
 VS Code, with a matched (bound) step and an unmatched step side by side so
 the color difference is visible.
-**Target:** `syntax-highlighting/vscode.png`
+**Target:** `syntax-highlighting/syntax-highlighting-vscode.png`
 ```
 
 ```{tab-item} Rider
@@ -30,7 +30,7 @@ the color difference is visible.
 TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
 Rider, with a matched (bound) step and an unmatched step side by side so
 the color difference is visible.
-**Target:** `syntax-highlighting/rider.png`
+**Target:** `syntax-highlighting/syntax-highlighting-rider.png`
 ```
 
 :::

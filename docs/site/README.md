@@ -93,17 +93,33 @@ with media later, create its sibling folder the same way.
 
 ### File naming
 
-`<ide>[-<variant>].<ext>` — for example:
+`<page-name>-<ide>[-<variant>].<ext>` — for example:
 
 ```
-editing-features/syntax-highlighting/vs.png
-editing-features/syntax-highlighting/vscode.png
-editing-features/syntax-highlighting/rider.png
+editing-features/syntax-highlighting/syntax-highlighting-vs.png
+editing-features/syntax-highlighting/syntax-highlighting-vscode.png
+editing-features/syntax-highlighting/syntax-highlighting-rider.png
 
-editing-features/diagnostics/vs-squiggle.png
-editing-features/diagnostics/vs-fix.gif
+editing-features/diagnostics/diagnostics-vs-squiggle.png
+editing-features/diagnostics/diagnostics-vs-fix.gif
 ```
 
+- **`<page-name>`** repeats the sibling folder's own name as a prefix on
+  every file inside it. This looks redundant — you're already inside
+  `syntax-highlighting/` — but it's load-bearing, not decorative: **Sphinx
+  copies every referenced image into one shared, flat `_images/` folder in
+  the built output, using only the basename, with no subdirectories.** A
+  bare `vs.png` in twelve different sibling folders are all, as far as the
+  build is concerned, the same filename — Sphinx disambiguates collisions
+  by appending a numeric suffix (`vs.png`, `vs1.png`, `vs2.png`, ...) based
+  on the order it happens to process pages in, and that assignment can
+  silently shift whenever a new same-named file is added, especially
+  across incremental (`sphinx-autobuild`) rebuilds rather than a clean
+  one. The symptom is exactly as confusing as it sounds: a page renders
+  someone else's image with no error or warning anywhere. Prefixing the
+  filename with its own page name makes every file's basename unique
+  site-wide, so the collision (and the silent-swap failure mode) can't
+  happen regardless of build order or history.
 - **`<ide>`** is always one of `vs`, `vscode`, `rider` — the same three
   codes used everywhere else on this site (`:sync:` keys, the support-matrix
   columns). One consistent vocabulary for "which IDE" across the whole
@@ -117,7 +133,11 @@ editing-features/diagnostics/vs-fix.gif
   `-hook-match`. Omit it entirely when there's exactly one file per IDE.
 
 This scheme is deliberately boring: given a page and an IDE, the file's
-path and name are fully determined, never a judgment call.
+path and name are fully determined, never a judgment call. If you ever see
+an image on one page that looks like it belongs to a different page,
+suspect a basename collision first — check the built page's actual `<img
+src>` against `_build/html/_images/` before assuming the markdown source
+is wrong.
 
 ### Capture conventions
 
@@ -224,11 +244,13 @@ landmark, not theme-specific markup.
    adjustment needed.
 3. Replace the `TODO(media)`/`**Target:**` lines with a standard Markdown
    image embed using that same path, e.g. from `syntax-highlighting.md`:
-   `![Syntax highlighting in Visual Studio](syntax-highlighting/vs.png)`.
+   `![Syntax highlighting in Visual Studio](syntax-highlighting/syntax-highlighting-vs.png)`.
 4. If a `TODO(media)` note doesn't yet state a `**Target:**` (shouldn't
    happen going forward, but flag it if you find one), pick
-   `<page-name>/<ide>[-<variant>].<ext>` following the convention above
-   rather than dropping the file wherever's convenient.
+   `<page-name>/<page-name>-<ide>[-<variant>].<ext>` following the
+   convention above rather than dropping the file wherever's convenient —
+   the page-name prefix on the filename itself is not optional, see
+   "File naming" above for why.
 
 **Exception — the landing page hero carousel** (`ide-support/index.md`):
 each slide is a `reqnroll-hero-slide` div containing a nested
@@ -253,7 +275,7 @@ the caption. For example, Visual Studio's slide should end up as:
 :name: reqnroll-hero-slide-vs
 
 :::{div} reqnroll-hero-media
-![Reqnroll IDE Support in Visual Studio](index/vs.png)
+![Reqnroll IDE Support in Visual Studio](index/index-vs.png)
 :::
 
 Visual Studio
@@ -283,19 +305,19 @@ example. The pattern:
 ````{tab-item} Visual Studio
 :sync: vs
 
-![Syntax highlighting in Visual Studio](syntax-highlighting/vs.png)
+![Syntax highlighting in Visual Studio](syntax-highlighting/syntax-highlighting-vs.png)
 ````
 
 ````{tab-item} VS Code
 :sync: vscode
 
-![Syntax highlighting in VS Code](syntax-highlighting/vscode.png)
+![Syntax highlighting in VS Code](syntax-highlighting/syntax-highlighting-vscode.png)
 ````
 
 ````{tab-item} Rider
 :sync: rider
 
-![Syntax highlighting in Rider](syntax-highlighting/rider.png)
+![Syntax highlighting in Rider](syntax-highlighting/syntax-highlighting-rider.png)
 ````
 
 :::

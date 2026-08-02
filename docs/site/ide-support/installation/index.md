@@ -17,7 +17,7 @@ Reqnroll IDE Support for Visual Studio supports **Visual Studio 2022** and
 TODO(media): 📷 screenshot of the Marketplace/"Manage Extensions" search
 results panel, with the Preview extension's listing visibly distinct from
 the existing "Reqnroll.VisualStudio" entry.
-**Target:** `index/vs-marketplace.png`
+**Target:** `index/index-vs-marketplace.png`
 
 ```{admonition} Don't confuse the two extensions
 :class: warning
@@ -49,7 +49,7 @@ for more.
 
 TODO(media): 📷 screenshot of the extension listing in the VS Code
 Marketplace panel.
-**Target:** `index/vscode-marketplace.png`
+**Target:** `index/index-vscode-marketplace.png`
 
 ```{admonition} Replaces the "Cucumber" extension recommendation
 :class: note
@@ -82,7 +82,7 @@ work as expected with the Reqnroll extension active.
 
 TODO(media): 📷 screenshot of the Marketplace search results panel showing
 the Reqnroll plugin listing.
-**Target:** `index/rider-marketplace.png`
+**Target:** `index/index-rider-marketplace.png`
 
 ```{admonition} Supported Rider version
 :class: note
@@ -98,7 +98,7 @@ confirming the server started.
 
 TODO(media): 📷 screenshot of the Rider Language Servers status widget
 showing the Reqnroll entry.
-**Target:** `index/rider-status-widget.png`
+**Target:** `index/index-rider-status-widget.png`
 ````
 
 :::

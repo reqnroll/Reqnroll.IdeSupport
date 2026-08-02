@@ -16,12 +16,12 @@ step turn green once you add the matching binding.
 ```{tab-item} Visual Studio
 :sync: vs
 
-![](diagnostics/vs-squiggle.png)
+![](diagnostics/diagnostics-vs-squiggle.png)
 
 TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
 matching binding is added. Nice to have; the screenshot above already
 conveys the static state on its own.
-**Target:** `diagnostics/vs-fix.gif`
+**Target:** `diagnostics/diagnostics-vs-fix.gif`
 ```
 
 ```{tab-item} VS Code
@@ -29,12 +29,12 @@ conveys the static state on its own.
 
 TODO(media): 📷 screenshot — a squiggle under an unmatched step in
 VS Code, plus the matching Problems panel entry.
-**Target:** `diagnostics/vscode-squiggle.png`
+**Target:** `diagnostics/diagnostics-vscode-squiggle.png`
 
 TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
 matching binding is added. Nice to have; the screenshot above already
 conveys the static state on its own.
-**Target:** `diagnostics/vscode-fix.gif`
+**Target:** `diagnostics/diagnostics-vscode-fix.gif`
 ```
 
 ```{tab-item} Rider
@@ -42,12 +42,12 @@ conveys the static state on its own.
 
 TODO(media): 📷 screenshot — a squiggle under an unmatched step in Rider,
 plus the matching Problems view entry.
-**Target:** `diagnostics/rider-squiggle.png`
+**Target:** `diagnostics/diagnostics-rider-squiggle.png`
 
 TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
 matching binding is added. Nice to have; the screenshot above already
 conveys the static state on its own.
-**Target:** `diagnostics/rider-fix.gif`
+**Target:** `diagnostics/diagnostics-rider-fix.gif`
 ```
 
 :::

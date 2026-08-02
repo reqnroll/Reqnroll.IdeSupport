@@ -21,21 +21,21 @@ types) in a tooltip. Hints refresh automatically as you edit.
 Visual Studio does not show the hover tooltip — this is a Visual Studio limitation. The `→ ClassName.MethodName` / `→ N matches`
 / `→ N bindings` labels themselves display normally.
 
-![](inlay-hints/vs.png)
+![](inlay-hints/inlay-hints-vs.png)
 ```
 
 ```{tab-item} VS Code
 :sync: vscode
 
 TODO(media): 📷 screenshot — the same, in VS Code.
-**Target:** `inlay-hints/vscode.png`
+**Target:** `inlay-hints/inlay-hints-vscode.png`
 ```
 
 ```{tab-item} Rider
 :sync: rider
 
 TODO(media): 📷 screenshot — the same, in Rider.
-**Target:** `inlay-hints/rider.png`
+**Target:** `inlay-hints/inlay-hints-rider.png`
 ```
 
 :::

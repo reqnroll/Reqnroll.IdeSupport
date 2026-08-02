@@ -22,7 +22,7 @@ menu instead — see the linked feature page for the full how-to.
 
 TODO(media): 📷 screenshot of the Extensions → Reqnroll submenu, showing
 all three commands hosted there in one place.
-**Target:** `keyboard-shortcuts/vs-menu.png`
+**Target:** `keyboard-shortcuts/keyboard-shortcuts-vs-menu.png`
 ````
 
 ````{tab-item} VS Code
@@ -56,7 +56,7 @@ all three commands hosted there in one place.
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Go to Hooks, or Tools → Reqnroll → Go to Hooks |
 
 TODO(media): 📷 screenshot of the Tools → Reqnroll submenu.
-**Target:** `keyboard-shortcuts/rider-menu.png`
+**Target:** `keyboard-shortcuts/keyboard-shortcuts-rider-menu.png`
 ````
 
 :::

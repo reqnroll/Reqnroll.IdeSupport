@@ -18,7 +18,7 @@ you get the same capabilities and the same editing experience.
 :name: reqnroll-hero-slide-vs
 
 :::{div} reqnroll-hero-media
-![Reqnroll IDE Support in Visual Studio](index/vs.png)
+![Reqnroll IDE Support in Visual Studio](index/index-vs.png)
 :::
 
 Visual Studio
@@ -30,7 +30,7 @@ Visual Studio
 :::{div} reqnroll-hero-media
 
 TODO(media): 📷 hero screenshot — the same, in VS Code.
-**Target:** `index/vscode.png`
+**Target:** `index/index-vscode.png`
 :::
 
 VS Code
@@ -42,7 +42,7 @@ VS Code
 :::{div} reqnroll-hero-media
 
 TODO(media): 📷 hero screenshot — the same, in Rider.
-**Target:** `index/rider.png`
+**Target:** `index/index-rider.png`
 :::
 
 Rider

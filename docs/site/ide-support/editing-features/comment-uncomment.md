@@ -14,7 +14,7 @@ discoverable menu command:
 `Ctrl+/` works directly. Also available via right-click →
 **Comment/Uncomment** in the code editor context menu.
 
-![](comment-uncomment/vs.gif)
+![](comment-uncomment/comment-uncomment-vs.gif)
 ```
 
 ```{tab-item} VS Code
@@ -24,7 +24,7 @@ discoverable menu command:
 → **Reqnroll: Comment/Uncomment**, or the Command Palette.
 
 TODO(media): 🎬 gif (optional, low priority).
-**Target:** `comment-uncomment/vscode.gif`
+**Target:** `comment-uncomment/comment-uncomment-vscode.gif`
 ```
 
 ```{tab-item} Rider
@@ -34,7 +34,7 @@ TODO(media): 🎬 gif (optional, low priority).
 **Comment/Uncomment**, or **Tools → Reqnroll → Comment/Uncomment**.
 
 TODO(media): 🎬 gif (optional, low priority).
-**Target:** `comment-uncomment/rider.gif`
+**Target:** `comment-uncomment/comment-uncomment-rider.gif`
 ```
 
 :::
