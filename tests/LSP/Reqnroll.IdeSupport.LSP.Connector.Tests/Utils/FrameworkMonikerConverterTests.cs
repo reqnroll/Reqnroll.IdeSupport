@@ -24,25 +24,18 @@ public class FrameworkMonikerConverterTests
     [Fact]
     public void GetShortFrameworkName_maps_dotnet_core_3_x_and_earlier_to_netcoreapp_prefix()
     {
-        FrameworkMonikerConverter.GetShortFrameworkName(".NETCoreApp,Version=v3.1").Should().Be("netcoreapp3. 1");
+        FrameworkMonikerConverter.GetShortFrameworkName(".NETCoreApp,Version=v3.1").Should().Be("netcoreapp3.1");
     }
 
     [Theory]
-    [InlineData(".NETFramework,Version=v4.8.1")]
-    [InlineData(".NETFramework,Version=v4.7.2")]
-    [InlineData(".NETFramework,Version=v4.6.2")]
-    [InlineData(".NETFramework,Version=v4.8")]
-    [InlineData(".NETFramework,Version=v4.0")]
-    public void GetShortFrameworkName_currently_throws_for_every_NETFramework_moniker(string fullFrameworkName)
+    [InlineData(".NETFramework,Version=v4.8.1", "net481")]
+    [InlineData(".NETFramework,Version=v4.7.2", "net472")]
+    [InlineData(".NETFramework,Version=v4.6.2", "net462")]
+    [InlineData(".NETFramework,Version=v4.8", "net48")]
+    [InlineData(".NETFramework,Version=v4.0", "net40")]
+    public void GetShortFrameworkName_maps_dotnet_framework_monikers_to_netXXX(string fullFrameworkName, string expected)
     {
-        // Documents a real bug rather than the intended behaviour: the .NET Framework branch's
-        // identifier check compares against ". NETFramework" (note the stray leading space) --
-        // FrameworkName's Identifier is always ".NETFramework" (no space), so this branch can
-        // never match and every .NET Framework moniker falls through to the "unsupported" case
-        // below. See FrameworkMonikerConverter.cs line 31.
-        var act = () => FrameworkMonikerConverter.GetShortFrameworkName(fullFrameworkName);
-
-        act.Should().Throw<NotSupportedException>();
+        FrameworkMonikerConverter.GetShortFrameworkName(fullFrameworkName).Should().Be(expected);
     }
 
     [Fact]
