@@ -5,7 +5,7 @@ C# `[Given("...")]`/`[When("...")]`/`[Then("...")]` attribute string —
 updates every occurrence across the workspace: the attribute string in the
 binding class, and every matching step in every `.feature` file.
 
-:::{tab-set}
+::::{tab-set}
 
 ```{tab-item} Visual Studio
 :sync: vs
@@ -14,28 +14,21 @@ Place the cursor on the step (in a `.feature` file) or the attribute string
 (in a `.cs` file) and invoke the standard **Rename** gesture (F2). This
 handles the common, unambiguous case directly.
 
-If a binding method has more than one candidate attribute (see the
-disambiguation note below), use **Extensions → Reqnroll → Rename Step**
-instead — it opens a dialog with a picker to choose which binding to
-rename.
-
 **Renaming from the feature file**
 
 ![Renaming a step from the .feature file in Visual Studio](rename-step/vs-feature.gif)
 
 **Renaming from the binding expression**
 
-TODO(media): 🎬 gif — cursor in the `[Given("...")]`/`[When("...")]`/`[Then("...")]`
-attribute string in a `.cs` file, invoking rename (F2), typing a new
-expression, and watching every matching `.feature` step update.
-**Target:** `rename-step/vs-cs.gif`
+![](rename-step/vs-cs.gif)
 
 **Renaming an ambiguously bound step**
 
-TODO(media): 🎬 gif — invoking rename on a step/method with more than one
-candidate binding attribute, showing the **Rename Step** picker dialog
-(Extensions → Reqnroll → Rename Step) and selecting a candidate to rename.
-**Target:** `rename-step/vs-picker.gif`
+If a binding method has more than one candidate attribute, use
+**Extensions → Reqnroll → Rename Step** instead — it opens a dialog with a
+picker to choose which binding to rename.
+
+![](rename-step/vs-picker.gif)
 ```
 
 ```{tab-item} VS Code
@@ -61,7 +54,22 @@ invoking rename (F2), typing a new expression, and watching every matching
 **Target:** `rename-step/vscode-cs.gif`
 
 VS Code doesn't yet support a disambiguation picker for ambiguously bound
-steps — see the note below — so there's no third capture for this tab.
+steps, so there's no third capture for this tab — see the note below.
+
+:::{admonition} Known limitation with ambiguous bindings
+:class: warning
+
+If a step is bound to more than one candidate attribute (multi-attribute
+disambiguation), VS Code's rename does not yet support choosing which one
+you mean. **Workaround:** place your cursor directly in the specific
+attribute string you want to rename, rather than on the step in the
+`.feature` file, before invoking rename.
+
+This limitation is specific to VS Code. Rider and Visual Studio both
+implement rename **with** disambiguation — a picker lets you choose which
+candidate binding to rename when a step matches more than one (see the
+Visual Studio and Rider tabs for how to reach that picker).
+:::
 ```
 
 ```{tab-item} Rider
@@ -99,19 +107,4 @@ Rider's picker UI differs visually.
 **Target:** `rename-step/rider-picker.gif`
 ```
 
-:::
-
-```{admonition} VS Code — known limitation with ambiguous bindings
-:class: warning
-
-If a step is bound to more than one candidate attribute (multi-attribute
-disambiguation), VS Code's rename does not yet support choosing which one
-you mean. **Workaround:** place your cursor directly in the specific
-attribute string you want to rename, rather than on the step in the
-`.feature` file, before invoking rename.
-
-This limitation is specific to VS Code. Rider and Visual Studio both
-implement rename **with** disambiguation — a picker lets you choose which
-candidate binding to rename when a step matches more than one (see the
-Visual Studio and Rider tabs above for how to reach that picker).
-```
+::::
