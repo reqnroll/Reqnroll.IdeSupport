@@ -20,9 +20,8 @@ menu instead — see the linked feature page for the full how-to.
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Go to Hooks |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (lightbulb) *(native VS default)* | — |
 
-TODO(media): 📷 screenshot of the Extensions → Reqnroll submenu, showing
-all three commands hosted there in one place.
-**Target:** `keyboard-shortcuts/keyboard-shortcuts-vs-menu.png`
+
+![](keyboard-shortcuts/keyboard-shortcuts-vs-menu.png)
 ````
 
 ````{tab-item} VS Code
