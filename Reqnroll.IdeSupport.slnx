@@ -42,6 +42,7 @@
         <Project Path="src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Wizards/Reqnroll.IdeSupport.VisualStudio.Wizards.csproj" />
     </Folder>
     <Folder Name="/Tests/LSP/">
+        <Project Path="tests/LSP/Reqnroll.IdeSupport.LSP.Connector.Tests/Reqnroll.IdeSupport.LSP.Connector.Tests.csproj" />
         <Project Path="tests/LSP/Reqnroll.IdeSupport.LSP.Core.Tests/Reqnroll.IdeSupport.LSP.Core.Tests.csproj" />
         <Project Path="tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Reqnroll.IdeSupport.LSP.Server.Tests.csproj" />
         <Project Path="tests/LSP/Reqnroll.IdeSupport.LSP.TestStubs/Reqnroll.IdeSupport.LSP.TestStubs.csproj" />
