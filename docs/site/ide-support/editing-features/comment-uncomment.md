@@ -14,9 +14,7 @@ discoverable menu command:
 `Ctrl+/` works directly. Also available via right-click →
 **Comment/Uncomment** in the code editor context menu.
 
-TODO(media): 🎬 gif (optional, low priority) — simple enough that this
-screenshot-free text description is likely sufficient on its own.
-**Target:** `comment-uncomment/vs.gif`
+![](comment-uncomment/vs.gif)
 ```
 
 ```{tab-item} VS Code

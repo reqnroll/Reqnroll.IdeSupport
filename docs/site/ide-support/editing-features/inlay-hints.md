@@ -18,11 +18,10 @@ types) in a tooltip. Hints refresh automatically as you edit.
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 📷 screenshot — a `.feature` file in Visual Studio showing the
-`→ ClassName.MethodName` hint after a defined step, the `→ N matches` and
-`→ N bindings` variants, and an undefined step showing no hint, all visible
-together if possible.
-**Target:** `inlay-hints/vs.png`
+Visual Studio does not show the hover tooltip — this is a Visual Studio limitation. The `→ ClassName.MethodName` / `→ N matches`
+/ `→ N bindings` labels themselves display normally.
+
+![](inlay-hints/vs.png)
 ```
 
 ```{tab-item} VS Code
@@ -49,6 +48,6 @@ showing/hiding is entirely each IDE's own native inlay-hints mechanism:
 
 | IDE | How to toggle |
 |---|---|
+| **Visual Studio** | Tools → Options → Text Editor → Advanced, or the equivalent inline-hints display toggle (Alt-F1) — the same generic setting used for any inlay hint, not Reqnroll-specific. |
 | **VS Code** | Native `editor.inlayHints.enabled` setting (`on` / `off` / `offUnlessPressed` / `onUnlessPressed`). In an `...UnlessPressed` mode, holding the default modifier key (Ctrl on Windows/Linux, ⌥ on Mac) temporarily shows/hides hints. |
-| **Visual Studio** | Tools → Options → Text Editor → Advanced, or the equivalent inline-hints display toggle — the same generic setting used for any inlay hint, not Reqnroll-specific. |
 | **Rider** | Editor → General → Inlay Hints — same generic Rider setting used for any inlay hint. |

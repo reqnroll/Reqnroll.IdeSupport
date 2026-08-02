@@ -9,17 +9,14 @@ C#. Folding regions update automatically as you edit the document.
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 📷 screenshot — a feature file in Visual Studio showing a
-collapsed Scenario block next to an expanded one, so the fold affordance
-is visible.
-**Target:** `code-folding/vs.png`
+![](code-folding/vs.gif)
 ```
 
 ```{tab-item} VS Code
 :sync: vscode
 
 TODO(media): 📷 screenshot — the same, in VS Code.
-**Target:** `code-folding/vscode.png`
+**Target:** `code-folding/vscode.gif`
 ```
 
 ```{tab-item} Rider

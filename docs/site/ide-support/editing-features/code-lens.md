@@ -1,6 +1,6 @@
 # Code Lens — Step & Hook Usage Counts
 
-Three related CodeLens annotations show live match counts inline, above the
+Three related CodeLens annotations show live binding match counts inline, above the
 relevant line, without needing to run Find Usages manually:
 
 ## Step usage counts (C# side)
@@ -31,16 +31,17 @@ hook with **zero** matches still shows "0 scenarios matched" rather than
 being hidden — a zero-match hook (e.g. a stale tag expression) is usually
 exactly what you need to notice. A hook with no `[Scope]` at all shows the
 static label "all scenarios" instead of a count, since it matches
-everything. Clicking always shows a results list of the matching scenarios.
+everything. Clicking the lens shows a results list of the matching scenarios.
 
 :::{tab-set}
 
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
-as rendered by Visual Studio's classic CodeLens API.
-**Target:** `code-lens/vs.png`
+From a csharp binding file, clicking on the 'step usage' or 'scenario matched' Code Lens will display matches in a results window from which you can navigate to one of the matched feature elements.
+From a feature file, clicking on a 'hook' Code Lens will result in a pop-up with the matching binding methods. Double clicking an entry will navigate you to that method.
+
+![](code-lens/vs.gif)
 ```
 
 ```{tab-item} VS Code
