@@ -23,7 +23,7 @@ internal static class FrameworkMonikerConverter
             }
             else
             {
-                return $"netcoreapp{version.Major}. {version.Minor}";
+                return $"netcoreapp{version.Major}.{version.Minor}";
             }
         }
 
