@@ -23,12 +23,12 @@ internal static class FrameworkMonikerConverter
             }
             else
             {
-                return $"netcoreapp{version.Major}. {version.Minor}";
+                return $"netcoreapp{version.Major}.{version.Minor}";
             }
         }
 
         // Handle .NET Framework
-        if (identifier.Equals(". NETFramework", StringComparison.OrdinalIgnoreCase))
+        if (identifier.Equals(".NETFramework", StringComparison.OrdinalIgnoreCase))
         {
             // Format: net + version without dots (net472, net48, etc.)
             string versionString = version.ToString();
