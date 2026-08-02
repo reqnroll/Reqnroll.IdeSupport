@@ -64,6 +64,16 @@ everything fits together.
 `docs/Archive/` holds superseded or fully-implemented design/plan documents kept for historical
 reference — each doc's own status banner says whether it's active or archived-and-why.
 
+## End-user documentation
+
+Drafted end-user documentation (installation, editing features, navigation features) lives in
+[docs/site/ide-support/](docs/site/ide-support/), authored in MyST/Sphinx alongside the code that
+implements the features it describes. It isn't published yet — see
+[docs/site/README.md](docs/site/README.md) for the plan to sync it into
+[reqnroll/Reqnroll](https://github.com/reqnroll/Reqnroll)'s `docs/ide-integrations/ide-support/`
+and publish it to docs.reqnroll.net, and issue [#63](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/63)
+for the content outline.
+
 ## Building
 
 There's no single top-level build for every project in this repo (the VS extension is
