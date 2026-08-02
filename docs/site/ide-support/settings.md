@@ -21,12 +21,6 @@ project setting in `reqnroll.json`) differs per IDE:
 ````{tab-item} Visual Studio
 :sync: vs
 
-**Tools → Options →** the Reqnroll-specific pages, mirroring the existing
-extension's Options pages.
-
-TODO(media): 📷 screenshot — the Visual Studio Options page.
-**Target:** `settings/settings-vs.png`
-
 ### Configuring via `reqnroll.json`
 
 To change the extension's settings, edit the
@@ -34,9 +28,7 @@ To change the extension's settings, edit the
 config file. If you don't have one, add it by right-clicking the Reqnroll
 project → **Add → New Item... → Add Reqnroll configuration file**.
 
-TODO(media): 📷 screenshot — the "Add Reqnroll configuration file" item
-template in the Add New Item dialog.
-**Target:** `settings/settings-vs-config-file.png`
+![Add Reqnroll configuration file item template](settings/settings-vs-config-file.png)
 
 ```{note}
 Formatting behavior can also be controlled by an
@@ -47,9 +39,7 @@ The configuration file has a
 [JSON schema](https://schemas.reqnroll.net/reqnroll-config-latest.json),
 so you'll see all available properties as you start typing.
 
-TODO(media): 📷 screenshot — IntelliSense completion while editing
-`reqnroll.json`, showing schema-driven property suggestions.
-**Target:** `settings/settings-vs-intellisense.png`
+![IntelliSense completion in reqnroll.json, driven by its JSON schema](settings/settings-vs-intellisense.png)
 
 ### The `ide` section of `reqnroll.json`
 
