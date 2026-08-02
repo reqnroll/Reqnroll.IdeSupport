@@ -120,7 +120,11 @@ suite('renameStep', () => {
       await selectRenameTarget(client, 'file:///Steps.cs', 1);
 
       assert.strictEqual(sentMethod, ReqnrollMethods.selectRenameTarget);
-      assert.deepStrictEqual(sentParams, { uri: 'file:///Steps.cs', version: 0, attributeIndex: 1 });
+      assert.deepStrictEqual(sentParams, {
+        uri: 'file:///Steps.cs',
+        version: 0,
+        attributeIndex: 1,
+      });
     });
   });
 
