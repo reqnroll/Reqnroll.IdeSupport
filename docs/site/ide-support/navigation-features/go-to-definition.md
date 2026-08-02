@@ -10,10 +10,7 @@ method in the C# binding class. If more than one binding matches
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 🎬 gif — cursor placed on a step, then jumping to the bound
-C# method. Navigation-over-time is the whole point here, a screenshot loses
-it.
-**Target:** `go-to-definition/go-to-definition-vs.gif`
+![](go-to-definition/go-to-definition-vs.gif)
 ```
 
 ```{tab-item} VS Code

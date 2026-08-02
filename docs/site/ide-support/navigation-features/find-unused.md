@@ -16,8 +16,7 @@ your cursor on anything first.
 editor context-menu placement or keybinding for this one — it's a
 workspace-wide scan, not tied to a specific line.
 
-TODO(media): 📷 screenshot — the command's results list of unused bindings.
-**Target:** `find-unused/find-unused-vs.png`
+![](find-unused/find-unused-vs.gif)
 ```
 
 ```{tab-item} VS Code

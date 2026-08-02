@@ -19,9 +19,7 @@ then either:
 
 Results open in the standard Find All References window.
 
-TODO(media): 🎬 gif — invoking Find Usages from a `.cs` binding method and
-seeing results across `.feature` files.
-**Target:** `find-usages/find-usages-vs.gif`
+![](find-usages/find-usages-vs.gif)
 ```
 
 ```{tab-item} VS Code

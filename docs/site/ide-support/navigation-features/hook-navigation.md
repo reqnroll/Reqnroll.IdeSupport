@@ -20,9 +20,7 @@ Place the cursor in a `.feature` file, then right-click → **Go to Hooks**
 (in the code editor context menu, next to "Go To Definition"). There's no
 Extensions menu placement for this one — it's editor-context-menu only.
 
-TODO(media): 🎬 gif — short jump-to-hook interaction, invoking Go to Hooks
-and selecting a result.
-**Target:** `hook-navigation/hook-navigation-vs.gif`
+![](hook-navigation/hook-navigation-vs.gif)
 ```
 
 ```{tab-item} VS Code
