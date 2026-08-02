@@ -140,7 +140,7 @@ internal sealed class RenameStepCommand : Command
 
             var currentStepText = !string.IsNullOrEmpty(currentExpression)
                 ? currentExpression
-                : ExtractStepTextFromLabel(currentLabel);
+                : RenameStepLabelParser.ExtractStepTextFromLabel(currentLabel);
 
             var newStepText = Microsoft.VisualBasic.Interaction.InputBox(
                 "Enter the new step text:", "Rename Step", currentStepText);
@@ -175,8 +175,17 @@ internal sealed class RenameStepCommand : Command
             _logger.LogError(ex, "RenameStepCommand: failed.");
         }
     }
+}
 
-    private static string ExtractStepTextFromLabel(string label)
+/// <summary>
+/// Splits a picker label of the form <c>"Given step text"</c> at the first space,
+/// returning everything after the keyword prefix. Kept on a plain static class (not on
+/// <see cref="RenameStepCommand"/> itself) so it can be unit-tested without pulling in a
+/// reference to the VS/COM <c>Command</c> base type.
+/// </summary>
+internal static class RenameStepLabelParser
+{
+    public static string ExtractStepTextFromLabel(string label)
     {
         var space = label.IndexOf(' ');
         var prefix = space >= 0 ? label.Substring(0, space + 1) : "";

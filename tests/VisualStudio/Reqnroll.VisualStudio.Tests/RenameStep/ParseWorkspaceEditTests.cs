@@ -138,4 +138,17 @@ public class ParseWorkspaceEditTests
 
         RenameStepService.ParseWorkspaceEdit(edit)!.FileEdits[@"c:\w\A.feature"][0].NewText.Should().BeEmpty();
     }
+
+    // ── URI mapping ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void A_non_file_uri_is_passed_through_unchanged_as_the_local_path()
+    {
+        var edit = WorkspaceEdit(("untitled:Steps.cs", new JArray(Edit(0, 0, 0, 1, "x"))));
+
+        var result = RenameStepService.ParseWorkspaceEdit(edit);
+
+        result.Should().NotBeNull();
+        result!.FileEdits.Should().ContainKey("untitled:Steps.cs");
+    }
 }
