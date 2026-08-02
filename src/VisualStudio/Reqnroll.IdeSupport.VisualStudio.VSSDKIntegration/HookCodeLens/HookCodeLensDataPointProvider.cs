@@ -35,6 +35,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 [Name(Id)]
 [ContentType("reqnroll-gherkin")]
 [Priority(200)]
+[LocalizedName(typeof(CodeLensResources), nameof(CodeLensResources.HookMatchCountProviderName))]
 internal sealed class HookCodeLensDataPointProvider : IAsyncCodeLensDataPointProvider
 {
     internal const string Id = "ReqnrollHookMatchCountCodeLensProvider";
