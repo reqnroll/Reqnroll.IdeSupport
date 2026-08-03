@@ -48,22 +48,18 @@ VS Code and seeing the generated binding method.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 🎬 gif — invoking the quick-fix in Rider, once
-[#437](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/437)
-confirms it's actually wired up — see the note below.
+TODO(media): 🎬 gif — invoking the quick-fix in Rider.
 **Target:** `defining-steps/defining-steps-rider.gif`
 ```
 
 :::
 
-```{admonition} Rider — verify before documenting as supported
+```{admonition} Rider — confirmed
 :class: note
 
-No Rider-specific code-action source was found for this feature as of this
-writing. It should be manually verified in a live Rider session whether
-this auto-negotiates via the platform's generic LSP code-action support
-(the same way diagnostics/completion do) or isn't wired up yet, before
-this page states Rider support definitively. Tracked in
+Works in Rider — it auto-negotiates via the platform's generic LSP
+code-action support (the same way diagnostics/completion do), no
+Rider-specific plugin code needed. Confirmed live; see
 [#437](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/437).
 ```
 
