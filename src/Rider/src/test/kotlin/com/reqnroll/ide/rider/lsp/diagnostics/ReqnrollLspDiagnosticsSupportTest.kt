@@ -43,4 +43,12 @@ class ReqnrollLspDiagnosticsSupportTest {
             tooltipFor("N.Steps.Add(int <a>, int <b>)"),
         )
     }
+
+    // Documents current behavior for an empty diagnostic message (not necessarily a fix): splitting
+    // "" on the line-ending regex yields a single empty segment, so XmlStringUtil.wrapInHtmlLines
+    // still renders one (empty) <nobr> element rather than an empty <html></html>.
+    @Test
+    fun `empty message renders as a single empty html line`() {
+        assertEquals("<html><nobr></nobr></html>", tooltipFor(""))
+    }
 }
