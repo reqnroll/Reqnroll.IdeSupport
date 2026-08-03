@@ -3,6 +3,7 @@ import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
     kotlin("jvm") version "2.4.10"
@@ -35,6 +36,21 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+
+    // The plugin runs against the IDE's own bundled Kotlin runtime (kotlin.stdlib.default.dependency
+    // = false, gradle.properties), not a copy we ship -- so compiled bytecode must not reference
+    // stdlib/coroutines symbols newer than what the *oldest* supported Rider bundles. Compiling at
+    // the default (compiler-version) API/language level with kotlin("jvm") 2.4.10 emitted a
+    // reference to kotlin.coroutines.jvm.internal.SpillingKt (a suspend-fn codegen helper added
+    // after 2.0) that RD-243 (Rider 2024.3, this plugin's pluginSinceBuild) doesn't have, and
+    // verifyPlugin caught it as a COMPATIBILITY_PROBLEMS NoSuchClassError risk. Pinning to 2.0 --
+    // matching the Kotlin version this project targeted before the compiler bump -- keeps the
+    // newer compiler's fixes without emitting bytecode the oldest supported IDE can't load. Bump
+    // this only alongside pluginSinceBuild.
+    compilerOptions {
+        apiVersion.set(KotlinVersion.KOTLIN_2_0)
+        languageVersion.set(KotlinVersion.KOTLIN_2_0)
+    }
 }
 
 tasks.test {
