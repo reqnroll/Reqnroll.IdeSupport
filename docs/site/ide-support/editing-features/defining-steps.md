@@ -49,8 +49,8 @@ VS Code and seeing the generated binding method.
 :sync: rider
 
 TODO(media): 🎬 gif — invoking the quick-fix in Rider, once
-[#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414)-style
-verification confirms it's actually wired up — see the note below.
+[#437](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/437)
+confirms it's actually wired up — see the note below.
 **Target:** `defining-steps/defining-steps-rider.gif`
 ```
 
@@ -62,8 +62,9 @@ verification confirms it's actually wired up — see the note below.
 No Rider-specific code-action source was found for this feature as of this
 writing. It should be manually verified in a live Rider session whether
 this auto-negotiates via the platform's generic LSP code-action support
-(the same way diagnostics does) or isn't wired up yet, before this page
-states Rider support definitively.
+(the same way diagnostics/completion do) or isn't wired up yet, before
+this page states Rider support definitively. Tracked in
+[#437](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/437).
 ```
 
 See also [New Project / Item Templates](../new-project-templates.md) for

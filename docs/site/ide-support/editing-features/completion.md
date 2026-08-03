@@ -34,22 +34,18 @@ appearing, and selecting an item.
 :sync: rider
 
 TODO(media): 🎬 gif — typing a keyword or step, the completion popup
-appearing, and selecting an item — capture only once
-[#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414) confirms
-Rider completion actually works; see the admonition below.
+appearing, and selecting an item.
 **Target:** `completion/completion-rider.gif`
 ```
 
 :::
 
-```{admonition} Rider completion — verify before relying on this page
-:class: warning
+```{admonition} Rider completion — confirmed
+:class: note
 
-No Rider-specific completion source code was found in the plugin as of this
-writing — it may rely on the IDE platform's generic LSP completion
-auto-negotiation (the same mechanism diagnostics use), but this should be
-manually confirmed in a live Rider session before this page states Rider
-completion as fully supported. Tracked in
+Completion works in Rider — it auto-negotiates via the IDE platform's
+generic LSP completion support (the same mechanism diagnostics uses), no
+Rider-specific plugin code needed. Confirmed live; see
 [#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414).
 ```
 

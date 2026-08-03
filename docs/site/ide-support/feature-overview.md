@@ -19,7 +19,7 @@ what to expect and what to do about it.
 |---|:---:|:---:|:---:|
 | [Syntax Highlighting](editing-features/syntax-highlighting.md) | ✅ | ✅ | ✅ |
 | [Diagnostics — Errors & Warnings](editing-features/diagnostics.md) | ✅ | ✅ | ✅ |
-| [Keyword & Step Completion](editing-features/completion.md) | ✅ | ✅ | ⚠️¹ |
+| [Keyword & Step Completion](editing-features/completion.md) | ✅ | ✅ | ✅ |
 | [Document & Table Formatting](editing-features/formatting.md) | ✅ | ⚠️² | ✅ |
 | [Comment / Uncomment](editing-features/comment-uncomment.md) | ✅ | ✅ | ✅ |
 | [Code Folding](editing-features/code-folding.md) | ✅ | ✅ | ✅ |
@@ -61,9 +61,9 @@ the faster path since you don't have to invoke anything.
 ---
 
 ¹ Not yet confirmed against a live Rider session — likely works via the
-IntelliJ platform's generic support (the same mechanism diagnostics uses),
-but hasn't been manually verified. Tracked in
-[#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414). If you
+IntelliJ platform's generic support (the same mechanism diagnostics and
+completion use), but hasn't been manually verified. Tracked in
+[#437](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/437). If you
 try it in Rider, that issue is the place to report what you find.
 
 ² Visual Studio ships its own built-in Gherkin formatting service, which
