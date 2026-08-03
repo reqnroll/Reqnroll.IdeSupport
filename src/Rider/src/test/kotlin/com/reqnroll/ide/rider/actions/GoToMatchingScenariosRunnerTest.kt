@@ -41,4 +41,14 @@ class GoToMatchingScenariosRunnerTest {
 
         assertEquals("[Scenario] (untitled)", GoToMatchingScenariosRunner.renderLabel(item))
     }
+
+    @Test
+    fun `matchingScenariosTitle uses singular wording for exactly one scenario`() {
+        assertEquals("1 matching scenario", GoToMatchingScenariosRunner.matchingScenariosTitle(1))
+    }
+
+    @Test
+    fun `matchingScenariosTitle uses plural wording for more than one scenario`() {
+        assertEquals("2 matching scenarios", GoToMatchingScenariosRunner.matchingScenariosTitle(2))
+    }
 }
