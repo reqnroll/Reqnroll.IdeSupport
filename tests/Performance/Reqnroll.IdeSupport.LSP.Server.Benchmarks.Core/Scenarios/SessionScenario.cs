@@ -21,7 +21,8 @@ public sealed record SessionOptions(
     double SupersedeRate = 0.30,
     int ThinkMs = 10,
     int TypingGapMs = 2,
-    int NavigateEveryNthBurst = 5);
+    int NavigateEveryNthBurst = 5,
+    int CodeLensEveryNthBurst = 10);
 
 /// <summary>Aggregate request/cancellation outcomes for an editing session.</summary>
 public sealed record SessionStats(
@@ -47,6 +48,17 @@ public sealed record SessionResult(
 /// <b>superseded</b>: the next "keystroke" cancels the in-flight requests (<c>$/cancelRequest</c>),
 /// exercising the cancellation path that real editors hammer. Think-time separates bursts so the
 /// arrival pattern is realistic rather than a saturating hot loop.
+/// <para>
+/// Go-to-definition and CodeLens are <b>not</b> part of the per-edit burst — real editors don't fire
+/// either on every keystroke (navigation is user-initiated; CodeLens is normally refreshed off a
+/// debounced server push, not the edit itself), so both are instead pulled on their own slower,
+/// fixed cadence (<see cref="SessionOptions.NavigateEveryNthBurst"/>/
+/// <see cref="SessionOptions.CodeLensEveryNthBurst"/>) and, unlike the burst set, are never
+/// superseded/cancelled — a real client doesn't cancel a navigation or a CodeLens refresh the way it
+/// cancels stale semantic-tokens/completion requests mid-keystroke. The chosen cadence is a synthetic
+/// stand-in for "occasional" (there is no single real-world rate to measure it against), useful for
+/// realistic connection-sharing contention rather than as a claim about actual refresh frequency.
+/// </para>
 /// </summary>
 /// <remarks>
 /// This measures interactive latency <em>under contention</em> — a "reality check" that complements
@@ -67,6 +79,7 @@ public sealed class SessionScenario
     private readonly LatencyRecorder _documentSymbol = new(PerfTargets.DocumentSymbol.Operation);
     private readonly LatencyRecorder _foldingRange = new(PerfTargets.FoldingRange.Operation);
     private readonly LatencyRecorder _definition = new(PerfTargets.DefinitionCacheHit.Operation);
+    private readonly LatencyRecorder _codeLens = new(PerfTargets.FeatureHookCodeLens.Operation);
     private readonly LatencyRecorder _diagnostics = new(PerfTargets.PublishDiagnostics.Operation);
 
     private long _issued;
@@ -99,6 +112,7 @@ public sealed class SessionScenario
         AddIfSampled(PerfTargets.DocumentSymbol, _documentSymbol);
         AddIfSampled(PerfTargets.FoldingRange, _foldingRange);
         AddIfSampled(PerfTargets.DefinitionCacheHit, _definition);
+        AddIfSampled(PerfTargets.FeatureHookCodeLens, _codeLens);
         AddIfSampled(PerfTargets.PublishDiagnostics, _diagnostics);
 
         return new SessionResult(results, BuildStats());
@@ -138,6 +152,15 @@ public sealed class SessionScenario
         if (_options.NavigateEveryNthBurst > 0 && i % _options.NavigateEveryNthBurst == 0)
             await TimedAsync(_definition, record,
                 ct => _harness.RequestDefinitionAsync(f.Uri, line, character, ct), CancellationToken.None)
+                .ConfigureAwait(false);
+
+        // 4b. CodeLens fires on its own slower cadence too, and is likewise not superseded — see the
+        //     class remarks for why it's excluded from the per-edit burst set. Requesting on the open
+        //     .feature file exercises HookCodeLensHandler (StepCodeLensHandler only returns lenses
+        //     for .cs files, which the session never opens).
+        if (_options.CodeLensEveryNthBurst > 0 && i % _options.CodeLensEveryNthBurst == 0)
+            await TimedAsync(_codeLens, record,
+                ct => _harness.RequestCodeLensAsync(f.Uri, ct), CancellationToken.None)
                 .ConfigureAwait(false);
 
         // 5. Record the diagnostics push latency (it raced the pulls).
