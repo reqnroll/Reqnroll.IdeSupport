@@ -32,6 +32,7 @@ public static class SessionRunner
             ThinkMs = IntArg(args, "--think-ms", defaults.ThinkMs),
             TypingGapMs = IntArg(args, "--typing-gap-ms", defaults.TypingGapMs),
             NavigateEveryNthBurst = IntArg(args, "--navigate-every", defaults.NavigateEveryNthBurst),
+            CodeLensEveryNthBurst = IntArg(args, "--codelens-every", defaults.CodeLensEveryNthBurst),
         };
         var fileCount = IntArg(args, "--files", 10);
         var outPath = StringArg(args, "--out");
@@ -44,7 +45,8 @@ public static class SessionRunner
         Console.WriteLine($"Running editing-session benchmark against corpus at {corpusRoot}");
         Console.WriteLine($"  bursts={options.Bursts} warmup={options.Warmup} files={fileCount} " +
                           $"supersede-rate={options.SupersedeRate} think-ms={options.ThinkMs} " +
-                          $"typing-gap-ms={options.TypingGapMs} out-of-process={outOfProcess}");
+                          $"typing-gap-ms={options.TypingGapMs} navigate-every={options.NavigateEveryNthBurst} " +
+                          $"codelens-every={options.CodeLensEveryNthBurst} out-of-process={outOfProcess}");
 
         await using var harness = new BenchmarkLspHarness();
         string transport;

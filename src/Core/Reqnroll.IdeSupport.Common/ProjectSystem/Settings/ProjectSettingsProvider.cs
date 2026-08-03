@@ -12,8 +12,11 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
 {
     /// <summary>Maximum number of times to retry initializing project settings before giving up.</summary>
     public const int MAX_RETRY_COUNT = 5;
+    private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromSeconds(5);
+
     private readonly IProjectScope _projectScope;
     private readonly ReqnrollProjectSettingsProvider _reqnrollProjectSettingsProvider;
+    private readonly TimeSpan _retryDelay;
     private ProjectSettings _projectSettings;
     private int _retryInitializeCounter;
     private Timer _retryInitializeTimer;
@@ -21,10 +24,19 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     /// <summary>Initializes a new instance of the <see cref="ProjectSettingsProvider"/> class.</summary>
     public ProjectSettingsProvider( IProjectScope projectScope,
         ReqnrollProjectSettingsProvider reqnrollProjectSettingsProvider)
+        : this(projectScope, reqnrollProjectSettingsProvider, DefaultRetryDelay)
+    {
+    }
+
+    /// <summary>Test seam: allows the retry timer's delay to be shortened so the retry state machine can be exercised without waiting on the real 5-second interval.</summary>
+    internal ProjectSettingsProvider(IProjectScope projectScope,
+        ReqnrollProjectSettingsProvider reqnrollProjectSettingsProvider,
+        TimeSpan retryDelay)
     {
         _projectScope = projectScope ?? throw new ArgumentNullException(nameof(projectScope));
         _reqnrollProjectSettingsProvider = reqnrollProjectSettingsProvider ??
                                            throw new ArgumentNullException(nameof(reqnrollProjectSettingsProvider));
+        _retryDelay = retryDelay;
         InitializeProjectSettings();
 
         //_projectScope.GetDeveroomConfigurationProvider().WeakConfigurationChanged += OnConfigurationChanged;
@@ -86,8 +98,8 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     private void StartRetryInitializeTimer()
     {
         _retryInitializeCounter++;
-        Logger.LogInfo("Project settings not available yet, retry in 5 seconds...");
-        _retryInitializeTimer = new Timer(RetryInitializeTimerTick, null, TimeSpan.FromSeconds(5), Timeout.InfiniteTimeSpan);
+        Logger.LogInfo($"Project settings not available yet, retry in {_retryDelay.TotalSeconds} seconds...");
+        _retryInitializeTimer = new Timer(RetryInitializeTimerTick, null, _retryDelay, Timeout.InfiniteTimeSpan);
 
     }
 

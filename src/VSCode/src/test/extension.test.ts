@@ -15,6 +15,8 @@ import './statusBar.test';
 import './commands/stepUsages.test';
 import './commands/findUnusedStepDefinitions.test';
 import './commands/goToHooks.test';
+import './commands/goToMatchingScenarios.test';
+import './commands/stepCodeLens.test';
 import './commands/commentToggle.test';
 
 /**

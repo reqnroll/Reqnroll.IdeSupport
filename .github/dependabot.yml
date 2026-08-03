@@ -1,0 +1,75 @@
+# ---------------------------------------------------------------------------
+# Dependabot configuration — one entry per package ecosystem used in this
+# repo (issue #412). Each entry watches the directory containing that
+# ecosystem's manifest and opens grouped weekly PRs so updates don't arrive
+# as a flood of single-dependency PRs.
+# ---------------------------------------------------------------------------
+version: 2
+updates:
+  # .NET/NuGet — Reqnroll.IdeSupport.slnx at the repo root pulls in every
+  # csproj under src/Core, src/LSP, src/VisualStudio, tests/**.
+  - package-ecosystem: 'nuget'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    groups:
+      nuget-dependencies:
+        patterns:
+          - '*'
+    labels:
+      - 'dependencies'
+      - 'nuget'
+
+  # VS Code extension (TypeScript/npm) — src/VSCode/package.json.
+  - package-ecosystem: 'npm'
+    directory: '/src/VSCode'
+    schedule:
+      interval: 'weekly'
+    groups:
+      npm-dependencies:
+        patterns:
+          - '*'
+    labels:
+      - 'dependencies'
+      - 'vscode'
+
+  # Rider plugin (Kotlin/Gradle) — src/Rider/build.gradle.kts.
+  - package-ecosystem: 'gradle'
+    directory: '/src/Rider'
+    schedule:
+      interval: 'weekly'
+    groups:
+      gradle-dependencies:
+        patterns:
+          - '*'
+    labels:
+      - 'dependencies'
+      - 'rider'
+
+  # GitHub Actions used by ci.yml and test-lsp.yml.
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - '*'
+    labels:
+      - 'dependencies'
+      - 'github-actions'
+
+  # Dependabot only scans .github/workflows for a given directory — the
+  # setup-rider-gradle-env composite action lives elsewhere and has its own
+  # `uses:` steps (actions/setup-java, actions/cache), so it needs its own entry.
+  - package-ecosystem: 'github-actions'
+    directory: '/.github/actions/setup-rider-gradle-env'
+    schedule:
+      interval: 'weekly'
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - '*'
+    labels:
+      - 'dependencies'
+      - 'github-actions'

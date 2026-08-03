@@ -50,7 +50,7 @@ object GoToMatchingScenariosRunner {
 
         ReqnrollResultPopup.show(
             project,
-            "${response.scenarios.size} Matching Scenario(s)",
+            matchingScenariosTitle(response.scenarios.size),
             response.scenarios,
             render = { item -> renderLabel(item) },
             onChosen = { item -> navigate(project, item) },
@@ -59,6 +59,16 @@ object GoToMatchingScenariosRunner {
 
     private fun navigate(project: Project, item: MatchingScenarioLocation) =
         ReqnrollResultPopup.navigateToUri(project, item.uri, item.startLine, item.startChar)
+
+    /**
+     * Wording matches the VS and VS Code clients' equivalent surfaces verbatim ("1 matching
+     * scenario" / "N matching scenarios") rather than this plugin's usual "N Thing(s)" title
+     * convention (see FindStepUsagesRunner) — deliberately unified across all three IDEs for this
+     * one picker. `internal` (rather than private) purely so it's unit-testable without an
+     * AnAction/platform fixture, matching [renderLabel].
+     */
+    internal fun matchingScenariosTitle(count: Int): String =
+        if (count == 1) "1 matching scenario" else "$count matching scenarios"
 
     /** `internal` (rather than private) purely so it's unit-testable without an AnAction/platform fixture. */
     internal fun renderLabel(item: MatchingScenarioLocation): String {

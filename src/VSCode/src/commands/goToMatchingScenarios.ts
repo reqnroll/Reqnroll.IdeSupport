@@ -58,9 +58,15 @@ export async function doGoToMatchingScenarios(
     scenario,
   }));
 
-  const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: `${response.scenarios.length} matching scenarios — select to navigate`,
-  });
+  // Singular/plural wording matches the VS and Rider clients' equivalent surfaces verbatim
+  // ("1 matching scenario" / "N matching scenarios") — previously always plural here, which read
+  // as "1 matching scenarios" for a single match.
+  const count = response.scenarios.length;
+  const placeHolder =
+    count === 1
+      ? '1 matching scenario — select to navigate'
+      : `${count} matching scenarios — select to navigate`;
+  const picked = await vscode.window.showQuickPick(items, { placeHolder });
   if (!picked) return;
   await navigateToScenario(picked.scenario);
 }

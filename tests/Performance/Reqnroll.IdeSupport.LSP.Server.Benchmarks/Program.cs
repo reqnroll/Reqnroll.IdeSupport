@@ -98,9 +98,12 @@ public static class Program
               Models one user editing one active document: each edit fires a burst of requests
               (semantic tokens, outline, folding, completion) pipelined on the single connection
               and racing the diagnostics push; a fraction of bursts are superseded (cancelled) to
-              exercise the $/cancelRequest path; think-time separates bursts. Per-op latency here
-              is measured UNDER LOAD, so it will be >= the isolated 'run' numbers — that is the
-              point. Report-only (the published targets are isolated-case references).
+              exercise the $/cancelRequest path; think-time separates bursts. Go-to-definition and
+              CodeLens are NOT part of that burst (neither fires on every keystroke in a real
+              editor) — each is instead pulled on its own slower, fixed cadence and never
+              superseded. Per-op latency here is measured UNDER LOAD, so it will be >= the isolated
+              'run' numbers — that is the point. Report-only (the published targets are
+              isolated-case references).
               --warmup <n>           Unrecorded warm-up bursts.                          (default 5)
               --bursts <n>           Measured edit bursts.                               (default 40)
               --files <n>            Corpus feature files in rotation as the active doc. (default 10)
@@ -108,6 +111,7 @@ public static class Program
               --typing-gap-ms <n>    Delay before the superseding "keystroke" cancels.   (default 2)
               --think-ms <n>         Pause between bursts (raise to model human pacing). (default 10)
               --navigate-every <n>   Fire go-to-definition every Nth burst.              (default 5)
+              --codelens-every <n>   Fire feature-file hook CodeLens every Nth burst.    (default 10)
               --out <path>           Write the results JSON (includes session activity stats).
               --out-of-process       Spawn the server EXE over stdio instead of in-process (see 'run').
               --server-exe <path>    Explicit server exe path (default: locate the built exe).

@@ -1,6 +1,7 @@
 Feature: Corpus feature 021
   Synthetic benchmark feature 021 for performance verification.
 
+  @hookscope
   Scenario: Scenario 021-0
     Given precondition 0 is met
     When feature 24 is enabled

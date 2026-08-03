@@ -345,6 +345,24 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 Position = new Position(line, character),
             }, ct);
 
+    /// <summary>
+    /// <c>reqnroll/goToMatchingScenarios</c> (issue #373) — the inverse of
+    /// <see cref="RequestGoToHooksAsync"/>: given a `.cs` position pinned to a hook-binding
+    /// attribute, returns every scenario its scope matches. <paramref name="line"/>/
+    /// <paramref name="character"/> must be the attribute's exact position (0-based), same as a
+    /// real client round-trips verbatim from a <see cref="RequestCodeLensAsync"/> hook lens's own
+    /// click arguments — not a proximity search like <see cref="RequestGoToHooksAsync"/>'s cursor
+    /// resolution.
+    /// </summary>
+    public Task<GoToMatchingScenariosResponse?> RequestGoToMatchingScenariosAsync(
+        DocumentUri uri, int line, int character, CancellationToken ct = default) =>
+        RequestAsync<GoToMatchingScenariosResponse?>(LspMethodNames.ReqnrollGoToMatchingScenarios,
+            new TextDocumentPositionParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = uri },
+                Position = new Position(line, character),
+            }, ct);
+
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────
 
     public Task<LspCodeLens[]?> RequestCodeLensAsync(DocumentUri uri, CancellationToken ct = default) =>
