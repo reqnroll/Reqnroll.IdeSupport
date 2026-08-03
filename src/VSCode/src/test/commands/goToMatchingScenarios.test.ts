@@ -75,7 +75,13 @@ suite('goToMatchingScenarios', () => {
       const client = fakeClient(() =>
         Promise.resolve({
           scenarios: [
-            { uri: 'file:///A.feature', startLine: 1, startChar: 0, scenarioName: 'Refund', isOutline: false },
+            {
+              uri: 'file:///A.feature',
+              startLine: 1,
+              startChar: 0,
+              scenarioName: 'Refund',
+              isOutline: false,
+            },
           ],
         }),
       );
@@ -83,7 +89,10 @@ suite('goToMatchingScenarios', () => {
 
       await withStubbedWindow(
         {
-          showQuickPick: ((items: readonly { label: string }[], options?: { placeHolder?: string }) => {
+          showQuickPick: ((
+            items: readonly { label: string }[],
+            options?: { placeHolder?: string },
+          ) => {
             placeHolder = options?.placeHolder;
             return Promise.resolve(undefined);
           }) as unknown as typeof vscode.window.showQuickPick,
@@ -98,8 +107,20 @@ suite('goToMatchingScenarios', () => {
       const client = fakeClient(() =>
         Promise.resolve({
           scenarios: [
-            { uri: 'file:///A.feature', startLine: 1, startChar: 0, scenarioName: 'Refund', isOutline: false },
-            { uri: 'file:///B.feature', startLine: 2, startChar: 0, scenarioName: 'Discount', isOutline: false },
+            {
+              uri: 'file:///A.feature',
+              startLine: 1,
+              startChar: 0,
+              scenarioName: 'Refund',
+              isOutline: false,
+            },
+            {
+              uri: 'file:///B.feature',
+              startLine: 2,
+              startChar: 0,
+              scenarioName: 'Discount',
+              isOutline: false,
+            },
           ],
         }),
       );
@@ -107,7 +128,10 @@ suite('goToMatchingScenarios', () => {
 
       await withStubbedWindow(
         {
-          showQuickPick: ((items: readonly { label: string }[], options?: { placeHolder?: string }) => {
+          showQuickPick: ((
+            items: readonly { label: string }[],
+            options?: { placeHolder?: string },
+          ) => {
             placeHolder = options?.placeHolder;
             return Promise.resolve(undefined);
           }) as unknown as typeof vscode.window.showQuickPick,

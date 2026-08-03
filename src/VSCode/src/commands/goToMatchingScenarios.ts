@@ -63,7 +63,9 @@ export async function doGoToMatchingScenarios(
   // as "1 matching scenarios" for a single match.
   const count = response.scenarios.length;
   const placeHolder =
-    count === 1 ? '1 matching scenario — select to navigate' : `${count} matching scenarios — select to navigate`;
+    count === 1
+      ? '1 matching scenario — select to navigate'
+      : `${count} matching scenarios — select to navigate`;
   const picked = await vscode.window.showQuickPick(items, { placeHolder });
   if (!picked) return;
   await navigateToScenario(picked.scenario);
