@@ -231,18 +231,18 @@
     "validate:tokens": "node scripts/validate-semantic-token-scopes.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.1.2",
     "@types/vscode": "~1.96.0",
-    "@vscode/test-electron": "^2.4.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.28.1",
-    "eslint": "^9.0.0",
+    "eslint": "^10.8.0",
     "mocha": "^11.0.0",
-    "prettier": "^3.4.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.0.0"
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0"
   },
   "repository": {
     "type": "git",
@@ -250,6 +250,6 @@
   },
   "dependencies": {
     "@vscode/extension-telemetry": "^1.5.2",
-    "vscode-languageclient": "^10.0.1"
+    "vscode-languageclient": "^10.1.0"
   }
 }
