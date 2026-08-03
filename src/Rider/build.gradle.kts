@@ -1,10 +1,14 @@
 import org.gradle.internal.os.OperatingSystem
+import org.gradle.kotlin.dsl.support.serviceOf
+import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
-    kotlin("jvm") version "2.0.21"
-    id("org.jetbrains.intellij.platform") version "2.2.1"
+    kotlin("jvm") version "2.4.10"
+    id("org.jetbrains.intellij.platform") version "2.18.1"
 }
 
 group = providers.gradleProperty("pluginGroup").get()
@@ -20,7 +24,8 @@ repositories {
 dependencies {
     intellijPlatform {
         rider(providers.gradleProperty("platformVersion"))
-        instrumentationTools()
+        // instrumentationTools() was a compatibility helper for the 1.x plugin, removed in 2.12.0 --
+        // build/test/verify now pull the required instrumentation dependencies automatically.
     }
 
     // Plain JUnit5 (kotlin.test assertions on the JUnit5 engine) for pure-logic unit tests that
@@ -32,6 +37,21 @@ dependencies {
 
 kotlin {
     jvmToolchain(21)
+
+    // The plugin runs against the IDE's own bundled Kotlin runtime (kotlin.stdlib.default.dependency
+    // = false, gradle.properties), not a copy we ship -- so compiled bytecode must not reference
+    // stdlib/coroutines symbols newer than what the *oldest* supported Rider bundles. Compiling at
+    // the default (compiler-version) API/language level with kotlin("jvm") 2.4.10 emitted a
+    // reference to kotlin.coroutines.jvm.internal.SpillingKt (a suspend-fn codegen helper added
+    // after 2.0) that RD-243 (Rider 2024.3, this plugin's pluginSinceBuild) doesn't have, and
+    // verifyPlugin caught it as a COMPATIBILITY_PROBLEMS NoSuchClassError risk. Pinning to 2.0 --
+    // matching the Kotlin version this project targeted before the compiler bump -- keeps the
+    // newer compiler's fixes without emitting bytecode the oldest supported IDE can't load. Bump
+    // this only alongside pluginSinceBuild.
+    compilerOptions {
+        apiVersion.set(KotlinVersion.KOTLIN_2_0)
+        languageVersion.set(KotlinVersion.KOTLIN_2_0)
+    }
 }
 
 tasks.test {
@@ -64,6 +84,16 @@ intellijPlatform {
     // bytecode-level early warning if one of those APIs changes or disappears somewhere in the
     // declared range.
     pluginVerification {
+        // IntelliJ Platform Gradle Plugin 2.15+ added INTERNAL_API_USAGES and
+        // OVERRIDE_ONLY_API_USAGES to the default failureLevel alongside COMPATIBILITY_PROBLEMS
+        // (previously the only one that failed the build) -- picked up here via the 2.2.1 -> 2.18.1
+        // bump. This plugin has always had internal/override-only API usages (30 and 1 respectively,
+        // unchanged by this bump) that were never gating before; restoring the pre-2.15 failureLevel
+        // keeps that established baseline instead of a dependency bump silently making verifyPlugin
+        // stricter. COMPATIBILITY_PROBLEMS -- the check that catches real "this API doesn't exist on
+        // this IDE version" regressions -- stays enforced.
+        failureLevel = listOf(VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS)
+
         ides {
             recommended()
             select {
@@ -95,6 +125,11 @@ intellijPlatform {
 //    whichever server-<rid> subdirectories already exist under <dir> — CI populates
 //    those from the already-built-and-tested artifacts test-lsp.yml publishes, so
 //    Gradle never needs `dotnet` on the CI runner at all.
+
+// Project.exec was removed in Gradle 9 -- ExecOperations is the injected replacement that still
+// runs eagerly and streams output to the console the way Project.exec used to (unlike
+// ProviderFactory.exec, which is lazy and silent).
+val execOperations = serviceOf<ExecOperations>()
 
 val repoRoot = layout.projectDirectory.dir("../..").asFile.canonicalFile
 val allServerRids = listOf("win-x64", "linux-x64", "osx-x64", "osx-arm64")
@@ -158,11 +193,10 @@ val publishServer by tasks.registering(Exec::class) {
         // Restore the Connector project for this RID first — it's multi-TFM and doesn't
         // resolve correctly as part of the Server's own restore. Same requirement as
         // src/VSCode/scripts/publish-server.sh.
-        // `project.exec` (not bare `exec`) — this task is itself an `Exec` task, which has its
-        // own no-arg `exec(): Unit` member that shadows the `Project.exec(Action)` extension;
-        // the unqualified name resolves to that member and fails to compile ("too many
-        // arguments") under some Gradle/Kotlin-DSL combinations.
-        project.exec {
+        // `execOperations.exec` (not `project.exec`, removed in Gradle 9, and not bare `exec` —
+        // this task is itself an `Exec` task, which has its own no-arg `exec(): Unit` member that
+        // shadows any unqualified `exec(Action)` extension).
+        execOperations.exec {
             commandLine("dotnet", "restore", connectorProject.toString(), "--runtime", serverRid)
         }
     }
@@ -198,7 +232,7 @@ tasks.named<Sync>("prepareSandbox") {
 
 tasks {
     wrapper {
-        gradleVersion = "8.10"
+        gradleVersion = "9.6.1"
     }
 }
 
