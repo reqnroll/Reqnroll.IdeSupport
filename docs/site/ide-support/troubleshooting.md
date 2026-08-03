@@ -24,6 +24,24 @@ for how to tell the two listings apart in the Marketplace.
   more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
   for the workaround (Rider and Visual Studio both handle this case).
 
+## A shared `.feature` file shows hooks, diagnostics, or highlighting from the "wrong" project
+
+If the same `.feature` file is linked into more than one project — for example, a
+`Calculator.feature` that physically lives in `ProjectA` and is also linked into `ProjectB` —
+Code Lens hook-match counts, **Go to Hooks**, diagnostics/squiggles, and syntax highlighting for
+that file always reflect **the project that physically contains the file on disk**, regardless
+of which project's node you used to open it (Solution Explorer, VS Code's Explorer, or Rider's
+Project view).
+
+This is deterministic, and by design rather than a bug: opening a file only identifies it by its
+path, with no way to know which project's node you clicked through to get there, so a single
+project has to be picked to drive what's shown. It's always the file's **home project** — the
+one whose folder physically contains it — never whichever project you happened to navigate from.
+
+If bindings differ between the two projects, expect Code Lens, [Hook Navigation](navigation-features/hook-navigation.md),
+and diagnostics on the shared file to reflect the home project's bindings only, even when the
+file is viewed "from" the other project.
+
 ## Where are the logs, and how do I change the log level?
 
 :::{tab-set}

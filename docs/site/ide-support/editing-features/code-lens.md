@@ -33,6 +33,12 @@ exactly what you need to notice. A hook with no `[Scope]` at all shows the
 static label "all scenarios" instead of a count, since it matches
 everything. Clicking the lens shows a results list of the matching scenarios.
 
+```{note}
+If a `.feature` file is linked into more than one project, its hook-match lenses always reflect
+the file's *home* project (wherever it physically lives on disk), regardless of which project's
+node you opened it from. See [Troubleshooting](../troubleshooting.md#a-shared-feature-file-shows-hooks-diagnostics-or-highlighting-from-the-wrong-project).
+```
+
 :::{tab-set}
 
 ```{tab-item} Visual Studio

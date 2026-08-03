@@ -61,3 +61,9 @@ shows hook-match counts inline above `Feature:`/`Scenario:` lines while
 you're reading the code, and clicking one opens the same picker filtered
 to that lens's own hook set.
 ```
+
+```{note}
+If a `.feature` file is linked into more than one project, the hooks shown here always come from
+the file's *home* project (wherever it physically lives on disk) — not necessarily the project
+you opened it from. See [Troubleshooting](../troubleshooting.md#a-shared-feature-file-shows-hooks-diagnostics-or-highlighting-from-the-wrong-project).
+```
