@@ -20,6 +20,25 @@ function fakeContext(): vscode.ExtensionContext {
 }
 
 /**
+ * Stubs `console.warn` for the duration of `fn`, restoring the original descriptor afterwards.
+ * A plain `console.warn = fn` assignment is a silent no-op here: the VS Code extension host
+ * installs `console.warn` as a `configurable: true` *accessor* (get/set) whose getter always
+ * returns its own patched function regardless of what's been "set" — confirmed by inspecting
+ * `Object.getOwnPropertyDescriptor(console, 'warn')` inside this suite before this fix. Since the
+ * property is configurable, `Object.defineProperty` can still fully replace it with a plain
+ * writable data property, unlike a bare assignment.
+ */
+async function withStubbedConsoleWarn<T>(stub: (...args: unknown[]) => void, fn: () => Thenable<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(console, 'warn')!;
+  Object.defineProperty(console, 'warn', { value: stub, writable: true, configurable: true, enumerable: true });
+  try {
+    return await fn();
+  } finally {
+    Object.defineProperty(console, 'warn', original);
+  }
+}
+
+/**
  * Registers the CodeLens provider with `client`/`context`, capturing the `vscode.CodeLensProvider`
  * passed to `vscode.languages.registerCodeLensProvider` so its `provideCodeLenses` can be invoked
  * directly, without needing a real editor/CodeLens-refresh pipeline.
@@ -90,11 +109,7 @@ suite('stepCodeLens', () => {
         });
         const provider = captureProvider(client);
 
-        const originalWarn = console.warn;
         let warned = false;
-        console.warn = () => {
-          warned = true;
-        };
         const originalShowErrorMessage = vscode.window.showErrorMessage;
         let errorShown = false;
         (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = () => {
@@ -104,7 +119,12 @@ suite('stepCodeLens', () => {
 
         try {
           const document = { uri: vscode.Uri.parse('file:///Steps.cs') } as vscode.TextDocument;
-          const lenses = await provider.provideCodeLenses(document, {} as vscode.CancellationToken);
+          const lenses = await withStubbedConsoleWarn(
+            () => {
+              warned = true;
+            },
+            () => Promise.resolve(provider.provideCodeLenses(document, {} as vscode.CancellationToken)),
+          );
 
           assert.deepStrictEqual(lenses, []);
           assert.ok(warned, 'console.warn should be called on request failure');
@@ -114,7 +134,6 @@ suite('stepCodeLens', () => {
             'showErrorMessage should NOT be called — CodeLens failures degrade silently by design',
           );
         } finally {
-          console.warn = originalWarn;
           (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage =
             originalShowErrorMessage;
         }
