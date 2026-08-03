@@ -126,13 +126,13 @@ jobs:
       core_lsp: ${{ steps.filter.outputs.core_lsp }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Filter changed paths
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             vs:
@@ -216,20 +216,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -237,7 +237,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Download published LSP server (win-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-win-x64
           path: lsp-server-win-x64
@@ -249,7 +249,7 @@ jobs:
         run: dotnet build ${{ env.EXTENSION_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} -p:UseExternalLspServerBuild=true "-p:LspServerBuildDir=${{ github.workspace }}\lsp-server-win-x64\" ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Upload VSIX candidate artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reqnroll-vs-extension-vsix-candidate
           path: src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/${{ env.CONFIGURATION }}/net481/*.vsix
@@ -266,20 +266,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -290,7 +290,7 @@ jobs:
         # Reqnroll.VisualStudio.Tests references the Extension project, which by default
         # builds LSP.Server itself via ProjectReference — see build-vs-extension's identical
         # step for why this instead reuses the artifact the lsp job already published.
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-win-x64
           path: lsp-server-win-x64
@@ -302,7 +302,7 @@ jobs:
         run: dotnet test ${{ env.TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults -p:UseExternalLspServerBuild=true "-p:LspServerBuildDir=${{ github.workspace }}\lsp-server-win-x64\" ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Upload Test Result TRX Files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: vs-extension-tests-trx
@@ -319,20 +319,20 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
@@ -346,7 +346,7 @@ jobs:
         run: dotnet test ${{ env.WIZARDS_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults
 
       - name: Upload Test Result TRX Files
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: vs-wizards-tests-trx
@@ -368,13 +368,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Download VSIX candidate artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: reqnroll-vs-extension-vsix-candidate
           path: vsix
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reqnroll-vs-extension-vsix
           path: vsix/*.vsix
@@ -392,7 +392,7 @@ jobs:
   # extension.ts's resolveServerPath() looks for server/<rid>/<binary>, not
   # server/server-<rid>/<binary> — so each RID is downloaded to an explicit
   # path below rather than via a single `pattern: server-*` download: with
-  # merge-multiple left at its default (false), actions/download-artifact@v4
+  # merge-multiple left at its default (false), actions/download-artifact@v8
   # nests pattern-matched artifacts one level deeper, under a directory named
   # after the artifact itself (server-<rid>/<files>) rather than the bare
   # RID. Downloading each one explicitly by name avoids that extra nesting
@@ -406,37 +406,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: ${{ env.VSCODE_DIR }}/package-lock.json
 
       - name: Download server (win-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-win-x64
           path: ${{ env.VSCODE_DIR }}/server/win-x64
 
       - name: Download server (linux-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-linux-x64
           path: ${{ env.VSCODE_DIR }}/server/linux-x64
 
       - name: Download server (osx-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-osx-x64
           path: ${{ env.VSCODE_DIR }}/server/osx-x64
 
       - name: Download server (osx-arm64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-osx-arm64
           path: ${{ env.VSCODE_DIR }}/server/osx-arm64
@@ -488,7 +488,7 @@ jobs:
         working-directory: ${{ env.VSCODE_DIR }}
 
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reqnroll-ide-support-vsix
           path: ${{ env.VSCODE_DIR }}/reqnroll-ide-support-*.vsix
@@ -505,12 +505,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -557,7 +557,7 @@ jobs:
   # (ReqnrollServerPathResolver.currentRid()). Each RID is downloaded to an
   # explicit path below rather than via a single `pattern: server-*` download:
   # with merge-multiple left at its default (false),
-  # actions/download-artifact@v4 nests pattern-matched artifacts one level
+  # actions/download-artifact@v8 nests pattern-matched artifacts one level
   # deeper, under a directory named after the artifact itself
   # (server-<rid>/<files>) rather than the bare RID — downloading each one
   # explicitly by name avoids that extra nesting level ending up inside the
@@ -577,7 +577,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -585,25 +585,25 @@ jobs:
         uses: ./.github/actions/setup-rider-gradle-env
 
       - name: Download server (win-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-win-x64
           path: ${{ env.RIDER_DIR }}/downloaded-server/win-x64
 
       - name: Download server (linux-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-linux-x64
           path: ${{ env.RIDER_DIR }}/downloaded-server/linux-x64
 
       - name: Download server (osx-x64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-osx-x64
           path: ${{ env.RIDER_DIR }}/downloaded-server/osx-x64
 
       - name: Download server (osx-arm64)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: server-osx-arm64
           path: ${{ env.RIDER_DIR }}/downloaded-server/osx-arm64
@@ -617,7 +617,7 @@ jobs:
         working-directory: ${{ env.RIDER_DIR }}
 
       - name: Upload plugin candidate artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reqnroll-ide-support-rider-plugin-candidate
           path: ${{ env.RIDER_DIR }}/build/distributions/*.zip
@@ -626,7 +626,7 @@ jobs:
       # Only the raw Action log was available for a buildPlugin/verifyPlugin failure otherwise —
       # this captures the Plugin Verifier's own report (and any other build report) for download.
       - name: Upload build reports on failure
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: rider-plugin-build-reports
@@ -649,7 +649,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -661,7 +661,7 @@ jobs:
         working-directory: ${{ env.RIDER_DIR }}
 
       - name: Upload test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: rider-plugin-test-results
@@ -679,13 +679,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download plugin candidate artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: reqnroll-ide-support-rider-plugin-candidate
           path: plugin
 
       - name: Upload plugin artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reqnroll-ide-support-rider-plugin
           path: plugin/*.zip
