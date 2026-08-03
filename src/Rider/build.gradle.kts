@@ -3,6 +3,7 @@ import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
@@ -83,6 +84,16 @@ intellijPlatform {
     // bytecode-level early warning if one of those APIs changes or disappears somewhere in the
     // declared range.
     pluginVerification {
+        // IntelliJ Platform Gradle Plugin 2.15+ added INTERNAL_API_USAGES and
+        // OVERRIDE_ONLY_API_USAGES to the default failureLevel alongside COMPATIBILITY_PROBLEMS
+        // (previously the only one that failed the build) -- picked up here via the 2.2.1 -> 2.18.1
+        // bump. This plugin has always had internal/override-only API usages (30 and 1 respectively,
+        // unchanged by this bump) that were never gating before; restoring the pre-2.15 failureLevel
+        // keeps that established baseline instead of a dependency bump silently making verifyPlugin
+        // stricter. COMPATIBILITY_PROBLEMS -- the check that catches real "this API doesn't exist on
+        // this IDE version" regressions -- stays enforced.
+        failureLevel = listOf(VerifyPluginTask.FailureLevel.COMPATIBILITY_PROBLEMS)
+
         ides {
             recommended()
             select {
