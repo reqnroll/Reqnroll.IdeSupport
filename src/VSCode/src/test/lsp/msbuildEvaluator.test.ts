@@ -91,6 +91,55 @@ suite('msbuildEvaluator', () => {
       assert.strictEqual(toProjectFileItems(items).length, 1);
     });
 
+    test('classifies ReqnrollFeatureFiles .feature items as features', () => {
+      // Reqnroll.Tools.MsBuild.Generation.props (pulled in transitively by Reqnroll.MsTest/
+      // Reqnroll.xUnit/etc.) appends **/*.feature to $(DefaultItemExcludes), so real Reqnroll
+      // projects never surface .feature files under None/Content — only via the private
+      // ReqnrollFeatureFiles item that package's .props statically populates (confirmed against
+      // an actual `dotnet msbuild -getItem` run against the Quickstart sample; EmbeddedResource
+      // is NOT a viable substitute here — that package only adds .feature files to
+      // EmbeddedResource inside a Target, which a bare -getItem evaluation never runs).
+      const items = {
+        Compile: [
+          { Identity: 'A.feature.cs', FullPath: 'C:\\proj\\A.feature.cs' },
+          { Identity: 'Steps.cs', FullPath: 'C:\\proj\\Steps.cs' },
+        ],
+        ReqnrollFeatureFiles: [{ Identity: 'A.feature', FullPath: 'C:\\proj\\A.feature' }],
+      };
+
+      const result = toProjectFileItems(items);
+
+      assert.deepStrictEqual(result.map((r) => r.role).sort(), ['binding', 'binding', 'feature']);
+      assert.ok(
+        result.some((r) => r.path === 'C:\\proj\\A.feature' && r.role === 'feature'),
+        'expected the ReqnrollFeatureFiles item to be classified as a feature file',
+      );
+    });
+
+    test('deduplicates a .feature file appearing under both ReqnrollFeatureFiles and None/Content', () => {
+      const items = {
+        None: [{ Identity: 'A.feature', FullPath: 'C:\\proj\\A.feature' }],
+        ReqnrollFeatureFiles: [{ Identity: 'A.feature', FullPath: 'C:\\proj\\A.feature' }],
+      };
+
+      assert.strictEqual(toProjectFileItems(items).length, 1);
+    });
+
+    test('returns no feature files when the project does not reference the Reqnroll MSBuild package', () => {
+      // -getItem for an item type that's never defined for a given project (e.g. a plain .csproj
+      // with no Reqnroll package reference) comes back as an empty array, not an error/omission.
+      const items = {
+        Compile: [{ Identity: 'Currency.cs', FullPath: 'C:\\proj\\Currency.cs' }],
+        None: [],
+        Content: [],
+        ReqnrollFeatureFiles: [],
+      };
+
+      const result = toProjectFileItems(items);
+
+      assert.deepStrictEqual(result, [{ path: 'C:\\proj\\Currency.cs', role: 'binding' }]);
+    });
+
     test('returns an empty array when there are no items of any type', () => {
       assert.deepStrictEqual(toProjectFileItems({}), []);
     });
