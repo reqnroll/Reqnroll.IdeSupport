@@ -1,6 +1,7 @@
 Feature: Corpus feature 007
   Synthetic benchmark feature 007 for performance verification.
 
+  @hookscope
   Scenario: Scenario 007-0
     Given precondition 0 is met
     When feature 28 is enabled

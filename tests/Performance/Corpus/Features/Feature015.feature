@@ -1,6 +1,7 @@
 Feature: Corpus feature 015
   Synthetic benchmark feature 015 for performance verification.
 
+  @hookscope
   Scenario: Scenario 015-0
     Given precondition 0 is met
     When feature 0 is enabled

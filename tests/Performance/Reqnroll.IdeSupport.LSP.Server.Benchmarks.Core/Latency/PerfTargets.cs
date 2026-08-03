@@ -107,6 +107,22 @@ public static class PerfTargets
     public static readonly PerfTarget StepCodeLens =
         new("textDocument/codeLens", 0, PerfTargetKind.InteractiveP95, "Step code lens on a .cs binding file (F18)");
 
+    // Hook-facing CodeLens/navigation (issues #269/#372/#373): the operation label carries a
+    // "#..." suffix (same convention as the completion variants above) because all three share the
+    // raw "textDocument/codeLens"/"reqnroll/goToHooks" wire method with an existing target above —
+    // without it they'd collide in the report and overwrite each other.
+    public static readonly PerfTarget FeatureHookCodeLens =
+        new("textDocument/codeLens#feature-hooks", 0, PerfTargetKind.InteractiveP95,
+            "Hook-match-count code lens on a .feature file (F18/#269/#372)");
+
+    public static readonly PerfTarget HookMatchCountCodeLens =
+        new("textDocument/codeLens#hook-match-count", 0, PerfTargetKind.InteractiveP95,
+            "Scenario-match-count code lens on a .cs hook binding (F18/#373)");
+
+    public static readonly PerfTarget GoToMatchingScenarios =
+        new("reqnroll/goToMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
+            "Go to matching scenarios from a .cs hook binding (#373)");
+
     public static readonly PerfTarget DocumentFormatting =
         new("textDocument/formatting", 0, PerfTargetKind.InteractiveP95, "Whole-document Gherkin formatting (F11)");
 

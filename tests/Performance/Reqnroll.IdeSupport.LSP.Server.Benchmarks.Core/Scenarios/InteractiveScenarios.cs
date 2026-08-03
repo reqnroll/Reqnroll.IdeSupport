@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.LSP.Server.Benchmarks.Harness;
@@ -210,10 +211,10 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
-    /// <c>reqnroll/goToHooks</c> — the corpus has no <c>[Before/AfterScenario]</c> hook bindings (see
-    /// <c>CorpusGenerator.BuildBindings</c>), so this always exercises the "no hooks found" fast path
-    /// rather than a populated result; still real protocol-boundary dispatch cost, same precedent as
-    /// <see cref="RenameTargetsAsync"/> on a single-binding position.
+    /// <c>reqnroll/goToHooks</c> from the first scenario's step position — that scenario carries
+    /// the corpus's <c>@hookscope</c> tag (see <c>CorpusGenerator.BuildFeature</c>), so this exercises
+    /// a real, populated hook match (the global + tag-scoped hooks from <c>CorpusGenerator.BuildBindings</c>),
+    /// not just protocol-boundary dispatch cost against an empty result.
     /// </summary>
     public async Task<LatencySummary> GoToHooksAsync()
         => await RunAsync(PerfTargets.GoToHooks.Operation, async i =>
@@ -244,8 +245,10 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
-    /// <c>textDocument/codeLens</c> on the corpus's .cs binding source file — <c>StepCodeLensHandler</c>
-    /// only returns lenses for .cs files, not .feature files (see <c>CorpusGenerator.BuildBindings</c>).
+    /// <c>textDocument/codeLens</c> on the corpus's .cs binding source file — measures
+    /// <c>StepCodeLensHandler</c>'s step-usage-count lens specifically (the combined response also
+    /// carries <c>HookMatchCountCodeLensHandler</c>'s lenses on the same file; see
+    /// <see cref="HookMatchCountCodeLensAsync"/> for that one measured in isolation).
     /// Opens the file once (untimed settle) then measures the lens request in isolation.
     /// </summary>
     public async Task<LatencySummary> StepCodeLensAsync(string corpusRoot)
@@ -258,6 +261,68 @@ public sealed class InteractiveScenarios
         return await RunAsync(PerfTargets.StepCodeLens.Operation, async _ =>
         {
             await _harness.RequestCodeLensAsync(uri).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <c>textDocument/codeLens</c> on a corpus <c>.feature</c> file (<c>HookCodeLensHandler</c>,
+    /// issues #269/#372) — the hook-match-count lenses above <c>Feature:</c>/<c>Scenario:</c> lines.
+    /// The corpus's global (unscoped) and <c>@hookscope</c>-tagged hooks (see
+    /// <c>CorpusGenerator.BuildBindings</c>/<c>BuildFeature</c>) give every feature file's first
+    /// scenario a real, non-empty lens set to measure against.
+    /// </summary>
+    public async Task<LatencySummary> FeatureHookCodeLensAsync()
+        => await RunAsync(PerfTargets.FeatureHookCodeLens.Operation, async i =>
+        {
+            var f = _features[i % _features.Count];
+            await _harness.RequestCodeLensAsync(f.Uri).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+    /// <summary>
+    /// <c>textDocument/codeLens</c> on the corpus's .cs binding source file — measures
+    /// <c>HookMatchCountCodeLensHandler</c>'s scenario-match-count lenses specifically (issue #373,
+    /// the reverse direction of <see cref="FeatureHookCodeLensAsync"/>: from a hook-binding method to
+    /// the scenarios its scope matches). The combined <c>textDocument/codeLens</c> response also
+    /// carries <see cref="StepCodeLensAsync"/>'s lenses on the same file, but both requests exercise
+    /// the identical wire round-trip and dispatch cost — this scenario isolates the operation label.
+    /// </summary>
+    public async Task<LatencySummary> HookMatchCountCodeLensAsync(string corpusRoot)
+    {
+        var csPath = Path.Combine(corpusRoot, "Bindings", "CorpusSteps.cs");
+        var uri = DocumentUri.FromFileSystemPath(csPath);
+        _harness.OpenCSharp(uri, 1, File.ReadAllText(csPath));
+        await Task.Delay(200).ConfigureAwait(false);
+
+        return await RunAsync(PerfTargets.HookMatchCountCodeLens.Operation, async _ =>
+        {
+            await _harness.RequestCodeLensAsync(uri).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <c>reqnroll/goToMatchingScenarios</c> (issue #373) — clicking a
+    /// <see cref="HookMatchCountCodeLensAsync"/> lens. The click position is read back from a real
+    /// lens's own <c>Command.Arguments</c> (an untimed setup step, same precedent as
+    /// <see cref="SemanticTokensDeltaAsync"/>'s <c>previousResultId</c> fetch), so the measured
+    /// request round-trips the exact position a real client would send rather than a guessed one.
+    /// </summary>
+    public async Task<LatencySummary> GoToMatchingScenariosAsync(string corpusRoot)
+    {
+        var csPath = Path.Combine(corpusRoot, "Bindings", "CorpusSteps.cs");
+        var uri = DocumentUri.FromFileSystemPath(csPath);
+        _harness.OpenCSharp(uri, 1, File.ReadAllText(csPath));
+        await Task.Delay(200).ConfigureAwait(false);
+
+        var lenses = await _harness.RequestCodeLensAsync(uri).ConfigureAwait(false);
+        var hookLens = (lenses ?? Array.Empty<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>())
+            .FirstOrDefault(l => l.Command?.Name == "reqnroll.goToMatchingScenarios");
+        var args = (JArray?)hookLens?.Command?.Arguments;
+        var line = args is { Count: > 1 } ? (int)args[1]! : 0;
+        var character = args is { Count: > 2 } ? (int)args[2]! : 0;
+
+        return await RunAsync(PerfTargets.GoToMatchingScenarios.Operation, async _ =>
+        {
+            await _harness.RequestGoToMatchingScenariosAsync(uri, line, character).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 

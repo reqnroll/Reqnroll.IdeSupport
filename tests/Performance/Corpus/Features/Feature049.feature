@@ -1,6 +1,7 @@
 Feature: Corpus feature 049
   Synthetic benchmark feature 049 for performance verification.
 
+  @hookscope
   Scenario: Scenario 049-0
     Given precondition 0 is met
     When feature 16 is enabled
