@@ -1,6 +1,7 @@
 Feature: Corpus feature 009
   Synthetic benchmark feature 009 for performance verification.
 
+  @hookscope
   Scenario: Scenario 009-0
     Given precondition 0 is met
     When feature 36 is enabled

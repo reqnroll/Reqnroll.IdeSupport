@@ -1,6 +1,7 @@
 Feature: Corpus feature 037
   Synthetic benchmark feature 037 for performance verification.
 
+  @hookscope
   Scenario: Scenario 037-0
     Given precondition 0 is met
     When feature 28 is enabled

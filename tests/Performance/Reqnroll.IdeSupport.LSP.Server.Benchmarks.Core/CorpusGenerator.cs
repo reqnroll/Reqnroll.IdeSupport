@@ -80,6 +80,28 @@ public sealed class CorpusGenerator
             sb.AppendLine();
         }
 
+        // Hook bindings: not fingerprinted (CorpusFingerprint only tracks step-definition shape),
+        // so these can be added/edited freely without moving the pinned fingerprint. Gives the
+        // hook-facing benchmarks (Go to Hooks, hook CodeLens both directions, Go to Matching
+        // Scenarios) something real to match instead of always hitting the empty fast path — an
+        // unscoped hook plus a tag-scoped one (matched by every feature's first scenario, see
+        // BuildFeature's "@hookscope" tag) covers both the "all scenarios" and counted-match shapes.
+        sb.AppendLine("    [BeforeScenario]");
+        sb.AppendLine("    public void GlobalBeforeScenario() { }");
+        sb.AppendLine();
+        sb.AppendLine("    [AfterScenario]");
+        sb.AppendLine("    public void GlobalAfterScenario() { }");
+        sb.AppendLine();
+        sb.AppendLine("    [BeforeScenario(\"hookscope\")]");
+        sb.AppendLine("    public void ScopedBeforeScenario() { }");
+        sb.AppendLine();
+        sb.AppendLine("    [BeforeStep]");
+        sb.AppendLine("    public void GlobalBeforeStep() { }");
+        sb.AppendLine();
+        sb.AppendLine("    [AfterStep]");
+        sb.AppendLine("    public void GlobalAfterStep() { }");
+        sb.AppendLine();
+
         sb.AppendLine("}");
         return sb.ToString();
     }
@@ -97,6 +119,10 @@ public sealed class CorpusGenerator
             // Rotate step kinds across scenarios so each file carries a stable mix of
             // bound, unbound and ambiguous steps.
             var patternId = (f * ScenariosPerFeature + s) % UniquePatternCount;
+            // Tags don't move the fingerprint (scenario/step counts are unaffected), so the first
+            // scenario of every feature carries @hookscope to give the tag-scoped hook binding
+            // (see BuildBindings) real matches for the hook-facing benchmarks to exercise.
+            if (s == 0) sb.AppendLine("  @hookscope");
             sb.AppendLine($"  Scenario: Scenario {f:D3}-{s}");
             sb.AppendLine($"    Given precondition {s} is met");                 // bound
             sb.AppendLine($"    When feature {patternId} is enabled");           // bound (unique)

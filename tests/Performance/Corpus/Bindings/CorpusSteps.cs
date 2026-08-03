@@ -198,4 +198,19 @@ public class CorpusSteps
     [When(@"feature 59 is enabled")]
     public void WhenFeature59IsEnabled() { }
 
+    [BeforeScenario]
+    public void GlobalBeforeScenario() { }
+
+    [AfterScenario]
+    public void GlobalAfterScenario() { }
+
+    [BeforeScenario("hookscope")]
+    public void ScopedBeforeScenario() { }
+
+    [BeforeStep]
+    public void GlobalBeforeStep() { }
+
+    [AfterStep]
+    public void GlobalAfterStep() { }
+
 }

@@ -1,6 +1,7 @@
 Feature: Corpus feature 005
   Synthetic benchmark feature 005 for performance verification.
 
+  @hookscope
   Scenario: Scenario 005-0
     Given precondition 0 is met
     When feature 20 is enabled
