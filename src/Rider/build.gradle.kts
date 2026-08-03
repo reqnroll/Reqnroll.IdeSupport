@@ -1,4 +1,6 @@
 import org.gradle.internal.os.OperatingSystem
+import org.gradle.kotlin.dsl.support.serviceOf
+import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 
@@ -20,7 +22,8 @@ repositories {
 dependencies {
     intellijPlatform {
         rider(providers.gradleProperty("platformVersion"))
-        instrumentationTools()
+        // instrumentationTools() was a compatibility helper for the 1.x plugin, removed in 2.12.0 --
+        // build/test/verify now pull the required instrumentation dependencies automatically.
     }
 
     // Plain JUnit5 (kotlin.test assertions on the JUnit5 engine) for pure-logic unit tests that
@@ -96,6 +99,11 @@ intellijPlatform {
 //    those from the already-built-and-tested artifacts test-lsp.yml publishes, so
 //    Gradle never needs `dotnet` on the CI runner at all.
 
+// Project.exec was removed in Gradle 9 -- ExecOperations is the injected replacement that still
+// runs eagerly and streams output to the console the way Project.exec used to (unlike
+// ProviderFactory.exec, which is lazy and silent).
+val execOperations = serviceOf<ExecOperations>()
+
 val repoRoot = layout.projectDirectory.dir("../..").asFile.canonicalFile
 val allServerRids = listOf("win-x64", "linux-x64", "osx-x64", "osx-arm64")
 
@@ -158,11 +166,10 @@ val publishServer by tasks.registering(Exec::class) {
         // Restore the Connector project for this RID first — it's multi-TFM and doesn't
         // resolve correctly as part of the Server's own restore. Same requirement as
         // src/VSCode/scripts/publish-server.sh.
-        // `project.exec` (not bare `exec`) — this task is itself an `Exec` task, which has its
-        // own no-arg `exec(): Unit` member that shadows the `Project.exec(Action)` extension;
-        // the unqualified name resolves to that member and fails to compile ("too many
-        // arguments") under some Gradle/Kotlin-DSL combinations.
-        project.exec {
+        // `execOperations.exec` (not `project.exec`, removed in Gradle 9, and not bare `exec` —
+        // this task is itself an `Exec` task, which has its own no-arg `exec(): Unit` member that
+        // shadows any unqualified `exec(Action)` extension).
+        execOperations.exec {
             commandLine("dotnet", "restore", connectorProject.toString(), "--runtime", serverRid)
         }
     }
@@ -198,7 +205,7 @@ tasks.named<Sync>("prepareSandbox") {
 
 tasks {
     wrapper {
-        gradleVersion = "8.10"
+        gradleVersion = "9.6.1"
     }
 }
 
