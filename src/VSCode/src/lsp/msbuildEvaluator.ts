@@ -68,16 +68,18 @@ interface MsbuildProperties {
   ProjectAssetsFile: string;
 }
 
-/** One entry from `-getItem:Compile;None;Content` (only the metadata we asked MSBuild to resolve). */
+/** One entry from `-getItem:Compile;None;Content;ReqnrollFeatureFiles` (only the metadata we asked MSBuild to resolve). */
 interface MsbuildItem {
   Identity: string;
   FullPath?: string;
 }
 
+type MsbuildItemType = 'Compile' | 'None' | 'Content' | 'ReqnrollFeatureFiles';
+
 interface MsbuildEvaluation {
   properties: MsbuildProperties;
-  // Keyed by item type (Compile/None/Content); absent when the project has none of that type.
-  items: Partial<Record<'Compile' | 'None' | 'Content', MsbuildItem[]>>;
+  // Keyed by item type; absent when the project has none of that type.
+  items: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
 }
 
 async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluation | null> {
@@ -88,9 +90,20 @@ async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluat
       '-p:DesignTimeBuild=true',
       '-nologo',
       '-getProperty:TargetFrameworkMoniker;OutputPath;AssemblyName;RootNamespace;ProjectAssetsFile',
-      // Compile (.cs bindings) + None/Content (.feature files are typically included as one of
-      // these, depending on how the project references the Reqnroll/SpecFlow tooling).
-      '-getItem:Compile;None;Content',
+      // Compile (.cs bindings) + None/Content (.feature files, for projects that don't use
+      // Reqnroll's own MSBuild generation tooling) + ReqnrollFeatureFiles. Reqnroll.Tools.MsBuild.
+      // Generation.props (pulled in transitively by Reqnroll.MsTest/Reqnroll.xUnit/etc.) appends
+      // `**/*.feature` to $(DefaultItemExcludes), which removes .feature files from the default
+      // None/Content globs entirely for any project using it — they're tracked instead via this
+      // private `ReqnrollFeatureFiles` item, statically populated in that package's .props (so
+      // `-getItem` sees it without running a build target — unlike `EmbeddedResource`, which the
+      // same package only populates inside a Target that a bare item-evaluation never runs).
+      // Without this, every project using that (very common) package reports zero feature files
+      // in its reqnroll/projectFiles baseline, permanently orphaning its .feature files from the
+      // server's membership index (confirmed live: feature-file CodeLens stuck reporting no
+      // matches). Querying an item name that doesn't exist for a given project (e.g. one that
+      // doesn't reference the package) is safe — MSBuild just returns an empty array for it.
+      '-getItem:Compile;None;Content;ReqnrollFeatureFiles',
     ];
 
     const child = execFile(
@@ -113,7 +126,7 @@ async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluat
         try {
           const parsed = JSON.parse(stdout) as {
             Properties: MsbuildProperties;
-            Items?: Partial<Record<'Compile' | 'None' | 'Content', MsbuildItem[]>>;
+            Items?: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
           };
           const p = parsed.Properties;
 
@@ -141,12 +154,14 @@ async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluat
 }
 
 /**
- * Reduces raw `Compile`/`None`/`Content` MSBuild items to the `.cs`/`.feature` files the
- * project's membership index cares about, deduplicated by resolved absolute path (the same
- * file can appear under more than one item type, e.g. a linked file).
+ * Reduces raw `Compile`/`None`/`Content`/`ReqnrollFeatureFiles` MSBuild items to the
+ * `.cs`/`.feature` files the project's membership index cares about, deduplicated by resolved
+ * absolute path (the same file can appear under more than one item type, e.g. a linked file, or
+ * a project using Reqnroll's MSBuild generation tooling where None/Content never carry .feature
+ * files at all — see the comment at the `-getItem` call site).
  */
 export function toProjectFileItems(
-  items: Partial<Record<'Compile' | 'None' | 'Content', MsbuildItem[]>>,
+  items: Partial<Record<MsbuildItemType, MsbuildItem[]>>,
 ): ProjectFileItem[] {
   const seen = new Set<string>();
   const result: ProjectFileItem[] = [];
@@ -165,6 +180,7 @@ export function toProjectFileItems(
   addAll(items.Compile, 'binding', '.cs');
   addAll(items.None, 'feature', '.feature');
   addAll(items.Content, 'feature', '.feature');
+  addAll(items.ReqnrollFeatureFiles, 'feature', '.feature');
 
   return result;
 }

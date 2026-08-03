@@ -38,4 +38,19 @@ class FindStepUsagesRunnerTest {
 
         assertEquals("the first number is 50", FindStepUsagesRunner.renderLabel(item))
     }
+
+    @Test
+    fun `renderLabel joins featureName and ruleName when both are set`() {
+        val item = FindStepUsageItem(
+            uri = "file:///repo/Calculator.feature",
+            stepText = "the first number is 50",
+            featureName = "Calculator",
+            ruleName = "Basic arithmetic",
+        )
+
+        assertEquals(
+            "the first number is 50 (Calculator / Basic arithmetic)",
+            FindStepUsagesRunner.renderLabel(item),
+        )
+    }
 }
