@@ -28,9 +28,17 @@ function fakeContext(): vscode.ExtensionContext {
  * property is configurable, `Object.defineProperty` can still fully replace it with a plain
  * writable data property, unlike a bare assignment.
  */
-async function withStubbedConsoleWarn<T>(stub: (...args: unknown[]) => void, fn: () => Thenable<T>): Promise<T> {
+async function withStubbedConsoleWarn<T>(
+  stub: (...args: unknown[]) => void,
+  fn: () => Thenable<T>,
+): Promise<T> {
   const original = Object.getOwnPropertyDescriptor(console, 'warn')!;
-  Object.defineProperty(console, 'warn', { value: stub, writable: true, configurable: true, enumerable: true });
+  Object.defineProperty(console, 'warn', {
+    value: stub,
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
   try {
     return await fn();
   } finally {
@@ -123,7 +131,8 @@ suite('stepCodeLens', () => {
             () => {
               warned = true;
             },
-            () => Promise.resolve(provider.provideCodeLenses(document, {} as vscode.CancellationToken)),
+            () =>
+              Promise.resolve(provider.provideCodeLenses(document, {} as vscode.CancellationToken)),
           );
 
           assert.deepStrictEqual(lenses, []);
