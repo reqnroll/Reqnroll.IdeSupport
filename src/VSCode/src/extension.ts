@@ -19,6 +19,7 @@ import {
   isCSharpDocument,
 } from './lsp/manualDocumentSync';
 import { createRenameMiddleware } from './commands/renameStep';
+import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
 
@@ -287,6 +288,11 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     middleware: {
       ...createManualSyncMiddleware(isCSharpDocument),
       ...createRenameMiddleware(() => client),
+      // 'reqnroll.toggleComment' is registered as a VS Code command above (Ctrl+/ handler);
+      // drop the server's redundant dynamic workspace/executeCommand registration for it so
+      // vscode-languageclient never attempts a duplicate registerCommand call — see
+      // executeCommandDedupe.ts for why that collision matters beyond just this command.
+      ...createExecuteCommandDedupeMiddleware(['reqnroll.toggleComment']),
     },
   };
 
