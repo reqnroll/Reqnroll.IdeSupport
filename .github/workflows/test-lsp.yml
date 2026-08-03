@@ -65,11 +65,13 @@ jobs:
   # slower unit/spec/publish jobs spin up.
   # ---------------------------------------------------------------------------
   build-lsp:
-    name: Build LSP
+    name: Build
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
@@ -108,13 +110,15 @@ jobs:
   # Reqnroll.IdeSupport.LSP.Server.Tests. Runs in parallel with spec-test-lsp.
   # ---------------------------------------------------------------------------
   unit-test-lsp:
-    name: Unit Tests (LSP)
+    name: Test (Unit)
     needs: [build-lsp]
     if: ${{ !inputs.skip-tests }}
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
@@ -170,13 +174,15 @@ jobs:
   # real out-of-process win-x64 server. Runs in parallel with unit-test-lsp.
   # ---------------------------------------------------------------------------
   spec-test-lsp:
-    name: Spec Tests (LSP)
+    name: Test (Spec)
     needs: [build-lsp]
     if: ${{ !inputs.skip-tests }}
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
@@ -218,7 +224,7 @@ jobs:
   # any RID is a NuGet runtime-pack download, not a host-OS requirement.
   # ---------------------------------------------------------------------------
   publish-lsp-server:
-    name: Publish LSP Server
+    name: Publish (${{ matrix.rid }})
     needs: [build-lsp, unit-test-lsp, spec-test-lsp]
     if: |
       always() &&
@@ -232,6 +238,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4

@@ -40,6 +40,14 @@
 # "Build Rider Plugin / ..." contexts are replaced by "CI / ...". Branch
 # protection rules referencing the old contexts need to be updated after this
 # merges.
+#
+# Job display names (issue #412) follow a "<Component> / <Stage>" convention
+# — VS/VSCode/Rider job names, and the LSP reusable workflow's own job names
+# (Build/Test (Unit)/Test (Spec)/Publish), which the Actions UI automatically
+# prefixes with the caller job's name ("LSP / Build", "LSP / Test (Unit)",
+# etc.) — so any required-status-check contexts already configured for the
+# old per-job names ("Unit Tests (VS Extension)", "Build Rider Plugin", "Test
+# LSP / Unit Tests (LSP)", ...) need to be re-pointed at the new ones.
 # ---------------------------------------------------------------------------
 name: CI
 
@@ -119,6 +127,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Filter changed paths
         id: filter
@@ -200,13 +210,15 @@ jobs:
   # instead of rebuilding it a second time.
   # ---------------------------------------------------------------------------
   build-vs-extension:
-    name: Build VS Extension
+    name: VS / Build
     needs: [changes, lsp]
     if: needs.changes.outputs.vs == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
@@ -249,12 +261,14 @@ jobs:
   # LSP server specs). Runs in parallel with test-vs-wizards.
   # ---------------------------------------------------------------------------
   test-vs-extension:
-    name: Unit Tests (VS Extension)
+    name: VS / Test (Extension)
     needs: [build-vs-extension]
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
@@ -300,12 +314,14 @@ jobs:
   # Runs in parallel with test-vs-extension.
   # ---------------------------------------------------------------------------
   test-vs-wizards:
-    name: Unit Tests (VS Wizards)
+    name: VS / Test (Wizards)
     needs: [build-vs-extension]
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
@@ -347,7 +363,7 @@ jobs:
   # publishing is desired).
   # ---------------------------------------------------------------------------
   publish-vsix:
-    name: Publish VSIX
+    name: VS / Publish
     needs: [test-vs-extension, test-vs-wizards]
     runs-on: windows-latest
     steps:
@@ -384,13 +400,15 @@ jobs:
   # equivalent problem.
   # ---------------------------------------------------------------------------
   build-vscode-extension:
-    name: Build VSIX (VS Code)
+    name: VSCode / Build
     needs: [changes, lsp]
     if: needs.changes.outputs.vscode == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
@@ -481,13 +499,15 @@ jobs:
   # dependency, so it doesn't need the lsp job at all.
   # ---------------------------------------------------------------------------
   tsc-only:
-    name: TypeScript Compile (server skip)
+    name: VSCode / Compile (TS only)
     needs: [changes]
     if: needs.changes.outputs.vscode == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
@@ -550,7 +570,7 @@ jobs:
   # src/Rider/CONTRIBUTING.md).
   # ---------------------------------------------------------------------------
   build-rider-plugin:
-    name: Build Rider Plugin
+    name: Rider / Build
     needs: [changes, lsp]
     if: needs.changes.outputs.rider == 'true'
     runs-on: ubuntu-latest
@@ -558,6 +578,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup JDK and Gradle cache
         uses: ./.github/actions/setup-rider-gradle-env
@@ -620,7 +642,7 @@ jobs:
   # the other) — publish-rider-plugin below is what actually gates on both.
   # ---------------------------------------------------------------------------
   test-rider-plugin:
-    name: Kotlin Unit Tests (build skip)
+    name: Rider / Test
     needs: [changes]
     if: needs.changes.outputs.rider == 'true'
     runs-on: ubuntu-latest
@@ -628,6 +650,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup JDK and Gradle cache
         uses: ./.github/actions/setup-rider-gradle-env
@@ -650,7 +674,7 @@ jobs:
   # test-rider-plugin has also passed. Mirrors publish-vsix above.
   # ---------------------------------------------------------------------------
   publish-rider-plugin:
-    name: Publish Rider Plugin
+    name: Rider / Publish
     needs: [build-rider-plugin, test-rider-plugin]
     runs-on: ubuntu-latest
     steps:
