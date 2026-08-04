@@ -46,9 +46,16 @@ suite('gherkin.tmLanguage.json', () => {
 
   test('should have all required repository keys', () => {
     const expected = [
-      'comments', 'doc_strings', 'tags', 'feature_keywords',
-      'step_keywords', 'table_header_separator', 'tables',
-      'strings', 'scenario_outline_placeholders', 'numeric_literals',
+      'comments',
+      'doc_strings',
+      'tags',
+      'feature_keywords',
+      'step_keywords',
+      'table_header_separator',
+      'tables',
+      'strings',
+      'scenario_outline_placeholders',
+      'numeric_literals',
     ];
     for (const key of expected) {
       assert.ok(key in grammar.repository, `Missing repository key: ${key}`);
