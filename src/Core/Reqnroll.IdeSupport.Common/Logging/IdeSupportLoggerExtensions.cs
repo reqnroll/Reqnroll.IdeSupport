@@ -80,7 +80,6 @@ public static class IdeSupportLoggerExtensions
         logger.Log(msg);
     }
 
-    //TODO: merge IIdeSupportLogger with ITelemetryService
     /// <summary>Logs an exception as a verbose-level message, without reporting it to telemetry.</summary>
     public static void LogDebugException(this IIdeSupportLogger logger, Exception ex, string message = "Exception",
         [CallerMemberName] string callerName = "???")

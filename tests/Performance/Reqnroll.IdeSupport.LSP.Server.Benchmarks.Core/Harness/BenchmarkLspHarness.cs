@@ -167,7 +167,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
         Client.SendNotification("textDocument/didOpen", new DidOpenTextDocumentParams
         {
             TextDocument = new TextDocumentItem
-            { Uri = uri, Version = version, LanguageId = "gherkin", Text = text }
+            { Uri = uri, Version = version, LanguageId = "Gherkin", Text = text }
         });
 
     public void ChangeFeature(DocumentUri uri, int version, string text) =>
