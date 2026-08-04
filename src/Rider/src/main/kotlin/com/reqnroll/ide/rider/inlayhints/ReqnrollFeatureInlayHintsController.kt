@@ -44,7 +44,7 @@ import java.awt.Rectangle
  * [com.reqnroll.ide.rider.ReqnrollFeatureLanguage] — confirmed via decompiling
  * `PsiPlainTextFileImpl`/`PlainTextParserDefinition` that IntelliJ's built-in fallback for a
  * language with no parser hardcodes `PlainTextLanguage`, not the file's declared language. So a
- * declarative provider registered for "Reqnroll Feature" was silently never invoked — confirmed
+ * declarative provider registered for "Gherkin" was silently never invoked — confirmed
  * live: zero `FeatureInlayHintHandler` requests ever reached the server, with no error anywhere.
  * Managing inlays here instead matches how every other `.feature` feature in this plugin already
  * works (semantic tokens, diagnostics, CodeLens): driven directly off the LSP request, keyed by

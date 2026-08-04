@@ -144,7 +144,7 @@
         },
         {
           "command": "reqnroll.goToStepDefinition",
-          "when": "editorLangId == gherkin"
+          "when": "false"
         },
         {
           "command": "reqnroll.defineSteps",

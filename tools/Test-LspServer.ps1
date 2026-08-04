@@ -332,7 +332,7 @@ try {
     Write-Host "Sending textDocument/didOpen..." -ForegroundColor DarkCyan
     [LspTestClient]::Send((Build-Json @{
         jsonrpc = "2.0"; method = "textDocument/didOpen"
-        params  = @{ textDocument = @{ uri = $featureUri; languageId = "gherkin"; version = 1; text = $featureText } }
+        params  = @{ textDocument = @{ uri = $featureUri; languageId = "Gherkin"; version = 1; text = $featureText } }
     }), $verbose)
 
     # Allow the server time to parse and cache tokens before we request them.

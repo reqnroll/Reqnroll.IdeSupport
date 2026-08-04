@@ -43,7 +43,7 @@ public class TextDocumentSyncHandlerTests
                 Uri = FeatureUri,
                 Version = 3,
                 Text = "Feature: Opened\nScenario: S\n  Given step\n",
-                LanguageId = "gherkin"
+                LanguageId = "Gherkin"
             }
         };
 
