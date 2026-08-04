@@ -144,8 +144,8 @@ dotnet test tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs/Reqnroll.IdeSupport.L
 # VS extension client-side unit tests
 dotnet test tests/VisualStudio/Reqnroll.VisualStudio.Tests/Reqnroll.VisualStudio.Tests.csproj
 
-# VS Code extension tests (grammar + utility functions, no VS Code required)
-cd tests/VSCode && npm ci && npm test
+# VS Code extension tests (downloads VS Code and runs in an Extension Development Host)
+cd src/VSCode && npm ci && npm run compile && npm test
 
 # Rider plugin tests (Kotlin, JUnit via Gradle)
 cd src/Rider && ./gradlew test

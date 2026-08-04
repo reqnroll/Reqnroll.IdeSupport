@@ -17,12 +17,12 @@ src/VSCode/               ← this directory (TypeScript extension)
     msbuildEvaluator.ts   ← dotnet msbuild property evaluation
     lspInspectorLogger.ts ← optional JSON-RPC file logger
     statusBar.ts          ← LSP server status bar item
+    test/                 ← Mocha suite (runs in an Extension Development Host)
   syntaxes/               ← TextMate grammar (.tmLanguage.json)
   scripts/
     publish-server.sh     ← publishes the LSP server for all RIDs
     build-vsix.sh         ← packages the .vsix
     validate-semantic-token-scopes.mjs  ← CI validation
-  tests/VSCode/           ← standalone Mocha test project (grammar + unit tests)
 src/LSP/                  ← the shared LSP server (C#)
 ```
 
@@ -75,11 +75,13 @@ This keeps `out/` up to date as you edit `.ts` files, so the Extension Developme
 ### 5. Running tests
 
 ```sh
-cd tests/VSCode
-npm ci && npm test
+cd src/VSCode
+npm run compile && npm test
 ```
 
-Tests cover the TextMate grammar and utility functions. They run without VS Code.
+`npm test` downloads VS Code (via `@vscode/test-electron`) and runs the full suite —
+TextMate grammar, utility functions, and command/LSP integration tests — inside an Extension
+Development Host.
 
 ### 6. Lint and format
 

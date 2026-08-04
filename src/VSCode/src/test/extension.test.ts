@@ -18,6 +18,8 @@ import './commands/goToHooks.test';
 import './commands/goToMatchingScenarios.test';
 import './commands/stepCodeLens.test';
 import './commands/commentToggle.test';
+import './util/selectionUtils.test';
+import './grammar.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.
