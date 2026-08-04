@@ -3,9 +3,21 @@
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) 22 or later
-- [.NET SDK](https://dotnet.microsoft.com/download) 10.0 or later (for server publish)
-- [VS Code](https://code.visualstudio.com/) 1.96 or later
+- [.NET SDK](https://dotnet.microsoft.com/download) 10.0 or later (for server publish —
+  matches the `net10.0` `TargetFramework` used across the solution's `.csproj` files)
+- [VS Code](https://code.visualstudio.com/) 1.96 or later — **intentional minimum, not
+  just "current version":** the first release with full `vscode-languageclient` v10
+  compatibility (also enforced by `engines.vscode` in `package.json`). Don't lower it
+  without checking that compatibility still holds.
 - Recommended VS Code extensions: ESLint (`dbaeumer.vscode-eslint`), Prettier (`esbenp.prettier-vscode`)
+
+> **Note:** `typescript` is intentionally capped at `^5.9.3` in `package.json` (not just
+> "not yet bumped") — `typescript-eslint@8.65.0` declares a peer dependency of
+> `typescript <6.1.0`, so installing a newer TypeScript breaks `npm install` with an
+> `ERESOLVE` conflict until `typescript-eslint` adds support for it. The `^` range itself
+> is what stops Dependabot from proposing a breaking bump; if Dependabot (or a manual
+> bump) ever does try to move past `5.x`, check whether `typescript-eslint` supports it
+> yet before accepting.
 
 ## Repository layout
 
