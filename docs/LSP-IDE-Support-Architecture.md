@@ -433,10 +433,10 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 | Property | Value | Notes |
 |----------|-------|-------|
 | Publisher / ID | `reqnroll.reqnroll-ide-support` | VS Code Marketplace ID |
-| Activation events | `onLanguage:gherkin`, `onLanguage:plaintext` | Server starts when a `.feature` file is opened |
-| Language registration | ID: `gherkin`, extensions: `.feature` | Associates `.feature` with the language server |
-| Default formatter | Reqnroll extension | `editor.defaultFormatter` for `gherkin` language |
-| `editor.formatOnType` | `true` (for `gherkin`) | Enables F12 table auto-formatting as user types |
+| Activation events | `onLanguage:Gherkin`, `onLanguage:plaintext` | Server starts when a `.feature` file is opened |
+| Language registration | ID: `Gherkin`, extensions: `.feature` | Associates `.feature` with the language server |
+| Default formatter | Reqnroll extension | `editor.defaultFormatter` for `Gherkin` language |
+| `editor.formatOnType` | `true` (for `Gherkin`) | Enables F12 table auto-formatting as user types |
 | `reqnroll.trace.server` | `off` / `messages` / `verbose` | Controls LSP protocol trace level; `verbose` also writes to a log file |
 | Main dependency | `vscode-languageclient` v10 | Standard VS Code LSP client library |
 | Minimum VS Code | 1.96.0 | First version with full `vscode-languageclient` v10 compatibility |
@@ -451,7 +451,7 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 | `src/statusBar.ts` | Status bar item (right-aligned) that reflects LSP server lifecycle state (`Starting` / `Running` / `Stopped`) via `client.onDidChangeState` |
 | `src/lspInspectorLogger.ts` | Creates a `LogOutputChannel` that tees to a timestamped `reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log` file when tracing is enabled; produces the same `{"isLSPMessage":true,...}` JSON format as the VS extension inspector |
 | `syntaxes/gherkin.tmLanguage.json` | TextMate grammar — provides keyword/tag/comment colouring before LSP semantic tokens arrive |
-| `language-configuration.json` | Comment configuration, bracket pairs, and indentation rules for the `gherkin` language |
+| `language-configuration.json` | Comment configuration, bracket pairs, and indentation rules for the `Gherkin` language |
 
 #### Startup sequence
 

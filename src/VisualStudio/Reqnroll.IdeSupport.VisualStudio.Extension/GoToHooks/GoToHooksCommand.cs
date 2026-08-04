@@ -47,7 +47,7 @@ internal sealed class GoToHooksCommand : Command
         Icon        = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a .feature file editor is active; invisible in all other editors.
-        VisibleWhen = ActivationConstraint.EditorContentType("gherkin"),
+        VisibleWhen = ActivationConstraint.EditorContentType("Gherkin"),
 
         // Placed in the navigation group of the code-editor context menu alongside
         // "Go To Definition" and "Find All References".

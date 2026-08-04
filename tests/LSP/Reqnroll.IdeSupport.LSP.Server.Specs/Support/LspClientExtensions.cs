@@ -24,7 +24,7 @@ public static class LspClientExtensions
             {
                 Uri = uri,
                 Version = version,
-                LanguageId = "gherkin",
+                LanguageId = "Gherkin",
                 Text = text
             }
         });

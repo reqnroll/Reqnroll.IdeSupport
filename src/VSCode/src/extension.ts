@@ -128,7 +128,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
 
     vscode.commands.registerCommand('reqnroll.showOutputChannel', () => outputChannel.show()),
 
-    // Comment/Uncomment toggle (Ctrl+/ for gherkin files)
+    // Comment/Uncomment toggle (Ctrl+/ for Gherkin files)
     vscode.commands.registerCommand('reqnroll.toggleComment', async () => {
       if (!client) {
         notReady('Comment/Uncomment')();
@@ -272,7 +272,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: 'gherkin', pattern: '**/*.feature' }],
+    documentSelector: [{ language: 'Gherkin', pattern: '**/*.feature' }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{feature,cs}'),
     },

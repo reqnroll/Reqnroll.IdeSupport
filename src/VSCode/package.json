@@ -22,14 +22,14 @@
     "feature"
   ],
   "activationEvents": [
-    "onLanguage:gherkin",
+    "onLanguage:Gherkin",
     "onLanguage:plaintext",
     "workspaceContains:**/*.feature"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "gherkin",
+        "id": "Gherkin",
         "aliases": [
           "Gherkin",
           "Feature",
@@ -44,7 +44,7 @@
     ],
     "grammars": [
       {
-        "language": "gherkin",
+        "language": "Gherkin",
         "scopeName": "text.gherkin.feature",
         "path": "./syntaxes/gherkin.tmLanguage.json"
       }
@@ -88,29 +88,29 @@
         "key": "ctrl+/",
         "mac": "cmd+/",
         "command": "reqnroll.toggleComment",
-        "when": "editorTextFocus && editorLangId == gherkin"
+        "when": "editorTextFocus && editorLangId == Gherkin"
       },
       {
         "key": "f12",
         "command": "reqnroll.goToStepDefinition",
-        "when": "editorTextFocus && editorLangId == gherkin"
+        "when": "editorTextFocus && editorLangId == Gherkin"
       },
       {
         "key": "f2",
         "command": "reqnroll.renameStep",
-        "when": "editorTextFocus && editorLangId == gherkin"
+        "when": "editorTextFocus && editorLangId == Gherkin"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "reqnroll.toggleComment",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == Gherkin",
           "group": "1_modification"
         },
         {
           "command": "reqnroll.goToHooks",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == Gherkin",
           "group": "navigation@90"
         },
         {
@@ -120,23 +120,23 @@
         },
         {
           "command": "reqnroll.defineSteps",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == Gherkin",
           "group": "1_modification@10"
         },
         {
           "command": "reqnroll.renameStep",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == Gherkin",
           "group": "1_modification@20"
         }
       ],
       "commandPalette": [
         {
           "command": "reqnroll.toggleComment",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == Gherkin"
         },
         {
           "command": "reqnroll.goToHooks",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == Gherkin"
         },
         {
           "command": "reqnroll.findStepUsages",
@@ -144,15 +144,15 @@
         },
         {
           "command": "reqnroll.goToStepDefinition",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == Gherkin"
         },
         {
           "command": "reqnroll.defineSteps",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == Gherkin"
         },
         {
           "command": "reqnroll.renameStep",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == Gherkin"
         }
       ]
     },
@@ -168,14 +168,14 @@
       }
     },
     "configurationDefaults": {
-      "[gherkin]": {
+      "[Gherkin]": {
         "editor.defaultFormatter": "reqnroll.reqnroll-ide-support",
         "editor.formatOnType": true
       }
     },
     "semanticTokenScopes": [
       {
-        "language": "gherkin",
+        "language": "Gherkin",
         "scopes": {
           "reqnroll.keyword": [
             "keyword.control.gherkin"

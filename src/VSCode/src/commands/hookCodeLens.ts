@@ -46,6 +46,6 @@ export function registerHookCodeLens(
   };
 
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider),
+    vscode.languages.registerCodeLensProvider({ language: 'Gherkin' }, provider),
   );
 }
