@@ -79,8 +79,8 @@ suite('Reqnroll Extension Tests', () => {
   test('Gherkin language should be registered', async () => {
     const languages = await vscode.languages.getLanguages();
     assert.ok(
-      languages.includes('Gherkin'),
-      `Gherkin language not registered. Available: ${languages.join(', ')}`,
+      languages.includes('gherkin'),
+      `gherkin language not registered. Available: ${languages.join(', ')}`,
     );
   });
 });

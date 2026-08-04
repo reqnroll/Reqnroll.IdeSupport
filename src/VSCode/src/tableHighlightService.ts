@@ -64,7 +64,7 @@ export class TableHighlightService implements vscode.Disposable {
   }
 
   private refreshEditor(editor: vscode.TextEditor): void {
-    if (editor.document.languageId !== 'Gherkin') {
+    if (editor.document.languageId !== 'gherkin') {
       return;
     }
 
