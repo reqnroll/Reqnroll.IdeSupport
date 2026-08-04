@@ -32,6 +32,7 @@
     "vscode": {
       "extensions": [
         "fwcd.kotlin",
+        "redhat.java",
         "vscjava.vscode-java-debug"
       ]
     }
