@@ -49,7 +49,7 @@ internal sealed class CommentToggleCommand : Command
         Icon        = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a .feature file editor is active; invisible in all other editors.
-        VisibleWhen = ActivationConstraint.EditorContentType("reqnroll-gherkin"),
+        VisibleWhen = ActivationConstraint.EditorContentType("Gherkin"),
 
         // Placed in the edit group of the code-editor context menu
         Placements  =

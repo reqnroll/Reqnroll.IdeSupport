@@ -64,9 +64,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
-    /// <summary>Reports the language id (<c>"csharp"</c> or <c>"gherkin"</c>) the server should associate with the given document URI.</summary>
+    /// <summary>Reports the language id (<c>"csharp"</c> or <c>"Gherkin"</c>) the server should associate with the given document URI.</summary>
     public override TextDocumentAttributes GetTextDocumentAttributes(DocumentUri uri)
-        => new(uri, IsCSharp(uri) ? "csharp" : "gherkin");
+        => new(uri, IsCSharp(uri) ? "csharp" : "Gherkin");
 
     /// <summary>Builds the LSP registration options for text synchronization: full-document change events and open/close notifications, without save text.</summary>
     protected override TextDocumentSyncRegistrationOptions CreateRegistrationOptions(

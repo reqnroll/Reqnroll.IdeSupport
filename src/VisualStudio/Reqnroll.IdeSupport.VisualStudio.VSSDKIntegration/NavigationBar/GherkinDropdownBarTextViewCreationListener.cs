@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
 /// <summary>
 /// Creates a <see cref="GherkinDropdownBarClient"/> Navigation Bar drop-down for each
-/// <c>reqnroll-gherkin</c> text view, without owning a legacy
+/// <c>Gherkin</c> text view, without owning a legacy
 /// <see cref="IVsLanguageInfo"/> language service — the client itself reaches
 /// <see cref="IVsDropdownBarManager"/> via the view's <see cref="IVsWindowFrame"/> and attaches
 /// directly. All resolution/attach logic (and its retries) lives on the client, not here — this
@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 /// instance before the real client (symbol-backed combos) was built.
 /// </remarks>
 [Export(typeof(IVsTextViewCreationListener))]
-[ContentType("reqnroll-gherkin")]
+[ContentType("Gherkin")]
 [TextViewRole(PredefinedTextViewRoles.Document)]
 internal sealed class GherkinDropdownBarTextViewCreationListener : IVsTextViewCreationListener
 {
