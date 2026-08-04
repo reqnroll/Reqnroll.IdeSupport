@@ -135,7 +135,7 @@ This piece should be sequenced **last** of the three (§5) since it depends on a
 
 ## 9. Impact on testing
 
-- **Unit (TS/Mocha, `tests/VSCode/`)** — following the existing pattern in `projectManager.test.ts`/`renameStep.test.ts`: test the version-comparison logic in `onboarding.ts` (first-install vs. upgrade vs. no-op) against a mocked `Memento`/`globalState`; test template substitution in `newFileCommands.ts` against fixed input; test the missing-package detection logic against a fixed `.csproj` fixture.
+- **Unit (TS/Mocha, `src/VSCode/src/test/`)** — following the existing pattern in `lsp/projectManager.test.ts`/`commands/renameStep.test.ts`: test the version-comparison logic in `onboarding.ts` (first-install vs. upgrade vs. no-op) against a mocked `Memento`/`globalState`; test template substitution in `newFileCommands.ts` against fixed input; test the missing-package detection logic against a fixed `.csproj` fixture.
 - **Integration (`extension.test.ts`)** — assert the new commands (`reqnroll.newFeatureFile`, `reqnroll.newConfigFile`, `reqnroll.newProject` once built) are registered and appear in `vscode.commands.getCommands()`, matching the existing registration-check pattern already used for other commands in that file.
 - **Manual verification** — walkthrough rendering, notification/action-button wiring, and `dotnet new` shell-out behavior are not practically covered by the Mocha harness (no VS Code UI automation in this repo's test setup) and should be manually verified per the `/verify` skill before merging each phase, the same way UI-affecting VS Code changes have been verified in prior work (see [[project-vscode-extension-status]]).
 
