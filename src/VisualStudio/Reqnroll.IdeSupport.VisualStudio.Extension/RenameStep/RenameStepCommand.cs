@@ -43,7 +43,7 @@ internal sealed class RenameStepCommand : Command
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
             ActivationConstraint.EditorContentType("CSharp"),
-            ActivationConstraint.EditorContentType("reqnroll-gherkin")),
+            ActivationConstraint.EditorContentType("gherkin")),
         Placements =
         [
             CommandPlacement.VsctParent(GuidSHLMainMenu, id: IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),

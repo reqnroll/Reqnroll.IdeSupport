@@ -14,12 +14,12 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 
 /// <summary>
 /// Intercepts the built-in Comment Selection / Uncomment Selection / Toggle Line Comment
-/// commands for <c>reqnroll-gherkin</c> text views and redirects them to the Reqnroll
+/// commands for <c>gherkin</c> text views and redirects them to the Reqnroll
 /// LSP server via <see cref="CommentToggleRedirect"/> (Comment/Uncomment toggle).
 /// </summary>
 /// <remarks>
 /// This is a MEF component registered via <c>[Export(typeof(IVsTextViewCreationListener))]</c>
-/// with a <c>[ContentType("reqnroll-gherkin")]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
+/// with a <c>[ContentType("gherkin")]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
 /// constraint so it only intercepts editable .feature file text views.
 ///
 /// When the user presses <c>Ctrl+K, Ctrl+C</c> (Comment Selection), <c>Ctrl+K, Ctrl+U</c>
@@ -31,10 +31,10 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
 {
     /// <summary>
     /// MEF export: creates a <see cref="CommentToggleCommandFilter"/> for each
-    /// <see cref="IVsTextView"/> whose content type is <c>reqnroll-gherkin</c>.
+    /// <see cref="IVsTextView"/> whose content type is <c>gherkin</c>.
     /// </summary>
     [Export(typeof(IVsTextViewCreationListener))]
-    [ContentType("reqnroll-gherkin")]
+    [ContentType("gherkin")]
     [TextViewRole(PredefinedTextViewRoles.Editable)]
     internal sealed class TextViewCreationListener : IVsTextViewCreationListener
     {

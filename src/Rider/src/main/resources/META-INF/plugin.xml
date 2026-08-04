@@ -27,7 +27,7 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
         name="Reqnroll Feature"
         implementationClass="com.reqnroll.ide.rider.ReqnrollFeatureFileType"
         fieldName="INSTANCE"
-        language="Reqnroll Feature"
+        language="gherkin"
         extensions="feature" />
 
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollRunnableProjectsListener" />

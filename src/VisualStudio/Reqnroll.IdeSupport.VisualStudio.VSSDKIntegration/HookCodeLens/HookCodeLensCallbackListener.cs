@@ -34,7 +34,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 /// with <c>RemoteMethodNotFoundException</c> even though the method genuinely exists.
 /// </remarks>
 [Export(typeof(ICodeLensCallbackListener))]
-[ContentType("reqnroll-gherkin")]
+[ContentType("gherkin")]
 public sealed class HookCodeLensCallbackListener : ICodeLensCallbackListener
 {
     public const string GetLensesMethod      = "Reqnroll.HookCodeLens.GetLenses";

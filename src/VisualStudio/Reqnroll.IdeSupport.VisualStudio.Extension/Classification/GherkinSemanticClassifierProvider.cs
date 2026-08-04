@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 /// mapping is a fixed internal table that cannot resolve Reqnroll's custom <c>reqnroll.*</c> token types.
 /// </remarks>
 [Export(typeof(IClassifierProvider))]
-[ContentType("reqnroll-gherkin")]
+[ContentType("gherkin")]
 internal sealed class GherkinSemanticClassifierProvider : IClassifierProvider
 {
     [Import] internal IClassificationTypeRegistryService ClassificationRegistry { get; set; } = null!;
