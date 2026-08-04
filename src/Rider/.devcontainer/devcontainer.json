@@ -8,7 +8,13 @@
   "containerEnv": {
     // WSLg's DISPLAY is typically ":0" — confirm with `echo $DISPLAY`
     // in Step 1 and adjust if yours differs.
-    "DISPLAY": ":0"
+    "DISPLAY": ":0",
+    // Gradle reads ORG_GRADLE_PROJECT_<name> as project property <name>. Set only
+    // here (not in tasks.json, which is shared with the native-toolchain track) so
+    // publishServer skips `dotnet publish` — unavailable in this container — and
+    // uses the pre-published binary instead. Native-toolchain contributors never see
+    // this var, so they keep live server rebuilds on every runIde launch.
+    "ORG_GRADLE_PROJECT_lspServerBuildDir": "${containerWorkspaceFolder}/src/Rider/downloaded-server"
   },
   "mounts": [
     // Docker Desktop's docker.exe is Windows-native, so bind-mount sources
@@ -31,7 +37,9 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "fwcd.kotlin"
+        "fwcd.kotlin",
+        "redhat.java",
+        "vscjava.vscode-java-debug"
       ]
     }
   }

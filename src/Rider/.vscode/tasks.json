@@ -18,6 +18,21 @@
       },
       "problemMatcher": [],
       "detail": "Republishes the LSP server (only if src/LSP or src/Core changed — see publishServer's Gradle inputs in build.gradle.kts) and launches a sandboxed Rider instance with the plugin loaded."
+    },
+    {
+      "label": "Gradle: runIde (debug)",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": {
+        "command": ".\\gradlew.bat"
+      },
+      "args": ["runIde", "--debug-jvm"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Same as 'Gradle: runIde', but passes Gradle's --debug-jvm flag, which suspends the sandbox JVM on debug port 5005 until a debugger attaches. Run this task first, wait for the terminal to print 'Listening for transport dt_socket at address: 5005', then press F5 (Attach to Rider sandbox) to connect and set Kotlin breakpoints."
     }
   ]
 }

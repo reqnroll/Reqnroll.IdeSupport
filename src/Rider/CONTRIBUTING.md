@@ -60,9 +60,32 @@ There are two tracks, depending on what's already on your machine — pick one:
 ```
 
 If `src/Rider` is open as the VS Code workspace folder, `.vscode/tasks.json` wraps
-`./gradlew runIde` as the default build task (Ctrl+Shift+B / Cmd+Shift+B) — not bound to
-F5, since there's no real debug target VS Code can attach to (Gradle launches its own
-separate JVM/Rider sandbox process).
+`./gradlew runIde` as the default build task (Ctrl+Shift+B / Cmd+Shift+B).
+
+### Debugging from VS Code
+
+Gradle launches the sandbox in its own separate JVM/Rider process, so plain `runIde`
+gives VS Code nothing to attach to. To get a real debug target instead of reasoning from
+logs (see "Logging" below) or a temporary `Thread.sleep`:
+
+1. Run the **`Gradle: runIde (debug)`** task (Terminal → Run Task…, or
+   `Ctrl+Shift+P` → "Tasks: Run Task"). It's the same as the default task but adds
+   Gradle's standard `--debug-jvm` flag, which suspends the sandbox's JVM on debug port
+   5005 until a debugger connects.
+2. Wait for the terminal to print `Listening for transport dt_socket at address: 5005`.
+3. Press **F5** — the **Attach to Rider sandbox** launch configuration
+   (`.vscode/launch.json`, type `java`, request `attach`, port 5005) connects and the
+   suspended sandbox resumes. Set breakpoints in `.kt` source before or after attaching;
+   both work once connected.
+
+Requires a Java debugger extension — `vscjava.vscode-java-debug`, included in the
+devcontainer's `customizations.vscode.extensions` (rebuild the container after pulling
+this change to pick it up); install it manually if you're on the native toolchain track
+and don't already have one.
+
+`vscode-java-debug` + `fwcd.kotlin` isn't an officially supported combination for Kotlin
+specifically (as opposed to Java) breakpoints — if a breakpoint in a `.kt` file doesn't
+bind or hit reliably, fall back to `ReqnrollDebugLogger`'s file logging instead.
 
 ## Bundling the LSP server
 
@@ -153,12 +176,14 @@ at it exactly the way CI does).
    chmod +x src/Rider/downloaded-server/linux-x64/Reqnroll.IdeSupport.LSP.Server
    ```
 4. **Inside the container**, bootstrap the Gradle wrapper once (see "First-time setup"
-   above), then launch the sandbox using the CI-style external build dir, so Gradle
-   never needs `dotnet`:
+   above), then launch the sandbox:
    ```
    cd src/Rider
-   ./gradlew runIde -PlspServerBuildDir=$(pwd)/downloaded-server
+   ./gradlew runIde
    ```
+   `devcontainer.json` sets `ORG_GRADLE_PROJECT_lspServerBuildDir` in `containerEnv`,
+   so Gradle automatically uses the CI-style external build dir above and never needs
+   `dotnet` — no `-P` flag required here.
 5. First run downloads the Rider platform SDK (large, one-time). A sandboxed Rider
    window should eventually appear on the Windows desktop via WSLg.
 
