@@ -31,8 +31,6 @@ also the
 for what each value produces). The LSP does not infer style from the
 sync/async convention already used by sibling bindings in the target
 class or file — it always follows this one project-wide setting.
-Confirmed live against both style values; see
-[#380](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/380).
 
 ```{admonition} Order of the offered options can vary by IDE
 :class: note
