@@ -139,7 +139,7 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
            otherwise) is bound to that shortcut for .feature files. -->
       <action id="Reqnroll.RenameFeatureStep"
           class="com.reqnroll.ide.rider.actions.RenameFeatureStepAction"
-          text="Rename Step"
+          text="Reqnroll: Rename Step"
           description="Renames a step's expression across the feature file and its C# binding">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
         <keyboard-shortcut keymap="$default" first-keystroke="shift F6" />
@@ -148,11 +148,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
       <!-- Rename Step (issue #160), .cs side. Deliberately no keyboard shortcut: Rider's native
            Shift+F6 rename already owns that shortcut for ordinary C# symbols, and this action's
            update() can't cheaply tell "caret is on a step attribute" from "caret is on any other
-           C# identifier" to safely take it over. Context-menu only, distinct text from the
-           native "Rename" entry already in that menu. -->
+           C# identifier" to safely take it over. Context-menu only. The "Reqnroll: " prefix
+           (matching VS Code's and VS's command naming, issue #293) is what disambiguates it
+           from the native "Rename..." entry already in that menu. -->
       <action id="Reqnroll.RenameCSharpStep"
           class="com.reqnroll.ide.rider.actions.RenameCSharpStepAction"
-          text="Rename Step (Reqnroll)"
+          text="Reqnroll: Rename Step"
           description="Renames the step-definition binding's expression across this attribute and the feature file">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
       </action>
