@@ -38,7 +38,7 @@ internal sealed class RenameStepCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Rename Step")
+    public override CommandConfiguration CommandConfiguration => new("Reqnroll: Rename Step")
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
