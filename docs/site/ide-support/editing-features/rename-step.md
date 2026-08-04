@@ -25,7 +25,7 @@ handles the common, unambiguous case directly.
 **Renaming an ambiguously bound step**
 
 If a binding method has more than one candidate attribute, use
-**Extensions → Reqnroll → Rename Step** instead — it opens a dialog with a
+**Extensions → Reqnroll → Reqnroll: Rename Step** instead — it opens a dialog with a
 picker to choose which binding to rename.
 
 ![](rename-step/rename-step-vs-picker.gif)
@@ -76,10 +76,11 @@ Visual Studio and Rider tabs for how to reach that picker).
 :sync: rider
 
 - **On the `.feature` step line:** press **Shift+F6**, or right-click →
-  **Rename Step**.
-- **On the C# attribute:** right-click → **Rename Step (Reqnroll)** — a
-  distinct context-menu entry from Rider's native "Rename", since native
-  Shift+F6 stays bound to ordinary C# symbol rename here.
+  **Reqnroll: Rename Step**.
+- **On the C# attribute:** right-click → **Reqnroll: Rename Step** — its
+  `Reqnroll: ` prefix distinguishes it from Rider's native "Rename" entry in
+  the same context menu, since native Shift+F6 stays bound to ordinary C#
+  symbol rename here.
 
 Both surfaces handle disambiguation via a picker when the binding has more
 than one candidate attribute.
@@ -94,7 +95,7 @@ string update to match.
 **Renaming from the binding expression**
 
 TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
-invoking **Rename Step (Reqnroll)**, typing a new expression, and watching
+invoking **Reqnroll: Rename Step**, typing a new expression, and watching
 every matching `.feature` step update.
 **Target:** `rename-step/rename-step-rider-cs.gif`
 
