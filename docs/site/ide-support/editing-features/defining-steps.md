@@ -19,6 +19,21 @@ action title (e.g. *"Define missing step → CalculatorSteps.cs"*), plus a
 alongside the best-matching existing file (or next to the feature file
 itself, if nothing else in the project has any bindings for it yet).
 
+## Sync vs. async skeleton style
+
+The generated method's sync/async style — and whether it uses a regular
+expression or a Cucumber Expression attribute — comes from the project's
+configured
+[`trace.stepDefinitionSkeletonStyle`](https://docs.reqnroll.net/latest/installation/configuration.html#trace)
+setting in `reqnroll.json` (`CucumberExpressionAttribute` by default; see
+also the
+[step-matching styles reference](https://docs.reqnroll.net/latest/automation/step-definitions.html#step-matching-styles-rules)
+for what each value produces). The LSP does not infer style from the
+sync/async convention already used by sibling bindings in the target
+class or file — it always follows this one project-wide setting.
+Confirmed live against both style values; see
+[#380](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/380).
+
 ```{admonition} Order of the offered options can vary by IDE
 :class: note
 
