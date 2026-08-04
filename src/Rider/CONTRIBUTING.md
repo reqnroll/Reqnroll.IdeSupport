@@ -176,12 +176,14 @@ at it exactly the way CI does).
    chmod +x src/Rider/downloaded-server/linux-x64/Reqnroll.IdeSupport.LSP.Server
    ```
 4. **Inside the container**, bootstrap the Gradle wrapper once (see "First-time setup"
-   above), then launch the sandbox using the CI-style external build dir, so Gradle
-   never needs `dotnet`:
+   above), then launch the sandbox:
    ```
    cd src/Rider
-   ./gradlew runIde -PlspServerBuildDir=$(pwd)/downloaded-server
+   ./gradlew runIde
    ```
+   `devcontainer.json` sets `ORG_GRADLE_PROJECT_lspServerBuildDir` in `containerEnv`,
+   so Gradle automatically uses the CI-style external build dir above and never needs
+   `dotnet` — no `-P` flag required here.
 5. First run downloads the Rider platform SDK (large, one-time). A sandboxed Rider
    window should eventually appear on the Windows desktop via WSLg.
 
