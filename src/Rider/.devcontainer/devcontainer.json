@@ -31,7 +31,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "fwcd.kotlin"
+        "fwcd.kotlin",
+        "vscjava.vscode-java-debug"
       ]
     }
   }
