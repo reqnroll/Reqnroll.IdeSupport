@@ -40,6 +40,7 @@
 - [F23 · Inlay Hints (Step Binding Info)](#f23--inlay-hints-step-binding-info)
 - [F24 · Hook Match CodeLens (Feature/Scenario/Step)](#f24--hook-match-codelens-featurescenariostep)
 - [F25 · Hook Match Count CodeLens (Hook Bindings)](#f25--hook-match-count-codelens-hook-bindings)
+- [F26 · Test Runner Integration (Run/Debug + Failed-Step Highlight)](#f26--test-runner-integration-rundebug--failed-step-highlight)
 - [Appendix B · Deferred / Future Features](#appendix-b--deferred--future-features)
 
 ---
@@ -1765,6 +1766,71 @@ The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): e
 
 ---
 
+### F26 · Test Runner Integration (Run/Debug + Failed-Step Highlight)
+
+**Status: Ready for implementation** — design drafted and all feasibility spikes resolved 2026-08-05
+(test-result correlation confirmed live across VS, VS Code, and Rider; see the design doc's status
+header for the full item-by-item resolution). Not yet implemented. Tracks issue
+[#262](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/262). Full design, including the
+decompiled ground truth for how Reqnroll's generator names/maps scenarios to test methods, in
+[docs/Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md).
+
+#### End-user experience
+
+`.feature` files get a run/debug gutter affordance on each `Scenario:`/`Scenario Outline:` line
+(invoking the mapped generated C# test method via the IDE's native test runner), a pass/fail indicator
+on the same line reflecting the last run, and a gutter mark on the specific step a failed scenario
+stopped at, with a hover tooltip carrying the captured error.
+
+#### IDE support matrix
+
+| VS Code | Visual Studio | Rider |
+|---------|---------------|-------|
+| 🔧 Plugin — `CodeLens` + custom gutter decorations, own `dotnet test` execution, no native Testing-panel presence (Option 2, see design doc §5) | 🔧 Plugin — classic CodeLens (F24 pattern), reusing VS's own `.TestExplorer.Run/DebugTestsFromCodeLens` commands | 🔧 Plugin — `RunLineMarkerContributor` |
+
+#### LSP messages
+
+| Direction | Method | Purpose |
+|-----------|--------|---------|
+| Client → Server | `reqnroll/resolveTestTargets` (`uri`, `range`) | Resolve the generated test method(s) for a scenario or Outline range |
+| Server → Client | `ScenarioTestTarget[]` | Declaring type, method name, and (for parameterized Outlines) row index/arguments |
+
+#### Notes
+
+- The one shared, server-side piece is the scenario→generated-test-method mapping (§2–3 of the design
+  doc) — everything else (native run/debug invocation, test-result event subscription, gutter
+  rendering) is per-IDE glue with no LSP involvement, same shape as [F19](#f19--new-project--item-wizards)/[F20](#f20--installation--upgrade-experience).
+- **VS's extension-point question is resolved**: there is no separate editor-margin surface — VS's own
+  run/debug/pass-fail affordance for ordinary tests is itself a classic CodeLens data-point provider
+  (decompiled from `Microsoft.VisualStudio.TestWindow.CodeLens.dll`), directly reusing F24's bridge
+  pattern and even VS's own internal `.TestExplorer.Run/DebugTestsFromCodeLens` commands. The
+  test-result channel is resolved for all three IDEs: a live `dotnet test` spike found the failed-step
+  signal is Reqnroll's own default step-trace stdout (seven-outcome vocabulary decompiled from
+  `TestTracer`), **not** `#line`-mapped stack traces as originally hypothesized — those always
+  misattribute to the scenario's last step, a `#line hidden`-region artifact. Chris then independently
+  confirmed both findings live in Rider via the devcontainer (real ambiguous-binding scenario run
+  through Rider's Test Runner), which also surfaced that Rider identifies a parameterized Outline row by
+  a formatted display name embedding its arguments, not a positional index — consistent with VS's
+  `TestMethodIdentifier` finding. See design doc §5–6.
+- **VS Code decided against a `TestController`** (confirmed 2026-08-05, Option 2): `vscode.tests` has no
+  API to read another extension's controller results, so delegating to the existing .NET/C# Dev Kit
+  testing extension the way VS delegates to its own Test Explorer isn't possible — owning a separate
+  `TestController` would work but duplicates the same generated methods C# Dev Kit already lists. VS
+  Code instead runs `dotnet test --filter` directly and renders its own gutter decorations, with no
+  presence in the native Testing panel. See design doc §5.
+- The mapping layer must account for Reqnroll's five test-framework providers (xUnit, xUnit.v3, NUnit,
+  MSTest, TUnit) using different row-test attributes — resolved by keeping method/class resolution
+  framework-agnostic and using a small per-framework attribute-name allowlist plus generator-guaranteed
+  row ordering for Outline row correlation, rather than parsing attribute argument values. See design
+  doc §3 (Tiers 1–2) and §7 items 5–6.
+- **Breakpoint/DAP support is explicitly out of scope for this issue** (confirmed 2026-08-05). Its
+  prerequisite (scenario→test-method mapping) is the same one this issue builds anyway, and Reqnroll's
+  `#line` pragmas mean PDB-level `.feature` debugging may be a narrower path-mapping problem than a
+  from-scratch DAP implementation — recorded as a lead for the deferred "Debug Support for Feature
+  Files" item below, not a deliverable of #262. See design doc §7 item 4.
+
+---
+
 ## Appendix B · Deferred / Future Features
 
 The following features were identified during planning (see [discussion #1077](https://github.com/orgs/reqnroll/discussions/1077)) as valuable but out of scope for the initial phases. They are recorded here to inform architectural decisions — implementations should avoid foreclosing these options.
@@ -1784,3 +1850,5 @@ When editing a `[Given("...")]` attribute string in C#, the regex pattern is val
 ### Debug Support for Feature Files
 
 Breakpoints set on `.feature` file step lines would pause test execution at the corresponding step. Step-into would navigate to the bound C# method. This requires implementation of the Debug Adapter Protocol (DAP), a separate protocol from LSP, likely in coordination with the Reqnroll test runner.
+
+Shares its scenario→generated-test-method mapping prerequisite with [F26 · Test Runner Integration](#f26--test-runner-integration-rundebug--failed-step-highlight), which is otherwise unrelated and does not deliver this item — explicitly out of scope for #262 (confirmed 2026-08-05). Reqnroll's generator emits `#line` pragmas around every step statement, so the compiled test assembly's PDB already carries `.feature`-relative sequence points (the same mechanism Razor/T4 templates use for direct-source debugging) — this may narrow the problem to per-IDE breakpoint-source/path-mapping rather than a from-scratch DAP implementation, but that's unconfirmed and left for whoever picks this item up separately. See [Test-Runner-Integration-Design.md §7](Test-Runner-Integration-Design.md#7-open-items-carried-into-implementation) item 4.
