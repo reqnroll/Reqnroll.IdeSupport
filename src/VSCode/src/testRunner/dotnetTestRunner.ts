@@ -56,9 +56,15 @@ export async function runDotnetTest(
           maxBuffer: 10 * 1024 * 1024,
           env: { ...process.env, MSYS_NO_PATHCONV: '1' },
         },
-        () => {
+        (error) => {
           // dotnet test exits non-zero when any test fails — expected, not a run failure.
           // Whether the run actually produced results is checked via the TRX file afterward.
+          // Still log unexpected launch-time errors (spawn failure, timeout kill, maxBuffer
+          // overflow) for diagnostics — these were previously silently dropped since the
+          // callback ignored its `error` parameter entirely.
+          if (error) {
+            console.error(`dotnetTestRunner: dotnet test reported an error for ${projectFile}:`, error.message);
+          }
           resolve(true);
         },
       );

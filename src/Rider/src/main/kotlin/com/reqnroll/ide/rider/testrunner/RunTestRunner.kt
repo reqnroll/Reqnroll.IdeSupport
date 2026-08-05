@@ -114,8 +114,13 @@ object RunTestRunner {
                 "--results-directory", resultsDir.absolutePath,
                 "--nologo",
             )
+            // Neither stdout nor stderr is read anywhere (results come from the TRX file, not
+            // live process output) — Redirect.DISCARD avoids the classic ProcessBuilder deadlock
+            // where an un-drained pipe fills its OS buffer and the child blocks writing to it,
+            // making `waitFor` hang until the timeout even for a run that would otherwise succeed.
             val process = ProcessBuilder(command)
-                .redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
                 .start()
             val completed = process.waitFor(TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) {
