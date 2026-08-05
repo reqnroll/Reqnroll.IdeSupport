@@ -1,6 +1,7 @@
 package com.reqnroll.ide.rider.lsp.protocol
 
 import org.eclipse.lsp4j.Position
+import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.TextDocumentIdentifier
 
 /**
@@ -187,4 +188,29 @@ data class SelectRenameTargetParams(
     val uri: String = "",
     val version: Int = 0,
     val attributeIndex: Int = 0,
+)
+
+/**
+ * Params for `reqnroll/resolveTestTargets` — mirrors ResolveTestTargetsParams.cs field-for-field
+ * (design doc §3/§4, issue #262). A range within a scenario/Outline's own header or steps resolves
+ * to every target for that scenario; a range within one specific `Examples:` row resolves to just
+ * that row's target.
+ */
+data class ResolveTestTargetsParams(
+    val textDocument: TextDocumentIdentifier,
+    val range: Range,
+)
+
+/** Response for `reqnroll/resolveTestTargets` — mirrors ResolveTestTargetsResponse.cs field-for-field. */
+data class ResolveTestTargetsResponse(
+    val targets: List<ScenarioTestTargetItem> = emptyList(),
+)
+
+/** One generated test method (or one row of a row-tests-parameterized method) a scenario/row resolves to. Mirrors ScenarioTestTargetDto.cs field-for-field. */
+data class ScenarioTestTargetItem(
+    val declaringTypeFullName: String = "",
+    val methodName: String = "",
+    val isParameterized: Boolean = false,
+    val rowArguments: Map<String, String>? = null,
+    val rowIndex: Int? = null,
 )

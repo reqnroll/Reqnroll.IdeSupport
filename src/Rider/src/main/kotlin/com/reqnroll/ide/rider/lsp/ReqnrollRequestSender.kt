@@ -12,6 +12,8 @@ import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetsResponse
+import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsParams
+import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsResponse
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
@@ -55,6 +57,7 @@ object ReqnrollRequestSender {
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
+    private const val RESOLVE_TEST_TARGETS_TIMEOUT_MS = 10_000
 
     /** Runs `reqnroll/findUnusedStepDefinitions`. Returns null if no Reqnroll LSP server is running, or on failure. */
     fun findUnusedStepDefinitions(project: Project): FindUnusedStepDefinitionsResponse? {
@@ -303,6 +306,32 @@ object ReqnrollRequestSender {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("documentSymbol: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs `reqnroll/resolveTestTargets` for the range [(startLine, startChar), (endLine, endChar)]
+     * in a `.feature` file (design doc §3/§4, issue #262) — resolves the generated test method(s)
+     * the scenario/Outline/example row at that range corresponds to. Returns null if no Reqnroll
+     * LSP server is running, or on failure.
+     */
+    fun resolveTestTargets(
+        project: Project, uri: String, startLine: Int, startChar: Int, endLine: Int, endChar: Int,
+    ): ResolveTestTargetsResponse? {
+        val server = firstRunningServer(project) ?: return null
+        val params = ResolveTestTargetsParams(
+            TextDocumentIdentifier(uri),
+            Lsp4jRange(Lsp4jPosition(startLine, startChar), Lsp4jPosition(endLine, endChar)),
+        )
+        return try {
+            server.sendRequestSync(RESOLVE_TEST_TARGETS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).resolveTestTargets(params)
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("resolveTestTargets: request failed", ex)
             null
         }
     }
