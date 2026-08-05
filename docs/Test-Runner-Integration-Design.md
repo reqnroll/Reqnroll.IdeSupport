@@ -126,6 +126,55 @@ directly from this table — and the resolver's own framework-capability lookup 
 same provider-name resolution mechanism (`UseUnitTestProvider`/`TargetMsTestVersion`), not by naively
 matching the first class it finds with a plausible name, per the MSTest lesson above.
 
+### AST-transforming generator plugins (e.g. `Reqnroll.ExternalData`) — a structural wrinkle
+
+Flagged by Chris (2026-08-05) and confirmed against Reqnroll's actual open source
+(`reqnroll/Reqnroll`, `Plugins/Reqnroll.ExternalData`), not taken on description alone. The
+`ExternalData` plugin lets an `Examples:` block's row **data** live in an external file (CSV/XLS/etc.)
+instead of the `.feature` file, selected by a tag. Its `ExternalDataTestGenerator.ParseContent` override
+parses the `.feature` file completely normally first, then runs `IncludeExternalDataTransformation` on
+the resulting **in-memory AST**, injecting synthetic `TableRow`s read from the external file — entirely
+inside Reqnroll's own generator pipeline, strictly after the point where the LSP server's own,
+independent Gherkin parse of the same `.feature` text would already be done. The LSP server's AST never
+sees the injected rows; they exist only in the generator's private copy.
+
+The tracing turned up a wrinkle sharper than "an `Examples:` block shows as header-only on screen":
+`IncludeExternalDataTransformation.GetTransformedScenarioOutline` explicitly handles a `Scenario
+Outline:` with **no `Examples:` block at all** (`scenarioOutline.Examples == null ||
+!scenarioOutline.Examples.Any()`) by falling through to the same transform used for a genuinely plain
+`Scenario:`, which constructs a brand-new `ScenarioOutline` from scratch using the external file's own
+columns as the header. **A plain `Scenario:` block, with the tag applied and no visible `Outline`
+keyword or `Examples:` block whatsoever, can generate as a fully row-tests-parameterized method** — the
+on-screen file gives no indication it's parameterized at all beyond the step text possibly containing
+`<placeholder>` tokens.
+
+**Why this doesn't break the design, and why it would have if §3 had gone the other way**: the
+architecture decision above — read the generated `.feature.cs` via Roslyn rather than predict names from
+the `.feature` file's own structure — means the resolver was never going to trust the `.feature` file's
+Examples-row count or `Scenario`/`Scenario Outline` keyword to determine parameterization in the first
+place. It has to anyway, now, for a real reason rather than a defensive one: Tier 1 discovers *whether* a
+scenario is parameterized and *how many* generated methods exist by finding methods on the class,
+either by exact predicted name (row-tests mode: `scenario.Name.ToIdentifier()`) or by name-prefix match
+(individual-methods mode: every method matching `{scenario.Name.ToIdentifier()}_.*`) — never by counting
+`.feature`-file rows. This was already the plan; ExternalData is the concrete case that makes it a
+requirement rather than a preference. One place in Tier 2 needs an explicit scope note as a result: the
+"*N*th row-attribute always corresponds to the *N*th `Examples:` row in the `.feature` file" positional
+claim (below) is about correlating a *specific selected `.feature` row* to a row-attribute index for
+per-row addressing — and per-row addressing was already ruled out entirely in §7 item 6 (native runners
+don't support it reliably even in the ordinary case). For an ExternalData scenario there's no `.feature`
+row to select in the first place — no on-screen line exists to attach a per-row gutter action to — so
+this doesn't need separate handling: the UI-level "only offer whole-scenario run, never per-row" behavior
+for such scenarios falls out for free from gutter icons being rendered against the LSP server's own
+Gherkin parse, which has nothing to render at a row that was never there.
+
+**What the resolver must not do**: treat "0 rows visible in the `.feature` file's `Examples:` block" or
+"no `Examples:` block at all" as "0 targets" or "not parameterized, use the plain-scenario naming rule."
+Both are true of the `.feature` file's own AST and both are wrong conclusions about the generated code.
+Resolution must always go through the generated `.feature.cs`, never short-circuit on the `.feature`
+file's own shape. This generalizes past `ExternalData` specifically — any other generator plugin (first-
+or third-party) that transforms the AST between parse and codegen has the same property, and the design
+already accounts for the general case, not just this one plugin.
+
 ---
 
 ## 3. Mapping layer — architecture decision
@@ -160,7 +209,15 @@ and what's its FQN" needs no per-framework knowledge at all. This alone is suffi
 scenario, and "run the whole Outline" (invoke the Theory/parameterized method as a unit) in row-tests
 mode.
 
-**Tier 2 — per-row correlation for row-tests Outlines.** This is where framework-specific attribute
+**Tier 2 — per-row correlation for row-tests Outlines.** Assumes the `.feature` file's own `Examples:`
+rows are what generated the row-attributes in document order — true for ordinary Outlines, **not** true
+for a scenario transformed by an AST-injecting generator plugin like `Reqnroll.ExternalData` (see the
+dedicated subsection above), where the `.feature` file may show zero rows or no `Examples:` block at
+all. This is fine in practice only because per-row addressing was already ruled out for every IDE in §7
+item 6 regardless of this case — Tier 2's positional correlation is used for *counting* rows to decide
+between "run the whole method" and nothing more, not for selecting a specific row to run, so it degrades
+safely (falls back to "run the whole method," same as the ordinary per-row-addressing fallback) rather
+than needing separate handling for the ExternalData case. This is where framework-specific attribute
 shape would normally bite — but it can be sidestepped almost entirely. The decompiled generator
 (`GenerateScenarioOutlineExamplesAsRowTests`, §2) iterates `scenarioOutline.Examples` then each
 `example.TableBody` in **document order**, calling `_unitTestGeneratorProvider.SetRow` exactly once per
@@ -321,6 +378,39 @@ through the native Testing UI.
   individual parameterized-test row (its `Equals` only compares `OutputFilePath`+`ManagedType`+
   `ManagedMethod` or the FQN) — confirms the §3 residual risk finding for VS specifically: row-tests
   Outline invocation targets "run the whole parameterized method," not one row, via this path.
+
+### Scenario Outline — "run all examples" affordance
+
+§3 already has the resolver return every row's `ScenarioTestTarget` when `reqnroll/resolveTestTargets`
+is called at the `Scenario Outline:` line, specifically so a gutter action there can run every example.
+What that action actually *does* with those targets splits by generation mode:
+
+**Row-tests mode (default) — free.** All targets share one `MethodName`. "Run all examples" is
+identical to the plain "run this method" action already described above for a single scenario — the
+native runner executes every `InlineData`/`TestCase`/`DataRow`/`Arguments` row as part of running that
+one method. No extra invocation logic needed in any IDE; the Outline-level gutter action and the
+single-scenario gutter action are the same code path.
+
+**Individual-methods mode (`allowRowTests = false`) — needs a real multi-target invocation, one per IDE:**
+
+- **VS Code**: owns its own `dotnet test` invocation, so this is the simplest case — OR the resolved
+  targets' exact FQNs into one filter expression, `dotnet test --filter "FullyQualifiedName=A|FullyQualifiedName=B|..."`,
+  and parse each method's own stdout block from the combined output. (A `~`-contains prefix filter on
+  the shared `{scenario.Name.ToIdentifier()}_` prefix, e.g. `FullyQualifiedName~ThisScenario_`, would
+  also work and needs fewer terms, at the cost of a small collision risk if another scenario's generated
+  name happens to contain the same substring — the exact-FQN OR list is safer and preferred.)
+- **Visual Studio**: `CodeLensDetailPaneCommand.CommandArgs` is an array — the decompiled
+  `TestStatusProvider` only showed a single-element usage (`new TestMethodIdentifier[1] { testMethod }`),
+  but `.TestExplorer.RunTestsFromCodeLens`/`DebugTestsFromCodeLens` are the same commands Test Explorer's
+  own "run selected tests" multi-select action drives, so passing an N-element `TestMethodIdentifier[]`
+  built from all N resolved targets is expected to work the same way. **Not yet confirmed** — the VS
+  live check already needed for §6's ServiceHub wiring should also verify multi-target `CommandArgs`
+  specifically, since only the single-target shape has been observed in the decompiled source.
+- **Rider**: whether a single `RunLineMarkerContributor` action can target multiple discovered test
+  items in one invocation, or whether it's constrained to one per marker, **hasn't been checked** — a
+  follow-up for whoever implements the Rider side, likely resolvable by looking at how Rider's own
+  built-in `[Fact]`/`[Test]`-class-level line marker (which already offers "run all tests in this class")
+  is implemented, since that's the same shape of problem.
 
 ---
 
@@ -543,6 +633,24 @@ info/hint severity, not error severity, to stay visually low-noise against genui
    initial implementation for any IDE (VS Code's own-execution design, §5, could add it later via
    `dotnet test --filter` with a `DisplayName`-based filter expression per row, since it owns the
    invocation — worth revisiting post-implementation, not blocking now).
+7. **Multi-target "run all examples" invocation for individual-methods-mode Outlines, per IDE** (§5, new
+   subsection). VS Code's own-execution design handles this trivially (OR'd `dotnet test --filter`
+   expression). VS's multi-element `TestMethodIdentifier[]` `CommandArgs` is plausible but unconfirmed —
+   only a single-target usage was observed in the decompiled `TestStatusProvider` source; fold into the
+   same live VS check §6 already calls for. Rider's multi-target line-marker capability is unchecked
+   entirely — a follow-up for Rider implementation, likely answerable by looking at how Rider's own
+   built-in per-class "run all tests" line marker works. Neither blocks starting implementation, since
+   row-tests mode (the framework default) doesn't need this at all.
+8. ~~**AST-transforming generator plugins (e.g. `Reqnroll.ExternalData`)**~~ **Resolved (2026-08-05,
+   flagged by Chris).** Confirmed against Reqnroll's actual source that such plugins (which inject
+   `Examples:` rows into the AST after parsing but before codegen, so the `.feature` file can show zero
+   rows or no `Examples:` block at all) don't require design changes — the resolver was already going
+   to determine parameterization from the generated `.feature.cs`, never from the `.feature` file's own
+   row count, and per-row addressing was already ruled out entirely (item 6), so this degrades safely to
+   the existing "run the whole method"/"run all methods" fallback with no special-casing needed. See §2's
+   dedicated subsection and §3 Tier 2's scope note. Worth a specs/unit-test fixture in §8 exercising a
+   scenario with an `ExternalData`-style tag and zero visible rows, to lock this in as a regression case
+   rather than leaving it as an untested inference.
 
 ---
 
@@ -556,7 +664,12 @@ info/hint severity, not error severity, to stay visually low-noise against genui
   not-yet-built (no `.feature.cs` present) cases.
 - **Acceptance (specs)** — a `.feature` spec exercising `reqnroll/resolveTestTargets` against a real
   generated fixture project (reusing the sample-project-generator infrastructure already used by F2
-  discovery specs), covering all three Outline naming modes from §2.
+  discovery specs), covering all three Outline naming modes from §2, **plus a fixture using
+  `Reqnroll.ExternalData`** (or a hand-rolled AST-injecting test double, to avoid an external-file
+  dependency in the test project) with a plain `Scenario:` and zero visible `Examples:` rows, asserting
+  the resolver still finds the generated row-tests method via Tier 1 rather than concluding "0 targets"
+  from the `.feature` file's own row count — locks in §7 item 8 as a regression case, not just an
+  untested inference.
 - Per-IDE run/debug and result-correlation glue is IDE-side only and follows
   [[vs-extension-testing-strategy]] — native-runner invocation and result-event handling aren't
   practically unit-testable; verify live per IDE instead.
