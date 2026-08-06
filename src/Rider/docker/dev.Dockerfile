@@ -47,4 +47,19 @@ RUN curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gra
 # which avoids a second layer of host-path translation.
 RUN ln -s /mnt/wslg/.X11-unix /tmp/.X11-unix
 
+# .NET SDK for `dotnet test` — RunTestRunner.kt shells out to a bare "dotnet" on PATH to
+# execute scenario runs (issue #262's Run lens); this is a completely separate concern
+# from publishServer's dotnet (deliberately skipped in this container via
+# ORG_GRADLE_PROJECT_lspServerBuildDir, see devcontainer.json) and from Rider's own bundled
+# CoreCLR backend (private runtime, never on PATH). Without this, the Run lens's "dotnet
+# test" click fails immediately with "Cannot run program \"dotnet\": No such file or
+# directory". Installed via Microsoft's official script rather than apt (Ubuntu's dotnet-sdk
+# packages lag current releases) into /usr/share/dotnet, symlinked onto PATH.
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir /usr/share/dotnet \
+    && rm /tmp/dotnet-install.sh \
+    && ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+ENV DOTNET_ROOT=/usr/share/dotnet
+
 WORKDIR /workspace

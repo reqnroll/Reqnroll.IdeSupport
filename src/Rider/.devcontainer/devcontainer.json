@@ -14,7 +14,11 @@
     // publishServer skips `dotnet publish` — unavailable in this container — and
     // uses the pre-published binary instead. Native-toolchain contributors never see
     // this var, so they keep live server rebuilds on every runIde launch.
-    "ORG_GRADLE_PROJECT_lspServerBuildDir": "${containerWorkspaceFolder}/src/Rider/downloaded-server"
+    // containerWorkspaceFolder already resolves to this project's own root
+    // (.../src/Rider) since that's the VS Code workspace folder that gets mounted —
+    // do NOT re-append "src/Rider" here, that doubles the path segment and points
+    // at a directory that never exists, so prepareSandbox silently bundles nothing.
+    "ORG_GRADLE_PROJECT_lspServerBuildDir": "${containerWorkspaceFolder}/downloaded-server"
   },
   "mounts": [
     // Docker Desktop's docker.exe is Windows-native, so bind-mount sources
