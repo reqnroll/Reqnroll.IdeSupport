@@ -16,9 +16,7 @@ method in the C# binding class. If more than one binding matches
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 🎬 gif — cursor placed on a step, then jumping to the bound
-C# method.
-**Target:** `go-to-definition/go-to-definition-vscode.gif`
+![](go-to-definition/go-to-definition-vscode.gif)
 ```
 
 ```{tab-item} Rider

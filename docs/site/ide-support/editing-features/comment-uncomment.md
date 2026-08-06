@@ -23,8 +23,7 @@ discoverable menu command:
 `Ctrl+/` (`Cmd+/` on macOS) works directly. Also available via right-click
 → **Reqnroll: Comment/Uncomment**, or the Command Palette.
 
-TODO(media): 🎬 gif (optional, low priority).
-**Target:** `comment-uncomment/comment-uncomment-vscode.gif`
+![](comment-uncomment/comment-uncomment-vscode.gif)
 ```
 
 ```{tab-item} Rider

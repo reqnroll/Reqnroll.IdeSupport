@@ -18,10 +18,7 @@ save required. Steps with no matching binding render in a distinct
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
-VS Code, with a matched (bound) step and an unmatched step side by side so
-the color difference is visible.
-**Target:** `syntax-highlighting/syntax-highlighting-vscode.png`
+![](syntax-highlighting/syntax-highlighting-vscode.png)
 ```
 
 ```{tab-item} Rider

@@ -53,9 +53,7 @@ From a feature file, clicking on a 'hook' Code Lens will result in a pop-up with
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot — the step-usage lens and both hook-match lenses
-as rendered by VS Code's native CodeLens.
-**Target:** `code-lens/code-lens-vscode.png`
+![](code-lens/code-lens-vscode.gif)
 ```
 
 ```{tab-item} Rider
@@ -64,7 +62,7 @@ as rendered by VS Code's native CodeLens.
 TODO(media): 📷 screenshot — the same three lenses as rendered by Rider's
 CodeVision — visibly different presentation from the native CodeLens shown
 in the other two tabs.
-**Target:** `code-lens/code-lens-rider.png`
+**Target:** `code-lens/code-lens-rider.gif`
 ```
 
 :::

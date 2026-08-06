@@ -25,9 +25,7 @@ the full step text on selection.
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 🎬 gif — typing a keyword or step, the completion popup
-appearing, and selecting an item.
-**Target:** `completion/completion-vscode.gif`
+![](completion/completion-vscode.gif)
 ```
 
 ```{tab-item} Rider

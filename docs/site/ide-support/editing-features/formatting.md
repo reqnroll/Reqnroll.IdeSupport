@@ -27,9 +27,7 @@ also be re-aligned by running Format Document. A row missing its trailing
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 🎬 gif — before/after auto-format on save or on-type, and the
-table column-alignment behavior as you type.
-**Target:** `formatting/formatting-vscode.gif`
+![](formatting/formatting-vscode.gif)
 ```
 
 ```{tab-item} Rider

@@ -14,9 +14,7 @@ large feature file without scrolling.
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot — VS Code's native Outline panel listing a
-Feature/Scenario/Steps tree.
-**Target:** `document-outline/document-outline-vscode.png`
+![](document-outline/document-outline-vscode.png)
 ```
 
 ```{tab-item} Rider

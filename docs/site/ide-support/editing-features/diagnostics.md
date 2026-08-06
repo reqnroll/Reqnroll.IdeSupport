@@ -27,9 +27,7 @@ conveys the static state on its own.
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot — a squiggle under an unmatched step in
-VS Code, plus the matching Problems panel entry.
-**Target:** `diagnostics/diagnostics-vscode-squiggle.png`
+![](diagnostics/diagnostics-vscode-squiggle.png)
 
 TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
 matching binding is added. Nice to have; the screenshot above already

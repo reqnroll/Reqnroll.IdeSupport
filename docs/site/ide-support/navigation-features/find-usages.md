@@ -7,7 +7,7 @@ panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 
 :::{tab-set}
 
-```{tab-item} Visual Studio
+`````{tab-item} Visual Studio
 :sync: vs
 
 Place the cursor in (or right-click) the binding method in a `.cs` file,
@@ -20,7 +20,15 @@ then either:
 Results open in the standard Find All References window.
 
 ![](find-usages/find-usages-vs.gif)
+
+```{admonition} Visual Studio — native "Find All References" doesn't reach this
+:class: warning
+
+Visual Studio's built-in **Find All References** (Shift+F12) does not route
+to Reqnroll bindings — it only searches C# symbol references. Use
+**Find Step Usages** instead (see above), not the native command.
 ```
+`````
 
 ```{tab-item} VS Code
 :sync: vscode
@@ -33,9 +41,7 @@ Place the cursor in the binding method in a `.cs` file, then either:
 Results appear in a Quick Pick list — selecting an entry jumps to that
 step in its `.feature` file.
 
-TODO(media): 🎬 gif — invoking Find Usages from a `.cs` binding method and
-seeing results across `.feature` files.
-**Target:** `find-usages/find-usages-vscode.gif`
+![](find-usages/find-usages-vscode.gif)
 ```
 
 ```{tab-item} Rider
@@ -53,15 +59,6 @@ results popup differs visually from VS/VS Code's.
 ```
 
 :::
-
-```{admonition} Visual Studio — native "Find All References" doesn't reach this
-:class: warning
-
-Visual Studio's built-in **Find All References** (Shift+F12) does not route
-to Reqnroll bindings — it only searches C# symbol references. Use
-**Find Step Usages** instead (see the Visual Studio tab above), not the
-native command.
-```
 
 ```{tip}
 You don't always need to invoke this explicitly — [Code Lens](../editing-features/code-lens.md)

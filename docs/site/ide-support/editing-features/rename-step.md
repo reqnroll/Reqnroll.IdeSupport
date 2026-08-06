@@ -44,7 +44,7 @@ right-click → **Reqnroll: Rename Step** or the Command Palette.
 TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
 rename (F2), typing a new step text, and watching the C# attribute string
 update to match.
-**Target:** `rename-step/rename-step-vscode-feature.gif`
+![](rename-step/rename-step-vscode-feature.gif)
 
 **Renaming from the binding expression**
 

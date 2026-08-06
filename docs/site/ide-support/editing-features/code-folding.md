@@ -15,8 +15,8 @@ C#. Folding regions update automatically as you edit the document.
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot — the same, in VS Code.
-**Target:** `code-folding/code-folding-vscode.gif`
+
+![](code-folding/code-folding-vscode.gif)
 ```
 
 ```{tab-item} Rider

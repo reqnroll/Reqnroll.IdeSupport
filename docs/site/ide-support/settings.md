@@ -184,9 +184,7 @@ Manages settings for discovering step bindings within the IDE.
 `.vscode/settings.json`, or the Settings UI, under the Reqnroll
 extension's contributed settings.
 
-TODO(media): 📷 screenshot — the VS Code settings UI, filtered to the
-Reqnroll extension's contributed settings.
-**Target:** `settings/settings-vscode.png`
+![](settings/settings-vscode.png)
 ```
 
 ```{tab-item} Rider

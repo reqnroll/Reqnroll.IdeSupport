@@ -27,8 +27,7 @@ Visual Studio does not show the hover tooltip — this is a Visual Studio limita
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot — the same, in VS Code.
-**Target:** `inlay-hints/inlay-hints-vscode.png`
+![](inlay-hints/inlay-hints-vscode.png)
 ```
 
 ```{tab-item} Rider
@@ -49,5 +48,5 @@ showing/hiding is entirely each IDE's own native inlay-hints mechanism:
 | IDE | How to toggle |
 |---|---|
 | **Visual Studio** | Tools → Options → Text Editor → Advanced, or the equivalent inline-hints display toggle (Alt-F1) — the same generic setting used for any inlay hint, not Reqnroll-specific. |
-| **VS Code** | Native `editor.inlayHints.enabled` setting (`on` / `off` / `offUnlessPressed` / `onUnlessPressed`). In an `...UnlessPressed` mode, holding the default modifier key (Ctrl on Windows/Linux, ⌥ on Mac) temporarily shows/hides hints. |
+| **VS Code** | Native `editor.inlayHints.enabled` setting (`on` / `off` / `offUnlessPressed` / `onUnlessPressed`). In an `...UnlessPressed` mode, holding the default modifier key (Ctrl-Alt on Windows/Linux, ⌥ on Mac) temporarily shows/hides hints. |
 | **Rider** | Editor → General → Inlay Hints — same generic Rider setting used for any inlay hint. |

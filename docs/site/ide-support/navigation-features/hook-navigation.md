@@ -33,9 +33,7 @@ Place the cursor in a `.feature` file, then either:
 
 No default keybinding.
 
-TODO(media): 🎬 gif — short jump-to-hook interaction, invoking Go to Hooks
-and selecting a result.
-**Target:** `hook-navigation/hook-navigation-vscode.gif`
+![](hook-navigation/hook-navigation-vscode.gif)
 ```
 
 ```{tab-item} Rider

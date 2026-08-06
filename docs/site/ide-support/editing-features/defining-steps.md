@@ -53,9 +53,7 @@ is listed first.
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 🎬 gif — invoking the quick-fix on an unmatched step in
-VS Code and seeing the generated binding method.
-**Target:** `defining-steps/defining-steps-vscode.gif`
+![](defining-steps/defining-steps-vscode.gif)
 ```
 
 ```{tab-item} Rider

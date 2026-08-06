@@ -37,7 +37,7 @@ menu instead — see the linked feature page for the full how-to.
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Command Palette → Reqnroll: Find Unused Step Definitions |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Go to Hooks, or Command Palette |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | — |
-| [Toggle inlay hints](editing-features/inlay-hints.md) | Hold Ctrl (⌥ on macOS) *(only in an `...UnlessPressed` mode)* | — |
+| [Toggle inlay hints](editing-features/inlay-hints.md) | Hold Ctrl-Alt (⌥ on macOS) *(only in an `...UnlessPressed` mode)* | — |
 ````
 
 ````{tab-item} Rider

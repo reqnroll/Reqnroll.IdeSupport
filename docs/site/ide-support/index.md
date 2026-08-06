@@ -29,8 +29,7 @@ Visual Studio
 
 :::{div} reqnroll-hero-media
 
-TODO(media): 📷 hero screenshot — the same, in VS Code.
-**Target:** `index/index-vscode.png`
+![](index/index-vscode.png)
 :::
 
 VS Code
