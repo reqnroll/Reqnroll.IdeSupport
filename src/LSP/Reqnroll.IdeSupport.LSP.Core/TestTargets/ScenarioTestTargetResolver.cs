@@ -20,9 +20,10 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         Uri featureUri,
         IReadOnlyCollection<DeveroomTag> tags,
         GherkinRange scenarioRange,
-        IReadOnlyCollection<string> projectPackageIds)
+        IReadOnlyCollection<string> projectPackageIds,
+        string? projectFolder = null)
     {
-        var generatedFilePath = GetGeneratedFilePath(featureUri);
+        var generatedFilePath = GetGeneratedFilePath(featureUri, projectFolder);
         if (generatedFilePath is null || !File.Exists(generatedFilePath))
             return Array.Empty<ScenarioTestTarget>(); // not built yet — see design doc §3's trade-off table
 
@@ -64,7 +65,17 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 
     // ── Tier 1: locate the generated companion file / class / exact-name method ────────────────
 
-    private static string? GetGeneratedFilePath(Uri featureUri)
+    /// <summary>
+    /// Locates the generated <c>&lt;feature&gt;.feature.cs</c> companion. Tries the classic
+    /// co-located convention first (<c>Foo.feature</c> -&gt; <c>Foo.feature.cs</c>, next to it), then
+    /// falls back to searching under <paramref name="projectFolder"/>'s <c>obj/</c> tree — Reqnroll
+    /// 3.3.0 added an MSBuild option (<c>GenerateFeatureFileCodeBehindInProjectDirectory=false</c>)
+    /// that relocates code-behind generation under the intermediate output directory instead, to
+    /// avoid touching the source tree. The exact obj-relative layout isn't a stable public contract
+    /// (it varies with configuration/TFM), so this matches by file name anywhere under <c>obj/</c>
+    /// rather than predicting a specific subpath.
+    /// </summary>
+    private static string? GetGeneratedFilePath(Uri featureUri, string? projectFolder)
     {
         if (!featureUri.IsAbsoluteUri)
             return null;
@@ -79,8 +90,40 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
             return null;
         }
 
-        // Reqnroll's own convention: Foo.feature -> Foo.feature.cs, next to it.
-        return string.IsNullOrEmpty(localPath) ? null : localPath + ".cs";
+        if (string.IsNullOrEmpty(localPath))
+            return null;
+
+        var coLocatedPath = localPath + ".cs";
+        if (File.Exists(coLocatedPath))
+            return coLocatedPath;
+
+        return FindInObjFolder(localPath, projectFolder) ?? coLocatedPath;
+    }
+
+    private static string? FindInObjFolder(string featurePath, string? projectFolder)
+    {
+        if (string.IsNullOrEmpty(projectFolder))
+            return null;
+
+        var objFolder = Path.Combine(projectFolder, "obj");
+        if (!Directory.Exists(objFolder))
+            return null;
+
+        var expectedFileName = Path.GetFileName(featurePath) + ".cs";
+        try
+        {
+            return Directory.EnumerateFiles(objFolder, expectedFileName, SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static string GetFullTypeName(ClassDeclarationSyntax classDecl)

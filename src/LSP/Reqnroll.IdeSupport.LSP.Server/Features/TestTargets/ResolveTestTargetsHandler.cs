@@ -87,7 +87,9 @@ public sealed class ResolveTestTargetsHandler
             return Task.FromResult(new ResolveTestTargetsResponse());
         }
 
-        var targets = _resolver.Resolve(new Uri(filePath), buffer.Tags, scenarioRange, packageIds);
+        var projectFolder = _scopeManager.ResolvePrimaryOwner(uri)?.ProjectFolder;
+
+        var targets = _resolver.Resolve(new Uri(filePath), buffer.Tags, scenarioRange, packageIds, projectFolder);
 
         _logger.LogVerbose($"ResolveTestTargetsHandler: {targets.Count} target(s) at range {request.Range} in {uri}");
 

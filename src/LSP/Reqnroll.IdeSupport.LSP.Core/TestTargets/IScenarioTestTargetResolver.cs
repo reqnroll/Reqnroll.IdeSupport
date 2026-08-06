@@ -27,10 +27,18 @@ public interface IScenarioTestTargetResolver
     /// project's test framework. An empty collection is treated as "framework unknown" — Tier 1
     /// method/class resolution still works, but row-tests parameterization is not detected.
     /// </param>
+    /// <param name="projectFolder">
+    /// The owning project's directory (the folder containing its <c>.csproj</c>), used to fall back
+    /// to an <c>obj/</c>-relocated code-behind file (Reqnroll 3.3.0+'s
+    /// <c>GenerateFeatureFileCodeBehindInProjectDirectory=false</c> option) when the co-located
+    /// <c>&lt;feature&gt;.feature.cs</c> doesn't exist. May be <see langword="null"/> or empty if the
+    /// owning project couldn't be resolved — the co-located convention is still tried in that case.
+    /// </param>
     /// <returns>Zero or more resolved targets. Never <see langword="null"/>.</returns>
     IReadOnlyList<ScenarioTestTarget> Resolve(
         Uri featureUri,
         IReadOnlyCollection<DeveroomTag> tags,
         GherkinRange scenarioRange,
-        IReadOnlyCollection<string> projectPackageIds);
+        IReadOnlyCollection<string> projectPackageIds,
+        string? projectFolder = null);
 }

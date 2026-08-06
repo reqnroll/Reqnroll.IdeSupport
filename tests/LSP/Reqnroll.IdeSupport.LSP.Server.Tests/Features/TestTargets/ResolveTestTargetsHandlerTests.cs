@@ -1,10 +1,12 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -170,6 +172,47 @@ public class ResolveTestTargetsHandlerTests
             RequestAt(FeatureUri, 1, 0, 1, 11), CancellationToken.None);
 
         result.Targets.Select(t => t.RowIndex).Should().BeEquivalentTo(new int?[] { 0, 1 }, o => o.WithStrictOrdering());
+    }
+
+    // ── Project folder threading (Reqnroll 3.3.0 obj-relocated code-behind) ─────
+
+    [Fact]
+    public async Task Handle_passes_the_primary_owners_project_folder_to_the_resolver_Async()
+    {
+        var projectFolder = Path.Combine(Path.GetTempPath(), "SomeProject");
+        var project = new LspReqnrollProject(
+            new ReqnrollProjectLoadedParams
+            {
+                WorkspaceFolder = projectFolder,
+                ProjectFile = Path.Combine(projectFolder, "SomeProject.csproj"),
+                ProjectFolder = projectFolder,
+                OutputAssemblyPath = Path.Combine(projectFolder, "bin", "SomeProject.dll"),
+                TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
+            },
+            Substitute.For<IIdeScope>());
+        _scopeManager.ResolvePrimaryOwner(FeatureUri).Returns(project);
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string?>())
+            .Returns(Array.Empty<ScenarioTestTarget>());
+
+        await CreateSut().HandleAsync(RequestAt(FeatureUri, 1, 0, 1, 11), CancellationToken.None);
+
+        _resolver.Received(1).Resolve(
+            Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(),
+            Arg.Any<IReadOnlyCollection<string>>(), projectFolder);
+    }
+
+    [Fact]
+    public async Task Handle_passes_a_null_project_folder_when_no_owner_resolves_Async()
+    {
+        _scopeManager.ResolvePrimaryOwner(FeatureUri).Returns((LspReqnrollProject?)null);
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string?>())
+            .Returns(Array.Empty<ScenarioTestTarget>());
+
+        await CreateSut().HandleAsync(RequestAt(FeatureUri, 1, 0, 1, 11), CancellationToken.None);
+
+        _resolver.Received(1).Resolve(
+            Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(),
+            Arg.Any<IReadOnlyCollection<string>>(), (string?)null);
     }
 
     // ── Telemetry ─────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.TestTargets;
 public class ScenarioTestTargetResolverTests : IDisposable
 {
     private readonly List<string> _tempFeaturePaths = new();
+    private readonly List<string> _tempProjectFolders = new();
     private static readonly string[] XUnitPackageIds = { "Reqnroll.xUnit" };
 
     public void Dispose()
@@ -17,6 +18,19 @@ public class ScenarioTestTargetResolverTests : IDisposable
             {
                 if (File.Exists(path + ".cs"))
                     File.Delete(path + ".cs");
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
+
+        foreach (var folder in _tempProjectFolders)
+        {
+            try
+            {
+                if (Directory.Exists(folder))
+                    Directory.Delete(folder, recursive: true);
             }
             catch
             {
@@ -42,6 +56,28 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var featurePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.feature");
         _tempFeaturePaths.Add(featurePath);
         File.WriteAllText(featurePath + ".cs", generatedCsContent);
+        return new Uri(featurePath);
+    }
+
+    /// <summary>
+    /// Mimics Reqnroll 3.3.0's <c>GenerateFeatureFileCodeBehindInProjectDirectory=false</c> option:
+    /// the <c>.feature</c> file sits directly under a fresh temp "project folder", but its
+    /// code-behind lands under that folder's <c>obj/</c> tree (at an arbitrary nested depth, since
+    /// the real layout varies by configuration/TFM) instead of beside it.
+    /// </summary>
+    private Uri WriteGeneratedFixtureInObjFolder(string generatedCsContent, out string projectFolder)
+    {
+        projectFolder = Path.Combine(Path.GetTempPath(), $"proj-{Guid.NewGuid()}");
+        _tempProjectFolders.Add(projectFolder);
+        Directory.CreateDirectory(projectFolder);
+
+        var featurePath = Path.Combine(projectFolder, $"{Guid.NewGuid()}.feature");
+        File.WriteAllText(featurePath, string.Empty);
+
+        var objSubfolder = Path.Combine(projectFolder, "obj", "Debug", "net8.0");
+        Directory.CreateDirectory(objSubfolder);
+        File.WriteAllText(Path.Combine(objSubfolder, Path.GetFileName(featurePath) + ".cs"), generatedCsContent);
+
         return new Uri(featurePath);
     }
 
@@ -295,6 +331,104 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Missing_generated_file_with_a_project_folder_but_no_obj_output_returns_empty_without_throwing()
+    {
+        var tags = ParseTags("Feature: F\nScenario: S\n    Given a step\n");
+        var uri = new Uri(Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.feature"));
+        var projectFolder = Path.Combine(Path.GetTempPath(), $"proj-{Guid.NewGuid()}");
+        _tempProjectFolders.Add(projectFolder);
+        Directory.CreateDirectory(projectFolder);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds, projectFolder);
+
+        result.Should().BeEmpty();
+    }
+
+    // ── Reqnroll 3.3.0 obj-relocated code-behind ────────────────────────────────
+
+    [Fact]
+    public void Plain_scenario_resolves_when_the_code_behind_is_relocated_under_obj()
+    {
+        var text = "Feature: Calculator\nScenario: Add two numbers\n    Given a step\n";
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixtureInObjFolder("""
+            namespace Tests
+            {
+                public class CalculatorFeature
+                {
+                    public void AddTwoNumbers()
+                    {
+                    }
+                }
+            }
+            """, out var projectFolder);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds, projectFolder);
+
+        result.Should().HaveCount(1);
+        result[0].DeclaringTypeFullName.Should().Be("Tests.CalculatorFeature");
+        result[0].MethodName.Should().Be("AddTwoNumbers");
+    }
+
+    [Fact]
+    public void Obj_relocated_code_behind_is_ignored_without_a_project_folder()
+    {
+        // No projectFolder passed => only the co-located convention is tried; the resolver must not
+        // guess at an obj/ location it was never told about.
+        var text = "Feature: Calculator\nScenario: Add two numbers\n    Given a step\n";
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixtureInObjFolder("""
+            namespace Tests
+            {
+                public class CalculatorFeature
+                {
+                    public void AddTwoNumbers()
+                    {
+                    }
+                }
+            }
+            """, out _);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Co_located_code_behind_is_preferred_over_an_obj_relocated_one_when_both_exist()
+    {
+        // Belt-and-braces: if a stale obj/ copy lingers alongside a co-located file (e.g. after
+        // toggling the MSBuild option), the co-located one — the one actually next to the .feature
+        // file being edited — wins.
+        var text = "Feature: Calculator\nScenario: Add two numbers\n    Given a step\n";
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixtureInObjFolder("""
+            namespace Tests
+            {
+                public class CalculatorFeature
+                {
+                    public void StaleMethod() { }
+                }
+            }
+            """, out var projectFolder);
+        File.WriteAllText(uri.LocalPath + ".cs", """
+            namespace Tests
+            {
+                public class CalculatorFeature
+                {
+                    public void AddTwoNumbers() { }
+                }
+            }
+            """);
+        _tempFeaturePaths.Add(uri.LocalPath);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds, projectFolder);
+
+        result.Should().HaveCount(1);
+        result[0].MethodName.Should().Be("AddTwoNumbers");
     }
 
     // ── ReqnrollIdentifierNaming ─────────────────────────────────────────────────
