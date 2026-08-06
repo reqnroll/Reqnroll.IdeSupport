@@ -69,7 +69,15 @@ public sealed class ResolveTestTargetsHandler
             return Task.FromResult(new ResolveTestTargetsResponse());
         }
 
-        var snapshot = buffer.ToGherkinTextSnapshot();
+        // Reuse the same snapshot instance buffer.Tags is already anchored to, rather than
+        // buffer.ToGherkinTextSnapshot() (which allocates a fresh IGherkinTextSnapshot on every
+        // call). GherkinRange.IntersectsWith — used by ScenarioTestTargetResolver.FindScenarioTag
+        // to match this range against each tag's own range — requires both ranges to reference the
+        // *same* snapshot instance and throws otherwise; a freshly-built snapshot never reference-
+        // equals the tags' snapshot even when the content is identical, so every resolution failed
+        // with "Ranges must refer to the same snapshot", silently swallowed by OmniSharp's request
+        // pipeline and surfaced to the client as an empty (0-target) result.
+        var snapshot = buffer.Tags.First().Range.Snapshot;
         var startOffset = snapshot.ToOffset(request.Range.Start.Line, request.Range.Start.Character);
         var endOffset = snapshot.ToOffset(request.Range.End.Line, request.Range.End.Character);
         var scenarioRange = Core.Documents.GherkinRange.FromPoint(snapshot, startOffset, Math.Max(0, endOffset - startOffset));
