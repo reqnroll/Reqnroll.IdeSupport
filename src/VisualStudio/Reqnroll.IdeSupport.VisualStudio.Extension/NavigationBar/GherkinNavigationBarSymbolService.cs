@@ -74,11 +74,7 @@ internal sealed class GherkinNavigationBarSymbolService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}}}}";
-    }
+    private static string BuildParams(string fileUri) => LspParamsBuilder.TextDocumentUri(fileUri);
 
     /// <summary>Pure mapping from a raw <c>reqnroll/documentSymbolHierarchical</c> JSON array to a list of <see cref="GherkinSymbolNode"/>. Separated from transport so it can be unit-tested.</summary>
     internal static IReadOnlyList<GherkinSymbolNode> MapResult(JArray? array)

@@ -72,11 +72,7 @@ internal sealed class StepCodeLensService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}}}}";
-    }
+    private static string BuildParams(string fileUri) => LspParamsBuilder.TextDocumentUri(fileUri);
 
     private static IReadOnlyList<StepLensItem> ParseItems(JArray array)
     {
