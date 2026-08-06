@@ -38,7 +38,9 @@ function withStubbedErrorMessage<T>(fn: () => Promise<T>): Promise<[T, string[]]
     messages.push(msg);
     return Promise.resolve(undefined);
   };
-  (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage = (msg: string) => {
+  (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage = (
+    msg: string,
+  ) => {
     messages.push(msg);
     return Promise.resolve(undefined);
   };
@@ -46,7 +48,8 @@ function withStubbedErrorMessage<T>(fn: () => Promise<T>): Promise<[T, string[]]
     .then((result): [T, string[]] => [result, messages])
     .finally(() => {
       (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = originalError;
-      (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage = originalWarn;
+      (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage =
+        originalWarn;
     });
 }
 
@@ -55,7 +58,9 @@ suite('runTest', () => {
     test('shows an error when no owning project is found', async () => {
       const projectManager = fakeProjectManager([]);
       const resultStore = new TestResultStore();
-      const decorationService = { applyResult: () => undefined } as unknown as ResultDecorationService;
+      const decorationService = {
+        applyResult: () => undefined,
+      } as unknown as ResultDecorationService;
 
       const [, messages] = await withStubbedErrorMessage(() =>
         doRunTest(
@@ -74,7 +79,9 @@ suite('runTest', () => {
       const projectFile = vscode.Uri.parse('file:///workspace/Foo.csproj').fsPath;
       const projectManager = fakeProjectManager([projectFile]);
       const resultStore = new TestResultStore();
-      const decorationService = { applyResult: () => undefined } as unknown as ResultDecorationService;
+      const decorationService = {
+        applyResult: () => undefined,
+      } as unknown as ResultDecorationService;
 
       const [, messages] = await withStubbedErrorMessage(() =>
         doRunTest(
@@ -101,11 +108,15 @@ suite('runTest', () => {
       } as unknown as ResultDecorationService;
 
       const runResult: DotnetTestRunResult = {
-        results: [{ testName: 'AddNumbers', outcome: 'Passed', stdOut: 'Given ok\n-> done: M() (0.0s)' }],
+        results: [
+          { testName: 'AddNumbers', outcome: 'Passed', stdOut: 'Given ok\n-> done: M() (0.0s)' },
+        ],
       };
 
       const args = argsFor('file:///workspace/Foo.feature', [target()]);
-      await doRunTest(projectManager, resultStore, decorationService, args, () => Promise.resolve(runResult));
+      await doRunTest(projectManager, resultStore, decorationService, args, () =>
+        Promise.resolve(runResult),
+      );
 
       const stored = resultStore.get(args.uri, args.range.start.line);
       assert.strictEqual(stored?.outcome, 'passed');
@@ -116,7 +127,9 @@ suite('runTest', () => {
       const projectFile = vscode.Uri.parse('file:///workspace/Foo.csproj').fsPath;
       const projectManager = fakeProjectManager([projectFile]);
       const resultStore = new TestResultStore();
-      const decorationService = { applyResult: () => undefined } as unknown as ResultDecorationService;
+      const decorationService = {
+        applyResult: () => undefined,
+      } as unknown as ResultDecorationService;
 
       const stdOut = [
         'Given a passing step',
@@ -129,7 +142,9 @@ suite('runTest', () => {
       };
 
       const args = argsFor('file:///workspace/Foo.feature', [target()]);
-      await doRunTest(projectManager, resultStore, decorationService, args, () => Promise.resolve(runResult));
+      await doRunTest(projectManager, resultStore, decorationService, args, () =>
+        Promise.resolve(runResult),
+      );
 
       const stored = resultStore.get(args.uri, args.range.start.line);
       assert.strictEqual(stored?.outcome, 'failed');
@@ -140,17 +155,28 @@ suite('runTest', () => {
       const projectFile = vscode.Uri.parse('file:///workspace/Foo.csproj').fsPath;
       const projectManager = fakeProjectManager([projectFile]);
       const resultStore = new TestResultStore();
-      const decorationService = { applyResult: () => undefined } as unknown as ResultDecorationService;
+      const decorationService = {
+        applyResult: () => undefined,
+      } as unknown as ResultDecorationService;
 
       const runResult: DotnetTestRunResult = {
         results: [
           { testName: 'AddNumbers (1)', outcome: 'Passed', stdOut: 'done' },
-          { testName: 'AddNumbers (2)', outcome: 'Failed', stdOut: 'Given x\n-> error: boom (0.0s)' },
+          {
+            testName: 'AddNumbers (2)',
+            outcome: 'Failed',
+            stdOut: 'Given x\n-> error: boom (0.0s)',
+          },
         ],
       };
 
-      const args = argsFor('file:///workspace/Foo.feature', [target(), target({ rowIndex: 1, isParameterized: true })]);
-      await doRunTest(projectManager, resultStore, decorationService, args, () => Promise.resolve(runResult));
+      const args = argsFor('file:///workspace/Foo.feature', [
+        target(),
+        target({ rowIndex: 1, isParameterized: true }),
+      ]);
+      await doRunTest(projectManager, resultStore, decorationService, args, () =>
+        Promise.resolve(runResult),
+      );
 
       assert.strictEqual(resultStore.get(args.uri, args.range.start.line)?.outcome, 'failed');
     });

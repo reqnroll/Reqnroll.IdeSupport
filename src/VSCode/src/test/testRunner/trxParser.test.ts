@@ -77,7 +77,9 @@ suite('trxParser', () => {
     });
 
     test('handles a self-closing UnitTestResult with no Output', () => {
-      const trx = trxWithResults(`<UnitTestResult testId="1" testName="Empty" outcome="NotExecuted" />`);
+      const trx = trxWithResults(
+        `<UnitTestResult testId="1" testName="Empty" outcome="NotExecuted" />`,
+      );
 
       const results = parseTrx(trx);
 
@@ -136,7 +138,15 @@ suite('trxParser', () => {
 
       assert.deepStrictEqual(
         entries.map((e) => e.outcome),
-        ['done', 'error', 'skipped', 'skippedBecauseOfPreviousErrors', 'pending', 'bindingError', 'undefined'],
+        [
+          'done',
+          'error',
+          'skipped',
+          'skippedBecauseOfPreviousErrors',
+          'pending',
+          'bindingError',
+          'undefined',
+        ],
       );
     });
 

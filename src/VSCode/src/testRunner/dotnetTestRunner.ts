@@ -63,7 +63,10 @@ export async function runDotnetTest(
           // overflow) for diagnostics — these were previously silently dropped since the
           // callback ignored its `error` parameter entirely.
           if (error) {
-            console.error(`dotnetTestRunner: dotnet test reported an error for ${projectFile}:`, error.message);
+            console.error(
+              `dotnetTestRunner: dotnet test reported an error for ${projectFile}:`,
+              error.message,
+            );
           }
           resolve(true);
         },

@@ -1,14 +1,20 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
-import { ResolveTestTargetsResponse, ScenarioTestTargetDto } from '../testRunner/scenarioTestTarget';
+import {
+  ResolveTestTargetsResponse,
+  ScenarioTestTargetDto,
+} from '../testRunner/scenarioTestTarget';
 import { TestResultStore } from '../testRunner/testResultStore';
 import { getCodeLensRefreshEvent } from './codeLensRefresh';
 
 /** Arguments passed through the `reqnroll.runTest` command from a lens click — see `runTest.ts`. */
 export interface RunTestCommandArgs {
   readonly uri: string;
-  readonly range: { start: { line: number; character: number }; end: { line: number; character: number } };
+  readonly range: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
   readonly targets: ScenarioTestTargetDto[];
 }
 
@@ -18,7 +24,9 @@ export interface RunTestCommandArgs {
  * nesting depth. Needed because a scenario nested under a `Rule` (kind `Namespace`) only shows up
  * as a grandchild of the top-level array, not a direct child.
  */
-export function collectMethodSymbols(symbols: readonly vscode.DocumentSymbol[]): vscode.DocumentSymbol[] {
+export function collectMethodSymbols(
+  symbols: readonly vscode.DocumentSymbol[],
+): vscode.DocumentSymbol[] {
   const result: vscode.DocumentSymbol[] = [];
   for (const symbol of symbols) {
     if (symbol.kind === vscode.SymbolKind.Method) result.push(symbol);
@@ -41,7 +49,8 @@ export function buildRunLens(
 ): vscode.CodeLens | undefined {
   if (targets.length === 0) return undefined;
 
-  const icon = cachedOutcome === undefined ? '$(play)' : cachedOutcome === 'passed' ? '$(check)' : '$(error)';
+  const icon =
+    cachedOutcome === undefined ? '$(play)' : cachedOutcome === 'passed' ? '$(check)' : '$(error)';
 
   const args: RunTestCommandArgs = {
     uri: documentUri,
@@ -121,7 +130,12 @@ export function registerRunCodeLens(
         }
 
         const cached = resultStore.get(uri, symbol.selectionRange.start.line);
-        const lens = buildRunLens(uri, symbol.selectionRange, response?.targets ?? [], cached?.outcome);
+        const lens = buildRunLens(
+          uri,
+          symbol.selectionRange,
+          response?.targets ?? [],
+          cached?.outcome,
+        );
         if (lens) lenses.push(lens);
       }
 

@@ -6,14 +6,18 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TrxParserTest {
-    private fun trxWithResults(resultsXml: String): String = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <TestRun id="00000000-0000-0000-0000-000000000000" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
-          <Results>
-            $resultsXml
-          </Results>
-        </TestRun>
-    """.trimIndent()
+    // Deliberately not using trimIndent() here: resultsXml is itself the (already-flush-left)
+    // output of another trimIndent() call, so splicing it into an indented outer template and
+    // trimIndent()-ing the result computes a common indentation of zero (from resultsXml's own
+    // lines) and leaves this template's own leading whitespace in place — including before
+    // "<?xml ...?>", which XML parsers reject outright ("Content is not allowed in prolog"). This
+    // template is written flush-left from the start instead, so no indentation stripping is needed.
+    private fun trxWithResults(resultsXml: String): String = """<?xml version="1.0" encoding="UTF-8"?>
+<TestRun id="00000000-0000-0000-0000-000000000000" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Results>
+    $resultsXml
+  </Results>
+</TestRun>"""
 
     @Test
     fun `parses a single passing result`() {

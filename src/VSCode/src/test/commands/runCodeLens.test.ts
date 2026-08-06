@@ -1,7 +1,11 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
-import { buildRunLens, collectMethodSymbols, registerRunCodeLens } from '../../commands/runCodeLens';
+import {
+  buildRunLens,
+  collectMethodSymbols,
+  registerRunCodeLens,
+} from '../../commands/runCodeLens';
 import { TestResultStore } from '../../testRunner/testResultStore';
 import { ScenarioTestTargetDto } from '../../testRunner/scenarioTestTarget';
 
@@ -29,7 +33,11 @@ function target(overrides: Partial<ScenarioTestTargetDto> = {}): ScenarioTestTar
   };
 }
 
-function methodSymbol(name: string, line: number, children: vscode.DocumentSymbol[] = []): vscode.DocumentSymbol {
+function methodSymbol(
+  name: string,
+  line: number,
+  children: vscode.DocumentSymbol[] = [],
+): vscode.DocumentSymbol {
   const range = new vscode.Range(line, 0, line + 1, 0);
   const symbol = new vscode.DocumentSymbol(name, '', vscode.SymbolKind.Method, range, range);
   symbol.children.push(...children);
@@ -44,7 +52,10 @@ function namespaceSymbol(name: string, children: vscode.DocumentSymbol[]): vscod
 }
 
 /** Registers the provider, capturing it the same way `stepCodeLens.test.ts` does. */
-function captureProvider(client: LanguageClient, resultStore: TestResultStore): vscode.CodeLensProvider {
+function captureProvider(
+  client: LanguageClient,
+  resultStore: TestResultStore,
+): vscode.CodeLensProvider {
   const original = vscode.languages.registerCodeLensProvider;
   let captured: vscode.CodeLensProvider | undefined;
   (vscode.languages as unknown as { registerCodeLensProvider: unknown }).registerCodeLensProvider =
