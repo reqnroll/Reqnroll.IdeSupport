@@ -64,6 +64,10 @@ internal sealed class RunTestCodeLensService
             return Array.Empty<RunTestTargetEntry>();
         }
 
+        _logger.LogInformation(
+            "RunTestCodeLensService: resolved output assembly path {OutputAssemblyPath} for {FileUri}.",
+            outputAssemblyPath, fileUri);
+
         var result = new List<RunTestTargetEntry>();
         foreach (var node in scenarioNodes)
         {
@@ -75,6 +79,13 @@ internal sealed class RunTestCodeLensService
 
             foreach (var target in targets)
                 result.Add(new RunTestTargetEntry(node.SelectionRange.Start.Line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName));
+        }
+
+        foreach (var entry in result)
+        {
+            _logger.LogInformation(
+                "RunTestCodeLensService: RunTestTargetEntry line={Line} assembly={OutputAssemblyPath} type={DeclaringTypeFullName} method={MethodName}",
+                entry.Line, entry.OutputAssemblyPath, entry.DeclaringTypeFullName, entry.MethodName);
         }
 
         return result;
@@ -117,8 +128,8 @@ internal sealed class RunTestCodeLensService
 
         try
         {
-            var projectItem = dte.Solution.FindProjectItem(filePath);
-            var project = projectItem?.ContainingProject;
+            var project = TryGetContainingProjectFromActiveDocument(dte, filePath)
+                ?? dte.Solution.FindProjectItem(filePath)?.ContainingProject;
             return project is null ? null : VsUtils.GetOutputAssemblyPath(project);
         }
         catch (Exception ex)
@@ -126,5 +137,29 @@ internal sealed class RunTestCodeLensService
             _logger.LogWarning(ex, "RunTestCodeLensService: failed to resolve the owning project's output assembly path for {FilePath}.", filePath);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Prefers the currently active document's own <see cref="ProjectItem.ContainingProject"/> over
+    /// <c>Solution.FindProjectItem(path)</c>, which returns an arbitrary match when the same physical
+    /// file is linked into more than one project (issue #262 live testing — a <c>.feature</c> file
+    /// linked via <c>&lt;ReqnrollFeatureFile Include="..\Other\Foo.feature"&gt;</c> resolves to
+    /// whichever project DTE enumerates first, not necessarily the one whose tab is actually open,
+    /// sending Run CodeLens to the wrong project's build output). Only used when the active document
+    /// is in fact <paramref name="filePath"/> — falls back to <c>FindProjectItem</c> otherwise (e.g. a
+    /// background/non-focused tab).
+    /// </summary>
+    private static Project? TryGetContainingProjectFromActiveDocument(DTE dte, string filePath)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        var activeDocument = dte.ActiveDocument;
+        if (activeDocument is null)
+            return null;
+
+        if (!string.Equals(activeDocument.FullName, filePath, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return activeDocument.ProjectItem?.ContainingProject;
     }
 }
