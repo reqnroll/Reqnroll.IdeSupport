@@ -110,14 +110,15 @@ internal sealed class FindStepUsagesService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int line0, int char0)
-    {
+    private static string BuildParams(string fileUri, int line0, int char0) =>
         // Same request params shape as textDocument/references (textDocument URI + position).
         // includeDeclaration omitted — reqnroll/findStepUsages ignores it but keep the field
         // for structural parity so any future tracing is recognisable as a references variant.
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}},\"position\":{{\"line\":{line0},\"character\":{char0}}},\"context\":{{\"includeDeclaration\":false}}}}";
-    }
+        new LspParamsBuilder()
+            .AddTextDocument(fileUri)
+            .AddPosition(line0, char0)
+            .AddRaw("context", "{\"includeDeclaration\":false}")
+            .Build();
 
     private static IReadOnlyList<StepUsageLocation> ParseLocations(JArray array)
     {
