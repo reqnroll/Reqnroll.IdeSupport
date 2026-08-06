@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -44,12 +45,12 @@ internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPoint
     /// <inheritdoc />
     /// <remarks>Only checks that the descriptor decodes structurally — whether the line actually has a resolved target is determined in <see cref="RunTestCodeLensDataPoint.GetDataAsync"/> via the callback round-trip.</remarks>
     public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token) =>
-        Task.FromResult(RunElementDescription.TryDecode(descriptor.ElementDescription, out _));
+        Task.FromResult(LineElementDescription.TryDecode(descriptor.ElementDescription, out _));
 
     /// <inheritdoc />
     public Task<IAsyncCodeLensDataPoint> CreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        RunElementDescription.TryDecode(descriptor.ElementDescription, out var line);
+        LineElementDescription.TryDecode(descriptor.ElementDescription, out var line);
 
         var fileUri = TryGetFileUri(descriptor.FilePath) ?? descriptor.FilePath;
 

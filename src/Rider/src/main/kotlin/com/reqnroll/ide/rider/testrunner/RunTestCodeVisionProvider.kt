@@ -2,16 +2,14 @@ package com.reqnroll.ide.rider.testrunner
 
 import com.intellij.codeInsight.codeVision.CodeVisionAnchorKind
 import com.intellij.codeInsight.codeVision.CodeVisionEntry
-import com.intellij.codeInsight.codeVision.CodeVisionHost
 import com.intellij.codeInsight.codeVision.CodeVisionProvider
 import com.intellij.codeInsight.codeVision.CodeVisionRelativeOrdering
 import com.intellij.codeInsight.codeVision.CodeVisionState
-import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
+import com.reqnroll.ide.rider.codevision.EditorLensRefresh
 
 /**
  * "▶ Run" CodeVision lens on each Scenario/Scenario Outline line in `.feature` files (design doc
@@ -37,15 +35,8 @@ class RunTestCodeVisionProvider : CodeVisionProvider<Unit> {
         const val ID = "Reqnroll.RunTestCodeVision"
 
         /** Forces a recompute of this lens for every currently open `.feature` editor in [project] — called after a run completes so the lens picks up the new pass/fail state. */
-        fun refreshOpenFeatureEditors(project: Project) {
-            val codeVisionHost = project.service<CodeVisionHost>()
-            for (editor in EditorFactory.getInstance().allEditors) {
-                if (editor.project != project) continue
-                val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: continue
-                if (!virtualFile.extension.equals("feature", ignoreCase = true)) continue
-                codeVisionHost.invalidateProvider(CodeVisionHost.LensInvalidateSignal(editor, listOf(ID)))
-            }
-        }
+        fun refreshOpenFeatureEditors(project: Project) =
+            EditorLensRefresh.invalidate(project, "feature", listOf(ID))
     }
 
     override val id: String = ID

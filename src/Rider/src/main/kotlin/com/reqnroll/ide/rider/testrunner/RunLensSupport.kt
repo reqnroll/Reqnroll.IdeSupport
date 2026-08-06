@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.io.URLUtil
+import com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
 import org.eclipse.lsp4j.DocumentSymbol
@@ -92,10 +93,9 @@ internal object RunLensSupport {
         targets: List<ScenarioTestTargetItem>,
     ): ClickableTextCodeVisionEntry {
         val title = renderTitle(RunTestResultStore.get(uri, startLine)?.outcome)
-        return ClickableTextCodeVisionEntry(
-            title, providerId, { _, _ -> RunTestRunner.run(project, uri, startLine, targets) },
-            null, title, title, emptyList(),
-        )
+        return StepUsagesCodeVisionProvider.buildEntry(title, providerId) {
+            RunTestRunner.run(project, uri, startLine, targets)
+        }
     }
 
     /** `internal` so it's unit-testable without a platform fixture. */
