@@ -59,13 +59,13 @@ internal sealed class ScenarioTestTargetService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, GherkinSymbolRange range)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return "{\"textDocument\":{\"uri\":" + escapedUri + "}," +
-               "\"range\":{\"start\":{\"line\":" + range.Start.Line + ",\"character\":" + range.Start.Character + "}," +
-               "\"end\":{\"line\":" + range.End.Line + ",\"character\":" + range.End.Character + "}}}";
-    }
+    private static string BuildParams(string fileUri, GherkinSymbolRange range) =>
+        new LspParamsBuilder()
+            .AddTextDocument(fileUri)
+            .AddRaw("range",
+                "{\"start\":{\"line\":" + range.Start.Line + ",\"character\":" + range.Start.Character + "}," +
+                "\"end\":{\"line\":" + range.End.Line + ",\"character\":" + range.End.Character + "}}")
+            .Build();
 
     /// <summary>
     /// Pure mapping from a raw <c>reqnroll/resolveTestTargets</c> JSON result to a list of
