@@ -65,11 +65,7 @@ internal sealed class HookFeatureCodeLensService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}}}}";
-    }
+    private static string BuildParams(string fileUri) => LspParamsBuilder.TextDocumentUri(fileUri);
 
     /// <summary>
     /// Maps the server's <c>CodeLens[]</c> for a <c>.feature</c> file into lens entries. Internal

@@ -78,11 +78,8 @@ internal sealed class GoToMatchingScenariosService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int line0, int char0)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}},\"position\":{{\"line\":{line0},\"character\":{char0}}}}}";
-    }
+    private static string BuildParams(string fileUri, int line0, int char0) =>
+        LspParamsBuilder.TextDocumentPosition(fileUri, line0, char0);
 
     private static IReadOnlyList<MatchingScenarioLocation> ParseScenarios(JArray array)
     {

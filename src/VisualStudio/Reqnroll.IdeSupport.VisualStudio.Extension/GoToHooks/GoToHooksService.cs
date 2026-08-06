@@ -99,12 +99,12 @@ internal sealed class GoToHooksService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        var ownLevelOnlyJson = ownLevelOnly ? "true" : "false";
-        return $"{{\"textDocument\":{{\"uri\":{escapedUri}}},\"position\":{{\"line\":{line0},\"character\":{char0}}},\"ownLevelOnly\":{ownLevelOnlyJson}}}";
-    }
+    private static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly) =>
+        new LspParamsBuilder()
+            .AddTextDocument(fileUri)
+            .AddPosition(line0, char0)
+            .AddBool("ownLevelOnly", ownLevelOnly)
+            .Build();
 
     private static IReadOnlyList<HookLocation> ParseHooks(JArray array)
     {
