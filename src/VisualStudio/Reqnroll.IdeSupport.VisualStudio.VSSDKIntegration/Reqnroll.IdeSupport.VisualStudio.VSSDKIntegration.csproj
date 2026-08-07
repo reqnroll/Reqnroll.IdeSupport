@@ -9,6 +9,14 @@
     <AssemblyName>Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration</AssemblyName>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>
+    <!-- MSB3277 ("conflicts between different versions ... that could not be resolved") is promoted
+         to a build error by build/Directory.Build.props's repo-wide MSBuildTreatWarningsAsErrors.
+         The Microsoft.VisualStudio.TestWindow.Internal reference below is inherently version-mismatched
+         against this project's pinned 17.14.x VS SDK packages (it's resolved from whatever VS version
+         is actually installed via vswhere, e.g. 18.x on a newer machine) — auto-unification already
+         picks the correct (primary, 17.x) reference despite the warning, so demoting just this one
+         code back to a message is safe and scoped to this project only. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +35,32 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.Common\Reqnroll.IdeSupport.Common.csproj" />
   </ItemGroup>
+
+  <!-- Microsoft.VisualStudio.TestWindow.Internal.dll (TestMethodIdentifier, public type — design
+       doc §5) ships inside every VS install with the Test SDK workload but is not published as a
+       NuGet package, so it's referenced by HintPath, resolved via vswhere.exe (the
+       Microsoft-guaranteed stable discovery location) rather than a hardcoded install path — the
+       same technique Microsoft's own VSSDK samples use for out-of-band, VS-shipped assemblies.
+       Private=false: it's provided by VS at runtime, never bundled into the VSIX. -->
+  <Target Name="ResolveVsInstallDir" BeforeTargets="ResolveAssemblyReferences">
+    <PropertyGroup>
+      <VsWhereExe>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer\vswhere.exe</VsWhereExe>
+    </PropertyGroup>
+    <Exec Command="&quot;$(VsWhereExe)&quot; -latest -property installationPath"
+          Condition="Exists('$(VsWhereExe)')"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="VsInstallDir" />
+    </Exec>
+    <Warning Text="vswhere.exe not found or no VS install detected — Microsoft.VisualStudio.TestWindow.Internal reference will be skipped; the Run CodeLens (RunTestCodeLens/) will fail to compile."
+             Condition="'$(VsInstallDir)' == ''" />
+    <ItemGroup Condition="'$(VsInstallDir)' != ''">
+      <Reference Include="Microsoft.VisualStudio.TestWindow.Internal">
+        <HintPath>$(VsInstallDir)\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Microsoft.VisualStudio.TestWindow.Internal.dll</HintPath>
+        <Private>false</Private>
+      </Reference>
+    </ItemGroup>
+  </Target>
 
   <ItemGroup>
     <!-- Instrumentation key for the Application Insights TelemetryClient. Lives here (not in

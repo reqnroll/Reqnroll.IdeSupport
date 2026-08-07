@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
@@ -56,12 +57,12 @@ internal sealed class HookCodeLensDataPointProvider : IAsyncCodeLensDataPointPro
     /// round-trip, which contributes no indicator when the line has no lens of this kind.
     /// </remarks>
     public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token) =>
-        Task.FromResult(HookElementDescription.TryDecode(descriptor.ElementDescription, out _));
+        Task.FromResult(LineElementDescription.TryDecode(descriptor.ElementDescription, out _));
 
     /// <inheritdoc />
     public Task<IAsyncCodeLensDataPoint> CreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        HookElementDescription.TryDecode(descriptor.ElementDescription, out var line);
+        LineElementDescription.TryDecode(descriptor.ElementDescription, out var line);
 
         // descriptor.FilePath is a plain filesystem path; every other bridge call is keyed by the
         // file:// URI the LSP server uses, so convert once here.

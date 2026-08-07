@@ -57,6 +57,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.HookCodeVisionProvider" />
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepHooksCodeVisionProvider" />
 
+    <!-- "▶ Run" lens on each Scenario/Scenario Outline line (design doc §5/§6, issue #262) — same
+         PSI-free CodeVisionProvider mechanism as the hook-match lenses above; see
+         RunTestCodeVisionProvider's doc comment for why RunLineMarkerContributor (the design doc's
+         original recommendation, a PSI-based gutter-icon API) isn't viable for this plugin. -->
+    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.testrunner.RunTestCodeVisionProvider" />
+
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see
          ReqnrollFeatureInlayHintsController's doc comment for why that silently breaks

@@ -81,6 +81,10 @@
       {
         "command": "reqnroll.renameStep",
         "title": "Reqnroll: Rename Step"
+      },
+      {
+        "command": "reqnroll.runTest",
+        "title": "Reqnroll: Run Scenario"
       }
     ],
     "keybindings": [
@@ -153,6 +157,10 @@
         {
           "command": "reqnroll.renameStep",
           "when": "editorLangId == gherkin"
+        },
+        {
+          "command": "reqnroll.runTest",
+          "when": "false"
         }
       ]
     },
