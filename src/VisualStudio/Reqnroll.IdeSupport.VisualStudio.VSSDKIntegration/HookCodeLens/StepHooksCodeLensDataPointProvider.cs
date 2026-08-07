@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
@@ -39,12 +40,12 @@ internal sealed class StepHooksCodeLensDataPointProvider : IAsyncCodeLensDataPoi
     /// descriptor identifies a line, so whether that line carries a step-hooks lens is resolved in
     /// <see cref="HookCodeLensDataPoint.GetDataAsync"/>, not here.</remarks>
     public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token) =>
-        Task.FromResult(HookElementDescription.TryDecode(descriptor.ElementDescription, out _));
+        Task.FromResult(LineElementDescription.TryDecode(descriptor.ElementDescription, out _));
 
     /// <inheritdoc />
     public Task<IAsyncCodeLensDataPoint> CreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        HookElementDescription.TryDecode(descriptor.ElementDescription, out var line);
+        LineElementDescription.TryDecode(descriptor.ElementDescription, out var line);
 
         var fileUri = HookCodeLensDataPointProvider.TryGetFileUri(descriptor.FilePath) ?? descriptor.FilePath;
 

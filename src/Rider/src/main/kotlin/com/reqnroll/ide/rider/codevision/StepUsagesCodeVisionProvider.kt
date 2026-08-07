@@ -2,14 +2,11 @@ package com.reqnroll.ide.rider.codevision
 
 import com.intellij.codeInsight.codeVision.CodeVisionAnchorKind
 import com.intellij.codeInsight.codeVision.CodeVisionEntry
-import com.intellij.codeInsight.codeVision.CodeVisionHost
 import com.intellij.codeInsight.codeVision.CodeVisionProvider
 import com.intellij.codeInsight.codeVision.CodeVisionRelativeOrdering
 import com.intellij.codeInsight.codeVision.CodeVisionState
 import com.intellij.codeInsight.codeVision.ui.model.ClickableTextCodeVisionEntry
-import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
@@ -50,15 +47,8 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
          * usage counts, so the lens silently goes stale (clicking still worked because that reruns
          * `findStepUsages` fresh; only the cached *count* was wrong).
          */
-        fun refreshOpenCsEditors(project: Project) {
-            val codeVisionHost = project.service<CodeVisionHost>()
-            for (editor in EditorFactory.getInstance().allEditors) {
-                if (editor.project != project) continue
-                val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: continue
-                if (!virtualFile.extension.equals("cs", ignoreCase = true)) continue
-                codeVisionHost.invalidateProvider(CodeVisionHost.LensInvalidateSignal(editor, listOf(ID)))
-            }
-        }
+        fun refreshOpenCsEditors(project: Project) =
+            EditorLensRefresh.invalidate(project, "cs", listOf(ID))
 
         /** True if [lens] has a command and its start line actually exists in a [lineCount]-line document. Pure filtering logic, kept separate from live Editor/Document access so it's unit-testable. */
         internal fun isRenderable(lens: CodeLens, lineCount: Int): Boolean =
@@ -67,17 +57,26 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
         /**
          * Builds the CodeVision entry rendered for [command], reporting as [providerId]. `internal`
          * (rather than folded into [computeEntries]) so the exact text/providerId wiring can be
-         * regression-tested without a platform fixture — `ClickableTextCodeVisionEntry`'s
-         * constructor is `(text, providerId, onClick, icon, longPresentation, tooltip,
-         * extraActions)`, confirmed via the JVM parameter-name assertions embedded in its
-         * decompiled bytecode; an earlier version of this code had `text`/`providerId` swapped, so
-         * the lens displayed this provider's id ("Reqnroll.StepUsagesCodeVision") instead of the
-         * actual usage count.
+         * regression-tested without a platform fixture.
          */
         internal fun buildEntry(command: Command, providerId: String, onClick: () -> Unit): ClickableTextCodeVisionEntry =
+            buildEntry(command.title, providerId, onClick)
+
+        /**
+         * Command-free variant of [buildEntry] for lenses with no LSP `Command` to source a title
+         * from — e.g. [com.reqnroll.ide.rider.testrunner.RunLensSupport.buildEntry], whose title is
+         * a cached run outcome rather than server-supplied text (issue #262 follow-up — this used to
+         * duplicate the `ClickableTextCodeVisionEntry` constructor call inline). `ClickableTextCodeVisionEntry`'s
+         * constructor is `(text, providerId, onClick, icon, longPresentation, tooltip,
+         * extraActions)`, confirmed via the JVM parameter-name assertions embedded in its decompiled
+         * bytecode; an earlier version of this code had `text`/`providerId` swapped, so the lens
+         * displayed this provider's id ("Reqnroll.StepUsagesCodeVision") instead of the actual usage
+         * count.
+         */
+        internal fun buildEntry(title: String, providerId: String, onClick: () -> Unit): ClickableTextCodeVisionEntry =
             ClickableTextCodeVisionEntry(
-                command.title, providerId, { _, _ -> onClick() },
-                null, command.title, command.title, emptyList(),
+                title, providerId, { _, _ -> onClick() },
+                null, title, title, emptyList(),
             )
     }
 

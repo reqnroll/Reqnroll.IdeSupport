@@ -145,6 +145,11 @@ export class ProjectManager {
     void this.discoverExistingProjects();
   }
 
+  /** The `.csproj`/`.slnx`/`.sln` files currently known to this manager, keyed by absolute path. */
+  getKnownProjects(): ReadonlySet<string> {
+    return this._knownProjects;
+  }
+
   /** Releases watchers, pending timers, and event subscriptions. */
   dispose(): void {
     this._watcher.dispose();

@@ -41,4 +41,28 @@ class StepUsagesCodeVisionProviderTest {
         assertEquals("3 step usages", entry.text)
         assertEquals("Reqnroll.StepUsagesCodeVision", entry.providerId)
     }
+
+    // Command-free overload (issue #262 follow-up) — used by RunLensSupport.buildEntry, whose
+    // title comes from a cached run outcome rather than an LSP Command. Same wrong-argument-order
+    // risk as the Command-based overload above, since it's the one now doing the actual
+    // ClickableTextCodeVisionEntry construction.
+    @Test
+    fun `buildEntry Command-free overload renders the given title as text, not the provider id`() {
+        val entry = StepUsagesCodeVisionProvider.buildEntry("▶ Run", providerId = "Reqnroll.RunTestCodeVision") {}
+
+        assertEquals("▶ Run", entry.text)
+        assertEquals("Reqnroll.RunTestCodeVision", entry.providerId)
+    }
+
+    @Test
+    fun `buildEntry Command-based overload delegates to the Command-free overload's text and providerId`() {
+        // Both overloads must agree on the (text, providerId) constructor order — this pins that
+        // the Command-based one is a thin wrapper, not a second hand-rolled construction.
+        val command = Command("2 scenarios matched", "reqnroll.goToMatchingScenarios")
+        val viaCommand = StepUsagesCodeVisionProvider.buildEntry(command, providerId = "Reqnroll.StepUsagesCodeVision") {}
+        val viaTitle = StepUsagesCodeVisionProvider.buildEntry(command.title, providerId = "Reqnroll.StepUsagesCodeVision") {}
+
+        assertEquals(viaTitle.text, viaCommand.text)
+        assertEquals(viaTitle.providerId, viaCommand.providerId)
+    }
 }

@@ -16,9 +16,12 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
+using Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
+using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 #pragma warning disable VSEXTPREVIEW_LSP
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension;
@@ -44,6 +47,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly LspServerConnectionService _connectionService;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
+    private ScenarioTestTargetService? _scenarioTestTargetService;
+    private RunTestCodeLensService? _runTestCodeLensService;
 
     /// <summary>Creates the language client, resolving the shared state holders and the already-launching connection service.</summary>
     public ReqnrollLanguageClient(
@@ -147,6 +152,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
             _navigationBarSymbolService              = new GherkinNavigationBarSymbolService(interceptingPipe, _loggerFactory.CreateLogger<GherkinNavigationBarSymbolService>());
             _hookFeatureCodeLensService               = new HookFeatureCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<HookFeatureCodeLensService>());
+            _scenarioTestTargetService                = new ScenarioTestTargetService(interceptingPipe, _loggerFactory.CreateLogger<ScenarioTestTargetService>());
 
             // Set the VSSDK command filter redirect so the keyboard shortcut interception
             // for Edit.CommentSelection/UncommentSelection/ToggleLineComment calls our service.
@@ -187,6 +193,14 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
 
                 var serviceProvider = ServiceProvider.GlobalProvider;
                 _connectionService.TelemetryTransmitter = ResolveMefService<ITelemetryTransmitter>(serviceProvider);
+
+                // Run CodeLens bridge (design doc §5/§6, issue #262) — needs a DTE-resolvable
+                // IServiceProvider for the owning project's output assembly path, so it's
+                // constructed here rather than alongside the other services above.
+                _runTestCodeLensService = new RunTestCodeLensService(
+                    _navigationBarSymbolService, _scenarioTestTargetService, serviceProvider,
+                    _loggerFactory.CreateLogger<RunTestCodeLensService>());
+                RunTestCodeLensRedirect.GetTargetsAsync = _runTestCodeLensService.GetTargetsAsync;
                 _logger.LogInformation(
                     "ReqnrollLanguageClient: ITelemetryTransmitter resolved: {Resolved}",
                     _connectionService.TelemetryTransmitter is not null ? "yes" : "no");
@@ -259,6 +273,9 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _hookFeatureCodeLensService = null;
             HookCodeLensRedirect.GetLensesAsync      = null;
             HookCodeLensRedirect.GetHookDetailsAsync = null;
+            _scenarioTestTargetService = null;
+            _runTestCodeLensService = null;
+            RunTestCodeLensRedirect.GetTargetsAsync = null;
 
             // _connectionService itself is NOT disposed here: it's a DI-owned singleton whose
             // lifetime spans the whole extension session, not just this provider instance.
