@@ -18,6 +18,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
@@ -164,6 +165,10 @@ public static class LanguageServerOptionsExtensions
         options.OnRequest<TextDocumentPositionParams, GoToMatchingScenariosResponse>(
             LspMethodNames.ReqnrollGoToMatchingScenarios,
             (request, ct) => resolver!.Get<GoToMatchingScenariosHandler>().HandleAsync(request, ct));
+
+        options.OnRequest<ResolveTestTargetsParams, ResolveTestTargetsResponse>(
+            LspMethodNames.ReqnrollResolveTestTargets,
+            (request, ct) => resolver!.Get<ResolveTestTargetsHandler>().HandleAsync(request, ct));
 
         // A single manual registration handles textDocument/codeLens for every lens kind:
         // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches,

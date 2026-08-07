@@ -10,4 +10,5 @@ internal static class CodeLensResources
 {
     public const string HookMatchCountProviderName = nameof(HookMatchCountProviderName);
     public const string StepHooksProviderName = nameof(StepHooksProviderName);
+    public const string RunTestProviderName = nameof(RunTestProviderName);
 }

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -118,6 +119,11 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
                 // ITagger<T>.TagsChanged event, not VS.Extensibility's CodeLens.Invalidate(), so it
                 // never provokes a reconnect and needs neither the debounce nor the rate guard.
                 HookCodeLensRedirect.InvalidateAll();
+
+                // Same reasoning as above, for the Run CodeLens on .feature scenario lines (design
+                // doc §5/§6, issue #262) — a rebuilt .feature.cs (new/changed generated methods)
+                // means previously-resolved reqnroll/resolveTestTargets results may be stale.
+                RunTestCodeLensRedirect.InvalidateAll();
             }
             return Task.FromResult(LspInterceptorResult.PassThrough);
         }
