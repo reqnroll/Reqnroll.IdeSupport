@@ -3,7 +3,6 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
@@ -61,12 +60,9 @@ internal sealed class CommentToggleService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int startLine, int endLine)
-    {
-        var escapedUri = Newtonsoft.Json.JsonConvert.ToString(fileUri);
-        return $"{{" +
-               $"\"command\":\"reqnroll.toggleComment\"," +
-               $"\"arguments\":[{escapedUri},{startLine},{endLine}]" +
-               $"}}";
-    }
+    private static string BuildParams(string fileUri, int startLine, int endLine) =>
+        new LspParamsBuilder()
+            .AddString("command", "reqnroll.toggleComment")
+            .AddRaw("arguments", $"[{LspParamsBuilder.EscapeString(fileUri)},{startLine},{endLine}]")
+            .Build();
 }

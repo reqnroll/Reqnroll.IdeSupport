@@ -19,6 +19,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
+using Reqnroll.IdeSupport.LSP.Core.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Configuration;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
@@ -35,6 +36,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -130,6 +132,8 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IProjectBindingRegistryLookup>(sp => sp.GetRequiredService<BindingRegistryProviderRouter>())
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
+            // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).
+            .AddSingleton<IScenarioTestTargetResolver, ScenarioTestTargetResolver>()
             .AddSingleton<IDeveroomTagParser, DeveroomTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch
             // whose binding expressions actually changed (BindingRegistryChangedHandler).
@@ -190,6 +194,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<GoToStepDefinitionsHandler>()
             .AddSingleton<GoToHooksHandler>()
             .AddSingleton<GoToMatchingScenariosHandler>()
+            .AddSingleton<ResolveTestTargetsHandler>()
             .AddSingleton<StepCodeLensHandler>()
             .AddSingleton<HookCodeLensHandler>()
             .AddSingleton<HookMatchCountCodeLensHandler>()

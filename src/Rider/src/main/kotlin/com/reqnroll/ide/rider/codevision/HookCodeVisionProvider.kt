@@ -2,13 +2,10 @@ package com.reqnroll.ide.rider.codevision
 
 import com.intellij.codeInsight.codeVision.CodeVisionAnchorKind
 import com.intellij.codeInsight.codeVision.CodeVisionEntry
-import com.intellij.codeInsight.codeVision.CodeVisionHost
 import com.intellij.codeInsight.codeVision.CodeVisionProvider
 import com.intellij.codeInsight.codeVision.CodeVisionRelativeOrdering
 import com.intellij.codeInsight.codeVision.CodeVisionState
-import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
@@ -39,17 +36,8 @@ class HookCodeVisionProvider : CodeVisionProvider<Unit> {
          * `workspace/codeLens/refresh`, the same way
          * [StepUsagesCodeVisionProvider.refreshOpenCsEditors] does for `.cs` files.
          */
-        fun refreshOpenFeatureEditors(project: Project) {
-            val codeVisionHost = project.service<CodeVisionHost>()
-            for (editor in EditorFactory.getInstance().allEditors) {
-                if (editor.project != project) continue
-                val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: continue
-                if (!virtualFile.extension.equals("feature", ignoreCase = true)) continue
-                codeVisionHost.invalidateProvider(
-                    CodeVisionHost.LensInvalidateSignal(editor, listOf(ID, StepHooksCodeVisionProvider.ID)),
-                )
-            }
-        }
+        fun refreshOpenFeatureEditors(project: Project) =
+            EditorLensRefresh.invalidate(project, "feature", listOf(ID, StepHooksCodeVisionProvider.ID))
     }
 
     override val id: String = ID

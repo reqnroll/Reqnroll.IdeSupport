@@ -66,9 +66,32 @@ There are two tracks, depending on what's already on your machine — pick one:
 ```
 
 If `src/Rider` is open as the VS Code workspace folder, `.vscode/tasks.json` wraps
-`./gradlew runIde` as the default build task (Ctrl+Shift+B / Cmd+Shift+B) — not bound to
-F5, since there's no real debug target VS Code can attach to (Gradle launches its own
-separate JVM/Rider sandbox process).
+`./gradlew runIde` as the default build task (Ctrl+Shift+B / Cmd+Shift+B).
+
+### Debugging from VS Code
+
+Gradle launches the sandbox in its own separate JVM/Rider process, so plain `runIde`
+gives VS Code nothing to attach to. To get a real debug target instead of reasoning from
+logs (see "Logging" below) or a temporary `Thread.sleep`:
+
+1. Run the **`Gradle: runIde (debug)`** task (Terminal → Run Task…, or
+   `Ctrl+Shift+P` → "Tasks: Run Task"). It's the same as the default task but adds
+   Gradle's standard `--debug-jvm` flag, which suspends the sandbox's JVM on debug port
+   5005 until a debugger connects.
+2. Wait for the terminal to print `Listening for transport dt_socket at address: 5005`.
+3. Press **F5** — the **Attach to Rider sandbox** launch configuration
+   (`.vscode/launch.json`, type `java`, request `attach`, port 5005) connects and the
+   suspended sandbox resumes. Set breakpoints in `.kt` source before or after attaching;
+   both work once connected.
+
+Requires a Java debugger extension — `vscjava.vscode-java-debug`, included in the
+devcontainer's `customizations.vscode.extensions` (rebuild the container after pulling
+this change to pick it up); install it manually if you're on the native toolchain track
+and don't already have one.
+
+`vscode-java-debug` + `fwcd.kotlin` isn't an officially supported combination for Kotlin
+specifically (as opposed to Java) breakpoints — if a breakpoint in a `.kt` file doesn't
+bind or hit reliably, fall back to `ReqnrollDebugLogger`'s file logging instead.
 
 ## Bundling the LSP server
 
@@ -159,14 +182,43 @@ at it exactly the way CI does).
    chmod +x src/Rider/downloaded-server/linux-x64/Reqnroll.IdeSupport.LSP.Server
    ```
 4. **Inside the container**, bootstrap the Gradle wrapper once (see "First-time setup"
-   above), then launch the sandbox using the CI-style external build dir, so Gradle
-   never needs `dotnet`:
+   above), then launch the sandbox:
    ```
    cd src/Rider
-   ./gradlew runIde -PlspServerBuildDir=$(pwd)/downloaded-server
+   ./gradlew runIde
    ```
+   `devcontainer.json` sets `ORG_GRADLE_PROJECT_lspServerBuildDir` in `containerEnv`,
+   so Gradle automatically uses the CI-style external build dir above and never needs
+   `dotnet` — no `-P` flag required here.
 5. First run downloads the Rider platform SDK (large, one-time). A sandboxed Rider
    window should eventually appear on the Windows desktop via WSLg.
+
+### Testing against a real host solution (optional)
+
+For manual testing against an actual .NET solution outside this repo (e.g. Reqnroll's
+Quickstart sample) rather than a scratch project under `/workspaces/rider-samples`, bind
+mount it in. The host path is inherently machine-specific, so it isn't a fixed entry in
+the committed `devcontainer.json` — add your own `mounts` line locally instead:
+
+1. Set an environment variable on the **host** (Windows) pointing at the solution's
+   folder, e.g. in PowerShell:
+   ```
+   [Environment]::SetEnvironmentVariable("REQNROLL_HOST_SOLUTION_DIR", "C:\Users\you\source\repos\Quickstart", "User")
+   ```
+   (restart your terminal/VS Code afterward so the new variable is visible)
+2. Add a line to your local (uncommitted) copy of `src/Rider/.devcontainer/devcontainer.json`'s
+   `mounts` array:
+   ```
+   "source=${localEnv:REQNROLL_HOST_SOLUTION_DIR},target=/workspaces/host-solution,type=bind"
+   ```
+3. Rebuild the container. The solution is then reachable at `/workspaces/host-solution`
+   in Rider's Open dialog. Also needs a real .NET SDK inside the container to restore —
+   see "Bundling the LSP server" above; the devcontainer installs one via
+   `dotnet-install.sh` for exactly this reason.
+
+Don't commit the `mounts` line — `${localEnv:...}` resolves to an empty/invalid path (and
+fails the container build) for anyone who hasn't set the variable, so this only belongs
+in your own working copy.
 
 ### What to check
 

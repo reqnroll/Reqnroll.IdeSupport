@@ -8,7 +8,23 @@
   "containerEnv": {
     // WSLg's DISPLAY is typically ":0" — confirm with `echo $DISPLAY`
     // in Step 1 and adjust if yours differs.
-    "DISPLAY": ":0"
+    "DISPLAY": ":0",
+    // Gradle reads ORG_GRADLE_PROJECT_<name> as project property <name>. Set only
+    // here (not in tasks.json, which is shared with the native-toolchain track) so
+    // publishServer skips `dotnet publish` — unavailable in this container — and
+    // uses the pre-published binary instead. Native-toolchain contributors never see
+    // this var, so they keep live server rebuilds on every runIde launch.
+    //
+    // No "src/Rider" prefix here, unlike the CONTRIBUTING.md path written from the repo
+    // root: because this devcontainer.json lives under src/Rider/.devcontainer (there's
+    // no repo-root devcontainer config), the dev-container tooling treats src/Rider
+    // itself as the workspace root, so ${containerWorkspaceFolder} already resolves to
+    // .../src/Rider. A "src/Rider" prefix here doubles that segment and points at a
+    // directory that never exists — confirmed live: prepareSandbox's `ridDir.exists()`
+    // check silently evaluated false, so it never even added a source for the
+    // (correctly, separately published) linux-x64 build, and runIde's LSP server failed
+    // to start with "Reqnroll LSP server not found".
+    "ORG_GRADLE_PROJECT_lspServerBuildDir": "${containerWorkspaceFolder}/downloaded-server"
   },
   "mounts": [
     // Docker Desktop's docker.exe is Windows-native, so bind-mount sources
@@ -27,11 +43,19 @@
     // slipping into a commit by accident. Sits alongside the repo checkout under
     // /workspaces so it's just as easy to reach from Rider's Open dialog.
     "source=reqnroll-rider-samples,target=/workspaces/rider-samples,type=volume"
+    // Optional: a host .NET solution for manual testing against a real project outside
+    // the repo (e.g. Reqnroll's Quickstart sample) — see CONTRIBUTING.md's "Manual
+    // verification" section. Not a fixed entry here since the host path is inherently
+    // machine-specific; add your own line locally (uncommitted) once
+    // REQNROLL_HOST_SOLUTION_DIR is set, e.g.:
+    // ,"source=${localEnv:REQNROLL_HOST_SOLUTION_DIR},target=/workspaces/host-solution,type=bind"
   ],
   "customizations": {
     "vscode": {
       "extensions": [
-        "fwcd.kotlin"
+        "fwcd.kotlin",
+        "redhat.java",
+        "vscjava.vscode-java-debug"
       ]
     }
   }

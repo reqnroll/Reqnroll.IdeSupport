@@ -36,4 +36,7 @@
   <data name="StepHooksProviderName" xml:space="preserve">
     <value>Reqnroll Step Hooks</value>
   </data>
+  <data name="RunTestProviderName" xml:space="preserve">
+    <value>Reqnroll Run Test (Feature)</value>
+  </data>
 </root>

@@ -82,4 +82,13 @@ interface ReqnrollLanguageServer : LanguageServer {
      */
     @JsonNotification("reqnroll/selectRenameTarget")
     fun selectRenameTarget(params: SelectRenameTargetParams)
+
+    /**
+     * Resolves the generated C# test method(s) that the scenario/Scenario Outline/example row at a
+     * `.feature` file range corresponds to (design doc §3/§4, issue #262) — see
+     * ResolveTestTargetsHandler.cs. Used by [com.reqnroll.ide.rider.testrunner.RunLensSupport] to
+     * build the Run CodeVision lens.
+     */
+    @JsonRequest("reqnroll/resolveTestTargets")
+    fun resolveTestTargets(params: ResolveTestTargetsParams): CompletableFuture<ResolveTestTargetsResponse>
 }

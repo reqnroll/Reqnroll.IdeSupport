@@ -57,6 +57,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.HookCodeVisionProvider" />
     <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepHooksCodeVisionProvider" />
 
+    <!-- "▶ Run" lens on each Scenario/Scenario Outline line (design doc §5/§6, issue #262) — same
+         PSI-free CodeVisionProvider mechanism as the hook-match lenses above; see
+         RunTestCodeVisionProvider's doc comment for why RunLineMarkerContributor (the design doc's
+         original recommendation, a PSI-based gutter-icon API) isn't viable for this plugin. -->
+    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.testrunner.RunTestCodeVisionProvider" />
+
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see
          ReqnrollFeatureInlayHintsController's doc comment for why that silently breaks
@@ -100,6 +106,14 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
           class="com.reqnroll.ide.rider.actions.FindUnusedStepDefinitionsAction"
           text="Find Unused Step Definitions"
           description="Scans the workspace for step-definition bindings with no matching steps in any feature file" />
+
+      <!-- Not surfaced via Settings > Editor > Inlay Hints — see
+           ReqnrollFeatureInlayHintsSettings's doc comment for why that page isn't reachable for
+           .feature files. This checkable Tools-menu item is the only on/off switch. -->
+      <action id="Reqnroll.ToggleFeatureInlayHints"
+          class="com.reqnroll.ide.rider.actions.ReqnrollToggleFeatureInlayHintsAction"
+          text="Show Feature Inlay Hints"
+          description="Toggles binding-info inlay hints in .feature file editors" />
 
       <!-- Mirrors VS Code's editor/context "Find Step Usages" entry (when editorLangId ==
            csharp) — the action's own update() restricts visibility to .cs files, so it's safe to
