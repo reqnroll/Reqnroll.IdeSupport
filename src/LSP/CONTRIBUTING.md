@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-- [.NET SDK](https://dotnet.microsoft.com/download) 10.0 or later
+- [.NET SDK](https://dotnet.microsoft.com/download) 10.0 or later (matches the `net10.0`
+  `TargetFramework` used across the solution's `.csproj` files)
 - A `.feature`-file-aware editor is optional for server-only work — the integration specs exercise
   the server directly without any IDE attached (see below)
 

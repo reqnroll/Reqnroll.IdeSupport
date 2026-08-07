@@ -22,16 +22,22 @@ that have no standard-LSP client hook at all.
 
 ## First-time setup
 
-The Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/`) is committed, pinned to
-8.10 — just use `./gradlew` directly, no bootstrap step needed, on either track below.
+The Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/`) is committed and
+Dependabot-managed — see `distributionUrl` in `gradle/wrapper/gradle-wrapper.properties`
+for the exact version currently pinned, rather than trusting a number here, since
+Dependabot bumps it independently of this file. Just use `./gradlew` directly, no
+bootstrap step needed, on either track below.
 
-If the wrapper ever needs regenerating (e.g. bumping the Gradle version), do it from a
-machine/container with a system `gradle` preinstalled for exactly that:
+If the wrapper ever needs regenerating by hand (rare — Dependabot normally does this),
+do it from a machine/container with a system `gradle` preinstalled for exactly that:
 `gradle wrapper --gradle-version <version>`. **Don't** use that system `gradle` for
 anything else — a system Gradle install can be materially ahead of what
-`build.gradle.kts` is written against (e.g. Gradle 9's `Project.exec()` / Kotlin-DSL
-changes broke this script when CI briefly evaluated it under a system Gradle 9.6.1
-instead of the committed wrapper's 8.10).
+`build.gradle.kts` is written against. (Historical incident, 2026-07: Gradle 9's
+`Project.exec()`/Kotlin-DSL changes broke this script when CI briefly evaluated it
+under a system Gradle a full major version ahead of the then-committed wrapper — the
+wrapper has since been bumped past that point by Dependabot, but the lesson about not
+mixing a system `gradle` with the wrapper still holds regardless of which versions are
+current.)
 
 There are two tracks, depending on what's already on your machine — pick one:
 

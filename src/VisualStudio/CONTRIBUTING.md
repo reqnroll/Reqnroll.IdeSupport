@@ -6,7 +6,8 @@
   **VisualStudio.Extensibility** component (VS.Extensibility is the primary API this extension
   uses; VSSDK is a fallback only for capabilities VS.Extensibility doesn't expose yet — see below)
 - [.NET SDK](https://dotnet.microsoft.com/download) 10.0 or later (builds/publishes the LSP server
-  bundled into the VSIX) and the .NET Framework 4.8.1 targeting pack (the extension itself is net481)
+  bundled into the VSIX — matches the `net10.0` `TargetFramework` used across the solution)
+  and the .NET Framework 4.8.1 targeting pack (the extension itself is net481)
 
 ## Repository layout
 

@@ -439,7 +439,7 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 | `editor.formatOnType` | `true` (for `gherkin`) | Enables F12 table auto-formatting as user types |
 | `reqnroll.trace.server` | `off` / `messages` / `verbose` | Controls LSP protocol trace level; `verbose` also writes to a log file |
 | Main dependency | `vscode-languageclient` v10 | Standard VS Code LSP client library |
-| Minimum VS Code | 1.96.0 | First version with full `vscode-languageclient` v10 compatibility |
+| Minimum VS Code | 1.96.0 — intentional pin, don't lower without reverifying | First version with full `vscode-languageclient` v10 compatibility; also enforced by `engines.vscode` in `package.json` |
 
 #### Source components
 
@@ -497,7 +497,9 @@ When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspecto
 - Built with `vsce` (VS Code Extension CLI) and packaged as a `.vsix`
 - The LSP server self-contained binaries for all four RIDs are bundled under `server/<rid>/` inside the `.vsix`
 - CI publishes all four RIDs in parallel (see `.github/workflows/ci.yml`); the `build-vscode-extension` job downloads all four artifacts and then runs `vsce package`
-- Minimum VS Code version: **1.96.0**
+- Minimum VS Code version: see [§6.1's client capabilities table](#61-vs-code) — an
+  intentional pin (`vscode-languageclient` v10 compatibility), not a plain "current
+  version" note; don't restate the number here separately from that table
 
 ### 6.2 Visual Studio
 
