@@ -187,6 +187,33 @@ at it exactly the way CI does).
 5. First run downloads the Rider platform SDK (large, one-time). A sandboxed Rider
    window should eventually appear on the Windows desktop via WSLg.
 
+### Testing against a real host solution (optional)
+
+For manual testing against an actual .NET solution outside this repo (e.g. Reqnroll's
+Quickstart sample) rather than a scratch project under `/workspaces/rider-samples`, bind
+mount it in. The host path is inherently machine-specific, so it isn't a fixed entry in
+the committed `devcontainer.json` — add your own `mounts` line locally instead:
+
+1. Set an environment variable on the **host** (Windows) pointing at the solution's
+   folder, e.g. in PowerShell:
+   ```
+   [Environment]::SetEnvironmentVariable("REQNROLL_HOST_SOLUTION_DIR", "C:\Users\you\source\repos\Quickstart", "User")
+   ```
+   (restart your terminal/VS Code afterward so the new variable is visible)
+2. Add a line to your local (uncommitted) copy of `src/Rider/.devcontainer/devcontainer.json`'s
+   `mounts` array:
+   ```
+   "source=${localEnv:REQNROLL_HOST_SOLUTION_DIR},target=/workspaces/host-solution,type=bind"
+   ```
+3. Rebuild the container. The solution is then reachable at `/workspaces/host-solution`
+   in Rider's Open dialog. Also needs a real .NET SDK inside the container to restore —
+   see "Bundling the LSP server" above; the devcontainer installs one via
+   `dotnet-install.sh` for exactly this reason.
+
+Don't commit the `mounts` line — `${localEnv:...}` resolves to an empty/invalid path (and
+fails the container build) for anyone who hasn't set the variable, so this only belongs
+in your own working copy.
+
 ### What to check
 
 Applies regardless of which track launched the sandbox.
