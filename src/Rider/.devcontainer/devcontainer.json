@@ -32,7 +32,9 @@
     // tree — no risk of `git status` noise, `git clean` wiping test projects, or one
     // slipping into a commit by accident. Sits alongside the repo checkout under
     // /workspaces so it's just as easy to reach from Rider's Open dialog.
-    "source=reqnroll-rider-samples,target=/workspaces/rider-samples,type=volume"
+    "source=reqnroll-rider-samples,target=/workspaces/rider-samples,type=volume",
+    // Host solution for manual testing against a real .NET project outside the repo.
+    "source=C:\\Users\\clrud\\source\\repos\\Quickstart,target=/workspaces/Quickstart,type=bind"
   ],
   "customizations": {
     "vscode": {

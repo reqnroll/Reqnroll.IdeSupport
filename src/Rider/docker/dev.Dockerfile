@@ -40,6 +40,26 @@ RUN curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gra
     && rm /tmp/gradle.zip \
     && ln -s /opt/gradle-${GRADLE_VERSION}/bin/gradle /usr/local/bin/gradle
 
+# .NET SDK — needed so Rider's backend can fully restore/evaluate host .NET solutions
+# opened via a bind mount (e.g. Quickstart projects used for manual plugin testing), not
+# for building this plugin itself. Without it, NuGet restore never runs and Rider's
+# project model silently drops non-Compile items (e.g. .feature None/Content items with
+# a Generator), even though well-known globs like Compile still resolve fine. Installed
+# via Microsoft's dotnet-install.sh (rather than the apt feed) so it isn't tied to
+# whatever Debian/Ubuntu release happens to back the eclipse-temurin base image.
+ARG DOTNET_SDK_VERSION=8.0
+RUN curl -fsSL -o /tmp/dotnet-install.sh https://dot.net/v1/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel ${DOTNET_SDK_VERSION} --install-dir /usr/share/dotnet \
+    && rm /tmp/dotnet-install.sh \
+    && ln -s /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH="${PATH}:/usr/share/dotnet"
+# Skip the first-run telemetry/welcome banner and first-time package cache population,
+# both irrelevant in a throwaway dev container.
+ENV DOTNET_NOLOGO=1
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+
 # /mnt/wslg is bind-mounted in from the host (see devcontainer.json); the
 # X11 socket actually lives at /mnt/wslg/.X11-unix, and this recreates the
 # same /tmp/.X11-unix symlink WSLg itself uses — done here as a plain
