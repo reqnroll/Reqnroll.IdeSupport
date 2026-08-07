@@ -34,9 +34,7 @@ context-menu placement or default keybinding.
 **Tools → Reqnroll → Find Unused Step Definitions**. No editor
 context-menu placement or keybinding.
 
-TODO(media): 📷 screenshot — Rider's results popup, captured separately
-alongside VS/VS Code's.
-**Target:** `find-unused/find-unused-rider.gif`
+![](find-unused/find-unused-rider.gif)
 ```
 
 :::

@@ -59,8 +59,7 @@ is listed first.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 🎬 gif — invoking the quick-fix in Rider.
-**Target:** `defining-steps/defining-steps-rider.gif`
+![](defining-steps/defining-steps-rider.gif)
 ```
 
 :::

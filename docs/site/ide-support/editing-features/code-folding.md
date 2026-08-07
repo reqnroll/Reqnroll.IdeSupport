@@ -22,8 +22,7 @@ C#. Folding regions update automatically as you edit the document.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 📷 screenshot — the same, in Rider.
-**Target:** `code-folding/code-folding-rider.png`
+![](code-folding/code-folding-rider.gif)
 ```
 
 :::

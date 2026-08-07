@@ -52,10 +52,7 @@ Place the cursor in the binding method in a `.cs` file, then either:
 - Right-click → **Find Step Usages**, or
 - **Tools → Reqnroll → Find Step Usages**.
 
-TODO(media): 🎬 gif — Rider's results, captured separately; Rider's find
-usages includes the Feature/Rule name for Rule-nested scenarios and its
-results popup differs visually from VS/VS Code's.
-**Target:** `find-usages/find-usages-rider.gif`
+![](find-usages/find-usages-rider.gif)
 ```
 
 :::

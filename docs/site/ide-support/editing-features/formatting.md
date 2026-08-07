@@ -33,12 +33,7 @@ also be re-aligned by running Format Document. A row missing its trailing
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 🎬 gif — before/after Format Document, and the on-type `|`
-table-column realignment behavior as you type. See the note below on
-what's confirmed to work in Rider — capture once
-[#415](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/415) settles
-the Enter/Tab-trigger question.
-**Target:** `formatting/formatting-rider.gif`
+![](formatting/formatting-rider.gif)
 ```
 
 :::

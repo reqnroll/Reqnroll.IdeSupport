@@ -38,9 +38,7 @@ conveys the static state on its own.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 📷 screenshot — a squiggle under an unmatched step in Rider,
-plus the matching Problems view entry.
-**Target:** `diagnostics/diagnostics-rider-squiggle.png`
+![](diagnostics/diagnostics-rider-squiggle.png)
 
 TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
 matching binding is added. Nice to have; the screenshot above already

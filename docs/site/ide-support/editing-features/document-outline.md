@@ -20,10 +20,7 @@ large feature file without scrolling.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 📷 screenshot — Rider's dedicated Structure View tool window
-showing the same tree. Capture separately from VS Code's — they look
-visually different.
-**Target:** `document-outline/document-outline-rider.png`
+![](document-outline/document-outline-rider.png)
 ```
 
 :::

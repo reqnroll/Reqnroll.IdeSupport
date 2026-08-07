@@ -22,9 +22,7 @@ method in the C# binding class. If more than one binding matches
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 🎬 gif — Rider's jump animation, captured separately; it looks
-different from VS/VS Code's.
-**Target:** `go-to-definition/go-to-definition-rider.gif`
+![](go-to-definition/go-to-definition-rider.gif)
 ```
 
 :::

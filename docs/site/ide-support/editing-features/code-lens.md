@@ -59,10 +59,7 @@ From a feature file, clicking on a 'hook' Code Lens will result in a pop-up with
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 📷 screenshot — the same three lenses as rendered by Rider's
-CodeVision — visibly different presentation from the native CodeLens shown
-in the other two tabs.
-**Target:** `code-lens/code-lens-rider.gif`
+![](code-lens/code-lens-rider.gif)
 ```
 
 :::

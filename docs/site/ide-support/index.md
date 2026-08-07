@@ -40,8 +40,7 @@ VS Code
 
 :::{div} reqnroll-hero-media
 
-TODO(media): 📷 hero screenshot — the same, in Rider.
-**Target:** `index/index-rider.png`
+![](index/index-rider.png)
 :::
 
 Rider

@@ -31,9 +31,7 @@ the full step text on selection.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 🎬 gif — typing a keyword or step, the completion popup
-appearing, and selecting an item.
-**Target:** `completion/completion-rider.gif`
+![](completion/completion-rider.gif)
 ```
 
 :::

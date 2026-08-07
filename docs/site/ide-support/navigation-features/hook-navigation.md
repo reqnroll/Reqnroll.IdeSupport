@@ -46,9 +46,7 @@ Place the cursor in a `.feature` file, then either:
 
 No default keybinding.
 
-TODO(media): 🎬 gif — short jump-to-hook interaction, invoking Go to Hooks
-and selecting a result.
-**Target:** `hook-navigation/hook-navigation-rider.gif`
+![](hook-navigation/hook-navigation-rider.gif)
 ```
 
 :::

@@ -24,10 +24,7 @@ save required. Steps with no matching binding render in a distinct
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 📷 screenshot showing colored Gherkin keywords/steps in
-Rider, with a matched (bound) step and an unmatched step side by side so
-the color difference is visible.
-**Target:** `syntax-highlighting/syntax-highlighting-rider.png`
+![](syntax-highlighting/syntax-highlighting-rider.png)
 ```
 
 :::

@@ -32,8 +32,7 @@ discoverable menu command:
 `Ctrl+/` works directly. Also available via right-click →
 **Comment/Uncomment**, or **Tools → Reqnroll → Comment/Uncomment**.
 
-TODO(media): 🎬 gif (optional, low priority).
-**Target:** `comment-uncomment/comment-uncomment-rider.gif`
+![](comment-uncomment/comment-uncomment-rider.gif)
 ```
 
 :::

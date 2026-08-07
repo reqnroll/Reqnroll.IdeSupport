@@ -41,9 +41,6 @@ right-click → **Reqnroll: Rename Step** or the Command Palette.
 
 **Renaming from the feature file**
 
-TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
-rename (F2), typing a new step text, and watching the C# attribute string
-update to match.
 ![](rename-step/rename-step-vscode-feature.gif)
 
 **Renaming from the binding expression**
@@ -87,17 +84,11 @@ than one candidate attribute.
 
 **Renaming from the feature file**
 
-TODO(media): 🎬 gif — cursor on a step in a `.feature` file, invoking
-rename (Shift+F6), typing a new step text, and watching the C# attribute
-string update to match.
-**Target:** `rename-step/rename-step-rider-feature.gif`
+![](rename-step/rename-step-rider-feature.gif)
 
 **Renaming from the binding expression**
 
-TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
-invoking **Reqnroll: Rename Step**, typing a new expression, and watching
-every matching `.feature` step update.
-**Target:** `rename-step/rename-step-rider-cs.gif`
+![](rename-step/rename-step-rider-cs.gif)
 
 **Renaming an ambiguously bound step**
 
