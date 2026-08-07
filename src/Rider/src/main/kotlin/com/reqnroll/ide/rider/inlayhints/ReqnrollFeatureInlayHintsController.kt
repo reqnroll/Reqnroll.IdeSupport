@@ -140,6 +140,11 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
         private fun refresh(project: Project, editor: Editor, virtualFile: VirtualFile) {
             if (project.isDisposed || editor.isDisposed) return
 
+            if (!ReqnrollFeatureInlayHintsSettings.isEnabled) {
+                clearInlays(editor)
+                return
+            }
+
             // ReqnrollRequestSender.inlayHint uses sendRequestSync, which blocks the calling
             // thread for up to INLAY_HINT_TIMEOUT_MS — refresh() is called from the EDT (both
             // editorCreated and the SWING_THREAD debounce alarm), so the request itself must run
