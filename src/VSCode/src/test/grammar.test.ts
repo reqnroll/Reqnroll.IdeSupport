@@ -360,8 +360,11 @@ suite('gherkin.tmLanguage.json', () => {
       const cellTokens = results[0].tokens.filter((t) =>
         t.scopes.includes('markup.table.cell.gherkin'),
       );
-      assert.strictEqual(cellTokens.length, 2, `Expected exactly 2 cells, got tokens: ` +
-        JSON.stringify(results[0].tokens));
+      assert.strictEqual(
+        cellTokens.length,
+        2,
+        `Expected exactly 2 cells, got tokens: ` + JSON.stringify(results[0].tokens),
+      );
     });
   });
 
