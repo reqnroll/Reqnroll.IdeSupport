@@ -30,7 +30,7 @@
       "patterns": [
         {
           "name": "markup.raw.gherkin",
-          "match": ".+"
+          "match": "(?:(?!\"\"\").)+"
         }
       ]
     },

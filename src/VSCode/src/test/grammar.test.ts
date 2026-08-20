@@ -1,6 +1,8 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as oniguruma from 'vscode-oniguruma';
+import * as vsctm from 'vscode-textmate';
 
 /**
  * Structural tests for the TextMate grammar (gherkin.tmLanguage.json).
@@ -25,15 +27,58 @@ interface Grammar {
 }
 
 let grammar: Grammar;
+let tmGrammar: vsctm.IGrammar;
+
+/**
+ * Tokenizes a full document (line by line, carrying rule state across lines) using the real
+ * TextMate engine, so tests can assert on the actual multi-line tokenizer behavior rather than
+ * just the shape of individual regexes.
+ */
+async function tokenizeLines(lines: string[]): Promise<vsctm.ITokenizeLineResult[]> {
+  let ruleStack = vsctm.INITIAL;
+  const results: vsctm.ITokenizeLineResult[] = [];
+  for (const line of lines) {
+    const result = tmGrammar.tokenizeLine(line, ruleStack);
+    results.push(result);
+    ruleStack = result.ruleStack;
+  }
+  return results;
+}
 
 suite('gherkin.tmLanguage.json', () => {
-  suiteSetup(() => {
-    grammar = JSON.parse(
-      fs.readFileSync(
-        path.resolve(__dirname, '..', '..', 'syntaxes', 'gherkin.tmLanguage.json'),
-        'utf-8',
-      ),
-    ) as Grammar;
+  suiteSetup(async () => {
+    const grammarPath = path.resolve(__dirname, '..', '..', 'syntaxes', 'gherkin.tmLanguage.json');
+    const grammarSource = fs.readFileSync(grammarPath, 'utf-8');
+    grammar = JSON.parse(grammarSource) as Grammar;
+
+    const wasmPath = path.resolve(
+      __dirname,
+      '..',
+      '..',
+      'node_modules',
+      'vscode-oniguruma',
+      'release',
+      'onig.wasm',
+    );
+    const wasmBin = fs.readFileSync(wasmPath).buffer;
+    await oniguruma.loadWASM(wasmBin);
+
+    const registry = new vsctm.Registry({
+      onigLib: Promise.resolve({
+        createOnigScanner: (patterns: string[]) => new oniguruma.OnigScanner(patterns),
+        createOnigString: (s: string) => new oniguruma.OnigString(s),
+      }),
+      loadGrammar: async (scopeName: string) => {
+        if (scopeName === 'text.gherkin.feature') {
+          return vsctm.parseRawGrammar(grammarSource, grammarPath);
+        }
+        return null;
+      },
+    });
+
+    const loaded = await registry.loadGrammar('text.gherkin.feature');
+    assert.ok(loaded, 'Failed to load gherkin.tmLanguage.json into the TextMate registry');
+    tmGrammar = loaded!;
   });
 
   test('should have a top-level patterns array with include references', () => {
@@ -160,6 +205,56 @@ suite('gherkin.tmLanguage.json', () => {
       assert.strictEqual(p().begin, '"""');
       assert.strictEqual(p().end, '"""');
       assert.strictEqual(p().name, 'string.quoted.other.gherkin');
+    });
+
+    // Regression test for #463: syntax highlighting stayed stuck in the doc-string scope after
+    // the closing """, because the doc_strings rule embedded the full text.html.markdown grammar
+    // and one of its own multi-line constructs could swallow the closing delimiter's line before
+    // the outer end pattern was ever re-tested.
+    test('#463: highlighting must return to normal after the closing """', async () => {
+      const lines = [
+        'Scenario: New bay with duplicated name',
+        "  Given a bay called 'Bay1'",
+        "  When I try to create a bay called 'Bay1'",
+        '  Then I will see a create bay error:',
+        '    """',
+        '    This name is already used for another bay',
+        '    """',
+        '',
+        'Scenario: New bay with no name',
+        '  When I try to create a bay with no name',
+        '  Then I will see a create bay error:',
+      ];
+      const results = await tokenizeLines(lines);
+
+      const closingDocStringLineIdx = 6; // '    """'
+      const closingScopes = results[closingDocStringLineIdx].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        closingScopes.some((s) => s.includes('string.quoted.other.gherkin')),
+        'The closing """ line itself should still be scoped as part of the doc string',
+      );
+
+      const nextScenarioLineIdx = 8; // 'Scenario: New bay with no name'
+      const nextScenarioScopes = results[nextScenarioLineIdx].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        !nextScenarioScopes.some((s) => s.includes('string.quoted.other.gherkin')),
+        `Expected highlighting to have exited the doc string after the closing """, but line ` +
+          `${nextScenarioLineIdx} ("${lines[nextScenarioLineIdx]}") is still scoped as ` +
+          `string.quoted.other.gherkin: ${JSON.stringify(nextScenarioScopes)}`,
+      );
+      assert.ok(
+        nextScenarioScopes.some((s) => s.includes('keyword.control.gherkin')),
+        `Expected the "Scenario:" keyword on line ${nextScenarioLineIdx} to be scoped as ` +
+          `keyword.control.gherkin: ${JSON.stringify(nextScenarioScopes)}`,
+      );
+
+      const nextThenLineIdx = 10; // '  Then I will see a create bay error:'
+      const nextThenScopes = results[nextThenLineIdx].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        nextThenScopes.some((s) => s.includes('keyword.control.gherkin.step')),
+        `Expected the "Then" keyword on line ${nextThenLineIdx} to be scoped as ` +
+          `keyword.control.gherkin.step: ${JSON.stringify(nextThenScopes)}`,
+      );
     });
   });
 
