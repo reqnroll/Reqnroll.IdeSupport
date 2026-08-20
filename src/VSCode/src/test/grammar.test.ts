@@ -135,6 +135,20 @@ suite('gherkin.tmLanguage.json', () => {
       const matches = '@smoke @regression @slow'.match(re);
       assert.strictEqual(matches?.length, 3);
     });
+
+    // An @ immediately preceded by a word character is part of a larger token (an email address,
+    // a handle embedded in a word) rather than a Gherkin tag, which always starts at a word
+    // boundary. Without the (?<!\w) guard, "user@example.com" in step text highlighted "@example"
+    // as a tag.
+    test('does not match an @ embedded in an email address', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual("the user's email is user@example.com".match(re), null);
+    });
+
+    test('still matches a tag immediately after other punctuation', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual('(@smoke)'.match(re), ['@smoke']);
+    });
   });
 
   // ── Feature keywords ────────────────────────────────────────────────────
@@ -201,9 +215,9 @@ suite('gherkin.tmLanguage.json', () => {
   suite('doc_strings', () => {
     const p = () => grammar.repository.doc_strings;
 
-    test('should use begin/end for triple-quoted blocks', () => {
-      assert.strictEqual(p().begin, '"""');
-      assert.strictEqual(p().end, '"""');
+    test('should use begin/end for triple-quoted blocks anchored to the start of the line', () => {
+      assert.strictEqual(p().begin, '^\\s*"""');
+      assert.strictEqual(p().end, '^\\s*"""');
       assert.strictEqual(p().name, 'string.quoted.other.gherkin');
     });
 
@@ -256,6 +270,52 @@ suite('gherkin.tmLanguage.json', () => {
           `keyword.control.gherkin.step: ${JSON.stringify(nextThenScopes)}`,
       );
     });
+
+    // A """ appearing mid-line (not alone on its own line, ignoring leading indentation) is not
+    // a valid doc-string delimiter per Gherkin's doc-string syntax, so it must not close the
+    // block. Without the ^\s* anchor on begin/end, this content would end the doc string early.
+    test('a """ that is not alone on its line does not close the doc string', async () => {
+      const lines = [
+        '  Then I will see a create bay error:',
+        '    """',
+        '    The result was """quoted""" inline, not a real delimiter',
+        '    """',
+        'Scenario: New bay with no name',
+      ];
+      const results = await tokenizeLines(lines);
+
+      const midLineIdx = 2;
+      const midLineTokens = results[midLineIdx].tokens;
+      assert.ok(
+        midLineTokens.every((t) => t.scopes.includes('string.quoted.other.gherkin')),
+        `Expected every token on the mid-line to remain inside the doc string, but got: ` +
+          `${JSON.stringify(midLineTokens)}`,
+      );
+
+      const nextScenarioIdx = 4;
+      const nextScenarioScopes = results[nextScenarioIdx].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        nextScenarioScopes.some((s) => s.includes('keyword.control.gherkin')),
+        'Expected the real closing """ (line 3, alone on its line) to have ended the doc ' +
+          'string so the following Scenario: is highlighted normally',
+      );
+    });
+
+    // Documents current, accepted behavior: an unterminated doc string has no closing delimiter
+    // before EOF, so it (and everything after it) stays scoped as a string. This is standard
+    // TextMate behavior for an unterminated begin/end block, not a bug — this test exists so a
+    // future change to that behavior is a deliberate choice, not an accidental regression.
+    test('an unterminated doc string stays open through the rest of the document', async () => {
+      const lines = ['    """', '    never closed', 'Scenario: unreachable as a real keyword'];
+      const results = await tokenizeLines(lines);
+
+      const lastLineScopes = results[2].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        lastLineScopes.some((s) => s.includes('string.quoted.other.gherkin')),
+        `Expected an unterminated doc string to still be open on the last line: ` +
+          `${JSON.stringify(lastLineScopes)}`,
+      );
+    });
   });
 
   // ── Table header separator ──────────────────────────────────────────────
@@ -291,6 +351,18 @@ suite('gherkin.tmLanguage.json', () => {
       const re = new RegExp(p().patterns[0].while);
       assert.ok(re.test('| value1 | value2 |'));
     });
+
+    // Gherkin table cells escape a literal pipe as "\|" so it isn't mistaken for a column
+    // separator. The naive [^|]+ cell pattern didn't know about that escape, so a cell like
+    // "a message with a \| pipe" fractured into two cells at the escaped pipe.
+    test('does not split a cell on an escaped \\| pipe', async () => {
+      const results = await tokenizeLines(['| a message with a \\| pipe | second |']);
+      const cellTokens = results[0].tokens.filter((t) =>
+        t.scopes.includes('markup.table.cell.gherkin'),
+      );
+      assert.strictEqual(cellTokens.length, 2, `Expected exactly 2 cells, got tokens: ` +
+        JSON.stringify(results[0].tokens));
+    });
   });
 
   // ── Strings ─────────────────────────────────────────────────────────────
@@ -314,6 +386,21 @@ suite('gherkin.tmLanguage.json', () => {
       const re = new RegExp(p().match);
       assert.ok(re.test('<name>'));
       assert.ok(re.test('<some-value>'));
+    });
+
+    test('should match a multi-word placeholder name', () => {
+      const re = new RegExp(p().match);
+      assert.ok(re.test('<bay name>'));
+    });
+
+    // [^>]+ was greedy across the whole line: "the count < 5 and total > 10" matched one
+    // placeholder spanning "< 5 and total >". Real placeholder syntax never has whitespace
+    // touching the brackets, so requiring \S immediately inside < and > distinguishes a
+    // placeholder from < / > used as comparison operators (the common case, where they're
+    // surrounded by spaces). Note: this does not catch the rarer spaceless form "a<5 and b>10".
+    test('does not treat comparison operators as one placeholder', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual('the count < 5 and total > 10'.match(re), null);
     });
   });
 
