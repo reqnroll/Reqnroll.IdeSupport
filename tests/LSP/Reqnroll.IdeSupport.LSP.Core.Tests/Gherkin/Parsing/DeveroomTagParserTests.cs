@@ -297,6 +297,60 @@ public class DeveroomTagParserTests
         tags.Any(t => t.Type == DeveroomTagTypes.StepParameter).Should().BeTrue();
     }
 
+    // Compound cases: a real placeholder sharing a line with comparison-operator "<"/">" usage.
+    // These matter more than the isolated case above because a fix that merely happens to work
+    // on a single condition could still misbehave once there's a real placeholder nearby for the
+    // greedy backtracking to latch onto.
+
+    [Fact]
+    public void Real_placeholder_is_found_while_comparison_operators_after_it_are_ignored()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given the <value> is < 5 and > 10\n" +
+                    "  Examples:\n    | value |\n    | 7     |\n";
+        var tags = ParseTags(text);
+        var placeholder = StepTextPlaceholderTags(tags).Should().ContainSingle().Which;
+        ((MatchedScenarioOutlinePlaceholder)placeholder.Data).Name.Should().Be("value");
+    }
+
+    [Fact]
+    public void Real_placeholder_is_found_while_comparison_operators_earlier_in_the_line_are_ignored()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n" +
+                    "  Given the value is < 5 and > 10 and aligned with <placeholder>\n" +
+                    "  Examples:\n    | placeholder |\n    | x           |\n";
+        var tags = ParseTags(text);
+        var placeholder = StepTextPlaceholderTags(tags).Should().ContainSingle().Which;
+        ((MatchedScenarioOutlinePlaceholder)placeholder.Data).Name.Should().Be("placeholder");
+    }
+
+    [Fact]
+    public void Two_real_placeholders_immediately_adjacent_to_comparison_operators_are_both_found()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n" +
+                    "  Given the value is < <highValue> and > <lowValue>\n" +
+                    "  Examples:\n    | highValue | lowValue |\n    | 10        | 1        |\n";
+        var tags = ParseTags(text);
+        var names = StepTextPlaceholderTags(tags)
+            .Select(t => ((MatchedScenarioOutlinePlaceholder)t.Data).Name);
+        names.Should().BeEquivalentTo("highValue", "lowValue");
+    }
+
+    // Documents that the known spaceless-form limitation (see MatchedScenarioOutlinePlaceholder's
+    // regex comment) persists even when a real placeholder is also present on the line — it isn't
+    // masked or fixed by the presence of legitimate placeholder syntax elsewhere. If this ever
+    // starts failing because the false match disappears, that's a welcome improvement; update the
+    // assertion rather than treating it as a regression.
+    [Fact]
+    public void Known_limitation_spaceless_comparison_operators_still_false_match_alongside_a_real_placeholder()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given the <value> is <5 and b>10\n" +
+                    "  Examples:\n    | value |\n    | 7     |\n";
+        var tags = ParseTags(text);
+        var names = StepTextPlaceholderTags(tags)
+            .Select(t => ((MatchedScenarioOutlinePlaceholder)t.Data).Name);
+        names.Should().BeEquivalentTo("value", "5 and b");
+    }
+
     // ── Background ────────────────────────────────────────────────────────────
 
     [Fact]
