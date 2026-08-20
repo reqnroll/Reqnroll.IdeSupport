@@ -274,7 +274,7 @@ suite('gherkin.tmLanguage.json', () => {
     // A """ appearing mid-line (not alone on its own line, ignoring leading indentation) is not
     // a valid doc-string delimiter per Gherkin's doc-string syntax, so it must not close the
     // block. Without the ^\s* anchor on begin/end, this content would end the doc string early.
-    test('a """ that is not alone on its line does not close the doc string', async () => {
+    test('a """ that is not alone on its line does not close the doc string', () => {
       const lines = [
         '  Then I will see a create bay error:',
         '    """',
@@ -282,7 +282,7 @@ suite('gherkin.tmLanguage.json', () => {
         '    """',
         'Scenario: New bay with no name',
       ];
-      const results = await tokenizeLines(lines);
+      const results = tokenizeLines(lines);
 
       const midLineIdx = 2;
       const midLineTokens = results[midLineIdx].tokens;
@@ -305,9 +305,9 @@ suite('gherkin.tmLanguage.json', () => {
     // before EOF, so it (and everything after it) stays scoped as a string. This is standard
     // TextMate behavior for an unterminated begin/end block, not a bug — this test exists so a
     // future change to that behavior is a deliberate choice, not an accidental regression.
-    test('an unterminated doc string stays open through the rest of the document', async () => {
+    test('an unterminated doc string stays open through the rest of the document', () => {
       const lines = ['    """', '    never closed', 'Scenario: unreachable as a real keyword'];
-      const results = await tokenizeLines(lines);
+      const results = tokenizeLines(lines);
 
       const lastLineScopes = results[2].tokens.map((t) => t.scopes).flat();
       assert.ok(
@@ -355,8 +355,8 @@ suite('gherkin.tmLanguage.json', () => {
     // Gherkin table cells escape a literal pipe as "\|" so it isn't mistaken for a column
     // separator. The naive [^|]+ cell pattern didn't know about that escape, so a cell like
     // "a message with a \| pipe" fractured into two cells at the escaped pipe.
-    test('does not split a cell on an escaped \\| pipe', async () => {
-      const results = await tokenizeLines(['| a message with a \\| pipe | second |']);
+    test('does not split a cell on an escaped \\| pipe', () => {
+      const results = tokenizeLines(['| a message with a \\| pipe | second |']);
       const cellTokens = results[0].tokens.filter((t) =>
         t.scopes.includes('markup.table.cell.gherkin'),
       );
