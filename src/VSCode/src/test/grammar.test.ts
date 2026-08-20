@@ -34,7 +34,7 @@ let tmGrammar: vsctm.IGrammar;
  * TextMate engine, so tests can assert on the actual multi-line tokenizer behavior rather than
  * just the shape of individual regexes.
  */
-async function tokenizeLines(lines: string[]): Promise<vsctm.ITokenizeLineResult[]> {
+function tokenizeLines(lines: string[]): vsctm.ITokenizeLineResult[] {
   let ruleStack = vsctm.INITIAL;
   const results: vsctm.ITokenizeLineResult[] = [];
   for (const line of lines) {
@@ -68,12 +68,10 @@ suite('gherkin.tmLanguage.json', () => {
         createOnigScanner: (patterns: string[]) => new oniguruma.OnigScanner(patterns),
         createOnigString: (s: string) => new oniguruma.OnigString(s),
       }),
-      loadGrammar: async (scopeName: string) => {
-        if (scopeName === 'text.gherkin.feature') {
-          return vsctm.parseRawGrammar(grammarSource, grammarPath);
-        }
-        return null;
-      },
+      loadGrammar: (scopeName: string) =>
+        Promise.resolve(
+          scopeName === 'text.gherkin.feature' ? vsctm.parseRawGrammar(grammarSource, grammarPath) : null,
+        ),
     });
 
     const loaded = await registry.loadGrammar('text.gherkin.feature');
@@ -211,7 +209,7 @@ suite('gherkin.tmLanguage.json', () => {
     // the closing """, because the doc_strings rule embedded the full text.html.markdown grammar
     // and one of its own multi-line constructs could swallow the closing delimiter's line before
     // the outer end pattern was ever re-tested.
-    test('#463: highlighting must return to normal after the closing """', async () => {
+    test('#463: highlighting must return to normal after the closing """', () => {
       const lines = [
         'Scenario: New bay with duplicated name',
         "  Given a bay called 'Bay1'",
@@ -225,7 +223,7 @@ suite('gherkin.tmLanguage.json', () => {
         '  When I try to create a bay with no name',
         '  Then I will see a create bay error:',
       ];
-      const results = await tokenizeLines(lines);
+      const results = tokenizeLines(lines);
 
       const closingDocStringLineIdx = 6; // '    """'
       const closingScopes = results[closingDocStringLineIdx].tokens.map((t) => t.scopes).flat();
