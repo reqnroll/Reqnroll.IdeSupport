@@ -405,6 +405,41 @@ suite('gherkin.tmLanguage.json', () => {
       const re = new RegExp(p().match, 'g');
       assert.deepStrictEqual('the count < 5 and total > 10'.match(re), null);
     });
+
+    // Compound cases: a real placeholder sharing a line with comparison-operator "<"/">" usage.
+    // These matter more than the isolated case above because a fix that merely happens to work
+    // on a single condition could still misbehave once there's a real placeholder nearby for the
+    // greedy backtracking to latch onto.
+
+    test('finds a real placeholder while ignoring comparison operators before it', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual('the <value> is < 5 and > 10'.match(re), ['<value>']);
+    });
+
+    test('finds a real placeholder while ignoring comparison operators earlier in the line', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual('the value is < 5 and > 10 and aligned with <placeholder>'.match(re), [
+        '<placeholder>',
+      ]);
+    });
+
+    test('finds two real placeholders immediately adjacent to comparison operators', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual('the value is < <highValue> and > <lowValue>'.match(re), [
+        '<highValue>',
+        '<lowValue>',
+      ]);
+    });
+
+    // Documents that the known spaceless-form limitation (see the comment above) persists even
+    // when a real placeholder is also present on the line — it isn't masked or fixed by the
+    // presence of legitimate placeholder syntax elsewhere. If this ever starts failing because
+    // the false match disappears, that's a welcome improvement; update the assertion rather than
+    // treating it as a regression.
+    test('known limitation: spaceless comparison operators still false-match alongside a real placeholder', () => {
+      const re = new RegExp(p().match, 'g');
+      assert.deepStrictEqual('the <value> is <5 and b>10'.match(re), ['<value>', '<5 and b>']);
+    });
   });
 
   // ── Numeric literals ────────────────────────────────────────────────────
