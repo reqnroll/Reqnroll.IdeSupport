@@ -46,6 +46,15 @@ public class DeveroomTagParserTests
     private static DeveroomTag Single(IReadOnlyCollection<DeveroomTag> tags, string type) =>
         tags.Single(t => t.Type == type);
 
+    // ScenarioOutlinePlaceholder tags come from two independent sources: TagRowCells tags every
+    // Examples header cell with this type (Data is a Gherkin.Ast.TableCell), and AddPlaceholderTags
+    // tags each <placeholder> found within a step's own text (Data is a
+    // MatchedScenarioOutlinePlaceholder). Tests about step-text placeholder detection need to
+    // filter to the latter, not just the tag type, or they'll also match unrelated header cells.
+    private static IEnumerable<DeveroomTag> StepTextPlaceholderTags(IReadOnlyCollection<DeveroomTag> tags) =>
+        OfType(tags, DeveroomTagTypes.ScenarioOutlinePlaceholder)
+            .Where(t => t.Data is MatchedScenarioOutlinePlaceholder);
+
     // ── empty file ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -247,6 +256,45 @@ public class DeveroomTagParserTests
         var text = "Feature: F\nScenario Outline: SO\n  Given <p>\n  Examples:\n    | p |\n    | x |\n";
         var tags = ParseTags(text);
         tags.Any(t => t.Type == DeveroomTagTypes.ExamplesBlock).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ScenarioOutline_multi_word_placeholder_produces_single_tag()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given a bay called <bay name>\n" +
+                    "  Examples:\n    | bay name |\n    | Bay1     |\n";
+        var tags = ParseTags(text);
+        var placeholderTag = StepTextPlaceholderTags(tags).Should().ContainSingle().Which;
+        ((MatchedScenarioOutlinePlaceholder)placeholderTag.Data).Name.Should().Be("bay name");
+    }
+
+    // Regression tests: "<"/">" used as comparison operators (not real placeholder syntax) used
+    // to be misread as a placeholder because the matching regex greedily spanned from the first
+    // "<" to the next ">" regardless of what was between them, and — worse — their mere presence
+    // silently suppressed StepParameter tags for the whole step via a naive
+    // step.Text.Contains("<") heuristic, even when there was no real placeholder to conflict with.
+    [Fact]
+    public void Comparison_operators_in_a_ScenarioOutline_step_do_not_produce_a_placeholder_tag()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given the count < 5 and total > 10 items\n" +
+                    "  Examples:\n    | unused |\n    | x      |\n";
+        var tags = ParseTags(text);
+        StepTextPlaceholderTags(tags).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Comparison_operators_in_a_ScenarioOutline_step_do_not_suppress_StepParameter_tags()
+    {
+        var binding = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
+            new Regex(@"^the count < (\d+) and total > (\d+) items$"), null,
+            new ProjectBindingImplementation("CountCheck", new[] { "System.Int32", "System.Int32" },
+                new SourceLocation("Steps.cs", 3, 1)));
+        var registry = RegistryWith(binding);
+
+        var text = "Feature: F\nScenario Outline: SO\n  Given the count < 5 and total > 10 items\n" +
+                    "  Examples:\n    | unused |\n    | x      |\n";
+        var tags = ParseTags(text, registry);
+        tags.Any(t => t.Type == DeveroomTagTypes.StepParameter).Should().BeTrue();
     }
 
     // ── Background ────────────────────────────────────────────────────────────
