@@ -70,7 +70,9 @@ suite('gherkin.tmLanguage.json', () => {
       }),
       loadGrammar: (scopeName: string) =>
         Promise.resolve(
-          scopeName === 'text.gherkin.feature' ? vsctm.parseRawGrammar(grammarSource, grammarPath) : null,
+          scopeName === 'text.gherkin.feature'
+            ? vsctm.parseRawGrammar(grammarSource, grammarPath)
+            : null,
         ),
     });
 
