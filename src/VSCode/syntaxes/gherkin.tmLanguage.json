@@ -24,8 +24,8 @@
       ]
     },
     "doc_strings": {
-      "begin": "\"\"\"",
-      "end": "\"\"\"",
+      "begin": "^\\s*\"\"\"",
+      "end": "^\\s*\"\"\"",
       "name": "string.quoted.other.gherkin",
       "patterns": [
         {
@@ -38,7 +38,7 @@
       "patterns": [
         {
           "name": "entity.name.tag.gherkin",
-          "match": "@\\w+(?:[\\w-]*\\w)?"
+          "match": "(?<!\\w)@\\w+(?:[\\w-]*\\w)?"
         }
       ]
     },
@@ -82,7 +82,7 @@
           "patterns": [
             {
               "name": "markup.table.cell.gherkin",
-              "match": "[^|]+"
+              "match": "(?:\\\\\\||[^|])+"
             },
             {
               "name": "punctuation.definition.table.gherkin",
@@ -106,7 +106,7 @@
       "patterns": [
         {
           "name": "variable.parameter.gherkin",
-          "match": "<([^>]+)>"
+          "match": "<(\\S(?:[\\w -]*\\S)?)>"
         }
       ]
     },
