@@ -106,6 +106,20 @@ public class GherkinDocumentSymbolServiceTests
         result[0].Children.Select(c => c.Name).Should().BeEquivalentTo(new[] { "S1", "S2" });
     }
 
+    // Regression test: an untitled "Scenario:" (no text after the colon) is valid Gherkin and is
+    // also the transient state of a Scenario line while it's being typed. The Gherkin parser gives
+    // it Name = "" (not null), which used to flow straight through to the LSP response, violating
+    // the protocol's requirement that DocumentSymbol.name be non-empty — vscode-languageclient
+    // rejects the whole response client-side ("name must not be falsy"), blanking the entire
+    // Outline view rather than just this one symbol.
+    [Fact]
+    public void Untitled_scenario_symbol_name_falls_back_to_keyword()
+    {
+        var tags = ParseTags("Feature: F\nScenario:\n    Given a step\n");
+        var result = CreateSut().BuildSymbols(tags);
+        result[0].Children[0].Name.Should().Be("Scenario");
+    }
+
     // ── Background ───────────────────────────────────────────────────────────
 
     [Fact]
@@ -220,6 +234,17 @@ public class GherkinDocumentSymbolServiceTests
         var tags = ParseTags(text);
         var result = CreateSut().BuildSymbols(tags);
         result[0].Children[0].Name.Should().Be("Calculator outline");
+    }
+
+    // Regression test: same class of bug as Untitled_scenario_symbol_name_falls_back_to_keyword,
+    // for an untitled "Scenario Outline:".
+    [Fact]
+    public void Untitled_ScenarioOutline_symbol_name_falls_back_to_keyword()
+    {
+        var text = "Feature: F\nScenario Outline:\n    Given the number is <n>\n    Examples:\n        | n |\n        | 1 |\n";
+        var tags = ParseTags(text);
+        var result = CreateSut().BuildSymbols(tags);
+        result[0].Children[0].Name.Should().Be("Scenario Outline");
     }
 
     // ── Examples ─────────────────────────────────────────────────────────────
