@@ -28,7 +28,10 @@
       "end": "\"\"\"",
       "name": "string.quoted.other.gherkin",
       "patterns": [
-        { "include": "text.html.markdown" }
+        {
+          "name": "markup.raw.gherkin",
+          "match": "(?:(?!\"\"\").)+"
+        }
       ]
     },
     "tags": {

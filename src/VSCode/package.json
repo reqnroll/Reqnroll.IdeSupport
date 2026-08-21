@@ -169,7 +169,11 @@
       "properties": {
         "reqnroll.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Traces the communication between VS Code and the Reqnroll LSP server, and also controls the server's own log verbosity ('off' -> Warning, 'messages' -> Info, 'verbose' -> Verbose). When set to 'verbose', a log file is also written to the Reqnroll log directory. Requires a window reload to take effect on the running server."
         }
@@ -250,7 +254,9 @@
     "mocha": "^11.8.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.67.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   },
   "repository": {
     "type": "git",
