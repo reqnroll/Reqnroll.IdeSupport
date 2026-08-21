@@ -70,8 +70,8 @@ public class GherkinDocumentSymbolService : IGherkinDocumentSymbolService
         var (name, kind) = stepsContainer switch
         {
             Background bg         => (NameOrKeyword(bg.Name, bg.Keyword), GherkinSymbolKind.Background),
-            ScenarioOutline so    => (so.Name, GherkinSymbolKind.ScenarioOutline),
-            Scenario sc           => (sc.Name, GherkinSymbolKind.Scenario),
+            ScenarioOutline so    => (NameOrKeyword(so.Name, so.Keyword), GherkinSymbolKind.ScenarioOutline),
+            Scenario sc           => (NameOrKeyword(sc.Name, sc.Keyword), GherkinSymbolKind.Scenario),
             _                     => (stepsContainer.GetType().Name, GherkinSymbolKind.Scenario),
         };
 
