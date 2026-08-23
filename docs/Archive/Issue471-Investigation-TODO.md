@@ -105,12 +105,52 @@ requests' own payload computation is not the likely culprit.
       binding location" is needed to explain the symptom — the fix is still to index
       `FindUsages`, but the mental model changes from "runaway quadratic growth" to
       "linear cost that's simply large enough, times poor dispatch behavior."
-- [ ] 4. Re-run the manual VS repro (`Reqnroll.VeryLargeFeature`) with the new
+- [x] 4. Re-run the manual VS repro (`Reqnroll.VeryLargeFeature`) with the new
       instrumentation from #2, capture `reqnroll-vs-server-debug-*.log`, and correlate
       climbing duration against cache/registry size growth.
-- [ ] 5. Cross-check VS-side request volume via protocol-log-level trace: confirm what
+      **DONE** — Chris ran the F5/DEBUG experimental instance 2026-08-23 ~15:21-15:23,
+      captured `reqnroll-vs-server-debug-20260823-32140.log` (120 PERF lines) +
+      `reqnroll-vs-inspector-20260823-152122.log`. Findings:
+      - `cacheDocs=1 cacheSteps=6238` — a single `.feature` file (`DuisSedSemAmet.feature`)
+        holds 6,238 cached steps; this is the "large .feature file" the issue described.
+      - 10 consecutive `textDocument/codeLens` calls on the large step-definitions file
+        (`FaucibusDictumSagittisCursusSteps.cs`), all at the same `cacheDocs=1
+        cacheSteps=6238`, cost a **stable ~1.22-1.29s each** — no climbing across
+        repeated calls at fixed cache size, confirming item #3's "linear in the
+        product, not runaway growth" model with real data. Back-calculating through
+        that model (~0.00043ms per binding×step pair) implies ~460 bindings in the file.
+      - Direct thread-sharing evidence: `internal/bindingRegistryReconcile`
+        (10,050.2ms, scannedFiles=0 reparsedFiles=1), `textDocument/didOpen`
+        (10,128.0ms), and the `reqnroll/semanticTokens` push (7,470.8ms) — three
+        independently-measured operations — all completed within ~2ms of each other,
+        all on `thread=20`. Signature of several operations queued behind one shared
+        execution lane and released together.
+      - New finding, not previously flagged: `reqnroll/resolveTestTargets` fired 51
+        times in ~8 seconds (~150-220ms each) for the single open feature file — under
+        serial dispatch that's ~7.65 continuous seconds of server time the original
+        issue report didn't call out.
+- [x] 5. Cross-check VS-side request volume via protocol-log-level trace: confirm what
       VS actually re-requests per refresh broadcast (all open tabs vs. visible one) —
       currently unverified from the client side.
+      **DONE (core question answered; one sub-question left open)** — used the
+      always-on client-side `reqnroll-vs-inspector-*.log` (not `--protocol-log-level`,
+      which is server-side/OmniSharp-internal and not what's needed here) from the same
+      session as #4. Cross-referencing it against the server PERF log for the first
+      `workspace/inlayHint/refresh`:
+      - Server sent the refresh request at 15:22:45.006.
+      - VS received it and sent its ack back at 15:22:59.229 (14.2s later — VS's own
+        re-pull: it fired `textDocument/foldingRange`, `textDocument/inlayHint`, and
+        `textDocument/semanticTokens/range` in that window).
+      - The server's own `await SendRequest(...).ReturningVoid()` didn't complete until
+        15:23:20.165 — **~21 seconds after VS's ack had already been sent**.
+      That 21s gap is an already-received response frame sitting unprocessed because the
+      server's dispatch loop was busy with other queued work — this is now the clearest
+      possible proof that the bottleneck is server-side serial dispatch, not VS being
+      slow to respond, straight from the production timeline (stronger than the
+      synthetic concurrency probe, since it needs no inference about concurrent load).
+      **Left open**: only one `.feature` and one `.cs` file were open in this repro, so
+      the original "all open tabs vs. just visible" sub-question is unanswered — would
+      need a repro with multiple tabs open. Not needed to confirm the main hypothesis.
 - [ ] 6. Write up findings as a comment on issue #471 (root cause + evidence), then scope
       the actual fix as follow-up issue(s)/PR(s) — do not fix inline as part of this
       investigation unless trivial and clearly in-scope.
