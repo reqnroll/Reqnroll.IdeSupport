@@ -75,11 +75,36 @@ requests' own payload computation is not the likely culprit.
         Full `LSP.Server.Tests` (774) and `LSP.Core.Tests` (618, 1 pre-existing skip) both
         green after the change, including all existing `BindingRegistryChangedHandlerTests`
         (unaffected by the return-type change).
-- [ ] 3. Add a benchmark scenario to
+- [x] 3. Add a benchmark scenario to
       `tests/Performance/Reqnroll.IdeSupport.LSP.Server.Benchmarks*` that grows the
       match-set cache to a few thousand steps and calls `StepCodeLensHandler`/
       `FindUsages` directly — fast, CI-runnable duration-vs-cache-size curve to confirm
       or kill hypothesis #1 quantitatively, without needing a full VS session.
+      **DONE** — `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Performance/FindUsagesScalingProbeTests.cs`,
+      two tests:
+      - `CodeLens_latency_vs_cached_step_count`: holds bindings-in-file fixed (64,
+        CorpusSteps.cs), varies workspace cache size 2→50 corpus features (~54→1350
+        steps). Result: 12.5ms → 44.3ms (only ~3.5x for a 25x step-count increase);
+        per-feature cost *decreases* (6.25 → 0.89 ms/feature). **Cache size alone is
+        sub-linear at this scale, not O(n²).**
+      - `CodeLens_latency_vs_bindings_in_file`: holds cache fixed at the corpus's full
+        1,350 steps, varies bindings-in-file: 64 (CorpusSteps.cs, 37.2ms) vs. 1,000
+        (synthetic generated file, 533.2ms). Binding-count ratio 15.6x → latency ratio
+        14.3x (~0.53-0.58 ms/binding, roughly constant). **Bindings-in-file scales
+        linearly.**
+      **Revised conclusion**: `FindUsages`/`StepCodeLensHandler` cost is linear in
+      *each* axis (bindingsInFile, cachedSteps) individually — not O(n²) in either
+      alone. But cost is the *product* of both, and at real-world scale (the issue's
+      ~1,300-method file) that product gets large: the 1,000-binding synthetic test
+      alone already cost 533ms for a *single* `textDocument/codeLens` call at only
+      1,350 cached steps — the issue's "large .feature file" is plausibly much bigger.
+      Combined with item #1's confirmed serial dispatch and VS's ~1/sec CodeLens
+      polling, this is enough to fully explain the reported tens-of-seconds numbers
+      without needing an O(n²) bug: linear-but-large per-call cost, multiplied by
+      several such calls queueing serially. No indexing bug *beyond* "no index by
+      binding location" is needed to explain the symptom — the fix is still to index
+      `FindUsages`, but the mental model changes from "runaway quadratic growth" to
+      "linear cost that's simply large enough, times poor dispatch behavior."
 - [ ] 4. Re-run the manual VS repro (`Reqnroll.VeryLargeFeature`) with the new
       instrumentation from #2, capture `reqnroll-vs-server-debug-*.log`, and correlate
       climbing duration against cache/registry size growth.
