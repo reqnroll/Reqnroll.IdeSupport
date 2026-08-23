@@ -1,6 +1,7 @@
 ﻿#nullable enable
 
 using System.Collections.Concurrent;
+using System.Linq;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -105,6 +106,15 @@ public sealed class BindingMatchService : IBindingMatchService
 
             yield return pair.Value;
         }
+    }
+
+    /// <inheritdoc />
+    public (int DocumentCount, int TotalStepCount) GetCacheStats()
+    {
+        // Snapshot the values once rather than enumerating _cache twice (Count + Sum), so this
+        // stays a single O(cached documents) pass under concurrent Store/Invalidate calls.
+        var snapshot = _cache.Values.ToArray();
+        return (snapshot.Length, snapshot.Sum(s => s.Steps.Count));
     }
 
     private static bool MatchesFilter(ProjectOwner owner, IReadOnlyCollection<ProjectOwner> filter)

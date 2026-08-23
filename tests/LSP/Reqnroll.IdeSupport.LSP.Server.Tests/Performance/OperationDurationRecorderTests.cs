@@ -153,6 +153,42 @@ public class OperationDurationRecorderTests
         act.Should().NotThrow();
     }
 
+    [Fact]
+    public void Record_includes_detail_in_log_line_when_provided()
+    {
+        var logger = new CapturingLogger();
+        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+
+        sut.Record("internal/bindingRegistryReconcile", 10, detail: "scannedFiles=3 reparsedFiles=2");
+
+        logger.Messages.Single().Should().Contain("scannedFiles=3 reparsedFiles=2");
+    }
+
+    [Fact]
+    public void Record_includes_the_current_managed_thread_id_in_every_log_line()
+    {
+        var logger = new CapturingLogger();
+        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+
+        sut.Record("textDocument/foldingRange", 1);
+
+        logger.Messages.Single().Should().Contain($"thread={Environment.CurrentManagedThreadId}");
+    }
+
+    [Fact]
+    public void Measure_carries_detail_through_to_the_recorded_line_on_dispose()
+    {
+        var logger = new CapturingLogger();
+        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+
+        using (sut.Measure("textDocument/codeLens", detail: "cacheDocs=50 cacheSteps=1350"))
+        {
+            // no work
+        }
+
+        logger.Messages.Single().Should().Contain("cacheDocs=50 cacheSteps=1350");
+    }
+
     [Theory]
     [InlineData(5, "<=10")]
     [InlineData(40, "<=50")]

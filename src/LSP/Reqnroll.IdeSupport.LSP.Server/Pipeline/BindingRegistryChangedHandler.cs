@@ -1,4 +1,5 @@
-﻿using MediatR;
+﻿using System.Diagnostics;
+using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common;
@@ -88,53 +89,72 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
     {
         // Performance Verification (Layer 4): time the binding-registry reconciliation —
         // the pipeline behind several cross-project binding-ownership bugs (issue #113).
-        using var _perf = _recorder.Measure(LspMethodNames.InternalBindingRegistryReconcile);
-
-        if (notification.RemovedBindingFilePaths is { Count: > 0 } removedPaths)
+        // Manual Stopwatch (not Measure's using-scope) because the file/step counts below — the
+        // issue #471 investigation's "what grew" tag — are only known once the scan/reparse calls
+        // return, not at the top of this method.
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var scannedFileCount = 0;
+        var reparsedFileCount = 0;
+        try
         {
-            await RemoveBindingFilesAsync(notification.Project, removedPaths, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        if (notification.IsFullReplacement)
-        {
-            // After a Connector full replacement, re-discover bindings from the project's .cs
-            // files using Roslyn source-level discovery.  The Connector provides bindings from
-            // the compiled DLL, which may be stale if the user renamed/edited bindings without
-            // rebuilding.  Source-level discovery replaces the stale compiled entries with fresh
-            // source-level data, preventing "Step definition not found" (and the inverse, a step
-            // still shown as bound to a renamed binding) on files edited but not rebuilt.
-            await RediscoverCsFilesAsync(notification.Project, cancellationToken)
-                .ConfigureAwait(false);
-
-            await ScanAllFeatureFilesAsync(notification.Project, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            // An incremental Roslyn patch that changed a binding's matched expression (added,
-            // removed, or edited). ConnectorBindingRegistryProvider only publishes this
-            // notification for a Roslyn patch when that's the case -- a method-body/comment edit
-            // never reaches here, since there's nothing for feature-file matching to recompute.
-            // Closed feature files' cached usage counts are now stale, but re-running the
-            // whole-project rescan on every keystroke would be wasteful, so it's debounced: a
-            // burst of edits collapses into one rescan after they settle.
-            var project = notification.Project;
-            _rescanDebouncer.ScheduleRescan(project, async ct =>
+            if (notification.RemovedBindingFilePaths is { Count: > 0 } removedPaths)
             {
-                await ScanAllFeatureFilesAsync(project, ct).ConfigureAwait(false);
-                await RequestCodeLensRefreshAsync(project, isFullReplacement: false).ConfigureAwait(false);
-            });
+                await RemoveBindingFilesAsync(notification.Project, removedPaths, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (notification.IsFullReplacement)
+            {
+                // After a Connector full replacement, re-discover bindings from the project's .cs
+                // files using Roslyn source-level discovery.  The Connector provides bindings from
+                // the compiled DLL, which may be stale if the user renamed/edited bindings without
+                // rebuilding.  Source-level discovery replaces the stale compiled entries with fresh
+                // source-level data, preventing "Step definition not found" (and the inverse, a step
+                // still shown as bound to a renamed binding) on files edited but not rebuilt.
+                await RediscoverCsFilesAsync(notification.Project, cancellationToken)
+                    .ConfigureAwait(false);
+
+                scannedFileCount = await ScanAllFeatureFilesAsync(notification.Project, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                // An incremental Roslyn patch that changed a binding's matched expression (added,
+                // removed, or edited). ConnectorBindingRegistryProvider only publishes this
+                // notification for a Roslyn patch when that's the case -- a method-body/comment edit
+                // never reaches here, since there's nothing for feature-file matching to recompute.
+                // Closed feature files' cached usage counts are now stale, but re-running the
+                // whole-project rescan on every keystroke would be wasteful, so it's debounced: a
+                // burst of edits collapses into one rescan after they settle.
+                // (That debounced scan runs after this method returns, so its own file count is not
+                // part of this measurement — ScanAllFeatureFilesAsync's own Measure/Record call
+                // still logs it, just under a PERF line timestamped later.)
+                var project = notification.Project;
+                _rescanDebouncer.ScheduleRescan(project, async ct =>
+                {
+                    await ScanAllFeatureFilesAsync(project, ct).ConfigureAwait(false);
+                    await RequestCodeLensRefreshAsync(project, isFullReplacement: false).ConfigureAwait(false);
+                });
+            }
+
+            reparsedFileCount = await ReparseOpenFilesAsync(notification.Project, cancellationToken)
+                .ConfigureAwait(false);
+
+            // VS package auto-load / startup race avoidance, piece 2b: after the binding registry
+            // is populated (Connector run complete), ask the client to refresh its code lens.
+            // Without this, a .cs file that was the
+            // foreground editor at startup keeps the (count-less) code lenses it rendered before the
+            // server was ready, until the user navigates away and back to re-realize the view.
+            if (notification.IsFullReplacement)
+                await RequestCodeLensRefreshAsync(notification.Project, isFullReplacement: true).ConfigureAwait(false);
         }
-
-        await ReparseOpenFilesAsync(notification.Project, cancellationToken).ConfigureAwait(false);
-
-        // VS package auto-load / startup race avoidance, piece 2b: after the binding registry
-        // is populated (Connector run complete), ask the client to refresh its code lens.
-        // Without this, a .cs file that was the
-        // foreground editor at startup keeps the (count-less) code lenses it rendered before the
-        // server was ready, until the user navigates away and back to re-realize the view.
-        if (notification.IsFullReplacement)
-            await RequestCodeLensRefreshAsync(notification.Project, isFullReplacement: true).ConfigureAwait(false);
+        finally
+        {
+            _recorder.Record(
+                LspMethodNames.InternalBindingRegistryReconcile,
+                Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
+                detail: $"scannedFiles={scannedFileCount} reparsedFiles={reparsedFileCount}");
+        }
     }
 
     /// <summary>
@@ -179,7 +199,8 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         CodeLensRefreshRequester.RequestRefreshAsync(
             _languageServer, _clientIde, _logger, project.ProjectName, isFullReplacement);
 
-    private async Task ScanAllFeatureFilesAsync(
+    /// <summary>Returns the number of closed feature files scanned, for the caller's PERF-line size tag (issue #471 investigation).</summary>
+    private async Task<int> ScanAllFeatureFilesAsync(
         LspReqnrollProject project,
         CancellationToken cancellationToken)
     {
@@ -197,7 +218,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             // interim, or startup race before the first baseline arrives).
             var projectFolder = project.ProjectFolder;
             if (string.IsNullOrEmpty(projectFolder) || !_fileSystem.Directory.Exists(projectFolder))
-                return;
+                return 0;
 
             allFeatureFiles = _fileSystem.Directory
                 .EnumerateFiles(projectFolder, "*.feature", SearchOption.AllDirectories)
@@ -231,9 +252,12 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
                 _logger.LogWarning($"ScanAllFeatureFiles: could not scan '{filePath}': {ex.Message}");
             }
         }
+
+        return closedFiles.Count;
     }
 
-    private async Task ReparseOpenFilesAsync(
+    /// <summary>Returns the number of open feature files reparsed, for the caller's PERF-line size tag (issue #471 investigation).</summary>
+    private async Task<int> ReparseOpenFilesAsync(
         LspReqnrollProject project,
         CancellationToken cancellationToken)
     {
@@ -248,7 +272,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         {
             _logger.LogVerbose(
                 $"BindingRegistryChanged — no open feature files to reparse for '{project.ProjectName}'.");
-            return;
+            return 0;
         }
 
         _logger.LogInfo(
@@ -261,6 +285,8 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             await ParseAndNotifyAsync(buffer.Uri, buffer.Version, cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        return affectedBuffers.Count;
     }
 
     private bool IsOwnedByProject(DocumentUri uri, LspReqnrollProject project)

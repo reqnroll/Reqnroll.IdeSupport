@@ -446,6 +446,33 @@ public class BindingMatchServiceTests
     }
 
     [Fact]
+    public void GetCacheStats_returns_document_count_and_total_step_count_across_the_cache()
+    {
+        var sut      = new BindingMatchService();
+        var registry = RegistryWith(GivenBinding("my step", file: "Steps.cs", line: 5));
+
+        // Two documents, one step each — DefinedFeature has a single "Given my step" scenario.
+        sut.Store(BuildSet(DefinedFeature, registry, docUri: Uri));
+        sut.Store(BuildSet(DefinedFeature, registry, docUri: SecondUri));
+
+        var (documentCount, totalStepCount) = sut.GetCacheStats();
+
+        documentCount.Should().Be(2);
+        totalStepCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void GetCacheStats_on_empty_cache_returns_zero()
+    {
+        var sut = new BindingMatchService();
+
+        var (documentCount, totalStepCount) = sut.GetCacheStats();
+
+        documentCount.Should().Be(0);
+        totalStepCount.Should().Be(0);
+    }
+
+    [Fact]
     public void FindUsages_uses_case_insensitive_path_comparison_on_source_file()
     {
         var sut = new BindingMatchService();

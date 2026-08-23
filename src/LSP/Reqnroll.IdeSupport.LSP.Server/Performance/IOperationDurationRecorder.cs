@@ -20,12 +20,21 @@ public interface IOperationDurationRecorder
     /// Starts a timing scope; the elapsed time is recorded when the returned handle is disposed.
     /// Usage: <c>using var _ = recorder.Measure("textDocument/completion", uri);</c>
     /// </summary>
-    IDisposable Measure(string operation, DocumentUri? uri = null);
+    /// <param name="operation">The operation label.</param>
+    /// <param name="uri">The document the operation concerns, if any.</param>
+    /// <param name="detail">
+    /// Optional free-form size/state tag (e.g. <c>"cacheDocs=50 cacheSteps=1350"</c>), captured at
+    /// call time and appended to the PERF log line. For issue #471-style investigations: lets a
+    /// climbing-duration pattern be correlated against the state that grew, without adding a
+    /// per-operation-type field to the recorder itself. Cheap to compute is the caller's
+    /// responsibility — this sink does not gate or defer it.
+    /// </param>
+    IDisposable Measure(string operation, DocumentUri? uri = null, string? detail = null);
 
     /// <summary>
     /// Records an already-measured duration for <paramref name="operation"/>. Use this overload
-    /// when the operation label is only known after the work runs (e.g. keyword vs. step
-    /// completion).
+    /// when the operation label (or <paramref name="detail"/>) is only known after the work runs
+    /// (e.g. keyword vs. step completion; a reconcile's actual file/step counts).
     /// </summary>
-    void Record(string operation, double elapsedMs, DocumentUri? uri = null);
+    void Record(string operation, double elapsedMs, DocumentUri? uri = null, string? detail = null);
 }

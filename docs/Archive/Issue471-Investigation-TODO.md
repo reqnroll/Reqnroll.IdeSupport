@@ -46,12 +46,35 @@ requests' own payload computation is not the likely culprit.
       CodeLens/FindUsages work rather than running concurrently. This also corroborates
       hypothesis #1: the workload doing the blocking is exactly the suspected
       unindexed `FindUsages` scan.
-- [ ] 2. Add thread-ID + size/count tags to the hot PERF lines
+- [x] 2. Add thread-ID + size/count tags to the hot PERF lines
       (`OperationDurationRecorder.cs:50`, `Measure`/`Record`):
       - `BindingMatchService.FindUsages` / `StepCodeLensHandler`: cache doc count, total
         step count at call time.
       - `BindingRegistryChangedHandler` reconcile: feature-file count, step count.
       Keep it cheap (Verbose-gated like today) — this is a diagnostics-only change.
+      **DONE**:
+      - `IOperationDurationRecorder.Measure`/`Record` gained an optional `string? detail`
+        param (source/binary-compatible — trailing optional param, all ~32 existing call
+        sites untouched); `OperationDurationRecorder.Record` now always logs
+        `thread={Environment.CurrentManagedThreadId}` and appends `detail` verbatim when
+        given.
+      - `IBindingMatchService.GetCacheStats()` added: `(DocumentCount, TotalStepCount)`,
+        O(1) + O(cached documents) — negligible next to the O(bindings × cached steps)
+        `FindUsages` sweep it's tagging. `StepCodeLensHandler` now calls it once per
+        `textDocument/codeLens` request and passes `cacheDocs=… cacheSteps=…` as `detail`.
+      - `BindingRegistryChangedHandler.Handle` switched from `using var _perf = Measure(...)`
+        to manual `Stopwatch` + `try/finally` + `Record(..., detail: "scannedFiles=…
+        reparsedFiles=…")`, since those counts are only known after
+        `ScanAllFeatureFilesAsync`/`ReparseOpenFilesAsync` return (both changed to return
+        `Task<int>` instead of `Task`, private methods only). `finally` preserves the
+        original "always records, even on exception" behavior of the `using` scope it
+        replaced. The debounced incremental-rescan path's own `ScanAllFeatureFilesAsync`
+        call still gets its own independent PERF line (unchanged), not folded into this one.
+      - Tests: 2 new `BindingMatchServiceTests` (`GetCacheStats_*`), 3 new
+        `OperationDurationRecorderTests` (`detail`/`thread`/`Measure`-carries-`detail`).
+        Full `LSP.Server.Tests` (774) and `LSP.Core.Tests` (618, 1 pre-existing skip) both
+        green after the change, including all existing `BindingRegistryChangedHandlerTests`
+        (unaffected by the return-type change).
 - [ ] 3. Add a benchmark scenario to
       `tests/Performance/Reqnroll.IdeSupport.LSP.Server.Benchmarks*` that grows the
       match-set cache to a few thousand steps and calls `StepCodeLensHandler`/
