@@ -534,6 +534,217 @@ public class BindingMatchServiceTests
         usages.Should().HaveCount(2);
     }
 
+    // ── BindingId (issue #471) ──────────────────────────────────────────────────
+
+    [Fact]
+    public void BindingId_is_stable_for_the_same_binding_identity()
+    {
+        var b1 = GivenBinding("my step", method: "Steps.MyStep", file: "Steps.cs", line: 5);
+        var b2 = GivenBinding("my step", method: "Steps.MyStep", file: "Steps.cs", line: 99); // different line
+
+        BindingId.For(b1).Should().Be(BindingId.For(b2), "identity is content-based, not location-based");
+    }
+
+    [Fact]
+    public void BindingId_differs_when_the_method_differs()
+    {
+        var b1 = GivenBinding("my step", method: "Steps.MethodA");
+        var b2 = GivenBinding("my step", method: "Steps.MethodB");
+
+        BindingId.For(b1).Should().NotBe(BindingId.For(b2));
+    }
+
+    [Fact]
+    public void BindingId_differs_when_the_step_block_differs()
+    {
+        var given = new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^my step$"), null,
+            new ProjectBindingImplementation("Steps.MyStep", null, new SourceLocation("Steps.cs", 5, 1)));
+        var when = new ProjectStepDefinitionBinding(ScenarioBlock.When, new Regex("^my step$"), null,
+            new ProjectBindingImplementation("Steps.MyStep", null, new SourceLocation("Steps.cs", 5, 1)));
+
+        BindingId.For(given).Should().NotBe(BindingId.For(when));
+    }
+
+    [Fact]
+    public void BindingId_differs_when_the_expression_differs()
+    {
+        var b1 = GivenBinding("my step");
+        var b2 = GivenBinding("my other step");
+
+        BindingId.For(b1).Should().NotBe(BindingId.For(b2));
+    }
+
+    [Fact]
+    public void BindingId_ToString_round_trips_through_TryParse()
+    {
+        var id = BindingId.For(GivenBinding("my step"));
+
+        BindingId.TryParse(id.ToString(), out var parsed).Should().BeTrue();
+        parsed.Should().Be(id);
+    }
+
+    // ── FindUsages(BindingId) (issue #471) ──────────────────────────────────────
+
+    [Fact]
+    public void FindUsages_by_BindingId_returns_steps_bound_to_that_binding()
+    {
+        var sut     = new BindingMatchService();
+        var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
+        sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
+
+        var usages = sut.FindUsages(BindingId.For(binding));
+
+        usages.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void FindUsages_by_BindingId_returns_nothing_for_an_unrelated_binding()
+    {
+        var sut     = new BindingMatchService();
+        var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
+        sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
+
+        var other = GivenBinding("some other step", method: "Other");
+        sut.FindUsages(BindingId.For(other)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FindUsages_by_BindingId_respects_project_filter_and_includes_Unknown_entries()
+    {
+        var sut     = new BindingMatchService();
+        var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
+        sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: Uri,       owner: OwnerA));
+        sut.Store(BuildSet(DefinedFeature, RegistryWith(binding), docUri: SecondUri, owner: OwnerB));
+
+        var id = BindingId.For(binding);
+        sut.FindUsages(id, [OwnerA]).Should().ContainSingle().Which.FeatureDocumentId.Should().Be(Uri);
+        sut.FindUsages(id).Should().HaveCount(2, "null filter returns all projects");
+    }
+
+    [Fact]
+    public void FindUsages_by_BindingId_agrees_with_FindUsages_by_SourceLocation()
+    {
+        var sut     = new BindingMatchService();
+        var binding = GivenBinding("my step", file: "Steps.cs", line: 5);
+        sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
+
+        var byId = sut.FindUsages(BindingId.For(binding));
+        var byLocation = sut.FindUsages(new SourceLocation("Steps.cs", 5, 1));
+
+        byId.Should().BeEquivalentTo(byLocation);
+    }
+
+    // ── shard-precise eviction (issue #471) ─────────────────────────────────────
+
+    [Fact]
+    public void InvalidateAllForDocument_removes_only_that_documents_bindings_from_the_reverse_index()
+    {
+        var sut = new BindingMatchService();
+        var bindingA = GivenBinding("step a", method: "MethodA", file: "A.cs", line: 5);
+        var bindingB = GivenBinding("step b", method: "MethodB", file: "B.cs", line: 5);
+        sut.Store(BuildSet("Feature: F\nScenario: S\n    Given step a\n", RegistryWith(bindingA), docUri: Uri));
+        sut.Store(BuildSet("Feature: F\nScenario: S\n    Given step b\n", RegistryWith(bindingB), docUri: SecondUri));
+
+        sut.InvalidateAllForDocument(Uri);
+
+        sut.FindUsages(BindingId.For(bindingA)).Should().BeEmpty("its only document was invalidated");
+        sut.FindUsages(BindingId.For(bindingB)).Should().ContainSingle("SecondUri's shard is untouched");
+    }
+
+    [Fact]
+    public void Store_replacing_a_document_removes_its_old_bindings_from_the_reverse_index()
+    {
+        var sut = new BindingMatchService();
+        var oldBinding = GivenBinding("old step", method: "OldMethod", file: "Steps.cs", line: 5);
+        var newBinding = GivenBinding("new step", method: "NewMethod", file: "Steps.cs", line: 20);
+
+        sut.Store(BuildSet("Feature: F\nScenario: S\n    Given old step\n", RegistryWith(oldBinding), version: 1));
+        sut.Store(BuildSet("Feature: F\nScenario: S\n    Given new step\n", RegistryWith(newBinding), version: 2));
+
+        sut.FindUsages(BindingId.For(oldBinding)).Should().BeEmpty("the old binding is no longer referenced by this document");
+        sut.FindUsages(BindingId.For(newBinding)).Should().ContainSingle();
+    }
+
+    // ── location-index leeway (issue #471) ──────────────────────────────────────
+
+    [Fact]
+    public void FindUsages_by_SourceLocation_resolves_a_click_up_to_two_lines_above_the_binding_start()
+    {
+        var sut     = new BindingMatchService();
+        var binding = GivenBinding("my step", file: "Steps.cs", line: 10);
+        sut.Store(BuildSet(DefinedFeature, RegistryWith(binding)));
+
+        sut.FindUsages(new SourceLocation("Steps.cs", 8, 1)).Should().ContainSingle("2-line backward leeway for the attribute line");
+        sut.FindUsages(new SourceLocation("Steps.cs", 7, 1)).Should().BeEmpty("3 lines back is outside the leeway window");
+    }
+
+    [Fact]
+    public void FindUsages_by_SourceLocation_resolves_both_bindings_that_share_a_source_line()
+    {
+        // Two attributes on one method share the same SourceLocation -- the location index must
+        // surface both BindingIds at a tied StartLine, not just the first one inserted.
+        var impl  = new ProjectBindingImplementation("Steps.MultiAttribute", null, new SourceLocation("Steps.cs", 5, 1));
+        var given = new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^first$"),  null, impl, "first");
+        var when  = new ProjectStepDefinitionBinding(ScenarioBlock.When,  new Regex("^second$"), null, impl, "second");
+        const string feature = "Feature: F\nScenario: S\n    Given first\n    When second\n";
+
+        var sut = new BindingMatchService();
+        sut.Store(BuildSet(feature, RegistryWith(given, when)));
+
+        sut.FindUsages(new SourceLocation("Steps.cs", 5, 1)).Should().HaveCount(2, "both attributes at the same location must resolve");
+    }
+
+    [Fact]
+    public void FindUsages_by_SourceLocation_isolates_closely_adjacent_bindings()
+    {
+        // Two bindings 4 lines apart -- inside the 2-line leeway of neither neighbour's window
+        // when queried from the far side, so a click near one must not accidentally pick up the
+        // other via an off-by-one in the binary search boundary.
+        var first  = GivenBinding("step one", method: "Steps.One", file: "Steps.cs", line: 10);
+        var second = GivenBinding("step two", method: "Steps.Two", file: "Steps.cs", line: 14);
+        const string feature = "Feature: F\nScenario: S\n    Given step one\n    Given step two\n";
+
+        var sut = new BindingMatchService();
+        sut.Store(BuildSet(feature, RegistryWith(first, second)));
+
+        sut.FindUsages(new SourceLocation("Steps.cs", 10, 1)).Should().ContainSingle().Which
+           .Result.Items.Single().MatchedStepDefinition!.Implementation.Method.Should().Be("Steps.One");
+        sut.FindUsages(new SourceLocation("Steps.cs", 14, 1)).Should().ContainSingle().Which
+           .Result.Items.Single().MatchedStepDefinition!.Implementation.Method.Should().Be("Steps.Two");
+        // First binding's window (with leeway) is [8,10]; second's is [12,14] -- line 11 falls
+        // between both windows and must resolve to neither.
+        sut.FindUsages(new SourceLocation("Steps.cs", 11, 1)).Should().BeEmpty("between both windows, outside either one's leeway");
+    }
+
+    [Fact]
+    public void FindUsages_by_SourceLocation_resolves_correctly_at_realistic_file_scale()
+    {
+        // Real repro scale (issue #471, Reqnroll.VeryLargeFeature): ~1,300 step-definition
+        // bindings in a single .cs file. Locks in that the binary-search location lookup (added
+        // after profiling showed a linear scan runs ~40x slower at this scale) still resolves
+        // correctly across the full range, not just at sizes small enough that a bug would be
+        // masked by scanning past it anyway.
+        const int count = 1300;
+        var bindings = Enumerable.Range(0, count)
+            .Select(i => GivenBinding($"step number {i}", method: $"Steps.Step{i}", file: "Steps.cs", line: 10 + i * 6))
+            .ToArray();
+        var feature = "Feature: F\nScenario: S\n" +
+            string.Concat(Enumerable.Range(0, count).Select(i => $"    Given step number {i}\n"));
+
+        var sut = new BindingMatchService();
+        sut.Store(BuildSet(feature, RegistryWith(bindings)));
+
+        AssertResolvesTo(sut, 0);
+        AssertResolvesTo(sut, 650);
+        AssertResolvesTo(sut, count - 1);
+        sut.FindUsages(new SourceLocation("Steps.cs", 10 + 3 * 6 + 3, 1))
+           .Should().BeEmpty("halfway between two bindings, outside leeway of either");
+
+        static void AssertResolvesTo(BindingMatchService sut, int index) =>
+            sut.FindUsages(new SourceLocation("Steps.cs", 10 + index * 6, 1)).Should().ContainSingle().Which
+               .Result.Items.Single().MatchedStepDefinition!.Implementation.Method.Should().Be($"Steps.Step{index}");
+    }
+
     // ── concurrency ──────────────────────────────────────────────────────────────
 
     [Fact]
