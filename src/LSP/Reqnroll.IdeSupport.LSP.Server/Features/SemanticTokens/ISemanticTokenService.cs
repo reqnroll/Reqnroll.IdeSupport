@@ -24,10 +24,18 @@ public interface ISemanticTokenService
     /// Returns semantic tokens for only the given <paramref name="range"/>, encoded fresh from the
     /// current tags on every call (not cached — a range result is a subset of the full-document
     /// cache entry <see cref="GetSemanticTokensAsync"/> maintains, and caching every distinct
-    /// viewport range would bloat that cache for no benefit; encoding is now proportional to the
-    /// range's tag count instead of the whole document, so recomputing per call is cheap).
+    /// viewport range would bloat that cache for no benefit).
     /// Backs <c>textDocument/semanticTokens/range</c> — issue #471: this used to compute and
     /// discard the entire document.
+    /// <para>
+    /// Scoping is applied as early as the tag list allows: out-of-range tags are dropped up front,
+    /// so sorting, overlap resolution and delta encoding all scale with the range's tag count
+    /// rather than the document's. The one part that still scales with the document is position
+    /// resolution — each in-range tag's offsets are turned into (line, character) by a linear scan
+    /// over the snapshot's lines — but that is now done exactly once per tag, shared between the
+    /// range filter and the token collection. Replacing that scan with precomputed line-start
+    /// offsets plus a binary search is a separate follow-up.
+    /// </para>
     /// </summary>
     Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensForRangeAsync(
         DocumentUri uri, int version,

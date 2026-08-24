@@ -9,11 +9,57 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// </summary>
 public sealed class ClientIdeContext
 {
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  codeLens/resolve OPT-IN ALLOWLIST — deliberately EMPTY (issue #471).
+    // ─────────────────────────────────────────────────────────────────────────────
+    //  The server CAN defer the expensive per-lens count to codeLens/resolve
+    //  (see StepCodeLensHandler.ResolveAsync / HookMatchCountCodeLensHandler.ResolveAsync
+    //  and CodeLensResolveHandler), and it declares codeLensProvider.resolveProvider = true
+    //  so a capable client may use it. But deferral is only safe when the CLIENT actually
+    //  performs the resolve round trip, and NO client this repo ships does today:
+    //
+    //    * VS Code  — src/VSCode/src/commands/stepCodeLens.ts registers a hand-rolled
+    //                 vscode.CodeLensProvider that does NOT implement resolveCodeLens and
+    //                 discards lens.data when constructing vscode.CodeLens objects, so
+    //                 codeLens/resolve is never sent and a placeholder lens never renders.
+    //    * Rider    — src/Rider/.../StepUsagesCodeVisionProvider.kt filters out any lens
+    //                 whose command == null before rendering, silently dropping every
+    //                 deferred lens.
+    //    * Visual Studio — resolve support unconfirmed; never exercised.
+    //
+    //  Confirmed live in VS Code during this plan's Task 9 manual verification: `.cs`
+    //  step-usage lenses vanished entirely and `.feature` hook-match lenses degraded.
+    //  Hence the gate is an explicit OPT-IN allowlist, not an inverted "everyone but VS"
+    //  check — the inverted form is exactly the bug this replaces.
+    //
+    //  TO ADD A CLIENT: first make that client implement the resolve round trip
+    //  (VS Code: implement CodeLensProvider.resolveCodeLens AND thread the server's
+    //  `data` payload through onto the vscode.CodeLens; Rider: render command == null
+    //  lenses as a placeholder CodeVision entry and issue codeLens/resolve to fill them
+    //  in), verify it live against a large solution, THEN add its `--ide` identifier here.
+    private static readonly HashSet<string> CodeLensResolveCapableIdes =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            // (intentionally empty — see the note above)
+        };
+
     /// <summary>Initializes a new instance of the <see cref="ClientIdeContext"/> class.</summary>
     public ClientIdeContext(string? ide, TraceLevel logLevel = TraceLevel.Warning)
+        : this(ide, ide is not null && CodeLensResolveCapableIdes.Contains(ide), logLevel)
+    {
+    }
+
+    /// <summary>
+    /// Test seam: builds a context with <see cref="SupportsCodeLensResolve"/> forced to
+    /// <paramref name="supportsCodeLensResolve"/>, so the deferred-resolve branch stays covered by
+    /// unit tests even while <see cref="CodeLensResolveCapableIdes"/> is empty. Never used in
+    /// production code — the public constructor is the only path the server takes.
+    /// </summary>
+    internal ClientIdeContext(string? ide, bool supportsCodeLensResolve, TraceLevel logLevel = TraceLevel.Warning)
     {
         Ide = ide;
         LogLevel = logLevel;
+        SupportsCodeLensResolve = supportsCodeLensResolve;
     }
 
     /// <summary>The raw <c>--ide</c> value, or <see langword="null"/> when absent.</summary>
@@ -31,4 +77,14 @@ public sealed class ClientIdeContext
     /// relying on it to pull them. See <see cref="Handlers.InternalHandlers.SemanticTokensPushHandler"/>.
     /// </summary>
     public bool IsVisualStudio => string.Equals(Ide, "visualstudio", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True only when the connecting client is on the <see cref="CodeLensResolveCapableIdes"/>
+    /// allowlist — i.e. its LSP client is known to actually issue <c>codeLens/resolve</c> for a
+    /// lens returned without a <c>Command</c>. The allowlist is empty today, so this is
+    /// <see langword="false"/> for every shipped client (VS Code, Rider, Visual Studio) and all
+    /// code lenses are computed eagerly, exactly as before issue #471's deferred path was added.
+    /// See the extensive note on the allowlist for the evidence and the criteria for adding a client.
+    /// </summary>
+    public bool SupportsCodeLensResolve { get; }
 }

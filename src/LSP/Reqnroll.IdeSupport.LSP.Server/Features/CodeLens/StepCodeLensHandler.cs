@@ -32,7 +32,7 @@ public sealed class StepCodeLensHandler
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
-    private readonly ClientIdeContext _clientIde;
+    private readonly ClientIdeContext              _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="StepCodeLensHandler"/> class.</summary>
     public StepCodeLensHandler(
@@ -98,12 +98,12 @@ public sealed class StepCodeLensHandler
         // Deduplicate: the same attribute location may appear in multiple registries (linked files).
         var seen = new HashSet<(int line, int col)>();
 
-        // Visual Studio's LSP client hasn't yet had codeLens/resolve support confirmed live
-        // (issue #471, follow-up verification task) — keep it on today's eager path so it never
-        // regresses to blank/unresolved lenses. Non-VS clients (VS Code, Rider) defer the
-        // FindUsages scan to codeLens/resolve instead of running it for every binding on every
-        // textDocument/codeLens poll.
-        var deferToResolve = !_clientIde.IsVisualStudio;
+        // Defer the per-binding FindUsages scan to codeLens/resolve ONLY for clients on the
+        // opt-in allowlist in ClientIdeContext.CodeLensResolveCapableIdes — that set is empty
+        // today, so every shipped client (VS Code, Rider, Visual Studio) takes the eager path
+        // below. None of them issue codeLens/resolve, and a deferred lens simply never renders
+        // for them (issue #471; see the allowlist note for the evidence).
+        var deferToResolve = _clientIde.SupportsCodeLensResolve;
 
         foreach (var binding in registry.StepDefinitions)
         {
@@ -148,8 +148,9 @@ public sealed class StepCodeLensHandler
     }
 
     /// <summary>
-    /// Resolves a placeholder lens created above (non-VS clients, deferred path) into its final
-    /// <c>Command</c> — backs <c>codeLens/resolve</c> (issue #471). Falls back to the "0 step
+    /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
+    /// <see cref="ClientIdeContext.SupportsCodeLensResolve"/>) into its final <c>Command</c> —
+    /// backs <c>codeLens/resolve</c> (issue #471). Falls back to the non-actionable "0 step
     /// usages" shape if the binding can no longer be located (e.g. the file changed between the
     /// initial <c>textDocument/codeLens</c> call and this resolve).
     /// </summary>
@@ -163,12 +164,12 @@ public sealed class StepCodeLensHandler
         var sourceCol   = data?["sourceColumn"]?.Value<int?>();
 
         if (uriStr is null || sourceFile is null || sourceLine is null || sourceCol is null)
-            return Task.FromResult(WithZeroUsages(lens, uriStr, lens.Range.Start.Line, lens.Range.Start.Character));
+            return Task.FromResult(WithZeroUsages(lens));
 
         var uri = DocumentUri.Parse(uriStr);
         var registry = _registryLookup.GetRegistryForUri(uri);
         if (registry == ProjectBindingRegistry.Invalid)
-            return Task.FromResult(WithZeroUsages(lens, uriStr, lens.Range.Start.Line, lens.Range.Start.Character));
+            return Task.FromResult(WithZeroUsages(lens));
 
         var owners = _scopeManager.ResolveOwners(uri);
         IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
@@ -193,8 +194,14 @@ public sealed class StepCodeLensHandler
             }
         };
 
+    /// <summary>
+    /// The non-actionable "nothing to navigate to" lens: same shape
+    /// <see cref="BuildResolvedLens"/> produces for <c>count == 0</c>, but without needing a URI
+    /// at all — deliberately so, since the callers reach this only when the URI is missing or
+    /// unusable and must never hand the client a clickable command built from a fabricated one.
+    /// </summary>
     private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens WithZeroUsages(
-        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens, string? _uriStr, int line, int col) =>
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens) =>
         new()
         {
             Range = lens.Range,

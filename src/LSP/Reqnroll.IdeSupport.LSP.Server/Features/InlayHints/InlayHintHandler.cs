@@ -68,7 +68,16 @@ public sealed class InlayHintHandler
             return Task.FromResult<InlayHintContainer?>(new InlayHintContainer());
         }
 
-        var hints = _hintService.Build(matchSet, request.Range.Start.Line, request.Range.End.Line)
+        // An end position at column 0 means "the start of that line", so that line is outside the
+        // requested range (LSP convention). Same adjustment SemanticTokenService applies for
+        // textDocument/semanticTokens/range — the two range-scoped requests must agree on what an
+        // exclusive end position means. The Intersects filter below would also drop those hints,
+        // but only after Build had already computed them.
+        var endLine = request.Range.End.Character == 0 && request.Range.End.Line > 0
+            ? request.Range.End.Line - 1
+            : request.Range.End.Line;
+
+        var hints = _hintService.Build(matchSet, request.Range.Start.Line, endLine)
             .Select(ToInlayHint)
             .Where(h => Intersects(h.Position, request.Range))
             .ToList();

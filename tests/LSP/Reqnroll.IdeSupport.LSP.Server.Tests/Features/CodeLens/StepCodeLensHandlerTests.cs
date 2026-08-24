@@ -36,8 +36,17 @@ public class StepCodeLensHandlerTests
                        .Returns(ProjectBindingRegistry.Invalid);
     }
 
-    private StepCodeLensHandler CreateSut(string ide = "visualstudio") =>
-        new(_matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
+    /// <summary>
+    /// Builds the handler for a client identified by <paramref name="ide"/>. The default
+    /// (<c>supportsCodeLensResolve: false</c>) is what EVERY shipped client gets today — the
+    /// <c>codeLens/resolve</c> allowlist in <see cref="ClientIdeContext"/> is empty, so the eager
+    /// path is the production path for VS, VS Code and Rider alike (issue #471).
+    /// Pass <c>supportsCodeLensResolve: true</c> to exercise the deferred branch, which is real
+    /// code kept ready for the first client that implements the resolve round trip.
+    /// </summary>
+    private StepCodeLensHandler CreateSut(string ide = "visualstudio", bool supportsCodeLensResolve = false) =>
+        new(_matchService, _scopeManager, _registryLookup,
+            new ClientIdeContext(ide, supportsCodeLensResolve), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
@@ -285,16 +294,48 @@ public class StepCodeLensHandlerTests
         captured!.SourceFileColumn.Should().Be(3);
     }
 
-    // ── Deferred resolve (non-VS clients) ────────────────────────────────────
+    // ── Deferred resolve (allowlisted resolve-capable clients only) ───────────
+
+    /// <summary>
+    /// The regression guard for issue #471's final-review fix: the deferred path must NOT be
+    /// active for any client the repo actually ships. Every one of these goes through the
+    /// production <see cref="ClientIdeContext"/> constructor, i.e. the real allowlist lookup —
+    /// so this fails the moment someone adds an entry without also shipping client-side
+    /// <c>resolveCodeLens</c> support.
+    /// </summary>
+    [Theory]
+    [InlineData("visualstudio")]
+    [InlineData("vscode")]
+    [InlineData("rider")]
+    [InlineData(null)]
+    public async Task Handle_computes_every_lens_eagerly_for_all_shipped_clients(string? ide)
+    {
+        new ClientIdeContext(ide).SupportsCodeLensResolve.Should()
+            .BeFalse("no shipped client implements the codeLens/resolve round trip yet");
+
+        var csPath  = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
+
+        var sut = new StepCodeLensHandler(
+            _matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
+        var result = await sut.HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result![0].Command!.Title.Should().Be("1 step usage");
+        result[0].Data.Should().BeNull();
+    }
 
     [Fact]
-    public async Task Handle_non_vs_client_returns_placeholder_lens_without_calling_FindUsages()
+    public async Task Handle_resolve_capable_client_returns_placeholder_lens_without_calling_FindUsages()
     {
         var csPath  = CsUri.GetFileSystemPath()!;
         var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
 
-        var result = await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None);
+        var result = await CreateSut(supportsCodeLensResolve: true)
+            .HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         result![0].Command.Should().BeNull();
         result[0].Data.Should().NotBeNull();
@@ -310,8 +351,11 @@ public class StepCodeLensHandlerTests
         _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
 
-        var placeholder = (await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None))![0];
-        var resolved = await CreateSut(ide: "vscode").ResolveAsync(placeholder, CancellationToken.None);
+        var placeholder = (await CreateSut(supportsCodeLensResolve: true)
+            .HandleAsync(RequestFor(CsUri), CancellationToken.None))![0];
+        placeholder.Command.Should().BeNull("the deferred branch must be the one under test here");
+
+        var resolved = await CreateSut().ResolveAsync(placeholder, CancellationToken.None);
 
         resolved.Command!.Title.Should().Be("1 step usage");
     }
@@ -333,9 +377,26 @@ public class StepCodeLensHandlerTests
             }
         };
 
-        var resolved = await CreateSut(ide: "vscode").ResolveAsync(lens, CancellationToken.None);
+        var resolved = await CreateSut().ResolveAsync(lens, CancellationToken.None);
 
         resolved.Command!.Title.Should().Be("0 step usages");
+        resolved.Command.Name.Should().Be("reqnroll.noStepUsages");
+        resolved.Command.Arguments.Should().BeNull("a zero-usage lens must not be clickable");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_falls_back_to_a_non_actionable_lens_when_the_Data_is_malformed()
+    {
+        var lens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+        {
+            Range = new LspRange(new Position(4, 0), new Position(4, 0)),
+            Data = new JObject { ["kind"] = "stepUsage" } // no uri/sourceFile/line/column
+        };
+
+        var resolved = await CreateSut().ResolveAsync(lens, CancellationToken.None);
+
+        resolved.Command!.Name.Should().Be("reqnroll.noStepUsages");
+        resolved.Command.Arguments.Should().BeNull("no URI is known, so nothing may be clickable");
     }
 }
 

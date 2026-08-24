@@ -272,10 +272,18 @@ public class Program
             // codeLensProvider.resolveProvider: declared statically for the same
             // dynamic-registration-race reason as inlayHintProvider/foldingRangeProvider above.
             // textDocument/codeLens itself is already always-on for this server (no capability
-            // gating needed for the base request); this only adds resolveProvider so clients that
-            // support it can defer per-lens computation to codeLens/resolve (issue #471) — see
-            // StepCodeLensHandler/HookMatchCountCodeLensHandler, which only actually defer for
-            // non-Visual-Studio clients until Task 9 confirms VS's LSP client resolves correctly.
+            // gating needed for the base request); this only advertises that the server CAN
+            // service codeLens/resolve — CodeLensResolveHandler does (issue #471).
+            //
+            // No shipped client currently uses it: neither VS Code nor Rider nor Visual Studio
+            // issues codeLens/resolve today, so every lens is still returned fully computed. The
+            // decision of whether to hand out an unresolved placeholder lens is NOT made here —
+            // it is made per client by ClientIdeContext.SupportsCodeLensResolve, an opt-in
+            // allowlist that is deliberately empty (see the note on that allowlist for the
+            // evidence and the criteria for adding a client). Advertising resolveProvider while
+            // that allowlist is empty is harmless — a spec-compliant client only resolves a lens
+            // that arrives without a Command, and none do — and it is what lets a newly
+            // allowlisted client work without an initialize-response change.
             void ApplyStaticCodeLensCapability()
             {
                 response.Capabilities.CodeLensProvider = new CodeLensRegistrationOptions.StaticOptions

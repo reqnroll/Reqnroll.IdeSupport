@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 
@@ -37,8 +38,17 @@ public class HookMatchCountCodeLensHandlerTests
         _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(Array.Empty<FeatureBindingMatchSet>());
     }
 
-    private HookMatchCountCodeLensHandler CreateSut(string ide = "visualstudio") =>
-        new(_matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
+    /// <summary>
+    /// Builds the handler for a client identified by <paramref name="ide"/>. The default
+    /// (<c>supportsCodeLensResolve: false</c>) is what EVERY shipped client gets today — the
+    /// <c>codeLens/resolve</c> allowlist in <see cref="ClientIdeContext"/> is empty, so the eager
+    /// path is the production path for VS, VS Code and Rider alike (issue #471).
+    /// Pass <c>supportsCodeLensResolve: true</c> to exercise the deferred branch, which is real
+    /// code kept ready for the first client that implements the resolve round trip.
+    /// </summary>
+    private HookMatchCountCodeLensHandler CreateSut(string ide = "visualstudio", bool supportsCodeLensResolve = false) =>
+        new(_matchService, _scopeManager, _registryLookup,
+            new ClientIdeContext(ide, supportsCodeLensResolve), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
@@ -293,14 +303,47 @@ public class HookMatchCountCodeLensHandlerTests
 
     // ── Gated eager/deferred split + resolve (issue #471) ───────────────────────
 
+    /// <summary>
+    /// The regression guard for issue #471's final-review fix: the deferred path must NOT be
+    /// active for any client the repo actually ships. Every one of these goes through the
+    /// production <see cref="ClientIdeContext"/> constructor, i.e. the real allowlist lookup —
+    /// so this fails the moment someone adds an entry without also shipping client-side
+    /// <c>resolveCodeLens</c> support.
+    /// </summary>
+    [Theory]
+    [InlineData("visualstudio")]
+    [InlineData("vscode")]
+    [InlineData("rider")]
+    [InlineData(null)]
+    public async Task Handle_computes_every_scoped_hook_lens_eagerly_for_all_shipped_clients(string? ide)
+    {
+        new ClientIdeContext(ide).SupportsCodeLensResolve.Should()
+            .BeFalse("no shipped client implements the codeLens/resolve round trip yet");
+
+        var hook = MakeScopedHook(HookType.BeforeScenario);
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+        var matchSet = BuildMatchSet("Feature: F\nScenario: S\n    Given a step\n", registry, FeatureUri.ToString());
+        _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(new[] { matchSet });
+
+        var sut = new HookMatchCountCodeLensHandler(
+            _matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
+        var result = await sut.HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Command!.Title.Should().Be("1 scenario matched");
+        result[0].Data.Should().BeNull();
+    }
+
     [Fact]
-    public async Task Handle_non_vs_client_defers_scoped_hooks_without_walking_the_corpus()
+    public async Task Handle_resolve_capable_client_defers_scoped_hooks_without_walking_the_corpus()
     {
         var hook = MakeScopedHook(HookType.BeforeScenario);
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
         _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
 
-        var result = await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None);
+        var result = await CreateSut(supportsCodeLensResolve: true)
+            .HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         result.Should().ContainSingle();
         result[0].Command.Should().BeNull();
@@ -309,14 +352,15 @@ public class HookMatchCountCodeLensHandlerTests
     }
 
     [Fact]
-    public async Task Handle_non_vs_client_still_resolves_unscoped_hooks_eagerly()
+    public async Task Handle_resolve_capable_client_still_resolves_unscoped_hooks_eagerly()
     {
         // "all scenarios" needs no corpus walk (issue #403) -- no reason to defer it.
         var hook = MakeHook(HookType.BeforeScenario); // unscoped
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
         _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
 
-        var result = await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None);
+        var result = await CreateSut(supportsCodeLensResolve: true)
+            .HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         result.Should().ContainSingle();
         result[0].Command!.Title.Should().Be("all scenarios");
@@ -331,9 +375,54 @@ public class HookMatchCountCodeLensHandlerTests
         var matchSet = BuildMatchSet("Feature: F\nScenario: S\n    Given a step\n", registry, FeatureUri.ToString());
         _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(new[] { matchSet });
 
-        var placeholder = (await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None))[0];
-        var resolved = await CreateSut(ide: "vscode").ResolveAsync(placeholder, CancellationToken.None);
+        var placeholder = (await CreateSut(supportsCodeLensResolve: true)
+            .HandleAsync(RequestFor(CsUri), CancellationToken.None))[0];
+        placeholder.Command.Should().BeNull("the deferred branch must be the one under test here");
+
+        var resolved = await CreateSut().ResolveAsync(placeholder, CancellationToken.None);
 
         resolved.Command!.Title.Should().Be("1 scenario matched");
+        resolved.Command.Name.Should().Be("reqnroll.goToMatchingScenarios");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_falls_back_to_a_non_actionable_lens_when_the_Data_is_malformed()
+    {
+        // Must NOT hand the client a clickable reqnroll.goToMatchingScenarios command built from
+        // a fabricated "file:///unknown" URI (issue #471 final review).
+        var lens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+        {
+            Range = new LspRange(new Position(4, 0), new Position(4, 0)),
+            Data = new JObject { ["kind"] = "hookMatchCount" } // no uri/sourceFile/line/column
+        };
+
+        var resolved = await CreateSut().ResolveAsync(lens, CancellationToken.None);
+
+        resolved.Command!.Name.Should().NotBe("reqnroll.goToMatchingScenarios");
+        resolved.Command.Arguments.Should().BeNull("no URI is known, so nothing may be clickable");
+        resolved.Command.Title.Should().Be("0 scenarios matched");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_falls_back_to_a_non_actionable_lens_when_the_hook_is_gone()
+    {
+        _registryLookup.GetRegistryForUri(CsUri).Returns(ProjectBindingRegistry.Invalid);
+        var lens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+        {
+            Range = new LspRange(new Position(4, 0), new Position(4, 0)),
+            Data = new JObject
+            {
+                ["kind"] = "hookMatchCount",
+                ["uri"] = CsUri.ToString(),
+                ["sourceFile"] = CsUri.GetFileSystemPath(),
+                ["sourceLine"] = 5,
+                ["sourceColumn"] = 1,
+            }
+        };
+
+        var resolved = await CreateSut().ResolveAsync(lens, CancellationToken.None);
+
+        resolved.Command!.Arguments.Should().BeNull("there is no hook left to navigate to");
+        resolved.Command.Title.Should().Be("0 scenarios matched");
     }
 }

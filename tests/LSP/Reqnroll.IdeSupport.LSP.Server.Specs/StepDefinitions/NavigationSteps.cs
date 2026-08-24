@@ -194,8 +194,15 @@ public sealed class NavigationSteps
 
     /// <summary>
     /// Follows up with <c>codeLens/resolve</c> (issue #471) for a lens whose <c>Command</c> came
-    /// back unset from <c>textDocument/codeLens</c> — the deferred-resolve path non-VS clients are
-    /// expected to complete, exactly as a real spec-compliant client would.
+    /// back unset from <c>textDocument/codeLens</c>, exactly as a spec-compliant client would.
+    /// <para>
+    /// This is a passthrough in practice today: the server only hands out unresolved placeholder
+    /// lenses to clients on <c>ClientIdeContext</c>'s <c>codeLens/resolve</c> allowlist, and that
+    /// allowlist is empty, so every lens these specs see already carries its <c>Command</c>. The
+    /// helper stays because it makes these assertions correct for EITHER server behaviour — so
+    /// they keep passing unchanged the day a client is allowlisted and the deferred path goes
+    /// live, instead of silently asserting against a null <c>Command</c>.
+    /// </para>
     /// </summary>
     private async Task<CodeLens> ResolveIfDeferredAsync(CodeLens lens)
     {
