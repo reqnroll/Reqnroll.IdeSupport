@@ -121,6 +121,8 @@ public sealed class StepCodeLensHandler
             var col  = src.SourceFileColumn - 1;
             var range = new LspRange(new Position(line, col), new Position(line, col));
 
+            var bindingId = BindingId.For(binding);
+
             if (deferToResolve)
             {
                 lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
@@ -130,6 +132,7 @@ public sealed class StepCodeLensHandler
                     {
                         ["kind"]         = "stepUsage",
                         ["uri"]          = uri.ToString(),
+                        ["bindingId"]    = bindingId.ToString(),
                         ["sourceFile"]   = src.SourceFile,
                         ["sourceLine"]   = src.SourceFileLine,
                         ["sourceColumn"] = src.SourceFileColumn,
@@ -138,8 +141,7 @@ public sealed class StepCodeLensHandler
                 continue;
             }
 
-            var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
-            var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+            var usages = _matchService.FindUsages(bindingId, projectFilter);
             lenses.Add(BuildResolvedLens(range, uri, line, col, usages.Count));
         }
 
@@ -159,11 +161,12 @@ public sealed class StepCodeLensHandler
     {
         var data = lens.Data as JObject;
         var uriStr      = data?["uri"]?.Value<string>();
+        var bindingIdStr = data?["bindingId"]?.Value<string>();
         var sourceFile  = data?["sourceFile"]?.Value<string>();
         var sourceLine  = data?["sourceLine"]?.Value<int?>();
         var sourceCol   = data?["sourceColumn"]?.Value<int?>();
 
-        if (uriStr is null || sourceFile is null || sourceLine is null || sourceCol is null)
+        if (uriStr is null)
             return Task.FromResult(WithZeroUsages(lens));
 
         var uri = DocumentUri.Parse(uriStr);
@@ -176,8 +179,24 @@ public sealed class StepCodeLensHandler
             ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
             : null;
 
-        var bindingLocation = new SourceLocation(sourceFile, sourceLine.Value, sourceCol.Value);
-        var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+        // Prefer the BindingId stashed at lens-creation time (issue #471): a direct O(1)
+        // reverse-index lookup, no location math. Fall back to the SourceLocation-based path only
+        // for a payload that predates this field (e.g. a stale client-cached lens).
+        IReadOnlyList<StepBindingMatch> usages;
+        if (bindingIdStr is not null && BindingId.TryParse(bindingIdStr, out var bindingId))
+        {
+            usages = _matchService.FindUsages(bindingId, projectFilter);
+        }
+        else if (sourceFile is not null && sourceLine is not null && sourceCol is not null)
+        {
+            var bindingLocation = new SourceLocation(sourceFile, sourceLine.Value, sourceCol.Value);
+            usages = _matchService.FindUsages(bindingLocation, projectFilter);
+        }
+        else
+        {
+            return Task.FromResult(WithZeroUsages(lens));
+        }
+
         return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character, usages.Count));
     }
 

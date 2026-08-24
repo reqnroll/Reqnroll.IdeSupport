@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefs;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.FindUnusedStepDefs;
 
@@ -39,7 +40,8 @@ public class FindUnusedStepDefinitionsServiceTests
     /// </code>
     /// Both <see cref="ProjectStepDefinitionBinding"/> objects reference the same
     /// <see cref="ProjectBindingImplementation"/> instance, so they share
-    /// <see cref="SourceLocation"/>, class name, and method name.
+    /// <see cref="SourceLocation"/>, class name, and method name — but each still gets its own
+    /// <see cref="BindingId"/> (identity includes <c>Expression</c>, issue #471).
     /// </summary>
     private static (ProjectStepDefinitionBinding First, ProjectStepDefinitionBinding Second)
         MakeTwoExpressionsOnSameMethod(
@@ -65,12 +67,7 @@ public class FindUnusedStepDefinitionsServiceTests
         return (b1, b2);
     }
 
-    /// <summary>
-    /// Returns a <see cref="StepBindingMatch"/> whose <c>Result.Items</c> record
-    /// <paramref name="binding"/> as the matched step definition. The service checks
-    /// <c>MatchedStepDefinition.Expression</c> to determine per-expression usage, so the
-    /// returned match must carry the real binding object, not a bare <c>MatchResult.NoMatch</c>.
-    /// </summary>
+    /// <summary>Returns a <see cref="StepBindingMatch"/> whose <c>Result.Items</c> record <paramref name="binding"/> as the matched step definition.</summary>
     private static StepBindingMatch MakeMatchForBinding(ProjectStepDefinitionBinding binding)
     {
         var snapshot = new LspTextSnapshot(
@@ -85,6 +82,13 @@ public class FindUnusedStepDefinitionsServiceTests
     private static (string ProjectName, ProjectBindingRegistry Registry)
         MakeEntry(string projectName, params ProjectStepDefinitionBinding[] bindings) =>
         (projectName, ProjectBindingRegistry.FromBindings(bindings));
+
+    /// <summary>Stubs <see cref="IBindingMatchService.FindUsages(BindingId,IReadOnlyCollection{ProjectOwner})"/> for the given binding's identity to return <paramref name="usages"/>.</summary>
+    private void StubUsagesFor(ProjectStepDefinitionBinding binding, params StepBindingMatch[] usages)
+    {
+        var id = BindingId.For(binding);
+        _matchService.FindUsages(id, Arg.Any<IReadOnlyCollection<ProjectOwner>>()).Returns(usages);
+    }
 
     // ── Empty workspace ────────────────────────────────────────────────────────
 
@@ -109,9 +113,8 @@ public class FindUnusedStepDefinitionsServiceTests
     [Fact]
     public void Binding_with_no_usages_is_reported()
     {
+        // NSubstitute returns Array.Empty<StepBindingMatch> for any un-stubbed FindUsages call.
         var binding = MakeBinding("/ws/Steps.cs", line: 10);
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -122,9 +125,7 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Binding_with_usages_is_not_reported()
     {
         var binding = MakeBinding("/ws/Steps.cs", line: 10);
-        // The match carries the binding's expression so the per-expression usage check passes.
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(new[] { MakeMatchForBinding(binding) });
+        StubUsagesFor(binding, MakeMatchForBinding(binding));
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -137,8 +138,6 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Reports_project_name_from_registry_entry()
     {
         var binding = MakeBinding("/ws/Steps.cs");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("MyProject", binding) });
 
@@ -149,8 +148,6 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Reports_class_name_parsed_from_method()
     {
         var binding = MakeBinding("/ws/Steps.cs", method: "StepDefs.GivenSomething()");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -161,8 +158,6 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Reports_method_name_parsed_from_method_without_params()
     {
         var binding = MakeBinding("/ws/Steps.cs", method: "StepDefs.GivenSomething(int, string)");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -174,8 +169,6 @@ public class FindUnusedStepDefinitionsServiceTests
     {
         // Roslyn path produces "Namespace.ClassName.MethodName" (no params)
         var binding = MakeBinding("/ws/Steps.cs", method: "MyApp.Steps.GivenSomething");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -188,8 +181,6 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Reports_binding_expression()
     {
         var binding = MakeBinding("/ws/Steps.cs", expression: "the sum is {int}");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -200,8 +191,6 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Reports_source_file_from_source_location()
     {
         var binding = MakeBinding("/ws/MySteps.cs", line: 42);
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -214,8 +203,6 @@ public class FindUnusedStepDefinitionsServiceTests
         // 1-based → 0-based wire conversion is the Server handler's responsibility, not the
         // Core service's - the service returns the domain-native 1-based position.
         var binding = MakeBinding("/ws/Steps.cs", line: 10, column: 5);
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
@@ -223,20 +210,18 @@ public class FindUnusedStepDefinitionsServiceTests
         result.Single().SourceColumn.Should().Be(5);
     }
 
-    // ── Deduplication (same source location in multiple project registries) ────
+    // ── Deduplication (same binding identity in multiple project registries) ───
 
     [Fact]
-    public void Deduplicates_same_source_location_across_projects()
+    public void Deduplicates_same_binding_across_projects()
     {
         var binding = MakeBinding("/ws/Steps.cs", line: 10);
         var entryA  = MakeEntry("A", binding);
         var entryB  = MakeEntry("B", binding);
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { entryA, entryB });
 
-        // Same source location → reported only once
+        // Same BindingId (same declaring type/method/params/block/expression) → reported once.
         result.Should().ContainSingle();
     }
 
@@ -244,9 +229,7 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Reports_distinct_bindings_in_same_project()
     {
         var b1 = MakeBinding("/ws/Steps.cs", line: 10);
-        var b2 = MakeBinding("/ws/Steps.cs", line: 20);
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
+        var b2 = MakeBinding("/ws/Steps.cs", line: 20, method: "StepDefinitions.GivenSomethingElse()");
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", b1, b2) });
 
@@ -259,13 +242,11 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Passes_null_project_filter_to_FindUsages()
     {
         var binding = MakeBinding("/ws/Steps.cs");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
 
         _matchService.Received(1).FindUsages(
-            Arg.Any<SourceLocation>(),
+            BindingId.For(binding),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
     }
 
@@ -284,7 +265,7 @@ public class FindUnusedStepDefinitionsServiceTests
 
         result.Should().BeEmpty();
         _matchService.DidNotReceive()
-                     .FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
+                     .FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
     }
 
     [Fact]
@@ -301,7 +282,7 @@ public class FindUnusedStepDefinitionsServiceTests
 
         result.Should().BeEmpty();
         _matchService.DidNotReceive()
-                     .FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
+                     .FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
     }
 
     // ── Invalid registry is skipped ───────────────────────────────────────────
@@ -323,27 +304,19 @@ public class FindUnusedStepDefinitionsServiceTests
     //   [When("second expression")]
     //   public void MultiAttributeMethod() { … }
     //
-    // The connector produces one ProjectStepDefinitionBinding per attribute, but all share
-    // the SAME ProjectBindingImplementation (same source file and line).
-    //
-    // The service checks each expression independently:
-    //   - FindUsages(loc) returns all steps matched by ANY expression at that location.
-    //   - Per-expression filtering: a step is a usage of expression X only when
-    //     its MatchResultItem.MatchedStepDefinition.Expression == X.
-    //   - Each unused expression produces its own result row.
-    //   - An expression that IS matched in a feature file is omitted from the results.
-    //   - FindUsages is called once per source location (not once per expression):
-    //     the service caches the result and re-uses it for each expression on the method.
+    // The connector produces one ProjectStepDefinitionBinding per attribute, sharing the SAME
+    // ProjectBindingImplementation (same source file and line) but each with its own BindingId
+    // (identity includes StepDefinitionType + Expression, issue #471) — so each expression gets
+    // its own precise FindUsages lookup, with no need for a per-location cache or a post-hoc
+    // "does this usage's Expression match?" filter.
 
     [Fact]
     public void Method_with_two_expressions_both_unused_reports_two_rows()
     {
-        // Each unused expression on a multi-attribute method gets its own row.
         var (b1, b2) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs", line: 10,
             expression1: "first expression",
             expression2: "second expression");
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());  // neither matched in any feature
+        // Neither expression stubbed → both resolve to "no usages".
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", b1, b2) });
 
@@ -353,33 +326,26 @@ public class FindUnusedStepDefinitionsServiceTests
     }
 
     [Fact]
-    public void Method_with_two_expressions_both_unused_calls_FindUsages_once()
+    public void Method_with_two_expressions_calls_FindUsages_once_per_expression()
     {
-        // Even though there are two binding objects, FindUsages must be called only once
-        // per source location — the result is cached for the second expression.
+        // Two distinct expressions on one method → two distinct BindingIds → two lookups, each
+        // an O(1) reverse-index hit (issue #471) rather than one location scan reused twice.
         var (b1, b2) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs", line: 10);
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
 
         CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", b1, b2) });
 
-        _matchService.Received(1)
-                     .FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
+        _matchService.Received(1).FindUsages(BindingId.For(b1), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
+        _matchService.Received(1).FindUsages(BindingId.For(b2), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
     }
 
     [Fact]
     public void Method_with_one_expression_used_reports_only_unused_expression()
     {
-        // b1 ("first expression") is matched in a feature file.
-        // b2 ("second expression") has no matches.
-        // Only b2 should appear in the results.
+        // b1 ("first expression") is matched in a feature file; b2 ("second expression") is not.
         var (b1, b2) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs", line: 10,
             expression1: "first expression",
             expression2: "second expression");
-
-        // FindUsages returns a match whose MatchedStepDefinition is b1 (expression1 used only).
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(new[] { MakeMatchForBinding(b1) });
+        StubUsagesFor(b1, MakeMatchForBinding(b1));
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", b1, b2) });
 
@@ -393,10 +359,8 @@ public class FindUnusedStepDefinitionsServiceTests
         var (b1, b2) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs", line: 10,
             expression1: "first expression",
             expression2: "second expression");
-
-        // FindUsages returns matches for both expressions.
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(new[] { MakeMatchForBinding(b1), MakeMatchForBinding(b2) });
+        StubUsagesFor(b1, MakeMatchForBinding(b1));
+        StubUsagesFor(b2, MakeMatchForBinding(b2));
 
         var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", b1, b2) });
 
@@ -418,22 +382,7 @@ public class FindUnusedStepDefinitionsServiceTests
             expression1: "used expr B1",
             expression2: "unused expr B2");
 
-        var locA = aB1.Implementation!.SourceLocation!;
-        var locB = bB1.Implementation!.SourceLocation!;
-
-        // Method A: nothing matched.
-        _matchService
-            .FindUsages(
-                Arg.Is<SourceLocation>(l => l.SourceFileLine == locA.SourceFileLine),
-                Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-            .Returns(Array.Empty<StepBindingMatch>());
-
-        // Method B: only bB1 ("used expr B1") is matched; bB2 has no usages.
-        _matchService
-            .FindUsages(
-                Arg.Is<SourceLocation>(l => l.SourceFileLine == locB.SourceFileLine),
-                Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-            .Returns(new[] { MakeMatchForBinding(bB1) });
+        StubUsagesFor(bB1, MakeMatchForBinding(bB1));
 
         var result = CreateSut().FindUnusedStepDefinitions(
             new[] { MakeEntry("A", aB1, aB2, bB1, bB2) });
