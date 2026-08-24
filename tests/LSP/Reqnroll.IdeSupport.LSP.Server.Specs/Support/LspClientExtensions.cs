@@ -130,6 +130,16 @@ public static class LspClientExtensions
             .Returning<CodeLens[]?>(ct);
 
     /// <summary>
+    /// Sends a <c>codeLens/resolve</c> request (issue #471) — the follow-up a spec-compliant
+    /// client makes for a lens whose <c>Command</c> came back unset from <c>textDocument/codeLens</c>
+    /// (the deferred-resolve path, non-VS clients only; see <c>StepCodeLensHandler</c>/
+    /// <c>HookMatchCountCodeLensHandler</c> remarks).
+    /// </summary>
+    public static Task<CodeLens?> RequestCodeLensResolveAsync(
+        this ILanguageClient client, CodeLens lens, CancellationToken ct = default)
+        => client.SendRequest(LspMethodNames.CodeLensResolve, lens).Returning<CodeLens?>(ct);
+
+    /// <summary>
     /// Sends a <c>textDocument/formatting</c> request (F11 — Document Auto-formatting).
     /// </summary>
     public static Task<TextEdit[]?> RequestFormattingAsync(

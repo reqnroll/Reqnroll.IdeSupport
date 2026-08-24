@@ -193,6 +193,12 @@ public static class LanguageServerOptionsExtensions
                 return results.SelectMany(r => r).ToArray();
             });
 
+        // codeLens/resolve: dispatches to whichever handler produced the lens, based on the
+        // "kind" discriminator embedded in CodeLens.Data (issue #471, non-VS deferred-resolve path).
+        options.OnRequest<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens, global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>(
+            LspMethodNames.CodeLensResolve,
+            (lens, ct) => resolver!.Get<CodeLensResolveHandler>().ResolveAsync(lens, ct));
+
         // inlayHint/foldingRange are routed manually (rather than via AddHandler's dynamic
         // registration) so that inlayHintProvider/foldingRangeProvider can be declared
         // statically in the initialize response — see Program.ConfigureServer for why.
