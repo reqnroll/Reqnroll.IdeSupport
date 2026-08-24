@@ -211,6 +211,7 @@ public class Program
             ApplySemanticTokensCapability();
             ApplyStaticInlayHintCapability();
             ApplyStaticFoldingCapability();
+            ApplyStaticCodeLensCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
 
@@ -266,6 +267,21 @@ public class Program
             void ApplyStaticFoldingCapability()
             {
                 response.Capabilities.FoldingRangeProvider = new FoldingRangeRegistrationOptions.StaticOptions();
+            }
+
+            // codeLensProvider.resolveProvider: declared statically for the same
+            // dynamic-registration-race reason as inlayHintProvider/foldingRangeProvider above.
+            // textDocument/codeLens itself is already always-on for this server (no capability
+            // gating needed for the base request); this only adds resolveProvider so clients that
+            // support it can defer per-lens computation to codeLens/resolve (issue #471) — see
+            // StepCodeLensHandler/HookMatchCountCodeLensHandler, which only actually defer for
+            // non-Visual-Studio clients until Task 9 confirms VS's LSP client resolves correctly.
+            void ApplyStaticCodeLensCapability()
+            {
+                response.Capabilities.CodeLensProvider = new CodeLensRegistrationOptions.StaticOptions
+                {
+                    ResolveProvider = true
+                };
             }
 
             // vscode-languageclient v10 (used by VS Code and Rider) does not wire its
