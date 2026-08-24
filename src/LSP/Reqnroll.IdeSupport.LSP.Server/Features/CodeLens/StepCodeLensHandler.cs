@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -31,18 +32,21 @@ public sealed class StepCodeLensHandler
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
+    private readonly ClientIdeContext _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="StepCodeLensHandler"/> class.</summary>
     public StepCodeLensHandler(
         IBindingMatchService          matchService,
         ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
+        ClientIdeContext              clientIde,
         IIdeSupportLogger               logger,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
         _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
+        _clientIde      = clientIde;
         _logger         = logger;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -94,6 +98,13 @@ public sealed class StepCodeLensHandler
         // Deduplicate: the same attribute location may appear in multiple registries (linked files).
         var seen = new HashSet<(int line, int col)>();
 
+        // Visual Studio's LSP client hasn't yet had codeLens/resolve support confirmed live
+        // (issue #471, follow-up verification task) — keep it on today's eager path so it never
+        // regresses to blank/unresolved lenses. Non-VS clients (VS Code, Rider) defer the
+        // FindUsages scan to codeLens/resolve instead of running it for every binding on every
+        // textDocument/codeLens poll.
+        var deferToResolve = !_clientIde.IsVisualStudio;
+
         foreach (var binding in registry.StepDefinitions)
         {
             if (!binding.IsValid) continue;
@@ -105,31 +116,90 @@ public sealed class StepCodeLensHandler
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
-            var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
-            var usages = _matchService.FindUsages(bindingLocation, projectFilter);
-            var count  = usages.Count;
-
             // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
             var line = src.SourceFileLine   - 1;
             var col  = src.SourceFileColumn - 1;
+            var range = new LspRange(new Position(line, col), new Position(line, col));
 
-            lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+            if (deferToResolve)
             {
-                Range = new LspRange(new Position(line, col), new Position(line, col)),
-                Command = new Command
+                lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
                 {
-                    Title     = count == 1 ? "1 step usage" : $"{count} step usages",
-                    Name      = count > 0 ? "reqnroll.findStepUsages" : "reqnroll.noStepUsages",
-                    Arguments = count > 0
-                        ? new JArray(uri.ToString(), line, col)
-                        : null
-                }
-            });
+                    Range = range,
+                    Data = new JObject
+                    {
+                        ["kind"]         = "stepUsage",
+                        ["uri"]          = uri.ToString(),
+                        ["sourceFile"]   = src.SourceFile,
+                        ["sourceLine"]   = src.SourceFileLine,
+                        ["sourceColumn"] = src.SourceFileColumn,
+                    }
+                });
+                continue;
+            }
+
+            var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
+            var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+            lenses.Add(BuildResolvedLens(range, uri, line, col, usages.Count));
         }
 
         _logger.LogVerbose($"StepCodeLensHandler: {lenses.Count} lens(es) for {uri}");
         return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[]>(lenses.ToArray());
     }
+
+    /// <summary>
+    /// Resolves a placeholder lens created above (non-VS clients, deferred path) into its final
+    /// <c>Command</c> — backs <c>codeLens/resolve</c> (issue #471). Falls back to the "0 step
+    /// usages" shape if the binding can no longer be located (e.g. the file changed between the
+    /// initial <c>textDocument/codeLens</c> call and this resolve).
+    /// </summary>
+    public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> ResolveAsync(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens, CancellationToken cancellationToken)
+    {
+        var data = lens.Data as JObject;
+        var uriStr      = data?["uri"]?.Value<string>();
+        var sourceFile  = data?["sourceFile"]?.Value<string>();
+        var sourceLine  = data?["sourceLine"]?.Value<int?>();
+        var sourceCol   = data?["sourceColumn"]?.Value<int?>();
+
+        if (uriStr is null || sourceFile is null || sourceLine is null || sourceCol is null)
+            return Task.FromResult(WithZeroUsages(lens, uriStr, lens.Range.Start.Line, lens.Range.Start.Character));
+
+        var uri = DocumentUri.Parse(uriStr);
+        var registry = _registryLookup.GetRegistryForUri(uri);
+        if (registry == ProjectBindingRegistry.Invalid)
+            return Task.FromResult(WithZeroUsages(lens, uriStr, lens.Range.Start.Line, lens.Range.Start.Character));
+
+        var owners = _scopeManager.ResolveOwners(uri);
+        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
+            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
+            : null;
+
+        var bindingLocation = new SourceLocation(sourceFile, sourceLine.Value, sourceCol.Value);
+        var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+        return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character, usages.Count));
+    }
+
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens BuildResolvedLens(
+        LspRange range, DocumentUri uri, int line, int col, int count) =>
+        new()
+        {
+            Range = range,
+            Command = new Command
+            {
+                Title     = count == 1 ? "1 step usage" : $"{count} step usages",
+                Name      = count > 0 ? "reqnroll.findStepUsages" : "reqnroll.noStepUsages",
+                Arguments = count > 0 ? new JArray(uri.ToString(), line, col) : null
+            }
+        };
+
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens WithZeroUsages(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens, string? _uriStr, int line, int col) =>
+        new()
+        {
+            Range = lens.Range,
+            Command = new Command { Title = "0 step usages", Name = "reqnroll.noStepUsages", Arguments = null }
+        };
 
     private static bool IsCSharp(DocumentUri uri) =>
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);

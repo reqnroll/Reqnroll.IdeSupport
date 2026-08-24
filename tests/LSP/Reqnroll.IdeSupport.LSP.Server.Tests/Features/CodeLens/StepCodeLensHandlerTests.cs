@@ -1,4 +1,5 @@
-﻿using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+﻿using Newtonsoft.Json.Linq;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -10,8 +11,10 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 
@@ -33,8 +36,8 @@ public class StepCodeLensHandlerTests
                        .Returns(ProjectBindingRegistry.Invalid);
     }
 
-    private StepCodeLensHandler CreateSut() =>
-        new(_matchService, _scopeManager, _registryLookup, _logger);
+    private StepCodeLensHandler CreateSut(string ide = "visualstudio") =>
+        new(_matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
@@ -280,6 +283,59 @@ public class StepCodeLensHandlerTests
 
         captured!.SourceFileLine.Should().Be(7);
         captured!.SourceFileColumn.Should().Be(3);
+    }
+
+    // ── Deferred resolve (non-VS clients) ────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_non_vs_client_returns_placeholder_lens_without_calling_FindUsages()
+    {
+        var csPath  = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+
+        var result = await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result![0].Command.Should().BeNull();
+        result[0].Data.Should().NotBeNull();
+        _matchService.DidNotReceive().FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
+    }
+
+    [Fact]
+    public async Task ResolveAsync_computes_the_command_from_the_lens_Data()
+    {
+        var csPath  = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
+
+        var placeholder = (await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None))![0];
+        var resolved = await CreateSut(ide: "vscode").ResolveAsync(placeholder, CancellationToken.None);
+
+        resolved.Command!.Title.Should().Be("1 step usage");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_falls_back_to_zero_usages_when_the_binding_can_no_longer_be_found()
+    {
+        _registryLookup.GetRegistryForUri(CsUri).Returns(ProjectBindingRegistry.Invalid);
+        var lens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+        {
+            Range = new LspRange(new Position(4, 0), new Position(4, 0)),
+            Data = new JObject
+            {
+                ["kind"] = "stepUsage",
+                ["uri"] = CsUri.ToString(),
+                ["sourceFile"] = CsUri.GetFileSystemPath(),
+                ["sourceLine"] = 5,
+                ["sourceColumn"] = 1,
+            }
+        };
+
+        var resolved = await CreateSut(ide: "vscode").ResolveAsync(lens, CancellationToken.None);
+
+        resolved.Command!.Title.Should().Be("0 step usages");
     }
 }
 
