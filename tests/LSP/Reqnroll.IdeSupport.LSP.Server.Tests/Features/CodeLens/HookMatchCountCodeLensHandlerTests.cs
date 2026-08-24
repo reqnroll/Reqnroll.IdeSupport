@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -36,8 +37,8 @@ public class HookMatchCountCodeLensHandlerTests
         _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(Array.Empty<FeatureBindingMatchSet>());
     }
 
-    private HookMatchCountCodeLensHandler CreateSut() =>
-        new(_matchService, _scopeManager, _registryLookup, _logger);
+    private HookMatchCountCodeLensHandler CreateSut(string ide = "visualstudio") =>
+        new(_matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
@@ -288,5 +289,51 @@ public class HookMatchCountCodeLensHandlerTests
 
         result.Should().ContainSingle("only the hook binding should produce a lens from this handler");
         result[0].Range!.Start.Line.Should().Be(4);
+    }
+
+    // ── Gated eager/deferred split + resolve (issue #471) ───────────────────────
+
+    [Fact]
+    public async Task Handle_non_vs_client_defers_scoped_hooks_without_walking_the_corpus()
+    {
+        var hook = MakeScopedHook(HookType.BeforeScenario);
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+
+        var result = await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Command.Should().BeNull();
+        result[0].Data.Should().NotBeNull();
+        _matchService.DidNotReceive().GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>());
+    }
+
+    [Fact]
+    public async Task Handle_non_vs_client_still_resolves_unscoped_hooks_eagerly()
+    {
+        // "all scenarios" needs no corpus walk (issue #403) -- no reason to defer it.
+        var hook = MakeHook(HookType.BeforeScenario); // unscoped
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+
+        var result = await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+        result[0].Command!.Title.Should().Be("all scenarios");
+    }
+
+    [Fact]
+    public async Task ResolveAsync_computes_the_scenario_count_from_the_lens_Data()
+    {
+        var hook = MakeScopedHook(HookType.BeforeScenario);
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+        var matchSet = BuildMatchSet("Feature: F\nScenario: S\n    Given a step\n", registry, FeatureUri.ToString());
+        _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(new[] { matchSet });
+
+        var placeholder = (await CreateSut(ide: "vscode").HandleAsync(RequestFor(CsUri), CancellationToken.None))[0];
+        var resolved = await CreateSut(ide: "vscode").ResolveAsync(placeholder, CancellationToken.None);
+
+        resolved.Command!.Title.Should().Be("1 scenario matched");
     }
 }

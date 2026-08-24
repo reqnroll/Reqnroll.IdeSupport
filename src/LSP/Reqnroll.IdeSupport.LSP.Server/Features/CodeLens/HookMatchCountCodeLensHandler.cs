@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -51,18 +52,21 @@ public sealed class HookMatchCountCodeLensHandler
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
+    private readonly ClientIdeContext              _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="HookMatchCountCodeLensHandler"/> class.</summary>
     public HookMatchCountCodeLensHandler(
         IBindingMatchService          matchService,
         ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
+        ClientIdeContext              clientIde,
         IIdeSupportLogger               logger,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
         _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
+        _clientIde      = clientIde;
         _logger         = logger;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -103,8 +107,10 @@ public sealed class HookMatchCountCodeLensHandler
             : null;
 
         // Computed once per request, not once per hook: HookScenarioMatching walks the full
-        // project scenario corpus, and a "Hooks.cs" file can have many hook methods.
-        var matchSets = _matchService.GetAll(projectFilter).ToList();
+        // project scenario corpus, and a "Hooks.cs" file can have many hook methods. Lazy because
+        // non-VS clients defer every scoped hook (below) -- when a file has only deferred hooks
+        // and/or unscoped ("all scenarios") hooks, this corpus walk should never run at all.
+        var matchSets = new Lazy<List<FeatureBindingMatchSet>>(() => _matchService.GetAll(projectFilter).ToList());
 
         var lenses = new List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
         var seen = new HashSet<(int line, int col)>();
@@ -121,40 +127,97 @@ public sealed class HookMatchCountCodeLensHandler
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
-            // Unscoped hooks (no [Scope] at all) match every scenario in the project: skip the
-            // corpus walk and show a static label rather than an unbounded, uninformative count
-            // (issue #403).
-            string title;
-            if (hook.Scope is null)
-            {
-                title = "all scenarios";
-            }
-            else
-            {
-                var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
-                var count = scenarios.Count;
-                title = count == 1 ? "1 scenario matched" : $"{count} scenarios matched";
-            }
-
             // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
             var line = src.SourceFileLine   - 1;
             var col  = src.SourceFileColumn - 1;
+            var range = new LspRange(new Position(line, col), new Position(line, col));
 
-            lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+            // Unscoped hooks (no [Scope] at all) match every scenario in the project: skip the
+            // corpus walk and show a static label rather than an unbounded, uninformative count
+            // (issue #403). No reason to ever defer this case -- there's nothing expensive to defer.
+            if (hook.Scope is null)
             {
-                Range = new LspRange(new Position(line, col), new Position(line, col)),
-                Command = new Command
+                lenses.Add(BuildResolvedLens(range, uri, line, col, title: "all scenarios"));
+                continue;
+            }
+
+            if (!_clientIde.IsVisualStudio)
+            {
+                lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
                 {
-                    Title     = title,
-                    Name      = "reqnroll.goToMatchingScenarios",
-                    Arguments = new JArray(uri.ToString(), line, col),
-                },
-            });
+                    Range = range,
+                    Data = new JObject
+                    {
+                        ["kind"]         = "hookMatchCount",
+                        ["uri"]          = uri.ToString(),
+                        ["sourceFile"]   = src.SourceFile,
+                        ["sourceLine"]   = src.SourceFileLine,
+                        ["sourceColumn"] = src.SourceFileColumn,
+                    }
+                });
+                continue;
+            }
+
+            var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets.Value, hook);
+            var count = scenarios.Count;
+            lenses.Add(BuildResolvedLens(range, uri, line, col,
+                title: count == 1 ? "1 scenario matched" : $"{count} scenarios matched"));
         }
 
         _logger.LogVerbose($"HookMatchCountCodeLensHandler: {lenses.Count} lens(es) for {uri}");
         return Task.FromResult(lenses.ToArray());
     }
+
+    /// <summary>
+    /// Resolves a placeholder lens created above (non-VS clients, scoped-hook deferred path) into
+    /// its final <c>Command</c> — backs <c>codeLens/resolve</c> (issue #471). Falls back to "0
+    /// scenarios matched" if the hook can no longer be located.
+    /// </summary>
+    public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> ResolveAsync(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens, CancellationToken cancellationToken)
+    {
+        var data = lens.Data as JObject;
+        var uriStr     = data?["uri"]?.Value<string>();
+        var sourceFile = data?["sourceFile"]?.Value<string>();
+        var sourceLine = data?["sourceLine"]?.Value<int?>();
+        var sourceCol  = data?["sourceColumn"]?.Value<int?>();
+
+        if (uriStr is null || sourceFile is null || sourceLine is null || sourceCol is null)
+            return Task.FromResult(BuildResolvedLens(lens.Range, DocumentUri.Parse(uriStr ?? "file:///unknown"),
+                lens.Range.Start.Line, lens.Range.Start.Character, "0 scenarios matched"));
+
+        var uri = DocumentUri.Parse(uriStr);
+        var registry = _registryLookup.GetRegistryForUri(uri);
+        if (registry == ProjectBindingRegistry.Invalid)
+            return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character, "0 scenarios matched"));
+
+        var hook = registry.Hooks.FirstOrDefault(h =>
+            h.Implementation?.SourceLocation is { } loc
+            && IsSameFile(loc.SourceFile, sourceFile)
+            && loc.SourceFileLine == sourceLine.Value
+            && loc.SourceFileColumn == sourceCol.Value);
+        if (hook is null)
+            return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character, "0 scenarios matched"));
+
+        var owners = _scopeManager.ResolveOwners(uri);
+        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
+            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
+            : null;
+        var matchSets = _matchService.GetAll(projectFilter).ToList();
+        var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
+        var count = scenarios.Count;
+
+        return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character,
+            count == 1 ? "1 scenario matched" : $"{count} scenarios matched"));
+    }
+
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens BuildResolvedLens(
+        LspRange range, DocumentUri uri, int line, int col, string title) =>
+        new()
+        {
+            Range = range,
+            Command = new Command { Title = title, Name = "reqnroll.goToMatchingScenarios", Arguments = new JArray(uri.ToString(), line, col) }
+        };
 
     private static readonly global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[] Empty =
         Array.Empty<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
