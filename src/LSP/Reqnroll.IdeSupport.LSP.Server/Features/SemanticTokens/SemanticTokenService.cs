@@ -4,6 +4,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 
 
@@ -72,6 +73,34 @@ public sealed class SemanticTokenService : ISemanticTokenService
         return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
     }
 
+    /// <inheritdoc/>
+    public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensForRangeAsync(
+        DocumentUri uri, int version, LspRange range, CancellationToken cancellationToken = default)
+    {
+        if (!_documentBufferService.TryGet(uri, out var buffer) || buffer?.Tags is not { } tags || tags.Count == 0)
+        {
+            _logger.LogVerbose($"SemanticTokenService: no tags available for {uri} v{version} (range)");
+            return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(EmptyTokens);
+        }
+
+        // When the end position is at column 0, it means "the start of that line",
+        // so we exclude that line from the range (LSP convention).
+        var endLine = range.End.Character == 0 && range.End.Line > 0
+            ? range.End.Line - 1
+            : range.End.Line;
+
+        var encoded = Encode(tags, range.Start.Line, endLine);
+        var tokens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens
+        {
+            Data = [.. encoded],
+            ResultId = $"{uri}@{version}"
+        };
+        _logger.LogInfo(
+            $"SemanticTokenService: encoded {encoded.Count / 5} range token(s) for {uri} v{version} " +
+            $"(lines {range.Start.Line}-{endLine})");
+        return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
+    }
+
     /// <summary>
     /// Evicts the cached token result for <paramref name="uri"/> so that the next
     /// <see cref="GetSemanticTokensAsync"/> call re-encodes from the current tags.
@@ -94,11 +123,15 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// block tags (FeatureBlock, etc.) are not emitted themselves but their
     /// children are processed recursively.
     /// </summary>
-    private static List<int> Encode(IReadOnlyCollection<DeveroomTag> tags)
+    private static List<int> Encode(
+        IReadOnlyCollection<DeveroomTag> tags, int? startLine = null, int? endLine = null)
     {
         // Collect all leaf tokens in document order (line asc, char asc).
         var entries = new List<(int Line, int Char, int Length, int TypeIdx, int ModBits)>();
-        CollectLeafTokens(tags, entries);
+        var scopedTags = startLine.HasValue && endLine.HasValue
+            ? FilterToLineRange(tags, startLine.Value, endLine.Value)
+            : tags;
+        CollectLeafTokens(scopedTags, entries);
 
         // Primary sort: (line, char) ascending.
         // Tie-break: length descending so that a longer outer token (e.g. DefinedStep
@@ -224,6 +257,24 @@ public sealed class SemanticTokenService : ISemanticTokenService
             }
         }
         return resolved;
+    }
+
+    /// <summary>
+    /// Filters to tags whose line span overlaps [<paramref name="startLine"/>, <paramref name="endLine"/>]
+    /// (both inclusive), before <see cref="CollectLeafTokens"/> runs — the actual cost reduction for
+    /// <c>textDocument/semanticTokens/range</c> (issue #471): fewer tags in means fewer
+    /// <see cref="ResolvePosition"/> calls, which is itself O(document lines) per call.
+    /// </summary>
+    private static IEnumerable<DeveroomTag> FilterToLineRange(
+        IEnumerable<DeveroomTag> tags, int startLine, int endLine)
+    {
+        foreach (var tag in tags)
+        {
+            var (tagStartLine, _) = ResolvePosition(tag.Range, tag.Range.Start);
+            var (tagEndLine, _) = ResolvePosition(tag.Range, tag.Range.End);
+            if (tagEndLine >= startLine && tagStartLine <= endLine)
+                yield return tag;
+        }
     }
 
     private static void CollectLeafTokens(

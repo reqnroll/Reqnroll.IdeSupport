@@ -21,6 +21,20 @@ public interface ISemanticTokenService
     Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensAsync(DocumentUri uri, int version, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns semantic tokens for only the given <paramref name="range"/>, encoded fresh from the
+    /// current tags on every call (not cached — a range result is a subset of the full-document
+    /// cache entry <see cref="GetSemanticTokensAsync"/> maintains, and caching every distinct
+    /// viewport range would bloat that cache for no benefit; encoding is now proportional to the
+    /// range's tag count instead of the whole document, so recomputing per call is cheap).
+    /// Backs <c>textDocument/semanticTokens/range</c> — issue #471: this used to compute and
+    /// discard the entire document.
+    /// </summary>
+    Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensForRangeAsync(
+        DocumentUri uri, int version,
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Evicts any cached token result for <paramref name="uri"/>, forcing the next
     /// <see cref="GetSemanticTokensAsync"/> call to re-encode from the current tags.
     /// Call this whenever the document's tags are updated without a version bump
