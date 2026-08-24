@@ -88,3 +88,8 @@ Scenario: The server advertises and serves textDocument/semanticTokens/range (is
 	And the semantic tokens for the whole-document range are requested
 	Then the semantic tokens include a "reqnroll.comment" token for "# a leading comment"
 	And the semantic tokens include a "reqnroll.tag" token for "@smoke"
+
+Scenario: Visual Studio is not offered pull support, only the legend it needs to decode pushed tokens
+	Given the LSP server is started for IDE "visualstudio"
+	Then the server does not advertise pull support for semantic tokens
+	And the server advertises a semantic token legend
