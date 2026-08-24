@@ -159,3 +159,34 @@ requests' own payload computation is not the likely culprit.
 
 - 2026-08-23: Branched from `origin/master` (not off the unrelated
   `experiment/remove-vsstubframeinitializer-timing` branch already checked out).
+- 2026-08-24: Decompiled `OmniSharp.Extensions.JsonRpc.dll`/`OmniSharp.Extensions.LanguageProtocol.dll`
+  (v0.19.9) to answer "does OmniSharp support concurrent dispatch" precisely. **It does** —
+  `ProcessScheduler` genuinely runs `[Parallel]`-tagged requests via `Observable.Merge`; every
+  handler this issue is about (`ICodeLensHandler`, `ISemanticTokensFullHandler`/`Delta`/`Range`,
+  `IInlayHintsHandler`, the three refresh handlers) is `[Parallel]` by the *library's own*
+  interface attribute — we have zero `[Serial]`/`[Parallel]` attributes anywhere in our code.
+  BUT `IDidOpenTextDocumentHandler`/`IDidChangeTextDocumentHandler`/`IDidSaveTextDocumentHandler`
+  are hardwired `[Serial]` by the library, and the scheduler's batch design means a Parallel
+  batch can't even start until the current Serial batch's slowest in-flight item fully drains.
+  Revises the "request dispatch is effectively serial" framing from finding #1: it isn't serial,
+  but a slow Serial-tagged `didOpen`/`didChange` (ours does synchronous Roslyn discovery + reparse
+  inline) stalls the whole pipeline, which looks identical from outside. Posted as a follow-up
+  issue comment along with a range/resolve-support audit (below).
+- 2026-08-24: Per Chris's request, audited range/resolve support for the LSP messages in this
+  issue:
+  - `textDocument/codeLens` has **no resolve support at all** — no `resolveProvider` capability
+    declared, no `codeLens/resolve` handler, lenses carry no `Data` token. Every lens's expensive
+    `Command` (the `FindUsages` scan) computes eagerly for the whole file on every poll. This is
+    the standard reason CodeLens resolve exists; ranked it as the highest-leverage, lowest-effort
+    fix — a protocol-shape change, not a data-structure rewrite, and shrinks the Parallel-batch
+    drain time too (ties into the dispatch finding above).
+  - `textDocument/semanticTokens/range` is registered but is a **no-op shim** —
+    `SemanticTokensHandler.HandleAsync(SemanticTokensRangeParams)` computes/encodes the entire
+    document regardless of the requested range (`// Return all tokens; the client will filter by
+    range.`). Likely a meaningful share of the `reqnroll/semanticTokens` push's 7,470.8ms.
+  - `textDocument/inlayHint` filters *output* by range but not *compute* — `InlayHintHandler`
+    builds hints for every step in the document, then filters. Same fix shape, smaller scope.
+  Recommended sequencing (posted to the issue): (a) CodeLens resolve, (b) genuine range-scoping
+  for semanticTokens/range + inlayHint, (c) the FindUsages index from the design-direction
+  comment, (d) get Roslyn discovery/reparse off the didOpen/didChange critical path. (a)-(c)
+  independent/any order; (d) architecturally separate.
