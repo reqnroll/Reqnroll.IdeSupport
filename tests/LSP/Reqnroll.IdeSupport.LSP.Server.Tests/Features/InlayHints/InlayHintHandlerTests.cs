@@ -94,4 +94,21 @@ public class InlayHintHandlerTests
         var hint = result!.Should().ContainSingle().Subject;
         hint.Position.Line.Should().Be(2);
     }
+
+    [Fact]
+    public async Task HandleAsync_passes_the_requested_ranges_line_bounds_to_Build()
+    {
+        var hintService = Substitute.For<IGherkinInlayHintService>();
+        var sut = new InlayHintHandler(_matchService, _scopeManager, hintService, _logger);
+
+        var step = MakeMatch("N.S1", startOffset: 33, length: 6, pattern: "a step");
+        var matchSet = new FeatureBindingMatchSet(FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step });
+        _matchService.Store(matchSet);
+        hintService.Build(matchSet, 0, 2).Returns(Array.Empty<GherkinInlayHint>());
+
+        var range = new LspRange(new Position(0, 0), new Position(2, 100)); // only line 2 in view
+        await sut.HandleAsync(RequestFor(FeatureUri, range), CancellationToken.None);
+
+        hintService.Received(1).Build(matchSet, 0, 2);
+    }
 }

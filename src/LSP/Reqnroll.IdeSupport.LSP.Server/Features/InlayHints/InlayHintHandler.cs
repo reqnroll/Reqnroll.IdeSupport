@@ -68,7 +68,7 @@ public sealed class InlayHintHandler
             return Task.FromResult<InlayHintContainer?>(new InlayHintContainer());
         }
 
-        var hints = _hintService.Build(matchSet)
+        var hints = _hintService.Build(matchSet, request.Range.Start.Line, request.Range.End.Line)
             .Select(ToInlayHint)
             .Where(h => Intersects(h.Position, request.Range))
             .ToList();
