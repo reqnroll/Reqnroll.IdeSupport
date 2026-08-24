@@ -10,11 +10,7 @@ suite('codeLensSuppression', () => {
       return [];
     };
 
-    const result = middleware.provideCodeLenses!(
-      {} as never,
-      {} as never,
-      next as never,
-    );
+    const result = middleware.provideCodeLenses!({} as never, {} as never, next);
 
     assert.deepStrictEqual(result, []);
     assert.strictEqual(nextCalled, false);
@@ -28,7 +24,7 @@ suite('codeLensSuppression', () => {
       return undefined;
     };
 
-    const result = middleware.resolveCodeLens!({} as never, {} as never, next as never);
+    const result = middleware.resolveCodeLens!({} as never, {} as never, next);
 
     assert.strictEqual(result, undefined);
     assert.strictEqual(nextCalled, false);
