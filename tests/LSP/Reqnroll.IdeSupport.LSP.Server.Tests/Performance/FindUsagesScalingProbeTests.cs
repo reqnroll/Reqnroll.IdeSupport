@@ -27,8 +27,16 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 /// fixed at 64; only cached-step count grows), per-step cost (ms / cacheSteps) should stay
 /// roughly flat across the run; if it instead climbs, that points to a worse-than-linear
 /// (e.g. re-scanning already-scanned state, or growth in something other than cache size) shape.
-/// Diagnostic, not a regression gate — logs its findings rather than asserting a specific curve
-/// shape, since the shape is exactly what's under investigation.
+/// </remarks>
+/// <remarks>
+/// <b>Regression gate, not a pure diagnostic</b> (tightened once the root cause was confirmed —
+/// see issue #471): asserts the largest measured point stays within a generous multiple of a
+/// naive linear-scaling prediction from the smallest point. Real runs measured ~44.3ms at 50
+/// features against a linear prediction of ~312.5ms (12.5ms × 25x the feature count) — nowhere
+/// close to the 5x-of-linear threshold below, and true O(n²) growth would land an order of
+/// magnitude past it. Forward-compatible: this stays valid (and only gets safer) whether
+/// <c>FindUsages</c> is later indexed or left as-is — no need to revisit after a fix lands, unlike
+/// <see cref="ConcurrencyProbeTests"/>'s dispatch-stall assertion.
 /// </remarks>
 public class FindUsagesScalingProbeTests
 {
@@ -98,9 +106,18 @@ public class FindUsagesScalingProbeTests
         var lastPerFeature = last.MedianMs / last.Features;
         Console.WriteLine($"Per-feature cost at {first.Features} features: {firstPerFeature:F3} ms/feature");
         Console.WriteLine($"Per-feature cost at {last.Features} features:  {lastPerFeature:F3} ms/feature");
-        Console.WriteLine(lastPerFeature > firstPerFeature * 2
-            ? "=> Per-feature cost climbs with cache size: consistent with worse-than-linear (e.g. O(n^2)-shaped) growth."
-            : "=> Per-feature cost stays roughly flat: consistent with linear growth in cache size.");
+
+        // Regression gate: the largest point must stay within 5x of a naive linear-scaling
+        // prediction from the smallest point. See the class remarks for why this threshold is
+        // safe against noise today and still catches a real O(n^2)-shaped regression.
+        const double headroom = 5.0;
+        var linearPrediction = first.MedianMs * (last.Features / (double)first.Features);
+        Console.WriteLine($"Linear prediction at {last.Features} features: {linearPrediction:F2} ms " +
+                           $"(actual {last.MedianMs:F2} ms, {headroom:F0}x-headroom threshold {linearPrediction * headroom:F2} ms)");
+        last.MedianMs.Should().BeLessThan(linearPrediction * headroom,
+            "cost should scale no worse than linearly (with generous headroom) with cached step count; " +
+            "a failure here means cache-size growth alone has become super-linear, not just the known " +
+            "bindings-in-file × cache-size product being large");
     }
 
     /// <summary>
@@ -113,6 +130,15 @@ public class FindUsagesScalingProbeTests
     /// scan cost, not additional matches) against the same fully-populated 1,350-step cache, and
     /// compares its per-binding cost to CorpusSteps.cs's (64 bindings) at the same cache size.
     /// </summary>
+    /// <remarks>
+    /// <b>Regression gate, not a pure diagnostic</b> (tightened once the root cause was confirmed —
+    /// see issue #471): same shape as <see cref="CodeLens_latency_vs_cached_step_count"/> — asserts
+    /// the large-file cost stays within a generous multiple of a naive linear-scaling prediction
+    /// from the baseline. Real runs measured ~533ms against a ~581ms linear prediction (already
+    /// under it) — the 3x-headroom threshold below leaves ample margin for noise while still
+    /// catching a real O(n^2)-shaped regression on this axis. Forward-compatible: stays valid
+    /// whether <c>FindUsages</c> is later indexed or left as-is.
+    /// </remarks>
     [Fact]
     public async Task CodeLens_latency_vs_bindings_in_file()
     {
@@ -157,9 +183,17 @@ public class FindUsagesScalingProbeTests
         Console.WriteLine($"CorpusSteps.cs   : {baselineBindingCount,5} bindings, {baselineMs,8:F2} ms, {baselinePerBinding,8:F4} ms/binding");
         Console.WriteLine($"SyntheticLarge.cs: {largeBindingCount,5} bindings, {largeMs,8:F2} ms, {largePerBinding,8:F4} ms/binding");
         Console.WriteLine($"Binding-count ratio: {(double)largeBindingCount / baselineBindingCount:F1}x; latency ratio: {largeMs / baselineMs:F1}x");
-        Console.WriteLine(largePerBinding > baselinePerBinding * 2
-            ? "=> Per-binding cost climbs sharply with bindings-in-file: consistent with worse-than-linear growth on this axis."
-            : "=> Per-binding cost stays roughly proportional: consistent with linear growth in bindings-in-file.");
+
+        // Regression gate: the large-file cost must stay within 3x of a naive linear-scaling
+        // prediction from the baseline. See the method remarks for why this threshold is safe
+        // against noise today and still catches a real O(n^2)-shaped regression.
+        const double headroom = 3.0;
+        var linearPrediction = baselineMs * (largeBindingCount / (double)baselineBindingCount);
+        Console.WriteLine($"Linear prediction at {largeBindingCount} bindings: {linearPrediction:F2} ms " +
+                           $"({headroom:F0}x-headroom threshold {linearPrediction * headroom:F2} ms)");
+        largeMs.Should().BeLessThan(linearPrediction * headroom,
+            "cost should scale no worse than linearly (with generous headroom) with bindings-in-file; " +
+            "a failure here means the per-binding FindUsages scan itself has become super-linear");
     }
 
     private static async Task<double> MedianCodeLensMsAsync(BenchmarkLspHarness harness, DocumentUri uri, int samples = 5)

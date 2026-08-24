@@ -25,11 +25,20 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 /// suspect for the workload that's actually saturating the server while the corpus's 1,350 cached
 /// steps sit in memory, close to the issue's reported ~1,300-method scale), then fire one cheap,
 /// unrelated <c>textDocument/foldingRange</c> request on a different document at the same time.
-/// If request dispatch is serial/single-threaded, the cheap request's latency should climb with
-/// the size of the concurrent CodeLens batch (it queues behind them); if dispatch is concurrent,
-/// its latency should stay close to its own solo baseline regardless of batch size. This is a
-/// diagnostic, not a regression gate — it logs its findings to the test output rather than
-/// asserting a specific outcome, since the answer is exactly what's under investigation.
+/// </remarks>
+/// <remarks>
+/// <b>Regression gate, not a pure diagnostic (tightened once the root cause was confirmed — see
+/// issue #471):</b> decompiling OmniSharp 0.19.9 confirmed <c>textDocument/codeLens</c> and
+/// <c>textDocument/foldingRange</c> are both <c>[Parallel]</c>-tagged by the library, so they
+/// should genuinely run concurrently — the &gt;5x slowdown this test asserts below is not
+/// "inherent to LSP," it's the confirmed, currently-unfixed symptom (a slow <c>[Serial]</c>-tagged
+/// <c>textDocument/didOpen</c>/<c>didChange</c> stalls the whole dispatch pipeline until it
+/// drains — see the issue for the full mechanism). Real runs against this corpus measured 45x-56x;
+/// asserting &gt;5x leaves generous headroom against CI noise while still failing loudly if this
+/// characteristic disappears unexpectedly (e.g. a harness regression silently stops exercising the
+/// bug) or gets dramatically worse. <b>This assertion documents known-bad behavior, not desired
+/// behavior — flip or delete it once the dispatch/CodeLens-resolve fix (tracked in a follow-up
+/// branch off this investigation) actually removes the stall.</b>
 /// </remarks>
 public class ConcurrencyProbeTests
 {
@@ -69,6 +78,11 @@ public class ConcurrencyProbeTests
         await harness.RequestFoldingRangeAsync(probeUri);
         var baselineMs = Stopwatch.GetElapsedTime(baselineStart).TotalMilliseconds;
 
+        // Sanity: a solo folding-range on a tiny file should never itself be slow. If this fails,
+        // the environment/harness is the problem, not the dispatch behavior under test below.
+        baselineMs.Should().BeLessThan(500,
+            "a solo folding-range request has no concurrent load and should be fast regardless of environment noise");
+
         // Concurrent: fire a batch of CodeLens requests (the suspected expensive, unindexed
         // FindUsages scan) and the same cheap request at the same time, without awaiting the
         // CodeLens calls first.
@@ -90,10 +104,15 @@ public class ConcurrencyProbeTests
         Console.WriteLine("=== Issue #471 concurrency probe ===");
         Console.WriteLine($"Corpus: {features.Count} feature files opened, ~1350 cached steps, 64 binding patterns.");
         Console.WriteLine($"Solo folding-range baseline:                {baselineMs:F1} ms");
-        Console.WriteLine($"Folding-range latency under {concurrentCodeLensCount} concurrent codeLens calls: {underLoadMs:F1} ms");
-        Console.WriteLine(underLoadMs > baselineMs * 3
-            ? "=> Cheap request latency scales with concurrent CodeLens load: consistent with SERIAL request dispatch."
-            : "=> Cheap request latency stayed near baseline despite concurrent CodeLens load: consistent with CONCURRENT request dispatch.");
+        Console.WriteLine($"Folding-range latency under {concurrentCodeLensCount} concurrent codeLens calls: {underLoadMs:F1} ms " +
+                           $"({underLoadMs / baselineMs:F1}x baseline)");
+
+        // Regression gate for the confirmed issue #471 symptom — see the class remarks for why
+        // this asserts the *bad* behavior rather than the desired one, and when to change it.
+        underLoadMs.Should().BeGreaterThan(baselineMs * 5,
+            "issue #471's confirmed dispatch-pipeline stall should still reproduce; " +
+            "real runs measured 45x-56x — if this drops near 1x, the fix landed and this assertion should be flipped, " +
+            "not silently left passing for the wrong reason");
     }
 
     private static async Task<bool> WaitForNonEmptyCodeLensAsync(
