@@ -43,17 +43,24 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     }
 
     /// <summary>Starts timing <paramref name="operation"/>; disposing the returned scope records its elapsed duration.</summary>
-    public IDisposable Measure(string operation, DocumentUri? uri = null)
-        => new Scope(this, operation, uri);
+    public IDisposable Measure(string operation, DocumentUri? uri = null, string? detail = null)
+        => new Scope(this, operation, uri, detail);
 
     /// <summary>Logs the elapsed duration of an operation and, subject to sampling, emits it as telemetry and a trace notification.</summary>
-    public void Record(string operation, double elapsedMs, DocumentUri? uri = null)
+    public void Record(string operation, double elapsedMs, DocumentUri? uri = null, string? detail = null)
     {
         // Primary sink: the existing log file. Verbose so it is off in normal runs and on when
         // diagnostics are enabled. The "PERF " prefix makes it greppable for offline analysis.
-        _logger.LogVerbose(() => uri is null
-            ? $"PERF op={operation} ms={elapsedMs:F1}"
-            : $"PERF op={operation} ms={elapsedMs:F1} uri={uri}");
+        // thread=<managed thread id> lets an offline analysis tell genuinely concurrent operations
+        // apart from ones serialized onto the same thread (issue #471 investigation — see
+        // ConcurrencyProbeTests for the empirical finding this was added to help confirm/quantify).
+        _logger.LogVerbose(() =>
+        {
+            var line = $"PERF op={operation} ms={elapsedMs:F1} thread={Environment.CurrentManagedThreadId}";
+            if (uri is not null) line += $" uri={uri}";
+            if (!string.IsNullOrEmpty(detail)) line += $" {detail}";
+            return line;
+        });
 
         // F41: mirror the same measurement as a $/logTrace notification (a no-op unless the
         // client opted into tracing via InitializeParams.Trace or $/setTrace). The URI only goes
@@ -94,14 +101,16 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         private readonly OperationDurationRecorder _owner;
         private readonly string _operation;
         private readonly DocumentUri? _uri;
+        private readonly string? _detail;
         private readonly long _startTimestamp;
         private bool _disposed;
 
-        public Scope(OperationDurationRecorder owner, string operation, DocumentUri? uri)
+        public Scope(OperationDurationRecorder owner, string operation, DocumentUri? uri, string? detail = null)
         {
             _owner = owner;
             _operation = operation;
             _uri = uri;
+            _detail = detail;
             _startTimestamp = Stopwatch.GetTimestamp();
         }
 
@@ -109,7 +118,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         {
             if (_disposed) return;
             _disposed = true;
-            _owner.Record(_operation, Stopwatch.GetElapsedTime(_startTimestamp).TotalMilliseconds, _uri);
+            _owner.Record(_operation, Stopwatch.GetElapsedTime(_startTimestamp).TotalMilliseconds, _uri, _detail);
         }
     }
 }

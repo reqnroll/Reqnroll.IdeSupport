@@ -53,4 +53,13 @@ public interface IBindingMatchService
     /// matching <see cref="FindUsages"/>'s existing pre-baseline-placeholder convention.
     /// </summary>
     IEnumerable<FeatureBindingMatchSet> GetAll(IReadOnlyCollection<ProjectOwner>? projectFilter = null);
+
+    /// <summary>
+    /// Cheap, approximate cache-size snapshot for diagnostics (issue #471 investigation):
+    /// <c>DocumentCount</c> is O(1); <c>TotalStepCount</c> is O(cached documents) — proportional to
+    /// how many feature files are cached, not to their contents' binding-match complexity, so it
+    /// stays negligible next to the O(bindings × cached steps) cost of a <see cref="FindUsages"/>
+    /// sweep it's meant to be logged alongside. Not on any hot per-binding path.
+    /// </summary>
+    (int DocumentCount, int TotalStepCount) GetCacheStats();
 }
