@@ -92,21 +92,24 @@ public class SemanticTokensHandlerTests
     }
 
     [Fact]
-    public async Task Handle_Range_delegates_to_token_service()
+    public async Task Handle_Range_delegates_to_the_range_scoped_token_service_method()
     {
         SetupBufferVersion(FeatureUri, 4);
         var expected = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens { Data = ImmutableArray.Create(0, 0, 7, 0, 0) };
-        _tokenService.GetSemanticTokensAsync(FeatureUri, 4, Arg.Any<CancellationToken>())
+        var range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(0, 0, 1, 0);
+        _tokenService.GetSemanticTokensForRangeAsync(FeatureUri, 4, range, Arg.Any<CancellationToken>())
                      .Returns(Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(expected));
 
         var sut = CreateSut();
         var request = new SemanticTokensRangeParams
         {
             TextDocument = new TextDocumentIdentifier { Uri = FeatureUri },
-            Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(0, 0, 1, 0)
+            Range = range
         };
         var result = await sut.HandleAsync(request, CancellationToken.None);
+
         result.Should().BeSameAs(expected);
+        await _tokenService.DidNotReceive().GetSemanticTokensAsync(Arg.Any<DocumentUri>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     // ── Delta ─────────────────────────────────────────────────────────────────
