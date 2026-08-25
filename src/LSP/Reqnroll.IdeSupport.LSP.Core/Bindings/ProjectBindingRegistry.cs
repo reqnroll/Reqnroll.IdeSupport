@@ -1,6 +1,7 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Gherkin.Ast;
@@ -27,6 +28,16 @@ public record ProjectBindingRegistry
 
     private static ProjectBindingImplementationEqualityComparer _equalityComparerForProjectBindingImplementations = new();
     private static int _versionCounter;
+
+    // Keyed by instance rather than an instance field: ProjectBindingRegistry is a record, whose
+    // synthesized equality compares every instance field, so a cache field here would silently
+    // break structural equality (harmless today -- nothing compares registries structurally --
+    // but a footgun worth avoiding). A registry is immutable and replaced wholesale on every
+    // mutation, so the index only ever needs building once per instance (issue #471).
+    private static readonly ConditionalWeakTable<ProjectBindingRegistry, StepLiteralIndex> _literalIndexCache = new();
+
+    private StepLiteralIndex LiteralIndex =>
+        _literalIndexCache.GetValue(this, r => StepLiteralIndex.Build(r.StepDefinitions));
 
     private ProjectBindingRegistry(IEnumerable<ProjectStepDefinitionBinding> stepDefinitions, IEnumerable<ProjectHookBinding> hooks)
     {
@@ -130,7 +141,12 @@ public record ProjectBindingRegistry
 
     private MatchResultItem[] MatchSingleContextResult(Step step, IGherkinDocumentContext context, string stepText)
     {
-        var sdMatches = StepDefinitions.Select(sd => sd.Match(step, context, stepText)).Where(m => m != null).ToArray();
+        // Literal prefilter (issue #471): narrows the O(bindings) regex-attempt loop below to
+        // bindings whose statically-known literal text is actually present in this step, via one
+        // Aho-Corasick scan instead of a per-binding regex attempt. See StepLiteralIndex's remarks
+        // for why this can never exclude a binding that would have genuinely matched.
+        var sdMatches = LiteralIndex.GetCandidates(stepText)
+            .Select(sd => sd.Match(step, context, stepText)).Where(m => m != null).ToArray();
         if (!sdMatches.Any())
             return new[] {MatchResultItem.CreateUndefined(step, stepText)};
 
