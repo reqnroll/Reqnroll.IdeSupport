@@ -124,4 +124,14 @@ public sealed class StepBindingMatch
         Result.Items
             .Where(i => i.MatchedStepDefinition?.Implementation?.SourceLocation != null)
             .Select(i => i.MatchedStepDefinition.Implementation.SourceLocation!);
+
+    /// <summary>
+    /// The stable <see cref="BindingId"/> identity paired with the source location of every
+    /// binding this step resolves to (issue #471's reverse index) — one pair per entry in
+    /// <see cref="BindingLocations"/>, in the same order.
+    /// </summary>
+    public IEnumerable<(BindingId Id, SourceLocation Location)> BindingIdentities =>
+        Result.Items
+            .Where(i => i.MatchedStepDefinition?.Implementation?.SourceLocation != null)
+            .Select(i => (BindingId.For(i.MatchedStepDefinition), i.MatchedStepDefinition.Implementation.SourceLocation!));
 }

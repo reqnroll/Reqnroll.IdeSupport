@@ -12,10 +12,13 @@ namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefs;
 /// independently — used expressions are omitted, unused ones each produce a row.
 /// </para>
 /// <para>
-/// Uses <see cref="IBindingMatchService.FindUsages"/> with no project filter (intersection
-/// semantics: an expression is considered used if any project's feature files reference it).
-/// A per-location cache avoids redundant match-set scans for multi-expression methods.
-/// Bindings with the same (file, line, expression) in multiple registries are deduplicated.
+/// Uses <see cref="IBindingMatchService.FindUsages(BindingId,IReadOnlyCollection{ProjectOwner})"/>
+/// with no project filter (intersection semantics: an expression is considered used if any
+/// project's feature files reference it) — an O(1) reverse-index lookup per binding (issue #471),
+/// keyed by <see cref="BindingId"/> so it's inherently per-expression-specific; no separate
+/// per-location cache or post-hoc expression filter is needed. Bindings sharing the same
+/// <see cref="BindingId"/> across multiple registries (a linked .cs file in several projects)
+/// are deduplicated.
 /// </para>
 /// </summary>
 public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinitionsService
@@ -46,13 +49,9 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
         _logger.LogVerbose(
             $"FindUnusedStepDefinitionsService: scanning {registries.Count} project(s)");
 
-        // Dedup by (sourceFile, sourceLine, expression): a linked .cs file appearing in N project
-        // registries must not produce N copies of the same row.
-        var seen = new HashSet<(string File, int Line, string Expression)>();
-
-        // Cache per source-location FindUsages results: a multi-expression method shares one
-        // SourceLocation, so the underlying match-set scan runs exactly once per location.
-        var locUsagesCache = new Dictionary<(string File, int Line), IReadOnlyList<StepBindingMatch>>();
+        // Dedup by BindingId: a linked .cs file appearing in N project registries must not
+        // produce N copies of the same row.
+        var seen = new HashSet<BindingId>();
 
         var items = new List<UnusedStepDefinition>();
 
@@ -67,25 +66,10 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
                 var loc = sd.Implementation?.SourceLocation;
                 if (loc is null) continue;
 
-                var expression = sd.Expression ?? string.Empty;
-                var fileKey = (loc.SourceFile ?? string.Empty).ToLowerInvariant();
-                var seenKey = (fileKey, loc.SourceFileLine, expression);
-                if (!seen.Add(seenKey)) continue;
+                var bindingId = BindingId.For(sd);
+                if (!seen.Add(bindingId)) continue;
 
-                // FindUsages returns all feature steps whose matched binding lives at `loc`
-                // (any expression on the method). Cache per location to avoid redundant scans.
-                var locKey = (fileKey, loc.SourceFileLine);
-                if (!locUsagesCache.TryGetValue(locKey, out var locUsages))
-                {
-                    locUsages = _matchService.FindUsages(loc, null);
-                    locUsagesCache[locKey] = locUsages;
-                }
-
-                // Filter to usages of THIS expression specifically: a step's MatchedStepDefinition
-                // records the exact binding that matched it, so we can distinguish expression A from
-                // expression B even though both share the same SourceLocation.
-                var isExpressionUsed = locUsages.Any(usage =>
-                    usage.Result.Items.Any(i => i.MatchedStepDefinition?.Expression == expression));
+                var isExpressionUsed = _matchService.FindUsages(bindingId, null).Count > 0;
 
                 if (isExpressionUsed) continue;
 

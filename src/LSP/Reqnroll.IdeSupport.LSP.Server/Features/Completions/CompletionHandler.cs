@@ -144,8 +144,8 @@ public sealed class CompletionHandler : ICompletionHandler
         var registry = _registryLookup.GetRegistryForUri(uri);
 
         Func<ProjectStepDefinitionBinding, int> usageCounter = sd =>
-            sd.Implementation?.SourceLocation is { } loc
-                ? _matchService.FindUsages(loc, projectFilter).Count
+            sd.Implementation?.SourceLocation is not null
+                ? _matchService.FindUsages(BindingId.For(sd), projectFilter).Count
                 : 0;
 
         var result = _completionService.GetStepCompletions(

@@ -45,6 +45,18 @@ public interface IBindingMatchService
         IReadOnlyCollection<ProjectOwner>? projectFilter = null);
 
     /// <summary>
+    /// Returns every cached feature step that resolves to the binding identified by
+    /// <paramref name="bindingId"/> — a direct O(1) reverse-index lookup, with no location math
+    /// (issue #471). Prefer this overload over the <see cref="SourceLocation"/> one whenever a
+    /// <see cref="Bindings.ProjectStepDefinitionBinding"/> (and therefore its
+    /// <see cref="BindingId"/>) is already in hand. Same project-filtering semantics as the
+    /// <see cref="SourceLocation"/> overload.
+    /// </summary>
+    IReadOnlyList<StepBindingMatch> FindUsages(
+        BindingId bindingId,
+        IReadOnlyCollection<ProjectOwner>? projectFilter = null);
+
+    /// <summary>
     /// Returns every cached match set across the whole workspace (closed files included, per the
     /// class remarks above), optionally restricted to specific owning projects. Backs the
     /// hook-match-count CodeLens (issue #373), which needs every project scenario's tag context
