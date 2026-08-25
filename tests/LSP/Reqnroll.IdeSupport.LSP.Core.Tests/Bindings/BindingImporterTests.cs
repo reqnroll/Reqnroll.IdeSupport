@@ -65,6 +65,39 @@ public class BindingImporterTests
     }
 
     [Fact]
+    public void MethodIdentifierLocation_overrides_the_PDB_derived_source_location()
+    {
+        // Regression guard (issue #471 follow-up): ConnectorDiscoveryService backfills the AST-based
+        // method-identifier location to replace the PDB sequence point, which can land inside the
+        // method body rather than on the declaration itself. ImportStepDefinition must actually
+        // apply that override, not just accept the parameter.
+        var sut = CreateSut();
+        var result = sut.ImportStepDefinition(
+            CreateStepDefinition(sourceLocation: "MyClass.cs|9|3"),
+            attributeSourceLine: null,
+            methodIdentifierLocation: (4, 17));
+
+        result!.Implementation.SourceLocation.Should().NotBeNull();
+        result.Implementation.SourceLocation!.SourceFile.Should().Be("MyClass.cs");
+        result.Implementation.SourceLocation.SourceFileLine.Should().Be(4);
+        result.Implementation.SourceLocation.SourceFileColumn.Should().Be(17);
+    }
+
+    [Fact]
+    public void MethodIdentifierLocation_override_is_ignored_when_null()
+    {
+        var sut = CreateSut();
+        var result = sut.ImportStepDefinition(
+            CreateStepDefinition(sourceLocation: "MyClass.cs|9|3"),
+            attributeSourceLine: null,
+            methodIdentifierLocation: null);
+
+        result!.Implementation.SourceLocation.Should().NotBeNull();
+        result.Implementation.SourceLocation!.SourceFileLine.Should().Be(9);
+        result.Implementation.SourceLocation.SourceFileColumn.Should().Be(3);
+    }
+
+    [Fact]
     public void Parses_source_location()
     {
         var sut = CreateSut();

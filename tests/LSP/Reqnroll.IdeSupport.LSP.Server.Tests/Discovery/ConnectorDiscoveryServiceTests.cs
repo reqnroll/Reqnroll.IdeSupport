@@ -366,6 +366,52 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public void RunDiscovery_replaces_the_PDB_derived_line_with_the_method_identifiers_own_line()
+    {
+        // Regression guard (issue #471 follow-up): the connector's own wire-format SourceLocation
+        // is a PDB sequence point, which can land a line or more into the method body rather than
+        // on the declaration itself -- simulated here by pointing the wire location at line 5
+        // (inside the body) even though the method identifier is actually on line 4. CodeLens (and
+        // anything else anchored on SourceLocation.SourceFileLine) needs the AST-precise line, not
+        // the raw wire one, once ConnectorDiscoveryService's backfill has a parsed AST available.
+        var stepsFile = WriteStepsFile("""
+            public class Steps
+            {
+                [Given("the first number is (.*)")]
+                public void SetFirstNumber(int number)
+                {
+                    var x = 1;
+                }
+            }
+            """);
+        GivenConnectorReturns(new DiscoveryResult
+        {
+            StepDefinitions =
+            [
+                new StepDefinition
+                {
+                    Type           = "Given",
+                    Regex          = "^the first number is (.*)$",
+                    Method         = "SetFirstNumber",
+                    ParamTypes     = "i",
+                    SourceLocation = $"{stepsFile}|5|9" // PDB sequence point: inside the body.
+                }
+            ],
+            Hooks = []
+        });
+        var scope = MakeScope(_assemblyPath);
+
+        var (registry, _) = CreateSut().RunDiscovery(
+            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        // "    public void SetFirstNumber(int number)" is line 4 (1-based); the method identifier
+        // starts at column 17.
+        var binding = registry.StepDefinitions.Should().ContainSingle().Which;
+        binding.Implementation.SourceLocation!.SourceFileLine.Should().Be(4);
+        binding.Implementation.SourceLocation.SourceFileColumn.Should().Be(17);
+    }
+
+    [Fact]
     public void RunDiscovery_leaves_attribute_source_line_null_for_external_plugin_binding_with_no_local_source()
     {
         // Simulates a step definition contributed by a dynamically loaded / external Reqnroll
