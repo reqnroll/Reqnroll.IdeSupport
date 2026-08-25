@@ -84,13 +84,14 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
 
     /// <summary>Re-parses <paramref name="text"/> directly into <paramref name="project"/>'s binding registry, bypassing membership-index owner resolution.</summary>
     public async Task UpdateFromSourceForProjectAsync(
-        LspReqnrollProject project, string filePath, string text, CancellationToken cancellationToken)
+        LspReqnrollProject project, string filePath, string text, CancellationToken cancellationToken,
+        bool notify = true)
     {
         if (string.IsNullOrEmpty(filePath))
             return;
 
         cancellationToken.ThrowIfCancellationRequested();
-        await ApplyToProjectAsync(project, filePath, text).ConfigureAwait(false);
+        await ApplyToProjectAsync(project, filePath, text, notify).ConfigureAwait(false);
     }
 
     /// <summary>Clears all step-definition bindings previously discovered for <paramref name="uri"/> from every owning project's registry, e.g. when the file is deleted.</summary>
@@ -122,7 +123,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
     /// (<see cref="UpdateFromSourceAsync"/>) and index-bypassing
     /// (<see cref="UpdateFromSourceForProjectAsync"/>) entry points.
     /// </summary>
-    private async Task ApplyToProjectAsync(LspReqnrollProject project, string filePath, string text)
+    private async Task ApplyToProjectAsync(LspReqnrollProject project, string filePath, string text, bool notify = true)
     {
         if (!project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)
             || obj is not ConnectorBindingRegistryProvider provider)
@@ -134,7 +135,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
 
         var previousCount = provider.Current.StepDefinitions.Length;
         var file = FileDetails.FromPath(filePath).WithCSharpContent(text);
-        await provider.ApplyRoslynFileUpdateAsync(file).ConfigureAwait(false);
+        await provider.ApplyRoslynFileUpdateAsync(file, notify).ConfigureAwait(false);
         var newCount = provider.Current.StepDefinitions.Length;
         var delta = newCount - previousCount;
         var deltaStr = delta == 0 ? "no change" : (delta > 0 ? $"+{delta}" : delta.ToString());

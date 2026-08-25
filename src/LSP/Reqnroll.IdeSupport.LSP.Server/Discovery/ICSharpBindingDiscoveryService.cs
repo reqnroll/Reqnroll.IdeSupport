@@ -25,10 +25,20 @@ public interface ICSharpBindingDiscoveryService
     /// <summary>
     /// Applies a Roslyn source-level binding update for a single <c>.cs</c> file, targeting
     /// a specific project directly — bypassing the membership-index owner resolution.
-    /// Used during startup full-replacement reconciliation (<see cref="BindingRegistryChangedHandler.RediscoverCsFilesAsync"/>)
-    /// when the baseline may not have arrived yet.
+    /// Used by <see cref="BindingRegistryChangedHandler.RediscoverCsFilesAsync"/> (startup
+    /// full-replacement reconciliation, when the baseline may not have arrived yet) and
+    /// <see cref="BindingRegistryChangedHandler.RemoveBindingFilesAsync"/> (purging a
+    /// project-files-delta-removed file's bindings).
     /// </summary>
-    Task UpdateFromSourceForProjectAsync(LspReqnrollProject project, string filePath, string text, CancellationToken cancellationToken);
+    /// <param name="notify">
+    /// Passed straight through to <see cref="Registry.ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync"/>
+    /// — see its remarks. <see cref="BindingRegistryChangedHandler.RediscoverCsFilesAsync"/> passes
+    /// <see langword="false"/> since its caller already reparses and notifies unconditionally right
+    /// after it returns; every other caller keeps the default (issue #471).
+    /// </param>
+    Task UpdateFromSourceForProjectAsync(
+        LspReqnrollProject project, string filePath, string text, CancellationToken cancellationToken,
+        bool notify = true);
 
     /// <summary>
     /// Removes all bindings declared in the <c>.cs</c> file at <paramref name="uri"/> from every

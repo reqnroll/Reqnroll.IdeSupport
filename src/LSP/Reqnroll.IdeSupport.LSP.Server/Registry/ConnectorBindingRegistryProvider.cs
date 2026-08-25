@@ -138,6 +138,21 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// the current registry, replacing only that file's step definitions and hooks (Roslyn/C#
     /// source-level binding discovery).
     /// </summary>
+    /// <param name="file">The file's path and current source text.</param>
+    /// <param name="notify">
+    /// Whether to raise <see cref="BindingRegistryChanged"/> when the patch actually changes
+    /// something. Pass <see langword="false"/> when the caller is itself a sub-step of a larger,
+    /// already-coordinated flow that will reparse and notify unconditionally once it's done --
+    /// e.g. <c>BindingRegistryChangedHandler.RediscoverCsFilesAsync</c>'s post-connector-run
+    /// overlay (issue #471). Reconciling Roslyn-parsed source on top of the connector's
+    /// reflection-based extraction of the same, unedited file routinely trips
+    /// <see cref="ProjectBindingRegistry.HasExpressionChanges"/> below even with zero real edits
+    /// (the two extraction methods aren't guaranteed byte-identical), so notifying there fired a
+    /// second, fully independent <c>BindingRegistryChangedNotification</c> that redundantly
+    /// reparsed every open feature file a second time -- confirmed live as part of a ~10s pileup
+    /// per startup discovery run. Every other caller should keep the default: a live edit (or a
+    /// file deletion) is not covered by any other notify path, so it must raise the event itself.
+    /// </param>
     /// <remarks>
     /// This is the in-process counterpart to the out-of-process reflection connector: it gives
     /// instant feedback as the user edits a step-definition file, without waiting for a build.
@@ -147,7 +162,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// post-build result. If no build has happened, the connector run is a hash-match no-op and
     /// the Roslyn patch survives.
     /// </remarks>
-    public async Task ApplyRoslynFileUpdateAsync(CSharpStepDefinitionFile file)
+    public async Task ApplyRoslynFileUpdateAsync(CSharpStepDefinitionFile file, bool notify = true)
     {
         await _currentLock.WaitAsync().ConfigureAwait(false);
         ProjectBindingRegistry updated;
@@ -162,6 +177,9 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         {
             _currentLock.Release();
         }
+
+        if (!notify)
+            return;
 
         // Skip the notification entirely when no binding's matched expression/scope actually
         // changed (e.g. a method-body or comment edit). Publishing here drives feature-file

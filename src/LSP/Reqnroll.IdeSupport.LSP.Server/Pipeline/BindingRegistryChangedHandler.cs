@@ -350,8 +350,16 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             ct.ThrowIfCancellationRequested();
             try
             {
+                // notify: false -- this method's own caller (Handle, further up this class) already
+                // reparses every open feature file and publishes MatchCacheChangedNotification
+                // unconditionally right after RediscoverCsFilesAsync returns. Without this, the
+                // notification ApplyRoslynFileUpdateAsync raises when its Roslyn-parsed result
+                // differs at all from the connector's just-loaded reflection-based extraction --
+                // which it essentially always does, real edit or not -- fired a second, fully
+                // independent BindingRegistryChangedNotification that redundantly reparsed the same
+                // feature files again moments later (issue #471).
                 await _csharpDiscoveryService
-                    .UpdateFromSourceForProjectAsync(project, filePath, text, ct)
+                    .UpdateFromSourceForProjectAsync(project, filePath, text, ct, notify: false)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

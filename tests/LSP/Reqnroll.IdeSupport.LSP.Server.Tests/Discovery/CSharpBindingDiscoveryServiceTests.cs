@@ -166,6 +166,32 @@ namespace S
         project.Dispose();
     }
 
+    // Issue #471: BindingRegistryChangedHandler.RediscoverCsFilesAsync passes notify: false because
+    // its own caller already reparses every open feature file and notifies unconditionally right
+    // after RediscoverCsFilesAsync returns -- a second independent event here just duplicated that
+    // reparse. The registry must still be patched; only the event is suppressed.
+    [Fact]
+    public async Task UpdateFromSourceForProjectAsync_still_applies_but_suppresses_the_event_when_notify_is_false()
+    {
+        var project  = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+
+        var changed = false;
+        provider.BindingRegistryChanged += (_, _) => changed = true;
+
+        var csPath = Path.Combine(_root1, "Steps.cs");
+
+        await CreateSut().UpdateFromSourceForProjectAsync(
+            project, csPath, StepDefinitionSource, CancellationToken.None, notify: false);
+
+        changed.Should().BeFalse("notify: false must suppress BindingRegistryChanged");
+        provider.Current.StepDefinitions.Should().ContainSingle("the registry must still be patched regardless of notify");
+
+        provider.Dispose();
+        project.Dispose();
+    }
+
     [Fact]
     public async Task UpdateFromSourceForProjectAsync_noops_when_project_has_no_provider()
     {

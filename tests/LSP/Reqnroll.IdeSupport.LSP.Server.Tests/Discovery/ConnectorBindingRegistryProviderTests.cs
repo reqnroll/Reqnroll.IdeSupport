@@ -153,6 +153,36 @@ namespace S
             .Which.Regex!.ToString().Should().Be("^the first number is (.*)$");
     }
 
+    // Issue #471: notify: false is used by BindingRegistryChangedHandler.RediscoverCsFilesAsync,
+    // whose own caller already reparses every open feature file and notifies unconditionally right
+    // after it returns -- a second independent event here would just redundantly repeat that work.
+    [Fact]
+    public async Task ApplyRoslynFileUpdate_still_patches_current_registry_but_does_not_raise_event_when_notify_is_false()
+    {
+        var sut = CreateSut();
+        var raised = false;
+        sut.BindingRegistryChanged += (_, _) => raised = true;
+
+        var file = FileDetailsFor("Steps.cs", @"
+namespace S
+{
+    [Reqnroll.Binding]
+    public class Steps
+    {
+        [Reqnroll.Given(""the first number is (.*)"")]
+        public void Method(int n) { }
+    }
+}");
+
+        await sut.ApplyRoslynFileUpdateAsync(file, notify: false);
+        await Task.Delay(200);
+
+        raised.Should().BeFalse("notify: false must suppress BindingRegistryChanged even though the patch changed something");
+        sut.Current.Should().NotBeSameAs(ProjectBindingRegistry.Invalid, "the registry must still be patched regardless of notify");
+        sut.Current.StepDefinitions.Should().ContainSingle()
+            .Which.Regex!.ToString().Should().Be("^the first number is (.*)$");
+    }
+
     [Fact]
     public async Task ApplyRoslynFileUpdate_raises_event_as_incremental_not_full_replacement()
     {
