@@ -142,7 +142,13 @@ public static class ServiceCollectionExtensions
             // tokens, inlay hints). Must be a singleton, unlike the MediatR handlers that use it —
             // see IRefreshDebouncer's remarks for why a transient handler's own instance field
             // can't debounce anything.
-            .AddSingleton<IRefreshDebouncer, RefreshDebouncer>();
+            .AddSingleton<IRefreshDebouncer, RefreshDebouncer>()
+            // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
+            // preserving correctness for pull handlers with no refresh capability (issue #471) —
+            // see IFeatureParseCoordinator's remarks. Singleton for the same reason as
+            // IRefreshDebouncer above: the per-URI pending-work state must outlive any single
+            // transient handler instance.
+            .AddSingleton<IFeatureParseCoordinator, FeatureParseCoordinator>();
     }
 
     /// <summary>

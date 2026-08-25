@@ -49,6 +49,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
     private readonly IMediator                        _mediator;
     private readonly ICSharpBindingDiscoveryService   _csharpDiscoveryService;
     private readonly IFeatureRescanDebouncer          _rescanDebouncer;
+    private readonly IFeatureParseCoordinator         _parseCoordinator;
     private readonly IIdeSupportLogger                  _logger;
     private readonly IOperationDurationRecorder         _recorder;
     private readonly IFileSystemForIDE                  _fileSystem;
@@ -64,6 +65,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         IMediator mediator,
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         IFeatureRescanDebouncer rescanDebouncer,
+        IFeatureParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IFileSystemForIDE fileSystem,
         IOperationDurationRecorder? recorder = null)
@@ -77,6 +79,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         _mediator               = mediator;
         _csharpDiscoveryService = csharpDiscoveryService;
         _rescanDebouncer        = rescanDebouncer;
+        _parseCoordinator       = parseCoordinator;
         _logger                 = logger;
         _fileSystem             = fileSystem;
         _recorder               = recorder ?? NullOperationDurationRecorder.Instance;
@@ -257,8 +260,22 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         return closedFiles.Count;
     }
 
-    /// <summary>Returns the number of open feature files reparsed, for the caller's PERF-line size tag (issue #471 investigation).</summary>
-    private async Task<int> ReparseOpenFilesAsync(
+    /// <summary>Returns the number of open feature files scheduled for reparse, for the caller's PERF-line size tag (issue #471 investigation).</summary>
+    /// <remarks>
+    /// Routes each buffer's reparse through <see cref="IFeatureParseCoordinator"/> instead of
+    /// awaiting it inline (issue #471): this reconciliation is already reached via a detached,
+    /// unawaited path (<c>BindingRegistryProviderRouter.OnProviderChanged</c>'s <c>_ =
+    /// _mediator.Publish(...)</c>), so routing through the coordinator here isn't about freeing a
+    /// dispatch lane -- it's so <c>FoldingRangeHandler</c>/<c>DocumentSymbolHandler</c>'s
+    /// <c>WaitForReadyAsync</c> calls see a pending entry for a URI whether the reparse was
+    /// triggered by a direct edit to that file or, as here, by a <c>.cs</c>-driven registry
+    /// cascade reconciling it. Without this, the same no-refresh-capability race those two
+    /// handlers guard against for direct edits would remain completely unaddressed for this path.
+    /// As a result this now returns the number of files *scheduled*, not completed — the actual
+    /// reparses run after this method (and <see cref="Handle"/> as a whole) returns, so their
+    /// duration is no longer part of this method's own timing.
+    /// </remarks>
+    private Task<int> ReparseOpenFilesAsync(
         LspReqnrollProject project,
         CancellationToken cancellationToken)
     {
@@ -273,21 +290,22 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         {
             _logger.LogVerbose(
                 $"BindingRegistryChanged — no open feature files to reparse for '{project.ProjectName}'.");
-            return 0;
+            return Task.FromResult(0);
         }
 
         _logger.LogInfo(
-            $"BindingRegistryChanged — reparsing {affectedBuffers.Count} open feature file(s) " +
-            $"for project '{project.ProjectName}'.");
+            $"BindingRegistryChanged — scheduling reparse of {affectedBuffers.Count} open feature " +
+            $"file(s) for project '{project.ProjectName}'.");
 
         foreach (var buffer in affectedBuffers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ParseAndNotifyAsync(buffer.Uri, buffer.Version, cancellationToken)
-                .ConfigureAwait(false);
+            var uri = buffer.Uri;
+            var version = buffer.Version;
+            _parseCoordinator.Schedule(uri, ct => ParseAndNotifyAsync(uri, version, ct));
         }
 
-        return affectedBuffers.Count;
+        return Task.FromResult(affectedBuffers.Count);
     }
 
     private bool IsOwnedByProject(DocumentUri uri, LspReqnrollProject project)

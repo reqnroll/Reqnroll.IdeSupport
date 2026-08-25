@@ -5,6 +5,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -35,6 +36,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly IGherkinDocumentSymbolService _symbolService;
+    private readonly IFeatureParseCoordinator      _parseCoordinator;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
 
@@ -51,11 +53,13 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     public DocumentSymbolHandler(
         IDocumentBufferService documentBufferService,
         IGherkinDocumentSymbolService symbolService,
+        IFeatureParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService = documentBufferService;
         _symbolService         = symbolService;
+        _parseCoordinator      = parseCoordinator;
         _logger                = logger;
         _recorder              = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -69,7 +73,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     }
 
     /// <summary>Handles a <c>textDocument/documentSymbol</c> request for the feature-outline tree.</summary>
-    public Task<SymbolInformationOrDocumentSymbolContainer?> Handle(
+    public async Task<SymbolInformationOrDocumentSymbolContainer?> Handle(
         DocumentSymbolParams request, CancellationToken ct)
     {
         // Benchmarked as load-only in the synthetic harness (no published target); now also
@@ -80,17 +84,20 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
             $"Document Outline textDocument/documentSymbol: {request.TextDocument.Uri} " +
             $"(hierarchicalSupport={_hierarchicalSupport})");
 
+        // documentSymbol has no LSP refresh capability (issue #471) -- see the matching
+        // FoldingRangeHandler comment.
+        await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
+
         var symbols = GetSymbols(request.TextDocument.Uri);
         if (symbols.Count == 0)
-            return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(new SymbolInformationOrDocumentSymbolContainer());
+            return new SymbolInformationOrDocumentSymbolContainer();
 
         var entries = _hierarchicalSupport
             ? symbols.Select(s => SymbolInformationOrDocumentSymbol.Create(ToDocumentSymbol(s)))
             : Flatten(symbols, request.TextDocument.Uri, containerName: null)
                 .Select(SymbolInformationOrDocumentSymbol.Create);
 
-        return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(
-            new SymbolInformationOrDocumentSymbolContainer(entries));
+        return new SymbolInformationOrDocumentSymbolContainer(entries);
     }
 
     /// <summary>
@@ -109,12 +116,17 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     /// written for the nested shape, would break) whenever VS's client declares no hierarchical
     /// support.
     /// </remarks>
-    public Task<IReadOnlyList<DocumentSymbol>> HandleHierarchicalAsync(
+    public async Task<IReadOnlyList<DocumentSymbol>> HandleHierarchicalAsync(
         DocumentSymbolParams request, CancellationToken ct)
     {
         using var _perf = _recorder.Measure(LspMethodNames.ReqnrollDocumentSymbolHierarchical, request.TextDocument.Uri);
+
+        // documentSymbol has no LSP refresh capability (issue #471) -- see the matching
+        // FoldingRangeHandler comment.
+        await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
+
         var symbols = GetSymbols(request.TextDocument.Uri);
-        return Task.FromResult<IReadOnlyList<DocumentSymbol>>(symbols.Select(ToDocumentSymbol).ToList());
+        return symbols.Select(ToDocumentSymbol).ToList();
     }
 
     private IReadOnlyList<GherkinDocumentSymbol> GetSymbols(DocumentUri uri)

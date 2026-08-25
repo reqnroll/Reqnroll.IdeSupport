@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.DocumentOutline;
 
@@ -15,13 +16,14 @@ public class DocumentSymbolHandlerTests
 {
     private readonly IDocumentBufferService       _bufferService  = Substitute.For<IDocumentBufferService>();
     private readonly IGherkinDocumentSymbolService _symbolService  = Substitute.For<IGherkinDocumentSymbolService>();
+    private readonly IFeatureParseCoordinator     _parseCoordinator = Substitute.For<IFeatureParseCoordinator>();
     private readonly IIdeSupportLogger               _logger         = Substitute.For<IIdeSupportLogger>();
 
     private static readonly DocumentUri FeatureUri =
         DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
     private DocumentSymbolHandler CreateSut() =>
-        new(_bufferService, _symbolService, _logger);
+        new(_bufferService, _symbolService, _parseCoordinator, _logger);
 
     private static DocumentSymbolParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };

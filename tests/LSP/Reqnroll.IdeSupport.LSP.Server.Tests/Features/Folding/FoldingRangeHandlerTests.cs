@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Folding;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Folding;
 
@@ -13,13 +14,14 @@ public class FoldingRangeHandlerTests
 {
     private readonly IDocumentBufferService         _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IGherkinFoldingRangeService     _foldingService = Substitute.For<IGherkinFoldingRangeService>();
+    private readonly IFeatureParseCoordinator       _parseCoordinator = Substitute.For<IFeatureParseCoordinator>();
     private readonly IIdeSupportLogger                 _logger        = Substitute.For<IIdeSupportLogger>();
 
     private static readonly DocumentUri FeatureUri =
         DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
     private FoldingRangeHandler CreateSut() =>
-        new(_bufferService, _foldingService, _logger);
+        new(_bufferService, _foldingService, _parseCoordinator, _logger);
 
     private static FoldingRangeRequestParam RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
