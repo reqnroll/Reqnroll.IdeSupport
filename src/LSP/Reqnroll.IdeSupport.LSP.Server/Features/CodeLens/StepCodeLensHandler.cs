@@ -113,12 +113,27 @@ public sealed class StepCodeLensHandler
 
             if (!IsSameFile(src.SourceFile, filePath)) continue;
 
-            var attrKey = (src.SourceFileLine, src.SourceFileColumn);
+            // Prefer the AST-backfilled attribute line (issue #471 follow-up) over
+            // SourceLocation.SourceFileLine, which is the method identifier's line for
+            // Roslyn-discovered bindings or a PDB sequence-point line for connector-discovered
+            // ones (often a line or more into the method body) -- neither is the attribute's own
+            // line. Skipping the redundant post-startup Roslyn reparse (item 7, #478) means the
+            // registry no longer always carries Roslyn's closer-but-still-wrong method-identifier
+            // location by the time this runs, so the PDB-derived location's imprecision -- always
+            // present for connector-discovered bindings -- became visible: the lens rendered a
+            // line or more after the method declaration instead of directly above it. Column is
+            // not tracked separately for the attribute line; 0 is fine here since every consumer
+            // of the resulting Range/Arguments (BindingLocationMatcher, reqnroll/findStepUsages)
+            // resolves by line only and ignores column.
+            var attrLine = binding.AttributeSourceLine ?? src.SourceFileLine;
+            var attrCol  = binding.AttributeSourceLine.HasValue ? 1 : src.SourceFileColumn;
+
+            var attrKey = (attrLine, attrCol);
             if (!seen.Add(attrKey)) continue;
 
-            // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
-            var line = src.SourceFileLine   - 1;
-            var col  = src.SourceFileColumn - 1;
+            // LSP positions are 0-based; attrLine/attrCol are 1-based.
+            var line = attrLine - 1;
+            var col  = attrCol  - 1;
             var range = new LspRange(new Position(line, col), new Position(line, col));
 
             var bindingId = BindingId.For(binding);

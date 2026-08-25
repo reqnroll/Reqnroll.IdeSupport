@@ -186,6 +186,31 @@ public class StepCodeLensHandlerTests
         range.End.Character.Should().Be(4);
     }
 
+    [Fact]
+    public async Task Handle_prefers_AttributeSourceLine_over_the_method_identifier_or_PDB_line()
+    {
+        // Regression guard: SourceLocation.SourceFileLine is the method identifier's line for
+        // Roslyn-discovered bindings, or a PDB sequence-point line (often inside the method body)
+        // for connector-discovered ones — never the attribute's own line. When AttributeSourceLine
+        // is known (both discovery paths backfill it), the lens must render there instead, or it
+        // renders a line or more after the method declaration rather than above it.
+        var csPath  = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create()
+                                        .AtSourceFile(csPath).AtLine(12).AtColumn(5)
+                                        .WithAttributeLine(10)
+                                        .Build();
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+
+        var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        // AttributeSourceLine 10 → LSP line 9, not SourceFileLine 12 → LSP line 11.
+        var range = result![0].Range!;
+        range.Start.Line.Should().Be(9);
+        range.End.Line.Should().Be(9);
+    }
+
     // ── Command wiring ────────────────────────────────────────────────────────
 
     [Fact]
@@ -438,10 +463,12 @@ file static class StepBindingBuilder
         private string _file   = "/workspace/Steps.cs";
         private int    _line   = 5;
         private int    _col    = 1;
+        private int?   _attributeLine;
 
         public Builder AtSourceFile(string file)  { _file = file; return this; }
         public Builder AtLine(int line)            { _line = line; return this; }
         public Builder AtColumn(int col)           { _col  = col;  return this; }
+        public Builder WithAttributeLine(int line) { _attributeLine = line; return this; }
 
         public ProjectStepDefinitionBinding Build()
         {
@@ -453,7 +480,8 @@ file static class StepBindingBuilder
                 ScenarioBlock.Given,
                 new System.Text.RegularExpressions.Regex("^.*$"),
                 scope: null,
-                implementation: impl);
+                implementation: impl,
+                attributeSourceLine: _attributeLine);
         }
     }
 }

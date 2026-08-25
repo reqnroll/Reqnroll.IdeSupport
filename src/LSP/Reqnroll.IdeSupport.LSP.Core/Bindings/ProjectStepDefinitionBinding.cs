@@ -32,7 +32,9 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     public Regex Regex { get; }
     /// <summary>
     /// The 1-based source line of the binding attribute (e.g. the <c>[Given("...")]</c> line).
-    /// Populated during syntax-based discovery; <see langword="null"/> for connector-discovered bindings.
+    /// Populated during syntax-based discovery, and backfilled via a Roslyn re-parse of the
+    /// source file for connector-discovered bindings too (<c>ConnectorDiscoveryService</c>);
+    /// <see langword="null"/> only when that backfill itself fails (e.g. source file unreadable).
     /// When set, <c>CoversQuery</c> uses this for exact AST-based matching instead of the heuristic line window.
     /// </summary>
     public int? AttributeSourceLine { get; }
