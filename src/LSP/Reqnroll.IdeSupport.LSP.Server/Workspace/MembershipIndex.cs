@@ -81,10 +81,18 @@ internal sealed class MembershipIndex
             var deltaProject = _findProjectByKey(key);
             if (deltaProject is not null)
             {
-                _ = _mediator.Publish(
-                    new BindingRegistryChangedNotification(
-                        deltaProject, false, removedBindingPaths),
-                    cancellationToken);
+                // See BindingRegistryProviderRouter.OnProviderChanged (issue #477): discarding
+                // the Publish Task would not actually defer it off this call stack.
+                // CancellationToken.None, not the incoming `cancellationToken`: that token is
+                // scoped to this notification's own request lifetime, which FireAndForget's
+                // background continuation deliberately outlives. Forwarding it would let the
+                // publish get silently cancelled the moment the request completes -- before the
+                // backgrounded work even runs -- defeating the notification entirely.
+                FireAndForgetExtensions.FireAndForget(
+                    () => _mediator.Publish(
+                        new BindingRegistryChangedNotification(deltaProject, false, removedBindingPaths),
+                        CancellationToken.None),
+                    _logger, nameof(HandleProjectFilesAsync));
             }
             return;
         }
@@ -123,9 +131,12 @@ internal sealed class MembershipIndex
         var project = _findProjectByKey(key);
         if (project is not null)
         {
-            _ = _mediator.Publish(
-                new BindingRegistryChangedNotification(project, true),
-                cancellationToken);
+            // See BindingRegistryProviderRouter.OnProviderChanged (issue #477): discarding
+            // the Publish Task would not actually defer it off this call stack.
+            // CancellationToken.None -- see the delta branch above for why.
+            FireAndForgetExtensions.FireAndForget(
+                () => _mediator.Publish(new BindingRegistryChangedNotification(project, true), CancellationToken.None),
+                _logger, nameof(HandleProjectFilesAsync));
         }
         else
         {

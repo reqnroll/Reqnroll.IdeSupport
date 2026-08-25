@@ -53,6 +53,27 @@ public class MembershipIndexTests
     private void Register(LspReqnrollProject project) =>
         _liveProjects[new ProjectKey(MembershipIndex.NormaliseFilePath(project.ProjectFullName), project.TargetFrameworkMoniker)] = project;
 
+    /// <summary>
+    /// Polls until <see cref="_mediator"/> has received at least one <c>Publish</c> call.
+    /// <see cref="MembershipIndex"/> now dispatches its notification via
+    /// <see cref="FireAndForgetExtensions"/> (issue #477) so it genuinely runs on a thread-pool
+    /// thread rather than inline — by design, since the whole point of the fix is that the
+    /// caller (here, the awaited <c>HandleProjectFilesAsync</c> call) no longer blocks on it.
+    /// That means it may not have happened yet the instant <c>HandleProjectFilesAsync</c>
+    /// returns, so tests that assert on it (or need it flushed before <c>ClearReceivedCalls</c>)
+    /// must wait for it explicitly instead of asserting immediately.
+    /// </summary>
+    private async Task WaitForPublishAsync(TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(2));
+        while (DateTime.UtcNow < deadline)
+        {
+            if (_mediator.ReceivedCalls().Any(c => c.GetMethodInfo().Name == nameof(IMediator.Publish)))
+                return;
+            await Task.Delay(5);
+        }
+    }
+
     private static ReqnrollProjectFilesParams BaselineParams(
         string projectFile, string tfm, params (string path, ProjectFileRole role)[] entries)
         => new()
@@ -385,6 +406,7 @@ public class MembershipIndexTests
             BaselineParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (@"C:\Proj\A.feature", ProjectFileRole.Feature)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n => n.IsFullReplacement && n.Project == project),
@@ -402,12 +424,14 @@ public class MembershipIndexTests
             BaselineParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (@"C:\Proj\A.feature", ProjectFileRole.Feature)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _mediator.ClearReceivedCalls();
 
         await sut.HandleProjectFilesAsync(
             DeltaParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (@"C:\Proj\B.feature", ProjectFileRole.Feature, true)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n => !n.IsFullReplacement && n.Project == project),
@@ -426,6 +450,7 @@ public class MembershipIndexTests
             BaselineParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (@"C:\Proj\A.feature", ProjectFileRole.Feature)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _liveProjects.Clear(); // project no longer resolvable
         _mediator.ClearReceivedCalls();
 
@@ -452,12 +477,14 @@ public class MembershipIndexTests
             BaselineParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (stepsFile, ProjectFileRole.Binding)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _mediator.ClearReceivedCalls();
 
         await sut.HandleProjectFilesAsync(
             DeltaParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (stepsFile, ProjectFileRole.Binding, false)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n =>
@@ -477,12 +504,14 @@ public class MembershipIndexTests
             BaselineParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (featureFile, ProjectFileRole.Feature)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _mediator.ClearReceivedCalls();
 
         await sut.HandleProjectFilesAsync(
             DeltaParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (featureFile, ProjectFileRole.Feature, false)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n =>
