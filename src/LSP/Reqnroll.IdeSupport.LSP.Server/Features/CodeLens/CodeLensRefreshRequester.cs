@@ -17,13 +17,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// </remarks>
 internal static class CodeLensRefreshRequester
 {
-    /// <summary>Sends the appropriate refresh notification/request for the connected client. <paramref name="projectName"/> is informational only (see <see cref="RefreshCodeLensParams.ProjectName"/>) and may be empty. <paramref name="isFullReplacement"/> is passed through to <see cref="RefreshCodeLensParams.IsFullReplacement"/> so the VS client can skip the reconnect-risking invalidation on incremental refreshes (issue #156/#318).</summary>
+    /// <summary>Sends the appropriate refresh notification/request for the connected client. <paramref name="projectName"/> is informational only (see <see cref="RefreshCodeLensParams.ProjectName"/>) and may be empty. <paramref name="isFullReplacement"/> is passed through to <see cref="RefreshCodeLensParams.IsFullReplacement"/> so the VS client can skip the reconnect-risking invalidation on incremental refreshes (issue #156/#318). <paramref name="cancellationToken"/> is honoured only by the non-VS <c>workspace/codeLens/refresh</c> request (VS's path is a fire-and-forget notification); pass a caller-owned token -- e.g. a debouncer's token (issue #471) -- rather than <see cref="CancellationToken.None"/> so a superseding refresh can actually cancel one still in flight.</summary>
     public static async Task RequestRefreshAsync(
         ILanguageServerFacade languageServer,
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
         string projectName,
-        bool isFullReplacement = false)
+        bool isFullReplacement = false,
+        CancellationToken cancellationToken = default)
     {
         if (clientIde.IsVisualStudio)
         {
@@ -48,7 +49,7 @@ internal static class CodeLensRefreshRequester
         {
             await languageServer.Client
                 .SendRequest(LspMethodNames.WorkspaceCodeLensRefresh)
-                .ReturningVoid(CancellationToken.None)
+                .ReturningVoid(cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)

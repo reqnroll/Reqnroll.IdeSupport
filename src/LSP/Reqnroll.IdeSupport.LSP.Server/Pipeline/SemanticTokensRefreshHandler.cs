@@ -22,6 +22,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// single <c>workspace/semanticTokens/refresh</c> request so the client is not flooded. The
 /// refresh is also guarded by a client-capability check: if the client did not advertise
 /// <c>workspace.semanticTokens.refreshSupport</c> the request is skipped.
+/// <para>
+/// <see cref="SendRefreshAsync"/> passes the debouncer's own <see cref="CancellationToken"/>
+/// (not <see cref="CancellationToken.None"/>) into the actual <c>SendRequest</c> call, so a
+/// superseding notification cancels a refresh that is already in flight, not just one still
+/// waiting out the debounce delay — see <see cref="RefreshDebouncer"/>'s remarks for why the
+/// distinction matters (issue #471).
+/// </para>
 /// </remarks>
 public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
 {
@@ -70,7 +77,7 @@ public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChang
             _logger.LogVerbose("SemanticTokensRefreshHandler: sending workspace/semanticTokens/refresh");
             await _languageServer.Client
                 .SendRequest(WorkspaceNames.SemanticTokensRefresh)
-                .ReturningVoid(CancellationToken.None)
+                .ReturningVoid(cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)

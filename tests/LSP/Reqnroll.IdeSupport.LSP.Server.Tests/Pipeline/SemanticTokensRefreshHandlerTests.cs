@@ -1,4 +1,4 @@
-﻿using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
-public class InlayHintRefreshHandlerTests : IDisposable
+public class SemanticTokensRefreshHandlerTests : IDisposable
 {
     private readonly ILanguageServerFacade _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
@@ -18,11 +18,11 @@ public class InlayHintRefreshHandlerTests : IDisposable
     // (here, this shared singleton stand-in) can actually collapse a burst across those instances.
     private readonly RefreshDebouncer _debouncer;
 
-    public InlayHintRefreshHandlerTests() => _debouncer = new RefreshDebouncer(_logger);
+    public SemanticTokensRefreshHandlerTests() => _debouncer = new RefreshDebouncer(_logger);
 
     public void Dispose() => _debouncer.Dispose();
 
-    private InlayHintRefreshHandler CreateSut() => new(_languageServer, _logger, _debouncer);
+    private SemanticTokensRefreshHandler CreateSut() => new(_languageServer, _logger, _debouncer);
 
     private void SetRefreshSupport(bool? supported)
     {
@@ -32,10 +32,10 @@ public class InlayHintRefreshHandlerTests : IDisposable
             {
                 Workspace = new WorkspaceClientCapabilities
                 {
-                    InlayHint = supported.HasValue
-                        ? new Supports<InlayHintWorkspaceClientCapabilities>(true,
-                            new InlayHintWorkspaceClientCapabilities { RefreshSupport = supported.Value })
-                        : new Supports<InlayHintWorkspaceClientCapabilities>(false)
+                    SemanticTokens = supported.HasValue
+                        ? new Supports<SemanticTokensWorkspaceCapability>(true,
+                            new SemanticTokensWorkspaceCapability { RefreshSupport = supported.Value })
+                        : new Supports<SemanticTokensWorkspaceCapability>(false)
                 }
             }
         });
@@ -51,7 +51,7 @@ public class InlayHintRefreshHandlerTests : IDisposable
         await CreateSut().Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
-        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.InlayHintRefresh);
+        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.SemanticTokensRefresh);
     }
 
     [Fact]
@@ -62,7 +62,7 @@ public class InlayHintRefreshHandlerTests : IDisposable
         await CreateSut().Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
         await Task.Delay(700);
 
-        _languageServer.Client.DidNotReceive().SendRequest(WorkspaceNames.InlayHintRefresh);
+        _languageServer.Client.DidNotReceive().SendRequest(WorkspaceNames.SemanticTokensRefresh);
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class InlayHintRefreshHandlerTests : IDisposable
         await CreateSut().Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
         await Task.Delay(700);
 
-        _languageServer.Client.DidNotReceive().SendRequest(WorkspaceNames.InlayHintRefresh);
+        _languageServer.Client.DidNotReceive().SendRequest(WorkspaceNames.SemanticTokensRefresh);
     }
 
     // Issue #471: passing CancellationToken.None here (as this used to, silently) means a
@@ -106,7 +106,7 @@ public class InlayHintRefreshHandlerTests : IDisposable
         await CreateSut().Handle(new MatchCacheChangedNotification(uri, 3), CancellationToken.None);
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
-        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.InlayHintRefresh);
+        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.SemanticTokensRefresh);
     }
 
     [Fact]
@@ -121,17 +121,17 @@ public class InlayHintRefreshHandlerTests : IDisposable
         _languageServer.Client.When(c => c.SendRequest(Arg.Any<string>())).Do(_ => sent.TrySetResult());
 
         var uri = DocumentUri.From("file:///f.feature");
-        await new InlayHintRefreshHandler(_languageServer, _logger, _debouncer)
+        await new SemanticTokensRefreshHandler(_languageServer, _logger, _debouncer)
             .Handle(new MatchCacheChangedNotification(uri, 1), CancellationToken.None);
-        await new InlayHintRefreshHandler(_languageServer, _logger, _debouncer)
+        await new SemanticTokensRefreshHandler(_languageServer, _logger, _debouncer)
             .Handle(new MatchCacheChangedNotification(uri, 2), CancellationToken.None);
-        await new InlayHintRefreshHandler(_languageServer, _logger, _debouncer)
+        await new SemanticTokensRefreshHandler(_languageServer, _logger, _debouncer)
             .Handle(new MatchCacheChangedNotification(uri, 3), CancellationToken.None);
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         // Give any incorrectly-surviving earlier-instance runs a chance to fire before asserting.
         await Task.Delay(200);
 
-        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.InlayHintRefresh);
+        _languageServer.Client.Received(1).SendRequest(WorkspaceNames.SemanticTokensRefresh);
     }
 }
