@@ -425,6 +425,7 @@ public class StepCodeLensHandlerTests
         resolved.Command!.Title.Should().Be("1 step usage");
         _matchService.DidNotReceive().FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>());
     }
+
 }
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
