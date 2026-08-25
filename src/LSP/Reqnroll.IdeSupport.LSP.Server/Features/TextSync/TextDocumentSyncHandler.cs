@@ -33,6 +33,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly ILanguageServerFacade _languageServer;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IFeatureParseCoordinator _parseCoordinator;
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = "**/*.feature" },
@@ -51,6 +52,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IMediator mediator,
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
+        IFeatureParseCoordinator parseCoordinator,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService = documentBufferService;
@@ -61,6 +63,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _mediator = mediator;
         _languageServer = languageServer;
         _logger = logger;
+        _parseCoordinator = parseCoordinator;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -80,32 +83,51 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         };
 
     /// <summary>Handles <c>textDocument/didOpen</c>: for C# files, updates the live-text cache and runs Roslyn binding discovery; for Gherkin files, updates the document buffer and re-parses/republishes diagnostics.</summary>
-    public override async Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
+    public override Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri;
         var version = request.TextDocument.Version;
         var text = request.TextDocument.Text;
 
-        // Performance Verification (Layer 4): the trigger side of every downstream operation.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
-
         if (IsCSharp(uri))
         {
             _logger.LogInfo($"C# document opened: {uri} (version {version})");
             _csharpFileTextCache.Update(uri, text);
-            await _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, true, cancellationToken).ConfigureAwait(false);
-            return Unit.Value;
+            // Off the shared Serial dispatch lane (issue #471) -- the Roslyn parse this drives
+            // (ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync's ReplaceBindings call)
+            // is real, non-trivial cost on a large step-definition file, and per-URI chaining in
+            // the coordinator still guarantees this file's own edits apply in order. The PERF
+            // measurement moves inside the scheduled work so it still reflects actual parse
+            // duration (Layer 4) rather than the now near-instant synchronous handler body.
+            _parseCoordinator.Schedule(uri, ct =>
+            {
+                using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
+                return _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, true, ct);
+            });
+            return Task.FromResult(Unit.Value);
         }
 
         _logger.LogInfo($"Document opened: {uri} (version {version})");
         _documentBufferService.Update(uri, version, text);
 
-        await ParseAndNotifyAsync(uri, version, cancellationToken).ConfigureAwait(false);
-        return Unit.Value;
+        // Off the shared Serial dispatch lane (issue #471): the buffer update above is
+        // synchronous and immediate, but the parse + MatchCacheChangedNotification publish is
+        // handed to the coordinator instead of awaited inline, so this handler returns without
+        // holding up other files' didOpen/didChange or newly-arriving Parallel requests.
+        // FoldingRangeHandler/DocumentSymbolHandler -- the two pull handlers with no
+        // server-initiated refresh capability -- await IFeatureParseCoordinator.WaitForReadyAsync
+        // before reading buffer.Tags, so this doesn't reintroduce the race a raw fire-and-forget
+        // would (see IFeatureParseCoordinator's remarks).
+        _parseCoordinator.Schedule(uri, async ct =>
+        {
+            using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
+            await ParseAndNotifyAsync(uri, version, ct).ConfigureAwait(false);
+        });
+        return Task.FromResult(Unit.Value);
     }
 
     /// <summary>Handles <c>textDocument/didChange</c>: for C# files, feeds the full changed text into Roslyn binding discovery; for Gherkin files, updates the document buffer and re-parses/republishes diagnostics.</summary>
-    public override async Task<Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
+    public override Task<Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri;
         var version = request.TextDocument.Version;
@@ -113,23 +135,29 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // With TextDocumentSyncKind.Full the single change contains the full document text.
         var text = request.ContentChanges.LastOrDefault()?.Text ?? string.Empty;
 
-        // Performance Verification (Layer 4): the trigger side of every downstream operation
-        // (only the diagnostics-publish half was measured before issue #113).
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
-
         if (IsCSharp(uri))
         {
             _logger.LogInfo($"C# document changed: {uri} (version {version})");
             _csharpFileTextCache.Update(uri, text);
-            await _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, false, cancellationToken).ConfigureAwait(false);
-            return Unit.Value;
+            // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
+            _parseCoordinator.Schedule(uri, ct =>
+            {
+                using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
+                return _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, false, ct);
+            });
+            return Task.FromResult(Unit.Value);
         }
 
         _logger.LogInfo($"Document changed: {uri} (version {version})");
         _documentBufferService.Update(uri, version, text);
 
-        await ParseAndNotifyAsync(uri, version, cancellationToken).ConfigureAwait(false);
-        return Unit.Value;
+        // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
+        _parseCoordinator.Schedule(uri, async ct =>
+        {
+            using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
+            await ParseAndNotifyAsync(uri, version, ct).ConfigureAwait(false);
+        });
+        return Task.FromResult(Unit.Value);
     }
 
     /// <summary>Handles <c>textDocument/didSave</c>. With full-document sync the buffer is already current from the preceding <c>didChange</c>, so this is currently a no-op beyond logging.</summary>

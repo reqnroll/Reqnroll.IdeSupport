@@ -22,12 +22,20 @@ public class TextDocumentSyncHandlerTests
     private readonly ILanguageServerFacade _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
+    // Real implementation, not a mock: Handle now schedules its parse/discovery work through this
+    // instead of awaiting it inline (issue #471), so tests need the scheduled work to actually run.
+    private readonly IFeatureParseCoordinator _parseCoordinator = new FeatureParseCoordinator(Substitute.For<IIdeSupportLogger>());
+
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
 
     private TextDocumentSyncHandler CreateSut() =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
-            _csharpFileTextCache, _mediator, _languageServer, _logger);
+            _csharpFileTextCache, _mediator, _languageServer, _logger, _parseCoordinator);
+
+    /// <summary>Awaits the coordinator's pending entry for <paramref name="uri"/> so a test can observe the effects of Handle's scheduled (not awaited) parse/discovery work.</summary>
+    private Task WaitForScheduledWorkAsync(DocumentUri uri) =>
+        _parseCoordinator.WaitForReadyAsync(uri, CancellationToken.None);
 
     [Fact]
     public async Task Handle_DidOpen_stores_document_and_publishes_match_cache_changed_notification()
@@ -58,6 +66,9 @@ public class TextDocumentSyncHandlerTests
         // Tag storage and match-set computation are delegated to IGherkinDocumentTaggerService.ParseAsync
         // (mocked here); the handler only publishes the match-cache-changed notification afterwards.
 
+        // Handle schedules the parse/publish through IFeatureParseCoordinator instead of awaiting
+        // it inline (issue #471) — wait for that scheduled work before asserting its effects.
+        await WaitForScheduledWorkAsync(FeatureUri);
         await _mediator.Received(1).Publish(
             Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 3),
             Arg.Any<CancellationToken>());
@@ -94,6 +105,7 @@ public class TextDocumentSyncHandlerTests
         // Tag storage and match-set computation are delegated to IGherkinDocumentTaggerService.ParseAsync
         // (mocked here); the handler only publishes the match-cache-changed notification afterwards.
 
+        await WaitForScheduledWorkAsync(FeatureUri);
         await _mediator.Received(1).Publish(
             Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 2),
             Arg.Any<CancellationToken>());
@@ -122,6 +134,7 @@ public class TextDocumentSyncHandlerTests
         buffer!.Text.Should().Be(string.Empty);
         buffer.Version.Should().Be(4);
 
+        await WaitForScheduledWorkAsync(FeatureUri);
         await _mediator.Received(1).Publish(
             Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 4),
             Arg.Any<CancellationToken>());
@@ -210,6 +223,7 @@ public class TextDocumentSyncHandlerTests
         // But the live-text cache is populated regardless — see ICSharpFileTextCache.
         _csharpFileTextCache.TryGet(CsUri, out var cachedText).Should().BeTrue();
         cachedText.Should().Be(source);
+        await WaitForScheduledWorkAsync(CsUri);
         await _csharpDiscoveryService.Received(1)
             .UpdateFromSourceAsync(CsUri, source, true, Arg.Any<CancellationToken>());
         await _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
@@ -229,6 +243,7 @@ public class TextDocumentSyncHandlerTests
 
         await sut.Handle(request, CancellationToken.None);
 
+        await WaitForScheduledWorkAsync(CsUri);
         await _csharpDiscoveryService.Received(1)
             .UpdateFromSourceAsync(CsUri, source, false, Arg.Any<CancellationToken>());
         _bufferService.TryGet(CsUri, out _).Should().BeFalse();

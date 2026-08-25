@@ -3,6 +3,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Folding;
@@ -25,6 +26,7 @@ public sealed class FoldingRangeHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly IGherkinFoldingRangeService    _foldingService;
+    private readonly IFeatureParseCoordinator      _parseCoordinator;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder     _recorder;
 
@@ -32,17 +34,19 @@ public sealed class FoldingRangeHandler
     public FoldingRangeHandler(
         IDocumentBufferService documentBufferService,
         IGherkinFoldingRangeService foldingService,
+        IFeatureParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService = documentBufferService;
         _foldingService         = foldingService;
+        _parseCoordinator      = parseCoordinator;
         _logger                = logger;
         _recorder              = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
     /// <summary>Handles a <c>textDocument/foldingRange</c> request for feature-file folding regions.</summary>
-    public Task<Container<FoldingRange>?> HandleAsync(
+    public async Task<Container<FoldingRange>?> HandleAsync(
         FoldingRangeRequestParam request, CancellationToken ct)
     {
         // Benchmarked as load-only in the synthetic harness (no published target); now also
@@ -51,17 +55,20 @@ public sealed class FoldingRangeHandler
 
         _logger.LogInfo($"Code Folding textDocument/foldingRange: {request.TextDocument.Uri}");
 
+        // foldingRange has no LSP refresh capability (issue #471) -- unlike codeLens/semanticTokens/
+        // inlayHint, a stale/empty answer here can never be corrected by the server later, so this
+        // must wait for any parse the sync handler handed off to IFeatureParseCoordinator instead
+        // of reading buffer.Tags out from under it.
+        await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
+
         if (!_documentBufferService.TryGet(request.TextDocument.Uri, out var buffer) || buffer?.Tags is null)
-            return Task.FromResult<Container<FoldingRange>?>(new Container<FoldingRange>());
+            return new Container<FoldingRange>();
 
         var ranges = _foldingService.BuildFoldingRanges(buffer.Tags);
         if (ranges.Count == 0)
-            return Task.FromResult<Container<FoldingRange>?>(new Container<FoldingRange>());
+            return new Container<FoldingRange>();
 
-        var container = new Container<FoldingRange>(
-            ranges.Select(ToFoldingRange));
-
-        return Task.FromResult<Container<FoldingRange>?>(container);
+        return new Container<FoldingRange>(ranges.Select(ToFoldingRange));
     }
 
     // ── Conversion helpers ────────────────────────────────────────────────

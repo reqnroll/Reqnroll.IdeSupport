@@ -31,6 +31,9 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly IMediator                    _mediator      = Substitute.For<IMediator>();
     private readonly ICSharpBindingDiscoveryService _csharpDiscovery = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly IFeatureRescanDebouncer      _rescanDebouncer = Substitute.For<IFeatureRescanDebouncer>();
+    // Real implementation, not a mock: ReparseOpenFilesAsync now schedules each buffer's reparse
+    // through this instead of awaiting it inline (issue #471), so tests need it to actually run.
+    private readonly IFeatureParseCoordinator     _parseCoordinator = new FeatureParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IIdeSupportLogger              _logger        = Substitute.For<IIdeSupportLogger>();
     private readonly IFileSystemForIDE            _fileSystem    = new FileSystemForIDE();
 
@@ -76,7 +79,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         => CreateSut(_clientIde);
 
     private BindingRegistryChangedHandler CreateSut(ClientIdeContext clientIde)
-        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
+        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
     // ── Closed-file scanning — index-driven (baseline received) ───────────────
 
@@ -222,6 +225,9 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
             CancellationToken.None);
 
+        // ReparseOpenFilesAsync now schedules each buffer's reparse through
+        // IFeatureParseCoordinator instead of awaiting it inline (issue #471).
+        await _parseCoordinator.WaitForReadyAsync(ownedUri, CancellationToken.None);
         await _taggerService.Received(1).ParseAsync(ownedUri,   Arg.Any<int?>());
         await _taggerService.DidNotReceive().ParseAsync(foreignUri, Arg.Any<int?>());
     }
@@ -244,6 +250,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
             CancellationToken.None);
 
+        await _parseCoordinator.WaitForReadyAsync(inFolderUri, CancellationToken.None);
         await _taggerService.Received(1).ParseAsync(inFolderUri, Arg.Any<int?>());
         await _taggerService.DidNotReceive().ParseAsync(outsideUri, Arg.Any<int?>());
     }
@@ -273,7 +280,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -304,7 +311,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -355,7 +362,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         var featureFile = Path.Combine(_projectFolder, "A.feature");
         File.WriteAllText(featureFile, "Feature: A\n");
