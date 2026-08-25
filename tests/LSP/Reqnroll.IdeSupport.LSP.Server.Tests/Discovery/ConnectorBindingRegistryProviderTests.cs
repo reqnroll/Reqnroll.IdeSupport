@@ -52,6 +52,12 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         CreateSut().Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
     }
 
+    [Fact]
+    public void HasSuccessfulConnectorRun_is_false_before_any_discovery_runs()
+    {
+        CreateSut().HasSuccessfulConnectorRun.Should().BeFalse();
+    }
+
     // ── Successful refresh ──────────────────────────────────────────────────────
 
     [Fact]
@@ -69,6 +75,25 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         var completed = await Task.WhenAny(changed.Task, Task.Delay(5000));
         completed.Should().BeSameAs(changed.Task, "discovery should complete and raise the change event");
         sut.Current.Should().BeSameAs(newRegistry);
+    }
+
+    // Issue #471: CSharpBindingDiscoveryService.UpdateFromSourceAsync uses this flag to skip a
+    // redundant source-level parse on textDocument/didOpen once the connector has already covered
+    // the project.
+    [Fact]
+    public async Task TriggerRefresh_sets_HasSuccessfulConnectorRun_true_on_a_real_swap()
+    {
+        var newRegistry = NonInvalidRegistry(hash: 42);
+        GivenDiscoveryReturns(newRegistry, "hash-1");
+
+        var sut = CreateSut();
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+
+        sut.HasSuccessfulConnectorRun.Should().BeTrue();
     }
 
     // ── No-op refresh ────────────────────────────────────────────────────────────
@@ -98,6 +123,12 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         raised.Should().BeFalse();
         sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
         _discovery.ReceivedWithAnyArgs().RunDiscovery(default!, default!, default!, default);
+        // Issue #471: the hash-match no-op path is exactly the "no compiled DLL yet" case (see
+        // ConnectorDiscoveryService.RunDiscovery, which returns the unchanged lastHash whenever
+        // OutputAssemblyPath is unset or the file doesn't exist) -- HasSuccessfulConnectorRun must
+        // stay false here so CSharpBindingDiscoveryService keeps relying on didOpen/didChange as
+        // the only source of bindings for an unbuilt project.
+        sut.HasSuccessfulConnectorRun.Should().BeFalse();
     }
 
     // ── Debounce: rapid triggers collapse to a single run ────────────────────────

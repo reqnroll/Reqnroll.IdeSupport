@@ -62,11 +62,34 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var appliedToAnyProject = false;
         foreach (var project in owners)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // On a mere didOpen (not an edit), skip the parse+patch once the project's connector
+            // has already succeeded at least once: BindingRegistryChangedHandler.RediscoverCsFilesAsync
+            // already covers this exact file (with this exact buffer text, via
+            // ICSharpFileTextCache) as part of that reconciliation, so reparsing here repeats that
+            // work for zero new information -- confirmed live, the same file parsed twice within
+            // 7 seconds with nothing having changed in between. Only applies once a real connector
+            // run has landed (see HasSuccessfulConnectorRun's remarks): an unbuilt project has no
+            // other source for this project's bindings, so didOpen must still run there -- VS Code
+            // routinely starts every session in exactly that state (issue #471).
+            if (isOpen && HasSuccessfulConnectorRun(project))
+            {
+                _logger.LogVerbose(
+                    $"[Roslyn] '{uri}' opened but '{project.ProjectName}' already has a successful " +
+                    "connector run; skipping redundant source-level parse.");
+                continue;
+            }
+
             await ApplyToProjectAsync(project, filePath, text).ConfigureAwait(false);
+            appliedToAnyProject = true;
         }
+
+        if (!appliedToAnyProject)
+            return;
 
         // Telemetry: Roslyn discovery event (membership index / telemetry design §2.3).
         var fileName = Path.GetFileName(filePath);
@@ -116,6 +139,12 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
             await ApplyToProjectAsync(project, filePath, string.Empty).ConfigureAwait(false);
         }
     }
+
+    /// <summary>True when <paramref name="project"/> has a connector provider that has already completed a successful discovery run. See <see cref="ConnectorBindingRegistryProvider.HasSuccessfulConnectorRun"/>'s remarks (issue #471).</summary>
+    private static bool HasSuccessfulConnectorRun(LspReqnrollProject project) =>
+        project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)
+        && obj is ConnectorBindingRegistryProvider provider
+        && provider.HasSuccessfulConnectorRun;
 
     /// <summary>
     /// Parses <paramref name="text"/> and replaces <paramref name="filePath"/>'s entries in

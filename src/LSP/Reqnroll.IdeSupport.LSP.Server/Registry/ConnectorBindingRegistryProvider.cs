@@ -38,6 +38,13 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     private string _lastHash = string.Empty;
     private bool _isFirstRun = true;
 
+    // Distinct from "_current is populated": _current can also become non-Invalid via a Roslyn
+    // per-file patch (ApplyRoslynFileUpdateAsync), e.g. from textDocument/didOpen on an unbuilt
+    // project. This tracks specifically whether the out-of-process connector has ever
+    // successfully loaded real bindings from a compiled DLL (RunDiscoveryAsync's non-hash-match
+    // path) -- see HasSuccessfulConnectorRun's remarks (issue #471).
+    private volatile bool _hasSuccessfulConnectorRun;
+
     // Serialises the read-modify-write on _current so two concurrent ApplyRoslynFileUpdateAsync
     // calls (e.g. didChange edits on different files) don't silently drop each other's changes,
     // and coordinates with RunDiscoveryAsync's _current write on the connector-run path.
@@ -100,6 +107,25 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
     /// <inheritdoc/>
     public ProjectBindingRegistry Current => _current;
+
+    /// <summary>
+    /// True once the out-of-process connector has successfully loaded real bindings from a
+    /// compiled DLL at least once (a genuine registry swap in <see cref="RunDiscoveryAsync"/>, not
+    /// its hash-match no-op path). Deliberately narrower than "<see cref="Current"/> is populated":
+    /// <see cref="ApplyRoslynFileUpdateAsync"/> can populate <see cref="Current"/> too, from a live
+    /// Roslyn per-file patch, which is exactly the case (an unbuilt project, no compiled DLL yet)
+    /// where the caller of this property still needs to keep relying on that path.
+    /// </summary>
+    /// <remarks>
+    /// Used by <see cref="Discovery.CSharpBindingDiscoveryService.UpdateFromSourceAsync"/> to skip
+    /// a redundant source-level parse on <c>textDocument/didOpen</c> once the connector has already
+    /// covered the project — confirmed live to otherwise re-parse the exact same unedited file
+    /// twice within seconds (issue #471). VS Code specifically relies on the un-gated path staying
+    /// available before this becomes true: its extension only ever runs a design-time MSBuild
+    /// evaluation, never an actual build, so a freshly cloned, not-yet-built project can go its
+    /// entire first session with this property false.
+    /// </remarks>
+    public bool HasSuccessfulConnectorRun => _hasSuccessfulConnectorRun;
 
     /// <inheritdoc/>
     public event EventHandler<bool>? BindingRegistryChanged
@@ -256,6 +282,12 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             {
                 _currentLock.Release();
             }
+
+            // Only reachable when RunDiscovery actually found and read a compiled DLL (it returns
+            // the unchanged lastHash -- never a genuinely new one -- when OutputAssemblyPath is
+            // unset or the file doesn't exist yet, so this branch can't be reached by an unbuilt
+            // project). See HasSuccessfulConnectorRun's remarks.
+            _hasSuccessfulConnectorRun = true;
 
             // Telemetry: connector discovery event (membership index / telemetry design §2.2).
             var triggerContext = _isFirstRun ? "projectLoad" : "build";
