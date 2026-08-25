@@ -269,12 +269,12 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// A tag that maps to a semantic token type, carrying its already-resolved start/end
     /// (line, character) positions and its token type/modifier indices.
     /// <para>
-    /// <see cref="ResolvePosition"/> is an O(document lines) linear scan, so resolving a tag's
-    /// positions is the dominant per-tag cost here. Carrying the result through the pipeline lets
-    /// the range filter and <see cref="CollectLeafTokens"/> share ONE resolution per tag instead
-    /// of each performing its own — without this, adding the range filter (issue #471) actually
-    /// *increased* the total <see cref="ResolvePosition"/> count for
-    /// <c>textDocument/semanticTokens/range</c> rather than reducing it.
+    /// Resolving a tag's positions (<see cref="GherkinRange.StartLinePosition"/>/
+    /// <see cref="GherkinRange.EndLinePosition"/>, both binary-search-backed — issue #471) is the
+    /// dominant per-tag cost here. Carrying the result through the pipeline lets the range filter
+    /// and <see cref="CollectLeafTokens"/> share ONE resolution per tag instead of each performing
+    /// its own — without this, adding the range filter (issue #471) actually *increased* the
+    /// total resolution count for <c>textDocument/semanticTokens/range</c> rather than reducing it.
     /// </para>
     /// </summary>
     private readonly record struct PositionedTag(
@@ -286,8 +286,8 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// <summary>
     /// Projects every token-mapped tag to a <see cref="PositionedTag"/> — the whole-document
     /// (non-range) path. Tags with no token mapping are dropped before their positions are
-    /// resolved, so this costs exactly the two <see cref="ResolvePosition"/> calls per *emitted*
-    /// tag that <see cref="CollectLeafTokens"/> used to make on its own.
+    /// resolved, so this costs exactly the two position resolutions per *emitted* tag that
+    /// <see cref="CollectLeafTokens"/> used to make on its own.
     /// </summary>
     private static IEnumerable<PositionedTag> ResolveTokenTags(IEnumerable<DeveroomTag> tags)
     {
@@ -296,8 +296,8 @@ public sealed class SemanticTokenService : ISemanticTokenService
             if (!ReqnrollSemanticTokens.TryGetToken(tag, out var typeIdx, out var modBits))
                 continue;
 
-            var (startLine, startChar) = ResolvePosition(tag.Range, tag.Range.Start);
-            var (endLine, endChar) = ResolvePosition(tag.Range, tag.Range.End);
+            var (startLine, startChar) = tag.Range.StartLinePosition;
+            var (endLine, endChar) = tag.Range.EndLinePosition;
             yield return new PositionedTag(tag, startLine, startChar, endLine, endChar, typeIdx, modBits);
         }
     }
@@ -309,11 +309,11 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// (sorting, <see cref="ResolveOverlaps"/>, delta encoding, and the per-line walk for
     /// multi-line tokens) then runs over the range's tag count rather than the document's.
     /// <para>
-    /// Cost: at most two <see cref="ResolvePosition"/> calls per token-mapped tag and no more —
-    /// the end position is resolved only when the start position did not already rule the tag
-    /// out (a tag starting after <paramref name="endLine"/> cannot overlap, since its end is
-    /// never before its start), and <see cref="CollectLeafTokens"/> reuses both rather than
-    /// resolving the surviving tags a second time.
+    /// Cost: at most two position resolutions per token-mapped tag and no more — the end
+    /// position is resolved only when the start position did not already rule the tag out (a tag
+    /// starting after <paramref name="endLine"/> cannot overlap, since its end is never before its
+    /// start), and <see cref="CollectLeafTokens"/> reuses both rather than resolving the
+    /// surviving tags a second time.
     /// </para>
     /// </summary>
     private static IEnumerable<PositionedTag> FilterToLineRange(
@@ -324,11 +324,11 @@ public sealed class SemanticTokenService : ISemanticTokenService
             if (!ReqnrollSemanticTokens.TryGetToken(tag, out var typeIdx, out var modBits))
                 continue;
 
-            var (tagStartLine, tagStartChar) = ResolvePosition(tag.Range, tag.Range.Start);
+            var (tagStartLine, tagStartChar) = tag.Range.StartLinePosition;
             if (tagStartLine > endLine)
                 continue;
 
-            var (tagEndLine, tagEndChar) = ResolvePosition(tag.Range, tag.Range.End);
+            var (tagEndLine, tagEndChar) = tag.Range.EndLinePosition;
             if (tagEndLine < startLine)
                 continue;
 
@@ -376,25 +376,6 @@ public sealed class SemanticTokenService : ISemanticTokenService
             // GherkinDocumentTaggerService already contains all descendants
             // (DeveroomTagParser.GetAllTags flattens the tree before caching).
         }
-    }
-
-    /// <summary>
-    /// Resolves an absolute character offset within a snapshot to (line, character).
-    /// </summary>
-    private static (int Line, int Character) ResolvePosition(GherkinRange range, int absoluteOffset)
-    {
-        var snapshot = range.Snapshot;
-        // Linear scan — acceptable for typical feature file sizes.
-        for (int ln = 0; ln < snapshot.LineCount; ln++)
-        {
-            var line = snapshot.GetLineFromLineNumber(ln);
-            if (absoluteOffset <= line.End)
-                return (ln, absoluteOffset - line.Start);
-        }
-        // Clamp to end of last line.
-        int lastLine = snapshot.LineCount - 1;
-        var last = snapshot.GetLineFromLineNumber(lastLine);
-        return (lastLine, last.End - last.Start);
     }
 
     // ── Cache housekeeping ────────────────────────────────────────────────────
