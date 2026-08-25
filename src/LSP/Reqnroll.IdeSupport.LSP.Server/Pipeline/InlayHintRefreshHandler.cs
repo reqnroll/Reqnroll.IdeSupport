@@ -16,6 +16,9 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// notifications into a single <c>workspace/inlayHint/refresh</c> request via the shared
 /// <see cref="IRefreshDebouncer"/> singleton (not an instance field — see that type's remarks for
 /// why), and only sends it when the client advertised <c>workspace.inlayHint.refreshSupport</c>.
+/// <see cref="SendRefreshAsync"/> passes the debouncer's own token into the request (issue #471),
+/// so a superseding notification cancels a refresh already in flight, not just one still waiting
+/// out the debounce delay.
 /// </remarks>
 public class InlayHintRefreshHandler : INotificationHandler<MatchCacheChangedNotification>
 {
@@ -63,7 +66,7 @@ public class InlayHintRefreshHandler : INotificationHandler<MatchCacheChangedNot
             _logger.LogVerbose("InlayHintRefreshHandler: sending workspace/inlayHint/refresh");
             await _languageServer.Client
                 .SendRequest(WorkspaceNames.InlayHintRefresh)
-                .ReturningVoid(CancellationToken.None)
+                .ReturningVoid(cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)

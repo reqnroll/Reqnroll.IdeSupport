@@ -133,7 +133,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
                 _rescanDebouncer.ScheduleRescan(project, async ct =>
                 {
                     await ScanAllFeatureFilesAsync(project, ct).ConfigureAwait(false);
-                    await RequestCodeLensRefreshAsync(project, isFullReplacement: false).ConfigureAwait(false);
+                    await RequestCodeLensRefreshAsync(project, isFullReplacement: false, ct).ConfigureAwait(false);
                 });
             }
 
@@ -146,7 +146,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             // foreground editor at startup keeps the (count-less) code lenses it rendered before the
             // server was ready, until the user navigates away and back to re-realize the view.
             if (notification.IsFullReplacement)
-                await RequestCodeLensRefreshAsync(notification.Project, isFullReplacement: true).ConfigureAwait(false);
+                await RequestCodeLensRefreshAsync(notification.Project, isFullReplacement: true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -195,9 +195,10 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
     }
 
     /// <summary>Asks the client to re-pull C# step code lenses. See <see cref="CodeLensRefreshRequester"/> for the VS/non-VS branching and <see cref="Features.CodeLens.RefreshCodeLensParams.IsFullReplacement"/> for why <paramref name="isFullReplacement"/> matters.</summary>
-    private Task RequestCodeLensRefreshAsync(LspReqnrollProject project, bool isFullReplacement) =>
+    private Task RequestCodeLensRefreshAsync(
+        LspReqnrollProject project, bool isFullReplacement, CancellationToken cancellationToken) =>
         CodeLensRefreshRequester.RequestRefreshAsync(
-            _languageServer, _clientIde, _logger, project.ProjectName, isFullReplacement);
+            _languageServer, _clientIde, _logger, project.ProjectName, isFullReplacement, cancellationToken);
 
     /// <summary>Returns the number of closed feature files scanned, for the caller's PERF-line size tag (issue #471 investigation).</summary>
     private async Task<int> ScanAllFeatureFilesAsync(
@@ -349,8 +350,16 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
             ct.ThrowIfCancellationRequested();
             try
             {
+                // notify: false -- this method's own caller (Handle, further up this class) already
+                // reparses every open feature file and publishes MatchCacheChangedNotification
+                // unconditionally right after RediscoverCsFilesAsync returns. Without this, the
+                // notification ApplyRoslynFileUpdateAsync raises when its Roslyn-parsed result
+                // differs at all from the connector's just-loaded reflection-based extraction --
+                // which it essentially always does, real edit or not -- fired a second, fully
+                // independent BindingRegistryChangedNotification that redundantly reparsed the same
+                // feature files again moments later (issue #471).
                 await _csharpDiscoveryService
-                    .UpdateFromSourceForProjectAsync(project, filePath, text, ct)
+                    .UpdateFromSourceForProjectAsync(project, filePath, text, ct, notify: false)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

@@ -52,6 +52,12 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         CreateSut().Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
     }
 
+    [Fact]
+    public void HasSuccessfulConnectorRun_is_false_before_any_discovery_runs()
+    {
+        CreateSut().HasSuccessfulConnectorRun.Should().BeFalse();
+    }
+
     // ── Successful refresh ──────────────────────────────────────────────────────
 
     [Fact]
@@ -69,6 +75,25 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         var completed = await Task.WhenAny(changed.Task, Task.Delay(5000));
         completed.Should().BeSameAs(changed.Task, "discovery should complete and raise the change event");
         sut.Current.Should().BeSameAs(newRegistry);
+    }
+
+    // Issue #471: CSharpBindingDiscoveryService.UpdateFromSourceAsync uses this flag to skip a
+    // redundant source-level parse on textDocument/didOpen once the connector has already covered
+    // the project.
+    [Fact]
+    public async Task TriggerRefresh_sets_HasSuccessfulConnectorRun_true_on_a_real_swap()
+    {
+        var newRegistry = NonInvalidRegistry(hash: 42);
+        GivenDiscoveryReturns(newRegistry, "hash-1");
+
+        var sut = CreateSut();
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+
+        sut.HasSuccessfulConnectorRun.Should().BeTrue();
     }
 
     // ── No-op refresh ────────────────────────────────────────────────────────────
@@ -98,6 +123,12 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         raised.Should().BeFalse();
         sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
         _discovery.ReceivedWithAnyArgs().RunDiscovery(default!, default!, default!, default);
+        // Issue #471: the hash-match no-op path is exactly the "no compiled DLL yet" case (see
+        // ConnectorDiscoveryService.RunDiscovery, which returns the unchanged lastHash whenever
+        // OutputAssemblyPath is unset or the file doesn't exist) -- HasSuccessfulConnectorRun must
+        // stay false here so CSharpBindingDiscoveryService keeps relying on didOpen/didChange as
+        // the only source of bindings for an unbuilt project.
+        sut.HasSuccessfulConnectorRun.Should().BeFalse();
     }
 
     // ── Debounce: rapid triggers collapse to a single run ────────────────────────
@@ -149,6 +180,36 @@ namespace S
         (await Task.WhenAny(changed.Task, Task.Delay(2000)))
             .Should().BeSameAs(changed.Task, "the source-level update should raise BindingRegistryChanged");
         sut.Current.Should().NotBeSameAs(ProjectBindingRegistry.Invalid);
+        sut.Current.StepDefinitions.Should().ContainSingle()
+            .Which.Regex!.ToString().Should().Be("^the first number is (.*)$");
+    }
+
+    // Issue #471: notify: false is used by BindingRegistryChangedHandler.RediscoverCsFilesAsync,
+    // whose own caller already reparses every open feature file and notifies unconditionally right
+    // after it returns -- a second independent event here would just redundantly repeat that work.
+    [Fact]
+    public async Task ApplyRoslynFileUpdate_still_patches_current_registry_but_does_not_raise_event_when_notify_is_false()
+    {
+        var sut = CreateSut();
+        var raised = false;
+        sut.BindingRegistryChanged += (_, _) => raised = true;
+
+        var file = FileDetailsFor("Steps.cs", @"
+namespace S
+{
+    [Reqnroll.Binding]
+    public class Steps
+    {
+        [Reqnroll.Given(""the first number is (.*)"")]
+        public void Method(int n) { }
+    }
+}");
+
+        await sut.ApplyRoslynFileUpdateAsync(file, notify: false);
+        await Task.Delay(200);
+
+        raised.Should().BeFalse("notify: false must suppress BindingRegistryChanged even though the patch changed something");
+        sut.Current.Should().NotBeSameAs(ProjectBindingRegistry.Invalid, "the registry must still be patched regardless of notify");
         sut.Current.StepDefinitions.Should().ContainSingle()
             .Which.Regex!.ToString().Should().Be("^the first number is (.*)$");
     }

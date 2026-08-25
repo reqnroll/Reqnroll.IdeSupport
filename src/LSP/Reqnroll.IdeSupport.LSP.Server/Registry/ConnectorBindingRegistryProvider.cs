@@ -38,6 +38,13 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     private string _lastHash = string.Empty;
     private bool _isFirstRun = true;
 
+    // Distinct from "_current is populated": _current can also become non-Invalid via a Roslyn
+    // per-file patch (ApplyRoslynFileUpdateAsync), e.g. from textDocument/didOpen on an unbuilt
+    // project. This tracks specifically whether the out-of-process connector has ever
+    // successfully loaded real bindings from a compiled DLL (RunDiscoveryAsync's non-hash-match
+    // path) -- see HasSuccessfulConnectorRun's remarks (issue #471).
+    private volatile bool _hasSuccessfulConnectorRun;
+
     // Serialises the read-modify-write on _current so two concurrent ApplyRoslynFileUpdateAsync
     // calls (e.g. didChange edits on different files) don't silently drop each other's changes,
     // and coordinates with RunDiscoveryAsync's _current write on the connector-run path.
@@ -101,6 +108,25 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// <inheritdoc/>
     public ProjectBindingRegistry Current => _current;
 
+    /// <summary>
+    /// True once the out-of-process connector has successfully loaded real bindings from a
+    /// compiled DLL at least once (a genuine registry swap in <see cref="RunDiscoveryAsync"/>, not
+    /// its hash-match no-op path). Deliberately narrower than "<see cref="Current"/> is populated":
+    /// <see cref="ApplyRoslynFileUpdateAsync"/> can populate <see cref="Current"/> too, from a live
+    /// Roslyn per-file patch, which is exactly the case (an unbuilt project, no compiled DLL yet)
+    /// where the caller of this property still needs to keep relying on that path.
+    /// </summary>
+    /// <remarks>
+    /// Used by <see cref="Discovery.CSharpBindingDiscoveryService.UpdateFromSourceAsync"/> to skip
+    /// a redundant source-level parse on <c>textDocument/didOpen</c> once the connector has already
+    /// covered the project — confirmed live to otherwise re-parse the exact same unedited file
+    /// twice within seconds (issue #471). VS Code specifically relies on the un-gated path staying
+    /// available before this becomes true: its extension only ever runs a design-time MSBuild
+    /// evaluation, never an actual build, so a freshly cloned, not-yet-built project can go its
+    /// entire first session with this property false.
+    /// </remarks>
+    public bool HasSuccessfulConnectorRun => _hasSuccessfulConnectorRun;
+
     /// <inheritdoc/>
     public event EventHandler<bool>? BindingRegistryChanged
     {
@@ -138,6 +164,21 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// the current registry, replacing only that file's step definitions and hooks (Roslyn/C#
     /// source-level binding discovery).
     /// </summary>
+    /// <param name="file">The file's path and current source text.</param>
+    /// <param name="notify">
+    /// Whether to raise <see cref="BindingRegistryChanged"/> when the patch actually changes
+    /// something. Pass <see langword="false"/> when the caller is itself a sub-step of a larger,
+    /// already-coordinated flow that will reparse and notify unconditionally once it's done --
+    /// e.g. <c>BindingRegistryChangedHandler.RediscoverCsFilesAsync</c>'s post-connector-run
+    /// overlay (issue #471). Reconciling Roslyn-parsed source on top of the connector's
+    /// reflection-based extraction of the same, unedited file routinely trips
+    /// <see cref="ProjectBindingRegistry.HasExpressionChanges"/> below even with zero real edits
+    /// (the two extraction methods aren't guaranteed byte-identical), so notifying there fired a
+    /// second, fully independent <c>BindingRegistryChangedNotification</c> that redundantly
+    /// reparsed every open feature file a second time -- confirmed live as part of a ~10s pileup
+    /// per startup discovery run. Every other caller should keep the default: a live edit (or a
+    /// file deletion) is not covered by any other notify path, so it must raise the event itself.
+    /// </param>
     /// <remarks>
     /// This is the in-process counterpart to the out-of-process reflection connector: it gives
     /// instant feedback as the user edits a step-definition file, without waiting for a build.
@@ -147,7 +188,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// post-build result. If no build has happened, the connector run is a hash-match no-op and
     /// the Roslyn patch survives.
     /// </remarks>
-    public async Task ApplyRoslynFileUpdateAsync(CSharpStepDefinitionFile file)
+    public async Task ApplyRoslynFileUpdateAsync(CSharpStepDefinitionFile file, bool notify = true)
     {
         await _currentLock.WaitAsync().ConfigureAwait(false);
         ProjectBindingRegistry updated;
@@ -162,6 +203,9 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         {
             _currentLock.Release();
         }
+
+        if (!notify)
+            return;
 
         // Skip the notification entirely when no binding's matched expression/scope actually
         // changed (e.g. a method-body or comment edit). Publishing here drives feature-file
@@ -238,6 +282,12 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             {
                 _currentLock.Release();
             }
+
+            // Only reachable when RunDiscovery actually found and read a compiled DLL (it returns
+            // the unchanged lastHash -- never a genuinely new one -- when OutputAssemblyPath is
+            // unset or the file doesn't exist yet, so this branch can't be reached by an unbuilt
+            // project). See HasSuccessfulConnectorRun's remarks.
+            _hasSuccessfulConnectorRun = true;
 
             // Telemetry: connector discovery event (membership index / telemetry design §2.2).
             var triggerContext = _isFirstRun ? "projectLoad" : "build";

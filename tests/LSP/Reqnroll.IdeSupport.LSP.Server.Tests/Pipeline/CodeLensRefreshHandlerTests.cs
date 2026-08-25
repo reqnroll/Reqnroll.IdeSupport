@@ -1,3 +1,4 @@
+using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
@@ -56,6 +57,23 @@ public class CodeLensRefreshHandlerTests : IDisposable
 
         _languageServer.Client.Received(1).SendRequest(LspMethodNames.WorkspaceCodeLensRefresh);
         _languageServer.DidNotReceiveWithAnyArgs().SendNotification(default!, default(object)!);
+    }
+
+    // Issue #471: passing CancellationToken.None here (as this used to, silently) means a
+    // superseding MatchCacheChangedNotification can never cancel a refresh already dispatched to
+    // the client -- only one still waiting out the debounce delay. See
+    // IRefreshDebouncer.Schedule's remarks.
+    [Fact]
+    public async Task Handle_passes_the_debouncer_supplied_token_to_the_refresh_request_for_non_visual_studio()
+    {
+        var fakeReturns = Substitute.For<IResponseRouterReturns>();
+        _languageServer.Client.SendRequest(Arg.Any<string>()).Returns(fakeReturns);
+
+        await CreateSut(new ClientIdeContext("vscode"))
+            .Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
+        await Task.Delay(700);
+
+        await fakeReturns.Received(1).ReturningVoid(Arg.Is<CancellationToken>(t => t != CancellationToken.None));
     }
 
     [Fact]

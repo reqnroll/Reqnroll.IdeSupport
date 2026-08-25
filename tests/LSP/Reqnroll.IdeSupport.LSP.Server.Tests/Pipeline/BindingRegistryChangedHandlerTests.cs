@@ -397,11 +397,14 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             new BindingRegistryChangedNotification(project, IsFullReplacement: true),
             CancellationToken.None);
 
+        // notify: false -- Handle's own ReparseOpenFilesAsync already reparses and notifies
+        // unconditionally once RediscoverCsFilesAsync returns (issue #471).
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
             project,
             Arg.Is<string>(p => PathEq(p, stepsPath)),
             Arg.Is<string>(t => t.Contains("renamed step")),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            notify: false);
 
         project.Dispose();
     }
@@ -447,12 +450,15 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             new BindingRegistryChangedNotification(project, IsFullReplacement: true),
             CancellationToken.None);
 
-        // Reconciled exactly once, with the BUFFER text — not the on-disk text.
+        // Reconciled exactly once, with the BUFFER text — not the on-disk text. notify: false --
+        // Handle's own ReparseOpenFilesAsync already reparses and notifies unconditionally once
+        // RediscoverCsFilesAsync returns (issue #471).
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
             project,
             Arg.Is<string>(p => PathEq(p, openPath)),
             Arg.Is<string>(t => t.Contains("unsaved buffer edit")),
-            Arg.Any<CancellationToken>());
+            Arg.Any<CancellationToken>(),
+            notify: false);
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
             project, Arg.Any<string>(), Arg.Is<string>(t => t.Contains("stale disk text")), Arg.Any<CancellationToken>());
 

@@ -1,5 +1,8 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Immutable;
+using System.Diagnostics;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -166,6 +169,32 @@ namespace S
         project.Dispose();
     }
 
+    // Issue #471: BindingRegistryChangedHandler.RediscoverCsFilesAsync passes notify: false because
+    // its own caller already reparses every open feature file and notifies unconditionally right
+    // after RediscoverCsFilesAsync returns -- a second independent event here just duplicated that
+    // reparse. The registry must still be patched; only the event is suppressed.
+    [Fact]
+    public async Task UpdateFromSourceForProjectAsync_still_applies_but_suppresses_the_event_when_notify_is_false()
+    {
+        var project  = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+
+        var changed = false;
+        provider.BindingRegistryChanged += (_, _) => changed = true;
+
+        var csPath = Path.Combine(_root1, "Steps.cs");
+
+        await CreateSut().UpdateFromSourceForProjectAsync(
+            project, csPath, StepDefinitionSource, CancellationToken.None, notify: false);
+
+        changed.Should().BeFalse("notify: false must suppress BindingRegistryChanged");
+        provider.Current.StepDefinitions.Should().ContainSingle("the registry must still be patched regardless of notify");
+
+        provider.Dispose();
+        project.Dispose();
+    }
+
     [Fact]
     public async Task UpdateFromSourceForProjectAsync_noops_when_project_has_no_provider()
     {
@@ -283,6 +312,91 @@ namespace S
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Roslyn".Equals(d["DiscoverySource"]) &&
                 "csOpen".Equals(d["TriggerContext"])));
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    // ── isOpen gated on HasSuccessfulConnectorRun (issue #471) ────────────────────
+
+    [Fact]
+    public async Task UpdateFromSourceAsync_skips_the_parse_on_didOpen_once_the_project_has_a_successful_connector_run()
+    {
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var discovery = Substitute.For<IConnectorDiscoveryService>();
+        discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((new ProjectBindingRegistry(
+                ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
+        var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(new[] { project });
+
+        // Drive a real, successful connector run first.
+        var connectorDone = new TaskCompletionSource();
+        provider.BindingRegistryChanged += (_, _) => connectorDone.TrySetResult();
+        provider.TriggerRefresh();
+        await Task.WhenAny(connectorDone.Task, Task.Delay(5000));
+        provider.HasSuccessfulConnectorRun.Should().BeTrue("test setup: the connector run must have landed before asserting the skip");
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = CreateSutWithTelemetry(telemetry);
+        var csUri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "Steps.cs"));
+
+        await sut.UpdateFromSourceAsync(csUri, StepDefinitionSource, isOpen: true, CancellationToken.None);
+
+        provider.Current.StepDefinitions.Should().BeEmpty(
+            "the connector's (empty) result must not be overwritten by a redundant didOpen parse");
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    [Fact]
+    public async Task UpdateFromSourceAsync_still_applies_on_didChange_even_after_a_successful_connector_run()
+    {
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var discovery = Substitute.For<IConnectorDiscoveryService>();
+        discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((new ProjectBindingRegistry(
+                ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
+        var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(new[] { project });
+
+        var connectorDone = new TaskCompletionSource();
+        provider.BindingRegistryChanged += (_, _) => connectorDone.TrySetResult();
+        provider.TriggerRefresh();
+        await Task.WhenAny(connectorDone.Task, Task.Delay(5000));
+        provider.HasSuccessfulConnectorRun.Should().BeTrue("test setup: the connector run must have landed before asserting didChange still applies");
+
+        var csUri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "Steps.cs"));
+
+        // isOpen: false -- an edit, not an open -- must always apply regardless of connector status.
+        await CreateSut().UpdateFromSourceAsync(csUri, StepDefinitionSource, isOpen: false, CancellationToken.None);
+
+        provider.Current.StepDefinitions.Should().ContainSingle("a live edit must always be reflected, even once the connector has already run");
+
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    [Fact]
+    public async Task UpdateFromSourceAsync_applies_on_didOpen_before_the_connector_has_ever_succeeded()
+    {
+        // The VS Code steady state (issue #471): no compiled DLL yet, so
+        // HasSuccessfulConnectorRun is false and didOpen must still be the source of bindings.
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(new[] { project });
+
+        provider.HasSuccessfulConnectorRun.Should().BeFalse();
+
+        var csUri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "Steps.cs"));
+        await CreateSut().UpdateFromSourceAsync(csUri, StepDefinitionSource, isOpen: true, CancellationToken.None);
+
+        provider.Current.StepDefinitions.Should().ContainSingle();
+
         provider.Dispose();
         project.Dispose();
     }

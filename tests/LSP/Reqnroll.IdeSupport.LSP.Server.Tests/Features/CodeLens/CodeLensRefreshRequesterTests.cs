@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
@@ -92,5 +93,22 @@ public class CodeLensRefreshRequesterTests
 
         await act.Should().NotThrowAsync();
         _logger.Received(1).Log(Arg.Is<LogMessage>(m => m.Level == TraceLevel.Warning && m.Message.Contains("boom")));
+    }
+
+    // Issue #471: the debouncer can only collapse a refresh already in flight if the request
+    // actually observes the token it was given -- passing CancellationToken.None here (as this
+    // used to, silently) makes a superseding trigger unable to cancel a slow send already
+    // dispatched to the client (see IRefreshDebouncer.Schedule's remarks).
+    [Fact]
+    public async Task RequestRefreshAsync_passes_the_given_cancellationToken_to_the_request_for_non_visual_studio()
+    {
+        var fakeReturns = Substitute.For<IResponseRouterReturns>();
+        _languageServer.Client.SendRequest(Arg.Any<string>()).Returns(fakeReturns);
+        using var cts = new CancellationTokenSource();
+
+        await CodeLensRefreshRequester.RequestRefreshAsync(
+            _languageServer, new ClientIdeContext("vscode"), _logger, "MyProject", cancellationToken: cts.Token);
+
+        await fakeReturns.Received(1).ReturningVoid(cts.Token);
     }
 }

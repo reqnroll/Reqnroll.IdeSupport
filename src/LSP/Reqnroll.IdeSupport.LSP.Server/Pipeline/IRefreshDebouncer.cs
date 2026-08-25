@@ -22,5 +22,15 @@ public interface IRefreshDebouncer
     /// with the same <paramref name="key"/> before the window elapses cancels the pending run and
     /// restarts the window, so only the last action scheduled for that key actually runs.
     /// </summary>
+    /// <remarks>
+    /// The cancellation only reaches as far as <paramref name="action"/> lets it: the token passed
+    /// to <paramref name="action"/> is cancelled both while it is still waiting out the delay and
+    /// after it has started running, but a superseding <see cref="Schedule"/> call can only abort
+    /// work that actually observes the token — e.g. by passing it into an outgoing
+    /// <c>SendRequest(...)</c> rather than <see cref="CancellationToken.None"/>. An action that
+    /// ignores the token it is given cannot be collapsed once started, even though a newer trigger
+    /// arrived (issue #471 — this was exactly the gap in the refresh handlers before they started
+    /// honouring it).
+    /// </remarks>
     void Schedule(string key, TimeSpan delay, Func<CancellationToken, Task> action);
 }
