@@ -88,17 +88,40 @@ public class GherkinRange : IEquatable<GherkinRange>
     /// Converts an absolute character offset to a (line, character) pair using the given snapshot.
     /// Lines and characters are both 0-based (LSP convention).
     /// </summary>
+    /// <remarks>
+    /// Binary search over each line's <c>End</c> offset (issue #471): lines are produced in
+    /// increasing order by <see cref="IGherkinTextSnapshot.GetLineFromLineNumber"/>'s backing
+    /// store, so a linear scan from line 0 here turned every call into an O(document line count)
+    /// operation -- called several times per symbol/token/range across the codebase (document
+    /// outline, folding, inlay hints, semantic tokens, rename, find-usages, diagnostics), this
+    /// made position resolution the dominant cost on large files (confirmed live: 6.6s for one
+    /// <c>reqnroll/documentSymbolHierarchical</c> call on an 18k-line feature file). Finds the
+    /// smallest line index whose <c>End</c> is &gt;= <paramref name="offset"/>, matching the
+    /// original linear scan's semantics exactly, including its out-of-bounds fallback (an offset
+    /// past the last line's End clamps to that line's length rather than producing a negative or
+    /// overlong character offset).
+    /// </remarks>
     internal static (int Line, int Character) ResolveOffset(IGherkinTextSnapshot snapshot, int offset)
     {
-        for (int ln = 0; ln < snapshot.LineCount; ln++)
+        int lo = 0;
+        int hi = snapshot.LineCount - 1;
+        while (lo < hi)
         {
-            var line = snapshot.GetLineFromLineNumber(ln);
+            int mid = lo + (hi - lo) / 2;
+            var line = snapshot.GetLineFromLineNumber(mid);
             if (offset <= line.End)
-                return (ln, offset - line.Start);
+                hi = mid;
+            else
+                lo = mid + 1;
         }
-        int lastLine = snapshot.LineCount - 1;
-        var last = snapshot.GetLineFromLineNumber(lastLine);
-        return (lastLine, last.End - last.Start);
+
+        var resolved = snapshot.GetLineFromLineNumber(lo);
+        if (offset <= resolved.End)
+            return (lo, offset - resolved.Start);
+
+        // offset is past every line's End (out-of-bounds) -- clamp to the last line's length,
+        // matching the previous linear scan's fallback.
+        return (lo, resolved.End - resolved.Start);
     }
 
     // Used by VoidDeveroomTag
