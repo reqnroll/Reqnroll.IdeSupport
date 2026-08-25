@@ -7,12 +7,16 @@ namespace Reqnroll.IdeSupport.LSP.Core.InlayHints;
 public sealed class GherkinInlayHintService : IGherkinInlayHintService
 {
     /// <summary>Builds inlay hints for each step in the match set: ambiguous-match counts, multi-binding template counts, or a single resolved binding name.</summary>
-    public IReadOnlyList<GherkinInlayHint> Build(FeatureBindingMatchSet matchSet)
+    public IReadOnlyList<GherkinInlayHint> Build(FeatureBindingMatchSet matchSet, int? startLine = null, int? endLine = null)
     {
         var hints = new List<GherkinInlayHint>();
 
         foreach (var step in matchSet.Steps)
         {
+            if (startLine.HasValue && endLine.HasValue
+                && (step.Range.EndLinePosition.Line < startLine.Value || step.Range.StartLinePosition.Line > endLine.Value))
+                continue;
+
             var result = step.Result;
             if (result is null)
                 continue;

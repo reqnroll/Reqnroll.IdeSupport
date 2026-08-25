@@ -84,7 +84,6 @@ public class SemanticTokensHandler
     }
 
     // ── Range ─────────────────────────────────────────────────────────────────
-    // Return all tokens; the client will filter by range.
 
     /// <summary>Handles a <c>textDocument/semanticTokens/range</c> request.</summary>
     public async Task<LspSemanticTokens> HandleAsync(
@@ -100,9 +99,10 @@ public class SemanticTokensHandler
 
         _logger.LogVerbose($"SemanticTokens/range requested for {uri} (version {version})");
 
-        return await _semanticTokenService.GetSemanticTokensAsync(uri, version, cancellationToken)
-                                          .ConfigureAwait(false)
-               ?? EmptyTokens;
+        return await _semanticTokenService
+            .GetSemanticTokensForRangeAsync(uri, version, request.Range, cancellationToken)
+            .ConfigureAwait(false)
+            ?? EmptyTokens;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

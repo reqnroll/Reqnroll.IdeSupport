@@ -4,6 +4,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 
 
@@ -72,6 +73,40 @@ public sealed class SemanticTokenService : ISemanticTokenService
         return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
     }
 
+    /// <inheritdoc/>
+    public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?> GetSemanticTokensForRangeAsync(
+        DocumentUri uri, int version, LspRange range, CancellationToken cancellationToken = default)
+    {
+        if (!_documentBufferService.TryGet(uri, out var buffer) || buffer?.Tags is not { } tags || tags.Count == 0)
+        {
+            _logger.LogVerbose($"SemanticTokenService: no tags available for {uri} v{version} (range)");
+            return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(EmptyTokens);
+        }
+
+        // When the end position is at column 0, it means "the start of that line",
+        // so we exclude that line from the range (LSP convention).
+        var endLine = range.End.Character == 0 && range.End.Line > 0
+            ? range.End.Line - 1
+            : range.End.Line;
+
+        var encoded = Encode(tags, range.Start.Line, endLine);
+        var tokens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens
+        {
+            Data = [.. encoded],
+            // Must NOT collide with the full-document result id ($"{uri}@{version}") that
+            // GetSemanticTokensAsync stamps and caches: this result carries only a subset of the
+            // document's tokens, so a semanticTokens/full/delta request quoting it as
+            // previousResultId would be diffed against the wrong baseline. The delta handler
+            // ignores previousResultId today, which is the only reason the shared id was
+            // harmless; including the range bounds keeps it unambiguous regardless.
+            ResultId = $"{uri}@{version}#{range.Start.Line}-{endLine}"
+        };
+        _logger.LogInfo(
+            $"SemanticTokenService: encoded {encoded.Count / 5} range token(s) for {uri} v{version} " +
+            $"(lines {range.Start.Line}-{endLine})");
+        return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens?>(tokens);
+    }
+
     /// <summary>
     /// Evicts the cached token result for <paramref name="uri"/> so that the next
     /// <see cref="GetSemanticTokensAsync"/> call re-encodes from the current tags.
@@ -94,11 +129,15 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// block tags (FeatureBlock, etc.) are not emitted themselves but their
     /// children are processed recursively.
     /// </summary>
-    private static List<int> Encode(IReadOnlyCollection<DeveroomTag> tags)
+    private static List<int> Encode(
+        IReadOnlyCollection<DeveroomTag> tags, int? startLine = null, int? endLine = null)
     {
         // Collect all leaf tokens in document order (line asc, char asc).
         var entries = new List<(int Line, int Char, int Length, int TypeIdx, int ModBits)>();
-        CollectLeafTokens(tags, entries);
+        var scopedTags = startLine.HasValue && endLine.HasValue
+            ? FilterToLineRange(tags, startLine.Value, endLine.Value)
+            : ResolveTokenTags(tags);
+        CollectLeafTokens(scopedTags, entries);
 
         // Primary sort: (line, char) ascending.
         // Tie-break: length descending so that a longer outer token (e.g. DefinedStep
@@ -226,45 +265,111 @@ public sealed class SemanticTokenService : ISemanticTokenService
         return resolved;
     }
 
-    private static void CollectLeafTokens(
-        IEnumerable<DeveroomTag> tags,
-        List<(int Line, int Char, int Length, int TypeIdx, int ModBits)> entries)
+    /// <summary>
+    /// A tag that maps to a semantic token type, carrying its already-resolved start/end
+    /// (line, character) positions and its token type/modifier indices.
+    /// <para>
+    /// <see cref="ResolvePosition"/> is an O(document lines) linear scan, so resolving a tag's
+    /// positions is the dominant per-tag cost here. Carrying the result through the pipeline lets
+    /// the range filter and <see cref="CollectLeafTokens"/> share ONE resolution per tag instead
+    /// of each performing its own — without this, adding the range filter (issue #471) actually
+    /// *increased* the total <see cref="ResolvePosition"/> count for
+    /// <c>textDocument/semanticTokens/range</c> rather than reducing it.
+    /// </para>
+    /// </summary>
+    private readonly record struct PositionedTag(
+        DeveroomTag Tag,
+        int StartLine, int StartChar,
+        int EndLine, int EndChar,
+        int TypeIdx, int ModBits);
+
+    /// <summary>
+    /// Projects every token-mapped tag to a <see cref="PositionedTag"/> — the whole-document
+    /// (non-range) path. Tags with no token mapping are dropped before their positions are
+    /// resolved, so this costs exactly the two <see cref="ResolvePosition"/> calls per *emitted*
+    /// tag that <see cref="CollectLeafTokens"/> used to make on its own.
+    /// </summary>
+    private static IEnumerable<PositionedTag> ResolveTokenTags(IEnumerable<DeveroomTag> tags)
     {
         foreach (var tag in tags)
         {
-            if (ReqnrollSemanticTokens.TryGetToken(tag, out var typeIdx, out var modBits))
+            if (!ReqnrollSemanticTokens.TryGetToken(tag, out var typeIdx, out var modBits))
+                continue;
+
+            var (startLine, startChar) = ResolvePosition(tag.Range, tag.Range.Start);
+            var (endLine, endChar) = ResolvePosition(tag.Range, tag.Range.End);
+            yield return new PositionedTag(tag, startLine, startChar, endLine, endChar, typeIdx, modBits);
+        }
+    }
+
+    /// <summary>
+    /// Projects the token-mapped tags whose line span overlaps
+    /// [<paramref name="startLine"/>, <paramref name="endLine"/>] (both inclusive) — the
+    /// <c>textDocument/semanticTokens/range</c> path (issue #471). Everything downstream
+    /// (sorting, <see cref="ResolveOverlaps"/>, delta encoding, and the per-line walk for
+    /// multi-line tokens) then runs over the range's tag count rather than the document's.
+    /// <para>
+    /// Cost: at most two <see cref="ResolvePosition"/> calls per token-mapped tag and no more —
+    /// the end position is resolved only when the start position did not already rule the tag
+    /// out (a tag starting after <paramref name="endLine"/> cannot overlap, since its end is
+    /// never before its start), and <see cref="CollectLeafTokens"/> reuses both rather than
+    /// resolving the surviving tags a second time.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<PositionedTag> FilterToLineRange(
+        IEnumerable<DeveroomTag> tags, int startLine, int endLine)
+    {
+        foreach (var tag in tags)
+        {
+            if (!ReqnrollSemanticTokens.TryGetToken(tag, out var typeIdx, out var modBits))
+                continue;
+
+            var (tagStartLine, tagStartChar) = ResolvePosition(tag.Range, tag.Range.Start);
+            if (tagStartLine > endLine)
+                continue;
+
+            var (tagEndLine, tagEndChar) = ResolvePosition(tag.Range, tag.Range.End);
+            if (tagEndLine < startLine)
+                continue;
+
+            yield return new PositionedTag(
+                tag, tagStartLine, tagStartChar, tagEndLine, tagEndChar, typeIdx, modBits);
+        }
+    }
+
+    private static void CollectLeafTokens(
+        IEnumerable<PositionedTag> tags,
+        List<(int Line, int Char, int Length, int TypeIdx, int ModBits)> entries)
+    {
+        foreach (var (tag, startLine, startChar, endLine, endChar, typeIdx, modBits) in tags)
+        {
+            // For multi-line tokens emit one entry per line.
+            if (startLine == endLine)
             {
-                var (startLine, startChar) = ResolvePosition(tag.Range, tag.Range.Start);
-                var (endLine, endChar) = ResolvePosition(tag.Range, tag.Range.End);
+                int length = endChar - startChar;
+                if (length > 0)
+                    entries.Add((startLine, startChar, length, typeIdx, modBits));
+            }
+            else
+            {
+                // First line: from startChar to end of line
+                var firstLine = tag.Range.Snapshot.GetLineFromLineNumber(startLine);
+                int firstLineLength = firstLine.End - firstLine.Start - startChar;
+                if (firstLineLength > 0)
+                    entries.Add((startLine, startChar, firstLineLength, typeIdx, modBits));
 
-                // For multi-line tokens emit one entry per line.
-                if (startLine == endLine)
+                // Middle lines
+                for (int ln = startLine + 1; ln < endLine; ln++)
                 {
-                    int length = endChar - startChar;
-                    if (length > 0)
-                        entries.Add((startLine, startChar, length, typeIdx, modBits));
+                    var midLine = tag.Range.Snapshot.GetLineFromLineNumber(ln);
+                    int midLength = midLine.End - midLine.Start;
+                    if (midLength > 0)
+                        entries.Add((ln, 0, midLength, typeIdx, modBits));
                 }
-                else
-                {
-                    // First line: from startChar to end of line
-                    var firstLine = tag.Range.Snapshot.GetLineFromLineNumber(startLine);
-                    int firstLineLength = firstLine.End - firstLine.Start - startChar;
-                    if (firstLineLength > 0)
-                        entries.Add((startLine, startChar, firstLineLength, typeIdx, modBits));
 
-                    // Middle lines
-                    for (int ln = startLine + 1; ln < endLine; ln++)
-                    {
-                        var midLine = tag.Range.Snapshot.GetLineFromLineNumber(ln);
-                        int midLength = midLine.End - midLine.Start;
-                        if (midLength > 0)
-                            entries.Add((ln, 0, midLength, typeIdx, modBits));
-                    }
-
-                    // Last line: from column 0 to endChar
-                    if (endChar > 0)
-                        entries.Add((endLine, 0, endChar, typeIdx, modBits));
-                }
+                // Last line: from column 0 to endChar
+                if (endChar > 0)
+                    entries.Add((endLine, 0, endChar, typeIdx, modBits));
             }
 
             // Do NOT recurse into ChildTags – the flat collection passed from

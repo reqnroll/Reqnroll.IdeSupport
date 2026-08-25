@@ -211,6 +211,7 @@ public class Program
             ApplySemanticTokensCapability();
             ApplyStaticInlayHintCapability();
             ApplyStaticFoldingCapability();
+            ApplyStaticCodeLensCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
 
@@ -228,16 +229,35 @@ public class Program
 
             void ApplySemanticTokensCapability()
             {
+                // Visual Studio's built-in LSP client can't map our custom token types to a
+                // classifier of its own, so tokens for it flow entirely through the separate
+                // reqnroll/semanticTokens push mechanism (SemanticTokensPushHandler) plus the VS
+                // extension's own SemanticTokensClassificationInterceptor -- neither of which
+                // depends on pull support being advertised. Declaring full/range support to VS
+                // anyway doesn't help it (it still can't render the result) and isn't free: VS's
+                // built-in client has been observed issuing its own pull requests (see
+                // SemanticTokensClassificationInterceptor's "fallback path" comment, added
+                // defensively for exactly this), duplicating the same expensive full-document
+                // encode the push path already paid for, for a response VS then discards.
+                //
+                // The Legend itself must still be advertised for VS, though: it's not part of the
+                // push notification's payload (PublishSemanticTokensParams carries only uri/
+                // version/data), so SemanticTokensClassificationInterceptor.CaptureLegendIfPresent
+                // reads it out of this same initialize response -- omitting the whole capability
+                // for VS would silently break token decoding for the push path too.
+                var isVisualStudio = string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase);
+
                 var tokenService = languageServer.Services.GetRequiredService<ISemanticTokenService>();
 
                 response.Capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
                 {
                     Legend = tokenService.Legend,
-                    Full = true,
+                    Full = !isVisualStudio,
                     // VS Code's and Rider's built-in LSP clients both support range requests (used as a
                     // large-file/viewport optimization); advertise it since SemanticTokensHandler already
-                    // implements textDocument/semanticTokens/range (issue #123).
-                    Range = true
+                    // implements textDocument/semanticTokens/range (issue #123). Withheld for VS along
+                    // with Full above, per the note at the top of this method.
+                    Range = !isVisualStudio
                 };
             }
 
@@ -266,6 +286,29 @@ public class Program
             void ApplyStaticFoldingCapability()
             {
                 response.Capabilities.FoldingRangeProvider = new FoldingRangeRegistrationOptions.StaticOptions();
+            }
+
+            // codeLensProvider.resolveProvider: declared statically for the same
+            // dynamic-registration-race reason as inlayHintProvider/foldingRangeProvider above.
+            // textDocument/codeLens itself is already always-on for this server (no capability
+            // gating needed for the base request); this only advertises that the server CAN
+            // service codeLens/resolve — CodeLensResolveHandler does (issue #471).
+            //
+            // No shipped client currently uses it: neither VS Code nor Rider nor Visual Studio
+            // issues codeLens/resolve today, so every lens is still returned fully computed. The
+            // decision of whether to hand out an unresolved placeholder lens is NOT made here —
+            // it is made per client by ClientIdeContext.SupportsCodeLensResolve, an opt-in
+            // allowlist that is deliberately empty (see the note on that allowlist for the
+            // evidence and the criteria for adding a client). Advertising resolveProvider while
+            // that allowlist is empty is harmless — a spec-compliant client only resolves a lens
+            // that arrives without a Command, and none do — and it is what lets a newly
+            // allowlisted client work without an initialize-response change.
+            void ApplyStaticCodeLensCapability()
+            {
+                response.Capabilities.CodeLensProvider = new CodeLensRegistrationOptions.StaticOptions
+                {
+                    ResolveProvider = true
+                };
             }
 
             // vscode-languageclient v10 (used by VS Code and Rider) does not wire its

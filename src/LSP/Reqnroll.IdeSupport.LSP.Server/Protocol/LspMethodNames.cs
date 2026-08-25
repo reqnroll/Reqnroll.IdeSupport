@@ -54,6 +54,8 @@ public static class LspMethodNames
     public const string TextDocumentReferences = "textDocument/references";
     /// <summary>Method name for the <c>textDocument/codeLens</c> request.</summary>
     public const string TextDocumentCodeLens = "textDocument/codeLens";
+    /// <summary>Method name for the <c>codeLens/resolve</c> request.</summary>
+    public const string CodeLensResolve = "codeLens/resolve";
     /// <summary>Method name for the <c>textDocument/inlayHint</c> request.</summary>
     public const string TextDocumentInlayHint = "textDocument/inlayHint";
     /// <summary>Method name for the <c>textDocument/foldingRange</c> request.</summary>

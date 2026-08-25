@@ -6,6 +6,8 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using Position = OmniSharp.Extensions.LanguageServer.Protocol.Models.Position;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.SemanticTokens;
 
@@ -164,6 +166,56 @@ public class SemanticTokenServiceTests
         tokens.Should().Contain(t => t.Line == 3 && t.Char == 13 && t.Length == 4 && t.Type == headerType, "\"col2\" gets its own DataTableHeader token");
         tokens.Should().Contain(t => t.Line == 4 && t.Type == dataTableType && t.Length == 19, "a data row must not be silently dropped");
         tokens.Should().Contain(t => t.Line == 5 && t.Type == dataTableType && t.Length == 19, "the last data row must not be silently dropped either");
+    }
+
+    // ── Range-scoped semantic tokens ───────────────────────────────────────────
+
+    [Fact]
+    public async Task GetSemanticTokensForRangeAsync_excludes_tags_outside_the_requested_line_range()
+    {
+        // "Given x" appears on line 2 and again on line 20 of a repeated Scenario block.
+        var text = "Feature: F\n" + string.Concat(Enumerable.Repeat("  Scenario: S\n    Given x\n", 10));
+        var snapshot = new TestGherkinSnapshot(text);
+        var firstOffset = text.IndexOf("Given x", StringComparison.Ordinal);
+        var lastOffset  = text.LastIndexOf("Given x", StringComparison.Ordinal);
+
+        var tag1 = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, firstOffset, 7));
+        var tag2 = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, lastOffset, 7));
+
+        var buf = new DocumentBuffer(FeatureUri, 1, snapshot.GetText()) with { Tags = new[] { tag1, tag2 } };
+        SetupBuffer(buf);
+
+        var sut = CreateSut();
+        var range = new LspRange(new Position(0, 0), new Position(3, 0)); // covers only the first "Given x" (line 2)
+
+        var result = await sut.GetSemanticTokensForRangeAsync(FeatureUri, 1, range, CancellationToken.None);
+
+        // 5 ints per token (deltaLine, deltaChar, length, type, modifiers) -- only one of the two tags qualifies.
+        result!.Data.Length.Should().Be(5);
+        // ...and it is specifically the in-range one (line 2), not the line-20 tag.
+        Decode(result.Data.ToArray()).Should().ContainSingle().Which.Line.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetSemanticTokensForRangeAsync_result_id_is_distinguishable_from_the_full_document_one()
+    {
+        // A range result is a strict subset of the full-document result, so reusing the
+        // full-document ResultId would let a later semanticTokens/full/delta request diff
+        // against the wrong baseline (issue #471 final review).
+        var text = "Feature: F\n" + string.Concat(Enumerable.Repeat("  Scenario: S\n    Given x\n", 10));
+        var snapshot = new TestGherkinSnapshot(text);
+        var offset = text.IndexOf("Given x", StringComparison.Ordinal);
+        var tag = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, offset, 7));
+
+        var buf = new DocumentBuffer(FeatureUri, 1, snapshot.GetText()) with { Tags = new[] { tag } };
+        SetupBuffer(buf);
+
+        var sut = CreateSut();
+        var full  = await sut.GetSemanticTokensAsync(FeatureUri, 1);
+        var ranged = await sut.GetSemanticTokensForRangeAsync(
+            FeatureUri, 1, new LspRange(new Position(0, 0), new Position(3, 0)), CancellationToken.None);
+
+        ranged!.ResultId.Should().NotBe(full!.ResultId);
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────

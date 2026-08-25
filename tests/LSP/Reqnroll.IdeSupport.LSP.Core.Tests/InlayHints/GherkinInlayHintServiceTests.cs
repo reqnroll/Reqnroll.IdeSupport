@@ -171,4 +171,18 @@ public class GherkinInlayHintServiceTests
         hints.Should().HaveCount(2);
         hints.Select(h => h.Kind).Should().AllBeEquivalentTo(GherkinInlayHintKind.Binding);
     }
+
+    [Fact]
+    public void Build_with_line_range_excludes_steps_outside_the_range()
+    {
+        var registry = RegistryWith(
+            Binding("step one", "N.S1"),
+            Binding("step two", "N.S2"));
+        const string feature = "Feature: F\nScenario: S\n    Given step one\n    And step two\n";
+
+        // "Given step one" is on line 2; "And step two" is on line 3. Restrict to line 2 only.
+        var hints = CreateSut().Build(MatchSetFor(feature, registry), startLine: 2, endLine: 2);
+
+        hints.Should().ContainSingle();
+    }
 }

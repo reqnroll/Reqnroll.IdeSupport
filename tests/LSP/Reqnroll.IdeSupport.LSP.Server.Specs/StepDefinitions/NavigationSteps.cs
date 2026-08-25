@@ -162,31 +162,62 @@ public sealed class NavigationSteps
     }
 
     [Then(@"the code lens at index (\d+) has title ""(.*)""")]
-    public void ThenCodeLensAtIndexHasTitle(int index, string expectedTitle)
+    public async Task ThenCodeLensAtIndexHasTitle(int index, string expectedTitle)
     {
         _ctx.LastCodeLens.Should().NotBeNull();
         _ctx.LastCodeLens!.Should().HaveCountGreaterThan(index,
             $"at least {index + 1} code lenses should exist");
-        _ctx.LastCodeLens![index].Command!.Title.Should().Be(expectedTitle);
+        var lens = await ResolveIfDeferredAsync(_ctx.LastCodeLens![index]).ConfigureAwait(false);
+        lens.Command!.Title.Should().Be(expectedTitle);
     }
 
     [Then(@"at least one code lens has a title containing ""(.*)""")]
-    public void ThenAtLeastOneCodeLensHasTitleContaining(string fragment)
+    public async Task ThenAtLeastOneCodeLensHasTitleContaining(string fragment)
     {
         _ctx.LastCodeLens.Should().NotBeNull();
-        _ctx.LastCodeLens!.Should().Contain(
+        var resolved = await ResolveAllIfDeferredAsync(_ctx.LastCodeLens!).ConfigureAwait(false);
+        resolved.Should().Contain(
             lens => lens.Command != null &&
                     lens.Command.Title.Contains(fragment, StringComparison.OrdinalIgnoreCase),
             $"at least one code lens should have a title containing '{fragment}'");
     }
 
     [Then(@"all code lenses have command ""(.*)""")]
-    public void ThenAllCodeLensesHaveCommand(string commandName)
+    public async Task ThenAllCodeLensesHaveCommand(string commandName)
     {
         _ctx.LastCodeLens.Should().NotBeNull();
-        _ctx.LastCodeLens!.Should().OnlyContain(
+        var resolved = await ResolveAllIfDeferredAsync(_ctx.LastCodeLens!).ConfigureAwait(false);
+        resolved.Should().OnlyContain(
             lens => lens.Command != null && lens.Command.Name == commandName,
             $"all code lenses should have command '{commandName}'");
+    }
+
+    /// <summary>
+    /// Follows up with <c>codeLens/resolve</c> (issue #471) for a lens whose <c>Command</c> came
+    /// back unset from <c>textDocument/codeLens</c>, exactly as a spec-compliant client would.
+    /// <para>
+    /// This is a passthrough in practice today: the server only hands out unresolved placeholder
+    /// lenses to clients on <c>ClientIdeContext</c>'s <c>codeLens/resolve</c> allowlist, and that
+    /// allowlist is empty, so every lens these specs see already carries its <c>Command</c>. The
+    /// helper stays because it makes these assertions correct for EITHER server behaviour — so
+    /// they keep passing unchanged the day a client is allowlisted and the deferred path goes
+    /// live, instead of silently asserting against a null <c>Command</c>.
+    /// </para>
+    /// </summary>
+    private async Task<CodeLens> ResolveIfDeferredAsync(CodeLens lens)
+    {
+        if (lens.Command is not null) return lens;
+        var resolved = await _ctx.Harness.Client.RequestCodeLensResolveAsync(lens).ConfigureAwait(false);
+        resolved.Should().NotBeNull("codeLens/resolve should always return a lens");
+        return resolved!;
+    }
+
+    private async Task<CodeLens[]> ResolveAllIfDeferredAsync(IEnumerable<CodeLens> lenses)
+    {
+        var results = new List<CodeLens>();
+        foreach (var lens in lenses)
+            results.Add(await ResolveIfDeferredAsync(lens).ConfigureAwait(false));
+        return results.ToArray();
     }
 
     // ── reqnroll/goToStepDefinitions (F5 — Go to Step Definition) ─────────────

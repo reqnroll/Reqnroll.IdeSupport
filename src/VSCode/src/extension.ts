@@ -24,6 +24,7 @@ import {
 } from './lsp/manualDocumentSync';
 import { createRenameMiddleware } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
+import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
 
@@ -310,6 +311,11 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       // vscode-languageclient never attempts a duplicate registerCommand call — see
       // executeCommandDedupe.ts for why that collision matters beyond just this command.
       ...createExecuteCommandDedupeMiddleware(['reqnroll.toggleComment']),
+      // The server declares codeLensProvider statically (issue #471) so a future capable client
+      // can use the deferred-resolve path, but that wakes up vscode-languageclient's own built-in
+      // CodeLens feature alongside the hand-rolled providers below (registerStepCodeLens,
+      // registerHookCodeLens), doubling every lens — see codeLensSuppression.ts.
+      ...createCodeLensSuppressionMiddleware(),
     },
   };
 

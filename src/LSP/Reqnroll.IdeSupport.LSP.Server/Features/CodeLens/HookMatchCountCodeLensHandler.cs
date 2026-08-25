@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -43,6 +44,15 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// click action is unaffected: <c>reqnroll/goToMatchingScenarios</c> still resolves and returns
 /// the full scenario list on demand.
 /// </para>
+/// <para>
+/// For a scoped hook the corpus walk can instead be deferred to <c>codeLens/resolve</c>
+/// (<see cref="ResolveAsync"/>, issue #471), but only for clients on the opt-in allowlist behind
+/// <see cref="ClientIdeContext.SupportsCodeLensResolve"/>. That allowlist is empty today, so every
+/// shipped client (VS Code, Rider, Visual Studio) gets fully-computed lenses eagerly — none of
+/// them issue <c>codeLens/resolve</c>, and a lens returned without a <c>Command</c> simply never
+/// renders for them. See the allowlist's note in <c>ClientIdeContext</c> for the evidence and for
+/// what a client must implement before being added.
+/// </para>
 /// </remarks>
 public sealed class HookMatchCountCodeLensHandler
 {
@@ -51,18 +61,21 @@ public sealed class HookMatchCountCodeLensHandler
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
+    private readonly ClientIdeContext              _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="HookMatchCountCodeLensHandler"/> class.</summary>
     public HookMatchCountCodeLensHandler(
         IBindingMatchService          matchService,
         ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
+        ClientIdeContext              clientIde,
         IIdeSupportLogger               logger,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
         _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
+        _clientIde      = clientIde;
         _logger         = logger;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -103,11 +116,20 @@ public sealed class HookMatchCountCodeLensHandler
             : null;
 
         // Computed once per request, not once per hook: HookScenarioMatching walks the full
-        // project scenario corpus, and a "Hooks.cs" file can have many hook methods.
-        var matchSets = _matchService.GetAll(projectFilter).ToList();
+        // project scenario corpus, and a "Hooks.cs" file can have many hook methods. Lazy because
+        // a resolve-capable client defers every scoped hook (below) -- when a file has only
+        // deferred hooks and/or unscoped ("all scenarios") hooks, this walk should never run.
+        var matchSets = new Lazy<List<FeatureBindingMatchSet>>(() => _matchService.GetAll(projectFilter).ToList());
 
         var lenses = new List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
         var seen = new HashSet<(int line, int col)>();
+
+        // Defer the scoped-hook corpus walk to codeLens/resolve ONLY for clients on the opt-in
+        // allowlist in ClientIdeContext.CodeLensResolveCapableIdes -- that set is empty today, so
+        // every shipped client (VS Code, Rider, Visual Studio) takes the eager path below. None of
+        // them issue codeLens/resolve, and a deferred lens simply never renders for them
+        // (issue #471; see the allowlist note for the evidence).
+        var deferToResolve = _clientIde.SupportsCodeLensResolve;
 
         foreach (var hook in registry.Hooks)
         {
@@ -121,40 +143,120 @@ public sealed class HookMatchCountCodeLensHandler
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
-            // Unscoped hooks (no [Scope] at all) match every scenario in the project: skip the
-            // corpus walk and show a static label rather than an unbounded, uninformative count
-            // (issue #403).
-            string title;
-            if (hook.Scope is null)
-            {
-                title = "all scenarios";
-            }
-            else
-            {
-                var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
-                var count = scenarios.Count;
-                title = count == 1 ? "1 scenario matched" : $"{count} scenarios matched";
-            }
-
             // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
             var line = src.SourceFileLine   - 1;
             var col  = src.SourceFileColumn - 1;
+            var range = new LspRange(new Position(line, col), new Position(line, col));
 
-            lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+            // Unscoped hooks (no [Scope] at all) match every scenario in the project: skip the
+            // corpus walk and show a static label rather than an unbounded, uninformative count
+            // (issue #403). No reason to ever defer this case -- there's nothing expensive to defer.
+            if (hook.Scope is null)
             {
-                Range = new LspRange(new Position(line, col), new Position(line, col)),
-                Command = new Command
+                lenses.Add(BuildResolvedLens(range, uri, line, col, title: "all scenarios"));
+                continue;
+            }
+
+            if (deferToResolve)
+            {
+                lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
                 {
-                    Title     = title,
-                    Name      = "reqnroll.goToMatchingScenarios",
-                    Arguments = new JArray(uri.ToString(), line, col),
-                },
-            });
+                    Range = range,
+                    Data = new JObject
+                    {
+                        ["kind"]         = "hookMatchCount",
+                        ["uri"]          = uri.ToString(),
+                        ["sourceFile"]   = src.SourceFile,
+                        ["sourceLine"]   = src.SourceFileLine,
+                        ["sourceColumn"] = src.SourceFileColumn,
+                    }
+                });
+                continue;
+            }
+
+            var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets.Value, hook);
+            var count = scenarios.Count;
+            lenses.Add(BuildResolvedLens(range, uri, line, col,
+                title: count == 1 ? "1 scenario matched" : $"{count} scenarios matched"));
         }
 
         _logger.LogVerbose($"HookMatchCountCodeLensHandler: {lenses.Count} lens(es) for {uri}");
         return Task.FromResult(lenses.ToArray());
     }
+
+    /// <summary>
+    /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
+    /// <see cref="ClientIdeContext.SupportsCodeLensResolve"/>, scoped-hook deferred path) into its
+    /// final <c>Command</c> — backs <c>codeLens/resolve</c> (issue #471). Falls back to the
+    /// non-actionable "0 scenarios matched" lens if the hook can no longer be located.
+    /// </summary>
+    public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> ResolveAsync(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens, CancellationToken cancellationToken)
+    {
+        var data = lens.Data as JObject;
+        var uriStr     = data?["uri"]?.Value<string>();
+        var sourceFile = data?["sourceFile"]?.Value<string>();
+        var sourceLine = data?["sourceLine"]?.Value<int?>();
+        var sourceCol  = data?["sourceColumn"]?.Value<int?>();
+
+        if (uriStr is null || sourceFile is null || sourceLine is null || sourceCol is null)
+            return Task.FromResult(WithNoMatchingScenarios(lens));
+
+        var uri = DocumentUri.Parse(uriStr);
+        var registry = _registryLookup.GetRegistryForUri(uri);
+        if (registry == ProjectBindingRegistry.Invalid)
+            return Task.FromResult(WithNoMatchingScenarios(lens));
+
+        var hook = registry.Hooks.FirstOrDefault(h =>
+            h.Implementation?.SourceLocation is { } loc
+            && IsSameFile(loc.SourceFile, sourceFile)
+            && loc.SourceFileLine == sourceLine.Value
+            && loc.SourceFileColumn == sourceCol.Value);
+        if (hook is null)
+            return Task.FromResult(WithNoMatchingScenarios(lens));
+
+        var owners = _scopeManager.ResolveOwners(uri);
+        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
+            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
+            : null;
+        var matchSets = _matchService.GetAll(projectFilter).ToList();
+        var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
+        var count = scenarios.Count;
+
+        return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character,
+            count == 1 ? "1 scenario matched" : $"{count} scenarios matched"));
+    }
+
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens BuildResolvedLens(
+        LspRange range, DocumentUri uri, int line, int col, string title) =>
+        new()
+        {
+            Range = range,
+            Command = new Command { Title = title, Name = "reqnroll.goToMatchingScenarios", Arguments = new JArray(uri.ToString(), line, col) }
+        };
+
+    /// <summary>
+    /// The non-actionable fallback lens used when <see cref="ResolveAsync"/> cannot trust the
+    /// lens's <c>Data</c> (missing/malformed) or can no longer find the hook it described. It
+    /// mirrors <c>StepCodeLensHandler.WithZeroUsages</c>: a "nothing to do" command name with
+    /// <c>Arguments = null</c>, never <c>reqnroll.goToMatchingScenarios</c> pointed at a
+    /// fabricated URI (which is what an earlier version did — a client-clickable command carrying
+    /// <c>file:///unknown</c>).
+    /// <para>
+    /// <c>reqnroll.noMatchingScenarios</c> is a sentinel with no arguments, the hook counterpart
+    /// of <c>reqnroll.noStepUsages</c>. It is unreachable while
+    /// <see cref="ClientIdeContext.SupportsCodeLensResolve"/> is false for every client; a client
+    /// adding itself to that allowlist should register it as a no-op (one line, exactly as VS
+    /// Code's <c>extension.ts</c> registers <c>reqnroll.noStepUsages</c>).
+    /// </para>
+    /// </summary>
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens WithNoMatchingScenarios(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens) =>
+        new()
+        {
+            Range = lens.Range,
+            Command = new Command { Title = "0 scenarios matched", Name = "reqnroll.noMatchingScenarios", Arguments = null }
+        };
 
     private static readonly global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[] Empty =
         Array.Empty<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();

@@ -170,6 +170,31 @@ public sealed class ProtocolSteps
             "the handler is wired up via manual routing in LanguageServerOptionsExtensions");
     }
 
+    [Then("the server does not advertise pull support for semantic tokens")]
+    public void ThenTheServerDoesNotAdvertisePullSupportForSemanticTokens()
+    {
+        var provider = _ctx.Harness.ServerInitializeResult.Capabilities.SemanticTokensProvider;
+        provider.Should().NotBeNull(
+            "the legend must still be advertised even when pull support is withheld -- " +
+            "SemanticTokensClassificationInterceptor reads it from this same initialize response");
+        (provider!.Full?.Bool ?? false).Should().BeFalse(
+            "Visual Studio's built-in LSP client can't render our custom token types and has been " +
+            "observed pulling anyway when full support is advertised, duplicating the expensive " +
+            "encode the reqnroll/semanticTokens push path already paid for");
+        (provider.Range?.Bool ?? false).Should().BeFalse(
+            "same reasoning as Full above -- VS relies solely on the push mechanism");
+    }
+
+    [Then("the server advertises a semantic token legend")]
+    public void ThenTheServerAdvertisesASemanticTokenLegend()
+    {
+        var provider = _ctx.Harness.ServerInitializeResult.Capabilities.SemanticTokensProvider;
+        provider.Should().NotBeNull();
+        provider!.Legend.TokenTypes.Should().NotBeEmpty(
+            "the VS extension's SemanticTokensClassificationInterceptor decodes reqnroll/semanticTokens " +
+            "push notifications using this legend -- it carries no legend of its own");
+    }
+
     [Then("the server statically advertises textDocumentSync with full sync and openClose")]
     public void ThenTheServerStaticallyAdvertisesTextDocumentSync()
     {

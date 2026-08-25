@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -31,18 +32,21 @@ public sealed class StepCodeLensHandler
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
+    private readonly ClientIdeContext              _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="StepCodeLensHandler"/> class.</summary>
     public StepCodeLensHandler(
         IBindingMatchService          matchService,
         ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
+        ClientIdeContext              clientIde,
         IIdeSupportLogger               logger,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
         _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
+        _clientIde      = clientIde;
         _logger         = logger;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -94,6 +98,13 @@ public sealed class StepCodeLensHandler
         // Deduplicate: the same attribute location may appear in multiple registries (linked files).
         var seen = new HashSet<(int line, int col)>();
 
+        // Defer the per-binding FindUsages scan to codeLens/resolve ONLY for clients on the
+        // opt-in allowlist in ClientIdeContext.CodeLensResolveCapableIdes — that set is empty
+        // today, so every shipped client (VS Code, Rider, Visual Studio) takes the eager path
+        // below. None of them issue codeLens/resolve, and a deferred lens simply never renders
+        // for them (issue #471; see the allowlist note for the evidence).
+        var deferToResolve = _clientIde.SupportsCodeLensResolve;
+
         foreach (var binding in registry.StepDefinitions)
         {
             if (!binding.IsValid) continue;
@@ -105,31 +116,97 @@ public sealed class StepCodeLensHandler
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
-            var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
-            var usages = _matchService.FindUsages(bindingLocation, projectFilter);
-            var count  = usages.Count;
-
             // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
             var line = src.SourceFileLine   - 1;
             var col  = src.SourceFileColumn - 1;
+            var range = new LspRange(new Position(line, col), new Position(line, col));
 
-            lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
+            if (deferToResolve)
             {
-                Range = new LspRange(new Position(line, col), new Position(line, col)),
-                Command = new Command
+                lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
                 {
-                    Title     = count == 1 ? "1 step usage" : $"{count} step usages",
-                    Name      = count > 0 ? "reqnroll.findStepUsages" : "reqnroll.noStepUsages",
-                    Arguments = count > 0
-                        ? new JArray(uri.ToString(), line, col)
-                        : null
-                }
-            });
+                    Range = range,
+                    Data = new JObject
+                    {
+                        ["kind"]         = "stepUsage",
+                        ["uri"]          = uri.ToString(),
+                        ["sourceFile"]   = src.SourceFile,
+                        ["sourceLine"]   = src.SourceFileLine,
+                        ["sourceColumn"] = src.SourceFileColumn,
+                    }
+                });
+                continue;
+            }
+
+            var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
+            var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+            lenses.Add(BuildResolvedLens(range, uri, line, col, usages.Count));
         }
 
         _logger.LogVerbose($"StepCodeLensHandler: {lenses.Count} lens(es) for {uri}");
         return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[]>(lenses.ToArray());
     }
+
+    /// <summary>
+    /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
+    /// <see cref="ClientIdeContext.SupportsCodeLensResolve"/>) into its final <c>Command</c> —
+    /// backs <c>codeLens/resolve</c> (issue #471). Falls back to the non-actionable "0 step
+    /// usages" shape if the binding can no longer be located (e.g. the file changed between the
+    /// initial <c>textDocument/codeLens</c> call and this resolve).
+    /// </summary>
+    public Task<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> ResolveAsync(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens, CancellationToken cancellationToken)
+    {
+        var data = lens.Data as JObject;
+        var uriStr      = data?["uri"]?.Value<string>();
+        var sourceFile  = data?["sourceFile"]?.Value<string>();
+        var sourceLine  = data?["sourceLine"]?.Value<int?>();
+        var sourceCol   = data?["sourceColumn"]?.Value<int?>();
+
+        if (uriStr is null || sourceFile is null || sourceLine is null || sourceCol is null)
+            return Task.FromResult(WithZeroUsages(lens));
+
+        var uri = DocumentUri.Parse(uriStr);
+        var registry = _registryLookup.GetRegistryForUri(uri);
+        if (registry == ProjectBindingRegistry.Invalid)
+            return Task.FromResult(WithZeroUsages(lens));
+
+        var owners = _scopeManager.ResolveOwners(uri);
+        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
+            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
+            : null;
+
+        var bindingLocation = new SourceLocation(sourceFile, sourceLine.Value, sourceCol.Value);
+        var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+        return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character, usages.Count));
+    }
+
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens BuildResolvedLens(
+        LspRange range, DocumentUri uri, int line, int col, int count) =>
+        new()
+        {
+            Range = range,
+            Command = new Command
+            {
+                Title     = count == 1 ? "1 step usage" : $"{count} step usages",
+                Name      = count > 0 ? "reqnroll.findStepUsages" : "reqnroll.noStepUsages",
+                Arguments = count > 0 ? new JArray(uri.ToString(), line, col) : null
+            }
+        };
+
+    /// <summary>
+    /// The non-actionable "nothing to navigate to" lens: same shape
+    /// <see cref="BuildResolvedLens"/> produces for <c>count == 0</c>, but without needing a URI
+    /// at all — deliberately so, since the callers reach this only when the URI is missing or
+    /// unusable and must never hand the client a clickable command built from a fabricated one.
+    /// </summary>
+    private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens WithZeroUsages(
+        global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens lens) =>
+        new()
+        {
+            Range = lens.Range,
+            Command = new Command { Title = "0 step usages", Name = "reqnroll.noStepUsages", Arguments = null }
+        };
 
     private static bool IsCSharp(DocumentUri uri) =>
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
