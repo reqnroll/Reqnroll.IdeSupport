@@ -65,6 +65,39 @@ public class BindingImporterTests
     }
 
     [Fact]
+    public void MethodIdentifierLocation_overrides_the_PDB_derived_source_location()
+    {
+        // Regression guard (issue #471 follow-up): ConnectorDiscoveryService backfills the AST-based
+        // method-identifier location to replace the PDB sequence point, which can land inside the
+        // method body rather than on the declaration itself. ImportStepDefinition must actually
+        // apply that override, not just accept the parameter.
+        var sut = CreateSut();
+        var result = sut.ImportStepDefinition(
+            CreateStepDefinition(sourceLocation: "MyClass.cs|9|3"),
+            attributeSourceLine: null,
+            methodIdentifierLocation: (4, 17));
+
+        result!.Implementation.SourceLocation.Should().NotBeNull();
+        result.Implementation.SourceLocation!.SourceFile.Should().Be("MyClass.cs");
+        result.Implementation.SourceLocation.SourceFileLine.Should().Be(4);
+        result.Implementation.SourceLocation.SourceFileColumn.Should().Be(17);
+    }
+
+    [Fact]
+    public void MethodIdentifierLocation_override_is_ignored_when_null()
+    {
+        var sut = CreateSut();
+        var result = sut.ImportStepDefinition(
+            CreateStepDefinition(sourceLocation: "MyClass.cs|9|3"),
+            attributeSourceLine: null,
+            methodIdentifierLocation: null);
+
+        result!.Implementation.SourceLocation.Should().NotBeNull();
+        result.Implementation.SourceLocation!.SourceFileLine.Should().Be(9);
+        result.Implementation.SourceLocation.SourceFileColumn.Should().Be(3);
+    }
+
+    [Fact]
     public void Parses_source_location()
     {
         var sut = CreateSut();
@@ -628,5 +661,88 @@ public class BindingImporterTryGetAttributeSourceLineTests : IDisposable
         var result = BindingImporter.TryParseSourceFile(missingPath, _fileSystem);
 
         result.Should().BeNull();
+    }
+}
+
+public class BindingImporterTryGetMethodIdentifierLocationTests : IDisposable
+{
+    private readonly IFileSystemForIDE _fileSystem = new FileSystemForIDE();
+    private readonly string _tempDir = System.IO.Path.Combine(
+        System.IO.Path.GetTempPath(), "BindingImporterTests_" + Guid.NewGuid());
+
+    public BindingImporterTryGetMethodIdentifierLocationTests() => System.IO.Directory.CreateDirectory(_tempDir);
+
+    public void Dispose()
+    {
+        if (System.IO.Directory.Exists(_tempDir))
+            System.IO.Directory.Delete(_tempDir, recursive: true);
+    }
+
+    private string WriteSource(string content)
+    {
+        var path = System.IO.Path.Combine(_tempDir, Guid.NewGuid() + ".cs");
+        System.IO.File.WriteAllText(path, content);
+        return path;
+    }
+
+    [Fact]
+    public void Returns_null_when_method_is_not_found()
+    {
+        var path = WriteSource("""
+            public class Steps
+            {
+                [Given("a step")]
+                public void MyStep() { }
+            }
+            """);
+        var root = BindingImporter.TryParseSourceFile(path, _fileSystem);
+
+        var result = BindingImporter.TryGetMethodIdentifierLocation(root, "NoSuchMethod");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Returns_the_method_identifiers_own_line_and_column_not_the_attributes()
+    {
+        // Regression guard (issue #471 follow-up): the connector's own wire-format location is a
+        // PDB sequence point, which can land a line or more into the method body. This backfill
+        // must resolve to the method identifier's own position — the same convention
+        // StepDefinitionFileParser.GetSourceLocation already uses for Roslyn-discovered bindings —
+        // so CodeLens (and anything else keyed on SourceLocation.SourceFileLine) anchors
+        // consistently regardless of which discovery path populated the registry.
+        var path = WriteSource("""
+            public class Steps
+            {
+                [Given("a step")]
+                public void MyStep() { }
+            }
+            """);
+        var root = BindingImporter.TryParseSourceFile(path, _fileSystem);
+
+        var result = BindingImporter.TryGetMethodIdentifierLocation(root, "MyStep");
+
+        // "    public void MyStep() { }" is line 4 (1-based); "MyStep" starts at column 17.
+        result.Should().Be((4, 17));
+    }
+
+    [Fact]
+    public void Resolves_the_first_matching_method_when_multiple_share_a_name_across_overloads()
+    {
+        var path = WriteSource("""
+            public class Steps
+            {
+                [Given("a step")]
+                public void MyStep() { }
+
+                [Given("another step")]
+                public void MyStep(int n) { }
+            }
+            """);
+        var root = BindingImporter.TryParseSourceFile(path, _fileSystem);
+
+        var result = BindingImporter.TryGetMethodIdentifierLocation(root, "MyStep");
+
+        result!.Value.Line.Should().Be(4);
     }
 }

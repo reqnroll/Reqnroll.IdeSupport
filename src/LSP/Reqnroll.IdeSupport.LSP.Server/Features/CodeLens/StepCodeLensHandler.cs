@@ -113,6 +113,18 @@ public sealed class StepCodeLensHandler
 
             if (!IsSameFile(src.SourceFile, filePath)) continue;
 
+            // Anchor on the method identifier's own line (SourceLocation.SourceFileLine), matching
+            // the conventional CodeLens-anchor position every client (VS Code, VS, Rider) expects
+            // for a "N references"-style lens: rendered directly above the declaration line, the
+            // same line the built-in C# references CodeLens targets. This used to be imprecise for
+            // connector-discovered bindings specifically -- SourceFileLine came from a raw PDB
+            // sequence point, which can land a line or more into the method body rather than on
+            // the declaration itself -- but ConnectorDiscoveryService now backfills the exact
+            // AST-based method-identifier location the same way Roslyn discovery always has
+            // (issue #471 follow-up), so this is precise for both discovery paths again. (An
+            // earlier fix here anchored on the *attribute's* own line instead, which rendered
+            // correctly in Visual Studio but one line too high in VS Code, whose CodeLens always
+            // renders as a floating row above its anchor line rather than overlaid on it.)
             var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
