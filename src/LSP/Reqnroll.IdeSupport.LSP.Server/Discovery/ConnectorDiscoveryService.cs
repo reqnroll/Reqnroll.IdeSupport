@@ -122,12 +122,20 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
         var stepDefinitions = (result.StepDefinitions ?? [])
             .Select(sd => {
-                // For connector-discovered bindings, backfill the attribute source line
-                // from the source file using Roslyn syntax parsing. This enables exact
-                // AST-based matching in FindBindingAtLocation instead of the heuristic
-                // line window that was the only option when AttributeSourceLine was null.
-                var attrLine = TryGetAttributeSourceLine(importer, sd, parsedFiles, _fileSystem);
-                return importer.ImportStepDefinition(sd, attrLine);
+                // For connector-discovered bindings, backfill the attribute source line and the
+                // method identifier's own location from the source file using Roslyn syntax
+                // parsing. The attribute line enables exact AST-based matching in
+                // FindBindingAtLocation instead of the heuristic line window that was the only
+                // option when AttributeSourceLine was null; the method-identifier location
+                // replaces the connector's own PDB sequence-point location (which can land a line
+                // or more into the method body) with the precise position Roslyn discovery
+                // already uses, so CodeLens and other consumers anchor consistently regardless of
+                // which discovery path populated the registry (issue #471 follow-up).
+                var root = TryGetParsedRoot(importer, sd, parsedFiles, _fileSystem);
+                var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
+                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, sd.Method, scenarioBlock);
+                var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, sd.Method);
+                return importer.ImportStepDefinition(sd, attrLine, methodLocation);
             })
             .Where(sd => sd is not null)
             .ToList();
@@ -162,10 +170,11 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         }
     }
 
-    /// Backfills the exact attribute source line for a connector-discovered step definition,
-    /// parsing each referenced source file at most once per <see cref="BuildRegistry"/> call
-    /// (<paramref name="parsedFiles"/> caches the syntax root across step definitions sharing a file).
-    private static int? TryGetAttributeSourceLine(BindingImporter importer, StepDefinition sd,
+    /// Resolves and parses a connector-discovered step definition's source file, parsing each
+    /// referenced file at most once per <see cref="BuildRegistry"/> call (<paramref name="parsedFiles"/>
+    /// caches the syntax root across step definitions sharing a file). Shared by the attribute-line
+    /// and method-identifier-location backfills, both of which need the same parsed root.
+    private static SyntaxNode? TryGetParsedRoot(BindingImporter importer, StepDefinition sd,
         Dictionary<string, SyntaxNode> parsedFiles, IFileSystemForIDE fileSystem)
     {
         var sourceFile = importer.ResolveSourceFilePath(sd.SourceLocation);
@@ -178,11 +187,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             parsedFiles[sourceFile] = root;
         }
 
-        if (root == null)
-            return null;
-
-        var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
-        return BindingImporter.TryGetAttributeSourceLine(root, sd.Method, scenarioBlock);
+        return root;
     }
 
     private static string FindConfigFilePath(IFileSystemForIDE fileSystem, IProjectScope scope)

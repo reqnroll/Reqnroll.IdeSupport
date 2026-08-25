@@ -113,27 +113,24 @@ public sealed class StepCodeLensHandler
 
             if (!IsSameFile(src.SourceFile, filePath)) continue;
 
-            // Prefer the AST-backfilled attribute line (issue #471 follow-up) over
-            // SourceLocation.SourceFileLine, which is the method identifier's line for
-            // Roslyn-discovered bindings or a PDB sequence-point line for connector-discovered
-            // ones (often a line or more into the method body) -- neither is the attribute's own
-            // line. Skipping the redundant post-startup Roslyn reparse (item 7, #478) means the
-            // registry no longer always carries Roslyn's closer-but-still-wrong method-identifier
-            // location by the time this runs, so the PDB-derived location's imprecision -- always
-            // present for connector-discovered bindings -- became visible: the lens rendered a
-            // line or more after the method declaration instead of directly above it. Column is
-            // not tracked separately for the attribute line; 0 is fine here since every consumer
-            // of the resulting Range/Arguments (BindingLocationMatcher, reqnroll/findStepUsages)
-            // resolves by line only and ignores column.
-            var attrLine = binding.AttributeSourceLine ?? src.SourceFileLine;
-            var attrCol  = binding.AttributeSourceLine.HasValue ? 1 : src.SourceFileColumn;
-
-            var attrKey = (attrLine, attrCol);
+            // Anchor on the method identifier's own line (SourceLocation.SourceFileLine), matching
+            // the conventional CodeLens-anchor position every client (VS Code, VS, Rider) expects
+            // for a "N references"-style lens: rendered directly above the declaration line, the
+            // same line the built-in C# references CodeLens targets. This used to be imprecise for
+            // connector-discovered bindings specifically -- SourceFileLine came from a raw PDB
+            // sequence point, which can land a line or more into the method body rather than on
+            // the declaration itself -- but ConnectorDiscoveryService now backfills the exact
+            // AST-based method-identifier location the same way Roslyn discovery always has
+            // (issue #471 follow-up), so this is precise for both discovery paths again. (An
+            // earlier fix here anchored on the *attribute's* own line instead, which rendered
+            // correctly in Visual Studio but one line too high in VS Code, whose CodeLens always
+            // renders as a floating row above its anchor line rather than overlaid on it.)
+            var attrKey = (src.SourceFileLine, src.SourceFileColumn);
             if (!seen.Add(attrKey)) continue;
 
-            // LSP positions are 0-based; attrLine/attrCol are 1-based.
-            var line = attrLine - 1;
-            var col  = attrCol  - 1;
+            // LSP positions are 0-based; SourceFileLine/SourceFileColumn are 1-based.
+            var line = src.SourceFileLine   - 1;
+            var col  = src.SourceFileColumn - 1;
             var range = new LspRange(new Position(line, col), new Position(line, col));
 
             var bindingId = BindingId.For(binding);

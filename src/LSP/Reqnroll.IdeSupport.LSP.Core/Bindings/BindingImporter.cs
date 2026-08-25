@@ -112,6 +112,29 @@ public class BindingImporter
         return null;
     }
 
+    /// <summary>
+    /// Backfills the exact method-identifier source location for a connector-discovered step
+    /// definition — mirrors <see cref="StepDefinitionFileParser"/>'s own AST-based line/column for
+    /// Roslyn-discovered bindings (the method identifier's line, not the attribute's, matching
+    /// standard "go to definition"/CodeLens-anchor convention). The connector's own wire-format
+    /// location is a PDB sequence point, which can land a line or more into the method body rather
+    /// than on the declaration itself; this replaces it with the same precise position Roslyn
+    /// discovery already uses, once the AST is available for this backfill pass anyway.
+    /// Returns null when no method with this name is found (e.g. partial class defined elsewhere,
+    /// or the source no longer matches what the connector saw at build time).
+    /// </summary>
+    public static (int Line, int Column)? TryGetMethodIdentifierLocation(SyntaxNode root, string methodName)
+    {
+        var method = root.DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .FirstOrDefault(m => m.Identifier.Text == methodName);
+        if (method == null)
+            return null;
+
+        var pos = method.Identifier.GetLocation().GetLineSpan().StartLinePosition;
+        return (pos.Line + 1, pos.Character + 1);
+    }
+
     /// <summary>Resolves the source file path referenced by a connector-discovered binding's raw
     /// wire-format source location, using the same "#index" table lookup as <see cref="ParseSourceLocation"/>.
     /// Returns null when the location is empty or the referenced/literal file does not exist.</summary>
@@ -134,7 +157,7 @@ public class BindingImporter
 
     /// <summary>Converts a wire-format step definition DTO into a <see cref="ProjectStepDefinitionBinding"/>, or null if it's invalid.</summary>
     public ProjectStepDefinitionBinding ImportStepDefinition(StepDefinition stepDefinition,
-        int? attributeSourceLine = null)
+        int? attributeSourceLine = null, (int Line, int Column)? methodIdentifierLocation = null)
     {
         try
         {
@@ -148,6 +171,14 @@ public class BindingImporter
 
             if (!_implementations.TryGetValue(stepDefinition.Method, out var implementation))
             {
+                // Prefer the AST-backfilled method-identifier location over the connector's own
+                // PDB-derived one (see TryGetMethodIdentifierLocation's remarks) when the same
+                // backfill pass that resolved it for this method succeeded.
+                if (methodIdentifierLocation.HasValue)
+                    sourceLocation = new SourceLocation(sourceLocation.SourceFile,
+                        methodIdentifierLocation.Value.Line, methodIdentifierLocation.Value.Column,
+                        sourceLocation.SourceFileEndLine, sourceLocation.SourceFileEndColumn);
+
                 implementation =
                     new ProjectBindingImplementation(stepDefinition.Method, parameterTypes, sourceLocation);
                 _implementations.Add(stepDefinition.Method, implementation);
