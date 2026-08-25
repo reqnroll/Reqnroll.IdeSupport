@@ -183,14 +183,17 @@ public class StepDefinitionFileParser
     /// above, and existing bindings rely on it.
     /// <para/>
     /// Once at least one placeholder is present, the expression is being authored as a Cucumber
-    /// expression, where <c>{param}</c> is the only syntax with special meaning — every other
-    /// character, including regex metacharacters like <c>$</c> <c>.</c> <c>(</c> <c>)</c>, is
-    /// literal text the step author expects to match verbatim. So in that case the literal
-    /// segments between placeholders are <see cref="Regex.Escape(string)"/>-d before being
-    /// spliced into the pattern. Without this, a literal <c>$</c> outside a placeholder — e.g.
-    /// <c>"the basket price should be ${float}"</c> — is interpreted as a regex end-of-string
-    /// anchor mid-pattern instead of a literal dollar sign, making the binding permanently
-    /// unmatchable instead of matching its literal text.
+    /// expression. Besides <c>{param}</c> placeholders, real Cucumber Expression syntax gives
+    /// <c>(text)</c> (optional text) and <c>text1/text2</c> (alternative text, split on <c>/</c>
+    /// within a whitespace-delimited run) special meaning too — see
+    /// <see cref="ParseCucumberExpression"/>. A backslash escapes any of <c>{ } ( ) /</c> (and
+    /// itself) back to a literal character. Every other character, including regex
+    /// metacharacters like <c>$</c> <c>.</c>, is literal text the step author expects to match
+    /// verbatim, so it is <see cref="Regex.Escape(string)"/>-d before being spliced into the
+    /// pattern. Without this, a literal <c>$</c> outside a placeholder — e.g. <c>"the basket
+    /// price should be ${float}"</c> — is interpreted as a regex end-of-string anchor mid-pattern
+    /// instead of a literal dollar sign, making the binding permanently unmatchable instead of
+    /// matching its literal text.
     /// </remarks>
     private static Regex BuildRegex(string expression)
     {
@@ -198,28 +201,203 @@ public class StepDefinitionFileParser
         if (matches.Count == 0)
             return new Regex($"^{expression}$", RegexOptions.CultureInvariant);
 
-        var regexBody = new StringBuilder();
-        var lastIndex = 0;
-        foreach (Match m in matches)
-        {
-            regexBody.Append(Regex.Escape(expression.Substring(lastIndex, m.Index - lastIndex)));
-            regexBody.Append(m.Groups[1].Value switch
-            {
-                "int" or "byte" or "short" or "long"    => @"(-?\d+)",
-                "float" or "double"                      => @"(-?\d*(?:\.\d+)?)",
-                "biginteger" or "bigdecimal"             => @"(-?\d+(?:\.\d+)?)",
-                "word"                                   => @"(\w+)",
-                // {string} matches a double- or single-quoted literal (simplified pattern).
-                "string"                                 => @"(""[^""]*""|'[^']*')",
-                // Custom/unknown parameter types (e.g. step-argument transformations): fall
-                // back to (.*) — the same pattern the connector produces for them at runtime.
-                _                                        => @"(.*)"
-            });
-            lastIndex = m.Index + m.Length;
-        }
-        regexBody.Append(Regex.Escape(expression.Substring(lastIndex)));
+        var regexBody = ParseCucumberExpression(expression);
         return new Regex($"^{regexBody}$", RegexOptions.CultureInvariant);
     }
+
+    /// <summary>
+    /// Converts a full Cucumber Expression (already known to contain at least one
+    /// <c>{param}</c> placeholder) into a regex body. Splits the expression into
+    /// whitespace-delimited runs at the top level (whitespace inside an unclosed <c>(...)</c> is
+    /// not a split point, so e.g. <c>"the (nice )item(s)"</c> stays one run) and hands each run
+    /// to <see cref="ParseRun"/>, which resolves alternation. Whitespace runs themselves are
+    /// escaped and passed through literally.
+    /// </summary>
+    private static string ParseCucumberExpression(string expression)
+    {
+        var result = new StringBuilder();
+        var i = 0;
+        var n = expression.Length;
+        while (i < n)
+        {
+            if (char.IsWhiteSpace(expression[i]))
+            {
+                var start = i;
+                while (i < n && char.IsWhiteSpace(expression[i]))
+                    i++;
+                result.Append(Regex.Escape(expression.Substring(start, i - start)));
+            }
+            else
+            {
+                var start = i;
+                var depth = 0;
+                while (i < n && (depth > 0 || !char.IsWhiteSpace(expression[i])))
+                {
+                    if (expression[i] == '\\' && i + 1 < n)
+                        i += 2;
+                    else
+                    {
+                        if (expression[i] == '(')
+                            depth++;
+                        else if (expression[i] == ')' && depth > 0)
+                            depth--;
+                        i++;
+                    }
+                }
+                result.Append(ParseRun(expression.Substring(start, i - start)));
+            }
+        }
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Resolves alternative text (<c>/</c>) within a single whitespace-delimited run. A run
+    /// containing an unescaped, unparenthesized <c>/</c> is Cucumber Expression alternation —
+    /// e.g. <c>cat/dog</c> — and becomes a non-capturing group of its alternatives; a run with
+    /// none is handed to <see cref="ParseText"/> unchanged.
+    /// </summary>
+    private static string ParseRun(string run)
+    {
+        var alternatives = SplitTopLevel(run, '/');
+        if (alternatives.Count == 1)
+            return ParseText(run);
+
+        return "(?:" + string.Join("|", alternatives.Select(ParseText)) + ")";
+    }
+
+    /// <summary>Splits <paramref name="text"/> on unescaped, depth-0 (outside any <c>(...)</c>) occurrences of <paramref name="delimiter"/>.</summary>
+    private static List<string> SplitTopLevel(string text, char delimiter)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        var depth = 0;
+        var i = 0;
+        while (i < text.Length)
+        {
+            var c = text[i];
+            if (c == '\\' && i + 1 < text.Length)
+            {
+                current.Append(c).Append(text[i + 1]);
+                i += 2;
+                continue;
+            }
+
+            if (c == '(')
+                depth++;
+            else if (c == ')' && depth > 0)
+                depth--;
+
+            if (c == delimiter && depth == 0)
+            {
+                result.Add(current.ToString());
+                current.Clear();
+            }
+            else
+                current.Append(c);
+            i++;
+        }
+        result.Add(current.ToString());
+        return result;
+    }
+
+    /// <summary>
+    /// Parses a text run (no top-level alternation left to resolve) for <c>{param}</c>
+    /// placeholders and <c>(optional text)</c> groups, escaping everything else so it matches
+    /// only its literal characters. A backslash-escaped <c>{ } ( ) / \</c> is unescaped back to
+    /// its literal character rather than being treated as syntax.
+    /// </summary>
+    private static string ParseText(string text)
+    {
+        var result = new StringBuilder();
+        var literal = new StringBuilder();
+        var i = 0;
+
+        void FlushLiteral()
+        {
+            if (literal.Length == 0)
+                return;
+            result.Append(Regex.Escape(literal.ToString()));
+            literal.Clear();
+        }
+
+        while (i < text.Length)
+        {
+            var c = text[i];
+            if (c == '\\' && i + 1 < text.Length)
+            {
+                literal.Append(text[i + 1]);
+                i += 2;
+                continue;
+            }
+
+            if (c == '{')
+            {
+                var close = text.IndexOf('}', i + 1);
+                var name = close > i ? text.Substring(i + 1, close - i - 1) : null;
+                if (name != null && CucumberParamPattern.IsMatch($"{{{name}}}"))
+                {
+                    FlushLiteral();
+                    result.Append(ParamTypePattern(name));
+                    i = close + 1;
+                    continue;
+                }
+            }
+            else if (c == '(')
+            {
+                var close = FindMatchingParen(text, i);
+                if (close > 0)
+                {
+                    FlushLiteral();
+                    result.Append("(?:").Append(ParseText(text.Substring(i + 1, close - i - 1))).Append(")?");
+                    i = close + 1;
+                    continue;
+                }
+            }
+
+            literal.Append(c);
+            i++;
+        }
+
+        FlushLiteral();
+        return result.ToString();
+    }
+
+    /// <summary>Finds the index of the <c>)</c> matching the <c>(</c> at <paramref name="openIndex"/>, respecting backslash escapes and nesting; -1 if unmatched.</summary>
+    private static int FindMatchingParen(string text, int openIndex)
+    {
+        var depth = 0;
+        for (var i = openIndex; i < text.Length; i++)
+        {
+            if (text[i] == '\\')
+            {
+                i++;
+                continue;
+            }
+
+            if (text[i] == '(')
+                depth++;
+            else if (text[i] == ')')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+        return -1;
+    }
+
+    private static string ParamTypePattern(string paramTypeName) => paramTypeName switch
+    {
+        "int" or "byte" or "short" or "long" => @"(-?\d+)",
+        "float" or "double" => @"(-?\d*(?:\.\d+)?)",
+        "biginteger" or "bigdecimal" => @"(-?\d+(?:\.\d+)?)",
+        "word" => @"(\w+)",
+        // {string} matches a double- or single-quoted literal (simplified pattern).
+        "string" => @"(""[^""]*""|'[^']*')",
+        // Custom/unknown parameter types (e.g. step-argument transformations): fall back to
+        // (.*) — the same pattern the connector produces for them at runtime.
+        _ => @"(.*)"
+    };
 
     /// <summary>
     /// Derives a matching regex from the method name and parameters for a step-definition

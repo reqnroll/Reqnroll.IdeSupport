@@ -460,6 +460,69 @@ namespace TestProject
         binding.Regex.IsMatch("the two numbers were added").Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("I have a cat/dog", "I have a cat", true)]
+    [InlineData("I have a cat/dog", "I have a dog", true)]
+    [InlineData("I have a cat/dog", "I have a cat/dog", false)]
+    [InlineData("I have a cat/dog", "I have a fish", false)]
+    public async Task Alternative_text_matches_either_alternative_not_the_literal_slash(
+        string expression, string stepText, bool shouldMatch)
+    {
+        // Reproduces issue #476: a Cucumber Expression using '/' alternative text (e.g.
+        // "cat/dog") must match either alternative, the same as the connector-discovered
+        // regex computed by Reqnroll's runtime cucumber-expressions library. Since there's
+        // no {param} placeholder here, plant one so the expression is still recognized as a
+        // Cucumber expression rather than a plain regex.
+        var stepDefinitions = await ParseStepDefinitions(
+            $@"[Given(""{expression} {{int}}"")]
+               public void Method(int n) {{ }}");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch($"{stepText} 1").Should().Be(shouldMatch);
+    }
+
+    [Theory]
+    [InlineData("I eat(s) apples", "I eat apples", true)]
+    [InlineData("I eat(s) apples", "I eats apples", true)]
+    [InlineData("I eat(s) apples", "I eat(s) apples", false)]
+    public async Task Optional_text_makes_the_parenthesized_text_optional_not_literal_parens(
+        string expression, string stepText, bool shouldMatch)
+    {
+        // Reproduces issue #476: a Cucumber Expression using '(text)' optional text must make
+        // the parenthesized text optional, not match the literal parentheses.
+        var stepDefinitions = await ParseStepDefinitions(
+            $@"[Given(""{expression} and {{int}}"")]
+               public void Method(int n) {{ }}");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch($"{stepText} and 1").Should().Be(shouldMatch);
+    }
+
+    [Fact]
+    public async Task Alternative_and_optional_text_can_combine_in_the_same_expression()
+    {
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""{int} red/blue disc(s)"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch("3 red discs").Should().BeTrue();
+        binding.Regex!.IsMatch("1 blue disc").Should().BeTrue();
+        binding.Regex!.IsMatch("2 green discs").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Backslash_escapes_alternation_and_optional_syntax_to_literal_characters()
+    {
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""a literal cat\\/dog and \\(parens\\) plus {int}"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch("a literal cat/dog and (parens) plus 1").Should().BeTrue();
+        binding.Regex!.IsMatch("a literal cat plus 1").Should().BeFalse();
+    }
+
     [Fact]
     public async Task Source_location_is_zero_width_range_at_method_identifier()
     {
