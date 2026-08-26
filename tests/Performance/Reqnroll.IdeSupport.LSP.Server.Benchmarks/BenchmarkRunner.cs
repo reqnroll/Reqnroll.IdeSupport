@@ -26,7 +26,11 @@ public static class BenchmarkRunner
     {
         var warmup = IntArg(args, "--warmup", 10);
         var measured = IntArg(args, "--iterations", 50);
-        var fileCount = IntArg(args, "--files", 10);
+        // Default to the full committed corpus (50 files, ~1,350 steps): issue #488 found the
+        // previous default of 10 undershot the scale (~50 files / ~1,350 steps) that #471's
+        // investigation needed to reliably reproduce dispatch-pipeline contention, so routine runs
+        // never got close to it.
+        var fileCount = IntArg(args, "--files", 50);
         var outPath = StringArg(args, "--out");
         var corpusAssembly = StringArg(args, "--corpus-assembly") ?? CorpusAssemblyLocator.TryFind();
         var includeBatch = !args.Contains("--no-batch");
@@ -142,6 +146,21 @@ public static class BenchmarkRunner
                 await BatchScenarios.FindUnusedStepDefinitionsAsync(harness).ConfigureAwait(false)));
         }
 
+        // Dispatch-fairness / head-of-line-blocking check (issue #488, following up on #471/#477):
+        // fire a workspace-wide didChange storm across most of the open files ("many tabs
+        // restored" / solution reload) and race it against a cheap read on a file the storm never
+        // touches. Needs at least two open files (storm set + probe); skipped below that.
+        ContentionCheck? contentionCheck = null;
+        if (features.Count >= 2)
+        {
+            Console.WriteLine("Running dispatch-fairness scenario (many tabs restored / solution reload storm)...");
+            var restoredFiles = features.Take(features.Count - 1).ToList();
+            var probe = features[^1];
+            contentionCheck = await new WorkspaceReloadContentionScenario(
+                harness, restoredFiles, probe, new WorkspaceReloadContentionOptions())
+                .RunAsync().ConfigureAwait(false);
+        }
+
         var results = summaries.Select(s => new OperationResult(s.Target, s.Summary)).ToList();
         var report = new BenchmarkReport(
             MachineName: Environment.MachineName,
@@ -152,7 +171,8 @@ public static class BenchmarkRunner
                                $"{manifest.Fingerprint.StepCount} steps",
             Results: results,
             Skipped: skipped,
-            Transport: transport);
+            Transport: transport,
+            ContentionChecks: contentionCheck is not null ? new[] { contentionCheck } : null);
 
         Console.WriteLine();
         Console.WriteLine(report.ToConsoleTable());
