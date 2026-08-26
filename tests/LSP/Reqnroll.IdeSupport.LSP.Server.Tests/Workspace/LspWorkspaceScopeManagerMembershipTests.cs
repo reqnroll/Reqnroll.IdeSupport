@@ -33,6 +33,27 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
         Directory.CreateDirectory(_root2);
     }
 
+    /// <summary>
+    /// Polls until <see cref="_mediator"/> has received at least one <c>Publish</c> call.
+    /// <see cref="LspWorkspaceScopeManager"/>/<c>MembershipIndex</c> now dispatch their
+    /// notification via <c>FireAndForgetExtensions</c> (issue #477), so it genuinely runs on a
+    /// thread-pool thread rather than inline — by design, since the whole point of the fix is
+    /// that the caller (here, the awaited <c>HandleProjectFilesAsync</c>/<c>HandleProjectLoadedAsync</c>
+    /// call) no longer blocks on it. That means it may not have happened yet the instant those
+    /// calls return, so tests that assert on it (or need it flushed before
+    /// <c>ClearReceivedCalls</c>) must wait for it explicitly instead of asserting immediately.
+    /// </summary>
+    private async Task WaitForPublishAsync(TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(2));
+        while (DateTime.UtcNow < deadline)
+        {
+            if (_mediator.ReceivedCalls().Any(c => c.GetMethodInfo().Name == nameof(IMediator.Publish)))
+                return;
+            await Task.Delay(5);
+        }
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
@@ -625,6 +646,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
             Arg.Any<CancellationToken>());
 
         await _sut.HandleProjectLoadedAsync(p, CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n => n.IsFullReplacement),
@@ -661,6 +683,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
             BaselineParams(p.ProjectFile, p.TargetFrameworkMoniker,
                 (Feature("old"), ProjectFileRole.Feature)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _mediator.ClearReceivedCalls();
 
         await _sut.HandleProjectFilesAsync(
@@ -668,6 +691,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
                 (Feature("old"), ProjectFileRole.Feature, false),
                 (Feature("renamed"), ProjectFileRole.Feature, true)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n => !n.IsFullReplacement),
@@ -687,12 +711,14 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
             BaselineParams(p.ProjectFile, p.TargetFrameworkMoniker,
                 (stepsFile, ProjectFileRole.Binding)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _mediator.ClearReceivedCalls();
 
         await _sut.HandleProjectFilesAsync(
             DeltaParams(p.ProjectFile, p.TargetFrameworkMoniker,
                 (stepsFile, ProjectFileRole.Binding, false)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n =>
@@ -714,12 +740,14 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
             BaselineParams(p.ProjectFile, p.TargetFrameworkMoniker,
                 (featureFile, ProjectFileRole.Feature)),
             CancellationToken.None);
+        await WaitForPublishAsync();
         _mediator.ClearReceivedCalls();
 
         await _sut.HandleProjectFilesAsync(
             DeltaParams(p.ProjectFile, p.TargetFrameworkMoniker,
                 (featureFile, ProjectFileRole.Feature, false)),
             CancellationToken.None);
+        await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n =>

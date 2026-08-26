@@ -136,9 +136,14 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         {
             _logger.LogInfo(
                 $"[Membership] Firing deferred full re-scan for '{project.ProjectName}' now that the project has loaded.");
-            _ = _mediator.Publish(
-                new BindingRegistryChangedNotification(project, true),
-                cancellationToken);
+            // See BindingRegistryProviderRouter.OnProviderChanged (issue #477): discarding
+            // the Publish Task would not actually defer it off this call stack. CancellationToken.None,
+            // not the incoming `cancellationToken`: that token is scoped to this notification's
+            // own request lifetime, which the background continuation deliberately outlives --
+            // forwarding it would let the publish get silently cancelled before it even runs.
+            FireAndForgetExtensions.FireAndForget(
+                () => _mediator.Publish(new BindingRegistryChangedNotification(project, true), CancellationToken.None),
+                _logger, nameof(HandleProjectLoadedAsync));
         }
 
         return Task.CompletedTask;

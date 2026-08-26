@@ -192,6 +192,14 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
             $"[Router] Binding registry updated for '{project.ProjectName}' " +
             $"(fullReplacement={isFullReplacement}); publishing notification.");
 
-        _ = _mediator.Publish(new BindingRegistryChangedNotification(project, isFullReplacement));
+        // OnProviderChanged runs synchronously on whatever call stack raised
+        // BindingRegistryChanged — ultimately a textDocument/didChange handler awaiting its way
+        // down here (issue #477). Discarding the Publish Task would not defer it: MediatR's
+        // default publisher awaits each handler in turn with no Task.Run in between, so the
+        // entire reparse-every-open-feature-file cascade would run inline on that caller's
+        // thread. FireAndForget genuinely backgrounds it instead.
+        FireAndForgetExtensions.FireAndForget(
+            () => _mediator.Publish(new BindingRegistryChangedNotification(project, isFullReplacement)),
+            _logger, nameof(OnProviderChanged));
     }
 }

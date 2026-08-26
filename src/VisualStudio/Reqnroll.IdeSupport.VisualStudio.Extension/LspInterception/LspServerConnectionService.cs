@@ -4,6 +4,7 @@ using System.IO.Pipelines;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Nerdbank.Streams;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
@@ -338,7 +339,9 @@ internal sealed class LspServerConnectionService : IDisposable
         // not be awaited here — Task.Run hands it to the thread pool so nothing runs synchronously
         // on the caller's thread. Dispose() keeps returning immediately, as before. ChildProcessJob
         // remains the safety net for VS itself terminating early.
-        _ = Task.Run(() => ShutdownServerAsync(shutdownHandshakeInterceptor, interceptingPipe, serverProcess, inspectorLogger, childJob));
+        FireAndForgetExtensions.FireAndForget(
+            () => ShutdownServerAsync(shutdownHandshakeInterceptor, interceptingPipe, serverProcess, inspectorLogger, childJob),
+            _logger, nameof(ShutdownServerAsync));
     }
 
     /// <summary>
