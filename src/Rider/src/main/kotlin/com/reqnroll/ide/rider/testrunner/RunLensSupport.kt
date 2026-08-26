@@ -41,11 +41,18 @@ internal object RunLensSupport {
     }
 
     /**
-     * Fetches the scenario/Outline symbols for [filePath]'s `.feature` document, resolves each
-     * one's test target(s) via `reqnroll/resolveTestTargets`, and builds one CodeVision entry per
-     * scenario that has at least one resolved target — scenarios with none (not built yet, or a
-     * naming-rule mismatch) get no entry at all, matching the "not built yet" reasoning already
-     * used in the VS Code/VS implementations of this same feature.
+     * Fetches the scenario/Outline symbols for [filePath]'s `.feature` document and builds one
+     * CodeVision entry per scenario that has at least one resolved test target — scenarios with
+     * none (not built yet, or a naming-rule mismatch) get no entry at all, matching the "not built
+     * yet" reasoning already used in the VS Code/VS implementations of this same feature.
+     *
+     * The symbol-tree walk itself runs on every call — `computeCodeVision` is invoked by IntelliJ's
+     * platform on its own schedule (edits, file open, etc.) with no way for this plugin to ask for
+     * only the visible range (issue #495's platform survey). What's skipped per call is the
+     * `reqnroll/resolveTestTargets` RPC: [RunTestTargetCache] reuses the previous resolution for any
+     * scenario whose identity (kind + name) hasn't changed since the last walk, so a large feature
+     * file only pays the RPC cost for scenarios that actually changed, not the whole document every
+     * time.
      */
     fun computeEntries(
         project: Project,
@@ -64,12 +71,17 @@ internal object RunLensSupport {
             val startLine = selectionRange.start.line
             if (startLine < 0 || startLine >= document.lineCount) continue
 
-            val response = ReqnrollRequestSender.resolveTestTargets(
-                project, uri,
-                selectionRange.start.line, selectionRange.start.character,
-                selectionRange.end.line, selectionRange.end.character,
-            )
-            val targets = response?.targets.orEmpty()
+            val identity = "${symbol.detail}|${symbol.name}"
+            val targets = RunTestTargetCache.get(uri, startLine, identity) ?: run {
+                val response = ReqnrollRequestSender.resolveTestTargets(
+                    project, uri,
+                    selectionRange.start.line, selectionRange.start.character,
+                    selectionRange.end.line, selectionRange.end.character,
+                )
+                val resolved = response?.targets.orEmpty()
+                RunTestTargetCache.put(uri, startLine, identity, resolved)
+                resolved
+            }
             if (targets.isEmpty()) continue
 
             val offset = document.getLineStartOffset(startLine)

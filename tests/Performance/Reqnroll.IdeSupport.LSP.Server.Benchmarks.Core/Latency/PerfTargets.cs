@@ -123,6 +123,16 @@ public static class PerfTargets
         new("reqnroll/goToMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
             "Go to matching scenarios from a .cs hook binding (#373)");
 
+    // Issue #495: the one reqnroll/* operation the Run CodeLens bridge depends on had neither a
+    // PerfTargets entry nor an InteractiveScenarios method, despite being field-instrumented via
+    // IOperationDurationRecorder in ResolveTestTargetsHandler since #262/#492 — the gap the whole-file
+    // walk investigation (#491-#495) exposed but never closed. Single-request latency only; the
+    // WorkspaceReloadContentionScenario-shaped concurrent-callers case lives alongside
+    // ResolveTestTargetsContentionScenario.
+    public static readonly PerfTarget ResolveTestTargets =
+        new("reqnroll/resolveTestTargets", 0, PerfTargetKind.InteractiveP95,
+            "Resolve generated test target(s) for a scenario (Run CodeLens, #262/#495)");
+
     public static readonly PerfTarget DocumentFormatting =
         new("textDocument/formatting", 0, PerfTargetKind.InteractiveP95, "Whole-document Gherkin formatting (F11)");
 

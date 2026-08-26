@@ -46,27 +46,32 @@ internal sealed class RunTestCodeLensTaggerProvider : ITaggerProvider
         }
 
         return buffer.Properties.GetOrCreateSingletonProperty(
-            typeof(LineKeyedCodeLensTagger<RunTestTargetEntry>),
-            () => new LineKeyedCodeLensTagger<RunTestTargetEntry>(
+            typeof(LineKeyedCodeLensTagger<RunTestLensLocation>),
+            () => new LineKeyedCodeLensTagger<RunTestLensLocation>(
                 buffer, doc.FilePath, fileUri,
                 FetchAsync, e => e.Line, EncodeElementDescription, RunTestCodeLensRedirect.TaggerRegistry)) as ITagger<T>;
     }
 
-    private static async Task<IReadOnlyList<RunTestTargetEntry>?> FetchAsync(string fileUri, CancellationToken ct)
+    /// <summary>
+    /// Fetches tag placements only (issue #495) — the symbol tree, with no
+    /// <c>reqnroll/resolveTestTargets</c> calls. The actual target(s) for a line are resolved
+    /// lazily, once that line's own <see cref="RunTestCodeLensDataPoint"/> is created, not here.
+    /// </summary>
+    private static async Task<IReadOnlyList<RunTestLensLocation>?> FetchAsync(string fileUri, CancellationToken ct)
     {
-        var fetch = RunTestCodeLensRedirect.GetTargetsAsync;
+        var fetch = RunTestCodeLensRedirect.GetTagLocationsAsync;
         if (fetch is null)
             return null;
         return await fetch(fileUri, ct).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Builds the revision-key strings for one line's group of Run targets — the trailing
-    /// component is opaque to data-point providers by design (see <see cref="LineElementDescription"/>),
-    /// it just has to change whenever the line's actual target set changes.
+    /// Builds the revision-key string for one line's tag — the trailing component is opaque to
+    /// data-point providers by design (see <see cref="LineElementDescription"/>), it just has to
+    /// change whenever the scenario's own identity (name/kind) changes. There is always exactly one
+    /// <see cref="RunTestLensLocation"/> per line (one scenario header per line), so no ordering
+    /// concern like the old resolved-target grouping had.
     /// </summary>
-    internal static string EncodeElementDescription(int line, IEnumerable<RunTestTargetEntry> entriesOnLine) =>
-        LineElementDescription.Encode(line, entriesOnLine
-            .OrderBy(e => e.DeclaringTypeFullName).ThenBy(e => e.MethodName)
-            .Select(e => e.DeclaringTypeFullName + "," + e.MethodName));
+    internal static string EncodeElementDescription(int line, IEnumerable<RunTestLensLocation> entriesOnLine) =>
+        LineElementDescription.Encode(line, entriesOnLine.Select(e => e.Key));
 }

@@ -87,6 +87,8 @@ function withStubbedExecuteCommand<T>(
   });
 }
 
+const noToken = {} as vscode.CancellationToken;
+
 suite('runCodeLens', () => {
   suite('collectMethodSymbols', () => {
     test('collects a top-level Method symbol', () => {
@@ -151,10 +153,17 @@ suite('runCodeLens', () => {
     });
   });
 
+  // Issue #495: provideCodeLenses no longer calls reqnroll/resolveTestTargets at all — it just
+  // places one unresolved lens per scenario symbol. Only resolveCodeLens (called lazily by VS Code,
+  // once per lens that actually scrolls into view) does the resolution.
   suite('provideCodeLenses', () => {
-    test('renders a lens for a scenario with resolved targets', async () => {
+    test('places one unresolved lens per scenario symbol, without calling resolveTestTargets', async () => {
+      let sendRequestCalls = 0;
       const client = fakeClient({
-        sendRequest: () => Promise.resolve({ targets: [target()] }),
+        sendRequest: () => {
+          sendRequestCalls++;
+          return Promise.resolve({ targets: [target()] });
+        },
       });
       const resultStore = new TestResultStore();
       const provider = captureProvider(client, resultStore);
@@ -166,21 +175,8 @@ suite('runCodeLens', () => {
       );
 
       assert.strictEqual(lenses?.length, 1);
-      assert.strictEqual(lenses[0].command?.command, 'reqnroll.runTest');
-    });
-
-    test('renders no lens for a scenario whose targets resolve empty (not built yet)', async () => {
-      const client = fakeClient({ sendRequest: () => Promise.resolve({ targets: [] }) });
-      const resultStore = new TestResultStore();
-      const provider = captureProvider(client, resultStore);
-      const document = { uri: vscode.Uri.parse('file:///F.feature') } as vscode.TextDocument;
-
-      const lenses = await withStubbedExecuteCommand(
-        () => Promise.resolve([methodSymbol('S', 1)]),
-        () => Promise.resolve(provider.provideCodeLenses(document, {} as vscode.CancellationToken)),
-      );
-
-      assert.deepStrictEqual(lenses, []);
+      assert.strictEqual(lenses[0].command, undefined, 'the lens must be unresolved until resolveCodeLens runs');
+      assert.strictEqual(sendRequestCalls, 0, 'provideCodeLenses must never call reqnroll/resolveTestTargets itself');
     });
 
     test('returns an empty array when the document has no symbols', async () => {
@@ -210,6 +206,65 @@ suite('runCodeLens', () => {
       );
 
       assert.strictEqual(lenses?.length, 1);
+    });
+  });
+
+  suite('resolveCodeLens', () => {
+    async function placeOneLens(
+      provider: vscode.CodeLensProvider,
+    ): Promise<vscode.CodeLens> {
+      const document = { uri: vscode.Uri.parse('file:///F.feature') } as vscode.TextDocument;
+      const lenses = await withStubbedExecuteCommand(
+        () => Promise.resolve([methodSymbol('S', 1)]),
+        () => Promise.resolve(provider.provideCodeLenses(document, {} as vscode.CancellationToken)),
+      );
+      return lenses![0];
+    }
+
+    test('resolves a scenario with resolved targets into a Run command', async () => {
+      const client = fakeClient({
+        sendRequest: () => Promise.resolve({ targets: [target()] }),
+      });
+      const resultStore = new TestResultStore();
+      const provider = captureProvider(client, resultStore);
+      const lens = await placeOneLens(provider);
+
+      const resolved = await provider.resolveCodeLens!(lens, noToken);
+
+      assert.strictEqual(resolved?.command?.command, 'reqnroll.runTest');
+    });
+
+    test('resolves to undefined for a scenario whose targets resolve empty (not built yet)', async () => {
+      const client = fakeClient({ sendRequest: () => Promise.resolve({ targets: [] }) });
+      const resultStore = new TestResultStore();
+      const provider = captureProvider(client, resultStore);
+      const lens = await placeOneLens(provider);
+
+      const resolved = await provider.resolveCodeLens!(lens, noToken);
+
+      assert.strictEqual(resolved, undefined);
+    });
+
+    test('resolves to undefined for a plain (non-Run) CodeLens instance', async () => {
+      const client = fakeClient({});
+      const resultStore = new TestResultStore();
+      const provider = captureProvider(client, resultStore);
+
+      const foreignLens = new vscode.CodeLens(new vscode.Range(0, 0, 0, 0));
+      const resolved = await provider.resolveCodeLens!(foreignLens, noToken);
+
+      assert.strictEqual(resolved, undefined);
+    });
+
+    test('resolves to undefined when reqnroll/resolveTestTargets fails', async () => {
+      const client = fakeClient({ sendRequest: () => Promise.reject(new Error('boom')) });
+      const resultStore = new TestResultStore();
+      const provider = captureProvider(client, resultStore);
+      const lens = await placeOneLens(provider);
+
+      const resolved = await provider.resolveCodeLens!(lens, noToken);
+
+      assert.strictEqual(resolved, undefined);
     });
   });
 });

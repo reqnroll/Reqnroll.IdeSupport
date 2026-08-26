@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
@@ -42,19 +43,23 @@ internal sealed class RunTestCodeLensService
     }
 
     /// <summary>
-    /// Resolves every Run-able target in <paramref name="fileUri"/>: fetches the symbol tree, keeps
-    /// Method-kind (Scenario/Scenario Outline) nodes at any nesting depth (covers scenarios nested
-    /// under a <c>Rule</c>), calls <c>reqnroll/resolveTestTargets</c> for each, and pairs the results
-    /// with the owning project's build-output assembly path. Returns an empty list (no Run lens will
-    /// render) when the owning project or its output assembly can't be resolved — mirrors the
-    /// "not built yet" reasoning the resolver itself already applies server-side.
+    /// Resolves the single Run-able target at <paramref name="line"/> in <paramref name="fileUri"/>
+    /// (issue #495): fetches the symbol tree, finds the one Method-kind (Scenario/Scenario Outline)
+    /// node whose header starts on <paramref name="line"/>, and calls
+    /// <c>reqnroll/resolveTestTargets</c> for that node alone — never for every other scenario in
+    /// the file. Returns an empty list (no Run lens will render) when the owning project or its
+    /// output assembly can't be resolved, or when no scenario node starts on <paramref name="line"/>.
     /// </summary>
-    public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsForLineAsync(string fileUri, int line, CancellationToken cancellationToken)
     {
         var symbols = await _symbolService.FetchSymbolsAsync(fileUri, cancellationToken).ConfigureAwait(false);
-        var scenarioNodes = CollectMethodNodes(symbols);
-        if (scenarioNodes.Count == 0)
+        var node = CollectMethodNodes(symbols).FirstOrDefault(n => n.SelectionRange.Start.Line == line);
+        if (node is null)
+        {
+            _logger.LogDebug(
+                "RunTestCodeLensService: no scenario/Outline node starts on line {Line} in {FileUri}.", line, fileUri);
             return Array.Empty<RunTestTargetEntry>();
+        }
 
         var outputAssemblyPath = await ResolveOutputAssemblyPathAsync(fileUri, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(outputAssemblyPath))
@@ -64,26 +69,17 @@ internal sealed class RunTestCodeLensService
             return Array.Empty<RunTestTargetEntry>();
         }
 
-        _logger.LogInformation(
-            "RunTestCodeLensService: resolved output assembly path {OutputAssemblyPath} for {FileUri}.",
-            outputAssemblyPath, fileUri);
+        var targets = await _targetService
+            .ResolveTestTargetsAsync(fileUri, node.SelectionRange, cancellationToken)
+            .ConfigureAwait(false);
 
-        var result = new List<RunTestTargetEntry>();
-        foreach (var node in scenarioNodes)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
+        // node.Detail carries "Scenario Outline" vs "Scenario" (see GherkinSymbolNode's
+        // remarks) — Kind alone collapses both to the same LSP SymbolKind.Method value.
+        var isScenarioOutline = string.Equals(node.Detail, "Scenario Outline", StringComparison.Ordinal);
 
-            var targets = await _targetService
-                .ResolveTestTargetsAsync(fileUri, node.SelectionRange, cancellationToken)
-                .ConfigureAwait(false);
-
-            // node.Detail carries "Scenario Outline" vs "Scenario" (see GherkinSymbolNode's
-            // remarks) — Kind alone collapses both to the same LSP SymbolKind.Method value.
-            var isScenarioOutline = string.Equals(node.Detail, "Scenario Outline", StringComparison.Ordinal);
-
-            foreach (var target in targets)
-                result.Add(new RunTestTargetEntry(node.SelectionRange.Start.Line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName, isScenarioOutline));
-        }
+        var result = targets
+            .Select(target => new RunTestTargetEntry(line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName, isScenarioOutline))
+            .ToList();
 
         foreach (var entry in result)
         {
@@ -94,6 +90,31 @@ internal sealed class RunTestCodeLensService
 
         return result;
     }
+
+    /// <summary>
+    /// Fetches every Run-lens tag placement for <paramref name="fileUri"/> (issue #495): the
+    /// symbol-tree walk alone, with no <c>reqnroll/resolveTestTargets</c> calls at all. Used by
+    /// <c>RunTestCodeLensTaggerProvider</c>, which only needs to know which lines get a tag and a
+    /// cheap change-detection key — the actual resolved target(s) are only fetched lazily, per
+    /// visible line, via <see cref="GetTargetsForLineAsync"/> when that line's own CodeLens data
+    /// point is created. Splitting these two concerns is what keeps this feature's cost
+    /// proportional to the number of currently-visible lines rather than the whole document (a
+    /// 2,000+ scenario file used to make every refresh call the resolver once per scenario).
+    /// </summary>
+    public async Task<IReadOnlyList<RunTestLensLocation>> GetTagLocationsAsync(string fileUri, CancellationToken cancellationToken)
+    {
+        var symbols = await _symbolService.FetchSymbolsAsync(fileUri, cancellationToken).ConfigureAwait(false);
+        return CollectMethodNodes(symbols)
+            .Select(node => new RunTestLensLocation(node.SelectionRange.Start.Line, BuildLensKey(node)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Opaque per-node key for <see cref="RunTestLensLocation.Key"/> — changes whenever the
+    /// scenario's own identity (name) or Scenario/Outline kind changes, which is all the classic
+    /// CodeLens engine needs to decide whether to recreate the line's data point.
+    /// </summary>
+    private static string BuildLensKey(GherkinSymbolNode node) => $"{node.Detail}|{node.Name}";
 
     /// <summary>
     /// Recursively collects Method-kind (Scenario/Scenario Outline) nodes at any nesting depth —

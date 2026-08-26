@@ -22,11 +22,25 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 /// </remarks>
 public static class RunTestCodeLensRedirect
 {
-    /// <summary>Delegate set by the Extension project: <c>(fileUri, ct) → every resolved Run target for that .feature file</c>.</summary>
-    public static Func<string, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>>? GetTargetsAsync { get; set; }
+    /// <summary>
+    /// Delegate set by the Extension project: <c>(fileUri, line, ct) → the resolved Run target(s)
+    /// for exactly that line</c> (issue #495) — called by the out-of-process
+    /// <see cref="RunTestCodeLensDataPoint"/>'s callback listener, one line at a time, instead of
+    /// resolving the whole file and filtering.
+    /// </summary>
+    public static Func<string, int, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>>? GetTargetsForLineAsync { get; set; }
+
+    /// <summary>
+    /// Delegate set by the Extension project: <c>(fileUri, ct) → every Run-lens tag placement for
+    /// that .feature file</c> (issue #495) — symbol-tree only, no <c>resolveTestTargets</c> calls.
+    /// Called in-process by <see cref="RunTestCodeLensTaggerProvider"/> to know which lines get a
+    /// tag; the actual resolution happens lazily via <see cref="GetTargetsForLineAsync"/> once a
+    /// line's own data point is created.
+    /// </summary>
+    public static Func<string, CancellationToken, Task<IReadOnlyList<RunTestLensLocation>>>? GetTagLocationsAsync { get; set; }
 
     /// <summary>The shared tagger registry every <see cref="LineKeyedCodeLensTagger{TEntry}"/> for this feature registers itself with.</summary>
-    internal static readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<RunTestTargetEntry>> TaggerRegistry =
+    internal static readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<RunTestLensLocation>> TaggerRegistry =
         new(tagger => tagger.RequestRefresh());
 
     /// <summary>

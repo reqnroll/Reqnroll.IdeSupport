@@ -95,15 +95,20 @@ public static class Program
                                      cold-start scan measure the real exe-launch cost.
               --server-exe <path>    Explicit server exe path (default: locate the built exe).
 
-            'run' also always includes a dispatch-fairness / head-of-line-blocking check (issue
-            #488, following up on #471/#477): with --files worth of feature files already open, it
-            fires a concurrent didChange storm across most of them (modelling many editor tabs
-            restoring at once, or a workspace-wide reload/config-change event) and races it against
-            a cheap textDocument/foldingRange read on the one file the storm never touches. Reported
-            as "Dispatch-fairness / head-of-line blocking" -- a ratio of the under-load read's P95 to
-            a same-run solo baseline, not an absolute-ms target (that ratio is noisy across
-            machines, but an absolute ms figure would be far noisier). Gated the same way as every
-            other target: report-only unless --assert / the reference-machine env var is set.
+            'run' also always includes two dispatch-fairness / head-of-line-blocking checks, both
+            reported as a ratio of an under-load read's P95 to a same-run solo baseline (not an
+            absolute-ms target -- that ratio is noisy across machines, but an absolute ms figure
+            would be far noisier). Gated the same way as every other target: report-only unless
+            --assert / the reference-machine env var is set.
+              - (issue #488, following up on #471/#477): with --files worth of feature files
+                already open, fires a concurrent didChange storm across most of them (modelling
+                many editor tabs restoring at once, or a workspace-wide reload/config-change
+                event) and races it against a cheap textDocument/foldingRange read on the one
+                file the storm never touches.
+              - (issue #495): fires many concurrent reqnroll/resolveTestTargets calls against
+                distinct scenario ranges in one synthetic ~2,000-scenario feature file (the Run
+                CodeLens bridge's per-target resolution, modelling many simultaneously-visible
+                Run lenses on a very large file) and races the same cheap foldingRange read.
 
             'session' OPTIONS
               Models one user editing one active document: each edit fires a burst of requests

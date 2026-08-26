@@ -94,6 +94,7 @@ public static class BenchmarkRunner
             (PerfTargets.FeatureHookCodeLens, await scenarios.FeatureHookCodeLensAsync().ConfigureAwait(false)),
             (PerfTargets.HookMatchCountCodeLens, await scenarios.HookMatchCountCodeLensAsync(corpusRoot).ConfigureAwait(false)),
             (PerfTargets.GoToMatchingScenarios, await scenarios.GoToMatchingScenariosAsync(corpusRoot).ConfigureAwait(false)),
+            (PerfTargets.ResolveTestTargets, await scenarios.ResolveTestTargetsAsync().ConfigureAwait(false)),
             (PerfTargets.InlayHint, await scenarios.InlayHintAsync().ConfigureAwait(false)),
             (PerfTargets.CodeAction, await scenarios.CodeActionAsync().ConfigureAwait(false)),
             (PerfTargets.DocumentFormatting, await scenarios.DocumentFormattingAsync().ConfigureAwait(false)),
@@ -146,19 +147,25 @@ public static class BenchmarkRunner
                 await BatchScenarios.FindUnusedStepDefinitionsAsync(harness).ConfigureAwait(false)));
         }
 
-        // Dispatch-fairness / head-of-line-blocking check (issue #488, following up on #471/#477):
-        // fire a workspace-wide didChange storm across most of the open files ("many tabs
-        // restored" / solution reload) and race it against a cheap read on a file the storm never
-        // touches. Needs at least two open files (storm set + probe); skipped below that.
-        ContentionCheck? contentionCheck = null;
+        // Dispatch-fairness / head-of-line-blocking checks (issue #488, following up on #471/#477;
+        // #495 added the second one). Each fires a storm of concurrent activity and races it against
+        // a cheap read on a file/range the storm never touches. Needs at least two open files (storm
+        // set + probe); skipped below that.
+        var contentionChecks = new List<ContentionCheck>();
         if (features.Count >= 2)
         {
             Console.WriteLine("Running dispatch-fairness scenario (many tabs restored / solution reload storm)...");
             var restoredFiles = features.Take(features.Count - 1).ToList();
             var probe = features[^1];
-            contentionCheck = await new WorkspaceReloadContentionScenario(
+            contentionChecks.Add(await new WorkspaceReloadContentionScenario(
                 harness, restoredFiles, probe, new WorkspaceReloadContentionOptions())
-                .RunAsync().ConfigureAwait(false);
+                .RunAsync().ConfigureAwait(false));
+
+            Console.WriteLine("Running dispatch-fairness scenario (concurrent Run CodeLens resolveTestTargets callers " +
+                               "against one very large feature file, issue #495)...");
+            var resolveTestTargetsContention = await ResolveTestTargetsContentionScenario.CreateAsync(
+                harness, corpusRoot, probe, new ResolveTestTargetsContentionOptions()).ConfigureAwait(false);
+            contentionChecks.Add(await resolveTestTargetsContention.RunAsync().ConfigureAwait(false));
         }
 
         var results = summaries.Select(s => new OperationResult(s.Target, s.Summary)).ToList();
@@ -172,7 +179,7 @@ public static class BenchmarkRunner
             Results: results,
             Skipped: skipped,
             Transport: transport,
-            ContentionChecks: contentionCheck is not null ? new[] { contentionCheck } : null);
+            ContentionChecks: contentionChecks.Count > 0 ? contentionChecks : null);
 
         Console.WriteLine();
         Console.WriteLine(report.ToConsoleTable());

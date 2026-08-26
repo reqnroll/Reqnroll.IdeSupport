@@ -57,14 +57,14 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
     /// <inheritdoc />
     public async Task<CodeLensDataPointDescriptor> GetDataAsync(CodeLensDescriptorContext descriptorContext, CancellationToken token)
     {
-        IReadOnlyList<RunTestTargetEntry> entries;
+        IReadOnlyList<RunTestTargetEntry> onThisLine;
         try
         {
-            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — invoking {RunTestCodeLensCallbackListener.GetTargetsMethod} for {_fileUri} line={_line}");
-            entries = await _callbackService
-                .InvokeAsync<IReadOnlyList<RunTestTargetEntry>>(this, RunTestCodeLensCallbackListener.GetTargetsMethod, new object[] { _fileUri }, token)
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — invoking {RunTestCodeLensCallbackListener.GetTargetsForLineMethod} for {_fileUri} line={_line}");
+            onThisLine = await _callbackService
+                .InvokeAsync<IReadOnlyList<RunTestTargetEntry>>(this, RunTestCodeLensCallbackListener.GetTargetsForLineMethod, new object[] { _fileUri, _line }, token)
                 .ConfigureAwait(false);
-            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — callback returned {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {_fileUri}");
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — callback returned {onThisLine.Count} entr{(onThisLine.Count == 1 ? "y" : "ies")} for {_fileUri} line={_line}");
         }
         catch (Exception ex) when (!token.IsCancellationRequested)
         {
@@ -73,14 +73,13 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             // fault, etc.) could ever surface, and losing it here meant the lens rendered forever in
             // its unresolved/loading state with zero trace anywhere of why (live report: no Details
             // popup ever appeared on click).
-            _logger.LogException(ex, $"RunTestCodeLensDataPoint: GetDataAsync — callback to {RunTestCodeLensCallbackListener.GetTargetsMethod} failed for {_fileUri} line={_line}");
-            entries = Array.Empty<RunTestTargetEntry>();
+            _logger.LogException(ex, $"RunTestCodeLensDataPoint: GetDataAsync — callback to {RunTestCodeLensCallbackListener.GetTargetsForLineMethod} failed for {_fileUri} line={_line}");
+            onThisLine = Array.Empty<RunTestTargetEntry>();
         }
 
-        var onThisLine = entries.Where(e => e.Line == _line).ToList();
         if (onThisLine.Count == 0)
         {
-            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — no entries matched line={_line} for {_fileUri}; {entries.Count} entries were on other lines.");
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — no target resolved for line={_line} in {_fileUri}.");
             _cachedMethods = Array.Empty<TestMethodIdentifier>();
             return new CodeLensDataPointDescriptor { Description = string.Empty };
         }

@@ -22,7 +22,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 [ContentType("Gherkin")]
 public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
 {
-    public const string GetTargetsMethod = "Reqnroll.RunTestCodeLens.GetTargets";
+    /// <summary>Resolves exactly one line's Run target(s), instead of the whole file (issue #495).</summary>
+    public const string GetTargetsForLineMethod = "Reqnroll.RunTestCodeLens.GetTargetsForLine";
 
     // Standalone file logger (no DI/MEF import needed) — same log file as the rest of the
     // extension's devenv.exe activity, since this class always runs in-process there (unlike its
@@ -32,27 +33,27 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
     // instrumentation existed on either side of this OOP↔in-process callback boundary).
     private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
 
-    [JsonRpcMethod(GetTargetsMethod)]
-    public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, CancellationToken cancellationToken)
+    [JsonRpcMethod(GetTargetsForLineMethod)]
+    public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsForLineAsync(string fileUri, int line, CancellationToken cancellationToken)
     {
-        Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsAsync called for {fileUri}");
+        Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync called for {fileUri}:{line}");
 
-        var fetch = RunTestCodeLensRedirect.GetTargetsAsync;
+        var fetch = RunTestCodeLensRedirect.GetTargetsForLineAsync;
         if (fetch is null)
         {
-            Logger.LogWarning("RunTestCodeLensCallbackListener: RunTestCodeLensRedirect.GetTargetsAsync is null — LSP connection not wired up yet; returning empty.");
+            Logger.LogWarning("RunTestCodeLensCallbackListener: RunTestCodeLensRedirect.GetTargetsForLineAsync is null — LSP connection not wired up yet; returning empty.");
             return Array.Empty<RunTestTargetEntry>();
         }
 
         try
         {
-            var entries = await fetch(fileUri, cancellationToken).ConfigureAwait(false);
-            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsAsync returning {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {fileUri}");
+            var entries = await fetch(fileUri, line, cancellationToken).ConfigureAwait(false);
+            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync returning {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {fileUri}:{line}");
             return entries;
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsAsync threw for {fileUri}");
+            Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsForLineAsync threw for {fileUri}:{line}");
             throw;
         }
     }
