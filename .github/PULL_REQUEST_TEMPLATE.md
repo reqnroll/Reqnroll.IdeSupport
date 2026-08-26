@@ -1,0 +1,67 @@
+<!---
+Thanks for helping to make Reqnroll.IdeSupport better! 💖
+
+You can feel free to open a "Draft" status pull request if you're not ready for feedback yet.
+
+Don't worry about getting everything perfect! We're here to help and will coach you through
+to getting your pull request ready to merge.
+
+The prompts below are for guidance to help you describe your change in a way that is most
+likely to make sense to other people when they are reviewing it. Still, it's just a guide,
+so feel free to delete anything that doesn't feel appropriate, and add anything additional
+that seems like it would provide useful context. 👏🏻
+
+You can delete these comment sections as you process them.
+-->
+
+### 🤔 What's changed?
+
+<!-- Describe your changes in detail -->
+
+### ⚡️ What's your motivation?
+
+<!--
+What motivated you to propose this change? Does it fix a bug? Add a new feature?
+If it fixes an open issue, you can link to the issue here, e.g. "Fixes #99"
+-->
+
+### 🏷️ What kind of change is this?
+
+<!--- Delete any options that are not relevant -->
+
+- :book: Documentation (improvements without changing code)
+- :bank: Refactoring/debt/DX (improvement to code design, tooling, etc. without changing behaviour)
+- :bug: Bug fix (non-breaking change which fixes a defect)
+- :zap: New feature (non-breaking change which adds new behaviour)
+- :boom: Breaking change (incompatible changes to the protocol or extension API)
+
+### 🧩 Area(s) touched
+
+<!--- Delete any options that are not relevant -->
+
+- LSP server (`src/LSP`)
+- Visual Studio extension (`src/VisualStudio`)
+- VS Code extension (`src/VSCode`)
+- Rider plugin (`src/Rider`)
+
+### ♻️ Anything particular you want feedback on?
+
+<!--
+Is there anything in this change you're unsure about, or would
+particularly like reviewers to give you feedback on?
+-->
+
+### 📋 Checklist:
+
+<!---
+This is to help you remember all the little things we often forget to do!
+
+Feel free to delete any tasks that are not relevant, or add new ones.
+-->
+
+- [ ] I've changed the behaviour of the code
+  - [ ] I have added/updated tests to cover my changes.
+- [ ] My change alters as-built behaviour described in a design doc under `docs/`
+  - [ ] I have updated the relevant doc accordingly (see `docs/AsBuilt-Reconciliation-Reminder.md`).
+- [ ] Users should know about my change
+  - [ ] I have added an entry to the "[vNext]" section of the [**CHANGELOG**](../blob/master/CHANGELOG.md), linking to this pull request & included my GitHub handle to the release contributors list.
