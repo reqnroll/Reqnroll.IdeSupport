@@ -1787,7 +1787,7 @@ stopped at, with a hover tooltip carrying the captured error.
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| 🔧 Plugin — `CodeLens` + custom gutter decorations, own `dotnet test` execution, no native Testing-panel presence (Option 2, see design doc §5) | 🔧 Plugin — classic CodeLens (F24 pattern), reusing VS's own `.TestExplorer.Run/DebugTestsFromCodeLens` commands | 🔧 Plugin — `RunLineMarkerContributor` |
+| 🔧 Plugin — `CodeLens` + custom gutter decorations, own `dotnet test` execution, no native Testing-panel presence (Option 2, see design doc §5) | 🔧 Plugin — classic CodeLens (F24 pattern), reusing VS's own `.TestExplorer.Run/DebugTestsFromCodeLens` commands | 🔧 Plugin — `CodeVisionProvider` (as-built; `RunLineMarkerContributor` wasn't viable — see design doc §5) |
 
 #### LSP messages
 
@@ -1829,6 +1829,17 @@ stopped at, with a hover tooltip carrying the captured error.
   `#line` pragmas mean PDB-level `.feature` debugging may be a narrower path-mapping problem than a
   from-scratch DAP implementation — recorded as a lead for the deferred "Debug Support for Feature
   Files" item below, not a deliverable of #262. See design doc §7 item 4.
+- **Per-target resolution, not whole-file (issue #495, 2026-08-26):** the initial implementation's
+  IDE-side glue resolved `reqnroll/resolveTestTargets` for every scenario in a `.feature` file on
+  every recompute/refresh, not just the scenario(s) actually needed — cheap per #492's syntax-tree
+  cache in isolation, but still O(scenario count) per recompute, which a 2,000+-scenario stress corpus
+  turned into a 30-45s walk exceeding VS's own CodeLens timeout. Fixed per platform, since each one's
+  extensibility contract determines what's possible: VS's async per-line CodeLens data points and VS
+  Code's `resolveCodeLens` both already support resolving only visible lenses lazily (the fix was
+  using that, not adding new plumbing); Rider's `CodeVisionProvider` has no equivalent hook, so it
+  instead gained `RunTestTargetCache`, an identity-keyed per-scenario cache invalidated by the same
+  `reqnroll/refreshCodeLenses` signal the Hook/StepUsages CodeVision providers already act on. See
+  design doc §3's correction for the full per-client breakdown.
 
 ---
 

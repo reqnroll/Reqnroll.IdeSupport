@@ -6,14 +6,24 @@ import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.reqnroll.ide.rider.codevision.HookCodeVisionProvider
 import com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider
+import com.reqnroll.ide.rider.testrunner.RunTestCodeVisionProvider
+import com.reqnroll.ide.rider.testrunner.RunTestTargetCache
 import java.util.concurrent.CompletableFuture
 
 /**
  * Delegates every [LspServerNotificationsHandler] callback straight through to Rider's own
  * platform-provided [handler], except [refreshCodeLenses] — there it also refreshes this
- * project's "N step usages" CodeVision lens ([StepUsagesCodeVisionProvider]) and the hook-match
+ * project's "N step usages" CodeVision lens ([StepUsagesCodeVisionProvider]), the hook-match
  * lenses ([HookCodeVisionProvider]/`StepHooksCodeVisionProvider`, invalidated together by
- * [HookCodeVisionProvider.refreshOpenFeatureEditors]) before delegating.
+ * [HookCodeVisionProvider.refreshOpenFeatureEditors]), and the Run lens
+ * ([RunTestCodeVisionProvider]) before delegating.
+ *
+ * The Run lens wiring (issue #495) also clears [RunTestTargetCache] first — that cache is what
+ * lets `RunLensSupport.computeEntries` skip re-sending `reqnroll/resolveTestTargets` for a scenario
+ * whose identity hasn't changed since the last recompute, and this notification is the real
+ * staleness signal for when a *resolution* actually changed underneath an unchanged scenario name
+ * (e.g. a `[Binding]` method renamed on the `.cs` side). Without this, a stale cached resolution
+ * could outlive the very change that invalidated it.
  *
  * Rider's CodeVision engine has no signal of its own for "the data behind this lens changed" —
  * unlike inlay hints/semantic tokens, which at least have *a* refresh mechanism once wired (see
@@ -39,6 +49,8 @@ class ReqnrollCodeLensRefreshInterceptor(
                 if (!project.isDisposed) {
                     StepUsagesCodeVisionProvider.refreshOpenCsEditors(project)
                     HookCodeVisionProvider.refreshOpenFeatureEditors(project)
+                    RunTestTargetCache.invalidateAll()
+                    RunTestCodeVisionProvider.refreshOpenFeatureEditors(project)
                 }
             },
             ModalityState.any(),

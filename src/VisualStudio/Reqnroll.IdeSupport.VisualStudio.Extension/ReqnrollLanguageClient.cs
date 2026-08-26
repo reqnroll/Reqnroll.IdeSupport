@@ -201,17 +201,23 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 _runTestCodeLensService = new RunTestCodeLensService(
                     _navigationBarSymbolService, _scenarioTestTargetService, serviceProvider,
                     _loggerFactory.CreateLogger<RunTestCodeLensService>());
-                // Shares one whole-document resolution across every concurrent caller of
-                // RunTestCodeLensRedirect.GetTargetsAsync — the tagger and every visible Scenario
-                // line's own out-of-process CodeLens data point all call through that one delegate
-                // independently, and without this each of those N callers on a large feature file
-                // re-walked the entire document from scratch (live report, 2026-08-26: individual
-                // data points hit VS's own ~26s CodeLens timeout and never resolved).
+                // Issue #495: the tagger (RunTestCodeLensRedirect.GetTagLocationsAsync) and every
+                // visible Scenario line's own out-of-process CodeLens data point
+                // (RunTestCodeLensRedirect.GetTargetsForLineAsync) are wired to two separate,
+                // independently-cheap operations now, instead of both funneling through one
+                // whole-document walk. The tagger only ever touches the symbol tree; only the
+                // per-line path calls reqnroll/resolveTestTargets, and only for the one line asked
+                // for. This cache still shares one computation across concurrent callers for the
+                // *same* (file, line) — e.g. the tagger's own placement fetch and a data point
+                // racing each other during startup — without reintroducing the old N+1-per-file cost
+                // (live report, 2026-08-26: whole-document walks on a 2,000+ scenario file hit VS's
+                // own ~26s CodeLens timeout and never resolved).
                 _runTestCodeLensResultCache = new RunTestCodeLensResultCache(
-                    _runTestCodeLensService.GetTargetsAsync,
+                    _runTestCodeLensService.GetTargetsForLineAsync,
                     _loggerFactory.CreateLogger<RunTestCodeLensResultCache>(),
                     ThreadHelper.JoinableTaskFactory);
-                RunTestCodeLensRedirect.GetTargetsAsync = _runTestCodeLensResultCache.GetTargetsAsync;
+                RunTestCodeLensRedirect.GetTargetsForLineAsync = _runTestCodeLensResultCache.GetTargetsAsync;
+                RunTestCodeLensRedirect.GetTagLocationsAsync = _runTestCodeLensService.GetTagLocationsAsync;
                 RunTestCodeLensRedirect.InvalidateCachedFile = _runTestCodeLensResultCache.InvalidateFile;
                 RunTestCodeLensRedirect.InvalidateAllCached = _runTestCodeLensResultCache.InvalidateAll;
                 _logger.LogInformation(
@@ -290,7 +296,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _runTestCodeLensService = null;
             _runTestCodeLensResultCache?.InvalidateAll();
             _runTestCodeLensResultCache = null;
-            RunTestCodeLensRedirect.GetTargetsAsync = null;
+            RunTestCodeLensRedirect.GetTargetsForLineAsync = null;
+            RunTestCodeLensRedirect.GetTagLocationsAsync = null;
             RunTestCodeLensRedirect.InvalidateCachedFile = null;
             RunTestCodeLensRedirect.InvalidateAllCached = null;
 

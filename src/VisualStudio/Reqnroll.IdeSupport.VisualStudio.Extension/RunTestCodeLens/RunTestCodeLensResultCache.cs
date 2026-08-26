@@ -14,26 +14,32 @@ using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 
 /// <summary>
-/// De-duplicates concurrent calls to <see cref="RunTestCodeLensService.GetTargetsAsync"/> for the
-/// same file, sharing one in-flight (or already-completed) computation instead of letting every
-/// caller re-walk the whole document independently.
+/// De-duplicates concurrent calls to <see cref="RunTestCodeLensService.GetTargetsForLineAsync"/> for
+/// the same <c>(fileUri, line)</c>, sharing one in-flight (or already-completed) computation instead
+/// of letting every caller re-resolve the same line independently.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The problem this fixes (live report, 2026-08-26):</b> <see cref="RunTestCodeLensService.GetTargetsAsync"/>
-/// resolves <i>every</i> scenario in a <c>.feature</c> file, not just one line's worth. It's called
-/// from two independent places that both go through the single <see cref="RunTestCodeLensRedirect.GetTargetsAsync"/>
-/// delegate: <c>RunTestCodeLensTaggerProvider</c> (in-process, once per tagger refresh) and, for
-/// every <i>visible Scenario line's own</i> <c>RunTestCodeLensDataPoint.GetDataAsync</c>, an
-/// out-of-process ServiceHub callback. On a large feature file with N visible scenario lines, that
-/// meant N+1 concurrent full-document walks competing for the same LSP server, each redoing all of
-/// it from scratch. Confirmed live: with #491's cache already making each
+/// <b>The problem this fixes (live report, 2026-08-26; re-scoped per issue #495):</b>
+/// <c>RunTestCodeLensService</c> used to have a single <c>GetTargetsAsync(fileUri)</c> that resolved
+/// <i>every</i> scenario in a <c>.feature</c> file on every call — called from two independent
+/// places that both went through one shared delegate: <c>RunTestCodeLensTaggerProvider</c>
+/// (in-process, once per tagger refresh) and, for every <i>visible Scenario line's own</i>
+/// <c>RunTestCodeLensDataPoint.GetDataAsync</c>, an out-of-process ServiceHub callback that only
+/// ever used its own line's entry out of the whole-file result. On a large feature file with N
+/// visible scenario lines, that meant N+1 concurrent full-document walks, each redoing all of it
+/// from scratch — confirmed live: with #491's cache already making each
 /// <c>reqnroll/resolveTestTargets</c> call ~4ms instead of ~150ms, a single walk of ~1,300 scenarios
 /// still took long enough — repeated 5x concurrently — that individual <c>GetDataAsync</c> calls hit
-/// VS's own classic-CodeLens timeout (observed at ~26s) and were cancelled
-/// (<see cref="OperationCanceledException"/> from <c>RunTestCodeLensService</c>'s own
-/// <c>cancellationToken.ThrowIfCancellationRequested()</c>), leaving the lens stuck showing "Loading
-/// data..." forever with no working Run/Debug popup.
+/// VS's own classic-CodeLens timeout (observed at ~26s) and were cancelled.
+/// </para>
+/// <para>
+/// Issue #495 split the whole-file walk in two: <c>RunTestCodeLensService.GetTagLocationsAsync</c>
+/// (symbol tree only, no <c>resolveTestTargets</c> calls, used by the tagger to place tags) and
+/// <c>GetTargetsForLineAsync(fileUri, line)</c> (one <c>resolveTestTargets</c> call for exactly the
+/// line a data point needs). This cache now de-dupes the latter, keyed by <c>(fileUri, line)</c>
+/// instead of just <c>fileUri</c> — concurrent visible lines in the same file no longer contend on
+/// one shared computation, since each now only does its own line's (already cheap) work.
 /// </para>
 /// <para>
 /// <b>A completed result is reused until an explicit invalidation, not a time-based TTL.</b> An
@@ -63,6 +69,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 /// </remarks>
 internal sealed class RunTestCodeLensResultCache
 {
+    /// <summary>One line's worth of shared computation — keyed by file plus line since #495, not file alone.</summary>
+    internal readonly record struct Key(string FileUri, int Line);
+
     private sealed class Entry
     {
         public Entry(CancellationTokenSource cts, AsyncLazy<IReadOnlyList<RunTestTargetEntry>> lazy)
@@ -75,7 +84,7 @@ internal sealed class RunTestCodeLensResultCache
         public AsyncLazy<IReadOnlyList<RunTestTargetEntry>> Lazy { get; }
     }
 
-    private readonly Func<string, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> _inner;
+    private readonly Func<string, int, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> _inner;
     private readonly ILogger<RunTestCodeLensResultCache> _logger;
     private readonly JoinableTaskFactory _joinableTaskFactory;
     private readonly TimeSpan _computationTimeout;
@@ -89,20 +98,20 @@ internal sealed class RunTestCodeLensResultCache
     // CreateEntry (and the CTS it allocates) never runs at all, so there is nothing to leak or
     // dispose. CreateEntry itself does no I/O, so a concurrent .Value read blocking on Lazy's default
     // execute-once lock is effectively instantaneous, not a real contention concern.
-    private readonly ConcurrentDictionary<string, Lazy<Entry>> _entries = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<Key, Lazy<Entry>> _entries = new();
 
-    /// <param name="inner">The real (expensive, whole-document) resolver to wrap — typically <see cref="RunTestCodeLensService.GetTargetsAsync"/>.</param>
+    /// <param name="inner">The real per-line resolver to wrap — typically <see cref="RunTestCodeLensService.GetTargetsForLineAsync"/>.</param>
     /// <param name="logger">Logging sink.</param>
     /// <param name="joinableTaskFactory">
     /// The <see cref="JoinableTaskFactory"/> each shared <see cref="AsyncLazy{T}"/> is constructed
     /// with. Defaults to <see cref="ThreadHelper.JoinableTaskFactory"/> — the real ambient VS one,
-    /// needed because <c>RunTestCodeLensService.GetTargetsAsync</c>'s own call chain switches to
-    /// the UI thread. Overridable so unit tests can supply a standalone
+    /// needed because <c>RunTestCodeLensService.GetTargetsForLineAsync</c>'s own call chain switches
+    /// to the UI thread. Overridable so unit tests can supply a standalone
     /// <c>new JoinableTaskContext().Factory</c> instead of depending on a real VS host.
     /// </param>
     /// <param name="computationTimeout">Upper bound on one shared computation's own lifetime, independent of any caller's token — a safety net against a truly runaway resolution, not the mechanism callers use to give up waiting. Defaults to 60 seconds, comfortably above VS's own observed ~26-second per-data-point timeout so the shared work outlives any single caller that gives up on it.</param>
     public RunTestCodeLensResultCache(
-        Func<string, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> inner,
+        Func<string, int, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> inner,
         ILogger<RunTestCodeLensResultCache> logger,
         JoinableTaskFactory? joinableTaskFactory = null,
         TimeSpan? computationTimeout = null)
@@ -114,49 +123,57 @@ internal sealed class RunTestCodeLensResultCache
     }
 
     /// <summary>
-    /// Returns the shared result for <paramref name="fileUri"/>, starting a new computation only
-    /// when none is in flight and no completed result is already cached. <paramref name="callerToken"/>
-    /// only governs how long this particular call is willing to wait — it never cancels the shared
-    /// computation itself (see this type's remarks).
+    /// Returns the shared result for <paramref name="fileUri"/>:<paramref name="line"/>, starting a
+    /// new computation only when none is in flight and no completed result is already cached.
+    /// <paramref name="callerToken"/> only governs how long this particular call is willing to wait
+    /// — it never cancels the shared computation itself (see this type's remarks).
     /// </summary>
-    public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, CancellationToken callerToken)
+    public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, int line, CancellationToken callerToken)
     {
+        var key = new Key(fileUri, line);
         var lazyEntry = _entries.AddOrUpdate(
-            fileUri,
-            addValueFactory: uri => new Lazy<Entry>(() => CreateEntry(uri)),
-            updateValueFactory: (uri, existing) => IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => CreateEntry(uri)));
+            key,
+            addValueFactory: static (k, self) => new Lazy<Entry>(() => self.CreateEntry(k)),
+            updateValueFactory: static (k, existing, self) => self.IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => self.CreateEntry(k)),
+            factoryArgument: this);
 
         var entry = lazyEntry.Value;
         return await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
     }
 
-    /// <summary>Drops the cached/in-flight result for <paramref name="fileUri"/>, if any, cancelling its computation.</summary>
+    /// <summary>Drops every cached/in-flight result for every line of <paramref name="fileUri"/>, cancelling each computation.</summary>
     public void InvalidateFile(string fileUri)
     {
-        if (_entries.TryRemove(fileUri, out var lazyEntry) && lazyEntry.IsValueCreated)
-            lazyEntry.Value.Cts.Cancel();
+        foreach (var key in _entries.Keys.Where(k => k.FileUri == fileUri).ToList())
+            InvalidateKey(key);
     }
 
     /// <summary>Drops every cached/in-flight result, cancelling each computation.</summary>
     public void InvalidateAll()
     {
-        foreach (var fileUri in _entries.Keys.ToList())
-            InvalidateFile(fileUri);
+        foreach (var key in _entries.Keys.ToList())
+            InvalidateKey(key);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private Entry CreateEntry(string fileUri)
+    private void InvalidateKey(Key key)
+    {
+        if (_entries.TryRemove(key, out var lazyEntry) && lazyEntry.IsValueCreated)
+            lazyEntry.Value.Cts.Cancel();
+    }
+
+    private Entry CreateEntry(Key key)
     {
         var cts = new CancellationTokenSource(_computationTimeout);
-        var lazy = new AsyncLazy<IReadOnlyList<RunTestTargetEntry>>(() => RunAsync(fileUri, cts.Token), _joinableTaskFactory);
+        var lazy = new AsyncLazy<IReadOnlyList<RunTestTargetEntry>>(() => RunAsync(key, cts.Token), _joinableTaskFactory);
         return new Entry(cts, lazy);
     }
 
     private bool IsUsable(Entry entry)
     {
         if (!entry.Lazy.IsValueFactoryCompleted)
-            return true; // still in flight — share it rather than starting a duplicate walk.
+            return true; // still in flight — share it rather than starting a duplicate resolution.
 
         var task = entry.Lazy.GetValueAsync();
         // A successfully-completed result stays usable indefinitely — see this type's remarks on
@@ -166,12 +183,12 @@ internal sealed class RunTestCodeLensResultCache
         return !task.IsFaulted && !task.IsCanceled;
     }
 
-    private async Task<IReadOnlyList<RunTestTargetEntry>> RunAsync(string fileUri, CancellationToken ct)
+    private async Task<IReadOnlyList<RunTestTargetEntry>> RunAsync(Key key, CancellationToken ct)
     {
-        _logger.LogInformation("RunTestCodeLensResultCache: starting shared computation for {FileUri}", fileUri);
-        var result = await _inner(fileUri, ct).ConfigureAwait(false);
-        _logger.LogInformation("RunTestCodeLensResultCache: shared computation for {FileUri} completed with {Count} entr{Suffix}",
-            fileUri, result.Count, result.Count == 1 ? "y" : "ies");
+        _logger.LogInformation("RunTestCodeLensResultCache: starting shared computation for {FileUri}:{Line}", key.FileUri, key.Line);
+        var result = await _inner(key.FileUri, key.Line, ct).ConfigureAwait(false);
+        _logger.LogInformation("RunTestCodeLensResultCache: shared computation for {FileUri}:{Line} completed with {Count} entr{Suffix}",
+            key.FileUri, key.Line, result.Count, result.Count == 1 ? "y" : "ies");
         return result;
     }
 }

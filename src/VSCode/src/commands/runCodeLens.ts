@@ -71,12 +71,31 @@ export function buildRunLens(
 }
 
 /**
+ * An unresolved "Run" lens placement (issue #495): carries just the scenario's own range and the
+ * owning document's URI, nothing else. `provideCodeLenses` returns one of these per scenario symbol
+ * without ever calling `reqnroll/resolveTestTargets` — that call only happens in
+ * {@link RunCodeLensProvider.resolveCodeLens}, and only for lenses VS Code has actually scrolled
+ * into view. On a large `.feature` file this is what keeps the per-file cost proportional to the
+ * number of currently-visible lenses instead of the whole document.
+ */
+class RunCodeLens extends vscode.CodeLens {
+  constructor(
+    range: vscode.Range,
+    readonly documentUri: string,
+  ) {
+    super(range);
+  }
+}
+
+/**
  * Registers the "▶ Run" CodeLens on each Scenario/Scenario Outline line (design doc §5 — VS Code
- * "Option 2: own execution, no `TestController`"). Unlike `hookCodeLens.ts`/`stepCodeLens.ts` (which
- * query the standard `textDocument/codeLens`), scenario ranges come from the standard
- * `vscode.executeDocumentSymbolProvider` built-in command (routed to the LSP server automatically —
- * no new custom request needed for that), and each range's actual test target(s) come from the new
- * custom `reqnroll/resolveTestTargets` request, mirroring `goToHooks.ts`'s custom-request pattern.
+ * "Option 2: own execution, no `TestController`"; re-scoped by issue #495 to use the standard
+ * two-phase `provideCodeLenses`/`resolveCodeLens` contract instead of resolving every scenario
+ * eagerly). Scenario ranges come from the standard `vscode.executeDocumentSymbolProvider` built-in
+ * command (routed to the LSP server automatically — no new custom request needed for that); each
+ * range's actual test target(s) come from the custom `reqnroll/resolveTestTargets` request, sent
+ * only once VS Code resolves a lens that's actually visible, mirroring `goToHooks.ts`'s
+ * custom-request pattern.
  *
  * 🐛 Debug is deliberately not implemented in this pass — VSTest debug-attach is a separate,
  * unverified mechanism; see docs/Test-Runner-Integration-Design.md §5 and the PR description.
@@ -88,6 +107,7 @@ export function registerRunCodeLens(
 ): void {
   const provider: vscode.CodeLensProvider = {
     onDidChangeCodeLenses: getCodeLensRefreshEvent(client, context),
+
     async provideCodeLenses(document: vscode.TextDocument): Promise<vscode.CodeLens[]> {
       const uri = document.uri.toString();
 
@@ -103,43 +123,50 @@ export function registerRunCodeLens(
       }
       if (!symbols || symbols.length === 0) return [];
 
-      const lenses: vscode.CodeLens[] = [];
+      // No reqnroll/resolveTestTargets calls here (issue #495) — just the placements. VS Code
+      // calls resolveCodeLens below, lazily, only for the lenses that scroll into view.
+      return collectMethodSymbols(symbols).map(
+        (symbol) => new RunCodeLens(symbol.selectionRange, uri),
+      );
+    },
 
-      for (const symbol of collectMethodSymbols(symbols)) {
-        let response: ResolveTestTargetsResponse;
-        try {
-          response = await client.sendRequest<ResolveTestTargetsResponse>(
-            ReqnrollMethods.resolveTestTargets,
-            {
-              textDocument: { uri },
-              range: {
-                start: {
-                  line: symbol.selectionRange.start.line,
-                  character: symbol.selectionRange.start.character,
-                },
-                end: {
-                  line: symbol.selectionRange.end.line,
-                  character: symbol.selectionRange.end.character,
-                },
+    async resolveCodeLens(
+      codeLens: vscode.CodeLens,
+      token: vscode.CancellationToken,
+    ): Promise<vscode.CodeLens | undefined> {
+      if (!(codeLens instanceof RunCodeLens)) return undefined;
+
+      let response: ResolveTestTargetsResponse;
+      try {
+        response = await client.sendRequest<ResolveTestTargetsResponse>(
+          ReqnrollMethods.resolveTestTargets,
+          {
+            textDocument: { uri: codeLens.documentUri },
+            range: {
+              start: {
+                line: codeLens.range.start.line,
+                character: codeLens.range.start.character,
+              },
+              end: {
+                line: codeLens.range.end.line,
+                character: codeLens.range.end.character,
               },
             },
-          );
-        } catch (err) {
-          console.warn('runCodeLens: reqnroll/resolveTestTargets request failed', err);
-          continue;
-        }
-
-        const cached = resultStore.get(uri, symbol.selectionRange.start.line);
-        const lens = buildRunLens(
-          uri,
-          symbol.selectionRange,
-          response?.targets ?? [],
-          cached?.outcome,
+          },
+          token,
         );
-        if (lens) lenses.push(lens);
+      } catch (err) {
+        console.warn('runCodeLens: reqnroll/resolveTestTargets request failed', err);
+        return undefined;
       }
 
-      return lenses;
+      const cached = resultStore.get(codeLens.documentUri, codeLens.range.start.line);
+      return buildRunLens(
+        codeLens.documentUri,
+        codeLens.range,
+        response?.targets ?? [],
+        cached?.outcome,
+      );
     },
   };
 

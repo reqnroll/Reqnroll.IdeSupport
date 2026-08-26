@@ -210,6 +210,44 @@ reuse the same parse. The "post-build only" trade-off itself is unaffected by th
 disk-mode freshness check (last-write-time) is what makes it safe to cache across an actual
 rebuild without a dedicated file watcher.
 
+**Correction (issue #495, 2026-08-26):** #492's shared syntax-tree cache made one
+`reqnroll/resolveTestTargets` call cheap (~150ms → ~3.6ms), but every IDE-side caller still issued
+one such call *per scenario in the whole file* on every recompute, not just for the scenario(s)
+actually needed — a leftover "resolve everything, then filter" shape from before per-line/per-lens
+callers existed. On the `VeryLargeFeature` stress corpus (~2,000+ scenarios) that still meant a
+30-45s wall-clock walk per recompute, independently slow enough to exceed VS's own classic-CodeLens
+per-data-point timeout (~26s) regardless of how cheap any one resolution had become. Root-caused and
+fixed per client, since each platform's own extensibility contract determines what's actually
+possible:
+
+- **VS (classic CodeLens)** — `RunTestCodeLensService` split into `GetTargetsForLineAsync(fileUri,
+  line)` (one resolution, called by each line's own `RunTestCodeLensDataPoint.GetDataAsync`) and
+  `GetTagLocationsAsync(fileUri)` (symbol tree only, zero `resolveTestTargets` calls, used only by
+  `RunTestCodeLensTaggerProvider` to know which lines get a tag placement). The async data-point API
+  was already per-line; the fix was ending the whole-file walk each data point triggered to serve
+  itself, not adding new async plumbing.
+- **VS Code** — `runCodeLens.ts`'s `CodeLensProvider` now implements the standard two-phase
+  contract: `provideCodeLenses` places one unresolved lens per scenario symbol (symbol tree only),
+  and `resolveCodeLens` — which VS Code calls lazily, only for lenses that actually scroll into
+  view — is where the single `reqnroll/resolveTestTargets` call for that one lens happens. VS Code's
+  own API already supported this; the previous implementation simply never used the `resolveCodeLens`
+  half of it.
+- **Rider** — IntelliJ's `CodeVisionProvider.computeCodeVision(editor, uiData)` has no visible-range
+  parameter and no per-entry resolve phase; it is always asked for the whole document, on the
+  platform's own schedule. There is no lever to make Rider ask for only the visible lines. Instead,
+  `RunTestTargetCache` (`Rider/testrunner/`) memoizes each `(uri, line)`'s resolved targets, keyed by
+  a cheap identity string (scenario kind + name) built from the symbol tree — `RunLensSupport.computeEntries`
+  still walks every scenario symbol on every call (unavoidable on this platform), but only re-sends
+  `reqnroll/resolveTestTargets` for a scenario whose identity actually changed since the last walk.
+  The cache is invalidated wholesale by the same `reqnroll/refreshCodeLenses` notification the sibling
+  Hook/StepUsages CodeVision providers already act on (`ReqnrollCodeLensRefreshInterceptor`) — the real
+  signal that an underlying resolution changed independent of the `.feature` file's own text (e.g. a
+  `[Binding]` method renamed in `.cs`).
+
+Net effect: VS and VS Code now issue `reqnroll/resolveTestTargets` proportional to the number of
+*currently visible* Run lenses, not the scenario count of the whole file. Rider still walks the whole
+symbol tree per recompute (platform limitation) but skips the RPC for everything that hasn't changed.
+
 **"Parse the code-behind" is not one uniform operation, though — it splits into two tiers with very
 different stability, because Reqnroll ships five test-framework providers (xUnit, xUnit.v3, NUnit,
 MSTest, TUnit) with different attribute vocabularies and argument shapes that can also change across
@@ -316,7 +354,7 @@ a plain `workspace/executeCommand`-style custom request is enough, matching F17/
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| 🔧 Plugin — `CodeLens` + custom gutter decorations (own execution, no `TestController`) | 🔧 Plugin — Test Explorer editor-margin `KnownMonikers` | 🔧 Plugin — `RunLineMarkerContributor` |
+| 🔧 Plugin — `CodeLens` + custom gutter decorations (own execution, no `TestController`) | 🔧 Plugin — Test Explorer editor-margin `KnownMonikers` | 🔧 Plugin — `CodeVisionProvider` (as-built; see note below — `RunLineMarkerContributor` wasn't viable) |
 
 All three reuse each platform's own run/debug/pass/fail glyph set rather than inventing
 Reqnroll-branded icons (see the issue's own survey — no distinct Gherkin/BDD icon convention exists
@@ -345,20 +383,34 @@ through the native Testing UI.
 
   **Decision (2026-08-05): Option 2 — own execution, no `TestController`, no native Test Explorer tree
   presence.** `▶ Run` / `🐛 Debug` `CodeLens` per scenario/row (same shape as F18's step-usage
-  `CodeLensProvider` — new provider, no new plumbing pattern), calling `reqnroll/resolveTestTargets` on
-  render, then shelling to `dotnet test --filter "FullyQualifiedName=..."` directly against the
-  resolved `DeclaringTypeFullName`/`MethodName` (confirmed to precisely target one method — §6). Pass/
-  fail and failed-step state are tracked entirely in our own extension state and rendered via custom
-  `TextEditorDecorationType` gutter icons plus the CodeLens label, not through `vscode.TestRun`/
-  `TestMessage`. Trades away native Test Explorer tree presence for avoiding duplicate entries against
-  C# Dev Kit's own listing of the same generated methods, and keeps VS Code's design fully within our
-  own extension's control — no dependency on another extension's behavior or its future changes.
-- **Rider**: `RunLineMarkerContributor` gutter icon on scenario/example lines, using
-  `AllIcons.Actions.Execute`/`StartDebugger` pre-run and `TestState.Green2`/`Red2`/`Yellow2` post-run
-  (standard Rider run-line-marker convention). Invokes Rider's native JVM-side test runner against the
-  resolved method. Note the current `reqnroll/Reqnroll.Rider` plugin has **no** scenario-level run
-  marker today ([reqnroll/Reqnroll.Rider#8](https://github.com/reqnroll/Reqnroll.Rider/issues/8)), so
-  there's no existing behavior to match or avoid conflicting with.
+  `CodeLensProvider` — new provider, no new plumbing pattern), calling `reqnroll/resolveTestTargets`
+  to resolve each lens, then shelling to `dotnet test --filter "FullyQualifiedName=..."` directly
+  against the resolved `DeclaringTypeFullName`/`MethodName` (confirmed to precisely target one
+  method — §6). Pass/fail and failed-step state are tracked entirely in our own extension state and
+  rendered via custom `TextEditorDecorationType` gutter icons plus the CodeLens label, not through
+  `vscode.TestRun`/`TestMessage`. Trades away native Test Explorer tree presence for avoiding
+  duplicate entries against C# Dev Kit's own listing of the same generated methods, and keeps VS
+  Code's design fully within our own extension's control — no dependency on another extension's
+  behavior or its future changes.
+  **Correction (issue #495):** the resolution call happens in `resolveCodeLens`, not
+  `provideCodeLenses` — VS Code calls the former lazily, only for lenses that scroll into view, so
+  `provideCodeLenses` itself only ever places unresolved lens ranges from the symbol tree. See the
+  §3 correction above.
+- **Rider**: as-built, a `CodeVisionProvider` (`RunTestCodeVisionProvider`/`RunLensSupport`), not the
+  `RunLineMarkerContributor` originally proposed here — this plugin registers `.feature` with no
+  `ParserDefinition`/PSI tree at all (see `ReqnrollFeatureLanguage`'s own doc comment), and
+  `RunLineMarkerContributor` is inherently PSI-based, so `CodeVisionProvider` (operates on
+  `Editor`/`Document` offsets, same as every other `.feature` editor feature in this plugin) is used
+  instead — the same substitution already made for the closely analogous hook-match-count lens
+  (`HookCodeVisionProvider`). Rendered inline rather than as a gutter icon as a result (Rider's
+  `CodeVisionProvider` API doesn't offer a gutter-icon presentation), using ▶/✓/✗ glyphs in place of
+  `AllIcons.Actions.Execute`/`TestState.Green2`/`Red2`. Invokes Rider's native JVM-side test runner
+  against the resolved method (`RunTestRunner`). Note the current `reqnroll/Reqnroll.Rider` plugin
+  has **no** scenario-level run marker today
+  ([reqnroll/Reqnroll.Rider#8](https://github.com/reqnroll/Reqnroll.Rider/issues/8)), so there's no
+  existing behavior to match or avoid conflicting with. See the §3 correction above for how this
+  provider avoids re-resolving every scenario on every recompute, given `CodeVisionProvider` has no
+  visible-range or per-entry-resolve hook to lean on the way VS Code's `resolveCodeLens` does.
 - **Visual Studio — resolved, §7 item 3.** There is no separate "Test Explorer editor margin"
   extension point to investigate — decompiling VS 18's own `Microsoft.VisualStudio.TestWindow.CodeLens.dll`
   shows that VS's built-in run/debug/pass-fail affordance for ordinary `[Fact]`/`[TestMethod]`/`[Test]`

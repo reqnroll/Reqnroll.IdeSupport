@@ -18,6 +18,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefs;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using LspCodeLens = OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens;
@@ -361,6 +362,23 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
                 Position = new Position(line, character),
+            }, ct);
+
+    /// <summary>
+    /// <c>reqnroll/resolveTestTargets</c> (issue #262/#495) — resolves the generated test method(s)
+    /// for the scenario/Outline/example-row header at <paramref name="range"/> in <paramref name="uri"/>.
+    /// Backs the Run CodeLens bridge on all three IDE clients; unlike <see cref="RequestGoToHooksAsync"/>
+    /// (cursor position), this takes an explicit range the same way a real client's per-line
+    /// resolution does (VS's <c>RunTestCodeLensDataPoint</c>, VS Code's <c>resolveCodeLens</c>,
+    /// Rider's <c>RunLensSupport</c> — see issue #495's per-client split).
+    /// </summary>
+    public Task<ResolveTestTargetsResponse?> RequestResolveTestTargetsAsync(
+        DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
+        RequestAsync<ResolveTestTargetsResponse?>(LspMethodNames.ReqnrollResolveTestTargets,
+            new ResolveTestTargetsParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = uri },
+                Range = range,
             }, ct);
 
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────

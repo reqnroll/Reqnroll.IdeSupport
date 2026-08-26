@@ -19,13 +19,10 @@ using Xunit;
 namespace Reqnroll.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
-/// Coverage for issue #262's follow-up fix: <see cref="RunTestCodeLensService.GetTargetsAsync"/>
-/// resolves an entire feature file's worth of scenarios, and used to be re-invoked independently by
-/// the tagger plus every visible Scenario line's own out-of-process CodeLens data point — on a large
-/// file that meant N+1 concurrent full-document walks, slow enough that individual callers hit VS's
-/// own CodeLens timeout and the lens got stuck showing "Loading data..." forever (live report,
-/// 2026-08-26). <see cref="RunTestCodeLensResultCache"/> shares one computation across concurrent
-/// callers for the same file instead.
+/// Coverage for issue #262's follow-up fix, re-scoped by issue #495:
+/// <see cref="RunTestCodeLensService.GetTargetsForLineAsync"/> is now called once per visible
+/// Scenario line rather than once per file for the whole document, so this cache de-dupes concurrent
+/// callers for the same <c>(fileUri, line)</c> instead of just <c>fileUri</c>.
 /// </summary>
 public class RunTestCodeLensResultCacheTests
 {
@@ -45,7 +42,7 @@ public class RunTestCodeLensResultCacheTests
 
         public CountingResolver(TaskCompletionSource<bool>? release = null) => _release = release;
 
-        public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, CancellationToken ct)
+        public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsForLineAsync(string fileUri, int line, CancellationToken ct)
         {
             Interlocked.Increment(ref CallCount);
             if (_release is not null)
@@ -57,20 +54,20 @@ public class RunTestCodeLensResultCacheTests
 
     private static RunTestCodeLensResultCache CreateSut(
         CountingResolver resolver, System.TimeSpan? computationTimeout = null) =>
-        new(resolver.GetTargetsAsync, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf, computationTimeout);
+        new(resolver.GetTargetsForLineAsync, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf, computationTimeout);
 
     [Fact]
-    public async Task Concurrent_callers_for_the_same_file_share_one_computation()
+    public async Task Concurrent_callers_for_the_same_file_and_line_share_one_computation()
     {
         var release = new TaskCompletionSource<bool>();
         var resolver = new CountingResolver(release);
         var sut = CreateSut(resolver);
 
-        // Five "visible scenario lines" all asking for the same file at once, mirroring N
-        // CodeLens data points each triggering their own GetDataAsync independently.
+        // Five callers all asking for the same (file, line) at once — e.g. the tagger's own
+        // placement fetch racing a data point during startup.
         var calls = new Task<IReadOnlyList<RunTestTargetEntry>>[5];
         for (var i = 0; i < calls.Length; i++)
-            calls[i] = sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
+            calls[i] = sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
 
         release.SetResult(true);
         var results = await Task.WhenAll(calls);
@@ -92,10 +89,22 @@ public class RunTestCodeLensResultCacheTests
         var resolver = new CountingResolver();
         var sut = CreateSut(resolver);
 
-        await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
-        await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
+        await sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+        await sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
 
         resolver.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Different_lines_in_the_same_file_are_resolved_independently()
+    {
+        var resolver = new CountingResolver();
+        var sut = CreateSut(resolver);
+
+        await sut.GetTargetsAsync("file:///A.feature", 3, CancellationToken.None);
+        await sut.GetTargetsAsync("file:///A.feature", 7, CancellationToken.None);
+
+        resolver.CallCount.Should().Be(2);
     }
 
     [Fact]
@@ -104,23 +113,25 @@ public class RunTestCodeLensResultCacheTests
         var resolver = new CountingResolver();
         var sut = CreateSut(resolver);
 
-        await sut.GetTargetsAsync("file:///A.feature", CancellationToken.None);
-        await sut.GetTargetsAsync("file:///B.feature", CancellationToken.None);
+        await sut.GetTargetsAsync("file:///A.feature", 3, CancellationToken.None);
+        await sut.GetTargetsAsync("file:///B.feature", 3, CancellationToken.None);
 
         resolver.CallCount.Should().Be(2);
     }
 
     [Fact]
-    public async Task InvalidateFile_forces_a_fresh_computation_on_the_next_call()
+    public async Task InvalidateFile_forces_a_fresh_computation_for_every_line_of_that_file_on_the_next_call()
     {
         var resolver = new CountingResolver();
         var sut = CreateSut(resolver);
 
-        await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
+        await sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+        await sut.GetTargetsAsync("file:///Test.feature", 7, CancellationToken.None);
         sut.InvalidateFile("file:///Test.feature");
-        await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
+        await sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+        await sut.GetTargetsAsync("file:///Test.feature", 7, CancellationToken.None);
 
-        resolver.CallCount.Should().Be(2);
+        resolver.CallCount.Should().Be(4, "invalidating a file must drop every one of its lines' cached results, not just one");
     }
 
     [Fact]
@@ -134,8 +145,8 @@ public class RunTestCodeLensResultCacheTests
         var sut = CreateSut(resolver);
 
         using var givingUpCts = new CancellationTokenSource();
-        var givingUpCall = sut.GetTargetsAsync("file:///Test.feature", givingUpCts.Token);
-        var patientCall = sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
+        var givingUpCall = sut.GetTargetsAsync("file:///Test.feature", 3, givingUpCts.Token);
+        var patientCall = sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
 
         givingUpCts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => givingUpCall);
@@ -152,7 +163,7 @@ public class RunTestCodeLensResultCacheTests
     public async Task A_faulted_computation_is_not_reused_by_a_later_caller()
     {
         var callCount = 0;
-        Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, CancellationToken ct)
+        Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct)
         {
             callCount++;
             return callCount == 1
@@ -163,9 +174,9 @@ public class RunTestCodeLensResultCacheTests
         var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
 
         await Assert.ThrowsAsync<System.InvalidOperationException>(
-            () => sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None));
+            () => sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None));
 
-        var result = await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
+        var result = await sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
 
         result.Should().BeEquivalentTo(SampleEntries);
         callCount.Should().Be(2, "a faulted result must not be handed to a later caller");

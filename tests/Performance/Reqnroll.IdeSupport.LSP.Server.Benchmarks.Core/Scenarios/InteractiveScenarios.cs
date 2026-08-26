@@ -224,6 +224,20 @@ public sealed class InteractiveScenarios
             await _harness.RequestGoToHooksAsync(f.Uri, line, character).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
+    /// <summary>
+    /// <c>reqnroll/resolveTestTargets</c> (issue #262/#495) at the first scenario's own range — the
+    /// Run CodeLens bridge's per-target resolution call, now backing VS's per-line data point, VS
+    /// Code's lazy <c>resolveCodeLens</c>, and (via <c>RunTestTargetCache</c>) Rider's identity-keyed
+    /// per-scenario cache, instead of a whole-file walk. Field-instrumented since #262/#492 but had
+    /// no isolated benchmark coverage until #495.
+    /// </summary>
+    public async Task<LatencySummary> ResolveTestTargetsAsync()
+        => await RunAsync(PerfTargets.ResolveTestTargets.Operation, async i =>
+        {
+            var f = _features[i % _features.Count];
+            await _harness.RequestResolveTestTargetsAsync(f.Uri, f.FirstScenarioRange).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────
 
     public async Task<LatencySummary> InlayHintAsync()
