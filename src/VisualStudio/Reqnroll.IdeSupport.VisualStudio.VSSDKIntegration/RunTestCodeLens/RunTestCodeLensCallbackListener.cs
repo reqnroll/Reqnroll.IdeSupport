@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.Common.Logging;
 using StreamJsonRpc;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -23,12 +24,36 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
 {
     public const string GetTargetsMethod = "Reqnroll.RunTestCodeLens.GetTargets";
 
+    // Standalone file logger (no DI/MEF import needed) — same log file as the rest of the
+    // extension's devenv.exe activity, since this class always runs in-process there (unlike its
+    // OOP counterpart RunTestCodeLensDataPoint, which needs its own logger instance because it
+    // runs under a different process/PID entirely). Added while investigating a live report of the
+    // Run CodeLens rendering but never producing a working Details popup on click (no prior
+    // instrumentation existed on either side of this OOP↔in-process callback boundary).
+    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+
     [JsonRpcMethod(GetTargetsMethod)]
     public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, CancellationToken cancellationToken)
     {
+        Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsAsync called for {fileUri}");
+
         var fetch = RunTestCodeLensRedirect.GetTargetsAsync;
-        return fetch is null
-            ? Array.Empty<RunTestTargetEntry>()
-            : await fetch(fileUri, cancellationToken).ConfigureAwait(false);
+        if (fetch is null)
+        {
+            Logger.LogWarning("RunTestCodeLensCallbackListener: RunTestCodeLensRedirect.GetTargetsAsync is null — LSP connection not wired up yet; returning empty.");
+            return Array.Empty<RunTestTargetEntry>();
+        }
+
+        try
+        {
+            var entries = await fetch(fileUri, cancellationToken).ConfigureAwait(false);
+            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsAsync returning {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {fileUri}");
+            return entries;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsAsync threw for {fileUri}");
+            throw;
+        }
     }
 }

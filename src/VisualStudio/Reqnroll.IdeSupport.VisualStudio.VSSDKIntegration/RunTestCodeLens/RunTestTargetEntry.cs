@@ -14,4 +14,12 @@ public sealed record RunTestTargetEntry(
     /// <summary>The generated test class's full name, e.g. <c>Discovery_PlatformCompatibilityFeature</c>.</summary>
     string DeclaringTypeFullName,
     /// <summary>The generated method name.</summary>
-    string MethodName);
+    string MethodName,
+    /// <summary>
+    /// True when <see cref="Line"/> is a <c>Scenario Outline:</c> header rather than a plain
+    /// <c>Scenario:</c> — used to choose "Run Scenario" vs "Run Scenarios" wording for the CodeLens
+    /// label, since a row-tests Outline still collapses to one <see cref="MethodName"/> like a plain
+    /// scenario would (see <c>ScenarioTestTargetResolver.ResolveExactMethod</c>'s remarks), so the
+    /// method/target shape alone can't distinguish the two cases.
+    /// </summary>
+    bool IsScenarioOutline = false);

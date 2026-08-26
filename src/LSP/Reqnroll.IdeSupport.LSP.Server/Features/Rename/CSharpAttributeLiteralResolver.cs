@@ -6,6 +6,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -24,17 +25,24 @@ internal sealed class CSharpAttributeLiteralResolver
     private readonly IDocumentBufferService _documentBuffer;
     private readonly IIdeSupportLogger      _logger;
     private readonly IFileSystemForIDE      _fileSystem;
+    private readonly ICSharpSyntaxTreeCache _syntaxTreeCache;
 
+    /// <summary>Initializes a new instance of the <see cref="CSharpAttributeLiteralResolver"/> class.
+    /// <paramref name="syntaxTreeCache"/> defaults when omitted so existing direct-construction call
+    /// sites (including tests) keep working unchanged; production wiring supplies the shared,
+    /// DI-registered cache instance.</summary>
     public CSharpAttributeLiteralResolver(
         ICSharpFileTextCache   csharpFileTextCache,
         IDocumentBufferService documentBuffer,
         IIdeSupportLogger      logger,
-        IFileSystemForIDE      fileSystem)
+        IFileSystemForIDE      fileSystem,
+        ICSharpSyntaxTreeCache? syntaxTreeCache = null)
     {
         _csharpFileTextCache = csharpFileTextCache;
         _documentBuffer      = documentBuffer;
         _logger              = logger;
         _fileSystem          = fileSystem;
+        _syntaxTreeCache     = syntaxTreeCache ?? new CSharpSyntaxTreeCache();
     }
 
     /// <summary>
@@ -149,8 +157,12 @@ internal sealed class CSharpAttributeLiteralResolver
             return null;
         }
 
-        var tree = CSharpSyntaxTree.ParseText(fileText);
-        var rootNode = await tree.GetRootAsync();
+        // Cached across calls within the same rename operation (issue #491): a method carrying
+        // several step-definition attributes resolves each one through this same call, which used
+        // to re-parse the file from scratch every time. GetOrParse's text-equality check keeps
+        // this correct against a concurrent edit to the same file.
+        var rootNode = _syntaxTreeCache.GetOrParse(csPath, fileText);
+        var tree = rootNode.SyntaxTree;
 
         return FindAttributeLiteral(tree, rootNode, binding);
     }

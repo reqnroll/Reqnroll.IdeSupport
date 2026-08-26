@@ -89,6 +89,17 @@ public class GherkinDocumentSymbolServiceTests
     }
 
     [Fact]
+    public void Scenario_symbol_detail_is_Scenario()
+    {
+        // Kind alone collapses to LSP SymbolKind.Method for both Scenario and Scenario Outline
+        // (DocumentSymbolHandler.ToSymbolKind) — Detail is what a consumer like the VS Run CodeLens
+        // reads to tell them apart (issue #262 follow-up).
+        var tags = ParseTags("Feature: F\nScenario: Add\n    Given a step\n");
+        var result = CreateSut().BuildSymbols(tags);
+        result[0].Children[0].Detail.Should().Be("Scenario");
+    }
+
+    [Fact]
     public void Scenario_symbol_name_is_scenario_name()
     {
         var tags = ParseTags("Feature: F\nScenario: Add two numbers\n    Given a step\n");
@@ -225,6 +236,15 @@ public class GherkinDocumentSymbolServiceTests
         var tags = ParseTags(text);
         var result = CreateSut().BuildSymbols(tags);
         result[0].Children[0].Kind.Should().Be(GherkinSymbolKind.ScenarioOutline);
+    }
+
+    [Fact]
+    public void ScenarioOutline_symbol_detail_is_ScenarioOutline()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n    Given the number is <n>\n    Examples:\n        | n |\n        | 1 |\n";
+        var tags = ParseTags(text);
+        var result = CreateSut().BuildSymbols(tags);
+        result[0].Children[0].Detail.Should().Be("Scenario Outline");
     }
 
     [Fact]

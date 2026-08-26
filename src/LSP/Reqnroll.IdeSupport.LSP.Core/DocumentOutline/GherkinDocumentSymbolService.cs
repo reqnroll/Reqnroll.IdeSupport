@@ -91,7 +91,12 @@ public class GherkinDocumentSymbolService : IGherkinDocumentSymbolService
 
         return new GherkinDocumentSymbol(
             Name: name,
-            Detail: null,
+            // Kind alone can't distinguish Scenario from Scenario Outline on the wire — both
+            // collapse to the same LSP SymbolKind.Method (ToSymbolKind in DocumentSymbolHandler),
+            // matching how VS's own document-symbol capability negotiation only ever sees the
+            // standard LSP SymbolKind enum. Consumers that need the distinction (e.g. the VS Run
+            // CodeLens choosing "Run Scenario" vs "Run Scenarios" wording) read Detail instead.
+            Detail: kind == GherkinSymbolKind.ScenarioOutline ? "Scenario Outline" : kind == GherkinSymbolKind.Scenario ? "Scenario" : null,
             Kind: kind,
             Range: scenarioTag.Range,
             SelectionRange: FirstLineRange(scenarioTag.Range),

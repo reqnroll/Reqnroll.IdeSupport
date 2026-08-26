@@ -1,8 +1,9 @@
 using Gherkin.Ast;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using System.IO;
 
@@ -15,6 +16,20 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestTargets;
 /// </summary>
 public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 {
+    private readonly ICSharpSyntaxTreeCache _syntaxTreeCache;
+    private readonly IFileSystemForIDE _fileSystem;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScenarioTestTargetResolver"/> class. Both
+    /// dependencies default when omitted so existing direct-construction call sites keep working
+    /// unchanged; production wiring supplies the shared, DI-registered cache instance.
+    /// </summary>
+    public ScenarioTestTargetResolver(ICSharpSyntaxTreeCache? syntaxTreeCache = null, IFileSystemForIDE? fileSystem = null)
+    {
+        _syntaxTreeCache = syntaxTreeCache ?? new CSharpSyntaxTreeCache();
+        _fileSystem = fileSystem ?? new FileSystemForIDE();
+    }
+
     /// <inheritdoc/>
     public IReadOnlyList<ScenarioTestTarget> Resolve(
         Uri featureUri,
@@ -24,7 +39,17 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         string? projectFolder = null)
     {
         var generatedFilePath = GetGeneratedFilePath(featureUri, projectFolder);
-        if (generatedFilePath is null || !File.Exists(generatedFilePath))
+        if (generatedFilePath is null)
+            return Array.Empty<ScenarioTestTarget>(); // not built yet — see design doc §3's trade-off table
+
+        // Cached across calls within the same resolution pass (issue #491): resolving every
+        // scenario/row in a large .feature file used to re-read and re-parse this same,
+        // unchanged generated file once per scenario. The cache's own last-write-time check
+        // keeps this correct across an actual rebuild. Checked before the tag/scenario-name work
+        // below (same short-circuit order as the original file-existence check) so a not-yet-built
+        // project doesn't pay for that work on every scenario in the file.
+        var root = _syntaxTreeCache.GetOrParseFromDisk(generatedFilePath, _fileSystem);
+        if (root is null)
             return Array.Empty<ScenarioTestTarget>(); // not built yet — see design doc §3's trade-off table
 
         if (tags.FirstOrDefault(t => t.Type == DeveroomTagTypes.FeatureBlock)?.Data is not Feature feature)
@@ -35,7 +60,6 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         if (scenarioName is null)
             return Array.Empty<ScenarioTestTarget>();
 
-        var root = CSharpSyntaxTree.ParseText(File.ReadAllText(generatedFilePath)).GetRoot();
         var expectedClassName = ReqnrollIdentifierNaming.ToIdentifier(feature.Name) + "Feature";
         var classDecl = root.DescendantNodes().OfType<ClassDeclarationSyntax>()
             .FirstOrDefault(c => c.Identifier.Text == expectedClassName);
