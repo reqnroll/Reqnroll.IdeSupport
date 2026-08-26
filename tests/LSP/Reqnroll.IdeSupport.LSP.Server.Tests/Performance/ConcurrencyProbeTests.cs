@@ -30,15 +30,26 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 /// <b>Regression gate, not a pure diagnostic (tightened once the root cause was confirmed — see
 /// issue #471):</b> decompiling OmniSharp 0.19.9 confirmed <c>textDocument/codeLens</c> and
 /// <c>textDocument/foldingRange</c> are both <c>[Parallel]</c>-tagged by the library, so they
-/// should genuinely run concurrently — the &gt;5x slowdown this test asserts below is not
-/// "inherent to LSP," it's the confirmed, currently-unfixed symptom (a slow <c>[Serial]</c>-tagged
-/// <c>textDocument/didOpen</c>/<c>didChange</c> stalls the whole dispatch pipeline until it
-/// drains — see the issue for the full mechanism). Real runs against this corpus measured 45x-56x;
-/// asserting &gt;5x leaves generous headroom against CI noise while still failing loudly if this
-/// characteristic disappears unexpectedly (e.g. a harness regression silently stops exercising the
-/// bug) or gets dramatically worse. <b>This assertion documents known-bad behavior, not desired
-/// behavior — flip or delete it once the dispatch/CodeLens-resolve fix (tracked in a follow-up
-/// branch off this investigation) actually removes the stall.</b>
+/// should genuinely run concurrently — the slowdown this test asserts below is not "inherent to
+/// LSP," it's a symptom of the dispatch pipeline (a slow <c>[Serial]</c>-tagged
+/// <c>textDocument/didOpen</c>/<c>didChange</c> stalls the whole pipeline until it drains — see
+/// the issue for the full mechanism).
+/// </remarks>
+/// <remarks>
+/// <b>History (see #477):</b> real runs originally measured 45x-56x, asserted as a &gt;5x floor
+/// documenting known-bad behavior. #477 fixed one confirmed contributor — four
+/// <c>_ = _mediator.Publish(...)</c> discards that looked fire-and-forget but actually ran their
+/// entire reparse cascade inline on the calling <c>[Serial]</c> handler's thread — and measurably
+/// improved this: local runs on a dev machine post-fix land around 16x-19x (down from 45x-56x),
+/// and one CI run measured as low as ~1.3x. That CI number is <i>not</i> the reliable new
+/// steady-state, though — it doesn't reproduce locally across five separate runs — so this is not
+/// yet a "the stall is gone, flip the assertion to require good behavior" situation the class's
+/// history once anticipated it would become. The residual ~16x-19x is plausibly genuine CPU
+/// contention from 20 concurrent <c>FindUsages</c> scans saturating the machine rather than a
+/// dispatch-blocking bug, but that's unconfirmed — worth its own investigation under #471, not
+/// something to declare fixed here. Until then this is a <b>regression ceiling</b>: normal
+/// (reduced but nonzero, and evidently environment-variable) stall passes; a return toward the
+/// original, fully-unfixed 45x-56x magnitude fails loudly.
 /// </remarks>
 public class ConcurrencyProbeTests
 {
@@ -107,12 +118,17 @@ public class ConcurrencyProbeTests
         Console.WriteLine($"Folding-range latency under {concurrentCodeLensCount} concurrent codeLens calls: {underLoadMs:F1} ms " +
                            $"({underLoadMs / baselineMs:F1}x baseline)");
 
-        // Regression gate for the confirmed issue #471 symptom — see the class remarks for why
-        // this asserts the *bad* behavior rather than the desired one, and when to change it.
-        underLoadMs.Should().BeGreaterThan(baselineMs * 5,
-            "issue #471's confirmed dispatch-pipeline stall should still reproduce; " +
-            "real runs measured 45x-56x — if this drops near 1x, the fix landed and this assertion should be flipped, " +
-            "not silently left passing for the wrong reason");
+        // Regression ceiling, not a "must reproduce the bug" floor (see the class remarks and
+        // #477): the original >5x floor asserted known-bad, fully-unfixed behavior. #477 reduced
+        // but did not eliminate this stall, and the residual magnitude has proven noisy across
+        // environments (~16x-19x on a dev machine, ~1.3x on one CI run) rather than converging to
+        // a small, stable ratio -- so a tight floor or ceiling around that residual would just
+        // move the flakiness, not remove it. 30x sits well below the original 45x-56x while
+        // comfortably clearing the observed post-fix range on both sides, so it still catches a
+        // real regression back toward the fully-unfixed magnitude.
+        underLoadMs.Should().BeLessThan(baselineMs * 30,
+            "if this reproduces anywhere near the original, fully-unfixed 45x-56x measured before " +
+            "#477's fire-and-forget fix, that fix's improvement has likely regressed");
     }
 
     private static async Task<bool> WaitForNonEmptyCodeLensAsync(

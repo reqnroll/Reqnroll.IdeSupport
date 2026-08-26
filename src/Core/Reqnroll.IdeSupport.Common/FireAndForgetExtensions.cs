@@ -29,8 +29,11 @@ public static class FireAndForgetExtensions
     public static void FireAndForget(this Task task, IIdeSupportLogger logger, string context)
     {
         task.ContinueWith(
+            // Flatten() (not .InnerException, which is only the first of possibly several)
+            // preserves every exception if the antecedent aggregated more than one -- its
+            // ToString() lists all of them, not just the first.
             t => logger.LogError(
-                $"Unhandled exception in fire-and-forget task ({context}): {t.Exception.Flatten().InnerException}"),
+                $"Unhandled exception in fire-and-forget task ({context}): {t.Exception.Flatten()}"),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
@@ -49,7 +52,9 @@ public static class FireAndForgetExtensions
     public static void FireAndForget(this Task task, ILogger logger, string context)
     {
         task.ContinueWith(
-            t => logger.LogError(t.Exception.Flatten().InnerException,
+            // Flatten() (not .InnerException, which is only the first of possibly several)
+            // preserves every exception if the antecedent aggregated more than one.
+            t => logger.LogError(t.Exception.Flatten(),
                 "Unhandled exception in fire-and-forget task ({Context})", context),
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
