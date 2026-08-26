@@ -23,7 +23,11 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        rider(providers.gradleProperty("platformVersion"))
+        rider(providers.gradleProperty("platformVersion")) {
+            // Rider isn't distributed through the installer channel the plugin defaults to;
+            // useInstaller = true (the default) triggers "not supported" at sync/build time.
+            useInstaller = false
+        }
         // instrumentationTools() was a compatibility helper for the 1.x plugin, removed in 2.12.0 --
         // build/test/verify now pull the required instrumentation dependencies automatically.
     }
