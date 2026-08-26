@@ -24,10 +24,12 @@ public sealed record BenchmarkReport(
     IReadOnlyList<OperationResult> Results,
     IReadOnlyList<SkippedBatchScenario>? Skipped = null,
     SessionStats? Session = null,
-    string Transport = "in-process (in-memory pipe)")
+    string Transport = "in-process (in-memory pipe)",
+    IReadOnlyList<ContentionCheck>? ContentionChecks = null)
 {
     /// <summary>True when every asserted operation met its performance target.</summary>
-    public bool AllPassed => Results.All(r => r.MeetsTarget);
+    public bool AllPassed =>
+        Results.All(r => r.MeetsTarget) && (ContentionChecks?.All(c => c.MeetsTarget) ?? true);
 
     public string ToConsoleTable() => ConsoleReporter.Render(this);
 
@@ -84,6 +86,21 @@ public static class ConsoleReporter
             sb.AppendLine("Skipped (not measured):");
             foreach (var s in report.Skipped)
                 sb.AppendLine($"  {s.Target.Operation,-40} — {s.Reason}");
+        }
+
+        if (report.ContentionChecks is { Count: > 0 })
+        {
+            sb.AppendLine();
+            sb.AppendLine("Dispatch-fairness / head-of-line blocking (cheap read latency vs. same-run solo");
+            sb.AppendLine("baseline; a ratio, not absolute ms, since both swing with machine speed -- see #488):");
+            foreach (var c in report.ContentionChecks)
+            {
+                var verdict = !report.AssertThresholds ? "—" : (c.MeetsTarget ? "PASS" : "FAIL");
+                sb.AppendLine(
+                    $"  {Trunc(c.Operation, 48),-48} baseline P95={c.Baseline.P95Ms,7:F1}ms  " +
+                    $"under-load P95={c.UnderLoad.P95Ms,8:F1}ms  ratio={c.RatioAtP95,6:F1}x  " +
+                    $"ceiling={c.CeilingRatio,4:F0}x  {verdict}");
+            }
         }
 
         if (report.Session is { } session)

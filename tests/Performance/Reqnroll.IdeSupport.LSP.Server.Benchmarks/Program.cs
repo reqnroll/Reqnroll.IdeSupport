@@ -67,7 +67,8 @@ public static class Program
             COMMANDS
               run                 Run the ISOLATED benchmark suite against the committed corpus —
                                   each operation measured on its own (the "contract check" against
-                                  the per-operation targets). Default when no command is given.
+                                  the per-operation targets), plus one dispatch-fairness check (see
+                                  below). Default when no command is given.
               session             Run the MIXED editing-session benchmark — interactive latency
                                   under realistic concurrent load (the "reality check"). See
                                   "'session' OPTIONS" below. Always report-only.
@@ -78,7 +79,7 @@ public static class Program
             'run' OPTIONS
               --warmup <n>           Discarded warm-up iterations per interactive op.   (default 10)
               --iterations <n>       Measured iterations per interactive op.            (default 50)
-              --files <n>            Corpus feature files to open and drive.            (default 10)
+              --files <n>            Corpus feature files to open and drive.            (default 50)
               --out <path>           Write the results JSON (also the future regression-tracking
                                      baseline format) to <path>.
               --no-batch             Skip the batch scenarios (cold-start scan) for a quick run.
@@ -94,6 +95,16 @@ public static class Program
                                      cold-start scan measure the real exe-launch cost.
               --server-exe <path>    Explicit server exe path (default: locate the built exe).
 
+            'run' also always includes a dispatch-fairness / head-of-line-blocking check (issue
+            #488, following up on #471/#477): with --files worth of feature files already open, it
+            fires a concurrent didChange storm across most of them (modelling many editor tabs
+            restoring at once, or a workspace-wide reload/config-change event) and races it against
+            a cheap textDocument/foldingRange read on the one file the storm never touches. Reported
+            as "Dispatch-fairness / head-of-line blocking" -- a ratio of the under-load read's P95 to
+            a same-run solo baseline, not an absolute-ms target (that ratio is noisy across
+            machines, but an absolute ms figure would be far noisier). Gated the same way as every
+            other target: report-only unless --assert / the reference-machine env var is set.
+
             'session' OPTIONS
               Models one user editing one active document: each edit fires a burst of requests
               (semantic tokens, outline, folding, completion) pipelined on the single connection
@@ -106,7 +117,7 @@ public static class Program
               isolated-case references).
               --warmup <n>           Unrecorded warm-up bursts.                          (default 5)
               --bursts <n>           Measured edit bursts.                               (default 40)
-              --files <n>            Corpus feature files in rotation as the active doc. (default 10)
+              --files <n>            Corpus feature files in rotation as the active doc. (default 50)
               --supersede-rate <f>   Fraction of bursts cancelled mid-flight, 0..1.     (default 0.3)
               --typing-gap-ms <n>    Delay before the superseding "keystroke" cancels.   (default 2)
               --think-ms <n>         Pause between bursts (raise to model human pacing). (default 10)

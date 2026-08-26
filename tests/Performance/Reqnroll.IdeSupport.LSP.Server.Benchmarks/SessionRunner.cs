@@ -34,7 +34,9 @@ public static class SessionRunner
             NavigateEveryNthBurst = IntArg(args, "--navigate-every", defaults.NavigateEveryNthBurst),
             CodeLensEveryNthBurst = IntArg(args, "--codelens-every", defaults.CodeLensEveryNthBurst),
         };
-        var fileCount = IntArg(args, "--files", 10);
+        // See BenchmarkRunner's matching change (issue #488): default to the full committed corpus
+        // rather than a scale too small to reproduce realistic dispatch contention.
+        var fileCount = IntArg(args, "--files", 50);
         var outPath = StringArg(args, "--out");
         var outOfProcess = args.Contains("--out-of-process");
         var serverExe = StringArg(args, "--server-exe") ?? (outOfProcess ? ServerExeLocator.Find() : null);
