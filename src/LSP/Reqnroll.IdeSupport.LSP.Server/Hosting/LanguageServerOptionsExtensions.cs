@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Server;
@@ -99,17 +100,34 @@ public static class LanguageServerOptionsExtensions
         });
 
         // ── Custom client-to-server notifications (now using MediatR INotification) ─
+        //
+        // Serial (not the OmniSharp default of Parallel for a manually-routed OnRequest/
+        // OnNotification with no JsonRpcHandlerOptions): these three mutate the same
+        // ILspWorkspaceScopeManager scope table, and while that table is a ConcurrentDictionary
+        // (safe against concurrent corruption), Parallel dispatch makes no guarantee about
+        // completion order — a fast projectUnloaded can finish before a slower, earlier-sent
+        // projectLoaded for the same project, leaving the scope loaded when the client already
+        // thinks it's gone (or the reverse, on a rapid solution reload). Forcing these three
+        // onto the Serial lane preserves the client's send order for project lifecycle events,
+        // which is worth the shared-FIFO-lane cost here because these fire rarely (project
+        // load/unload/file-list changes), unlike the high-frequency per-keystroke handlers this
+        // codebase deliberately keeps off that lane (see IFeatureParseCoordinator's remarks).
+        var serialOptions = new JsonRpcHandlerOptions { RequestProcessType = RequestProcessType.Serial };
+
         options.OnNotification<ReqnrollProjectLoadedParams>(
             LspMethodNames.ReqnrollProjectLoaded,
-            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectLoadedAsync(p, ct));
+            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectLoadedAsync(p, ct),
+            serialOptions);
 
         options.OnNotification<ReqnrollProjectUnloadedParams>(
             LspMethodNames.ReqnrollProjectUnloaded,
-            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectUnloadedAsync(p, ct));
+            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectUnloadedAsync(p, ct),
+            serialOptions);
 
         options.OnNotification<ReqnrollProjectFilesParams>(
             LspMethodNames.ReqnrollProjectFiles,
-            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectFilesAsync(p, ct));
+            (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectFilesAsync(p, ct),
+            serialOptions);
 
         // #85: VS-side tab-activation backstop — forces a fresh binding-match recompute and
         // diagnostics/semantic-tokens republish for a document the client has just detected
