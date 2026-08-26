@@ -490,6 +490,25 @@ namespace TestProject
         binding.Regex.Should().BeNull();
     }
 
+    [Fact]
+    public async Task Short_is_not_a_recognized_cucumber_parameter_type_name()
+    {
+        // Reqnroll's own registry only aliases int/float/double/byte/long/decimal to their C#
+        // keywords -- {short} resolves solely via the CLR type name Int16
+        // (RuntimeBindingType.Name => Type.Name), so it's undefined in a real Reqnroll project.
+        // Recognizing "short" here would falsely validate it via Roslyn discovery while the
+        // connector-discovered path leaves it undefined -- the same class of divergence #476
+        // exists to fix, just for a different name.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the count is {short}"")]
+              public void Method(short n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue("unknown types fall back to a wildcard rather than being rejected");
+        binding.Regex!.IsMatch("the count is anything").Should().BeTrue(
+            "an unrecognized type name falls back to matching any text, not a digits-only pattern");
+    }
+
     [Theory]
     [InlineData("I have a cat/dog", "I have a cat", true)]
     [InlineData("I have a cat/dog", "I have a dog", true)]

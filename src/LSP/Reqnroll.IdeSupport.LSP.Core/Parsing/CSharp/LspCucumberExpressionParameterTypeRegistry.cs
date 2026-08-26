@@ -15,8 +15,15 @@ namespace Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 /// <c>[StepArgumentTransformation]</c>s) — information that does not exist yet during
 /// syntax-only, pre-build discovery. This registry instead knows only the standard built-in
 /// Cucumber parameter types that appear literally in step-definition source
-/// (<c>int</c>/<c>byte</c>/<c>short</c>/<c>long</c>/<c>float</c>/<c>double</c>/<c>decimal</c>/
-/// <c>word</c>/<c>string</c>, using the exact same regex fragments as Reqnroll's runtime via
+/// (<c>int</c>/<c>byte</c>/<c>long</c>/<c>float</c>/<c>double</c>/<c>decimal</c>/
+/// <c>word</c>/<c>string</c> -- deliberately <i>not</i> <c>short</c>: Reqnroll's own registry
+/// exposes a <see cref="short"/> parameter only under its CLR type name <c>Int16</c>
+/// (<c>RuntimeBindingType.Name =&gt; Type.Name</c>), since <c>short</c> is absent from its
+/// keyword-alias table alongside <c>int</c>/<c>float</c>/<c>double</c>/<c>byte</c>/<c>long</c>/
+/// <c>decimal</c> -- registering <c>short</c> here anyway would make <c>{short}</c> falsely
+/// valid via Roslyn discovery while the connector-discovered path leaves it undefined, exactly
+/// the class of divergence this registry exists to avoid), using the exact same regex
+/// fragments as Reqnroll's runtime via
 /// <see cref="ParameterTypeConstants"/> so the two never drift out of sync) and treats every
 /// other name — a project-defined <c>[StepArgumentTransformation]</c> type, or an enum — as an
 /// unknown type matched by <see cref="ParameterTypeConstants.AnonymousParameterRegex"/>
@@ -30,7 +37,6 @@ internal sealed class LspCucumberExpressionParameterTypeRegistry : IParameterTyp
     {
         ["int"] = Numeric("int", ParameterTypeConstants.IntParameterRegex),
         ["byte"] = Numeric("byte", ParameterTypeConstants.IntParameterRegex),
-        ["short"] = Numeric("short", ParameterTypeConstants.IntParameterRegex),
         ["long"] = Numeric("long", ParameterTypeConstants.IntParameterRegex),
         ["float"] = Numeric("float", ParameterTypeConstants.FloatParameterRegex),
         ["double"] = Numeric("double", ParameterTypeConstants.FloatParameterRegex),

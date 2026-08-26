@@ -201,8 +201,14 @@ public class StepDefinitionFileParser
 
             return new CucumberExpression(expression, CucumberExpressionParameterTypeRegistry).Regex;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is CucumberExpressionException or ArgumentException)
         {
+            // CucumberExpressionException: the grammar's own validation rejected the expression
+            // (e.g. "an alternative may not be empty"). ArgumentException covers
+            // RegexParseException from the plain-regex branch (an existing binding whose regex
+            // text is itself malformed). Anything else is an unexpected bug -- e.g. in
+            // LspCucumberExpressionParameterTypeRegistry -- and should propagate rather than
+            // being silently reported as merely an invalid binding with no diagnostic trail.
             return null;
         }
     }
