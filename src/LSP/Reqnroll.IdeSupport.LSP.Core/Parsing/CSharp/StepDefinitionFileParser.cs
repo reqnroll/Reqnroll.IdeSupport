@@ -1,6 +1,7 @@
 ﻿#nullable disable
 
 using Cucumber.TagExpressions;
+using CucumberExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -29,13 +30,6 @@ public class StepDefinitionFileParser
     private const string AttributeSuffix = "Attribute";
 
     private static readonly ReqnrollTagExpressionParser TagExpressionParser = new();
-
-    /// <summary>
-    /// Matches a Cucumber <c>{paramType}</c> placeholder where the parameter name is a simple
-    /// word identifier. Used to convert Cucumber expressions to regex before matching.
-    /// </summary>
-    private static readonly Regex CucumberParamPattern =
-        new(@"\{(\w+)\}", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // The following four members port Reqnroll.Bindings.StepDefinitionRegexCalculator's
     // method-name-style binding algorithm (see issue #268: an attribute with no expression,
@@ -167,58 +161,66 @@ public class StepDefinitionFileParser
         }
     }
 
+    private static readonly IParameterTypeRegistry CucumberExpressionParameterTypeRegistry = new LspCucumberExpressionParameterTypeRegistry();
+
     /// <summary>
     /// Converts a Reqnroll step-definition expression to a compiled <see cref="Regex"/>. The
-    /// expression may be a plain regex or a Cucumber expression that uses <c>{paramType}</c>
-    /// placeholders. Standard Cucumber parameter types are converted to their canonical regex
-    /// patterns; unknown/custom types (e.g. project-defined step-argument transformations like
-    /// <c>{Verb}</c>) fall back to <c>(.*)</c> so the binding can still match its steps even
-    /// though the precise regex is not statically derivable without a semantic model.
-    /// For plain-regex expressions the substitution is a no-op (no <c>{...}</c> present).
+    /// expression may be a plain regex or a Cucumber Expression that uses <c>{paramType}</c>
+    /// placeholders (and, per the real Cucumber Expression grammar, <c>(optional text)</c> and
+    /// <c>alternative/text</c>).
     /// </summary>
     /// <remarks>
-    /// An expression with no <c>{param}</c> placeholder at all is treated as a plain, already
-    /// regex-ready pattern and passed through unescaped (e.g. <c>"the firs number is (.*)"</c>
-    /// stays a real capturing group) — this is the "plain regex" half of the contract described
-    /// above, and existing bindings rely on it.
+    /// Delegates to the real <c>Cucumber.CucumberExpressions</c> library — the same one
+    /// Reqnroll's own runtime depends on and uses for this exact purpose — via
+    /// <see cref="global::CucumberExpressions.CucumberExpression"/>, rather than hand-rolling the
+    /// grammar here. <see cref="CucumberExpressionDetector"/> (a faithful port of Reqnroll's own
+    /// detector, which lives in the runtime assembly LSP.Core doesn't reference) decides whether
+    /// <paramref name="expression"/> is a Cucumber Expression at all; an expression it classifies
+    /// as a plain regex (e.g. an existing binding written as
+    /// <c>[Given("the number is (\\d+)")]</c>) is anchored and compiled unescaped, keeping its
+    /// capturing group intact instead of being turned into literal parenthesis text. Standard
+    /// Cucumber parameter types are converted using the exact same regex fragments as Reqnroll's
+    /// runtime (see <see cref="LspCucumberExpressionParameterTypeRegistry"/>); unknown/custom
+    /// types (e.g. project-defined step-argument transformations like <c>{Verb}</c>) fall back to
+    /// <c>(.*)</c> so the binding can still match its steps even though the precise regex is not
+    /// statically derivable without a semantic model.
     /// <para/>
-    /// Once at least one placeholder is present, the expression is being authored as a Cucumber
-    /// expression, where <c>{param}</c> is the only syntax with special meaning — every other
-    /// character, including regex metacharacters like <c>$</c> <c>.</c> <c>(</c> <c>)</c>, is
-    /// literal text the step author expects to match verbatim. So in that case the literal
-    /// segments between placeholders are <see cref="Regex.Escape(string)"/>-d before being
-    /// spliced into the pattern. Without this, a literal <c>$</c> outside a placeholder — e.g.
-    /// <c>"the basket price should be ${float}"</c> — is interpreted as a regex end-of-string
-    /// anchor mid-pattern instead of a literal dollar sign, making the binding permanently
-    /// unmatchable instead of matching its literal text.
+    /// The real grammar's own validation (e.g. "an alternative may not be empty", "an optional
+    /// may not contain a parameter") can throw for a malformed expression where the old
+    /// hand-rolled version never did; those are caught and surfaced as an unmatchable binding
+    /// (<see langword="null"/> regex, <see cref="ProjectStepDefinitionBinding.IsValid"/> false)
+    /// rather than aborting discovery of every other binding in the file.
+    /// </para>
     /// </remarks>
     private static Regex BuildRegex(string expression)
     {
-        var matches = CucumberParamPattern.Matches(expression);
-        if (matches.Count == 0)
-            return new Regex($"^{expression}$", RegexOptions.CultureInvariant);
-
-        var regexBody = new StringBuilder();
-        var lastIndex = 0;
-        foreach (Match m in matches)
+        try
         {
-            regexBody.Append(Regex.Escape(expression.Substring(lastIndex, m.Index - lastIndex)));
-            regexBody.Append(m.Groups[1].Value switch
-            {
-                "int" or "byte" or "short" or "long"    => @"(-?\d+)",
-                "float" or "double"                      => @"(-?\d*(?:\.\d+)?)",
-                "biginteger" or "bigdecimal"             => @"(-?\d+(?:\.\d+)?)",
-                "word"                                   => @"(\w+)",
-                // {string} matches a double- or single-quoted literal (simplified pattern).
-                "string"                                 => @"(""[^""]*""|'[^']*')",
-                // Custom/unknown parameter types (e.g. step-argument transformations): fall
-                // back to (.*) — the same pattern the connector produces for them at runtime.
-                _                                        => @"(.*)"
-            });
-            lastIndex = m.Index + m.Length;
+            if (!CucumberExpressionDetector.IsCucumberExpression(expression))
+                return new Regex(GetWholeTextMatchRegexSource(expression), RegexOptions.CultureInvariant);
+
+            return new CucumberExpression(expression, CucumberExpressionParameterTypeRegistry).Regex;
         }
-        regexBody.Append(Regex.Escape(expression.Substring(lastIndex)));
-        return new Regex($"^{regexBody}$", RegexOptions.CultureInvariant);
+        catch (Exception ex) when (ex is CucumberExpressionException or ArgumentException)
+        {
+            // CucumberExpressionException: the grammar's own validation rejected the expression
+            // (e.g. "an alternative may not be empty"). ArgumentException covers
+            // RegexParseException from the plain-regex branch (an existing binding whose regex
+            // text is itself malformed). Anything else is an unexpected bug -- e.g. in
+            // LspCucumberExpressionParameterTypeRegistry -- and should propagate rather than
+            // being silently reported as merely an invalid binding with no diagnostic trail.
+            return null;
+        }
+    }
+
+    /// <summary>Anchors <paramref name="regexString"/> at both ends if it isn't already, mirroring Reqnroll's own <c>RegexFactory.GetWholeTextMatchRegexSource</c>.</summary>
+    private static string GetWholeTextMatchRegexSource(string regexString)
+    {
+        if (!regexString.StartsWith("^"))
+            regexString = "^" + regexString;
+        if (!regexString.EndsWith("$"))
+            regexString += "$";
+        return regexString;
     }
 
     /// <summary>

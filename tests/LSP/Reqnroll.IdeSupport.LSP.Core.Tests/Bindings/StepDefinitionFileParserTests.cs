@@ -369,21 +369,35 @@ namespace TestProject
     }
 
     [Theory]
-    [InlineData("Given", @"the number is {int}",         "the number is 42",      @"(-?\d+)")]
-    [InlineData("When",  @"the value is {float}",        "the value is 3.14",     @"(-?\d*(?:\.\d+)?)")]
-    [InlineData("Then",  @"the word is {word}",          "the word is hello",     @"(\w+)")]
+    [InlineData("Given", @"the number is {int}",  "the number is 42")]
+    [InlineData("When",  @"the value is {float}", "the value is 3.14")]
+    [InlineData("Then",  @"the word is {word}",   "the word is hello")]
     public async Task Standard_cucumber_param_types_are_converted_to_regex(
-        string keyword, string expression, string stepText, string expectedGroupPattern)
+        string keyword, string expression, string stepText)
     {
+        // The exact regex fragment for each type is Cucumber.CucumberExpressions' own (the same
+        // library Reqnroll's runtime depends on) rather than something this parser controls, so
+        // only the resulting match behaviour is asserted here.
         var stepDefinitions = await ParseStepDefinitions(
             $@"[{keyword}(""{expression}"")]
                public void Method() {{ }}");
 
         var binding = stepDefinitions.Should().ContainSingle().Subject!;
         binding.IsValid.Should().BeTrue();
-        binding.Regex.ToString().Should().Contain(expectedGroupPattern);
         binding.Regex.IsMatch(stepText).Should().BeTrue(
             $"the converted regex should match the step text '{stepText}'");
+    }
+
+    [Fact]
+    public async Task Word_param_type_does_not_match_across_a_space()
+    {
+        // {word} matches a single non-whitespace run, not an arbitrary phrase.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the word is {word}"")]
+              public void Method(string value) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch("the word is hello world").Should().BeFalse();
     }
 
     [Fact]
@@ -458,6 +472,104 @@ namespace TestProject
         binding.Regex.ToString().Should().Contain(@"(.*)");
         binding.Regex.IsMatch("the two numbers 'are' added").Should().BeTrue();
         binding.Regex.IsMatch("the two numbers were added").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Malformed_cucumber_expression_yields_an_invalid_binding_instead_of_throwing()
+    {
+        // The real Cucumber Expression grammar's own validation (e.g. "an alternative may not
+        // be empty") can reject input the old hand-rolled parser never did. One malformed
+        // attribute must degrade to an invalid (null-regex) binding rather than throwing and
+        // aborting discovery of every other binding in the file.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""a cat/{int}"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeFalse("an alternative containing only a parameter is invalid Cucumber Expression syntax");
+        binding.Regex.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Short_is_not_a_recognized_cucumber_parameter_type_name()
+    {
+        // Reqnroll's own registry only aliases int/float/double/byte/long/decimal to their C#
+        // keywords -- {short} resolves solely via the CLR type name Int16
+        // (RuntimeBindingType.Name => Type.Name), so it's undefined in a real Reqnroll project.
+        // Recognizing "short" here would falsely validate it via Roslyn discovery while the
+        // connector-discovered path leaves it undefined -- the same class of divergence #476
+        // exists to fix, just for a different name.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the count is {short}"")]
+              public void Method(short n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue("unknown types fall back to a wildcard rather than being rejected");
+        binding.Regex!.IsMatch("the count is anything").Should().BeTrue(
+            "an unrecognized type name falls back to matching any text, not a digits-only pattern");
+    }
+
+    [Theory]
+    [InlineData("I have a cat/dog", "I have a cat", true)]
+    [InlineData("I have a cat/dog", "I have a dog", true)]
+    [InlineData("I have a cat/dog", "I have a cat/dog", false)]
+    [InlineData("I have a cat/dog", "I have a fish", false)]
+    public async Task Alternative_text_matches_either_alternative_not_the_literal_slash(
+        string expression, string stepText, bool shouldMatch)
+    {
+        // Reproduces issue #476: a Cucumber Expression using '/' alternative text (e.g.
+        // "cat/dog") must match either alternative, the same as the connector-discovered
+        // regex computed by Reqnroll's runtime cucumber-expressions library. Since there's
+        // no {param} placeholder here, plant one so the expression is still recognized as a
+        // Cucumber expression rather than a plain regex.
+        var stepDefinitions = await ParseStepDefinitions(
+            $@"[Given(""{expression} {{int}}"")]
+               public void Method(int n) {{ }}");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch($"{stepText} 1").Should().Be(shouldMatch);
+    }
+
+    [Theory]
+    [InlineData("I eat(s) apples", "I eat apples", true)]
+    [InlineData("I eat(s) apples", "I eats apples", true)]
+    [InlineData("I eat(s) apples", "I eat(s) apples", false)]
+    public async Task Optional_text_makes_the_parenthesized_text_optional_not_literal_parens(
+        string expression, string stepText, bool shouldMatch)
+    {
+        // Reproduces issue #476: a Cucumber Expression using '(text)' optional text must make
+        // the parenthesized text optional, not match the literal parentheses.
+        var stepDefinitions = await ParseStepDefinitions(
+            $@"[Given(""{expression} and {{int}}"")]
+               public void Method(int n) {{ }}");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch($"{stepText} and 1").Should().Be(shouldMatch);
+    }
+
+    [Fact]
+    public async Task Alternative_and_optional_text_can_combine_in_the_same_expression()
+    {
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""{int} red/blue disc(s)"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch("3 red discs").Should().BeTrue();
+        binding.Regex!.IsMatch("1 blue disc").Should().BeTrue();
+        binding.Regex!.IsMatch("2 green discs").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Backslash_escapes_alternation_and_optional_syntax_to_literal_characters()
+    {
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""a literal cat\\/dog and \\(parens\\) plus {int}"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch("a literal cat/dog and (parens) plus 1").Should().BeTrue();
+        binding.Regex!.IsMatch("a literal cat plus 1").Should().BeFalse();
     }
 
     [Fact]
