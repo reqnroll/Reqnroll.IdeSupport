@@ -1,0 +1,67 @@
+---
+name: Bug report
+description: Report a problem with the LSP server or one of its IDE clients
+labels: [bug]
+body:
+- type: dropdown
+  attributes:
+    label: Which IDE / client are you using?
+    options:
+      - Visual Studio
+      - Visual Studio Code
+      - Rider
+      - Other / not IDE-specific (LSP server itself)
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: IDE Version
+    description: e.g. Visual Studio 2022 17.11.2, VS Code 1.93.1, Rider 2024.2
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: Extension / Package Version
+    description: Version of the Reqnroll IDE extension or LSP server package in use
+  validations:
+    required: true
+- type: dropdown
+  attributes:
+    label: .NET Implementation (of the project under test)
+    options:
+      - .NET 10
+      - .NET 9
+      - .NET 8
+      - .NET Framework 4.6.2 or later
+      - Other / not applicable
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Content of reqnroll.json configuration file
+    placeholder: PLEASE COPY THE ENTIRE reqnroll.json, if present
+- type: textarea
+  attributes:
+    label: Issue Description
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Steps to Reproduce
+    placeholder: Include a minimal .feature/.cs pair if possible
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Server / Client Logs
+    description: >
+      For LSP-protocol-level issues, server-debug + client-inspector logs together are usually
+      what's needed to diagnose the problem. See the area-specific CONTRIBUTING guide
+      (src/LSP, src/VisualStudio, src/VSCode) for how to raise log verbosity and where to find
+      the log output for your client.
+    placeholder: Paste relevant log excerpts here
+- type: input
+  attributes:
+    label: Link to Repro Project
+  validations:
+    required: false

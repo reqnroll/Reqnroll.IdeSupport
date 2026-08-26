@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Feature request
+    url: https://github.com/orgs/reqnroll/discussions/new?category=ideas
+    about: Please create a new discussion in the "Ideas" category of our discussion board
+  - name: Contributing guide
+    url: https://github.com/reqnroll/Reqnroll.IdeSupport/blob/master/CONTRIBUTING.md
+    about: Read this before filing, especially the "Before you start" section on checking existing issues and open questions
