@@ -56,8 +56,8 @@ public class RunTestCodeLensResultCacheTests
     }
 
     private static RunTestCodeLensResultCache CreateSut(
-        CountingResolver resolver, System.TimeSpan? resultTtl = null, System.TimeSpan? computationTimeout = null) =>
-        new(resolver.GetTargetsAsync, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf, resultTtl, computationTimeout);
+        CountingResolver resolver, System.TimeSpan? computationTimeout = null) =>
+        new(resolver.GetTargetsAsync, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf, computationTimeout);
 
     [Fact]
     public async Task Concurrent_callers_for_the_same_file_share_one_computation()
@@ -81,10 +81,16 @@ public class RunTestCodeLensResultCacheTests
     }
 
     [Fact]
-    public async Task A_completed_result_within_the_TTL_is_reused_without_recomputing()
+    public async Task A_completed_result_is_reused_indefinitely_without_recomputing()
     {
+        // Regression coverage (live report, 2026-08-26): this cache used to expire a completed
+        // result after a fixed few-second TTL, so any caller arriving after that window forced an
+        // entirely new full-document walk — one slow enough on a large corpus (30-45s) to reliably
+        // outlive VS's own per-data-point timeout, even though nothing had actually changed.
+        // There's no time-based expiry any more: a completed result is valid until an explicit
+        // InvalidateFile/InvalidateAll (see the next test), never merely because time passed.
         var resolver = new CountingResolver();
-        var sut = CreateSut(resolver, resultTtl: System.TimeSpan.FromSeconds(30));
+        var sut = CreateSut(resolver);
 
         await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
         await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
@@ -108,7 +114,7 @@ public class RunTestCodeLensResultCacheTests
     public async Task InvalidateFile_forces_a_fresh_computation_on_the_next_call()
     {
         var resolver = new CountingResolver();
-        var sut = CreateSut(resolver, resultTtl: System.TimeSpan.FromSeconds(30));
+        var sut = CreateSut(resolver);
 
         await sut.GetTargetsAsync("file:///Test.feature", CancellationToken.None);
         sut.InvalidateFile("file:///Test.feature");

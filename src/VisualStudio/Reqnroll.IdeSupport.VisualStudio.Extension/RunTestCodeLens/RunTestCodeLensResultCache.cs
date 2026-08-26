@@ -15,7 +15,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 
 /// <summary>
 /// De-duplicates concurrent calls to <see cref="RunTestCodeLensService.GetTargetsAsync"/> for the
-/// same file, sharing one in-flight (or recently-completed) computation instead of letting every
+/// same file, sharing one in-flight (or already-completed) computation instead of letting every
 /// caller re-walk the whole document independently.
 /// </summary>
 /// <remarks>
@@ -34,6 +34,20 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 /// (<see cref="OperationCanceledException"/> from <c>RunTestCodeLensService</c>'s own
 /// <c>cancellationToken.ThrowIfCancellationRequested()</c>), leaving the lens stuck showing "Loading
 /// data..." forever with no working Run/Debug popup.
+/// </para>
+/// <para>
+/// <b>A completed result is reused until an explicit invalidation, not a time-based TTL.</b> An
+/// earlier version of this cache expired a completed result after a fixed few seconds, on the
+/// theory that a short TTL would only need to absorb one initial burst of near-simultaneous
+/// <c>GetDataAsync</c> calls. In practice (live report, 2026-08-26) a single walk on a large corpus
+/// (~2,400 scenarios) can itself take 30-45 seconds — far longer than the TTL — so scrolling to a
+/// newly-visible region more than a few seconds after the last completed walk discarded a perfectly
+/// good result and forced an entirely new one, which then reliably outlived every individual
+/// caller's own VS-imposed timeout. There is no correctness reason for a TTL here: real staleness is
+/// already reported explicitly via <see cref="InvalidateFile"/>/<see cref="InvalidateAll"/>, called
+/// from <c>CodeLensRefreshInterceptor</c> whenever the server's <c>reqnroll/refreshCodeLens</c>
+/// notification says the underlying binding registry or feature file actually changed. A completed
+/// result is therefore valid indefinitely until one of those fires.
 /// </para>
 /// <para>
 /// <b>Cancellation is deliberately decoupled from any one caller.</b> Each caller supplies its own
@@ -59,13 +73,11 @@ internal sealed class RunTestCodeLensResultCache
 
         public CancellationTokenSource Cts { get; }
         public AsyncLazy<IReadOnlyList<RunTestTargetEntry>> Lazy { get; }
-        public DateTime? CompletedAtUtc { get; set; }
     }
 
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> _inner;
     private readonly ILogger<RunTestCodeLensResultCache> _logger;
     private readonly JoinableTaskFactory _joinableTaskFactory;
-    private readonly TimeSpan _resultTtl;
     private readonly TimeSpan _computationTimeout;
 
     // Values are Lazy<Entry>, not Entry directly: ConcurrentDictionary.AddOrUpdate's factories may
@@ -88,25 +100,22 @@ internal sealed class RunTestCodeLensResultCache
     /// the UI thread. Overridable so unit tests can supply a standalone
     /// <c>new JoinableTaskContext().Factory</c> instead of depending on a real VS host.
     /// </param>
-    /// <param name="resultTtl">How long a completed result stays reusable by a new caller before a fresh computation is started. Defaults to 3 seconds — long enough to absorb a burst of near-simultaneous CodeLens data-point calls, short enough that a real edit's invalidation (see <see cref="InvalidateFile"/>) is rarely even needed to see fresh results.</param>
     /// <param name="computationTimeout">Upper bound on one shared computation's own lifetime, independent of any caller's token — a safety net against a truly runaway resolution, not the mechanism callers use to give up waiting. Defaults to 60 seconds, comfortably above VS's own observed ~26-second per-data-point timeout so the shared work outlives any single caller that gives up on it.</param>
     public RunTestCodeLensResultCache(
         Func<string, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> inner,
         ILogger<RunTestCodeLensResultCache> logger,
         JoinableTaskFactory? joinableTaskFactory = null,
-        TimeSpan? resultTtl = null,
         TimeSpan? computationTimeout = null)
     {
         _inner = inner;
         _logger = logger;
         _joinableTaskFactory = joinableTaskFactory ?? ThreadHelper.JoinableTaskFactory;
-        _resultTtl = resultTtl ?? TimeSpan.FromSeconds(3);
         _computationTimeout = computationTimeout ?? TimeSpan.FromSeconds(60);
     }
 
     /// <summary>
     /// Returns the shared result for <paramref name="fileUri"/>, starting a new computation only
-    /// when none is in flight and no recent-enough one is cached. <paramref name="callerToken"/>
+    /// when none is in flight and no completed result is already cached. <paramref name="callerToken"/>
     /// only governs how long this particular call is willing to wait — it never cancels the shared
     /// computation itself (see this type's remarks).
     /// </summary>
@@ -118,9 +127,7 @@ internal sealed class RunTestCodeLensResultCache
             updateValueFactory: (uri, existing) => IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => CreateEntry(uri)));
 
         var entry = lazyEntry.Value;
-        var result = await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
-        entry.CompletedAtUtc ??= DateTime.UtcNow;
-        return result;
+        return await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
     }
 
     /// <summary>Drops the cached/in-flight result for <paramref name="fileUri"/>, if any, cancelling its computation.</summary>
@@ -152,10 +159,11 @@ internal sealed class RunTestCodeLensResultCache
             return true; // still in flight — share it rather than starting a duplicate walk.
 
         var task = entry.Lazy.GetValueAsync();
-        if (task.IsFaulted || task.IsCanceled)
-            return false; // don't hand a failed/cancelled result to a fresh caller.
-
-        return entry.CompletedAtUtc is { } completedAt && DateTime.UtcNow - completedAt < _resultTtl;
+        // A successfully-completed result stays usable indefinitely — see this type's remarks on
+        // why a time-based TTL isn't needed: InvalidateFile/InvalidateAll are the real staleness
+        // signal. Only a failed/cancelled result is treated as unusable, so a fresh caller gets a
+        // real retry instead of the same exception replayed forever.
+        return !task.IsFaulted && !task.IsCanceled;
     }
 
     private async Task<IReadOnlyList<RunTestTargetEntry>> RunAsync(string fileUri, CancellationToken ct)
