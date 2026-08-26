@@ -77,15 +77,19 @@ internal sealed class RunTestCodeLensService
                 .ResolveTestTargetsAsync(fileUri, node.SelectionRange, cancellationToken)
                 .ConfigureAwait(false);
 
+            // node.Detail carries "Scenario Outline" vs "Scenario" (see GherkinSymbolNode's
+            // remarks) — Kind alone collapses both to the same LSP SymbolKind.Method value.
+            var isScenarioOutline = string.Equals(node.Detail, "Scenario Outline", StringComparison.Ordinal);
+
             foreach (var target in targets)
-                result.Add(new RunTestTargetEntry(node.SelectionRange.Start.Line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName));
+                result.Add(new RunTestTargetEntry(node.SelectionRange.Start.Line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName, isScenarioOutline));
         }
 
         foreach (var entry in result)
         {
             _logger.LogInformation(
-                "RunTestCodeLensService: RunTestTargetEntry line={Line} assembly={OutputAssemblyPath} type={DeclaringTypeFullName} method={MethodName}",
-                entry.Line, entry.OutputAssemblyPath, entry.DeclaringTypeFullName, entry.MethodName);
+                "RunTestCodeLensService: RunTestTargetEntry line={Line} assembly={OutputAssemblyPath} type={DeclaringTypeFullName} method={MethodName} isScenarioOutline={IsScenarioOutline}",
+                entry.Line, entry.OutputAssemblyPath, entry.DeclaringTypeFullName, entry.MethodName, entry.IsScenarioOutline);
         }
 
         return result;

@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -58,7 +59,8 @@ public sealed class StepRenameHandler
         ClientIdeContext              clientIdeContext,
         IFileSystemForIDE             fileSystem,
         ILspTelemetryService?         telemetryService = null,
-        IOperationDurationRecorder?   recorder = null)
+        IOperationDurationRecorder?   recorder = null,
+        ICSharpSyntaxTreeCache?       syntaxTreeCache = null)
     {
         _matchService    = matchService;
         _scopeManager    = scopeManager;
@@ -73,7 +75,7 @@ public sealed class StepRenameHandler
         _fileSystem      = fileSystem;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
-        _attributeLiteralResolver = new CSharpAttributeLiteralResolver(csharpFileTextCache, documentBuffer, logger, fileSystem);
+        _attributeLiteralResolver = new CSharpAttributeLiteralResolver(csharpFileTextCache, documentBuffer, logger, fileSystem, syntaxTreeCache);
         _bindingResolver = new RenameBindingResolver(matchService, scopeManager, _sessionManager, logger);
         _nameReconciler  = new NewNameReconciler(logger);
         _postApplyCoordinator = new RenamePostApplyCoordinator(

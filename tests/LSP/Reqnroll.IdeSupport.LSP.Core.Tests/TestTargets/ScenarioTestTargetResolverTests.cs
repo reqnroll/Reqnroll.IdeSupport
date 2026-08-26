@@ -101,7 +101,59 @@ public class ScenarioTestTargetResolverTests : IDisposable
 
     private static ScenarioTestTargetResolver CreateSut() => new();
 
+    /// <summary>Wraps a real <see cref="CSharpSyntaxTreeCache"/>, counting how many times a
+    /// disk-mode parse was actually requested — used to confirm <see cref="ScenarioTestTargetResolver"/>
+    /// goes through the shared cache rather than parsing the generated file itself (issue #491).</summary>
+    private sealed class CountingSyntaxTreeCache : ICSharpSyntaxTreeCache
+    {
+        private readonly CSharpSyntaxTreeCache _inner = new();
+        public List<SyntaxNode?> ReturnedRoots { get; } = new();
+
+        public SyntaxNode? GetOrParseFromDisk(string filePath, IFileSystemForIDE fileSystem)
+        {
+            var root = _inner.GetOrParseFromDisk(filePath, fileSystem);
+            ReturnedRoots.Add(root);
+            return root;
+        }
+
+        public SyntaxNode GetOrParse(string filePath, string text) => _inner.GetOrParse(filePath, text);
+        public void Invalidate(string filePath) => _inner.Invalidate(filePath);
+    }
+
     // ── Plain scenario ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Resolving_the_same_file_twice_reuses_the_cached_parse_instead_of_re_reading_disk()
+    {
+        // Regression coverage for issue #491: RunTestCodeLensService calls Resolve once per
+        // scenario/row in a file, which used to re-read and re-parse the same generated .feature.cs
+        // from scratch on every single call. The resolver must go through the shared cache so a
+        // second resolution against the same, unchanged file is a cache hit.
+        var text = "Feature: Calculator\nScenario: Add two numbers\n    Given a step\n";
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixture("""
+            namespace Tests
+            {
+                public class CalculatorFeature
+                {
+                    public void AddTwoNumbers()
+                    {
+                    }
+                }
+            }
+            """);
+        var cache = new CountingSyntaxTreeCache();
+        var sut = new ScenarioTestTargetResolver(cache);
+
+        sut.Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        sut.Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+
+        // The cache is consulted on every call (that's how it validates freshness), but the second
+        // call must get back the exact same parsed root as the first — proof the resolver is
+        // routing through the shared cache rather than re-parsing the file itself.
+        cache.ReturnedRoots.Should().HaveCount(2);
+        cache.ReturnedRoots[1].Should().BeSameAs(cache.ReturnedRoots[0]);
+    }
 
     [Fact]
     public void Plain_scenario_resolves_to_a_single_non_parameterized_target()

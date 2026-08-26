@@ -16,6 +16,7 @@ using Reqnroll.IdeSupport.LSP.Core.InlayHints;
 
 
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
@@ -159,6 +160,12 @@ public static class ServiceCollectionExtensions
         return services
             .AddSingleton<IDocumentBufferService, DocumentBufferService>()
             .AddSingleton<ICSharpFileTextCache, CSharpFileTextCache>()
+            // Shared cache of parsed C# syntax trees, keyed by file path (issue #491) — avoids
+            // re-parsing the same unchanged file (e.g. a generated <feature>.feature.cs code-behind,
+            // or a step-definition file with several attributes on one method) once per caller within
+            // the same logical operation. Consumed by ScenarioTestTargetResolver and
+            // CSharpAttributeLiteralResolver.
+            .AddSingleton<ICSharpSyntaxTreeCache, CSharpSyntaxTreeCache>()
             // BindingMatchService holds the per-document match cache; it must be a singleton
             // so the cache survives across requests and is shared by the tagger (writer) and
             // the Go to Definition / diagnostics consumers (readers).

@@ -29,9 +29,29 @@ public static class RunTestCodeLensRedirect
     internal static readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<RunTestTargetEntry>> TaggerRegistry =
         new(tagger => tagger.RequestRefresh());
 
+    /// <summary>
+    /// Set by the Extension project alongside <see cref="GetTargetsAsync"/> — lets this class
+    /// invalidate the Extension's own shared-result cache (issue #262 follow-up: multiple
+    /// concurrent callers, the tagger and every visible line's own out-of-process CodeLens data
+    /// point, share one computation per file) without this VSSDKIntegration project needing a
+    /// reference to that cache's type.
+    /// </summary>
+    public static Action<string>? InvalidateCachedFile { get; set; }
+
+    /// <summary>Set by the Extension project alongside <see cref="GetTargetsAsync"/> — see <see cref="InvalidateCachedFile"/>.</summary>
+    public static Action? InvalidateAllCached { get; set; }
+
     /// <summary>Requests a re-pull of Run targets for <paramref name="fileUri"/>. Safe to call from any thread.</summary>
-    public static void InvalidateFile(string fileUri) => TaggerRegistry.InvalidateFile(fileUri);
+    public static void InvalidateFile(string fileUri)
+    {
+        InvalidateCachedFile?.Invoke(fileUri);
+        TaggerRegistry.InvalidateFile(fileUri);
+    }
 
     /// <summary>Requests a re-pull of Run targets for every tracked <c>.feature</c> file. Safe to call from any thread.</summary>
-    public static void InvalidateAll() => TaggerRegistry.InvalidateAll();
+    public static void InvalidateAll()
+    {
+        InvalidateAllCached?.Invoke();
+        TaggerRegistry.InvalidateAll();
+    }
 }

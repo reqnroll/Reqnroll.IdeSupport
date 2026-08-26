@@ -147,10 +147,13 @@ graph TB
             BindingMatch["Binding Match\nService"]
             SymbolSvc["Symbol / Outline\nService"]
             InlayHintSvc["Gherkin Inlay Hint\nService (F23)"]
+            CSharpTreeCache["C# Syntax Tree\nCache (#491)"]
+            TestTargetResolver["Scenario Test Target\nResolver"]
 
             RoslynDiscovery --> BindingRegistry
             BindingMatch --> BindingRegistry
             InlayHintSvc --> BindingMatch
+            TestTargetResolver --> CSharpTreeCache
         end
 
         Handlers --> GherkinParser
@@ -212,6 +215,17 @@ Binding information enters the registry from two sources:
 The Binding Match Service holds the `FeatureBindingMatchSet` cache derived from the tag tree (see above). Because matching is fused into the parse pass rather than being a separate stage, the cache is not updated independently of the Document Buffer — both are written together by the sync handler on every `didOpen` / `didChange`.
 
 When the **Binding Registry** changes (C# file save or post-build reflection scan), the server cannot rely on the tag tree already encoding the new match results. `BindingRegistryChangedHandler` therefore re-runs `DeveroomTagParser` for each open feature file against the updated registry, atomically replacing both the tag tree in the Document Buffer and the match set in the Binding Match Service. Any change to the match cache triggers the Diagnostics Aggregator to recompute and push diagnostics for affected files.
+
+**4 · C# Syntax Tree Cache**
+
+A fourth, smaller cache (`ICSharpSyntaxTreeCache`, `LSP.Core/Parsing/CSharp/`) sits underneath the C#-facing consumers above the Gherkin pipeline: `ScenarioTestTargetResolver` (resolving `reqnroll/resolveTestTargets` against a generated `<feature>.feature.cs` code-behind) and `CSharpAttributeLiteralResolver` (locating a step-definition attribute literal for the Step Rename feature). Both used to re-parse the same file with Roslyn on every call — harmless for a single lookup, but a large `.feature` file's Run CodeLens resolves every scenario/row through a separate call, and a method carrying several step attributes resolves each one separately too, so the same unchanged file was parsed once per caller within one logical operation (issue #491).
+
+Unlike the Document Buffer and Binding Registry, this cache has no push-invalidation event wired up anywhere — it's purely self-validating on read. Two entry points reflect the two kinds of file it serves:
+
+- **Disk mode** (`GetOrParseFromDisk`), for a file with no known live/open text (the generated code-behind is essentially never opened by a human): freshness is checked via the file's last-write-time — a cheap stat call — before trusting the cached parse, so a rebuild that regenerates the code-behind is picked up on the next read without any watcher.
+- **Live-text mode** (`GetOrParse`), for a caller that already resolved the file's current text itself (an open editor buffer, a live-text cache): freshness is checked by comparing the given text against what was cached, so no disk I/O is needed at all.
+
+Bounded by a small MRU cap rather than a per-URI document lifecycle, since it has no "close" event for disk-only files to hook.
 
 ---
 

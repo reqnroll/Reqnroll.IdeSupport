@@ -94,4 +94,27 @@ public class GherkinNavigationBarSymbolServiceMapResultTests
         result.Should().ContainSingle();
         result[0].Name.Should().Be("Calculator");
     }
+
+    [Fact]
+    public void Detail_is_mapped_when_present()
+    {
+        // Kind alone can't distinguish Scenario from Scenario Outline on the wire (both collapse
+        // to LSP SymbolKind.Method) — Detail carries that distinction (issue #262 follow-up, Run
+        // CodeLens "Run Scenario" vs "Run Scenarios" wording).
+        var symbol = Symbol("SO", 6, Range(1, 0, 3, 0));
+        symbol["detail"] = "Scenario Outline";
+
+        var result = GherkinNavigationBarSymbolService.MapResult(new JArray(symbol));
+
+        result[0].Detail.Should().Be("Scenario Outline");
+    }
+
+    [Fact]
+    public void Missing_detail_maps_to_null()
+    {
+        var result = GherkinNavigationBarSymbolService.MapResult(new JArray(
+            Symbol("Calculator", 2, Range(0, 0, 9, 0))));
+
+        result[0].Detail.Should().BeNull();
+    }
 }

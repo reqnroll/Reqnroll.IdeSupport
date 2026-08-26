@@ -23,4 +23,11 @@ public sealed record GherkinSymbolNode(
     int                               Kind,
     GherkinSymbolRange                Range,
     GherkinSymbolRange                SelectionRange,
-    IReadOnlyList<GherkinSymbolNode>  Children);
+    IReadOnlyList<GherkinSymbolNode>  Children,
+    /// <summary>
+    /// Mirrors LSP <c>DocumentSymbol.detail</c> — carries the finer-grained Gherkin construct name
+    /// (e.g. <c>"Scenario Outline"</c> vs <c>"Scenario"</c>) that <see cref="Kind"/> alone can't
+    /// express, since both collapse to the same LSP <c>SymbolKind.Method</c> value. <see langword="null"/>
+    /// when the server didn't set one (e.g. Feature/Rule/Step nodes).
+    /// </summary>
+    string?                           Detail = null);
