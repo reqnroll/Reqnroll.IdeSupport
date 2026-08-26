@@ -49,6 +49,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
     private ScenarioTestTargetService? _scenarioTestTargetService;
     private RunTestCodeLensService? _runTestCodeLensService;
+    private RunTestCodeLensResultCache? _runTestCodeLensResultCache;
 
     /// <summary>Creates the language client, resolving the shared state holders and the already-launching connection service.</summary>
     public ReqnrollLanguageClient(
@@ -200,7 +201,19 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 _runTestCodeLensService = new RunTestCodeLensService(
                     _navigationBarSymbolService, _scenarioTestTargetService, serviceProvider,
                     _loggerFactory.CreateLogger<RunTestCodeLensService>());
-                RunTestCodeLensRedirect.GetTargetsAsync = _runTestCodeLensService.GetTargetsAsync;
+                // Shares one whole-document resolution across every concurrent caller of
+                // RunTestCodeLensRedirect.GetTargetsAsync — the tagger and every visible Scenario
+                // line's own out-of-process CodeLens data point all call through that one delegate
+                // independently, and without this each of those N callers on a large feature file
+                // re-walked the entire document from scratch (live report, 2026-08-26: individual
+                // data points hit VS's own ~26s CodeLens timeout and never resolved).
+                _runTestCodeLensResultCache = new RunTestCodeLensResultCache(
+                    _runTestCodeLensService.GetTargetsAsync,
+                    _loggerFactory.CreateLogger<RunTestCodeLensResultCache>(),
+                    ThreadHelper.JoinableTaskFactory);
+                RunTestCodeLensRedirect.GetTargetsAsync = _runTestCodeLensResultCache.GetTargetsAsync;
+                RunTestCodeLensRedirect.InvalidateCachedFile = _runTestCodeLensResultCache.InvalidateFile;
+                RunTestCodeLensRedirect.InvalidateAllCached = _runTestCodeLensResultCache.InvalidateAll;
                 _logger.LogInformation(
                     "ReqnrollLanguageClient: ITelemetryTransmitter resolved: {Resolved}",
                     _connectionService.TelemetryTransmitter is not null ? "yes" : "no");
@@ -275,7 +288,11 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             HookCodeLensRedirect.GetHookDetailsAsync = null;
             _scenarioTestTargetService = null;
             _runTestCodeLensService = null;
+            _runTestCodeLensResultCache?.InvalidateAll();
+            _runTestCodeLensResultCache = null;
             RunTestCodeLensRedirect.GetTargetsAsync = null;
+            RunTestCodeLensRedirect.InvalidateCachedFile = null;
+            RunTestCodeLensRedirect.InvalidateAllCached = null;
 
             // _connectionService itself is NOT disposed here: it's a DI-owned singleton whose
             // lifetime spans the whole extension session, not just this provider instance.

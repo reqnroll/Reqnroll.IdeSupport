@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
@@ -36,16 +37,29 @@ internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPoint
 
     private readonly ICodeLensCallbackService _callbackService;
 
+    // Standalone file logger (no MEF import needed) — this provider and its data points run
+    // out-of-process (ServiceHub.Host, confirmed live via tasklist for the sibling Hook lens
+    // provider), a different PID than devenv.exe, so they need their own log file rather than
+    // sharing the extension's IIdeSupportLogger instance. Added while investigating a live report
+    // of the Run CodeLens rendering but its Details popup never appearing on click — there was no
+    // prior instrumentation anywhere in this OOP data-point path.
+    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+
     [ImportingConstructor]
     public RunTestCodeLensDataPointProvider(ICodeLensCallbackService callbackService)
     {
         _callbackService = callbackService;
+        Logger.LogInfo($"RunTestCodeLensDataPointProvider: instance created. Assembly: {typeof(RunTestCodeLensDataPointProvider).Assembly.Location}");
     }
 
     /// <inheritdoc />
     /// <remarks>Only checks that the descriptor decodes structurally — whether the line actually has a resolved target is determined in <see cref="RunTestCodeLensDataPoint.GetDataAsync"/> via the callback round-trip.</remarks>
-    public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token) =>
-        Task.FromResult(LineElementDescription.TryDecode(descriptor.ElementDescription, out _));
+    public Task<bool> CanCreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
+    {
+        var canCreate = LineElementDescription.TryDecode(descriptor.ElementDescription, out var decodedLine);
+        Logger.LogVerbose($"RunTestCodeLensDataPointProvider: CanCreateDataPointAsync({descriptor.FilePath}, ElementDescription='{descriptor.ElementDescription}') -> {canCreate} (line={decodedLine})");
+        return Task.FromResult(canCreate);
+    }
 
     /// <inheritdoc />
     public Task<IAsyncCodeLensDataPoint> CreateDataPointAsync(CodeLensDescriptor descriptor, CodeLensDescriptorContext descriptorContext, CancellationToken token)
@@ -53,8 +67,9 @@ internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPoint
         LineElementDescription.TryDecode(descriptor.ElementDescription, out var line);
 
         var fileUri = TryGetFileUri(descriptor.FilePath) ?? descriptor.FilePath;
+        Logger.LogVerbose($"RunTestCodeLensDataPointProvider: CreateDataPointAsync — line={line}, fileUri={fileUri}");
 
-        IAsyncCodeLensDataPoint dataPoint = new RunTestCodeLensDataPoint(descriptor, _callbackService, fileUri, line);
+        IAsyncCodeLensDataPoint dataPoint = new RunTestCodeLensDataPoint(descriptor, _callbackService, fileUri, line, Logger);
         return Task.FromResult(dataPoint);
     }
 

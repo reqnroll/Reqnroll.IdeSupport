@@ -1,8 +1,10 @@
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -91,5 +93,79 @@ public class CSharpAttributeLiteralResolverTests
 
         literal.Should().BeNull(
             "a method-name-style binding has no literal to find, and must not fall back to an unrelated method's");
+    }
+
+    // ── Shared syntax-tree cache wiring (issue #491) ────────────────────────────────────
+
+    /// <summary>Wraps a real <see cref="CSharpSyntaxTreeCache"/>, recording the root returned on
+    /// each call — used to confirm <see cref="CSharpAttributeLiteralResolver"/> routes through the
+    /// shared cache instead of parsing the file itself on every call.</summary>
+    private sealed class RecordingSyntaxTreeCache : ICSharpSyntaxTreeCache
+    {
+        private readonly CSharpSyntaxTreeCache _inner = new();
+        public List<SyntaxNode> ReturnedRoots { get; } = new();
+
+        public SyntaxNode? GetOrParseFromDisk(string filePath, IFileSystemForIDE fileSystem)
+            => _inner.GetOrParseFromDisk(filePath, fileSystem);
+
+        public SyntaxNode GetOrParse(string filePath, string text)
+        {
+            var root = _inner.GetOrParse(filePath, text);
+            ReturnedRoots.Add(root);
+            return root;
+        }
+
+        public void Invalidate(string filePath) => _inner.Invalidate(filePath);
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_reuses_the_cached_parse_for_a_second_binding_in_the_same_unchanged_file()
+    {
+        // Regression coverage for issue #491: RenameTargetsHandler's multi-attribute picker calls
+        // FindAttributeLiteralAsync once per binding attribute found on the same method — which used
+        // to re-parse the whole file from scratch on every call. Two bindings against the same
+        // unchanged file must share one parsed root.
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"a step\")]\n" +
+            "        [When(\"a step\")]\n" +
+            "        public void AStep() { }\n" +
+            "    }\n" +
+            "}\n";
+
+        var documentBuffer = Substitute.For<IDocumentBufferService>();
+        documentBuffer
+            .TryGet(Arg.Any<DocumentUri>(), out Arg.Any<DocumentBuffer?>())
+            .Returns(ci =>
+            {
+                ci[1] = new DocumentBuffer(CsUri, 1, csText);
+                return true;
+            });
+
+        var cache = new RecordingSyntaxTreeCache();
+        var sut = new CSharpAttributeLiteralResolver(
+            new CSharpFileTextCache(), documentBuffer, Substitute.For<IIdeSupportLogger>(),
+            new FileSystemForIDE(), cache);
+
+        var implementation = new ProjectBindingImplementation(
+            "N.Steps.AStep()", Array.Empty<string>(),
+            new SourceLocation(CsUri.GetFileSystemPath()!, sourceFileLine: 9, sourceFileColumn: 9));
+        var givenBinding = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex("^a step$"), null, implementation,
+            specifiedExpression: "a step", error: null, attributeSourceLine: 7);
+        var whenBinding = new ProjectStepDefinitionBinding(
+            ScenarioBlock.When, new Regex("^a step$"), null, implementation,
+            specifiedExpression: "a step", error: null, attributeSourceLine: 8);
+
+        await sut.FindAttributeLiteralAsync(CsUri, givenBinding);
+        await sut.FindAttributeLiteralAsync(CsUri, whenBinding);
+
+        cache.ReturnedRoots.Should().HaveCount(2);
+        cache.ReturnedRoots[1].Should().BeSameAs(cache.ReturnedRoots[0]);
     }
 }

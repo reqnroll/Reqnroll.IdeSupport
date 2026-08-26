@@ -311,9 +311,21 @@ internal sealed class LspInterceptingPipe : IDisposable
                         body.ToString());
                 }
 
-                // Consume correlated responses before external interceptors so they never reach VS.
-                if (TryCompleteCorrelatedResponse(body))
+                // Consume correlated responses before *forwarding* to VS (they must never reach
+                // VS's own JsonRpc, which never sent them) — but still run them through
+                // _receiveInterceptors first (issue #491) so LspInspectorLogger sees this traffic
+                // like everything else on the pipe. Without this, every owned-RPC response
+                // (e.g. reqnroll/resolveTestTargets) is invisible to the inspector log even though
+                // it genuinely crossed the wire, which made a real N+1 request-storm bug look like
+                // near-total silence when first diagnosed.
+                if (TryGetCorrelatedResponseId(body, out var correlatedId))
+                {
+                    var correlatedMessage = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.Now);
+                    await RunInterceptorsAsync(correlatedMessage, _receiveInterceptors, ct).ConfigureAwait(false);
+
+                    CompleteCorrelatedResponse(correlatedId, body);
                     continue;
+                }
 
                 // Drop a response whose matching request was sent by a since-abandoned VS-facing
                 // session (issue #395) — forwarding it to whichever session is current would hand
@@ -762,6 +774,16 @@ internal sealed class LspInterceptingPipe : IDisposable
                 _injectLock.Release();
             }
 
+            // Notify interceptors about the injected request (issue #491), the same way
+            // SendNotificationToServerAsync already does, so it appears in the inspector log —
+            // otherwise every owned-RPC request (e.g. reqnroll/resolveTestTargets) is invisible to
+            // LspInspectorLogger even though it genuinely crossed the wire. Runs outside the inject
+            // lock to avoid holding it during potentially-slow interceptor work; parsing the body we
+            // just built cannot fail, so no try/catch is needed around it the way the receive-side
+            // equivalent needs one around externally-sourced bytes.
+            var injectedMessage = new LspMessage(LspMessageDirection.Send, JObject.Parse(body), DateTimeOffset.Now);
+            await RunInterceptorsAsync(injectedMessage, _sendInterceptors, cancellationToken).ConfigureAwait(false);
+
             return await tcs.Task.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -781,9 +803,31 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// Checks whether <paramref name="body"/> is a JSON-RPC response to one of our injected
     /// requests (identified purely by the <see cref="RequestIdPrefix"/> id, which only
     /// <see cref="SendRequestToServerAsync"/> ever generates — VS's own request ids are always
-    /// plain integers). If so, completes the awaiting <see cref="TaskCompletionSource{T}"/> (when
-    /// one is still registered) and always returns <c>true</c> so the pump skips forwarding the
-    /// frame to VS.
+    /// plain integers). Pure check, no side effects — see <see cref="CompleteCorrelatedResponse"/>
+    /// for actually consuming it. Split out (issue #491) so the caller can run the response
+    /// through <c>_receiveInterceptors</c> for logging in between recognising and consuming it.
+    /// </summary>
+    private static bool TryGetCorrelatedResponseId(JObject body, out string id)
+    {
+        id = string.Empty;
+
+        // A JSON-RPC response has an "id" and either "result" or "error", but no "method".
+        if (body.ContainsKey("method")) return false;
+
+        var idToken = body["id"];
+        var idValue = idToken?.Value<string>();
+        if (idValue is null || !idValue.StartsWith(RequestIdPrefix, StringComparison.Ordinal)) return false;
+
+        id = idValue;
+        return true;
+    }
+
+    /// <summary>
+    /// Completes the awaiting <see cref="TaskCompletionSource{T}"/> for the injected request
+    /// <paramref name="id"/> (when one is still registered) with <paramref name="body"/>'s result.
+    /// Always called once <see cref="TryGetCorrelatedResponseId"/> recognises the response as ours
+    /// — the frame is never forwarded to VS regardless of whether a pending TCS is still around to
+    /// receive it.
     /// </summary>
     /// <remarks>
     /// Issue #401: a response must never be forwarded to VS just because
@@ -791,26 +835,17 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// <c>finally</c> block removes the id from <see cref="_pendingRequests"/> as soon as its
     /// caller's <see cref="CancellationToken"/> fires — e.g. a <see cref="StepCodeLensService"/>
     /// request cancelled mid-reconnect — which can race the server's real response arriving a few
-    /// milliseconds later. Previously that race made this method return <see langword="false"/>
-    /// (nothing left to complete), letting the response fall through to
-    /// <see cref="ForwardToCurrentVsWriterAsync"/> and hand VS's JsonRpc a response to a request it
-    /// never sent: the same <c>RemoteProtocolViolation: A response was received without a request
-    /// having been sent</c> fatal error #395 fixed for VS's own peer-session responses, just
-    /// triggered via this side channel instead. Since the id prefix alone proves the response is
-    /// ours, it is always safe (and now always correct) to consume it here regardless of whether a
-    /// pending TCS is still around to receive it.
+    /// milliseconds later. Previously that race made the caller treat this as "nothing left to
+    /// complete," letting the response fall through to <see cref="ForwardToCurrentVsWriterAsync"/>
+    /// and hand VS's JsonRpc a response to a request it never sent: the same
+    /// <c>RemoteProtocolViolation: A response was received without a request having been sent</c>
+    /// fatal error #395 fixed for VS's own peer-session responses, just triggered via this side
+    /// channel instead. Since the id prefix alone proves the response is ours, it is always safe
+    /// (and correct) to consume it here regardless of whether a pending TCS is still around to
+    /// receive it.
     /// </remarks>
-    private bool TryCompleteCorrelatedResponse(JObject body)
+    private void CompleteCorrelatedResponse(string id, JObject body)
     {
-        // A JSON-RPC response has an "id" and either "result" or "error", but no "method".
-        if (body.ContainsKey("method")) return false;
-
-        var idToken = body["id"];
-        if (idToken is null) return false;
-
-        var id = idToken.Value<string>();
-        if (id is null || !id.StartsWith(RequestIdPrefix, StringComparison.Ordinal)) return false;
-
         if (_pendingRequests.TryRemove(id, out var tcs))
         {
             if (body.ContainsKey("error"))
@@ -829,8 +864,6 @@ internal sealed class LspInterceptingPipe : IDisposable
                 "would be an unmatched response and fatally close the connection (issue #401).",
                 id, RequestIdPrefix);
         }
-
-        return true;
     }
 
     /// <summary>
@@ -854,7 +887,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// True if <paramref name="body"/> is a JSON-RPC <b>response</b> (has <c>id</c>, no
-    /// <c>method</c>). Mirrors <see cref="TryCompleteCorrelatedResponse"/>'s own shape check, for
+    /// <c>method</c>). Mirrors <see cref="TryGetCorrelatedResponseId"/>'s own shape check, for
     /// VS's own (non-<see cref="RequestIdPrefix"/>) request ids.
     /// </summary>
     private static bool TryGetResponseId(JObject body, out string id)

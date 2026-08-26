@@ -95,11 +95,12 @@ internal sealed class GherkinNavigationBarSymbolService
     {
         var name = obj["name"]?.Value<string>() ?? string.Empty;
         var kind = obj["kind"]?.Value<int>() ?? 0;
+        var detail = obj["detail"]?.Value<string>();
         var range = MapRange(obj["range"] as JObject);
         var selectionRange = MapRange(obj["selectionRange"] as JObject);
         var children = MapResult(obj["children"] as JArray);
 
-        return new GherkinSymbolNode(name, kind, range, selectionRange, children);
+        return new GherkinSymbolNode(name, kind, range, selectionRange, children, detail);
     }
 
     private static GherkinSymbolRange MapRange(JObject? range)

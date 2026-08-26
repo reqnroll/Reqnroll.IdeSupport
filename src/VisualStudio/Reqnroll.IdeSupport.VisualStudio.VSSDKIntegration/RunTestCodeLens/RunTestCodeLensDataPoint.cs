@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.TestWindow;
 using Microsoft.VisualStudio.Threading;
+using Reqnroll.IdeSupport.Common.Logging;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
@@ -33,15 +34,17 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
     private readonly ICodeLensCallbackService _callbackService;
     private readonly string _fileUri;
     private readonly int _line;
+    private readonly IIdeSupportLogger _logger;
 
     private IReadOnlyList<TestMethodIdentifier> _cachedMethods = Array.Empty<TestMethodIdentifier>();
 
-    public RunTestCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line)
+    public RunTestCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, IIdeSupportLogger logger)
     {
         Descriptor = descriptor;
         _callbackService = callbackService;
         _fileUri = fileUri;
         _line = line;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -57,18 +60,27 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         IReadOnlyList<RunTestTargetEntry> entries;
         try
         {
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — invoking {RunTestCodeLensCallbackListener.GetTargetsMethod} for {_fileUri} line={_line}");
             entries = await _callbackService
                 .InvokeAsync<IReadOnlyList<RunTestTargetEntry>>(this, RunTestCodeLensCallbackListener.GetTargetsMethod, new object[] { _fileUri }, token)
                 .ConfigureAwait(false);
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — callback returned {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {_fileUri}");
         }
-        catch (Exception) when (!token.IsCancellationRequested)
+        catch (Exception ex) when (!token.IsCancellationRequested)
         {
+            // Previously swallowed with no logging at all — this catch is the only place a failure
+            // in the OOP-to-devenv.exe callback round trip (ServiceHub activation, RPC/serialization
+            // fault, etc.) could ever surface, and losing it here meant the lens rendered forever in
+            // its unresolved/loading state with zero trace anywhere of why (live report: no Details
+            // popup ever appeared on click).
+            _logger.LogException(ex, $"RunTestCodeLensDataPoint: GetDataAsync — callback to {RunTestCodeLensCallbackListener.GetTargetsMethod} failed for {_fileUri} line={_line}");
             entries = Array.Empty<RunTestTargetEntry>();
         }
 
         var onThisLine = entries.Where(e => e.Line == _line).ToList();
         if (onThisLine.Count == 0)
         {
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — no entries matched line={_line} for {_fileUri}; {entries.Count} entries were on other lines.");
             _cachedMethods = Array.Empty<TestMethodIdentifier>();
             return new CodeLensDataPointDescriptor { Description = string.Empty };
         }
@@ -85,8 +97,15 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             .Distinct()
             .ToList();
 
+        // "Scenarios" (plural) for a Scenario Outline — running it runs every Examples: row, not a
+        // single case — "Scenario" for a plain scenario. All entries on one line share the same
+        // IsScenarioOutline value (they come from a single symbol node), so the first is enough.
+        var label = onThisLine[0].IsScenarioOutline ? "▶ Run Scenarios" : "▶ Run Scenario";
+
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}'");
+
         // Pre-fetch/cache now (see this type's remarks) — nothing further to resolve for GetDetailsAsync.
-        return new CodeLensDataPointDescriptor { Description = "Run" };
+        return new CodeLensDataPointDescriptor { Description = label };
     }
 
     /// <inheritdoc />
@@ -103,6 +122,8 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             commands.Add(BuildCommand("Run", TestExplorerCommandIds.RunCommandId, methods));
             commands.Add(BuildCommand("Debug", TestExplorerCommandIds.DebugCommandId, methods));
         }
+
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}");
 
         return Task.FromResult(new CodeLensDetailsDescriptor
         {

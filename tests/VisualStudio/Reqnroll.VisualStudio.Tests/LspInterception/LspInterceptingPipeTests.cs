@@ -1,11 +1,13 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
@@ -22,6 +24,19 @@ namespace Reqnroll.VisualStudio.Tests.LspInterception;
 public class LspInterceptingPipeTests : IAsyncLifetime
 {
     private static readonly TimeSpan ShortTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>Records every message it sees, for asserting an owned-RPC request/response was
+    /// actually run through the interceptor list (issue #491) rather than bypassing it.</summary>
+    private sealed class RecordingInterceptor : ILspMessageInterceptor
+    {
+        public List<LspMessage> Seen { get; } = new();
+
+        public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken)
+        {
+            Seen.Add(message);
+            return Task.FromResult(LspInterceptorResult.PassThrough);
+        }
+    }
 
     private sealed class FakeServerPipe : IDuplexPipe
     {
@@ -92,8 +107,9 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         // Regression coverage for issue #401: SendRequestToServerAsync (used by StepCodeLensService,
         // FindStepUsagesService, etc.) removes its pending-request entry as soon as its caller's
         // CancellationToken fires — e.g. cancelled mid-reconnect, same as the captured repro. If the
-        // server's real response for that id arrives afterward, TryCompleteCorrelatedResponse must
-        // still recognise and drop it purely from the "reqnroll-rpc-" id prefix (proof it's ours),
+        // server's real response for that id arrives afterward, TryGetCorrelatedResponseId/
+        // CompleteCorrelatedResponse must still recognise and drop it purely from the
+        // "reqnroll-rpc-" id prefix (proof it's ours),
         // rather than letting it fall through to VS's JsonRpc — which never sent that request and
         // would treat it as the same fatal "unmatched response" protocol violation #395 fixed for
         // VS's own peer-session responses.
@@ -149,6 +165,40 @@ public class LspInterceptingPipeTests : IAsyncLifetime
 
         var delivered = await ReadFrameAsync(session1.Input, ShortTimeout);
         delivered.Should().Contain("\"id\":1");
+    }
+
+    [Fact]
+    public async Task An_owned_rpc_request_and_its_response_are_both_run_through_the_interceptors()
+    {
+        // Regression coverage for issue #491: a request injected by SendRequestToServerAsync (e.g.
+        // ScenarioTestTargetService's reqnroll/resolveTestTargets) and the response consumed for it
+        // must both reach the interceptor list — that's how LspInspectorLogger sees this traffic —
+        // even though the response is never forwarded on to VS. Before this fix, neither direction
+        // ran through the interceptors at all, so this owned-RPC channel was invisible to the
+        // inspector log regardless of how much traffic crossed it.
+        var sendInterceptor = new RecordingInterceptor();
+        var receiveInterceptor = new RecordingInterceptor();
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, new ILspMessageInterceptor[] { sendInterceptor }, new ILspMessageInterceptor[] { receiveInterceptor },
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        _pipe.CreateFreshVsFacingPipe();
+
+        var requestTask = _pipe.SendRequestToServerAsync("reqnroll/resolveTestTargets", "{}", CancellationToken.None);
+
+        var forwarded = await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        var id = ExtractId(forwarded);
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":{{\"targets\":[]}}}}");
+
+        await requestTask;
+
+        sendInterceptor.Seen.Should().ContainSingle(m =>
+            m.Direction == LspMessageDirection.Send && m.Method == "reqnroll/resolveTestTargets");
+        receiveInterceptor.Seen.Should().ContainSingle(m =>
+            m.Direction == LspMessageDirection.Receive && m.Id!.Value<string>() == id);
     }
 
     // ── Minimal LSP frame read/write helpers (Content-Length: N\r\n\r\nBODY) ──────────────────

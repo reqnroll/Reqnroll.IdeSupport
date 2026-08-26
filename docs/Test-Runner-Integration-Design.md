@@ -196,6 +196,20 @@ Predicting names is the fallback if we later find `.feature.cs` isn't reliably p
 gutter needs to render (e.g., before any build in a fresh clone) — worth revisiting if that turns out
 to matter in practice, but not the starting design.
 
+**Correction (issue #491, 2026-08-26):** "ordinary Roslyn parse" in the trade-off table above
+understates the real cost at scale. `RunTestCodeLensService` calls `reqnroll/resolveTestTargets`
+once per scenario/Outline/Examples-row in a file, and the original implementation re-read and
+re-parsed the same, unchanged `<feature>.feature.cs` from scratch on every single one of those
+calls. For a large stress-corpus feature file (~1,300 rows) this meant ~1,300 sequential Roslyn
+parses of the same file, pegging a CPU core for the file's entire time open. The fix is a shared
+`ICSharpSyntaxTreeCache` (`LSP.Core/Parsing/CSharp/`, see [Architecture §3 item
+4](LSP-IDE-Support-Architecture.md#3-module-architecture)) that both `ScenarioTestTargetResolver`
+and `CSharpAttributeLiteralResolver` (the Rename feature's analogous per-attribute case) now read
+through, so repeated resolutions against the same unchanged file within one logical operation
+reuse the same parse. The "post-build only" trade-off itself is unaffected by this — the cache's
+disk-mode freshness check (last-write-time) is what makes it safe to cache across an actual
+rebuild without a dedicated file watcher.
+
 **"Parse the code-behind" is not one uniform operation, though — it splits into two tiers with very
 different stability, because Reqnroll ships five test-framework providers (xUnit, xUnit.v3, NUnit,
 MSTest, TUnit) with different attribute vocabularies and argument shapes that can also change across
