@@ -1,6 +1,7 @@
 ﻿#nullable disable
 
 using Cucumber.TagExpressions;
+using CucumberExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -29,13 +30,6 @@ public class StepDefinitionFileParser
     private const string AttributeSuffix = "Attribute";
 
     private static readonly ReqnrollTagExpressionParser TagExpressionParser = new();
-
-    /// <summary>
-    /// Matches a Cucumber <c>{paramType}</c> placeholder where the parameter name is a simple
-    /// word identifier. Used to convert Cucumber expressions to regex before matching.
-    /// </summary>
-    private static readonly Regex CucumberParamPattern =
-        new(@"\{(\w+)\}", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // The following four members port Reqnroll.Bindings.StepDefinitionRegexCalculator's
     // method-name-style binding algorithm (see issue #268: an attribute with no expression,
@@ -167,237 +161,61 @@ public class StepDefinitionFileParser
         }
     }
 
+    private static readonly IParameterTypeRegistry CucumberExpressionParameterTypeRegistry = new LspCucumberExpressionParameterTypeRegistry();
+
     /// <summary>
     /// Converts a Reqnroll step-definition expression to a compiled <see cref="Regex"/>. The
-    /// expression may be a plain regex or a Cucumber expression that uses <c>{paramType}</c>
-    /// placeholders. Standard Cucumber parameter types are converted to their canonical regex
-    /// patterns; unknown/custom types (e.g. project-defined step-argument transformations like
-    /// <c>{Verb}</c>) fall back to <c>(.*)</c> so the binding can still match its steps even
-    /// though the precise regex is not statically derivable without a semantic model.
-    /// For plain-regex expressions the substitution is a no-op (no <c>{...}</c> present).
+    /// expression may be a plain regex or a Cucumber Expression that uses <c>{paramType}</c>
+    /// placeholders (and, per the real Cucumber Expression grammar, <c>(optional text)</c> and
+    /// <c>alternative/text</c>).
     /// </summary>
     /// <remarks>
-    /// An expression with no <c>{param}</c> placeholder at all is treated as a plain, already
-    /// regex-ready pattern and passed through unescaped (e.g. <c>"the firs number is (.*)"</c>
-    /// stays a real capturing group) — this is the "plain regex" half of the contract described
-    /// above, and existing bindings rely on it.
+    /// Delegates to the real <c>Cucumber.CucumberExpressions</c> library — the same one
+    /// Reqnroll's own runtime depends on and uses for this exact purpose — via
+    /// <see cref="global::CucumberExpressions.CucumberExpression"/>, rather than hand-rolling the
+    /// grammar here. <see cref="CucumberExpressionDetector"/> (a faithful port of Reqnroll's own
+    /// detector, which lives in the runtime assembly LSP.Core doesn't reference) decides whether
+    /// <paramref name="expression"/> is a Cucumber Expression at all; an expression it classifies
+    /// as a plain regex (e.g. an existing binding written as
+    /// <c>[Given("the number is (\\d+)")]</c>) is anchored and compiled unescaped, keeping its
+    /// capturing group intact instead of being turned into literal parenthesis text. Standard
+    /// Cucumber parameter types are converted using the exact same regex fragments as Reqnroll's
+    /// runtime (see <see cref="LspCucumberExpressionParameterTypeRegistry"/>); unknown/custom
+    /// types (e.g. project-defined step-argument transformations like <c>{Verb}</c>) fall back to
+    /// <c>(.*)</c> so the binding can still match its steps even though the precise regex is not
+    /// statically derivable without a semantic model.
     /// <para/>
-    /// Once at least one placeholder is present, the expression is being authored as a Cucumber
-    /// expression. Besides <c>{param}</c> placeholders, real Cucumber Expression syntax gives
-    /// <c>(text)</c> (optional text) and <c>text1/text2</c> (alternative text, split on <c>/</c>
-    /// within a whitespace-delimited run) special meaning too — see
-    /// <see cref="ParseCucumberExpression"/>. A backslash escapes any of <c>{ } ( ) /</c> (and
-    /// itself) back to a literal character. Every other character, including regex
-    /// metacharacters like <c>$</c> <c>.</c>, is literal text the step author expects to match
-    /// verbatim, so it is <see cref="Regex.Escape(string)"/>-d before being spliced into the
-    /// pattern. Without this, a literal <c>$</c> outside a placeholder — e.g. <c>"the basket
-    /// price should be ${float}"</c> — is interpreted as a regex end-of-string anchor mid-pattern
-    /// instead of a literal dollar sign, making the binding permanently unmatchable instead of
-    /// matching its literal text.
+    /// The real grammar's own validation (e.g. "an alternative may not be empty", "an optional
+    /// may not contain a parameter") can throw for a malformed expression where the old
+    /// hand-rolled version never did; those are caught and surfaced as an unmatchable binding
+    /// (<see langword="null"/> regex, <see cref="ProjectStepDefinitionBinding.IsValid"/> false)
+    /// rather than aborting discovery of every other binding in the file.
+    /// </para>
     /// </remarks>
     private static Regex BuildRegex(string expression)
     {
-        var matches = CucumberParamPattern.Matches(expression);
-        if (matches.Count == 0)
-            return new Regex($"^{expression}$", RegexOptions.CultureInvariant);
-
-        var regexBody = ParseCucumberExpression(expression);
-        return new Regex($"^{regexBody}$", RegexOptions.CultureInvariant);
-    }
-
-    /// <summary>
-    /// Converts a full Cucumber Expression (already known to contain at least one
-    /// <c>{param}</c> placeholder) into a regex body. Splits the expression into
-    /// whitespace-delimited runs at the top level (whitespace inside an unclosed <c>(...)</c> is
-    /// not a split point, so e.g. <c>"the (nice )item(s)"</c> stays one run) and hands each run
-    /// to <see cref="ParseRun"/>, which resolves alternation. Whitespace runs themselves are
-    /// escaped and passed through literally.
-    /// </summary>
-    private static string ParseCucumberExpression(string expression)
-    {
-        var result = new StringBuilder();
-        var i = 0;
-        var n = expression.Length;
-        while (i < n)
+        try
         {
-            if (char.IsWhiteSpace(expression[i]))
-            {
-                var start = i;
-                while (i < n && char.IsWhiteSpace(expression[i]))
-                    i++;
-                result.Append(Regex.Escape(expression.Substring(start, i - start)));
-            }
-            else
-            {
-                var start = i;
-                var depth = 0;
-                while (i < n && (depth > 0 || !char.IsWhiteSpace(expression[i])))
-                {
-                    if (expression[i] == '\\' && i + 1 < n)
-                        i += 2;
-                    else
-                    {
-                        if (expression[i] == '(')
-                            depth++;
-                        else if (expression[i] == ')' && depth > 0)
-                            depth--;
-                        i++;
-                    }
-                }
-                result.Append(ParseRun(expression.Substring(start, i - start)));
-            }
+            if (!CucumberExpressionDetector.IsCucumberExpression(expression))
+                return new Regex(GetWholeTextMatchRegexSource(expression), RegexOptions.CultureInvariant);
+
+            return new CucumberExpression(expression, CucumberExpressionParameterTypeRegistry).Regex;
         }
-        return result.ToString();
-    }
-
-    /// <summary>
-    /// Resolves alternative text (<c>/</c>) within a single whitespace-delimited run. A run
-    /// containing an unescaped, unparenthesized <c>/</c> is Cucumber Expression alternation —
-    /// e.g. <c>cat/dog</c> — and becomes a non-capturing group of its alternatives; a run with
-    /// none is handed to <see cref="ParseText"/> unchanged.
-    /// </summary>
-    private static string ParseRun(string run)
-    {
-        var alternatives = SplitTopLevel(run, '/');
-        if (alternatives.Count == 1)
-            return ParseText(run);
-
-        return "(?:" + string.Join("|", alternatives.Select(ParseText)) + ")";
-    }
-
-    /// <summary>Splits <paramref name="text"/> on unescaped, depth-0 (outside any <c>(...)</c>) occurrences of <paramref name="delimiter"/>.</summary>
-    private static List<string> SplitTopLevel(string text, char delimiter)
-    {
-        var result = new List<string>();
-        var current = new StringBuilder();
-        var depth = 0;
-        var i = 0;
-        while (i < text.Length)
+        catch (Exception)
         {
-            var c = text[i];
-            if (c == '\\' && i + 1 < text.Length)
-            {
-                current.Append(c).Append(text[i + 1]);
-                i += 2;
-                continue;
-            }
-
-            if (c == '(')
-                depth++;
-            else if (c == ')' && depth > 0)
-                depth--;
-
-            if (c == delimiter && depth == 0)
-            {
-                result.Add(current.ToString());
-                current.Clear();
-            }
-            else
-                current.Append(c);
-            i++;
+            return null;
         }
-        result.Add(current.ToString());
-        return result;
     }
 
-    /// <summary>
-    /// Parses a text run (no top-level alternation left to resolve) for <c>{param}</c>
-    /// placeholders and <c>(optional text)</c> groups, escaping everything else so it matches
-    /// only its literal characters. A backslash-escaped <c>{ } ( ) / \</c> is unescaped back to
-    /// its literal character rather than being treated as syntax.
-    /// </summary>
-    private static string ParseText(string text)
+    /// <summary>Anchors <paramref name="regexString"/> at both ends if it isn't already, mirroring Reqnroll's own <c>RegexFactory.GetWholeTextMatchRegexSource</c>.</summary>
+    private static string GetWholeTextMatchRegexSource(string regexString)
     {
-        var result = new StringBuilder();
-        var literal = new StringBuilder();
-        var i = 0;
-
-        void FlushLiteral()
-        {
-            if (literal.Length == 0)
-                return;
-            result.Append(Regex.Escape(literal.ToString()));
-            literal.Clear();
-        }
-
-        while (i < text.Length)
-        {
-            var c = text[i];
-            if (c == '\\' && i + 1 < text.Length)
-            {
-                literal.Append(text[i + 1]);
-                i += 2;
-                continue;
-            }
-
-            if (c == '{')
-            {
-                var close = text.IndexOf('}', i + 1);
-                var name = close > i ? text.Substring(i + 1, close - i - 1) : null;
-                if (name != null && CucumberParamPattern.IsMatch($"{{{name}}}"))
-                {
-                    FlushLiteral();
-                    result.Append(ParamTypePattern(name));
-                    i = close + 1;
-                    continue;
-                }
-            }
-            else if (c == '(')
-            {
-                var close = FindMatchingParen(text, i);
-                if (close > 0)
-                {
-                    FlushLiteral();
-                    result.Append("(?:").Append(ParseText(text.Substring(i + 1, close - i - 1))).Append(")?");
-                    i = close + 1;
-                    continue;
-                }
-            }
-
-            literal.Append(c);
-            i++;
-        }
-
-        FlushLiteral();
-        return result.ToString();
+        if (!regexString.StartsWith("^"))
+            regexString = "^" + regexString;
+        if (!regexString.EndsWith("$"))
+            regexString += "$";
+        return regexString;
     }
-
-    /// <summary>Finds the index of the <c>)</c> matching the <c>(</c> at <paramref name="openIndex"/>, respecting backslash escapes and nesting; -1 if unmatched.</summary>
-    private static int FindMatchingParen(string text, int openIndex)
-    {
-        var depth = 0;
-        for (var i = openIndex; i < text.Length; i++)
-        {
-            if (text[i] == '\\')
-            {
-                i++;
-                continue;
-            }
-
-            if (text[i] == '(')
-                depth++;
-            else if (text[i] == ')')
-            {
-                depth--;
-                if (depth == 0)
-                    return i;
-            }
-        }
-        return -1;
-    }
-
-    private static string ParamTypePattern(string paramTypeName) => paramTypeName switch
-    {
-        "int" or "byte" or "short" or "long" => @"(-?\d+)",
-        "float" or "double" => @"(-?\d*(?:\.\d+)?)",
-        "biginteger" or "bigdecimal" => @"(-?\d+(?:\.\d+)?)",
-        "word" => @"(\w+)",
-        // {string} matches a double- or single-quoted literal (simplified pattern).
-        "string" => @"(""[^""]*""|'[^']*')",
-        // Custom/unknown parameter types (e.g. step-argument transformations): fall back to
-        // (.*) — the same pattern the connector produces for them at runtime.
-        _ => @"(.*)"
-    };
 
     /// <summary>
     /// Derives a matching regex from the method name and parameters for a step-definition

@@ -369,21 +369,35 @@ namespace TestProject
     }
 
     [Theory]
-    [InlineData("Given", @"the number is {int}",         "the number is 42",      @"(-?\d+)")]
-    [InlineData("When",  @"the value is {float}",        "the value is 3.14",     @"(-?\d*(?:\.\d+)?)")]
-    [InlineData("Then",  @"the word is {word}",          "the word is hello",     @"(\w+)")]
+    [InlineData("Given", @"the number is {int}",  "the number is 42")]
+    [InlineData("When",  @"the value is {float}", "the value is 3.14")]
+    [InlineData("Then",  @"the word is {word}",   "the word is hello")]
     public async Task Standard_cucumber_param_types_are_converted_to_regex(
-        string keyword, string expression, string stepText, string expectedGroupPattern)
+        string keyword, string expression, string stepText)
     {
+        // The exact regex fragment for each type is Cucumber.CucumberExpressions' own (the same
+        // library Reqnroll's runtime depends on) rather than something this parser controls, so
+        // only the resulting match behaviour is asserted here.
         var stepDefinitions = await ParseStepDefinitions(
             $@"[{keyword}(""{expression}"")]
                public void Method() {{ }}");
 
         var binding = stepDefinitions.Should().ContainSingle().Subject!;
         binding.IsValid.Should().BeTrue();
-        binding.Regex.ToString().Should().Contain(expectedGroupPattern);
         binding.Regex.IsMatch(stepText).Should().BeTrue(
             $"the converted regex should match the step text '{stepText}'");
+    }
+
+    [Fact]
+    public async Task Word_param_type_does_not_match_across_a_space()
+    {
+        // {word} matches a single non-whitespace run, not an arbitrary phrase.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the word is {word}"")]
+              public void Method(string value) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex!.IsMatch("the word is hello world").Should().BeFalse();
     }
 
     [Fact]
@@ -458,6 +472,22 @@ namespace TestProject
         binding.Regex.ToString().Should().Contain(@"(.*)");
         binding.Regex.IsMatch("the two numbers 'are' added").Should().BeTrue();
         binding.Regex.IsMatch("the two numbers were added").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Malformed_cucumber_expression_yields_an_invalid_binding_instead_of_throwing()
+    {
+        // The real Cucumber Expression grammar's own validation (e.g. "an alternative may not
+        // be empty") can reject input the old hand-rolled parser never did. One malformed
+        // attribute must degrade to an invalid (null-regex) binding rather than throwing and
+        // aborting discovery of every other binding in the file.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""a cat/{int}"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeFalse("an alternative containing only a parameter is invalid Cucumber Expression syntax");
+        binding.Regex.Should().BeNull();
     }
 
     [Theory]
