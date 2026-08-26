@@ -161,7 +161,12 @@ export function registerRunCodeLens(
       }
 
       const cached = resultStore.get(codeLens.documentUri, codeLens.range.start.line);
-      return buildRunLens(codeLens.documentUri, codeLens.range, response?.targets ?? [], cached?.outcome);
+      return buildRunLens(
+        codeLens.documentUri,
+        codeLens.range,
+        response?.targets ?? [],
+        cached?.outcome,
+      );
     },
   };
 

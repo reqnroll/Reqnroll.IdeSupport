@@ -175,8 +175,16 @@ suite('runCodeLens', () => {
       );
 
       assert.strictEqual(lenses?.length, 1);
-      assert.strictEqual(lenses[0].command, undefined, 'the lens must be unresolved until resolveCodeLens runs');
-      assert.strictEqual(sendRequestCalls, 0, 'provideCodeLenses must never call reqnroll/resolveTestTargets itself');
+      assert.strictEqual(
+        lenses[0].command,
+        undefined,
+        'the lens must be unresolved until resolveCodeLens runs',
+      );
+      assert.strictEqual(
+        sendRequestCalls,
+        0,
+        'provideCodeLenses must never call reqnroll/resolveTestTargets itself',
+      );
     });
 
     test('returns an empty array when the document has no symbols', async () => {
@@ -210,9 +218,7 @@ suite('runCodeLens', () => {
   });
 
   suite('resolveCodeLens', () => {
-    async function placeOneLens(
-      provider: vscode.CodeLensProvider,
-    ): Promise<vscode.CodeLens> {
+    async function placeOneLens(provider: vscode.CodeLensProvider): Promise<vscode.CodeLens> {
       const document = { uri: vscode.Uri.parse('file:///F.feature') } as vscode.TextDocument;
       const lenses = await withStubbedExecuteCommand(
         () => Promise.resolve([methodSymbol('S', 1)]),
