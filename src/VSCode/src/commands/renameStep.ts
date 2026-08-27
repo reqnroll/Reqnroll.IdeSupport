@@ -219,6 +219,14 @@ export async function renameStepFromCSharp(
 
   await selectRenameTarget(client, uriStr, chosen.attributeIndex);
 
+  // showInputBox always renders at the top of the editor group — unlike the in-place widget
+  // `.feature` rename gets from editor.action.rename, there's no API to anchor it near the
+  // cursor. Scrolling the binding's line to the top of the viewport first (rather than leaving
+  // it wherever the user's eye already was, often mid-screen) puts the code right next to the
+  // box that's about to appear above it, instead of leaving the two far apart (issue #457 UX
+  // follow-up, confirmed live).
+  editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.AtTop);
+
   const currentStepText = chosen.expression || extractStepTextFromLabel(chosen.label);
   const newStepText = await vscode.window.showInputBox({
     prompt: 'Enter the new step text:',

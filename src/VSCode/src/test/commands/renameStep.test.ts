@@ -383,11 +383,17 @@ suite('renameStep', () => {
   // reqnroll/renameTargets + textDocument/rename directly, mirroring the Visual Studio extension's
   // RenameStepCommand.
   suite('renameStepFromCSharp', () => {
-    function fakeEditor(uri = 'file:///Steps.cs', line = 4, char = 10): vscode.TextEditor {
+    function fakeEditor(
+      uri = 'file:///Steps.cs',
+      line = 4,
+      char = 10,
+      revealRange?: (range: vscode.Range, revealType?: vscode.TextEditorRevealType) => void,
+    ): vscode.TextEditor {
       return {
         document: { uri: vscode.Uri.parse(uri), languageId: 'csharp' },
         selection: { active: new vscode.Position(line, char) },
-      } as vscode.TextEditor;
+        revealRange: revealRange ?? (() => undefined),
+      } as unknown as vscode.TextEditor;
     }
 
     test('shows an info message and sends nothing when there are no targets', async () => {
@@ -473,6 +479,44 @@ suite('renameStep', () => {
       });
       assert.ok(asWorkspaceEditCalledWith, 'the raw rename result should be converted');
       assert.strictEqual(appliedByWorkspace, appliedEdit);
+    });
+
+    test('reveals the binding line at the top of the viewport before prompting (issue #457 UX)', async () => {
+      // showInputBox always renders at the top of the editor group, unlike the in-place widget
+      // used for .feature renames — scrolling the binding's line to the top first keeps the code
+      // next to the box instead of leaving them far apart on screen.
+      let revealedRange: vscode.Range | undefined;
+      let revealedType: vscode.TextEditorRevealType | undefined;
+      let revealedBeforeInputBox = false;
+      const editor = fakeEditor('file:///Steps.cs', 4, 10, (range, revealType) => {
+        revealedRange = range;
+        revealedType = revealType;
+      });
+
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+            });
+          }
+          return Promise.resolve(null);
+        },
+      });
+
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        () => {
+          revealedBeforeInputBox = revealedRange !== undefined;
+          return Promise.resolve(undefined);
+        },
+        () => renameStepFromCSharp(client, editor),
+      );
+
+      assert.ok(revealedRange?.start.isEqual(new vscode.Position(4, 10)));
+      assert.strictEqual(revealedType, vscode.TextEditorRevealType.AtTop);
+      assert.ok(revealedBeforeInputBox, 'the line should be revealed before the input box appears');
     });
 
     test('falls back to the label text when expression is empty (method-name-style binding)', async () => {
