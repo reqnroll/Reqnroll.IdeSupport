@@ -21,4 +21,15 @@ internal static class TestExplorerCommandIds
 
     /// <summary><c>.TestExplorer.DebugTestsFromCodeLens</c>.</summary>
     internal const int DebugCommandId = 899;
+
+    /// <summary>
+    /// <c>.TestExplorer.SyncTestFromCodeLens</c> — reveals/highlights the given test in the Test
+    /// Explorer tool window (decompiled from <c>AbstractTestProvider.AbstractTestDataPoint</c>'s
+    /// <c>SyncTestCommand</c>, issue #504 follow-up). Lets a user jump straight to the native
+    /// pass/fail glyph, run history, and output VS's own <c>TestStatusProvider</c> CodeLens already
+    /// shows on the generated <c>.feature.cs</c> method, without us needing the internal
+    /// <c>ICodeLensTestInformationService</c> ourselves (design doc §6 — that path was rejected as an
+    /// unsupported internal API).
+    /// </summary>
+    internal const int SyncCommandId = 904;
 }

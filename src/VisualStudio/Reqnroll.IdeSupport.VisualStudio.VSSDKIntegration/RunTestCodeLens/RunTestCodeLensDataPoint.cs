@@ -120,6 +120,11 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         {
             commands.Add(BuildCommand("Run", TestExplorerCommandIds.RunCommandId, methods));
             commands.Add(BuildCommand("Debug", TestExplorerCommandIds.DebugCommandId, methods));
+            // Reveals the test in the Test Explorer tool window (issue #504 follow-up) — the
+            // supported way to reach the native pass/fail glyph and run history VS's own
+            // TestStatusProvider CodeLens already shows on the generated .feature.cs method,
+            // without this extension needing the internal ICodeLensTestInformationService itself.
+            commands.Add(BuildCommand("Show in Test Explorer", TestExplorerCommandIds.SyncCommandId, methods));
         }
 
         _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}");

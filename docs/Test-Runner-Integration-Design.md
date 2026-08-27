@@ -485,11 +485,29 @@ single-scenario gutter action are the same code path.
 Substantially de-risked by research below, but each IDE still needs one **live** confirmation before
 implementation — none of this has been run against a real Reqnroll-generated test yet. Status per IDE:
 
+**Visual Studio pass/fail glyph — investigated and decided against (issue #504 follow-up,
+2026-08-27).** The plan below (`ICodeLensTestInformationService`/`GetTestOutcomeAsync`) was decompiled
+in full from `Microsoft.VisualStudio.TestWindow.Internal.dll`/`...CodeLens.dll`, confirming the API
+shape exactly. But unlike `TestMethodIdentifier` (public, already used by the shipped Run/Debug
+delegation — see §5), **`ICodeLensTestInformationService`, `CodeLensTestInformationProxy`,
+`CodeLensTestInformationCallbackService`, and `RemoteTestWindowServiceProvider` are all `internal` to
+that Microsoft assembly** — not part of the public extensibility surface at all. Calling them would
+require reflecting into Microsoft's own private implementation types, with no compile-time contract and
+no deprecation notice if a VS servicing update renames or removes any of it. Chris decided this risk
+isn't worth it just for a pass/fail glyph on the CodeLens label — **decision: don't pursue this.** The
+Run/Debug delegation (§5, already shipped) is unaffected: it only ever needed the public
+`TestMethodIdentifier` type and VS's public `CodeLensDetailPaneCommand` mechanism, so results already
+land correctly in VS's own Test Explorer window when the user clicks Run or Debug — only the CodeLens
+label itself won't mirror pass/fail back. The rest of this section is kept for the record (Rider's
+`SMTestProxy` and VS Code's `dotnet test` stdout channel are unaffected — this internal-API problem is
+VS-specific).
+
 **Visual Studio — API shape confirmed by decompilation; the stack-trace question is now live-tested,
 and the answer is a correction, not a confirmation.** The same `ICodeLensTestInformationService` that
 backs `TestStatusProvider` (§5) is reachable over the identical out-of-process CodeLens ServiceHub
 channel F24 already wired up (`RemoteTestWindowServiceProvider` → `GetServiceStreamAsync` →
-`ICodeLensTestInformationProxy`):
+`ICodeLensTestInformationProxy`) — **but see the correction immediately above: this is an internal,
+unsupported API, and the team decided not to consume it.**
 
 ```csharp
 Task<TestOutcome> GetTestOutcomeAsync(Guid dataPointId, TestMethodIdentifier testMethod, CancellationToken ct);
@@ -624,12 +642,13 @@ info/hint severity, not error severity, to stay visually low-noise against genui
 
 **What still needs a live session, concretely:**
 
-1. **Visual Studio** — the data-shape and stack-trace questions are resolved (above, via a `dotnet
-   test`-level spike, not VS itself). What's left is narrower: launch the Experimental Instance with a
-   prototype CodeLens data point on a `.feature` scenario and confirm `GetServiceProxyAsync`/
-   `GetTestOutcomeAsync`/`GetTestDetailsAsync` actually resolve through the live ServiceHub channel
-   against a real `TestMethodIdentifier` — i.e. that the wiring works, not what the data looks like.
-   Solo-doable, no Chris needed.
+1. ~~**Visual Studio**~~ Resolved (2026-08-27) — **not pursuing the pass/fail glyph.**
+   `ICodeLensTestInformationService`/`GetServiceProxyAsync`/`GetTestOutcomeAsync` are all `internal` to
+   Microsoft's assembly (confirmed by decompilation, see §6 correction above), so consuming them would
+   mean reflecting into unsupported private implementation types with no compatibility guarantee. Run/Debug
+   delegation to Test Explorer (§5) already works via the public `TestMethodIdentifier`/
+   `CodeLensDetailPaneCommand` surface and is unaffected — only the CodeLens label's own pass/fail glyph
+   is dropped. No live-testing session needed for VS.
 2. ~~**VS Code**~~ Resolved — Option 2 decided (own execution via `dotnet test --filter`, no
    `TestController`, no native Testing panel presence), after confirming via `vscode.d.ts` and VS Code's
    own command source that there's no way to delegate to C# Dev Kit's controller and read its result
@@ -659,11 +678,11 @@ info/hint severity, not error severity, to stay visually low-noise against genui
    --filter "FullyQualifiedName=..."` precisely targets a resolved `ScenarioTestTarget`. Chris then
    independently confirmed both findings live in Rider via the devcontainer (real ambiguous-binding
    scenario, same misattribution, same stdout trace, plus the row-test formatted-display-name finding).
-   VS's `ICodeLensTestInformationService`/`TestResultRecord.StandardOutput`, VS Code's directly-shelled
-   `dotnet test` (§5, Option 2), and Rider's Test Runner all consume the same signal. Only a narrow
-   VS-side wiring check (does the ServiceHub channel actually connect from a prototype) and a Rider-side
-   plugin-API-accessor lookup (which exact `SMTestProxy` method exposes the already-proven-present
-   stdout) remain — neither blocks the design.
+   VS Code's directly-shelled `dotnet test` (§5, Option 2) and Rider's Test Runner both consume this
+   signal. VS's `ICodeLensTestInformationService`/`TestResultRecord.StandardOutput` path was decided
+   against (2026-08-27, see §6 correction) — it's an internal, unsupported API — so VS carries no
+   pass/fail glyph via this channel; a Rider-side plugin-API-accessor lookup (which exact `SMTestProxy`
+   method exposes the already-proven-present stdout) remains open but doesn't block the design.
 2a. ~~**VS Code `TestController` vs. own-execution design fork**~~ **Resolved — Option 2, own execution,
    no `TestController` (2026-08-05).** `vscode.tests` exposes no way to read another extension's
    controller results (confirmed against `vscode.d.ts` — an earlier guess that a `tests.testResults`
