@@ -361,7 +361,24 @@ Reqnroll-branded icons (see the issue's own survey — no distinct Gherkin/BDD i
 elsewhere to match), except VS Code (below), which owns its glyph rendering since it isn't going
 through the native Testing UI.
 
-- **VS Code — decided against delegating to C# Dev Kit's `TestController` (Option 2).** Investigated
+- **VS Code — superseded (issue #504, 2026-08-27): now owns a `TestController`, Option 2 retired.**
+  The reasoning below (kept for the record) was sound at the time, but issue #504 confirmed live
+  that C# Dev Kit's own test discovery already places a decoration directly on a Reqnroll-generated
+  method's `.feature`-mapped location — the exact "no way to address a `.feature` line" premise the
+  original Option 2 analysis rested on. Given that, owning a `TestController` (reliable, always
+  present) was judged worth the accepted risk of an occasional duplicate Testing-sidebar entry when
+  C# Dev Kit's separately flaky/async discovery also happens to fire for the same scenario. As-built
+  in `src/VSCode/src/testRunner/reqnrollTestController.ts`: file-level items discovered via
+  `workspace.findFiles`, populated lazily via `vscode.executeDocumentSymbolProvider` (no
+  `reqnroll/resolveTestTargets` calls at tree-build time, preserving issue #495's "resolve on
+  demand" fix), and a `Run`-kind `TestRunProfile` reusing the existing TRX-based `dotnet test`
+  invocation. Pass/fail and the failed-step marker (`TestMessage.location`) are now native Testing
+  API behavior instead of the hand-rolled `TestResultStore`/`ResultDecorationService` this replaces
+  (both deleted). **Debug remains deliberately unimplemented**, same as the CodeLens this supersedes
+  — `VSTEST_HOST_DEBUG` + a debug-adapter attach is a separate, unverified mechanism needing its own
+  spike.
+
+- **(Superseded, kept for the record) VS Code — decided against delegating to C# Dev Kit's `TestController` (Option 2).** Investigated
   whether the CodeLens could invoke the existing .NET/C# Dev Kit testing extension's own run/debug
   machinery directly, mirroring VS's approach (below) — checked against `vscode.d.ts` and VS Code's own
   command source rather than assumed. Two findings closed this off:
