@@ -4,6 +4,7 @@ import {
   LanguageClient,
   Middleware,
   PrepareRenameSignature,
+  WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 
@@ -171,4 +172,71 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
       return next(document, position, token);
     },
   };
+}
+
+/**
+ * Splits a `reqnroll/renameTargets` label of the form `"Given step text"` at the first space,
+ * returning everything after the keyword prefix — the fallback source text for the rename input
+ * box when `RenameTargetItem.expression` is empty (method-name-style bindings, issue #344).
+ * Mirrors `RenameStepLabelParser.ExtractStepTextFromLabel` in the Visual Studio extension.
+ */
+export function extractStepTextFromLabel(label: string): string {
+  const spaceIndex = label.indexOf(' ');
+  const prefix = spaceIndex >= 0 ? label.slice(0, spaceIndex + 1) : '';
+  return label.length > prefix.length ? label.slice(prefix.length) : label;
+}
+
+/**
+ * Runs the Step Rename refactoring from a `.cs` binding attribute (issue #457).
+ *
+ * VS Code's built-in rename UI can't be reused here the way it is for `.feature` files: the
+ * language client's `documentSelector` deliberately excludes `csharp` (its `.cs` sync is driven
+ * manually — see `manualDocumentSync.ts`), so `vscode-languageclient` never registers a rename
+ * provider for that language, and `editor.action.rename` would have nothing to invoke. Instead
+ * this mirrors the Visual Studio extension's `RenameStepCommand`/`RenameStepService`: query
+ * `reqnroll/renameTargets`, disambiguate via `QuickPick` when more than one binding sits at the
+ * cursor (multiple `[Given]`/`[When]`/`[Then]` attributes on the same method), prompt for the new
+ * step text with a plain input box pre-filled with the current expression, then send
+ * `textDocument/rename` directly and apply the resulting `WorkspaceEdit` ourselves.
+ */
+export async function renameStepFromCSharp(
+  client: LanguageClient,
+  editor: vscode.TextEditor,
+): Promise<void> {
+  const uriStr = editor.document.uri.toString();
+  const position = editor.selection.active;
+
+  const targets = await getRenameTargets(client, uriStr, position);
+  if (targets.length === 0) {
+    void vscode.window.showInformationMessage(
+      'Reqnroll: No step definition found to rename at this position.',
+    );
+    return;
+  }
+
+  const chosen = targets.length === 1 ? targets[0] : await pickRenameTarget(targets);
+  if (!chosen) return;
+
+  await selectRenameTarget(client, uriStr, chosen.attributeIndex);
+
+  const currentStepText = chosen.expression || extractStepTextFromLabel(chosen.label);
+  const newStepText = await vscode.window.showInputBox({
+    prompt: 'Enter the new step text:',
+    value: currentStepText,
+  });
+  if (!newStepText) return;
+
+  const result = await client.sendRequest<LspWorkspaceEdit | null>('textDocument/rename', {
+    textDocument: { uri: uriStr },
+    position: { line: position.line, character: position.character },
+    newName: newStepText,
+  });
+
+  if (!result) {
+    void vscode.window.showErrorMessage('Reqnroll: Rename failed.');
+    return;
+  }
+
+  const edit = await client.protocol2CodeConverter.asWorkspaceEdit(result);
+  await vscode.workspace.applyEdit(edit);
 }
