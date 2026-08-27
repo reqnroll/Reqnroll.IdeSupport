@@ -29,14 +29,3 @@ export function getCodeLensRefreshEvent(
   }
   return sharedEmitter.event;
 }
-
-/**
- * Fires the shared `onDidChangeCodeLenses` event directly, for a purely client-side reason to
- * refresh lenses (e.g. `runTest.ts` updating a CodeLens title after a local `dotnet test` run
- * completes — there's no server-side state change to trigger the usual
- * `workspace/codeLens/refresh` push for that). No-op if no provider has registered yet (nothing
- * to refresh).
- */
-export function fireCodeLensRefresh(): void {
-  sharedEmitter?.fire();
-}

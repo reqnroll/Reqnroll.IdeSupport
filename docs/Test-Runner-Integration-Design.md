@@ -18,6 +18,16 @@
 > methods, since VS Code's Testing API has no way to delegate execution to another extension's
 > controller and read its result back (confirmed against `vscode.d.ts` and VS Code's own command source
 > — see §5).
+>
+> **VS Code — final status (issue #504, 2026-08-27): no run mechanism of its own.** The full arc: shipped
+> as Option 2 above → migrated to an owned `TestController` when #504 showed C# Dev Kit's discovery
+> already addresses `.feature` locations → reconsidered and fully reverted (this update) once live use
+> showed the `TestController` wasn't adding value C# Dev Kit's own gutter/Test Explorer integration
+> doesn't already provide. VS Code's Reqnroll extension now has **no Run/Debug/CodeLens/TestController
+> for scenarios at all** — entirely deferred to C# Dev Kit, including its known discovery flakiness
+> (§6's live-testing note on this being unreliable across a VS Code relaunch stands, but is accepted as
+> C# Dev Kit's own problem to fix, not this extension's to work around). VS and Rider are unaffected by
+> this — see their own sections in §5/§6.
 
 ---
 
@@ -360,6 +370,12 @@ All three reuse each platform's own run/debug/pass/fail glyph set rather than in
 Reqnroll-branded icons (see the issue's own survey — no distinct Gherkin/BDD icon convention exists
 elsewhere to match), except VS Code (below), which owns its glyph rendering since it isn't going
 through the native Testing UI.
+
+> **VS Code note: historical record only, not current.** Everything below in this VS Code bullet
+> (Option 2, the CodeLens, the analysis that led to it) describes what was actually shipped and later
+> removed. See the top-of-document status block ("VS Code — final status") for where this landed: no
+> run mechanism of VS Code's own at all, fully deferred to C# Dev Kit. Kept here because the
+> `vscode.tests` API research is still accurate and would need re-doing if this is ever revisited.
 
 - **VS Code — decided against delegating to C# Dev Kit's `TestController` (Option 2).** Investigated
   whether the CodeLens could invoke the existing .NET/C# Dev Kit testing extension's own run/debug
