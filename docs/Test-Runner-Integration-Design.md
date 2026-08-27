@@ -378,6 +378,29 @@ through the native Testing UI.
   — `VSTEST_HOST_DEBUG` + a debug-adapter attach is a separate, unverified mechanism needing its own
   spike.
 
+  **Live-testing follow-up (2026-08-27), three gaps found against C# Dev Kit's own test items:**
+  1. **Output pane — fixed.** VS Code's Test Results "Output" tab doesn't populate itself; it only
+     ever shows what the extension explicitly streams via `TestRun.appendOutput()`, which nothing
+     called. Fixed: `appendRunOutput` streams every `TrxUnitTestResult`'s captured stdout (Reqnroll's
+     step trace, §6) for both passed and failed runs, CRLF-normalized as the Output tab (a
+     terminal-style view) requires.
+  2. **Scenario Outline shows as one row, not a per-row tree — deferred, not fixed.** C# Dev Kit's
+     own discovery gives each generated parameterized-test row its own child node; ours doesn't,
+     because the LSP server's `Examples` document-symbol node has no row-level children at all
+     (`GherkinDocumentSymbolService.BuildExamplesSymbol` returns `Children: Array.Empty<...>()`) —
+     there's nothing on the wire today to build sub-items from. Two paths forward, neither taken yet:
+     add per-row child symbols server-side (correct fix, touches the LSP protocol), or call
+     `reqnroll/resolveTestTargets` per Outline at tree-build time (reintroduces the per-scenario RPC
+     cost issue #495 eliminated, just scoped to Outlines). Chris deferred this — the Outline still
+     runs correctly (every row executes), it just doesn't show the breakdown in the tree.
+  3. **Intermittent "DLL locked by another process" build failures — no code change needed.** Live
+     testing showed MSBuild's own output already indicates it's retrying the copy internally; the
+     class of failure is a known transient collision with another process (most likely C# Dev Kit's
+     own background OmniSharp build) holding the output DLL, not something specific to this
+     extension's invocation. The Output-pane fix above (item 1) also means a real failure's MSBuild
+     error text is now visible to the user going forward, where it previously only reached
+     `console.error`.
+
 - **(Superseded, kept for the record) VS Code — decided against delegating to C# Dev Kit's `TestController` (Option 2).** Investigated
   whether the CodeLens could invoke the existing .NET/C# Dev Kit testing extension's own run/debug
   machinery directly, mirroring VS's approach (below) — checked against `vscode.d.ts` and VS Code's own

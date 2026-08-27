@@ -207,6 +207,7 @@ suite('reqnrollTestController', () => {
       readonly failed: Array<{ item: vscode.TestItem; message: vscode.TestMessage }>;
       readonly errored: Array<{ item: vscode.TestItem; message: vscode.TestMessage }>;
       readonly skipped: vscode.TestItem[];
+      readonly output: string[];
       ended: boolean;
     }
 
@@ -218,6 +219,7 @@ suite('reqnrollTestController', () => {
         failed: [],
         errored: [],
         skipped: [],
+        output: [],
         ended: false,
       };
       const fakeRun = {
@@ -229,6 +231,7 @@ suite('reqnrollTestController', () => {
         errored: (item: vscode.TestItem, message: vscode.TestMessage) =>
           recorded.errored.push({ item, message }),
         skipped: (item: vscode.TestItem) => recorded.skipped.push(item),
+        appendOutput: (text: string) => recorded.output.push(text),
         end: () => {
           recorded.ended = true;
         },
@@ -269,6 +272,7 @@ suite('reqnrollTestController', () => {
         assert.strictEqual(recorded.passed[0], item);
         assert.strictEqual(recorded.failed.length, 0);
         assert.ok(recorded.ended);
+        assert.deepStrictEqual(recorded.output, ['done']);
       } finally {
         controller.dispose();
       }
@@ -301,6 +305,8 @@ suite('reqnrollTestController', () => {
         // parseStepTrace's detail captures everything after "error:", including the duration —
         // matches trxParser.test.ts's own expectations for the same stdout shape.
         assert.strictEqual(recorded.failed[0].message.message, 'boom (0.0s)');
+        // appendOutput needs \r\n line endings (Test Results is a terminal-style output view).
+        assert.strictEqual(recorded.output[0], stdOut.replace(/\n/g, '\r\n'));
       } finally {
         controller.dispose();
       }

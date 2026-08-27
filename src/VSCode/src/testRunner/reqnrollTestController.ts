@@ -6,7 +6,7 @@ import { ReqnrollMethods } from '../lsp/lspMethods';
 import { ResolveTestTargetsResponse, ScenarioTestTargetDto } from './scenarioTestTarget';
 import { runDotnetTest } from './dotnetTestRunner';
 import { buildTestFilter } from './testFilterBuilder';
-import { findFirstFailure, parseStepTrace } from './trxParser';
+import { findFirstFailure, parseStepTrace, TrxUnitTestResult } from './trxParser';
 import { findStepLine } from './stepLocator';
 
 export const REQNROLL_TEST_CONTROLLER_ID = 'reqnrollScenarios';
@@ -208,6 +208,26 @@ async function collectLeafItems(
   return leaves;
 }
 
+/**
+ * Streams captured stdout to the Test Results "Output" tab (issue #504 follow-up — VS Code doesn't
+ * populate that tab on its own; it renders exactly what the extension pushes via `appendOutput`,
+ * same as a real terminal, hence the required `\r\n` line endings). Row-tests results (multiple
+ * `TrxUnitTestResult` entries under one scenario item) are each labeled by test name so a mixed
+ * pass/fail Outline run doesn't read as one undifferentiated blob.
+ */
+function appendRunOutput(
+  run: vscode.TestRun,
+  item: vscode.TestItem,
+  results: readonly TrxUnitTestResult[],
+): void {
+  const text = results
+    .map((r) => (results.length > 1 ? `${r.testName}\n${r.stdOut}` : r.stdOut))
+    .filter((block) => block.length > 0)
+    .join('\n\n')
+    .replace(/\r?\n/g, '\r\n');
+  if (text.length > 0) run.appendOutput(text, undefined, item);
+}
+
 function toLspRange(range: vscode.Range) {
   return {
     start: { line: range.start.line, character: range.start.character },
@@ -274,6 +294,11 @@ async function runOneScenario(
     run.errored(item, new vscode.TestMessage('Reqnroll: dotnet test ran but produced no results for this filter.'));
     return;
   }
+
+  // VS Code's Test Results "Output" tab shows nothing unless the extension explicitly streams it
+  // here — unlike C# Dev Kit's own runner, which does this for its own test items. Reqnroll's step
+  // trace (§6) is exactly what a user expects to see in that pane.
+  appendRunOutput(run, item, runResult.results);
 
   const failingResult = runResult.results.find((r) => r.outcome === 'Failed');
   if (!failingResult) {
