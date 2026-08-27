@@ -4,8 +4,10 @@ import { LanguageClient } from 'vscode-languageclient/node';
 import {
   collapseActiveSelectionForFeatureStepRename,
   createRenameMiddleware,
+  extractStepTextFromLabel,
   getRenameTargets,
   pickRenameTarget,
+  renameStepFromCSharp,
   selectRenameTarget,
 } from '../../commands/renameStep';
 import { ReqnrollMethods } from '../../lsp/lspMethods';
@@ -14,11 +16,32 @@ import { ReqnrollMethods } from '../../lsp/lspMethods';
 function fakeClient(overrides: {
   sendRequest?: (method: string, params: unknown) => Promise<unknown>;
   sendNotification?: (method: string, params: unknown) => Promise<void>;
+  asWorkspaceEdit?: (edit: unknown) => Promise<vscode.WorkspaceEdit>;
 }): LanguageClient {
   return {
     sendRequest: overrides.sendRequest ?? (() => Promise.resolve(null)),
     sendNotification: overrides.sendNotification ?? (() => Promise.resolve(undefined)),
+    protocol2CodeConverter: {
+      asWorkspaceEdit:
+        overrides.asWorkspaceEdit ?? (() => Promise.resolve(new vscode.WorkspaceEdit())),
+    },
   } as unknown as LanguageClient;
+}
+
+/** Stubs a VS Code API function for the duration of `fn`, restoring the original afterwards. */
+async function withStub<TNamespace extends object, TKey extends keyof TNamespace, TResult>(
+  namespace: TNamespace,
+  key: TKey,
+  stub: TNamespace[TKey],
+  fn: () => Promise<TResult>,
+): Promise<TResult> {
+  const original = namespace[key];
+  namespace[key] = stub;
+  try {
+    return await fn();
+  } finally {
+    namespace[key] = original;
+  }
 }
 
 suite('renameStep', () => {
@@ -336,5 +359,282 @@ suite('renameStep', () => {
         }
       },
     );
+  });
+
+  suite('extractStepTextFromLabel', () => {
+    test('strips the keyword prefix up to the first space', () => {
+      assert.strictEqual(
+        extractStepTextFromLabel('Given the first number is {int}'),
+        'the first number is {int}',
+      );
+    });
+
+    test('returns the label unchanged when there is no space', () => {
+      assert.strictEqual(extractStepTextFromLabel('Given'), 'Given');
+    });
+
+    test('returns an empty string unchanged', () => {
+      assert.strictEqual(extractStepTextFromLabel(''), '');
+    });
+  });
+
+  // Issue #457: the built-in rename UI can't be reused from a .cs binding attribute (the language
+  // client's documentSelector excludes csharp), so renameStepFromCSharp drives
+  // reqnroll/renameTargets + textDocument/rename directly, mirroring the Visual Studio extension's
+  // RenameStepCommand.
+  suite('renameStepFromCSharp', () => {
+    function fakeEditor(uri = 'file:///Steps.cs', line = 4, char = 10): vscode.TextEditor {
+      return {
+        document: { uri: vscode.Uri.parse(uri), languageId: 'csharp' },
+        selection: { active: new vscode.Position(line, char) },
+      } as vscode.TextEditor;
+    }
+
+    test('shows an info message and sends nothing when there are no targets', async () => {
+      const client = fakeClient({ sendRequest: () => Promise.resolve({ targets: [] }) });
+      let shownMessage: string | undefined;
+
+      await withStub(
+        vscode.window,
+        'showInformationMessage',
+        (message: string) => {
+          shownMessage = message;
+          return Promise.resolve(undefined);
+        },
+        () => renameStepFromCSharp(client, fakeEditor()),
+      );
+
+      assert.ok(shownMessage?.includes('No step definition found'));
+    });
+
+    test('single target: skips the picker, prompts with its expression, sends rename, applies the edit', async () => {
+      let selectTargetParams: unknown;
+      let renameParams: unknown;
+      let inputBoxOptions: vscode.InputBoxOptions | undefined;
+      let asWorkspaceEditCalledWith: unknown;
+      let appliedEdit: vscode.WorkspaceEdit | undefined;
+
+      const client = fakeClient({
+        sendRequest: (method: string, params: unknown) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [
+                { label: 'Given a first number', expression: 'a first number', attributeIndex: 0 },
+              ],
+            });
+          }
+          if (method === 'textDocument/rename') {
+            renameParams = params;
+            return Promise.resolve({ changes: {} });
+          }
+          return Promise.resolve(null);
+        },
+        sendNotification: (_method, params) => {
+          selectTargetParams = params;
+          return Promise.resolve();
+        },
+        asWorkspaceEdit: (edit: unknown) => {
+          asWorkspaceEditCalledWith = edit;
+          appliedEdit = new vscode.WorkspaceEdit();
+          return Promise.resolve(appliedEdit);
+        },
+      });
+
+      let appliedByWorkspace: vscode.WorkspaceEdit | undefined;
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        ((options: vscode.InputBoxOptions) => {
+          inputBoxOptions = options;
+          return Promise.resolve('a whole number');
+        }) as typeof vscode.window.showInputBox,
+        () =>
+          withStub(
+            vscode.workspace,
+            'applyEdit',
+            (edit: vscode.WorkspaceEdit) => {
+              appliedByWorkspace = edit;
+              return Promise.resolve(true);
+            },
+            () => renameStepFromCSharp(client, fakeEditor('file:///Steps.cs', 4, 10)),
+          ),
+      );
+
+      assert.deepStrictEqual(selectTargetParams, {
+        uri: 'file:///Steps.cs',
+        version: 0,
+        attributeIndex: 0,
+      });
+      assert.strictEqual(inputBoxOptions?.value, 'a first number');
+      assert.deepStrictEqual(renameParams, {
+        textDocument: { uri: 'file:///Steps.cs' },
+        position: { line: 4, character: 10 },
+        newName: 'a whole number',
+      });
+      assert.ok(asWorkspaceEditCalledWith, 'the raw rename result should be converted');
+      assert.strictEqual(appliedByWorkspace, appliedEdit);
+    });
+
+    test('falls back to the label text when expression is empty (method-name-style binding)', async () => {
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a first number', expression: '', attributeIndex: 0 }],
+            });
+          }
+          return Promise.resolve(null);
+        },
+      });
+
+      let inputBoxOptions: vscode.InputBoxOptions | undefined;
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        ((options: vscode.InputBoxOptions) => {
+          inputBoxOptions = options;
+          return Promise.resolve(undefined);
+        }) as typeof vscode.window.showInputBox,
+        () => renameStepFromCSharp(client, fakeEditor()),
+      );
+
+      assert.strictEqual(inputBoxOptions?.value, 'a first number');
+    });
+
+    test('multiple targets: uses the QuickPick and sends the chosen attributeIndex', async () => {
+      let selectTargetParams: unknown;
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [
+                { label: 'Given a', expression: 'a', attributeIndex: 0 },
+                { label: 'Given b', expression: 'b', attributeIndex: 1 },
+              ],
+            });
+          }
+          return Promise.resolve(null);
+        },
+        sendNotification: (_method, params) => {
+          selectTargetParams = params;
+          return Promise.resolve();
+        },
+      });
+
+      await withStub(
+        vscode.window,
+        'showQuickPick',
+        ((items: readonly { label: string; target: unknown }[]) =>
+          Promise.resolve(items[1])) as unknown as typeof vscode.window.showQuickPick,
+        () =>
+          withStub(
+            vscode.window,
+            'showInputBox',
+            () => Promise.resolve(undefined),
+            () => renameStepFromCSharp(client, fakeEditor()),
+          ),
+      );
+
+      assert.deepStrictEqual(selectTargetParams, {
+        uri: 'file:///Steps.cs',
+        version: 0,
+        attributeIndex: 1,
+      });
+    });
+
+    test('multiple targets: does nothing when the picker is dismissed', async () => {
+      let renameSent = false;
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [
+                { label: 'Given a', expression: 'a', attributeIndex: 0 },
+                { label: 'Given b', expression: 'b', attributeIndex: 1 },
+              ],
+            });
+          }
+          if (method === 'textDocument/rename') renameSent = true;
+          return Promise.resolve(null);
+        },
+      });
+
+      await withStub(
+        vscode.window,
+        'showQuickPick',
+        () => Promise.resolve(undefined),
+        () => renameStepFromCSharp(client, fakeEditor()),
+      );
+
+      assert.strictEqual(renameSent, false, 'textDocument/rename should not be sent');
+    });
+
+    test('does nothing when the input box is cancelled', async () => {
+      let renameSent = false;
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+            });
+          }
+          if (method === 'textDocument/rename') renameSent = true;
+          return Promise.resolve(null);
+        },
+      });
+
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        () => Promise.resolve(undefined),
+        () => renameStepFromCSharp(client, fakeEditor()),
+      );
+
+      assert.strictEqual(renameSent, false, 'textDocument/rename should not be sent');
+    });
+
+    test('shows an error message and applies nothing when the server returns no edit', async () => {
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+            });
+          }
+          if (method === 'textDocument/rename') return Promise.resolve(null);
+          return Promise.resolve(null);
+        },
+      });
+
+      let shownError: string | undefined;
+      let applyEditCalled = false;
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        () => Promise.resolve('a new name'),
+        () =>
+          withStub(
+            vscode.window,
+            'showErrorMessage',
+            (message: string) => {
+              shownError = message;
+              return Promise.resolve(undefined);
+            },
+            () =>
+              withStub(
+                vscode.workspace,
+                'applyEdit',
+                () => {
+                  applyEditCalled = true;
+                  return Promise.resolve(true);
+                },
+                () => renameStepFromCSharp(client, fakeEditor()),
+              ),
+          ),
+      );
+
+      assert.ok(shownError?.includes('Rename failed'));
+      assert.strictEqual(applyEditCalled, false);
+    });
   });
 });

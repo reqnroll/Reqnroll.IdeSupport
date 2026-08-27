@@ -25,6 +25,7 @@ import {
 import {
   collapseActiveSelectionForFeatureStepRename,
   createRenameMiddleware,
+  renameStepFromCSharp,
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
@@ -257,11 +258,25 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       await vscode.commands.executeCommand('editor.action.quickFix');
     }),
 
-    // Step Rename refactoring (delegates to VS Code's native rename; server handles textDocument/rename).
-    // collapseActiveSelectionForFeatureStepRename() must run BEFORE editor.action.rename starts —
-    // see its doc comment (issue #456): mutating the selection while that command already has an
-    // in-flight prepareRename request cancels the rename outright for parameterized steps.
+    // Step Rename refactoring. For .cs files there is no rename provider registered —
+    // documentSelector deliberately excludes csharp (see manualDocumentSync.ts) — so
+    // renameStepFromCSharp drives the reqnroll/renameTargets + textDocument/rename flow directly
+    // (issue #457), mirroring the Visual Studio extension's RenameStepCommand. For .feature files
+    // this delegates to VS Code's native rename; collapseActiveSelectionForFeatureStepRename()
+    // must run BEFORE editor.action.rename starts — see its doc comment (issue #456): mutating
+    // the selection while that command already has an in-flight prepareRename request cancels
+    // the rename outright for parameterized steps.
     vscode.commands.registerCommand('reqnroll.renameStep', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor?.document.languageId === 'csharp') {
+        if (!client) {
+          notReady('Rename Step')();
+          return;
+        }
+        await renameStepFromCSharp(client, editor);
+        return;
+      }
+
       collapseActiveSelectionForFeatureStepRename();
       await vscode.commands.executeCommand('editor.action.rename');
     }),
