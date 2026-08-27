@@ -96,6 +96,27 @@ suite('runTest', () => {
       assert.ok(messages.some((m) => m.includes('failed to run')));
     });
 
+    test('shows the specific dotnet-not-found message when the CLI could not be resolved', async () => {
+      const projectFile = vscode.Uri.parse('file:///workspace/Foo.csproj').fsPath;
+      const projectManager = fakeProjectManager([projectFile]);
+      const resultStore = new TestResultStore();
+      const decorationService = {
+        applyResult: () => undefined,
+      } as unknown as ResultDecorationService;
+
+      const [, messages] = await withStubbedErrorMessage(() =>
+        doRunTest(
+          projectManager,
+          resultStore,
+          decorationService,
+          argsFor('file:///workspace/Foo.feature', [target()]),
+          () => Promise.resolve({ error: "the dotnet CLI was not found on PATH" }),
+        ),
+      );
+
+      assert.ok(messages.some((m) => m.includes('was not found on PATH')));
+    });
+
     test('updates the result store and applies decorations on a passing run', async () => {
       const projectFile = vscode.Uri.parse('file:///workspace/Foo.csproj').fsPath;
       const projectManager = fakeProjectManager([projectFile]);

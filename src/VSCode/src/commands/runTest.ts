@@ -49,6 +49,11 @@ export async function doRunTest(
     return;
   }
 
+  if ('error' in runResult) {
+    void vscode.window.showErrorMessage(`Reqnroll: ${runResult.error}`);
+    return;
+  }
+
   if (runResult.results.length === 0) {
     void vscode.window.showWarningMessage(
       'Reqnroll: dotnet test ran but produced no results for this filter.',
