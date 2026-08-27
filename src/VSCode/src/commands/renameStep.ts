@@ -83,8 +83,9 @@ export function selectRenameTarget(
 }
 
 /**
- * Collapses an active text selection to a plain cursor before a `.feature` step rename is
- * delegated to VS Code's built-in rename UI (issue #456).
+ * Collapses the active editor's text selection to a plain cursor before a `.feature` step rename
+ * is invoked (issue #456). Must run BEFORE `editor.action.rename` starts — see the call site in
+ * `extension.ts`'s `reqnroll.renameStep` command, not inside the `prepareRename` middleware below.
  *
  * For a `.feature`-triggered rename, `StepRenameHandler.HandlePrepareRenameAsync` seeds the
  * rename box with the binding's ABSTRACT Cucumber expression (e.g.
@@ -104,21 +105,27 @@ export function selectRenameTarget(
  *
  * Rather than changing what `Placeholder` contains (which would fix the highlight at the cost of
  * exposing raw parameter values in the common, already-correct no-selection case — see the design
- * discussion on issue #456), collapse the pre-existing selection to `position` right before
- * delegating, so VS Code takes its own safe "no selection" path for a `.feature` step specifically.
- * A no-op for `.cs` files (and for a `.feature` file with no active selection), where the
+ * discussion on issue #456), collapse the pre-existing selection to the cursor right before
+ * `editor.action.rename` runs, so VS Code takes its own safe "no selection" path for a `.feature`
+ * step specifically. A no-op for `.cs` files (and when there's no active selection), where the
  * preserved-selection behavior is already correct.
+ *
+ * This MUST happen before VS Code's rename command starts, not from inside `prepareRename`
+ * middleware — verified live, mutating `editor.selection` while that command has an in-flight
+ * `textDocument/prepareRename` request fires a selection-change event that VS Code treats as "the
+ * user moved the cursor, cancel this rename," regardless of whether the mutation happens before or
+ * after the request resolves. Simple (non-parameterized) steps can race past this — their
+ * round-trip is fast enough that the command isn't listening for cancellation yet, or has already
+ * finished — but parameterized steps, whose server-side matching takes longer, reliably lose the
+ * race: the rename widget never opens at all. Collapsing the selection here, before
+ * `editor.action.rename` is even invoked, avoids ever mutating the selection while that command is
+ * active.
  */
-export function collapseSelectionForFeatureStepRename(
-  document: vscode.TextDocument,
-  position: vscode.Position,
-): void {
-  if (document.languageId !== 'gherkin') return;
-
+export function collapseActiveSelectionForFeatureStepRename(): void {
   const editor = vscode.window.activeTextEditor;
-  if (editor?.document !== document || editor.selection.isEmpty) return;
+  if (editor?.document.languageId !== 'gherkin' || editor.selection.isEmpty) return;
 
-  editor.selection = new vscode.Selection(position, position);
+  editor.selection = new vscode.Selection(editor.selection.active, editor.selection.active);
 }
 
 /**
@@ -135,10 +142,6 @@ export function collapseSelectionForFeatureStepRename(
  *
  * Returning `undefined` when the user dismisses the picker suppresses the rename, matching
  * `prepareRename` returning `null` elsewhere in this handler.
- *
- * Also collapses an active selection before delegating to `next` for a `.feature` step, working
- * around a VS Code rename-widget quirk (issue #456) — see
- * {@link collapseSelectionForFeatureStepRename}.
  *
  * `getClient` is a lazy accessor rather than a direct `LanguageClient` because this middleware
  * must be supplied to `LanguageClientOptions` before the `LanguageClient` itself is constructed
@@ -165,20 +168,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
         await selectRenameTarget(client, document.uri.toString(), chosen.attributeIndex);
       }
 
-      const result = await next(document, position, token);
-
-      // Collapse the selection only after the LSP round-trip has resolved: mutating
-      // editor.selection *before* next() fires a selection-change event that VS Code's rename
-      // command treats as "the user moved the cursor, cancel this request" (verified live —
-      // #456's fix originally collapsed the selection up front and that made rename silently
-      // do nothing for parameterized steps, whose extra server-side matching work gave the
-      // cancellation time to land before the request completed; simple steps finished fast
-      // enough to race past it). Collapsing afterwards still lands before VS Code opens the
-      // rename widget (that only happens once this function returns), so the fix for #456 still
-      // takes effect.
-      collapseSelectionForFeatureStepRename(document, position);
-
-      return result;
+      return next(document, position, token);
     },
   };
 }
