@@ -66,9 +66,12 @@ public class CSharpSyntaxTreeCacheTests : IDisposable
 
         var first = sut.GetOrParseFromDisk(path, _fileSystem);
 
-        // Ensure a distinct last-write-time even on filesystems with coarse mtime resolution.
-        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(2));
+        // Write the new content first, then bump the mtime -- File.WriteAllText itself sets the
+        // file's last-write-time to the real current time as part of the write, so setting it
+        // beforehand (as this test used to) gets silently undone by the write that follows it,
+        // leaving no guaranteed distinct mtime on filesystems with coarse resolution.
         File.WriteAllText(path, "public class Steps { public void Second() { } }");
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(2));
 
         var second = sut.GetOrParseFromDisk(path, _fileSystem);
 
