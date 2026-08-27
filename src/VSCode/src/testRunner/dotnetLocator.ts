@@ -20,7 +20,9 @@ export function resolveDotnetExecutable(): string {
     if (fs.existsSync(candidate)) return candidate;
   }
 
-  const wellKnown = wellKnownInstallPaths(executableName).find((candidate) => fs.existsSync(candidate));
+  const wellKnown = wellKnownInstallPaths(executableName).find((candidate) =>
+    fs.existsSync(candidate),
+  );
   if (wellKnown) return wellKnown;
 
   return 'dotnet';

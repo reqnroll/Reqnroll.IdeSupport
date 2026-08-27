@@ -110,7 +110,7 @@ suite('runTest', () => {
           resultStore,
           decorationService,
           argsFor('file:///workspace/Foo.feature', [target()]),
-          () => Promise.resolve({ error: "the dotnet CLI was not found on PATH" }),
+          () => Promise.resolve({ error: 'the dotnet CLI was not found on PATH' }),
         ),
       );
 
