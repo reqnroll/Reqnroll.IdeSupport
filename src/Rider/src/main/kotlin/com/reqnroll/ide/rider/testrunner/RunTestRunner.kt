@@ -51,10 +51,13 @@ object RunTestRunner {
                     return
                 }
 
-                val results = runDotnetTest(runnableProject.projectFilePath, filter)
-                if (results == null) {
-                    notifyError(project, "dotnet test failed to run for ${runnableProject.projectFilePath}.")
-                    return
+                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter)
+                val results = when (testOutcome) {
+                    is DotnetTestOutcome.Failure -> {
+                        notifyError(project, testOutcome.message)
+                        return
+                    }
+                    is DotnetTestOutcome.Success -> testOutcome.results
                 }
 
                 val outcome = if (results.any { it.outcome == "Failed" }) RunOutcome.FAILED else RunOutcome.PASSED
@@ -100,15 +103,21 @@ object RunTestRunner {
             .distinct()
             .joinToString("|") { "FullyQualifiedName=$it" }
 
-    /** Shells to `dotnet test --filter` with a TRX logger and parses the result. Returns null when the run itself couldn't be started/completed — a non-zero exit code from failing tests is not itself a failure, only the absence of a TRX file is. */
-    private fun runDotnetTest(projectFile: String, filter: String): List<TrxUnitTestResult>? {
+    /** The outcome of a [runDotnetTest] call — [Failure.message] is shown to the user verbatim, so it distinguishes an unresolvable `dotnet` CLI (issue #452) from every other launch failure. */
+    private sealed class DotnetTestOutcome {
+        data class Success(val results: List<TrxUnitTestResult>) : DotnetTestOutcome()
+        data class Failure(val message: String) : DotnetTestOutcome()
+    }
+
+    /** Shells to `dotnet test --filter` with a TRX logger and parses the result. Returns [DotnetTestOutcome.Failure] when the run itself couldn't be started/completed — a non-zero exit code from failing tests is not itself a failure, only the absence of a TRX file is. */
+    private fun runDotnetTest(projectFile: String, filter: String): DotnetTestOutcome {
         val resultsDir = Files.createTempDirectory("reqnroll-test-").toFile()
         val trxFileName = "result.trx"
         val trxFile = File(resultsDir, trxFileName)
 
         return try {
             val command = listOf(
-                "dotnet", "test", projectFile,
+                DotnetCliLocator.resolve(), "test", projectFile,
                 "--filter", filter,
                 "--logger", "trx;LogFileName=$trxFileName",
                 "--results-directory", resultsDir.absolutePath,
@@ -118,24 +127,33 @@ object RunTestRunner {
             // live process output) — Redirect.DISCARD avoids the classic ProcessBuilder deadlock
             // where an un-drained pipe fills its OS buffer and the child blocks writing to it,
             // making `waitFor` hang until the timeout even for a run that would otherwise succeed.
-            val process = ProcessBuilder(command)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start()
+            val process = try {
+                ProcessBuilder(command)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+            } catch (ex: java.io.IOException) {
+                ReqnrollDebugLogger.warn("RunTestRunner: dotnet not found while starting dotnet test for $projectFile", ex)
+                return DotnetTestOutcome.Failure(
+                    "Could not launch 'dotnet' for $projectFile — the dotnet CLI was not found on PATH, " +
+                        "DOTNET_ROOT, or common install locations. Ensure the .NET SDK is installed and " +
+                        "accessible to Rider, then retry."
+                )
+            }
             val completed = process.waitFor(TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             if (!completed) {
                 process.destroyForcibly()
-                return null
+                return DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
             }
 
             // A non-zero dotnet test exit code (failing tests) is expected and not itself a run
             // failure — only the absence of a TRX file means the run itself never completed.
-            if (!trxFile.exists()) return null
+            if (!trxFile.exists()) return DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
 
-            TrxParser.parse(trxFile.readText())
+            DotnetTestOutcome.Success(TrxParser.parse(trxFile.readText()))
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("RunTestRunner: dotnet test failed to run for $projectFile", ex)
-            null
+            DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
         } finally {
             resultsDir.deleteRecursively()
         }

@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { resolveDotnetExecutable } from './dotnetLocator';
 import { parseTrx, TrxUnitTestResult } from './trxParser';
 
 /** Structural subset of `vscode.CancellationToken` — avoids an unnecessary `vscode` import here (mirrors `msbuildEvaluator.ts`'s vscode-free style). */
@@ -12,6 +13,15 @@ export interface CancellationSignal {
 
 export interface DotnetTestRunResult {
   readonly results: TrxUnitTestResult[];
+}
+
+/**
+ * Returned in place of `null` when the run couldn't even be launched with a message specific
+ * enough to act on (e.g. `dotnet` unresolvable, issue #452) rather than the generic
+ * "failed to run" shown for every other launch failure.
+ */
+export interface DotnetTestLaunchFailure {
+  readonly error: string;
 }
 
 const TEST_TIMEOUT_MS = 120_000;
@@ -29,7 +39,7 @@ export async function runDotnetTest(
   projectFile: string,
   filterExpr: string,
   cancellationToken?: CancellationSignal,
-): Promise<DotnetTestRunResult | null> {
+): Promise<DotnetTestRunResult | DotnetTestLaunchFailure | null> {
   const resultsDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'reqnroll-test-'));
   const trxFileName = 'result.trx';
   const trxPath = path.join(resultsDir, trxFileName);
@@ -47,9 +57,11 @@ export async function runDotnetTest(
       '--nologo',
     ];
 
-    const completed = await new Promise<boolean>((resolve) => {
+    type SpawnResult = { ok: true } | { ok: false; error?: NodeJS.ErrnoException };
+
+    const spawnResult = await new Promise<SpawnResult>((resolve) => {
       const child = execFile(
-        'dotnet',
+        resolveDotnetExecutable(),
         args,
         {
           timeout: TEST_TIMEOUT_MS,
@@ -68,29 +80,38 @@ export async function runDotnetTest(
               error.message,
             );
           }
-          resolve(true);
+          resolve({ ok: true });
         },
       );
 
-      child.on('error', (err) => {
+      child.on('error', (err: NodeJS.ErrnoException) => {
         console.error(`dotnetTestRunner: failed to launch dotnet test for ${projectFile}:`, err);
-        resolve(false);
+        resolve({ ok: false, error: err });
       });
 
       if (cancellationToken) {
         if (cancellationToken.isCancellationRequested) {
           child.kill();
-          resolve(false);
+          resolve({ ok: false });
         } else {
           cancellationToken.onCancellationRequested(() => {
             child.kill();
-            resolve(false);
+            resolve({ ok: false });
           });
         }
       }
     });
 
-    if (!completed || !fs.existsSync(trxPath)) return null;
+    if (!spawnResult.ok) {
+      if (spawnResult.error?.code === 'ENOENT') {
+        return {
+          error: `Could not launch 'dotnet' for ${projectFile} — the dotnet CLI was not found on PATH, DOTNET_ROOT, or common install locations. Ensure the .NET SDK is installed and accessible to VS Code, then retry.`,
+        };
+      }
+      return null;
+    }
+
+    if (!fs.existsSync(trxPath)) return null;
 
     const trxXml = await fs.promises.readFile(trxPath, 'utf-8');
     return { results: parseTrx(trxXml) };
