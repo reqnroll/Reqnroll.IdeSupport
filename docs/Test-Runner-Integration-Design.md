@@ -4,8 +4,11 @@
 > §6 test-result correlation confirmed live for all three IDEs (VS/VS Code via a `dotnet test` spike,
 > Rider independently via Chris's devcontainer run); §7 items 1, 3, 5 resolved by decompilation; item 6
 > resolved as a live-confirmed design constraint (target the whole parameterized method, not one row).
-> Item 2 (Rider's exact `SMTestProxy` plugin-API accessor) and item 4 (breakpoint/DAP, explicitly out of
-> scope) are the only remaining items, and neither blocks starting implementation.
+> Item 2 (Rider's exact test-framework plugin-API accessor) turned out, on later investigation
+> (2026-08-27), to be based on a wrong hypothesis — see §6's correction: Rider's unit testing has no
+> JVM-side extension point for native tool-window integration at all, not pursued. Item 4 (breakpoint/DAP)
+> remains explicitly out of scope. Neither blocked the design actually shipped (own-execution CodeLens/
+> CodeVision for all three IDEs, later reverted for VS Code specifically — see §5's VS Code note).
 > **Audience:** Core team contributors
 > **Tracks:** [#262](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/262)
 > **Scope decisions confirmed by Chris (2026-08-05):** in scope now (feasibility spike first, not
@@ -658,6 +661,52 @@ evidence above proves the *data* is there and captured; only the *plugin-facing 
 confirming, and that's answerable by decompiling `intellij-community`'s `smRunner` module (a follow-up
 task, not something blocking the design any further).
 
+---
+
+**Correction (issue #504, 2026-08-27 — Rider research spike, unattended, bytecode inspection via the
+devcontainer's Gradle cache, no live UI session): the `SMTestProxy` hypothesis above is wrong.** Rider's
+.NET unit testing is **not** built on IntelliJ Platform's generic `SMTRunnerEventsListener`/`SMTestProxy`
+test-framework integration at all — that's the JVM-language (Java/Kotlin/etc.) test-framework mechanism.
+Decompiling `intellij.rider.jar` and `product.jar` from the actual pinned Rider 2024.3.5 distribution
+(technique: [[rider-bytecode-inspection-technique]]) shows a Rider-specific, entirely separate system
+under `com.jetbrains.rider.unitTesting.*` (frontend UI: tool window, tree, actions — ~150 classes) and
+`com.jetbrains.rider.model.RdUnitTest*` (the protocol model: `RdUnitTestSession`, `RdUnitTestHost`,
+`RdUnitTestResultData`, `RdUnitTestTreeDescriptor`, etc., all `*.Pregenerated.kt` — RD-protocol-generated
+code, confirmed by class name and by `RdUnitTestSession` extending `RdBindableBase`).
+
+**Why this matters — this is not just a wrong accessor name, it changes the feasibility conclusion
+entirely.** `RdUnitTestSession`'s only outbound actions are `RdSignal<Unit>` fields named `_run`/`_debug`
+— the JVM frontend can only *fire a run/debug signal* on a session; it cannot *construct* one. Every
+`RdUnitTestSession`/tree node the tool window ever shows originates from the **.NET backend**
+(ReSharperHost) and is synced to the JVM frontend over the RD protocol, one-directionally, as
+already-discovered data. There is no JVM-side extension point anywhere in `com.jetbrains.rider.unitTesting`
+for a plugin to inject a synthetic test element, a custom provider, or a fake session — the frontend is
+a thin, protocol-driven renderer of backend-owned state, not an extensible discovery/registration surface.
+
+**What this means for Reqnroll scenarios appearing in Rider's native Unit Tests tool window**: it would
+require a **ReSharperHost backend plugin** — a `JetBrains.ReSharper.*`-SDK, C#-based .NET plugin
+implementing that side's own `IUnitTestProvider`/`IUnitTestElement` extensibility (the same mechanism
+NUnit/xUnit/MSTest's *built-in* Rider support presumably uses, unverified — not reachable from this
+devcontainer's JVM-only bytecode). This is a **different plugin architecture and SDK entirely** from
+`src/Rider`'s existing pure-Kotlin frontend plugin (`com.reqnroll.ide.rider.*`) — a new project with its
+own build/package/versioning story, not a follow-up feature inside the existing one. That's a
+qualitatively larger undertaking than anything else done for issue #504 across all three IDEs — closer
+in scope to standing up a new subsystem than extending an existing one.
+
+**Decision: not pursuing this now.** Rider keeps its existing `CodeVisionProvider`-based own-execution
+Run lens (`RunTestCodeVisionProvider`/`RunLensSupport`/`RunTestRunner` — unchanged, still the right
+design for what it does) with no native Unit Tests tool window presence. Arrived at the same practical
+outcome as VS Code's #504 reversal (no `TestController`/native-tree integration), but via a completely
+different reason: VS Code's case was "not worth it, C# Dev Kit already covers this adequately"; Rider's
+case is "the extensibility point needed doesn't exist on the JVM side at all — it would need a new,
+separately-scoped C# backend plugin project." If this is ever revisited, the concrete starting points
+are: (1) confirm whether `IUnitTestProvider`/`IUnitTestElement` are indeed public, third-party-usable
+ReSharper SDK interfaces (not decompiled/verified this session — only the JVM frontend was inspected,
+since that's what the devcontainer's Gradle cache actually contains); (2) check whether the legacy
+`reqnroll/Reqnroll.Rider` plugin (predates this repo, referenced at
+[reqnroll/Reqnroll.Rider#8](https://github.com/reqnroll/Reqnroll.Rider/issues/8)) ever had a
+ReSharperHost-side component, as a possible starting point or prior-art reference.
+
 **Presentation target** (from the issue's own follow-up comment and the legacy Rider plugin's
 confirmed source): a **gutter icon** at the failed step's line — not inline diagnostics, not
 line-background highlighting — with a hover tooltip showing the failure output. Registered at
@@ -674,12 +723,13 @@ info/hint severity, not error severity, to stay visually low-noise against genui
    `TestController`, no native Testing panel presence), after confirming via `vscode.d.ts` and VS Code's
    own command source that there's no way to delegate to C# Dev Kit's controller and read its result
    back. No open design question or live-testing need remains for VS Code.
-3. ~~**Rider**~~ Resolved (2026-08-05) — Chris ran a real ambiguous-binding scenario through the
-   devcontainer's Rider Test Runner and confirmed both the stack-trace misattribution and the stdout
-   step-trace independently, on a different test host than the `dotnet test` spike. No open design
-   question remains for Rider; only a narrow follow-up (confirming the exact `SMTRunnerEventsListener`/
-   `SMTestProxy` plugin-API accessor for the already-proven-present data) is left, and it doesn't block
-   the design.
+3. ~~**Rider**~~ Resolved (2026-08-05 live-testing; 2026-08-27 native-tree feasibility). Chris ran a real
+   ambiguous-binding scenario through the devcontainer's Rider Test Runner and confirmed both the
+   stack-trace misattribution and the stdout step-trace independently, on a different test host than the
+   `dotnet test` spike — this part of the design (own-execution, stdout parsing) is unaffected. The
+   `SMTestProxy` plugin-API accessor mentioned as a follow-up below is now known to be the **wrong
+   hypothesis** — see the correction above: Rider's unit testing has no JVM-side extension point at all,
+   native tool-window integration is not pursued, decision recorded above.
 
 **All three IDEs' test-result correlation designs are now closed out — §6 is fully resolved.**
 
@@ -703,9 +753,11 @@ info/hint severity, not error severity, to stay visually low-noise against genui
    signal. VS's `ICodeLensTestInformationService`/`TestResultRecord.StandardOutput` path (2026-08-27,
    see §6 correction) is now consumed via a guarded reflection bridge (`RunTestOutcomeBridge`) rather
    than `TestResultRecord.StandardOutput`'s step-trace parsing — the outcome-only glyph doesn't need the
-   failed-step detail that stdout parsing was originally for; a Rider-side plugin-API-accessor lookup
-   (which exact `SMTestProxy` method exposes the already-proven-present stdout) remains open but doesn't
-   block the design.
+   failed-step detail that stdout parsing was originally for. The Rider-side plugin-API-accessor lookup
+   this line used to flag as an open follow-up is resolved as a non-issue (2026-08-27): Rider's unit
+   testing isn't built on `SMTestProxy` at all (§6 correction) and native tool-window integration isn't
+   being pursued, so there's no accessor left to look up — Rider keeps its existing own-execution
+   `CodeVisionProvider` display, which already has the stdout it needs.
 2a. ~~**VS Code `TestController` vs. own-execution design fork**~~ **Resolved — Option 2, own execution,
    no `TestController` (2026-08-05).** `vscode.tests` exposes no way to read another extension's
    controller results (confirmed against `vscode.d.ts` — an earlier guess that a `tests.testResults`
