@@ -165,9 +165,20 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
         await selectRenameTarget(client, document.uri.toString(), chosen.attributeIndex);
       }
 
+      const result = await next(document, position, token);
+
+      // Collapse the selection only after the LSP round-trip has resolved: mutating
+      // editor.selection *before* next() fires a selection-change event that VS Code's rename
+      // command treats as "the user moved the cursor, cancel this request" (verified live —
+      // #456's fix originally collapsed the selection up front and that made rename silently
+      // do nothing for parameterized steps, whose extra server-side matching work gave the
+      // cancellation time to land before the request completed; simple steps finished fast
+      // enough to race past it). Collapsing afterwards still lands before VS Code opens the
+      // rename widget (that only happens once this function returns), so the fix for #456 still
+      // takes effect.
       collapseSelectionForFeatureStepRename(document, position);
 
-      return next(document, position, token);
+      return result;
     },
   };
 }
