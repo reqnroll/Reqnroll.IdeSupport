@@ -485,29 +485,37 @@ single-scenario gutter action are the same code path.
 Substantially de-risked by research below, but each IDE still needs one **live** confirmation before
 implementation — none of this has been run against a real Reqnroll-generated test yet. Status per IDE:
 
-**Visual Studio pass/fail glyph — investigated and decided against (issue #504 follow-up,
-2026-08-27).** The plan below (`ICodeLensTestInformationService`/`GetTestOutcomeAsync`) was decompiled
-in full from `Microsoft.VisualStudio.TestWindow.Internal.dll`/`...CodeLens.dll`, confirming the API
-shape exactly. But unlike `TestMethodIdentifier` (public, already used by the shipped Run/Debug
-delegation — see §5), **`ICodeLensTestInformationService`, `CodeLensTestInformationProxy`,
-`CodeLensTestInformationCallbackService`, and `RemoteTestWindowServiceProvider` are all `internal` to
-that Microsoft assembly** — not part of the public extensibility surface at all. Calling them would
-require reflecting into Microsoft's own private implementation types, with no compile-time contract and
-no deprecation notice if a VS servicing update renames or removes any of it. Chris decided this risk
-isn't worth it just for a pass/fail glyph on the CodeLens label — **decision: don't pursue this.** The
-Run/Debug delegation (§5, already shipped) is unaffected: it only ever needed the public
-`TestMethodIdentifier` type and VS's public `CodeLensDetailPaneCommand` mechanism, so results already
-land correctly in VS's own Test Explorer window when the user clicks Run or Debug — only the CodeLens
-label itself won't mirror pass/fail back. The rest of this section is kept for the record (Rider's
-`SMTestProxy` and VS Code's `dotnet test` stdout channel are unaffected — this internal-API problem is
-VS-specific).
+**Visual Studio pass/fail glyph — reconsidered and implemented via reflection (issue #504 follow-up,
+2026-08-27).** Initially decided against (see the superseded reasoning originally here): unlike
+`TestMethodIdentifier` (public, already used by the shipped Run/Debug delegation — see §5),
+**`ICodeLensTestInformationService`, `CodeLensTestInformationProxy`, `CodeLensTestInformationCallbackService`,
+and `RemoteTestWindowServiceProvider` are all `internal`** to `Microsoft.VisualStudio.TestWindow.Internal.dll` —
+not part of the public extensibility surface, no compile-time contract, no deprecation notice if a VS
+servicing update reshapes or removes any of it. Chris subsequently decided the glyph was worth the risk
+provided any failure degrades gracefully rather than crashing the CodeLens host.
+
+**As-built**: `RunTestOutcomeBridge` (`src/VisualStudio/.../RunTestCodeLens/RunTestOutcomeBridge.cs`)
+reflects into `RemoteTestWindowServiceProvider.Instance.GetServiceStreamAsync` → constructs a
+`CodeLensTestInformationProxy` over the returned stream (passing a `null` callback target — this bridge
+only polls, it never subscribes to change notifications) → invokes `ICodeLensTestInformationService.GetTestOutcomeAsync`
+via the (also internal) interface's `MethodInfo`, since the concrete proxy implements it as an explicit
+interface member. The outcome enum value is read back by name (`.ToString()`) rather than cast to the
+real `TestOutcome` type, so even a renamed/reshaped enum degrades to "unrecognized" instead of an
+`InvalidCastException`. Every step is wrapped in one `try/catch`; the **first** failure anywhere in the
+chain sets a permanent-for-the-process `_unavailable` flag — no retry storm, no per-call reflection cost
+once the API is known gone, and Run/Debug (§5, unaffected — public API only) keep working regardless.
+Deliberately does **not** call the simpler `AbstractTestProvider.GetServiceProxyAsync` convenience
+method VS's own `TestStatusProvider` uses: that method depends on a private static VS-process-id field
+only populated once VS's own CSharp/Basic/C/C++-scoped test CodeLens providers have themselves run in
+this ServiceHub host — not guaranteed for a user who only opens `.feature` files. The glyph mapping
+itself (`TestOutcome` → `KnownMonikers.StatusOK`/`StatusError`/`StatusWarning`) needs no reflection —
+`KnownMonikers` is a fully public, stable API, mirroring `TestStatusProvider.ToImageId`.
 
 **Visual Studio — API shape confirmed by decompilation; the stack-trace question is now live-tested,
 and the answer is a correction, not a confirmation.** The same `ICodeLensTestInformationService` that
 backs `TestStatusProvider` (§5) is reachable over the identical out-of-process CodeLens ServiceHub
 channel F24 already wired up (`RemoteTestWindowServiceProvider` → `GetServiceStreamAsync` →
-`ICodeLensTestInformationProxy`) — **but see the correction immediately above: this is an internal,
-unsupported API, and the team decided not to consume it.**
+`ICodeLensTestInformationProxy`) — **now consumed via reflection, see the correction immediately above.**
 
 ```csharp
 Task<TestOutcome> GetTestOutcomeAsync(Guid dataPointId, TestMethodIdentifier testMethod, CancellationToken ct);
@@ -642,13 +650,10 @@ info/hint severity, not error severity, to stay visually low-noise against genui
 
 **What still needs a live session, concretely:**
 
-1. ~~**Visual Studio**~~ Resolved (2026-08-27) — **not pursuing the pass/fail glyph.**
-   `ICodeLensTestInformationService`/`GetServiceProxyAsync`/`GetTestOutcomeAsync` are all `internal` to
-   Microsoft's assembly (confirmed by decompilation, see §6 correction above), so consuming them would
-   mean reflecting into unsupported private implementation types with no compatibility guarantee. Run/Debug
-   delegation to Test Explorer (§5) already works via the public `TestMethodIdentifier`/
-   `CodeLensDetailPaneCommand` surface and is unaffected — only the CodeLens label's own pass/fail glyph
-   is dropped. No live-testing session needed for VS.
+1. ~~**Visual Studio**~~ Resolved (2026-08-27) — **pass/fail glyph implemented via reflection**, guarded
+   so any future shape change degrades to "no glyph" rather than throwing (see §6 correction above,
+   `RunTestOutcomeBridge`). Run/Debug delegation to Test Explorer (§5) is unaffected either way — it
+   only ever needed the public `TestMethodIdentifier`/`CodeLensDetailPaneCommand` surface.
 2. ~~**VS Code**~~ Resolved — Option 2 decided (own execution via `dotnet test --filter`, no
    `TestController`, no native Testing panel presence), after confirming via `vscode.d.ts` and VS Code's
    own command source that there's no way to delegate to C# Dev Kit's controller and read its result
@@ -679,10 +684,12 @@ info/hint severity, not error severity, to stay visually low-noise against genui
    independently confirmed both findings live in Rider via the devcontainer (real ambiguous-binding
    scenario, same misattribution, same stdout trace, plus the row-test formatted-display-name finding).
    VS Code's directly-shelled `dotnet test` (§5, Option 2) and Rider's Test Runner both consume this
-   signal. VS's `ICodeLensTestInformationService`/`TestResultRecord.StandardOutput` path was decided
-   against (2026-08-27, see §6 correction) — it's an internal, unsupported API — so VS carries no
-   pass/fail glyph via this channel; a Rider-side plugin-API-accessor lookup (which exact `SMTestProxy`
-   method exposes the already-proven-present stdout) remains open but doesn't block the design.
+   signal. VS's `ICodeLensTestInformationService`/`TestResultRecord.StandardOutput` path (2026-08-27,
+   see §6 correction) is now consumed via a guarded reflection bridge (`RunTestOutcomeBridge`) rather
+   than `TestResultRecord.StandardOutput`'s step-trace parsing — the outcome-only glyph doesn't need the
+   failed-step detail that stdout parsing was originally for; a Rider-side plugin-API-accessor lookup
+   (which exact `SMTestProxy` method exposes the already-proven-present stdout) remains open but doesn't
+   block the design.
 2a. ~~**VS Code `TestController` vs. own-execution design fork**~~ **Resolved — Option 2, own execution,
    no `TestController` (2026-08-05).** `vscode.tests` exposes no way to read another extension's
    controller results (confirmed against `vscode.d.ts` — an earlier guess that a `tests.testResults`
