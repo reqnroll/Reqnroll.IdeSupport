@@ -113,6 +113,36 @@ public class BindingImporter
     }
 
     /// <summary>
+    /// Extracts the bare method name from a connector wire-format method reference —
+    /// <c>"{DeclaringTypeName}.{MethodName}({ParamTypeNames})"</c>, e.g.
+    /// <c>"Steps.SetFirstNumber(Int32)"</c> (see <c>DiscoveryResultTransformer.GetMethodReference</c>
+    /// on the connector side) — for comparison against a Roslyn
+    /// <see cref="MethodDeclarationSyntax"/>'s <c>Identifier.Text</c>, which is never qualified or
+    /// parenthesized. <see cref="TryGetAttributeSourceLine(SyntaxNode,string,ScenarioBlock)"/> and
+    /// <see cref="TryGetMethodIdentifierLocation"/> compare by name only and never stripped this
+    /// themselves, so passing the raw wire-format reference straight through made both backfills
+    /// silently miss on every real connector-discovered binding (they matched only in tests, whose
+    /// fixtures used an already-bare method name that never occurs in production — issue #484
+    /// follow-up).
+    /// </summary>
+    /// <remarks>
+    /// Falls back to the input unchanged when it doesn't look like that shape (no <c>(</c>, or no
+    /// <c>.</c> before it) — a wire format that already carries a bare name (existing test fixtures,
+    /// or a future format change) round-trips correctly instead of being mangled.
+    /// </remarks>
+    public static string ExtractBareMethodName(string wireMethodReference)
+    {
+        if (string.IsNullOrEmpty(wireMethodReference))
+            return wireMethodReference;
+
+        var parenIndex = wireMethodReference.IndexOf('(');
+        var beforeParen = parenIndex >= 0 ? wireMethodReference.Substring(0, parenIndex) : wireMethodReference;
+
+        var lastDot = beforeParen.LastIndexOf('.');
+        return lastDot >= 0 ? beforeParen.Substring(lastDot + 1) : beforeParen;
+    }
+
+    /// <summary>
     /// Backfills the exact method-identifier source location for a connector-discovered step
     /// definition — mirrors <see cref="StepDefinitionFileParser"/>'s own AST-based line/column for
     /// Roslyn-discovered bindings (the method identifier's line, not the attribute's, matching
@@ -121,7 +151,9 @@ public class BindingImporter
     /// than on the declaration itself; this replaces it with the same precise position Roslyn
     /// discovery already uses, once the AST is available for this backfill pass anyway.
     /// Returns null when no method with this name is found (e.g. partial class defined elsewhere,
-    /// or the source no longer matches what the connector saw at build time).
+    /// or the source no longer matches what the connector saw at build time). <paramref name="methodName"/>
+    /// must already be a bare method name — see <see cref="ExtractBareMethodName"/> for callers
+    /// starting from a connector wire-format method reference.
     /// </summary>
     public static (int Line, int Column)? TryGetMethodIdentifierLocation(SyntaxNode root, string methodName)
     {

@@ -131,10 +131,39 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 // or more into the method body) with the precise position Roslyn discovery
                 // already uses, so CodeLens and other consumers anchor consistently regardless of
                 // which discovery path populated the registry (issue #471 follow-up).
-                var root = TryGetParsedRoot(importer, sd, parsedFiles, _fileSystem);
+                //
+                // sd.Method is the connector's wire-format reference --
+                // "{DeclaringTypeName}.{MethodName}({ParamTypeNames})", e.g. "Steps.SetFirstNumber(Int32)"
+                // -- not a bare method name, so it must be stripped down to the bare identifier before
+                // comparing against MethodDeclarationSyntax.Identifier.Text below (issue #484 follow-up:
+                // passing sd.Method straight through made both backfills silently miss on every real
+                // connector-discovered binding, matching only in unit tests whose fixtures used an
+                // already-bare name that never occurs in production).
+                var root = TryGetParsedRoot(importer, sd, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
-                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, sd.Method, scenarioBlock);
-                var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, sd.Method);
+                var bareMethodName = BindingImporter.ExtractBareMethodName(sd.Method);
+                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock);
+                var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
+
+                // The one case worth a warning even when a root parsed successfully: no method
+                // declaration by this name was found in it, so the precise identifier location the
+                // CodeLens anchor and other consumers need never gets backfilled, and
+                // ImportStepDefinition silently falls back to the connector's raw PDB-derived
+                // location -- which SourceLocationProvider documents as the first *executable
+                // statement* in the method body, not the declaration line (issue #484's symptom:
+                // "N step usages" rendering below the method instead of above it). Root causes seen
+                // in practice: the file changed since the last build, a partial class split across
+                // files, or an overload sharing the same method name.
+                if (root != null && methodLocation == null)
+                {
+                    _logger.LogWarning(
+                        $"[Connector] No method declaration named '{bareMethodName}' (from wire reference " +
+                        $"'{sd.Method}') found while re-parsing its source for method-identifier backfill " +
+                        $"(source location '{sd.SourceLocation}'); CodeLens/navigation for this binding will " +
+                        "anchor on the connector's raw PDB-derived location instead, which can land inside " +
+                        "the method body rather than on its declaration line.");
+                }
+
                 return importer.ImportStepDefinition(sd, attrLine, methodLocation);
             })
             .Where(sd => sd is not null)
@@ -173,18 +202,35 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// Resolves and parses a connector-discovered step definition's source file, parsing each
     /// referenced file at most once per <see cref="BuildRegistry"/> call (<paramref name="parsedFiles"/>
     /// caches the syntax root across step definitions sharing a file). Shared by the attribute-line
-    /// and method-identifier-location backfills, both of which need the same parsed root.
+    /// and method-identifier-location backfills, both of which need the same parsed root. Logs the
+    /// two ways this can fail, at different severities: an unresolvable source file is the expected,
+    /// benign case for a reflection-discovered binding from an external plugin assembly whose source
+    /// isn't available locally (see <see cref="BindingImporter.ResolveSourceFilePath"/>'s remarks),
+    /// so that's verbose-only; a resolved file that fails to parse is unexpected and worth a warning
+    /// (once per file, not per step definition, since <paramref name="parsedFiles"/> caches the miss too).
     private static SyntaxNode? TryGetParsedRoot(BindingImporter importer, StepDefinition sd,
-        Dictionary<string, SyntaxNode> parsedFiles, IFileSystemForIDE fileSystem)
+        Dictionary<string, SyntaxNode> parsedFiles, IFileSystemForIDE fileSystem, IIdeSupportLogger logger)
     {
         var sourceFile = importer.ResolveSourceFilePath(sd.SourceLocation);
         if (sourceFile == null)
+        {
+            logger.LogVerbose(
+                $"[Connector] No local source file resolved for '{sd.Method}' (source location " +
+                $"'{sd.SourceLocation}'); method-identifier backfill skipped, using the connector's " +
+                "raw PDB-derived location.");
             return null;
+        }
 
         if (!parsedFiles.TryGetValue(sourceFile, out var root))
         {
             root = BindingImporter.TryParseSourceFile(sourceFile, fileSystem);
             parsedFiles[sourceFile] = root;
+
+            if (root == null)
+                logger.LogWarning(
+                    $"[Connector] Failed to parse resolved source file '{sourceFile}' for method-identifier " +
+                    $"backfill (binding '{sd.Method}'); every binding from this file will fall back to the " +
+                    "connector's raw PDB-derived location.");
         }
 
         return root;
