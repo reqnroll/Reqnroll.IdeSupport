@@ -22,7 +22,10 @@ import {
   createManualSyncMiddleware,
   isCSharpDocument,
 } from './lsp/manualDocumentSync';
-import { createRenameMiddleware } from './commands/renameStep';
+import {
+  collapseActiveSelectionForFeatureStepRename,
+  createRenameMiddleware,
+} from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import { registerTelemetry } from './telemetry';
@@ -254,8 +257,12 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       await vscode.commands.executeCommand('editor.action.quickFix');
     }),
 
-    // Step Rename refactoring (delegates to VS Code's native rename; server handles textDocument/rename)
+    // Step Rename refactoring (delegates to VS Code's native rename; server handles textDocument/rename).
+    // collapseActiveSelectionForFeatureStepRename() must run BEFORE editor.action.rename starts —
+    // see its doc comment (issue #456): mutating the selection while that command already has an
+    // in-flight prepareRename request cancels the rename outright for parameterized steps.
     vscode.commands.registerCommand('reqnroll.renameStep', async () => {
+      collapseActiveSelectionForFeatureStepRename();
       await vscode.commands.executeCommand('editor.action.rename');
     }),
   );

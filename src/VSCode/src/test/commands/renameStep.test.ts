@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import {
+  collapseActiveSelectionForFeatureStepRename,
   createRenameMiddleware,
   getRenameTargets,
   pickRenameTarget,
@@ -124,6 +125,81 @@ suite('renameStep', () => {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 1,
+      });
+    });
+  });
+
+  // Issue #456: VS Code's built-in rename widget preserves an active pre-selection by reapplying
+  // its raw character offset onto whatever placeholder text prepareRename returns — correct for a
+  // .cs attribute rename (placeholder IS the literal buffer text) but wrong for a .feature step
+  // (placeholder is a different, abstract expression), landing the highlight mid-parameter-token
+  // instead of on the word the user meant. Collapsing the selection to a cursor makes VS Code fall
+  // back to its own verified-safe default: the whole placeholder selected. This must run before
+  // editor.action.rename starts (see extension.ts's reqnroll.renameStep command) rather than from
+  // inside prepareRename middleware — mutating the selection while that command has an in-flight
+  // request cancels the rename outright for parameterized steps (verified live).
+  suite('collapseActiveSelectionForFeatureStepRename', () => {
+    const featureDocument = {
+      uri: vscode.Uri.parse('file:///Steps.feature'),
+      languageId: 'gherkin',
+    } as vscode.TextDocument;
+    const csDocument = {
+      uri: vscode.Uri.parse('file:///Steps.cs'),
+      languageId: 'csharp',
+    } as vscode.TextDocument;
+
+    function withActiveEditor<T>(editor: vscode.TextEditor | undefined, fn: () => T): T {
+      const original = Object.getOwnPropertyDescriptor(vscode.window, 'activeTextEditor');
+      Object.defineProperty(vscode.window, 'activeTextEditor', {
+        value: editor,
+        configurable: true,
+      });
+      try {
+        return fn();
+      } finally {
+        if (original) Object.defineProperty(vscode.window, 'activeTextEditor', original);
+      }
+    }
+
+    test('collapses a non-empty selection on a .feature document to its active end', () => {
+      const active = new vscode.Position(2, 24);
+      const editor = {
+        document: featureDocument,
+        selection: new vscode.Selection(new vscode.Position(2, 19), active),
+      } as vscode.TextEditor;
+
+      withActiveEditor(editor, () => collapseActiveSelectionForFeatureStepRename());
+
+      assert.ok(editor.selection.isEmpty, 'the selection should be collapsed to a plain cursor');
+      assert.ok(editor.selection.active.isEqual(active));
+    });
+
+    test('does nothing for a .cs document, where the preserved-selection behavior is already correct', () => {
+      const originalSelection = new vscode.Selection(
+        new vscode.Position(2, 19),
+        new vscode.Position(2, 24),
+      );
+      const editor = { document: csDocument, selection: originalSelection } as vscode.TextEditor;
+
+      withActiveEditor(editor, () => collapseActiveSelectionForFeatureStepRename());
+
+      assert.strictEqual(editor.selection, originalSelection);
+    });
+
+    test('does nothing when there is no active selection to begin with', () => {
+      const position = new vscode.Position(2, 25);
+      const emptySelection = new vscode.Selection(position, position);
+      const editor = { document: featureDocument, selection: emptySelection } as vscode.TextEditor;
+
+      withActiveEditor(editor, () => collapseActiveSelectionForFeatureStepRename());
+
+      assert.strictEqual(editor.selection, emptySelection);
+    });
+
+    test('does nothing when there is no active editor', () => {
+      withActiveEditor(undefined, () => {
+        // Must not throw when there's nothing to collapse.
+        collapseActiveSelectionForFeatureStepRename();
       });
     });
   });

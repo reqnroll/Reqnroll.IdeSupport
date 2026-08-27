@@ -83,6 +83,52 @@ export function selectRenameTarget(
 }
 
 /**
+ * Collapses the active editor's text selection to a plain cursor before a `.feature` step rename
+ * is invoked (issue #456). Must run BEFORE `editor.action.rename` starts — see the call site in
+ * `extension.ts`'s `reqnroll.renameStep` command, not inside the `prepareRename` middleware below.
+ *
+ * For a `.feature`-triggered rename, `StepRenameHandler.HandlePrepareRenameAsync` seeds the
+ * rename box with the binding's ABSTRACT Cucumber expression (e.g.
+ * `"the client added {int} units of {string} to the basket"`), not the concrete text literally in
+ * the buffer (`"the client added 1 units of \"Electric guitar\" to the basket"`) — deliberate, so
+ * the box always yields an unambiguous new expression rather than requiring a fragile diff against
+ * real parameter values. Those two strings only match character-for-character when every
+ * parameter's rendered width happens to equal its abstract token's width.
+ *
+ * VS Code's built-in rename widget, when the user had an active selection at invocation time
+ * (verified live), preserves it by re-applying that selection's raw character offset onto
+ * whatever placeholder text comes back — correct for a `.cs` attribute rename, where the
+ * placeholder IS the literal buffer text, but wrong here: the highlight lands wherever that offset
+ * happens to fall inside the abstract expression, often mid-way through a `{parameter}` token
+ * instead of on the word the user meant. An *unselected* cursor doesn't trigger this — verified
+ * live, that case already selects the whole placeholder, the correct/intended default.
+ *
+ * Rather than changing what `Placeholder` contains (which would fix the highlight at the cost of
+ * exposing raw parameter values in the common, already-correct no-selection case — see the design
+ * discussion on issue #456), collapse the pre-existing selection to the cursor right before
+ * `editor.action.rename` runs, so VS Code takes its own safe "no selection" path for a `.feature`
+ * step specifically. A no-op for `.cs` files (and when there's no active selection), where the
+ * preserved-selection behavior is already correct.
+ *
+ * This MUST happen before VS Code's rename command starts, not from inside `prepareRename`
+ * middleware — verified live, mutating `editor.selection` while that command has an in-flight
+ * `textDocument/prepareRename` request fires a selection-change event that VS Code treats as "the
+ * user moved the cursor, cancel this rename," regardless of whether the mutation happens before or
+ * after the request resolves. Simple (non-parameterized) steps can race past this — their
+ * round-trip is fast enough that the command isn't listening for cancellation yet, or has already
+ * finished — but parameterized steps, whose server-side matching takes longer, reliably lose the
+ * race: the rename widget never opens at all. Collapsing the selection here, before
+ * `editor.action.rename` is even invoked, avoids ever mutating the selection while that command is
+ * active.
+ */
+export function collapseActiveSelectionForFeatureStepRename(): void {
+  const editor = vscode.window.activeTextEditor;
+  if (editor?.document.languageId !== 'gherkin' || editor.selection.isEmpty) return;
+
+  editor.selection = new vscode.Selection(editor.selection.active, editor.selection.active);
+}
+
+/**
  * Builds a `RenameMiddleware.prepareRename` override that surfaces server-side rename ambiguity
  * (the Step Rename refactoring's multi-attribute case) with a VS Code–idiomatic `QuickPick`,
  * mirroring the disambiguation dialog the Visual Studio client shows via

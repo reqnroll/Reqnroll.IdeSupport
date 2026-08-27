@@ -758,6 +758,77 @@ public class StepRenameHandlerTests
             "a synthetic whole-line range was the bug this regression guards against");
     }
 
+    // ── Regression/repro (issue #456): F2 rename on a parameterized step pre-highlights the
+    //    wrong span in the rename box. Root cause is exactly what HandlePrepareRenameAsync's own
+    //    remarks (above) describe: VS Code's built-in rename UI computes the user's pre-selection
+    //    offset against the CONCRETE step text, then reapplies that same raw character offset into
+    //    Placeholder — a different string whenever a parameter's rendered width differs from its
+    //    abstract token (here "1" is 1 char, "{int}" is 5). That reapplication happens inside VS
+    //    Code itself, not in this server, so it can't be driven directly from a server-side test —
+    //    this test instead proves the drift using the server's own real Range/Placeholder output
+    //    for the issue's exact reported scenario. ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task PrepareRename_Range_and_Placeholder_reproduce_issue_456s_selection_drift()
+    {
+        const string stepText   = "the client added 1 units of \"Electric guitar\" to the basket";
+        const string expression = "the client added {int} units of {string} to the basket";
+
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
+        var binding = MakeBinding(
+            ScenarioBlock.When,
+            new Regex("^the client added (\\d+) units of \"(.*)\" to the basket$"),
+            specifiedExpression: expression,
+            line: 8, column: 9,
+            method: "Steps.WhenTheClientAddedUnitsOf()");
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var project = MakeTestProject();
+        _scopeManager.ResolveOwners(featureUri).Returns(new[] { project });
+        _scopeManager.GetProjectForUri(featureUri).Returns(project);
+
+        var matchSet = MakeFeatureMatchSet(
+            featureUri.ToString(), binding,
+            "And", stepText, stepLine: 2, stepChar: 5);
+        _matchService.TryGet(Arg.Any<MatchSetKey>(), out Arg.Any<FeatureBindingMatchSet>())
+            .Returns(ci =>
+            {
+                ci[1] = matchSet;
+                return true;
+            });
+
+        // Cursor/selection on "units" in the concrete text.
+        var unitsOffset = stepText.IndexOf("units", StringComparison.Ordinal);
+        var result = await CreateSut().HandlePrepareRenameAsync(
+            new PrepareRenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = featureUri },
+                Position = new Position(2, 5 + unitsOffset) // "\tAnd " prefix is 5 chars
+            },
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.PlaceholderRange!.Placeholder.Should().Be(expression,
+            "the rename box is seeded with the abstract expression, not the concrete step text");
+
+        // ── Reproduce the client-side drift using the server's real Range/Placeholder ──────────
+        // A client that pre-selected "units" computes that selection's offset relative to
+        // Range.Start in the CONCRETE text, then reapplies the same raw offset/length into
+        // Placeholder verbatim (this is VS Code's built-in behavior, not our code).
+        var selectionOffset = unitsOffset;
+        var selectionLength = "units".Length;
+        var placeholder = result.PlaceholderRange.Placeholder;
+        var reapplied = placeholder.Substring(
+            selectionOffset, Math.Min(selectionLength, placeholder.Length - selectionOffset));
+
+        reapplied.Should().NotBe("units",
+            $"reproduces issue #456: reapplying the concrete-text offset ({selectionOffset}) into " +
+            $"Placeholder verbatim no longer lands on \"units\" once the {{int}} parameter (5 chars) " +
+            $"has replaced the shorter concrete value \"1\" (1 char) earlier in the string -- got " +
+            $"\"{reapplied}\" instead");
+    }
+
     // ── Regression (issue #344 follow-up): confirmed live in VS — a .feature step bound to a
     //    method-name-style binding (a bare [Given], no explicit expression) has no attribute
     //    literal to rename at all. Before this fix, CSharpAttributeLiteralResolver's "nearest
