@@ -1,4 +1,5 @@
-﻿using Reqnroll.IdeSupport.Common;
+﻿using System.Diagnostics;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
@@ -409,6 +410,76 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         var binding = registry.StepDefinitions.Should().ContainSingle().Which;
         binding.Implementation.SourceLocation!.SourceFileLine.Should().Be(4);
         binding.Implementation.SourceLocation.SourceFileColumn.Should().Be(17);
+    }
+
+    [Fact]
+    public void RunDiscovery_backfill_matches_the_real_declaringType_dot_signature_wire_shape()
+    {
+        // DiscoveryResultTransformer.GetMethodReference (connector side) actually emits
+        // "{DeclaringTypeName}.{MethodName}({ParamTypeNames})" -- e.g. "Steps.SetFirstNumber(Int32)"
+        // -- not a bare method name, unlike every other fixture in this file. Regression guard
+        // (issue #484 follow-up): passing that straight through to
+        // TryGetMethodIdentifierLocation/TryGetAttributeSourceLine (which compare against the bare
+        // Roslyn identifier only) made both backfills silently miss on every real
+        // connector-discovered binding -- they only ever matched in tests, because every other
+        // fixture here uses an already-bare Method value that never occurs in production.
+        // BuildRegistry must strip the wire shape down to the bare name (BindingImporter.
+        // ExtractBareMethodName) before comparing.
+        var stepsFile = WriteStepsFile("""
+            public class Steps
+            {
+                [Given("the first number is (.*)")]
+                public void SetFirstNumber(int number)
+                {
+                    var x = 1;
+                }
+            }
+            """);
+        GivenConnectorReturns(new DiscoveryResult
+        {
+            StepDefinitions =
+            [
+                new StepDefinition
+                {
+                    Type           = "Given",
+                    Regex          = "^the first number is (.*)$",
+                    Method         = "Steps.SetFirstNumber(Int32)",
+                    ParamTypes     = "i",
+                    SourceLocation = $"{stepsFile}|5|9" // PDB sequence point: inside the body.
+                }
+            ],
+            Hooks = []
+        });
+        var scope = MakeScope(_assemblyPath);
+
+        var (registry, _) = CreateSut().RunDiscovery(
+            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        // "    public void SetFirstNumber(int number)" is line 4 (1-based); the method identifier
+        // starts at column 17 -- same precise position as the bare-name fixture above, now also
+        // reached from the realistic wire-format shape.
+        var binding = registry.StepDefinitions.Should().ContainSingle().Which;
+        binding.Implementation.SourceLocation!.SourceFileLine.Should().Be(4);
+        binding.Implementation.SourceLocation.SourceFileColumn.Should().Be(17);
+        binding.AttributeSourceLine.Should().Be(3);
+
+        _logger.DidNotReceive().Log(Arg.Is<LogMessage>(m => m.Level == TraceLevel.Warning));
+    }
+
+    [Fact]
+    public void ExtractBareMethodName_strips_the_declaring_type_and_parameter_list()
+    {
+        BindingImporter.ExtractBareMethodName("Steps.SetFirstNumber(Int32)").Should().Be("SetFirstNumber");
+        BindingImporter.ExtractBareMethodName("Steps.MyStep()").Should().Be("MyStep");
+        BindingImporter.ExtractBareMethodName("Outer+Inner.MyStep(Int32, String)").Should().Be("MyStep");
+    }
+
+    [Fact]
+    public void ExtractBareMethodName_leaves_an_already_bare_name_unchanged()
+    {
+        BindingImporter.ExtractBareMethodName("SetFirstNumber").Should().Be("SetFirstNumber");
+        BindingImporter.ExtractBareMethodName("").Should().Be("");
+        BindingImporter.ExtractBareMethodName(null!).Should().BeNull();
     }
 
     [Fact]
