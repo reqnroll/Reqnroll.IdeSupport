@@ -6,6 +6,8 @@
 
 ## Bug fixes:
 
+* Fixed the step-usage "N step usages" CodeLens rendering below the binding method's declaration instead of above it, for connector-discovered bindings (LSP server) - see #484
+
 *Contributors of this release (in alphabetical order):*
 
 * [@clrudolphi](https://github.com/clrudolphi)
