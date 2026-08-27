@@ -126,28 +126,62 @@ suite('gherkin.tmLanguage.json', () => {
 
   // ── Tags ────────────────────────────────────────────────────────────────
 
+  // A real Gherkin tag line is whitespace followed by one or more @tags and nothing else -- tags
+  // never appear inside Feature/Scenario/step text. The rule is therefore anchored (begin/end,
+  // like doc_strings/tables below) to lines that themselves start with @, not a bare regex applied
+  // anywhere on the line; only the inner pattern matches individual @tag tokens once inside that scope.
   suite('tags', () => {
-    const p = () => grammar.repository.tags.patterns[0];
+    const outer = () => grammar.repository.tags.patterns[0];
+    const inner = () => outer().patterns[0];
 
-    test('should match individual @tags anywhere on a line', () => {
-      const re = new RegExp(p().match, 'g');
+    test('should anchor to the start of a tag line', () => {
+      assert.strictEqual(outer().begin, '^\\s*(?=@)');
+      assert.strictEqual(outer().end, '$');
+      assert.strictEqual(inner().name, 'entity.name.tag.gherkin');
+    });
+
+    test('the inner pattern matches individual @tag tokens', () => {
+      const re = new RegExp(inner().match, 'g');
       assert.deepStrictEqual('@smoke'.match(re), ['@smoke']);
       const matches = '@smoke @regression @slow'.match(re);
       assert.strictEqual(matches?.length, 3);
     });
 
-    // An @ immediately preceded by a word character is part of a larger token (an email address,
-    // a handle embedded in a word) rather than a Gherkin tag, which always starts at a word
-    // boundary. Without the (?<!\w) guard, "user@example.com" in step text highlighted "@example"
-    // as a tag.
-    test('does not match an @ embedded in an email address', () => {
-      const re = new RegExp(p().match, 'g');
-      assert.deepStrictEqual("the user's email is user@example.com".match(re), null);
+    test('a real tag line is scoped as entity.name.tag.gherkin', () => {
+      const results = tokenizeLines(['@smoke @regression', 'Scenario: Something']);
+      const tagScopes = results[0].tokens.map((t) => t.scopes).flat();
+      assert.ok(tagScopes.some((s) => s.includes('entity.name.tag.gherkin')));
     });
 
-    test('still matches a tag immediately after other punctuation', () => {
-      const re = new RegExp(p().match, 'g');
-      assert.deepStrictEqual('(@smoke)'.match(re), ['@smoke']);
+    // Regression test: an @word appearing inside ordinary step text (preceded by whitespace, not
+    // a word character, so it isn't caught by an email-address-style guard either) used to still
+    // be colored as a tag, because the old rule had no notion of "this line is a tag line" -- any
+    // @word anywhere in the document matched. Anchoring to line-start fixes this: the line starts
+    // with "Given", not "@", so the tags rule never activates on it at all.
+    test('does not color an @mention inside step text as a tag', () => {
+      const results = tokenizeLines(['Given a message mentioning @channel']);
+      const scopes = results[0].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        !scopes.some((s) => s.includes('entity.name.tag.gherkin')),
+        `Expected no entity.name.tag.gherkin scope on step text, but got: ${JSON.stringify(scopes)}`,
+      );
+    });
+
+    // An @ embedded in an email address inside step text -- covered by the same line-anchoring fix
+    // above, not a separate guard.
+    test('does not color an @ embedded in an email address as a tag', () => {
+      const results = tokenizeLines(["Given the user's email is user@example.com"]);
+      const scopes = results[0].tokens.map((t) => t.scopes).flat();
+      assert.ok(!scopes.some((s) => s.includes('entity.name.tag.gherkin')));
+    });
+
+    // A line that starts with something other than whitespace-then-@ is never a tag line, even if
+    // an @token appears later on it -- e.g. stray punctuation before what looks like a tag is not
+    // valid Gherkin tag syntax, unlike the pre-fix behavior which matched "@smoke" inside "(@smoke)".
+    test('a line not starting with @ is never treated as a tag line', () => {
+      const results = tokenizeLines(['(@smoke)']);
+      const scopes = results[0].tokens.map((t) => t.scopes).flat();
+      assert.ok(!scopes.some((s) => s.includes('entity.name.tag.gherkin')));
     });
   });
 

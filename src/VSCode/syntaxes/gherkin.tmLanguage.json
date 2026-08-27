@@ -37,8 +37,15 @@
     "tags": {
       "patterns": [
         {
-          "name": "entity.name.tag.gherkin",
-          "match": "(?<!\\w)@\\w+(?:[\\w-]*\\w)?"
+          "comment": "A Gherkin tag line is whitespace followed by one or more @tags and nothing else -- anchoring to the start of the line (not just a non-word-char lookbehind) is what keeps an @mention/@handle inside step text (e.g. \"Given a message mentioning @channel\") from being colored as a tag; only a line that itself begins with @ enters this scope at all.",
+          "begin": "^\\s*(?=@)",
+          "end": "$",
+          "patterns": [
+            {
+              "name": "entity.name.tag.gherkin",
+              "match": "@\\w+(?:[\\w-]*\\w)?"
+            }
+          ]
         }
       ]
     },
