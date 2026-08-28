@@ -246,20 +246,6 @@ public static class LspClientExtensions
             .Returning<CommandOrCodeActionContainer?>(ct);
 
     /// <summary>
-    /// Sends a <c>reqnroll/goToStepDefinitions</c> request (F5 — Go to Step Definition).
-    /// Returns step definition locations with type and method metadata for a cursor in a .feature file.
-    /// </summary>
-    public static Task<GoToStepDefinitionsResponse?> RequestGoToStepDefinitionsAsync(
-        this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)
-        => client.SendRequest("reqnroll/goToStepDefinitions",
-                new TextDocumentPositionParams
-                {
-                    TextDocument = new TextDocumentIdentifier { Uri = uri },
-                    Position     = new Position(line, character)
-                })
-            .Returning<GoToStepDefinitionsResponse?>(ct);
-
-    /// <summary>
     /// Sends a <c>workspace/didChangeWatchedFiles</c> notification with a single Deleted event
     /// for the given <c>.cs</c> URI, simulating what VS Code's LSP client sends when a source
     /// file is removed from disk.

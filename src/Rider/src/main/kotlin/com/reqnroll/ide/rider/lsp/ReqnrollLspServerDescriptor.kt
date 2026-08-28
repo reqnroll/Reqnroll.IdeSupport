@@ -38,8 +38,9 @@ class ReqnrollLspServerDescriptor(project: Project) :
 
     // Unlike semantic tokens/completion/diagnostics (which default to auto-enable based
     // on server capability), the platform defaults Go To Definition support to off —
-    // must opt in explicitly. FeatureDefinitionHandler/GoToStepDefinitionsHandler
-    // implement it server-side. Hover isn't implemented server-side, so left disabled.
+    // must opt in explicitly. DefinitionHandler implements it server-side via the standard
+    // textDocument/definition request (no Rider-specific navigation code needed). Hover isn't
+    // implemented server-side, so left disabled.
     override val lspGoToDefinitionSupport: Boolean = true
 
     // Without this, Rider's platform default only colors the LSP *standard* token type

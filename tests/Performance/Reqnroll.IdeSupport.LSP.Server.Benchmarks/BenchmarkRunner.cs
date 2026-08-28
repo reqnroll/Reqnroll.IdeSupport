@@ -88,7 +88,6 @@ public static class BenchmarkRunner
             (PerfTargets.RenameTargets, await scenarios.RenameTargetsAsync().ConfigureAwait(false)),
             (PerfTargets.FindStepUsages, await scenarios.FindStepUsagesAsync().ConfigureAwait(false)),
             (PerfTargets.StepReferences, await scenarios.StepReferencesAsync().ConfigureAwait(false)),
-            (PerfTargets.GoToStepDefinitions, await scenarios.GoToStepDefinitionsAsync().ConfigureAwait(false)),
             (PerfTargets.GoToHooks, await scenarios.GoToHooksAsync().ConfigureAwait(false)),
             (PerfTargets.StepCodeLens, await scenarios.StepCodeLensAsync(corpusRoot).ConfigureAwait(false)),
             (PerfTargets.FeatureHookCodeLens, await scenarios.FeatureHookCodeLensAsync().ConfigureAwait(false)),

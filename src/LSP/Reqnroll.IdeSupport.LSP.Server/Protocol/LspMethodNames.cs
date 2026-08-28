@@ -16,8 +16,6 @@ public static class LspMethodNames
     public const string ReqnrollProjectFiles = "reqnroll/projectFiles";
     /// <summary>Method name for the <c>reqnroll/findStepUsages</c> request.</summary>
     public const string ReqnrollFindStepUsages = "reqnroll/findStepUsages";
-    /// <summary>Method name for the <c>reqnroll/goToStepDefinitions</c> request.</summary>
-    public const string ReqnrollGoToStepDefinitions = "reqnroll/goToStepDefinitions";
     /// <summary>Method name for the <c>reqnroll/goToHooks</c> request.</summary>
     public const string ReqnrollGoToHooks = "reqnroll/goToHooks";
     /// <summary>Method name for the <c>reqnroll/goToMatchingScenarios</c> request (issue #373).</summary>

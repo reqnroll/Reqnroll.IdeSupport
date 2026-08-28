@@ -98,9 +98,6 @@ public static class PerfTargets
     public static readonly PerfTarget StepReferences =
         new("textDocument/references", 0, PerfTargetKind.InteractiveP95, "Find references from a .feature step");
 
-    public static readonly PerfTarget GoToStepDefinitions =
-        new("reqnroll/goToStepDefinitions", 0, PerfTargetKind.InteractiveP95, "Go to step definition(s) (F5)");
-
     public static readonly PerfTarget GoToHooks =
         new("reqnroll/goToHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
 

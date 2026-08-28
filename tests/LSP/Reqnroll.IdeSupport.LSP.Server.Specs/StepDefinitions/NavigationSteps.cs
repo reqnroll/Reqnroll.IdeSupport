@@ -220,49 +220,4 @@ public sealed class NavigationSteps
         return results.ToArray();
     }
 
-    // ── reqnroll/goToStepDefinitions (F5 — Go to Step Definition) ─────────────
-
-    [When(@"step definitions are requested at line (\d+) column (\d+) in ""(.*)""")]
-    public async Task WhenStepDefinitionsAreRequestedAt(int line, int column, string fileName)
-    {
-        var uri = _ctx.UriFor(fileName);
-        _ctx.LastGoToStepDefinitions = await _ctx.Harness.Client
-            .RequestGoToStepDefinitionsAsync(uri, line, column)
-            .ConfigureAwait(false);
-    }
-
-    [Then(@"(\d+) step definition(?:s are|s is| is| are) returned")]
-    public void ThenNStepDefinitionsAreReturned(int expected)
-    {
-        var count = _ctx.LastGoToStepDefinitions?.StepDefinitions?.Count ?? 0;
-        count.Should().Be(expected, $"expected {expected} step definition(s) but got {count}");
-    }
-
-    [Then(@"the step definitions include a location in ""(.*)""")]
-    public void ThenStepDefinitionsIncludeLocationIn(string fileName)
-    {
-        _ctx.LastGoToStepDefinitions.Should().NotBeNull();
-        _ctx.LastGoToStepDefinitions!.StepDefinitions.Should().Contain(
-            sd => sd.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase),
-            $"a step definition location in '{fileName}' should be present");
-    }
-
-    [Then(@"the step definitions include step type ""(.*)""")]
-    public void ThenStepDefinitionsIncludeStepType(string stepType)
-    {
-        _ctx.LastGoToStepDefinitions.Should().NotBeNull();
-        _ctx.LastGoToStepDefinitions!.StepDefinitions.Should().Contain(
-            sd => string.Equals(sd.StepType, stepType, StringComparison.OrdinalIgnoreCase),
-            $"a step definition with step type '{stepType}' should be present");
-    }
-
-    [Then(@"the step definitions include method name containing ""(.*)""")]
-    public void ThenStepDefinitionsIncludeMethodNameContaining(string fragment)
-    {
-        _ctx.LastGoToStepDefinitions.Should().NotBeNull();
-        _ctx.LastGoToStepDefinitions!.StepDefinitions.Should().Contain(
-            sd => sd.MethodName.Contains(fragment, StringComparison.OrdinalIgnoreCase),
-            $"a step definition with method name containing '{fragment}' should be present");
-    }
-
 }
