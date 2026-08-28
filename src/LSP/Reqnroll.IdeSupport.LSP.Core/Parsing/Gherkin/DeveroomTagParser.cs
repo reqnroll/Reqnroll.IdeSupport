@@ -242,7 +242,14 @@ public class DeveroomTagParser : IDeveroomTagParser
             stepTag.AddChild(new DeveroomTag(DeveroomTagTypes.DefinedStep,
                 GetTextSpan(fileSnapshot, step.Location, step.Text, offset: step.Keyword.Length),
                 match));
-            if (!(scenarioDefinition is ScenarioOutline) || !step.Text.Contains("<"))
+            // Parameter tags are only skipped when the step text contains a real placeholder,
+            // since substituting it with an Examples value would shift character offsets between
+            // the raw step text shown here and the resolved text the binding match was computed
+            // against. A bare "<"/">" used as a comparison operator (not a real placeholder) used
+            // to trip this via a naive step.Text.Contains("<") check, silently dropping parameter
+            // highlighting for the whole step even though there was no offset risk.
+            if (!(scenarioDefinition is ScenarioOutline) ||
+                !MatchedScenarioOutlinePlaceholder.MatchScenarioOutlinePlaceholders(step).Any())
             {
                 var parameterMatch = match.Items.First(m => m.ParameterMatch != null).ParameterMatch;
                 AddParameterTags(fileSnapshot, parameterMatch, stepTag, step);

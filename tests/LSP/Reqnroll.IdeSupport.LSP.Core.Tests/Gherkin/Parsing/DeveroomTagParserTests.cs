@@ -46,6 +46,15 @@ public class DeveroomTagParserTests
     private static DeveroomTag Single(IReadOnlyCollection<DeveroomTag> tags, string type) =>
         tags.Single(t => t.Type == type);
 
+    // ScenarioOutlinePlaceholder tags come from two independent sources: TagRowCells tags every
+    // Examples header cell with this type (Data is a Gherkin.Ast.TableCell), and AddPlaceholderTags
+    // tags each <placeholder> found within a step's own text (Data is a
+    // MatchedScenarioOutlinePlaceholder). Tests about step-text placeholder detection need to
+    // filter to the latter, not just the tag type, or they'll also match unrelated header cells.
+    private static IEnumerable<DeveroomTag> StepTextPlaceholderTags(IReadOnlyCollection<DeveroomTag> tags) =>
+        OfType(tags, DeveroomTagTypes.ScenarioOutlinePlaceholder)
+            .Where(t => t.Data is MatchedScenarioOutlinePlaceholder);
+
     // ── empty file ────────────────────────────────────────────────────────────
 
     [Fact]
@@ -247,6 +256,99 @@ public class DeveroomTagParserTests
         var text = "Feature: F\nScenario Outline: SO\n  Given <p>\n  Examples:\n    | p |\n    | x |\n";
         var tags = ParseTags(text);
         tags.Any(t => t.Type == DeveroomTagTypes.ExamplesBlock).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ScenarioOutline_multi_word_placeholder_produces_single_tag()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given a bay called <bay name>\n" +
+                    "  Examples:\n    | bay name |\n    | Bay1     |\n";
+        var tags = ParseTags(text);
+        var placeholderTag = StepTextPlaceholderTags(tags).Should().ContainSingle().Which;
+        ((MatchedScenarioOutlinePlaceholder)placeholderTag.Data).Name.Should().Be("bay name");
+    }
+
+    // Regression tests: "<"/">" used as comparison operators (not real placeholder syntax) used
+    // to be misread as a placeholder because the matching regex greedily spanned from the first
+    // "<" to the next ">" regardless of what was between them, and — worse — their mere presence
+    // silently suppressed StepParameter tags for the whole step via a naive
+    // step.Text.Contains("<") heuristic, even when there was no real placeholder to conflict with.
+    [Fact]
+    public void Comparison_operators_in_a_ScenarioOutline_step_do_not_produce_a_placeholder_tag()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given the count < 5 and total > 10 items\n" +
+                    "  Examples:\n    | unused |\n    | x      |\n";
+        var tags = ParseTags(text);
+        StepTextPlaceholderTags(tags).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Comparison_operators_in_a_ScenarioOutline_step_do_not_suppress_StepParameter_tags()
+    {
+        var binding = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
+            new Regex(@"^the count < (\d+) and total > (\d+) items$"), null,
+            new ProjectBindingImplementation("CountCheck", new[] { "System.Int32", "System.Int32" },
+                new SourceLocation("Steps.cs", 3, 1)));
+        var registry = RegistryWith(binding);
+
+        var text = "Feature: F\nScenario Outline: SO\n  Given the count < 5 and total > 10 items\n" +
+                    "  Examples:\n    | unused |\n    | x      |\n";
+        var tags = ParseTags(text, registry);
+        tags.Any(t => t.Type == DeveroomTagTypes.StepParameter).Should().BeTrue();
+    }
+
+    // Compound cases: a real placeholder sharing a line with comparison-operator "<"/">" usage.
+    // These matter more than the isolated case above because a fix that merely happens to work
+    // on a single condition could still misbehave once there's a real placeholder nearby for the
+    // greedy backtracking to latch onto.
+
+    [Fact]
+    public void Real_placeholder_is_found_while_comparison_operators_after_it_are_ignored()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given the <value> is < 5 and > 10\n" +
+                    "  Examples:\n    | value |\n    | 7     |\n";
+        var tags = ParseTags(text);
+        var placeholder = StepTextPlaceholderTags(tags).Should().ContainSingle().Which;
+        ((MatchedScenarioOutlinePlaceholder)placeholder.Data).Name.Should().Be("value");
+    }
+
+    [Fact]
+    public void Real_placeholder_is_found_while_comparison_operators_earlier_in_the_line_are_ignored()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n" +
+                    "  Given the value is < 5 and > 10 and aligned with <placeholder>\n" +
+                    "  Examples:\n    | placeholder |\n    | x           |\n";
+        var tags = ParseTags(text);
+        var placeholder = StepTextPlaceholderTags(tags).Should().ContainSingle().Which;
+        ((MatchedScenarioOutlinePlaceholder)placeholder.Data).Name.Should().Be("placeholder");
+    }
+
+    [Fact]
+    public void Two_real_placeholders_immediately_adjacent_to_comparison_operators_are_both_found()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n" +
+                    "  Given the value is < <highValue> and > <lowValue>\n" +
+                    "  Examples:\n    | highValue | lowValue |\n    | 10        | 1        |\n";
+        var tags = ParseTags(text);
+        var names = StepTextPlaceholderTags(tags)
+            .Select(t => ((MatchedScenarioOutlinePlaceholder)t.Data).Name);
+        names.Should().BeEquivalentTo("highValue", "lowValue");
+    }
+
+    // Documents that the known spaceless-form limitation (see MatchedScenarioOutlinePlaceholder's
+    // regex comment) persists even when a real placeholder is also present on the line — it isn't
+    // masked or fixed by the presence of legitimate placeholder syntax elsewhere. If this ever
+    // starts failing because the false match disappears, that's a welcome improvement; update the
+    // assertion rather than treating it as a regression.
+    [Fact]
+    public void Known_limitation_spaceless_comparison_operators_still_false_match_alongside_a_real_placeholder()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given the <value> is <5 and b>10\n" +
+                    "  Examples:\n    | value |\n    | 7     |\n";
+        var tags = ParseTags(text);
+        var names = StepTextPlaceholderTags(tags)
+            .Select(t => ((MatchedScenarioOutlinePlaceholder)t.Data).Name);
+        names.Should().BeEquivalentTo("value", "5 and b");
     }
 
     // ── Background ────────────────────────────────────────────────────────────

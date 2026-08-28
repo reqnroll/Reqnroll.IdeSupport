@@ -25,7 +25,12 @@ public struct MatchedScenarioOutlinePlaceholder
         _match = match;
     }
 
-    private static readonly Regex ScenarioOutlineParamRe = new(@"\<(?<name>[^\>]+)\>");
+    // Requires non-whitespace immediately inside the angle brackets — real placeholder syntax
+    // never has whitespace touching < or >, whereas "<"/">" used as comparison operators
+    // typically do (e.g. "count < 5 and total > 10"). Without this, [^>]+ greedily spanned from
+    // the first < to the next > regardless of what was in between, matching the whole
+    // "< 5 and total >" as one placeholder. Doesn't catch the rarer spaceless form "a<5 and b>10".
+    private static readonly Regex ScenarioOutlineParamRe = new(@"\<(?<name>\S(?:[\w -]*\S)?)\>");
 
     /// <summary>Finds every <c>&lt;placeholder&gt;</c> in a step's text.</summary>
     public static IEnumerable<MatchedScenarioOutlinePlaceholder> MatchScenarioOutlinePlaceholders(Step step)
