@@ -263,6 +263,26 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       collapseActiveSelectionForFeatureStepRename();
       await vscode.commands.executeCommand('editor.action.rename');
     }),
+
+    // F2 keybinding target (issue #506). F2 is the default C# rename-symbol shortcut, so unlike
+    // the explicit "Reqnroll: Rename Step" command above, a miss at the cursor (not on a binding
+    // expression, or a .cs file the Reqnroll server doesn't own at all) must fall through to VS
+    // Code's own editor.action.rename rather than showing a Reqnroll-specific message — otherwise
+    // F2 would stop renaming ordinary C# symbols everywhere in every .cs file.
+    vscode.commands.registerCommand('reqnroll.renameStepOrSymbol', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (editor?.document.languageId === 'csharp') {
+        if (!client) {
+          await vscode.commands.executeCommand('editor.action.rename');
+          return;
+        }
+        await renameStepFromCSharp(client, editor, { fallbackToNativeRename: true });
+        return;
+      }
+
+      collapseActiveSelectionForFeatureStepRename();
+      await vscode.commands.executeCommand('editor.action.rename');
+    }),
   );
 
   // ── Server path resolution ──────────────────────────────────────────────────

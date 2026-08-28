@@ -123,15 +123,24 @@ internal sealed class RenameBindingResolver
     /// attributes stacked on that one method, no matter how close another, different method
     /// happens to sit in the file.
     /// </remarks>
+    /// <param name="requireAttributeLine">
+    /// When <see langword="true"/> (issue #506 — VS Code's F2 dispatcher), only the binding's own
+    /// attribute line counts as a match: the method-identifier-line fallback and the
+    /// connector-discovered heuristic window are both disabled, so a cursor on the method name or
+    /// its body no longer counts as "on the binding" and F2 falls through to the native C# rename
+    /// instead of hijacking it. Explicit invocations (context menu, command palette) leave this
+    /// <see langword="false"/> to keep the original, deliberately loose behavior — a user who
+    /// picked "Reqnroll: Rename Step" from anywhere on the method has clearly stated their intent.
+    /// </param>
     public static List<ProjectStepDefinitionBinding> FindBindingsAtCSharpMethod(
-        ProjectBindingRegistry registry, string path, int line)
+        ProjectBindingRegistry registry, string path, int line, bool requireAttributeLine = false)
     {
         var candidates = registry.StepDefinitions
             .Where(b => b.Implementation.SourceLocation != null &&
                         string.Equals(b.Implementation.SourceLocation.SourceFile, path, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var anchor = candidates.FirstOrDefault(b => CoversLine(b, line));
+        var anchor = candidates.FirstOrDefault(b => CoversLine(b, line, requireAttributeLine));
         if (anchor == null)
             return new List<ProjectStepDefinitionBinding>();
 
@@ -144,11 +153,18 @@ internal sealed class RenameBindingResolver
     // Mirrors ProjectBindingRegistry.CoversQuery (kept in sync manually — see its own comment):
     // exact attribute/method-line match for syntax-discovered bindings, a heuristic window only
     // as a fallback for connector-discovered bindings that lack AttributeSourceLine.
-    private static bool CoversLine(ProjectStepDefinitionBinding binding, int line)
+    private static bool CoversLine(ProjectStepDefinitionBinding binding, int line, bool requireAttributeLine)
     {
         var sourceFileLine = binding.Implementation.SourceLocation!.SourceFileLine;
         if (binding.AttributeSourceLine.HasValue)
-            return line == binding.AttributeSourceLine.Value || line == sourceFileLine;
+            return requireAttributeLine
+                ? line == binding.AttributeSourceLine.Value
+                : line == binding.AttributeSourceLine.Value || line == sourceFileLine;
+
+        // No precise attribute location is known for a connector-discovered binding — a strict
+        // caller must not guess via the heuristic window below.
+        if (requireAttributeLine)
+            return false;
 
         const int attributeLeeway = 5;
         return Math.Abs(sourceFileLine - line) <= attributeLeeway;

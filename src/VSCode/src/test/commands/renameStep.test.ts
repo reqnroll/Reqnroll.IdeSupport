@@ -407,6 +407,74 @@ suite('renameStep', () => {
       assert.ok(shownMessage?.includes('No step definition found'));
     });
 
+    // Issue #506: F2 must still work as an ordinary C# rename everywhere else in a .cs file
+    // (local variables, non-Reqnroll projects), so the F2-bound path opts into falling through to
+    // VS Code's native rename instead of showing the Reqnroll-specific message on a miss.
+    suite('fallbackToNativeRename', () => {
+      test('delegates to editor.action.rename instead of showing a message when there are no targets', async () => {
+        const client = fakeClient({ sendRequest: () => Promise.resolve({ targets: [] }) });
+        let shownMessage: string | undefined;
+        let executedCommand: string | undefined;
+
+        await withStub(
+          vscode.window,
+          'showInformationMessage',
+          (message: string) => {
+            shownMessage = message;
+            return Promise.resolve(undefined);
+          },
+          () =>
+            withStub(
+              vscode.commands,
+              'executeCommand',
+              ((command: string) => {
+                executedCommand = command;
+                return Promise.resolve(undefined);
+              }) as typeof vscode.commands.executeCommand,
+              () =>
+                renameStepFromCSharp(client, fakeEditor(), { fallbackToNativeRename: true }),
+            ),
+        );
+
+        assert.strictEqual(executedCommand, 'editor.action.rename');
+        assert.strictEqual(shownMessage, undefined);
+      });
+
+      test('runs the normal Reqnroll flow unchanged when a target is found', async () => {
+        let renameSent = false;
+        const client = fakeClient({
+          sendRequest: (method: string) => {
+            if (method === ReqnrollMethods.renameTargets) {
+              return Promise.resolve({
+                targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+              });
+            }
+            if (method === 'textDocument/rename') {
+              renameSent = true;
+              return Promise.resolve({ changes: {} });
+            }
+            return Promise.resolve(null);
+          },
+        });
+
+        await withStub(
+          vscode.window,
+          'showInputBox',
+          () => Promise.resolve('a new name'),
+          () =>
+            withStub(
+              vscode.workspace,
+              'applyEdit',
+              () => Promise.resolve(true),
+              () =>
+                renameStepFromCSharp(client, fakeEditor(), { fallbackToNativeRename: true }),
+            ),
+        );
+
+        assert.strictEqual(renameSent, true);
+      });
+    });
+
     test('single target: skips the picker, prompts with its expression, sends rename, applies the edit', async () => {
       let selectTargetParams: unknown;
       let renameParams: unknown;
