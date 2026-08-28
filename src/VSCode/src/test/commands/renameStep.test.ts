@@ -431,8 +431,7 @@ suite('renameStep', () => {
                 executedCommand = command;
                 return Promise.resolve(undefined);
               }) as typeof vscode.commands.executeCommand,
-              () =>
-                renameStepFromCSharp(client, fakeEditor(), { fallbackToNativeRename: true }),
+              () => renameStepFromCSharp(client, fakeEditor(), { fallbackToNativeRename: true }),
             ),
         );
 
@@ -466,8 +465,7 @@ suite('renameStep', () => {
               vscode.workspace,
               'applyEdit',
               () => Promise.resolve(true),
-              () =>
-                renameStepFromCSharp(client, fakeEditor(), { fallbackToNativeRename: true }),
+              () => renameStepFromCSharp(client, fakeEditor(), { fallbackToNativeRename: true }),
             ),
         );
 
