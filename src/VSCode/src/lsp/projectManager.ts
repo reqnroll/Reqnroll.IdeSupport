@@ -102,9 +102,13 @@ export function findOwningProjectFile(
  *     reproduce today: an Extension-Host recreation (a real, unbuilt project registered before its
  *     first build, then built) recovered correctly with this client-side glue *disabled* — the
  *     canonical path (server dynamic registration + `vscode-languageclient`'s own watcher) is
- *     sufficient on its own under default settings. This class was reverted to that canonical path;
- *     VS's `VsProjectEventMonitor` doesn't need any of this — it hooks
- *     `DTE.Events.BuildEvents.OnBuildDone` directly.
+ *     sufficient on its own under default settings. Confirmed again in live manual testing (real
+ *     `dotnet build`s against a real multi-project solution, one incremental and one full/clean
+ *     rebuild producing 150+ dependency-DLL noise) — both correctly detected and filtered by the
+ *     server using canonical registration alone, per the server's own file log
+ *     (`HandleOutputAssemblyChange: ... triggering discovery for '<project>'`). This class was
+ *     reverted to that canonical path; VS's `VsProjectEventMonitor` doesn't need any of this — it
+ *     hooks `DTE.Events.BuildEvents.OnBuildDone` directly.
  */
 export class ProjectManager {
   private readonly _client: LanguageClient;
