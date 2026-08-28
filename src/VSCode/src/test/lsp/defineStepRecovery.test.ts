@@ -37,8 +37,17 @@ const execFileAsync = util.promisify(execFile);
  * initial workspace scan — is what discovers and registers it. That's "a new project added
  * mid-session" rather than "already present at activation," but it exercises the same
  * registration-before-first-build precondition either way.
+ *
+ * Skipped on CI: relies on `workspace/didChangeWatchedFiles` actually being delivered for a real
+ * `dotnet build`'s output, which — per `watcherExclude.test.ts`'s investigation — does not appear
+ * to work at all inside this repo's `xvfb-run` + headless-Electron GitHub Actions runner, even
+ * with a generous timeout. That's a CI-sandbox capability gap, not something this test or the
+ * mechanism under test can route around. Runs locally / in manual Extension Host runs, where it
+ * has repeatedly proven its worth.
  */
-suite('Define Step build-completion recovery (issue #2 root-cause recreation)', function () {
+const suiteFn = process.env.CI ? suite.skip : suite;
+
+suiteFn('Define Step build-completion recovery (issue #2 root-cause recreation)', function () {
   this.timeout(240_000);
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
