@@ -24,11 +24,19 @@ interface RenameTargetsResponse {
  * array when the server has nothing renameable there, or when the request itself fails (e.g. an
  * older server that doesn't implement it) — in either case the caller falls back to the normal
  * `prepareRename` flow.
+ *
+ * `requireAttributeLine` (issue #506): pass `true` for the F2-bound dispatcher, which must not
+ * steal an ordinary C# rename-symbol away from a method or local identifier. Without it, the
+ * server also matches a cursor anywhere on the bound method's declaration line (not just within
+ * the binding attribute itself) — the correct, deliberately loose behavior for the explicit
+ * "Reqnroll: Rename Step" context-menu/palette command, but wrong for F2, which must fall through
+ * to `editor.action.rename` unless the cursor is genuinely on the binding expression.
  */
 export async function getRenameTargets(
   client: LanguageClient,
   uriStr: string,
   position: vscode.Position,
+  options?: { requireAttributeLine?: boolean },
 ): Promise<RenameTargetItem[]> {
   try {
     const response = await client.sendRequest<RenameTargetsResponse | null>(
@@ -36,6 +44,7 @@ export async function getRenameTargets(
       {
         textDocument: { uri: uriStr },
         position: { line: position.line, character: position.character },
+        requireAttributeLine: options?.requireAttributeLine ?? false,
       },
     );
     return response?.targets ?? [];
@@ -198,16 +207,32 @@ export function extractStepTextFromLabel(label: string): string {
  * cursor (multiple `[Given]`/`[When]`/`[Then]` attributes on the same method), prompt for the new
  * step text with a plain input box pre-filled with the current expression, then send
  * `textDocument/rename` directly and apply the resulting `WorkspaceEdit` ourselves.
+ *
+ * `fallbackToNativeRename` (issue #506): when set, a miss at the cursor — not on a binding
+ * expression, or not even a Reqnroll-owned file — delegates to VS Code's own `editor.action.rename`
+ * instead of showing "No step definition found". This is what the F2 keybinding needs: F2 has to
+ * work as an ordinary C# rename everywhere else in a `.cs` file (locals, methods, non-Reqnroll
+ * projects), so silently eating the keystroke with an unrelated message would break the most-used
+ * refactor shortcut in the language. The explicit "Reqnroll: Rename Step" context-menu/palette
+ * command leaves this off — a user who deliberately picked that command wants to know their cursor
+ * wasn't on a binding.
  */
 export async function renameStepFromCSharp(
   client: LanguageClient,
   editor: vscode.TextEditor,
+  options?: { fallbackToNativeRename?: boolean },
 ): Promise<void> {
   const uriStr = editor.document.uri.toString();
   const position = editor.selection.active;
 
-  const targets = await getRenameTargets(client, uriStr, position);
+  const targets = await getRenameTargets(client, uriStr, position, {
+    requireAttributeLine: options?.fallbackToNativeRename,
+  });
   if (targets.length === 0) {
+    if (options?.fallbackToNativeRename) {
+      await vscode.commands.executeCommand('editor.action.rename');
+      return;
+    }
     void vscode.window.showInformationMessage(
       'Reqnroll: No step definition found to rename at this position.',
     );

@@ -262,7 +262,7 @@ public static class LanguageServerOptionsExtensions
                 await resolver!.Get<StepRenameHandler>().HandleRenameAsync(request, ct)
                 ?? new WorkspaceEdit());
 
-        options.OnRequest<TextDocumentPositionParams, RenameTargetsResponse>(
+        options.OnRequest<RenameTargetsParams, RenameTargetsResponse>(
             LspMethodNames.ReqnrollRenameTargets,
             async (request, ct) =>
                 await resolver!.Get<RenameTargetsHandler>().HandleRenameTargetsAsync(request, ct)

@@ -73,4 +73,49 @@ public class RenameBindingResolverTests
 
         result.Should().BeEmpty();
     }
+
+    // Issue #506: F2 (VS Code's dispatcher for both native C# rename-symbol and Reqnroll's step
+    // rename) must not hijack a rename of the method identifier itself — only the attribute line
+    // should count as "on the binding" for that caller, unlike the deliberately loose default used
+    // by the explicit "Reqnroll: Rename Step" context-menu/palette command.
+    [Fact]
+    public void FindBindingsAtCSharpMethod_matches_the_method_identifier_line_by_default()
+    {
+        var binding = MakeBinding("the first number is {int}", methodLine: 10, attributeSourceLine: 9);
+        var registry = ProjectBindingRegistry.FromBindings(new[] { binding });
+
+        var result = RenameBindingResolver.FindBindingsAtCSharpMethod(registry, CsPath, line: 10);
+
+        result.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void FindBindingsAtCSharpMethod_with_requireAttributeLine_ignores_the_method_identifier_line()
+    {
+        var binding = MakeBinding("the first number is {int}", methodLine: 10, attributeSourceLine: 9);
+        var registry = ProjectBindingRegistry.FromBindings(new[] { binding });
+
+        var onMethodLine = RenameBindingResolver.FindBindingsAtCSharpMethod(
+            registry, CsPath, line: 10, requireAttributeLine: true);
+        var onAttributeLine = RenameBindingResolver.FindBindingsAtCSharpMethod(
+            registry, CsPath, line: 9, requireAttributeLine: true);
+
+        onMethodLine.Should().BeEmpty();
+        onAttributeLine.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void FindBindingsAtCSharpMethod_with_requireAttributeLine_returns_empty_for_a_connector_discovered_binding()
+    {
+        // No AttributeSourceLine (connector-discovered binding whose Roslyn backfill failed) — the
+        // heuristic ±5-line window is an approximation, unsafe to rely on when the caller (F2)
+        // needs certainty that the cursor is genuinely on the binding, not just nearby.
+        var binding = MakeBinding("the first number is {int}", methodLine: 10, attributeSourceLine: null);
+        var registry = ProjectBindingRegistry.FromBindings(new[] { binding });
+
+        var result = RenameBindingResolver.FindBindingsAtCSharpMethod(
+            registry, CsPath, line: 10, requireAttributeLine: true);
+
+        result.Should().BeEmpty();
+    }
 }

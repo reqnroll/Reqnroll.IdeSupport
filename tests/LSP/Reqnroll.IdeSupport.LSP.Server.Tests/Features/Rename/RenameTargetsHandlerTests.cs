@@ -37,7 +37,7 @@ public class RenameTargetsHandlerTests
     public async Task Returns_null_for_a_uri_with_neither_a_cs_nor_feature_extension_Async()
     {
         var result = await CreateSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams { TextDocument = TxtUri, Position = new Position(0, 0) },
+            new RenameTargetsParams { TextDocument = TxtUri, Position = new Position(0, 0) },
             CancellationToken.None);
 
         result.Should().BeNull();
@@ -49,7 +49,7 @@ public class RenameTargetsHandlerTests
         _registryLookup.GetRegistryForUri(CsUri).Returns(ProjectBindingRegistry.Invalid);
 
         var result = await CreateSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams { TextDocument = CsUri, Position = new Position(0, 0) },
+            new RenameTargetsParams { TextDocument = CsUri, Position = new Position(0, 0) },
             CancellationToken.None);
 
         result.Should().NotBeNull();
@@ -64,7 +64,7 @@ public class RenameTargetsHandlerTests
         _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
 
         var result = await CreateSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams { TextDocument = CsUri, Position = new Position(0, 0) },
+            new RenameTargetsParams { TextDocument = CsUri, Position = new Position(0, 0) },
             CancellationToken.None);
 
         result.Should().NotBeNull();
@@ -77,7 +77,7 @@ public class RenameTargetsHandlerTests
         _scopeManager.ResolveOwners(FeatureUri).Returns(Array.Empty<LspReqnrollProject>());
 
         var result = await CreateSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams { TextDocument = FeatureUri, Position = new Position(0, 0) },
+            new RenameTargetsParams { TextDocument = FeatureUri, Position = new Position(0, 0) },
             CancellationToken.None);
 
         result.Should().NotBeNull();

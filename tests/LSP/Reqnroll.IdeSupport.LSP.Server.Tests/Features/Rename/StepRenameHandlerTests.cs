@@ -570,7 +570,7 @@ public class StepRenameHandlerTests
                        .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
 
         var response = await CreateTargetsSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams
+            new RenameTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = CsUri },
                 Position     = new Position(7, 8)
@@ -1092,7 +1092,7 @@ public class StepRenameHandlerTests
             });
 
         var response = await CreateTargetsSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams
+            new RenameTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = featureUri },
                 Position = new Position(2, 14)
@@ -1112,7 +1112,7 @@ public class StepRenameHandlerTests
         _scopeManager.ResolveOwners(featureUri).Returns(Array.Empty<LspReqnrollProject>());
 
         var response = await CreateTargetsSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams
+            new RenameTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = featureUri },
                 Position = new Position(2, 14)
@@ -1162,7 +1162,7 @@ public class StepRenameHandlerTests
             });
 
         var response = await CreateTargetsSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams
+            new RenameTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = featureUri },
                 Position = new Position(2, 14)
@@ -1284,7 +1284,7 @@ public class StepRenameHandlerTests
         // underlying _matchService/_scopeManager substitutes, so FindBindingsAtFeatureStep
         // resolves the identical candidate set/order for both.
         var targets = await CreateTargetsSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams
+            new RenameTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = featureUri },
                 Position = new Position(2, 14)
@@ -1355,7 +1355,7 @@ public class StepRenameHandlerTests
             });
 
         var response = await CreateTargetsSut().HandleRenameTargetsAsync(
-            new TextDocumentPositionParams
+            new RenameTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = featureUri },
                 Position = new Position(2, 14)

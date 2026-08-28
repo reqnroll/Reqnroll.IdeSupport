@@ -11,6 +11,7 @@
 
 * Fixed the Run action failing with a generic error when `dotnet` isn't on the IDE process's `PATH` (e.g. macOS GUI-launched apps) - now falls back to `DOTNET_ROOT` and well-known install locations, and shows a specific message when `dotnet` still can't be found (Rider) - see #452
 * Fixed the step-usage "N step usages" CodeLens rendering below the binding method's declaration instead of above it, for connector-discovered bindings (LSP server) - see #484
+* Fixed F2 doing nothing (or erroring "Rename not available at this location") on a `.cs` binding attribute - now runs Reqnroll's Rename Step, falling back to the native C# rename everywhere else in a `.cs` file so it doesn't hijack renaming an ordinary symbol, including the binding method's own name (VS Code) - see #506
 
 *Contributors of this release (in alphabetical order):*
 

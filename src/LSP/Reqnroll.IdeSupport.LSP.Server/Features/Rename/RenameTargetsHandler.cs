@@ -34,8 +34,8 @@ public sealed class RenameTargetsHandler
     }
 
     public async Task<RenameTargetsResponse?> HandleRenameTargetsAsync(
-        TextDocumentPositionParams request,
-        CancellationToken          cancellationToken)
+        RenameTargetsParams request,
+        CancellationToken   cancellationToken)
     {
         var uri  = request.TextDocument.Uri;
         var path = uri.GetFileSystemPath();
@@ -48,7 +48,8 @@ public sealed class RenameTargetsHandler
 
         if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleRenameTargetsFromCSharpAsync(uri, path, request.Position, cancellationToken);
+            return await HandleRenameTargetsFromCSharpAsync(
+                uri, path, request.Position, request.RequireAttributeLine, cancellationToken);
         }
 
         if (path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase))
@@ -60,7 +61,8 @@ public sealed class RenameTargetsHandler
     }
 
     private async Task<RenameTargetsResponse?> HandleRenameTargetsFromCSharpAsync(
-        DocumentUri uri, string path, Position position, CancellationToken cancellationToken)
+        DocumentUri uri, string path, Position position, bool requireAttributeLine,
+        CancellationToken cancellationToken)
     {
         var line = position.Line + 1;
 
@@ -68,8 +70,11 @@ public sealed class RenameTargetsHandler
         if (registry == ProjectBindingRegistry.Invalid)
             return new RenameTargetsResponse();
 
-        // Collect all bindings at this method location (heuristic: within 5 lines)
-        var allBindings = RenameBindingResolver.FindBindingsAtCSharpMethod(registry, path, line);
+        // Collect all bindings at this method location (heuristic: within 5 lines, unless
+        // requireAttributeLine narrows this to the binding's own attribute line — see
+        // RenameTargetsParams.RequireAttributeLine).
+        var allBindings = RenameBindingResolver.FindBindingsAtCSharpMethod(
+            registry, path, line, requireAttributeLine);
 
         if (allBindings.Count == 0)
             return new RenameTargetsResponse();
