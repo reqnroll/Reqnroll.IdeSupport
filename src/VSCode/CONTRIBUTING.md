@@ -104,6 +104,17 @@ npm run format          # write (auto-fix)
 npm run format:check    # check only (used in CI)
 ```
 
+`npm ci`/`npm install` also installs a repo-root git `pre-commit` hook (via `husky` +
+`lint-staged`, configured under `lint-staged` in `package.json`) that runs `prettier --write` on
+staged `.ts` files automatically. This exists because `npm run format:check` is unreliable to
+eyeball on a Windows checkout: `.gitattributes`' `text=auto` normalizes `.ts` files to CRLF in
+the working copy, so `prettier --check` flags essentially every file (touched or not) with a
+false positive from the line-ending conversion alone — real violations get lost in that noise.
+The hook sidesteps it entirely: `prettier --write` always normalizes to LF on disk before
+staging, regardless of what the working copy had, so a real formatting issue can't slip through
+to CI the way it otherwise can on Windows. If you ever need to skip it (e.g. a WIP commit),
+`HUSKY=0 git commit ...` disables it for that one command.
+
 ### 7. Packaging
 
 ```sh

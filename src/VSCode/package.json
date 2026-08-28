@@ -232,7 +232,11 @@
     "build:server": "bash scripts/publish-server.sh",
     "build:server:dev": "node scripts/dev-publish-server.mjs",
     "build:vsix": "bash scripts/build-vsix.sh",
-    "validate:tokens": "node scripts/validate-semantic-token-scopes.mjs"
+    "validate:tokens": "node scripts/validate-semantic-token-scopes.mjs",
+    "prepare": "cd ../.. && node src/VSCode/node_modules/husky/bin.js"
+  },
+  "lint-staged": {
+    "*.ts": "prettier --write"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -243,6 +247,8 @@
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.8.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.4.1",
     "mocha": "^11.8.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
