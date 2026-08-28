@@ -7,6 +7,7 @@
 * Run CodeLens now shows the scenario's last-run pass/fail glyph, matching VS's own test CodeLens (VS) - see #504
 * Run, hook-match-count, and step-hooks CodeLenses on a `Scenario:` line now appear in a deterministic order (Run, then hook count, then step-hooks) instead of an unspecified tie (VS) - see #504
 * Go to Step Definition's ambiguous-match picker now shows the target method's source line instead of a method name/step-type label, built from the standard `textDocument/definition` response instead of a Reqnroll-specific message (VS Code) - see #126
+* Post-build binding rediscovery now relies solely on the server's standard LSP dynamic file-watch registration instead of a redundant client-side watcher, after confirming the canonical path reliably detects real `dotnet build`s on its own (VS Code) - see #31
 
 ## Bug fixes:
 

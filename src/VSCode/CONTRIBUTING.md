@@ -151,6 +151,17 @@ Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--tra
 Changing `reqnroll.trace.server` requires a window reload to take effect on the already-running
 server (the `--log-level` it maps to is fixed at process launch).
 
+**The Output panel can appear empty even with tracing on.** `reqnroll.trace.server: verbose`
+correctly drives `vscode-languageclient` to trace (`InitializeParams.Trace`/`$/setTrace` as
+above), but the **Reqnroll LSP Trace** channel is a `vscode.LogOutputChannel`, which has its own
+independent display-level filter — set only by the user, via that channel's own dropdown in the
+Output panel (or Command Palette → "Developer: Set Log Level…" → pick the channel). Nothing in
+`reqnroll.trace.server`, or anywhere else in the extension, can raise that filter programmatically,
+so a channel left at its default level will silently show nothing even while tracing is fully
+active. If the panel looks empty, check the timestamped file log under `%LOCALAPPDATA%\Reqnroll\`
+(or the platform equivalent above) instead — it's written directly to disk and isn't subject to
+this filter, so it's the more reliable place to look.
+
 ## CI
 
 The GitHub Actions workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs its VS Code jobs (`build-vscode-extension`, `tsc-only`) whenever a push or PR touches VS Code, Core, or LSP paths. It:

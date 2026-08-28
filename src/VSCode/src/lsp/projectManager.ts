@@ -1,10 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import {
-  DidChangeWatchedFilesNotification,
-  FileChangeType,
-  LanguageClient,
-} from 'vscode-languageclient/node';
+import { LanguageClient } from 'vscode-languageclient/node';
 import { evaluateProject, ProjectFileItem, ProjectProperties } from './msbuildEvaluator';
 import { ReqnrollMethods } from './lspMethods';
 
@@ -89,30 +85,35 @@ export function findOwningProjectFile(
  *     own `workspace/didChangeWorkspaceFolders` LSP notification is already sent automatically
  *     by vscode-languageclient's WorkspaceFoldersFeature; this only covers *our* project
  *     discovery, which the library has no knowledge of).
- * v5: forwards output-assembly (re)build events to the server. Connector-based binding
- *     discovery (`ConnectorBindingRegistryProvider`, server-side) reflects over the project's
- *     `OutputAssemblyPath` DLL; if that DLL doesn't exist yet when the initial
- *     `reqnroll/projectLoaded` baseline is sent (e.g. a freshly cloned repo opened before its
- *     first `dotnet build`), discovery fails once with "Output assembly not found". The server
- *     already declares a standard `workspace/didChangeWatchedFiles` registration for
- *     `**\/bin/**\/*.dll` (`WatchedFilesHandler.cs`) specifically to retry discovery once the
- *     assembly appears — but whether each IDE's LSP client actually *delivers* those dynamically
- *     registered watched-file events reliably is an open question (Q9 in
- *     docs/LSP-IDE-Support-Open-Questions.md); VS Code's `files.watcherExclude` commonly excludes
- *     `bin/`/`obj/` from the file watching a dynamically-registered `FileSystemWatcherFeature`
- *     relies on. Rather than resending the full `reqnroll/projectLoaded` + baseline (which re-runs
- *     `dotnet msbuild` and duplicates work the server can already do with the `OutputAssemblyPath`
- *     it was given at initial registration — that path is computed from MSBuild properties and is
- *     correct even before the file exists), this watcher sends the *same standard*
- *     `workspace/didChangeWatchedFiles` notification directly, landing on the server's existing
- *     handler with no extra round trip. VS's `VsProjectEventMonitor` doesn't need this fallback —
- *     it hooks `DTE.Events.BuildEvents.OnBuildDone` directly.
+ * v5 (added, then reverted — see below): forwarded output-assembly (re)build events to the server
+ *     as a client-side `RelativePattern(outputDir, '*.dll')` watcher per project, sending a
+ *     synthetic `workspace/didChangeWatchedFiles` notification directly. This was added by PR #26
+ *     to fix issue #2 (a project registered before its first `dotnet build` — DLL missing —
+ *     permanently failed Connector-based binding discovery with no retry), on the assumption that
+ *     the server's own standard dynamic registration for `**\/bin/**\/*.dll`
+ *     (`WatchedFilesHandler.cs`) wasn't reliably delivered by `vscode-languageclient`'s generic
+ *     `FileSystemWatcherFeature` — specifically that VS Code's `files.watcherExclude` (which many
+ *     users add for `bin/`/`obj/`) suppresses it.
+ *
+ *     Issue #31 (Q9) investigated that assumption directly. Two findings: (1) `files.watcherExclude`
+ *     covering `bin/` does suppress *any* `createFileSystemWatcher`-based approach, including this
+ *     client-side glue — narrowing the glob doesn't route around it, so the glue provided no
+ *     resilience against the one confirmed failure mode. (2) Issue #2's original symptom does not
+ *     reproduce today: an Extension-Host recreation (a real, unbuilt project registered before its
+ *     first build, then built) recovered correctly with this client-side glue *disabled* — the
+ *     canonical path (server dynamic registration + `vscode-languageclient`'s own watcher) is
+ *     sufficient on its own under default settings. Confirmed again in live manual testing (real
+ *     `dotnet build`s against a real multi-project solution, one incremental and one full/clean
+ *     rebuild producing 150+ dependency-DLL noise) — both correctly detected and filtered by the
+ *     server using canonical registration alone, per the server's own file log
+ *     (`HandleOutputAssemblyChange: ... triggering discovery for '<project>'`). This class was
+ *     reverted to that canonical path; VS's `VsProjectEventMonitor` doesn't need any of this — it
+ *     hooks `DTE.Events.BuildEvents.OnBuildDone` directly.
  */
 export class ProjectManager {
   private readonly _client: LanguageClient;
   private readonly _watcher: vscode.FileSystemWatcher;
   private readonly _fileWatcher: vscode.FileSystemWatcher;
-  private readonly _outputWatchers = new Map<string, vscode.FileSystemWatcher>();
   private readonly _knownProjects = new Set<string>();
   private readonly _resendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private _disposables: vscode.Disposable[] = [];
@@ -154,8 +155,6 @@ export class ProjectManager {
   dispose(): void {
     this._watcher.dispose();
     this._fileWatcher.dispose();
-    for (const watcher of this._outputWatchers.values()) watcher.dispose();
-    this._outputWatchers.clear();
     for (const timer of this._resendTimers.values()) clearTimeout(timer);
     this._resendTimers.clear();
     for (const d of this._disposables) d.dispose();
@@ -239,46 +238,12 @@ export class ProjectManager {
   /**
    * Re-runs MSBuild evaluation for an already-registered project and resends both
    * `reqnroll/projectLoaded` and its `reqnroll/projectFiles` baseline. Used for `.cs`/`.feature`
-   * additions/removals, where the file *membership* itself may have changed — not for output
-   * assembly rebuilds (see {@link notifyOutputAssemblyChanged}), which don't need a fresh MSBuild
-   * evaluation since `OutputAssemblyPath` doesn't change just because the DLL was rebuilt.
+   * additions/removals, where the file *membership* itself may have changed.
    */
   private async resendProjectFiles(projectFile: string): Promise<void> {
     const { props } = await this.sendProjectLoaded(projectFile);
     if (!props) return; // msbuild unavailable — index stays Pending, same as v1 fallback
     await this.sendProjectFilesBaseline(projectFile, props.targetFrameworkMoniker, props.files);
-
-    // v5: arm the output-assembly watcher if this resend is what first discovered
-    // outputAssemblyPath (e.g. initial registration ran before `dotnet restore`). Guarded so a
-    // project resent more than once (this path isn't one-shot like registerProject) doesn't leak
-    // a duplicate watcher.
-    if (props.outputAssemblyPath && !this._outputWatchers.has(projectFile)) {
-      this.watchProjectOutputPath(projectFile, props.outputAssemblyPath);
-    }
-  }
-
-  /**
-   * Forwards a `bin/**` DLL create/change event to the server as a standard
-   * `workspace/didChangeWatchedFiles` notification (v5, see class doc). No-ops for assemblies
-   * that don't belong to a known project (dependency DLLs, other tools' output). Deliberately
-   * does *not* re-run MSBuild or resend `reqnroll/projectLoaded`/`reqnroll/projectFiles` — the
-   * server's `WatchedFilesHandler` already has the project's `OutputAssemblyPath` from its
-   * original registration (computed from MSBuild properties, valid whether or not the file
-   * exists yet) and can retry discovery from just the URI + change type.
-   */
-  private notifyOutputAssemblyChanged(uri: vscode.Uri, changeType: FileChangeType): void {
-    if (!findOwningProjectFile(uri.fsPath, this._knownProjects)) return;
-
-    void this._client
-      .sendNotification(DidChangeWatchedFilesNotification.type, {
-        changes: [{ uri: uri.toString(), type: changeType }],
-      })
-      .catch((err: unknown) => {
-        console.error(
-          `ProjectManager: failed to notify output assembly change for ${uri.fsPath}:`,
-          err,
-        );
-      });
   }
 
   // ── Notification sending ──────────────────────────────────────────────
@@ -311,29 +276,7 @@ export class ProjectManager {
         result.props.targetFrameworkMoniker,
         result.props.files,
       );
-
-      // v5: Forward output-assembly build events to the server as a standard
-      // workspace/didChangeWatchedFiles notification. Instead of a workspace-wide
-      // **/bin/**/*.dll glob that fires on every project's bin/ output (including
-      // unrelated dependency DLLs), watch only this project's output directory.
-      if (result.props.outputAssemblyPath) {
-        this.watchProjectOutputPath(projectFile, result.props.outputAssemblyPath);
-      }
     }
-  }
-
-  private watchProjectOutputPath(projectFile: string, outputAssemblyPath: string): void {
-    const outputDir = path.dirname(outputAssemblyPath);
-
-    // Use a RelativePattern scoped to the project's output directory instead of a
-    // workspace-wide **/bin/**/*.dll glob that fires on every project's DLL output.
-    const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(outputDir, '*.dll'),
-    );
-    watcher.onDidCreate((uri) => this.notifyOutputAssemblyChanged(uri, FileChangeType.Created));
-    watcher.onDidChange((uri) => this.notifyOutputAssemblyChanged(uri, FileChangeType.Changed));
-
-    this._outputWatchers.set(projectFile, watcher);
   }
 
   /**
@@ -412,13 +355,6 @@ export class ProjectManager {
   private async unregisterProject(uri: vscode.Uri): Promise<void> {
     const projectFile = uri.fsPath;
     if (!this._knownProjects.has(projectFile)) return;
-
-    // Dispose the scoped output-assembly watcher for this project
-    const watcher = this._outputWatchers.get(projectFile);
-    if (watcher) {
-      watcher.dispose();
-      this._outputWatchers.delete(projectFile);
-    }
 
     const params = { projectFile };
 

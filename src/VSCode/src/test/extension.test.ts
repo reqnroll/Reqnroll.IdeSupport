@@ -5,6 +5,8 @@ import { ReqnrollExtensionApi } from '../extension';
 
 // Pull in all additional test suites so the single entry-point loads them all
 import './lsp/projectManager.test';
+import './lsp/watcherExclude.test';
+import './lsp/defineStepRecovery.test';
 import './lsp/lspInspectorLogger.test';
 import './lsp/msbuildEvaluator.test';
 import './resolveServerPath.test';
