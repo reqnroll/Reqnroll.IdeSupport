@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.VisualStudio.Core.Imaging;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.TestWindow;
@@ -101,10 +102,20 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // IsScenarioOutline value (they come from a single symbol node), so the first is enough.
         var label = onThisLine[0].IsScenarioOutline ? "▶ Run Scenarios" : "▶ Run Scenario";
 
-        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}'");
+        // Best-effort pass/fail glyph (issue #504 follow-up) — reflects into an unsupported internal
+        // VS API (see RunTestOutcomeBridge's remarks) that degrades to "no glyph" on any failure, so
+        // this never blocks the lens itself from rendering. Only the first target's outcome is used —
+        // good enough for the common single-method case; a mixed-outcome multi-target Outline
+        // (allowRowTests = false) just shows the first target's state, not an aggregate.
+        ImageId? imageId = null;
+        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_cachedMethods[0], token).ConfigureAwait(false);
+        if (outcome is { } resolvedOutcome)
+            imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
+
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcome?.ToString() ?? "(none)"}");
 
         // Pre-fetch/cache now (see this type's remarks) — nothing further to resolve for GetDetailsAsync.
-        return new CodeLensDataPointDescriptor { Description = label };
+        return new CodeLensDataPointDescriptor { Description = label, ImageId = imageId };
     }
 
     /// <inheritdoc />
@@ -120,6 +131,11 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         {
             commands.Add(BuildCommand("Run", TestExplorerCommandIds.RunCommandId, methods));
             commands.Add(BuildCommand("Debug", TestExplorerCommandIds.DebugCommandId, methods));
+            // Reveals the test in the Test Explorer tool window (issue #504 follow-up) — the
+            // supported way to reach the native pass/fail glyph and run history VS's own
+            // TestStatusProvider CodeLens already shows on the generated .feature.cs method,
+            // without this extension needing the internal ICodeLensTestInformationService itself.
+            commands.Add(BuildCommand("Show in Test Explorer", TestExplorerCommandIds.SyncCommandId, methods));
         }
 
         _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}");

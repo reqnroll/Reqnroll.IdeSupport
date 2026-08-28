@@ -29,7 +29,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 [Export(typeof(IAsyncCodeLensDataPointProvider))]
 [Name(Id)]
 [ContentType("Gherkin")]
-[Priority(200)]
+// Lower Priority sorts first (Microsoft.VisualStudio.Utilities.PriorityAttribute) — 100 puts Run
+// ahead of the hook-count lenses (200/300 below), mirroring VS's own TestStatusProvider, which uses
+// Priority(100) so its pass/fail glyph always leads on ordinary C# test methods (issue #504 follow-up).
+[Priority(100)]
 [LocalizedName(typeof(CodeLensResources), nameof(CodeLensResources.RunTestProviderName))]
 internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPointProvider
 {

@@ -18,5 +18,4 @@ export const ReqnrollMethods = {
   projectFiles: 'reqnroll/projectFiles',
   renameTargets: 'reqnroll/renameTargets',
   selectRenameTarget: 'reqnroll/selectRenameTarget',
-  resolveTestTargets: 'reqnroll/resolveTestTargets',
 } as const;

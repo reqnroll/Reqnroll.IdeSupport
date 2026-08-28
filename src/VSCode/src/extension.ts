@@ -13,10 +13,6 @@ import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
 import { registerHookCodeLens } from './commands/hookCodeLens';
-import { registerRunCodeLens, RunTestCommandArgs } from './commands/runCodeLens';
-import { doRunTest } from './commands/runTest';
-import { TestResultStore } from './testRunner/testResultStore';
-import { ResultDecorationService } from './testRunner/resultDecorationService';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
@@ -35,8 +31,6 @@ import { TableHighlightService } from './tableHighlightService';
 let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
 let statusBar: StatusBarManager | undefined;
-let testResultStore: TestResultStore | undefined;
-let resultDecorationService: ResultDecorationService | undefined;
 
 /** The .NET RID for the current platform/arch combination the server is published for. */
 export function ridFor(platform: NodeJS.Platform, arch: string): string {
@@ -233,17 +227,6 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       },
     ),
 
-    // Run Scenario (issue #262) — only ever invoked from the "▶ Run" CodeLens click, with the
-    // lens's own resolved targets forwarded as its single argument (see runCodeLens.ts). No
-    // command-palette/keybinding entry point, matching reqnroll.goToMatchingScenarios above.
-    vscode.commands.registerCommand('reqnroll.runTest', async (args: RunTestCommandArgs) => {
-      if (!client || !projectManager || !testResultStore || !resultDecorationService) {
-        notReady('Run')();
-        return;
-      }
-      await doRunTest(projectManager, testResultStore, resultDecorationService, args);
-    }),
-
     // Go to Step Definition (rich picker with method name + step type)
     vscode.commands.registerCommand('reqnroll.goToStepDefinition', async () => {
       if (!client) {
@@ -370,11 +353,10 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       registerStepCodeLens(client!, context);
       // Hook-match count CodeLens for .feature files (issue #269)
       registerHookCodeLens(client!, context);
-      // Run CodeLens + pass/fail/failed-step gutter decorations for .feature scenarios (issue #262)
-      testResultStore = new TestResultStore();
-      resultDecorationService = new ResultDecorationService(testResultStore);
-      context.subscriptions.push(resultDecorationService);
-      registerRunCodeLens(client!, context, testResultStore);
+      // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
+      // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
+      // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"
+      // action and a later vscode.TestController migration were both tried and reverted here.
       // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
       // above) instead of relying on vscode-languageclient's built-in sync feature.
       context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));

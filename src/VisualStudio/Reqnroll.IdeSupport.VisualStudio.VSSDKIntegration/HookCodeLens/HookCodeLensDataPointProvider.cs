@@ -35,6 +35,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 [Export(typeof(IAsyncCodeLensDataPointProvider))]
 [Name(Id)]
 [ContentType("Gherkin")]
+// Lower Priority sorts first (Microsoft.VisualStudio.Utilities.PriorityAttribute) — 200 sits between
+// Run (100, RunTestCodeLensDataPointProvider) and the step-hooks count (300,
+// StepHooksCodeLensDataPointProvider) (issue #504 follow-up).
 [Priority(200)]
 [LocalizedName(typeof(CodeLensResources), nameof(CodeLensResources.HookMatchCountProviderName))]
 internal sealed class HookCodeLensDataPointProvider : IAsyncCodeLensDataPointProvider
