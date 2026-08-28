@@ -12,8 +12,8 @@ const execFileAsync = util.promisify(execFile);
  * `dotnet build` (not the stubbed spec-suite fixtures, which announce a pre-existing output
  * assembly and so never exercise this gap): a project is discovered and registered before it has
  * ever been built, exactly as PR #26 describes ("a freshly cloned repo opened before ever running
- * `dotnet build`"). The fixture lives under `__defineStepE2E__` at the repo root (created out-of-band
- * before this suite runs, so `discoverExistingProjects()` finds it at activation time).
+ * `dotnet build`"). The fixture lives under `__defineStepE2E__` at the repo root, written to disk
+ * by `suiteSetup` below.
  *
  * `Recovery.feature` has two steps: one genuinely bound by `RecoverySteps.cs` (compiled into the
  * DLL only once the build runs), and one deliberately never bound by anything. The `.cs` binding
@@ -28,6 +28,15 @@ const execFileAsync = util.promisify(execFile);
  * every step bound. The never-bound step breaks that ambiguity: its diagnostic can only appear once
  * the registry has actually left `Invalid`, so it's the real signal for "the server retried
  * discovery after the build and is no longer suppressing."
+ *
+ * The fixture must be self-contained to run on a clean CI checkout (not just a dev machine that
+ * happened to have it lying around from a previous manual run), so `suiteSetup`/`suiteTeardown`
+ * below create and remove it rather than assuming it already exists. It's created *after* the
+ * extension is already active (idempotent — activation already happened in an earlier suite
+ * within this same test run), so `ProjectManager`'s live `**\/*.csproj` watcher — not the one-shot
+ * initial workspace scan — is what discovers and registers it. That's "a new project added
+ * mid-session" rather than "already present at activation," but it exercises the same
+ * registration-before-first-build precondition either way.
  */
 suite('Define Step build-completion recovery (issue #2 root-cause recreation)', function () {
   this.timeout(240_000);
@@ -44,6 +53,53 @@ suite('Define Step build-completion recovery (issue #2 root-cause recreation)', 
 
   const BOUND_LINE = 3; // "    When an unbuilt binding recovers"
   const UNBOUND_LINE = 4; // "    And this step will never be bound"
+
+  const FIXTURE_CSPROJ = `<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Reqnroll" Version="3.2.0" />
+  </ItemGroup>
+</Project>
+`;
+
+  const FIXTURE_STEPS_CS = `using Reqnroll;
+
+namespace Fixture
+{
+    [Binding]
+    public class RecoverySteps
+    {
+        [When("an unbuilt binding recovers")]
+        public void WhenAnUnbuiltBindingRecovers()
+        {
+        }
+    }
+}
+`;
+
+  const FIXTURE_FEATURE = `Feature: Recovery
+
+Scenario: S
+    When an unbuilt binding recovers
+    And this step will never be bound
+`;
+
+  suiteSetup(async () => {
+    await fs.rm(fixtureRoot, { recursive: true, force: true }); // clean slate, defensive
+    await fs.mkdir(fixtureRoot, { recursive: true });
+    await fs.writeFile(csproj, FIXTURE_CSPROJ);
+    await fs.writeFile(path.join(fixtureRoot, 'RecoverySteps.cs'), FIXTURE_STEPS_CS);
+    await fs.writeFile(featureFile, FIXTURE_FEATURE);
+  });
+
+  suiteTeardown(async () => {
+    await fs.rm(fixtureRoot, { recursive: true, force: true });
+  });
 
   async function openFeatureDoc(): Promise<vscode.TextDocument> {
     const uri = vscode.Uri.file(featureFile);
@@ -84,8 +140,13 @@ suite('Define Step build-completion recovery (issue #2 root-cause recreation)', 
     await ext.activate();
 
     await openFeatureDoc();
-    // Let the initial didOpen/registration settle.
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    // Let the fixture .csproj's live-watcher discovery + registerProject's async `dotnet msbuild`
+    // evaluation settle before racing it with the build below. Now that the fixture is created
+    // mid-session (self-contained, see suiteSetup) rather than present at initial workspace scan,
+    // this is a real dependency chain — the server needs the project's OutputAssemblyPath
+    // registered *before* WatchedFilesHandler can match the DLL-created event to it — not just a
+    // nice-to-have buffer, so it's generous on purpose.
+    await new Promise((resolve) => setTimeout(resolve, 15_000));
 
     const before = currentDiagnostics();
     console.log(

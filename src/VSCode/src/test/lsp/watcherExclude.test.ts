@@ -13,7 +13,9 @@ import * as vscode from 'vscode';
  * it writes to the isolated `.vscode-test/user-data` profile rather than the repo's own
  * `.vscode/settings.json`.
  */
-suite('files.watcherExclude vs RelativePattern watcher (issue #31 / Q9)', () => {
+suite('files.watcherExclude vs RelativePattern watcher (issue #31 / Q9)', function () {
+  this.timeout(30_000);
+
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
     throw new Error('This suite requires an open workspace folder');
@@ -24,7 +26,7 @@ suite('files.watcherExclude vs RelativePattern watcher (issue #31 / Q9)', () => 
   async function waitForWatcherEvent(
     outputDir: string,
     dllPath: string,
-    timeoutMs = 5000,
+    timeoutMs = 10_000,
   ): Promise<boolean> {
     await fs.mkdir(outputDir, { recursive: true });
 
@@ -43,8 +45,10 @@ suite('files.watcherExclude vs RelativePattern watcher (issue #31 / Q9)', () => 
         });
       });
 
-      // Let the watcher fully arm before the write races it.
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Let the watcher fully arm before the write races it — CI's Linux runners have been
+      // observed needing more headroom than a local dev machine for both the config update to
+      // settle and the watcher to actually start delivering inotify events.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       await fs.writeFile(dllPath, 'fake-dll-bytes');
 
       return await fired;
@@ -68,6 +72,7 @@ suite('files.watcherExclude vs RelativePattern watcher (issue #31 / Q9)', () => 
         { '**/.git/objects/**': true },
         vscode.ConfigurationTarget.Global,
       );
+    await new Promise((resolve) => setTimeout(resolve, 500)); // let the exclude change settle
 
     const outputDir = path.join(testRoot, 'no-exclude', 'bin', 'Debug', 'net8.0');
     const fired = await waitForWatcherEvent(outputDir, path.join(outputDir, 'App.dll'));
@@ -86,6 +91,7 @@ suite('files.watcherExclude vs RelativePattern watcher (issue #31 / Q9)', () => 
     await vscode.workspace
       .getConfiguration()
       .update('files.watcherExclude', { '**/bin/**': true }, vscode.ConfigurationTarget.Global);
+    await new Promise((resolve) => setTimeout(resolve, 500)); // let the exclude change settle
 
     const outputDir = path.join(testRoot, 'with-exclude', 'bin', 'Debug', 'net8.0');
     const fired = await waitForWatcherEvent(outputDir, path.join(outputDir, 'App.dll'));
