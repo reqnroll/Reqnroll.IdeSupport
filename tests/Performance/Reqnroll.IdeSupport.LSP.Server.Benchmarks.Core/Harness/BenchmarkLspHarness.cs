@@ -328,15 +328,6 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 Context = new ReferenceContext { IncludeDeclaration = true },
             }, ct);
 
-    public Task<GoToStepDefinitionsResponse?> RequestGoToStepDefinitionsAsync(
-        DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<GoToStepDefinitionsResponse?>(LspMethodNames.ReqnrollGoToStepDefinitions,
-            new TextDocumentPositionParams
-            {
-                TextDocument = new TextDocumentIdentifier { Uri = uri },
-                Position = new Position(line, character),
-            }, ct);
-
     public Task<GoToHooksResponse?> RequestGoToHooksAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
         RequestAsync<GoToHooksResponse?>(LspMethodNames.ReqnrollGoToHooks,

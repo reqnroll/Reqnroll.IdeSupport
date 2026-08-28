@@ -1,74 +1,100 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { LanguageClient } from 'vscode-languageclient/node';
-import { ReqnrollMethods } from '../lsp/lspMethods';
+import {
+  DefinitionRequest,
+  LanguageClient,
+  Location,
+  LocationLink,
+} from 'vscode-languageclient/node';
 import { openAndReveal } from '../util/navigationUtils';
 
-interface GoToStepDefinitionsResponse {
-  stepDefinitions: GoToStepDefinitionLocation[];
-}
-
-interface GoToStepDefinitionLocation {
+interface ResolvedLocation {
   uri: string;
-  startLine: number;
-  startChar: number;
-  stepType: string;
-  methodName: string;
+  line: number;
+  char: number;
 }
 
 /**
- * Implements Go to Step Definition: queries the server for step definitions matching the step
- * at the cursor and navigates directly if there's exactly one, or shows a rich `QuickPick`
- * (method name + step type) to choose among several.
+ * Implements Go to Step Definition using the standard `textDocument/definition` request (the
+ * same one VS/Rider's generic LSP clients use — see `DefinitionHandler` server-side). Navigates
+ * directly if there's exactly one location, or shows a `QuickPick` built from each candidate's
+ * own source line (mirroring what VS's built-in multi-definition results window shows: source
+ * text + filename + line number) when there's more than one.
  */
 export async function doGoToStepDefinition(client: LanguageClient): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
 
   const pos = editor.selection.active;
-  let response: GoToStepDefinitionsResponse;
+  let result: Location | Location[] | LocationLink[] | null;
   try {
-    response = await client.sendRequest<GoToStepDefinitionsResponse>(
-      ReqnrollMethods.goToStepDefinitions,
-      {
-        textDocument: { uri: editor.document.uri.toString() },
-        position: { line: pos.line, character: pos.character },
-      },
-    );
+    result = await client.sendRequest(DefinitionRequest.type, {
+      textDocument: { uri: editor.document.uri.toString() },
+      position: { line: pos.line, character: pos.character },
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     void vscode.window.showErrorMessage(`Reqnroll: Go to Step Definition failed — ${msg}`);
     return;
   }
 
-  if (!response.stepDefinitions || response.stepDefinitions.length === 0) {
+  const locations = normalizeLocations(result);
+  if (locations.length === 0) {
     void vscode.window.showInformationMessage(
       'Reqnroll: No step definition found at this position.',
     );
     return;
   }
 
-  if (response.stepDefinitions.length === 1) {
-    await navigateToStepDefinition(response.stepDefinitions[0]);
+  if (locations.length === 1) {
+    await navigateTo(locations[0]);
     return;
   }
 
-  const items = response.stepDefinitions.map((def) => ({
-    label: `$(symbol-method) ${def.methodName}`,
-    description: `[${def.stepType}]`,
-    detail: uriToRelativePath(def.uri),
-    def,
-  }));
+  const items = await Promise.all(
+    locations.map(async (loc) => ({
+      label: await getSourceLineText(loc),
+      description: `${uriToRelativePath(loc.uri)}:${loc.line + 1}`,
+      loc,
+    })),
+  );
 
   const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: `${response.stepDefinitions.length} step definitions found — select to navigate`,
+    placeHolder: `${locations.length} step definitions found — select to navigate`,
   });
   if (!picked) return;
-  await navigateToStepDefinition(picked.def);
+  await navigateTo(picked.loc);
 }
 
-async function navigateToStepDefinition(def: GoToStepDefinitionLocation): Promise<void> {
-  await openAndReveal(vscode.Uri.parse(def.uri), def.startLine, def.startChar);
+/** Collapses the three shapes `textDocument/definition` can return into a flat location list. */
+function normalizeLocations(
+  result: Location | Location[] | LocationLink[] | null,
+): ResolvedLocation[] {
+  if (!result) return [];
+  const items = Array.isArray(result) ? result : [result];
+  return items.map((item) =>
+    'targetUri' in item
+      ? {
+          uri: item.targetUri,
+          line: item.targetRange.start.line,
+          char: item.targetRange.start.character,
+        }
+      : { uri: item.uri, line: item.range.start.line, char: item.range.start.character },
+  );
+}
+
+async function navigateTo(loc: ResolvedLocation): Promise<void> {
+  await openAndReveal(vscode.Uri.parse(loc.uri), loc.line, loc.char);
+}
+
+/** Reads the trimmed source text of `loc`'s line, e.g. `public void AddNumbers(int a, int b)`. */
+async function getSourceLineText(loc: ResolvedLocation): Promise<string> {
+  try {
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(loc.uri));
+    return doc.lineAt(loc.line).text.trim();
+  } catch {
+    return path.basename(vscode.Uri.parse(loc.uri).fsPath);
+  }
 }
 
 /**

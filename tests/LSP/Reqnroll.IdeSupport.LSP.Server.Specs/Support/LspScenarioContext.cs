@@ -39,9 +39,6 @@ public sealed class LspScenarioContext
     public Container<FoldingRange>? LastFoldingRanges { get; set; }
     public ApplyWorkspaceEditParams? LastToggleEdit { get; set; }
 
-    // F5 — Go to Step Definition (custom reqnroll/goToStepDefinitions response)
-    public GoToStepDefinitionsResponse? LastGoToStepDefinitions { get; set; }
-
     // F15 — Find Unused Step Definitions
     public FindUnusedStepDefinitionsResponse? LastFindUnused { get; set; }
 

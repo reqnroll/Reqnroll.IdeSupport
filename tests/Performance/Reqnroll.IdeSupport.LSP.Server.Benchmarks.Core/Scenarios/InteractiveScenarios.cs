@@ -202,14 +202,6 @@ public sealed class InteractiveScenarios
             await _harness.RequestStepReferencesAsync(f.Uri, line, character).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
-    public async Task<LatencySummary> GoToStepDefinitionsAsync()
-        => await RunAsync(PerfTargets.GoToStepDefinitions.Operation, async i =>
-        {
-            var f = _features[i % _features.Count];
-            var (line, character) = f.StepPosition;
-            await _harness.RequestGoToStepDefinitionsAsync(f.Uri, line, character).ConfigureAwait(false);
-        }).ConfigureAwait(false);
-
     /// <summary>
     /// <c>reqnroll/goToHooks</c> from the first scenario's step position — that scenario carries
     /// the corpus's <c>@hookscope</c> tag (see <c>CorpusGenerator.BuildFeature</c>), so this exercises

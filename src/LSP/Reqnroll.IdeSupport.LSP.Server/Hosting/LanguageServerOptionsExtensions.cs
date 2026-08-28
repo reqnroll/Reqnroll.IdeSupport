@@ -172,10 +172,6 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollDocumentSymbolHierarchical,
             (request, ct) => resolver!.Get<DocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
 
-        options.OnRequest<TextDocumentPositionParams, GoToStepDefinitionsResponse>(
-            LspMethodNames.ReqnrollGoToStepDefinitions,
-            (request, ct) => resolver!.Get<GoToStepDefinitionsHandler>().HandleAsync(request, ct));
-
         options.OnRequest<GoToHooksParams, GoToHooksResponse>(
             LspMethodNames.ReqnrollGoToHooks,
             (request, ct) => resolver!.Get<GoToHooksHandler>().HandleAsync(request, ct));

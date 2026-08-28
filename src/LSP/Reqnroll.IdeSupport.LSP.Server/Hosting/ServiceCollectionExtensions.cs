@@ -204,7 +204,6 @@ public static class ServiceCollectionExtensions
             .AddSingleton<ICompletionService, CompletionService>()
             .AddSingleton<ICompletionMatcher, ReturnAllCompletionMatcher>()
             .AddSingleton<DefinitionHandler>()
-            .AddSingleton<GoToStepDefinitionsHandler>()
             .AddSingleton<GoToHooksHandler>()
             .AddSingleton<GoToMatchingScenariosHandler>()
             .AddSingleton<ResolveTestTargetsHandler>()

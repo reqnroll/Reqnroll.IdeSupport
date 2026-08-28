@@ -8,7 +8,6 @@
  * descriptors exported by `vscode-languageclient/node` instead (e.g. `CodeLensRequest.type`).
  */
 export const ReqnrollMethods = {
-  goToStepDefinitions: 'reqnroll/goToStepDefinitions',
   goToHooks: 'reqnroll/goToHooks',
   goToMatchingScenarios: 'reqnroll/goToMatchingScenarios',
   findStepUsages: 'reqnroll/findStepUsages',

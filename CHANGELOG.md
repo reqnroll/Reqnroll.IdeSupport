@@ -6,6 +6,7 @@
 * Run CodeLens's Details popup now has a "Show in Test Explorer" action alongside Run/Debug, jumping straight to the test's native pass/fail state and run history (VS) - see #504
 * Run CodeLens now shows the scenario's last-run pass/fail glyph, matching VS's own test CodeLens (VS) - see #504
 * Run, hook-match-count, and step-hooks CodeLenses on a `Scenario:` line now appear in a deterministic order (Run, then hook count, then step-hooks) instead of an unspecified tie (VS) - see #504
+* Go to Step Definition's ambiguous-match picker now shows the target method's source line instead of a method name/step-type label, built from the standard `textDocument/definition` response instead of a Reqnroll-specific message (VS Code) - see #126
 
 ## Bug fixes:
 
