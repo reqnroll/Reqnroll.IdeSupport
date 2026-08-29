@@ -1896,6 +1896,13 @@ addition; they just discarded the failure instead of setting `Error`. See
 [Architecture §7](LSP-IDE-Support-Architecture.md#7-binding-connector) note below for the parity
 this restores with the connector path, which already combined both into `ProjectBinding.Error`.
 
+Both of these two are also anchored at the specific attribute that failed (`[Given/When/Then]` for
+an expression error, the binding's own attribute for a scope error), via `ProjectBinding.ErrorLocation`
+— unlike a structural error, which is shared by every attribute on the method and stays anchored at
+the method identifier so it dedupes to one squiggle rather than one per attribute. `ErrorLocation`
+is only populated on the Roslyn path; the connector's PDB-derived data has no per-attribute
+location to offer, so a connector-reported failure still anchors at the method.
+
 `[StepArgumentTransformation]` validation is out of scope: `StepDefinitionFileParser` doesn't
 discover that attribute at all today (only `StepDefinitionAttributes`/`HookAttributes` are
 recognized), a separate, larger prerequisite closed independently.

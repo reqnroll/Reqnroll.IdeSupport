@@ -10,10 +10,11 @@ public class CSharpDiagnosticsAggregatorTests
     private readonly CSharpDiagnosticsAggregator _sut = new();
 
     private static ProjectStepDefinitionBinding StepDefIn(
-        string path, string method, int line, int column, string? error, ScenarioBlock block = ScenarioBlock.Given) =>
+        string path, string method, int line, int column, string? error, ScenarioBlock block = ScenarioBlock.Given,
+        SourceLocation? errorLocation = null) =>
         new(block, new Regex("^x$"), null,
             new ProjectBindingImplementation(method, null, new SourceLocation(path, line, column, line, column + 1)),
-            error: error);
+            error: error, errorLocation: errorLocation);
 
     private static ProjectHookBinding HookIn(string path, string method, int line, int column, string? error) =>
         new(new ProjectBindingImplementation(method, null, new SourceLocation(path, line, column, line, column + 1)),
@@ -60,6 +61,28 @@ public class CSharpDiagnosticsAggregatorTests
 
         diagnostics.Should().ContainSingle();
         diagnostics[0].Message.Should().Be("must be a class");
+    }
+
+    [Fact]
+    public void Attribute_specific_errors_on_the_same_method_are_not_merged()
+    {
+        // Issue #514 follow-up: two attributes on one method ([Given] with a malformed
+        // expression, [When] with a valid one) share Implementation.SourceLocation (the method)
+        // but each carries its own ErrorLocation (its own attribute) -- these must stay separate
+        // squiggles, unlike the pure-structural-error case above which correctly merges.
+        var registry = new ProjectBindingRegistry(
+            [
+                StepDefIn(FilePath, "Steps.Method()", 10, 5, error: "bad expression",
+                    errorLocation: new SourceLocation(FilePath, 9, 5, 9, 20)),
+                StepDefIn(FilePath, "Steps.Method()", 10, 5, error: null, block: ScenarioBlock.When)
+            ], [], projectHash: 1);
+
+        var diagnostics = _sut.Aggregate(registry, FilePath);
+
+        diagnostics.Should().ContainSingle();
+        diagnostics[0].Message.Should().Be("bad expression");
+        // Anchored at the attribute (line 9), not the method (line 10).
+        diagnostics[0].Location.SourceFileLine.Should().Be(9);
     }
 
     [Fact]

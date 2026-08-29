@@ -13,8 +13,8 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     /// <summary>Creates a step definition binding.</summary>
     public ProjectStepDefinitionBinding(ScenarioBlock stepDefinitionType, Regex regex, BindingScope scope,
         ProjectBindingImplementation implementation, string specifiedExpression = null, string error = null,
-        int? attributeSourceLine = null)
-    : base(implementation, scope, error)
+        int? attributeSourceLine = null, SourceLocation errorLocation = null)
+    : base(implementation, scope, error, errorLocation)
     {
         StepDefinitionType = stepDefinitionType;
         Regex = regex;
@@ -139,6 +139,6 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     public ProjectStepDefinitionBinding WithSpecifiedExpression(string expression)
     {
         var regex = GetRegexFromSpecifiedExpression(expression);
-        return new ProjectStepDefinitionBinding(StepDefinitionType, regex, Scope, Implementation, expression, Error, AttributeSourceLine);
+        return new ProjectStepDefinitionBinding(StepDefinitionType, regex, Scope, Implementation, expression, Error, AttributeSourceLine, ErrorLocation);
     }
 }

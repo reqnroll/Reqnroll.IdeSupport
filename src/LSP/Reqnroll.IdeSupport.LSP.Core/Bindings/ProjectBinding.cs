@@ -20,13 +20,26 @@ public class ProjectBinding
     public virtual bool IsValid => Error == null && Scope?.IsValid != false;
     /// <summary>A description of why this binding could not be imported/used, or null if it's valid.</summary>
     public string Error { get; }
+    /// <summary>
+    /// Where a diagnostic for <see cref="Error"/> should be anchored, when it's more specific than
+    /// the method itself — e.g. the <c>[Given(...)]</c> attribute for a malformed step expression,
+    /// or the binding's own attribute for an invalid scope tag expression (issue #514 follow-up).
+    /// <see langword="null"/> for a structural (method/type-level) error, which is shared by every
+    /// attribute on the method and should fall back to <see cref="ProjectBindingImplementation.SourceLocation"/>
+    /// so it dedupes to one squiggle rather than one per attribute. Only populated by
+    /// <c>StepDefinitionFileParser</c> (Roslyn); the connector's PDB-derived data has no
+    /// per-attribute location to offer.
+    /// </summary>
+    public SourceLocation ErrorLocation { get; }
 
     /// <summary>Creates a binding from its implementation, scope, and optional error.</summary>
-    public ProjectBinding(ProjectBindingImplementation implementation, BindingScope scope, string error = null)
+    public ProjectBinding(ProjectBindingImplementation implementation, BindingScope scope, string error = null,
+        SourceLocation errorLocation = null)
     {
         Implementation = implementation;
         Scope = scope;
         Error = error;
+        ErrorLocation = errorLocation;
     }
 
     /// <summary>Checks whether this binding's <see cref="Scope"/> (tag expression, feature title, scenario title) matches the given context.</summary>

@@ -1098,6 +1098,10 @@ namespace S
         binding.Regex.Should().BeNull();
         binding.Error.Should().Contain("({int})");
         binding.IsValid.Should().BeFalse();
+        // Issue #514 follow-up: anchored at the [Given(...)] attribute (one line above the
+        // method, in this template), not the method identifier.
+        binding.ErrorLocation.Should().NotBeNull();
+        binding.ErrorLocation!.SourceFileLine.Should().Be(binding.Implementation.SourceLocation!.SourceFileLine - 1);
     }
 
     [Fact]
@@ -1113,6 +1117,8 @@ namespace S
         binding.Regex.Should().BeNull();
         binding.Error.Should().Contain("an unclosed [character class");
         binding.IsValid.Should().BeFalse();
+        binding.ErrorLocation.Should().NotBeNull();
+        binding.ErrorLocation!.SourceFileLine.Should().Be(binding.Implementation.SourceLocation!.SourceFileLine - 1);
     }
 
     [Fact]
@@ -1140,6 +1146,11 @@ namespace S
         var binding = stepDefinitions.Should().ContainSingle().Subject!;
         binding.Error.Should().Contain("@a and");
         binding.IsValid.Should().BeFalse();
+        // Anchored at the step-definition's own attribute ([Given], the one directly above the
+        // method in this template) -- not the separate [Scope] attribute two lines up, and not
+        // the method. See ErrorLocation's remarks for why this simplification was chosen.
+        binding.ErrorLocation.Should().NotBeNull();
+        binding.ErrorLocation!.SourceFileLine.Should().Be(binding.Implementation.SourceLocation!.SourceFileLine - 1);
     }
 
     [Fact]
@@ -1153,6 +1164,9 @@ namespace S
         var hook = bindings.Hooks.Should().ContainSingle().Subject!;
         hook.Error.Should().Contain("@a and");
         hook.IsValid.Should().BeFalse();
+        // Anchored at the hook's own attribute ([BeforeScenario]), one line above the method.
+        hook.ErrorLocation.Should().NotBeNull();
+        hook.ErrorLocation!.SourceFileLine.Should().Be(hook.Implementation.SourceLocation!.SourceFileLine - 1);
     }
 
     [Fact]
@@ -1184,6 +1198,25 @@ namespace TestProject
 }");
         var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
         binding.Error.Should().Contain("must be a class").And.Contain("@a and");
+        // The scope error still anchors the diagnostic at the attribute, even though a
+        // structural error also applies to the same binding.
+        binding.ErrorLocation.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Purely_structural_error_has_no_error_location()
+    {
+        // No ErrorLocation for a structural-only error -- it's shared by every attribute on the
+        // method (see CSharpDiagnosticsAggregator's dedup), so it must fall back to the method's
+        // own Implementation.SourceLocation rather than pin to whichever attribute happened to be
+        // enumerated last.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""x"")]
+              public async void Method() { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("must not be async void");
+        binding.ErrorLocation.Should().BeNull();
     }
 
     // ── HasExpressionChanges ────────────────────────────────────────────────────

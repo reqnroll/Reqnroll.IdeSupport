@@ -170,9 +170,24 @@ public class StepDefinitionFileParser
                 ? BuildRegex(expression, out regexError)
                 : BuildMethodNameRegex(block, methodName, parameterNames);
             var error = CombineErrors(structuralError, regexError, bindingScope?.Error);
+            // Issue #514 follow-up: an expression or scope error is specific to this attribute,
+            // not the method as a whole (unlike a structural error, shared by every attribute on
+            // the method) -- anchor the diagnostic there instead of at the method identifier.
+            var errorLocation = regexError != null || bindingScope?.Error != null
+                ? GetAttributeLocation(implementation.SourceLocation?.SourceFile, attribute)
+                : null;
             target.Add(new ProjectStepDefinitionBinding(block, regex, bindingScope, implementation, expression,
-                error: error, attributeSourceLine: attrLine));
+                error: error, attributeSourceLine: attrLine, errorLocation: errorLocation));
         }
+    }
+
+    /// <summary>Captures the full span of a binding attribute (e.g. <c>[Given("...")]</c>), for anchoring an attribute-specific diagnostic (issue #514 follow-up) rather than the shared method location.</summary>
+    private static SourceLocation GetAttributeLocation(string sourceFile, AttributeSyntax attribute)
+    {
+        var span = attribute.GetLocation().GetLineSpan();
+        return new SourceLocation(sourceFile,
+            span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1,
+            span.EndLinePosition.Line + 1, span.EndLinePosition.Character + 1);
     }
 
     /// <summary>
@@ -342,7 +357,13 @@ public class StepDefinitionFileParser
         var hookTags = GetHookTags(attribute);
         var order = GetHookOrder(attribute);
         var scope = BuildScope(CombineWithHookTags(methodScope, hookTags));
-        return new ProjectHookBinding(implementation, scope, hookType, order, CombineErrors(error, scope?.Error));
+        // Issue #514 follow-up: a scope error is specific to this hook's own attribute (e.g.
+        // [BeforeScenario]), not the method as a whole -- unlike error (structural), which is
+        // shared by every attribute on the method and should stay anchored at the method.
+        var errorLocation = scope?.Error != null
+            ? GetAttributeLocation(implementation.SourceLocation?.SourceFile, attribute)
+            : null;
+        return new ProjectHookBinding(implementation, scope, hookType, order, CombineErrors(error, scope?.Error), errorLocation);
     }
 
     // The four hook types below run once for the whole test run/feature rather than once per
