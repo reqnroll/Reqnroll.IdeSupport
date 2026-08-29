@@ -130,6 +130,30 @@ public class DiagnosticsAggregatorTests
     }
 
     [Fact]
+    public void Undefined_step_uses_an_invalid_near_miss_bindings_error_when_present()
+    {
+        // Issue #514's "cheap first step": a structurally-matching but invalid binding's Error
+        // (set by StepDefinitionFileParser's validation, or by the connector for its own import
+        // failures) should replace the generic "not found" message.
+        var invalidBinding = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
+            new Regex("^the binding exists$"), null,
+            new ProjectBindingImplementation("MyStep", null, new SourceLocation("Steps.cs", 5, 1)),
+            error: "must be static");
+        var registry = RegistryWith(invalidBinding);
+
+        const string feature = "Feature: F\nScenario: S\n    Given the binding exists\n";
+        var matchSet = MatchSetFor(feature, registry);
+
+        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+
+        result.Should().ContainSingle();
+        var diag = result[0];
+        diag.Severity.Should().Be(GherkinDiagnosticSeverity.Warning);
+        diag.Source.Should().Be(DiagnosticsAggregator.BindingSource);
+        diag.Message.Should().Be("must be static");
+    }
+
+    [Fact]
     public void Defined_step_does_not_produce_a_diagnostic()
     {
         const string feature = "Feature: F\nScenario: S\n    Given the binding exists\n";

@@ -145,10 +145,11 @@ public record ProjectBindingRegistry
         // bindings whose statically-known literal text is actually present in this step, via one
         // Aho-Corasick scan instead of a per-binding regex attempt. See StepLiteralIndex's remarks
         // for why this can never exclude a binding that would have genuinely matched.
-        var sdMatches = LiteralIndex.GetCandidates(stepText)
+        var candidates = LiteralIndex.GetCandidates(stepText).ToArray();
+        var sdMatches = candidates
             .Select(sd => sd.Match(step, context, stepText)).Where(m => m != null).ToArray();
         if (!sdMatches.Any())
-            return new[] {MatchResultItem.CreateUndefined(step, stepText)};
+            return new[] {MatchResultItem.CreateUndefined(step, stepText, FindNearMissErrors(candidates, step, context, stepText))};
 
         sdMatches = HandleDataTableOverloads(step, sdMatches);
         sdMatches = HandleDocStringOverloads(step, sdMatches);
@@ -159,6 +160,35 @@ public record ProjectBindingRegistry
             return new[] {sdMatches[0]};
 
         return sdMatches.Select(mi => mi.CloneToAmbiguousItem()).ToArray();
+    }
+
+    /// <summary>
+    /// Issue #514's "cheap first step": when a step has no valid match, checks whether any
+    /// <em>invalid</em> candidate binding's regex/scope would otherwise have matched it (via
+    /// <see cref="ProjectStepDefinitionBinding.WouldMatchIgnoringValidity"/>, which — unlike
+    /// <see cref="ProjectStepDefinitionBinding.Match"/> — doesn't short-circuit on
+    /// <c>!IsValid</c>) and, if so, returns that binding's <see cref="ProjectBinding.Error"/> so
+    /// the step's "undefined" diagnostic can name the real reason instead of a generic "not
+    /// found" — e.g. a step-definition method that lost its required <c>static</c> modifier is
+    /// still reported as the specific validation failure, not silently as if no binding had ever
+    /// existed for it. Returns <see langword="null"/> when no invalid candidate matches
+    /// structurally, preserving the existing generic message.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="candidates"/> is <see cref="LiteralIndex"/>'s own prefiltered set — already
+    /// narrowed to bindings whose literal text could possibly appear in <paramref name="stepText"/>
+    /// (soundly, per <see cref="StepLiteralIndex"/>'s remarks), so this re-checks only the regex
+    /// and scope, not the literal prefilter.
+    /// </remarks>
+    private static string[]? FindNearMissErrors(
+        IEnumerable<ProjectStepDefinitionBinding> candidates, Step step, IGherkinDocumentContext context, string stepText)
+    {
+        var errors = candidates
+            .Where(b => b.Error != null && b.WouldMatchIgnoringValidity(step, context, stepText))
+            .Select(b => b.Error)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return errors.Length == 0 ? null : errors;
     }
 
     /// <summary>

@@ -333,7 +333,7 @@ We are **not** addressing this at this time. Closing the gap would mean feeding 
 
 Two categories of diagnostic are displayed for `.feature` files:
 
-- **Binding mismatches** (`DiagnosticSeverity.Warning`, yellow squiggle, `source: "reqnroll.binding"`): steps that have no matching binding are underlined. Hovering shows "Step definition not found."
+- **Binding mismatches** (`DiagnosticSeverity.Warning`, yellow squiggle, `source: "reqnroll.binding"`): steps that have no matching binding are underlined. Hovering shows "Step definition not found." — or, when the step structurally matches a binding that exists but is invalid (its `Error` set by the connector's import failure, or by [F27](#f27--c-binding-validation-diagnostics)'s validation), that binding's specific error instead, e.g. *"Binding method 'Setup' must be static because its containing type 'Hooks' is abstract."*
 - **Parse errors** (`DiagnosticSeverity.Error`, red squiggle, `source: "reqnroll.parser"`): structurally invalid Gherkin (e.g., missing `Feature:` header, invalid tag syntax) is underlined with a description.
 
 Both categories are computed after every edit and pushed as a **single** `textDocument/publishDiagnostics` message. The LSP specification requires that one message delivers the complete diagnostic set for a URI; separate messages would clear previously delivered diagnostics of the other category. A `DiagnosticsAggregator` combines both sources before sending.
@@ -1964,11 +1964,16 @@ sequenceDiagram
   file is registered twice and every step matching it is reported ambiguous. Confirmed present
   before F27 existed; unrelated to this feature, but worth knowing about since it can look like an
   F27 regression.
-- **Still open**: enriching the `.feature`-file "step not found" diagnostic ([F3](#f3--gherkin-file-diagnostics))
-  using an invalid binding's `Error` when its regex would otherwise have matched the step — the
-  issue's "cheap first step" recommendation. Needs matching-engine work:
-  `ProjectStepDefinitionBinding.Match` currently returns `null` on `!IsValid` before ever trying
-  the regex, so an invalid binding is invisible to matching entirely today.
+- **The issue's "cheap first step" is also implemented**: `.feature`-file "step not found"
+  diagnostics ([F3](#f3--gherkin-file-diagnostics)) now name the real reason when the step
+  structurally matches an *invalid* binding, instead of a generic "not found." Since
+  `ProjectStepDefinitionBinding.Match` returns `null` on `!IsValid` before ever trying the regex —
+  making an invalid binding invisible to real matching, correctly — a separate
+  `WouldMatchIgnoringValidity` check (regex + scope only, never used for real step-execution
+  matching) runs only when a step has no valid match at all, and its result flows through
+  `MatchResultItem`'s existing `Errors`/`MatchResult.GetErrorMessage()` mechanism — the same one
+  the Ambiguous case already used — so `DiagnosticsAggregator` needed only a one-line change to
+  stop discarding it.
 
 ---
 

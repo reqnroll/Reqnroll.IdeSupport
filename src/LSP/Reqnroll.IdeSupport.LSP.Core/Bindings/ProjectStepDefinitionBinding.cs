@@ -99,6 +99,23 @@ public class ProjectStepDefinitionBinding : ProjectBinding
         return MatchResultItem.CreateMatch(this, parameterMatch);
     }
 
+    /// <summary>
+    /// Like <see cref="Match"/> but ignores <see cref="ProjectBinding.IsValid"/> — used only to
+    /// find a near-miss for diagnostics (issue #514's "cheap first step"): an invalid binding
+    /// (one with <see cref="ProjectBinding.Error"/> set) whose regex and scope would otherwise
+    /// have matched a step that is reported undefined. Never used for real step-execution
+    /// matching, which must keep excluding invalid bindings via <see cref="Match"/>.
+    /// </summary>
+    public bool WouldMatchIgnoringValidity(Step step, IGherkinDocumentContext context, string stepText = null)
+    {
+        if (Regex is null || !(step is DeveroomGherkinStep deveroomGherkinStep))
+            return false;
+        if (deveroomGherkinStep.ScenarioBlock != StepDefinitionType)
+            return false;
+        stepText = stepText ?? step.Text;
+        return Regex.Match(stepText).Success && MatchScope(context);
+    }
+
     private ParameterMatch MatchParameter(Step step, Match match)
     {
         var parameterCount = Implementation.ParameterTypes?.Length ?? 0;

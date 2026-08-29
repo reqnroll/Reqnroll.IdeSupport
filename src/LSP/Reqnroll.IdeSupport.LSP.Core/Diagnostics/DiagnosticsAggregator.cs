@@ -39,10 +39,15 @@ public sealed class DiagnosticsAggregator : IDiagnosticsAggregator
         }
 
         // Undefined-step/binding diagnostics: undefined steps from the binding match set.
+        // Issue #514's "cheap first step": when the step structurally matches an *invalid*
+        // binding (e.g. a step-definition method missing a required `static`), Result.GetErrorMessage()
+        // carries that binding's Error (see ProjectBindingRegistry.FindNearMissErrors) instead of
+        // being null — the same mechanism the Ambiguous case below already uses, so this just
+        // stops discarding it, per the issue's own recommendation.
         foreach (var step in matchSet.Undefined)
         {
             diagnostics.Add(new GherkinDiagnostic(
-                UndefinedStepMessage,
+                step.Result.GetErrorMessage() ?? UndefinedStepMessage,
                 step.Range,
                 GherkinDiagnosticSeverity.Warning,
                 BindingSource));

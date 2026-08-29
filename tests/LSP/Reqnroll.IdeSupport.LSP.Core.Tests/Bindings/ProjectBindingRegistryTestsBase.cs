@@ -21,7 +21,7 @@ public abstract class ProjectBindingRegistryTestsBase
 
     protected ProjectStepDefinitionBinding CreateStepDefinitionBinding(string regex,
         ScenarioBlock scenarioBlock = ScenarioBlock.Given, BindingScope? scope = null, string[]? parameterTypes = null,
-        string? methodName = null)
+        string? methodName = null, string? error = null)
     {
         methodName = methodName ?? "MyMethod" + Guid.NewGuid().ToString("N");
         if (!Implementations.TryGetValue(methodName, out var implementation))
@@ -36,7 +36,7 @@ public abstract class ProjectBindingRegistryTestsBase
         // (e.g. [Given(@"...")]), not a method-name-style binding (issue #344 gave
         // SpecifiedExpression == null a real meaning — see CreateMethodNameStyleStepDefinitionBinding).
         return new ProjectStepDefinitionBinding(scenarioBlock, new Regex("^" + regex + "$"), scope, implementation,
-            specifiedExpression: regex);
+            specifiedExpression: regex, error: error);
     }
 
     /// <summary>
