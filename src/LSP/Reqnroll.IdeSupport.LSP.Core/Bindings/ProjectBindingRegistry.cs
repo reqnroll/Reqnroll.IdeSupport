@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Gherkin.Ast;
@@ -314,6 +315,19 @@ public record ProjectBindingRegistry
     /// freshly discovered ones, leaving bindings from other files untouched. This is the
     /// per-file replacement used by Roslyn/C# source-level binding discovery.
     /// </summary>
+    /// <remarks>
+    /// A binding is also dropped from the "other files" side when it's superseded by identity
+    /// (see <see cref="BindingIdentity"/>) by one of the freshly parsed bindings, even if
+    /// <see cref="IsSameSourceFile"/> says it comes from a different file. This is a safety net
+    /// for issues #469/#503/#515: the reflection connector's and Roslyn's source paths for the
+    /// very same file can legitimately disagree (a PDB path baked in from a devcontainer/CI build
+    /// vs. the live LSP workspace path; a stale/unreadable PDB source location that resolves to
+    /// null; a stale IDE-side cache), so path comparison alone can fail to recognize an existing
+    /// binding as belonging to the file being reconciled -- leaving it in place alongside its
+    /// freshly discovered replacement and surfacing as a false "ambiguous step" (the same method
+    /// reported twice, once by its connector-style short name and once by its Roslyn-style
+    /// fully-qualified name).
+    /// </remarks>
     public async Task<ProjectBindingRegistry> ReplaceBindings(CSharpStepDefinitionFile stepDefinitionFile)
     {
         var stepDefinitionParser = new StepDefinitionFileParser();
@@ -322,9 +336,113 @@ public record ProjectBindingRegistry
         bool FromOtherFile(ProjectBinding binding) =>
             !IsSameSourceFile(binding.Implementation.SourceLocation?.SourceFile, stepDefinitionFile.FullName);
 
+        var newStepDefinitionIdentities = new HashSet<(ScenarioBlock StepDefinitionType, string Identity)>(
+            parsed.StepDefinitions.Select(sd => (sd.StepDefinitionType, Identity: BindingIdentity(sd.Implementation))));
+        var newHookIdentities = new HashSet<(HookType HookType, string Identity)>(
+            parsed.Hooks.Select(h => (h.HookType, Identity: BindingIdentity(h.Implementation))));
+
+        bool NotSupersededStepDefinition(ProjectStepDefinitionBinding sd) =>
+            FromOtherFile(sd) &&
+            !newStepDefinitionIdentities.Contains((sd.StepDefinitionType, BindingIdentity(sd.Implementation)));
+
+        bool NotSupersededHook(ProjectHookBinding h) =>
+            FromOtherFile(h) &&
+            !newHookIdentities.Contains((h.HookType, BindingIdentity(h.Implementation)));
+
         return new ProjectBindingRegistry(
-            StepDefinitions.Where(FromOtherFile).Concat(parsed.StepDefinitions),
-            Hooks.Where(FromOtherFile).Concat(parsed.Hooks));
+            StepDefinitions.Where(NotSupersededStepDefinition).Concat(parsed.StepDefinitions),
+            Hooks.Where(NotSupersededHook).Concat(parsed.Hooks));
+    }
+
+    /// <summary>
+    /// A path-independent identity for a binding's implementation: its method identity (see
+    /// <see cref="NormalizeMethodIdentity"/>) plus its parameter types, each normalized (see
+    /// <see cref="NormalizeParameterType"/>). Used by <see cref="ReplaceBindings"/> to recognize
+    /// that an existing binding and a freshly parsed one describe the same method even when their
+    /// source-file paths don't match.
+    /// </summary>
+    private static string BindingIdentity(ProjectBindingImplementation implementation) =>
+        $"{NormalizeMethodIdentity(implementation.Method)}|" +
+        $"{string.Join(",", implementation.ParameterTypes.Select(NormalizeParameterType))}";
+
+    private static readonly Dictionary<string, string> CSharpKeywordToClrTypeName = new(StringComparer.Ordinal)
+    {
+        ["bool"] = "Boolean", ["byte"] = "Byte", ["sbyte"] = "SByte", ["char"] = "Char",
+        ["decimal"] = "Decimal", ["double"] = "Double", ["float"] = "Single",
+        ["int"] = "Int32", ["uint"] = "UInt32", ["long"] = "Int64", ["ulong"] = "UInt64",
+        ["short"] = "Int16", ["ushort"] = "UInt16", ["string"] = "String", ["object"] = "Object",
+    };
+
+    // Matches each dotted identifier chain within a parameter-type string (the type itself, and
+    // every generic type argument), so a generic/array/nullable type's namespace-qualified pieces
+    // -- e.g. the "System.Collections.Generic"/"String"/"Int32" inside
+    // "System.Collections.Generic.Dictionary<String,Int32>" -- are each reduced independently,
+    // rather than only the string's own trailing segment (which a plain Split('.').Last() would
+    // do, incorrectly leaving everything up to the first type argument's namespace untouched).
+    private static readonly Regex DottedIdentifierRegex =
+        new(@"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Reduces a parameter type to a spelling-independent canonical form, for the same reason
+    /// <see cref="NormalizeMethodIdentity"/> reduces a method name: the connector reports a
+    /// parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable",
+    /// "System.Collections.Generic.List&lt;String&gt;", "System.Int32?" -- effectively
+    /// <c>Type.FullName</c>, confirmed by running the actual connector's discovery command against
+    /// a probe assembly), while Roslyn reports the literal source-code type text (e.g. "int",
+    /// "DataTable", "List&lt;string&gt;", "int?" -- <c>ParameterSyntax.Type.ToString()</c>), which
+    /// for a C# primitive keyword doesn't even share a spelling with its CLR name, and can vary in
+    /// namespace-qualification and whitespace independently of the connector's. This strips
+    /// whitespace, then reduces every dotted identifier chain in the string -- the type itself
+    /// *and* each of its generic type arguments -- to its trailing segment, mapping a C# primitive
+    /// keyword to its CLR simple name; array (<c>[]</c>), generic (<c>&lt;,&gt;</c>), and nullable
+    /// (<c>?</c>) punctuation is left as-is, which is already spelled identically on both sides.
+    /// </summary>
+    /// <remarks>
+    /// Confirmed live against the Quickstart sample (issue #515 follow-up): fixing only the
+    /// top-level type name (treating the whole string as one identifier) corrected parameterless
+    /// and simple-typed methods, but left every generic/array/nullable-typed method duplicated --
+    /// e.g. the connector's "System.Collections.Generic.Dictionary&lt;String,Int32&gt;" never
+    /// matched Roslyn's "Dictionary&lt;string, int&gt;" even after that narrower fix, since neither
+    /// the inner type arguments' spelling nor the space after the comma were normalized.
+    /// </remarks>
+    private static string NormalizeParameterType(string type)
+    {
+        var withoutWhitespace = WhitespaceRegex.Replace(type, string.Empty);
+        return DottedIdentifierRegex.Replace(withoutWhitespace, match =>
+        {
+            var simpleName = match.Value.Split('.').Last();
+            return CSharpKeywordToClrTypeName.TryGetValue(simpleName, out var clrName) ? clrName : simpleName;
+        });
+    }
+
+    private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Reduces a binding's <see cref="ProjectBindingImplementation.Method"/> to its trailing
+    /// "DeclaringType.MethodName" segment, discarding any parameter-signature suffix and
+    /// namespace prefix.
+    /// </summary>
+    /// <remarks>
+    /// The reflection connector and Roslyn format this string differently for the very same
+    /// method: the connector emits "DeclaringType.MethodName(ParamType, ...)" (built from
+    /// <c>MethodInfo</c> reflection data, no namespace --
+    /// see <c>DiscoveryResultTransformer.GetMethodReference</c>), while Roslyn emits
+    /// "Namespace.DeclaringType.MethodName" (walking up syntax-tree ancestors -- see
+    /// <c>StepDefinitionFileParser.FullMethodName</c>), with no parameter list. A literal
+    /// comparison of the two therefore never matches even for the identical method, which is why
+    /// <see cref="BindingIdentity"/> normalizes through this method instead of comparing
+    /// <see cref="ProjectBindingImplementation.Method"/> directly.
+    /// </remarks>
+    private static string NormalizeMethodIdentity(string? method)
+    {
+        if (string.IsNullOrEmpty(method))
+            return string.Empty;
+
+        var withoutSignature = method!.Split('(')[0];
+        var segments = withoutSignature.Split('.');
+        return segments.Length <= 2
+            ? withoutSignature
+            : string.Join(".", segments.Skip(segments.Length - 2));
     }
 
     /// <summary>

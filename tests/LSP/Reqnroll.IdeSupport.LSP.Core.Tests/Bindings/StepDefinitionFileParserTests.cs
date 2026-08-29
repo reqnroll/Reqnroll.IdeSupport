@@ -1219,6 +1219,134 @@ namespace TestProject
         binding.ErrorLocation.Should().BeNull();
     }
 
+    [Fact]
+    public async Task ReplaceBindings_removes_a_stale_binding_by_identity_even_when_the_source_path_disagrees()
+    {
+        // Issues #469/#503/#515: the reflection connector and Roslyn can disagree on a binding's
+        // source-file path for the very same file -- a PDB path baked in from a devcontainer/CI
+        // build vs. the live workspace path, a stale/unreadable PDB location resolving to null, or
+        // a stale IDE-side cache. When path comparison alone can't recognize the stale binding as
+        // belonging to the file being reconciled, it must still be evicted by identity, or it
+        // survives alongside its freshly Roslyn-parsed replacement -- surfacing as a false
+        // "ambiguous step" (same method reported twice: once under the connector's short
+        // "Type.Method(ParamType)" form, once under Roslyn's fully-qualified "Namespace.Type.Method").
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [When(""expression"")]
+        public void Method() { }
+    }
+}");
+
+        // The stale binding's source path (simulating a devcontainer-built PDB path, or a null
+        // resolution) does not string-match FilePath, so IsSameSourceFile alone would miss it.
+        var registry = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^expression$", "Steps.Method()", "/workspaces/host-solution/Steps.cs",
+                    ScenarioBlock.When)
+            },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var updated = await registry.ReplaceBindings(changedFile);
+
+        updated.StepDefinitions.Should().ContainSingle(
+            "the stale connector-discovered binding must be superseded by identity, " +
+            "not left in place alongside the freshly Roslyn-parsed one");
+    }
+
+    [Fact]
+    public async Task ReplaceBindings_removes_a_stale_binding_when_only_its_parameter_type_spelling_differs()
+    {
+        // Follow-up to issues #469/#503/#515, confirmed live against the Quickstart sample: the
+        // identity check above only fixed parameterless methods. The connector reports a
+        // parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable" --
+        // from reflection's Type.FullName), while Roslyn reports the literal source-code type text
+        // (e.g. "int", "DataTable" -- ParameterSyntax.Type.ToString()). Without normalizing both to
+        // the same spelling, a parameterized method's identity never matches across the two, so it
+        // stayed duplicated even after the path-independent eviction was added.
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [Given(""the client added {int} pcs of {string} to the basket"")]
+        public void Method(int quantity, string product) { }
+    }
+}");
+
+        var staleBinding = new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^stale$"), null,
+            new ProjectBindingImplementation("Steps.Method(Int32, System.String)", new[] { "Int32", "System.String" },
+                new SourceLocation("/workspaces/host-solution/Steps.cs", 0, 0)));
+
+        var registry = new ProjectBindingRegistry(
+            new[] { staleBinding },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var updated = await registry.ReplaceBindings(changedFile);
+
+        updated.StepDefinitions.Should().ContainSingle(
+            "the stale binding must be superseded by identity even though the connector's " +
+            "\"Int32\"/\"System.String\" parameter types are spelled differently from Roslyn's " +
+            "\"int\"/\"string\"");
+    }
+
+    // Real wire values captured by running the actual reqnroll-ide-connector's discovery command
+    // against a probe assembly (issue #515 follow-up) -- these are exactly what
+    // ProjectBindingImplementation.ParameterTypes holds for a connector-discovered binding.
+    [Theory]
+    [InlineData("System.Collections.Generic.List<String>", "using System.Collections.Generic;",
+        "List<string> items")]
+    [InlineData("System.Collections.Generic.Dictionary<String,Int32>", "using System.Collections.Generic;",
+        "Dictionary<string, int> map")]
+    [InlineData("System.String[]", "", "string[] items")]
+    [InlineData("System.Int32?", "", "int? value")]
+    public async Task ReplaceBindings_removes_a_stale_binding_for_generic_array_and_nullable_parameter_types(
+        string connectorParameterType, string usingDirective, string roslynParameterDeclaration)
+    {
+        // Generic/array/nullable types compound the plain-primitive mismatch above: the connector
+        // reports "System.Collections.Generic.Dictionary<String,Int32>" (its own friendly
+        // generic-name format, confirmed via the probe -- not raw reflection FullName, which would
+        // carry backticks/arity/assembly-qualified names instead), while Roslyn reports the literal
+        // source text, e.g. "Dictionary<string, int>" -- differing in the type argument's spelling
+        // *and* in whitespace after the comma. A naive "normalize the whole string as one
+        // identifier" fix (treating the type name and its generic arguments as an opaque unit)
+        // would still fail to match these, since neither the inner type arguments' casing nor the
+        // comma-space were addressed.
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent($@"
+{usingDirective}
+namespace TestProject
+{{
+    [Binding]
+    public class Steps
+    {{
+        [Given(""expression"")]
+        public void Method({roslynParameterDeclaration}) {{ }}
+    }}
+}}");
+
+        var staleBinding = new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^expression$"), null,
+            new ProjectBindingImplementation("Steps.Method(...)", new[] { connectorParameterType },
+                new SourceLocation("/workspaces/host-solution/Steps.cs", 0, 0)));
+
+        var registry = new ProjectBindingRegistry(
+            new[] { staleBinding },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var updated = await registry.ReplaceBindings(changedFile);
+
+        updated.StepDefinitions.Should().ContainSingle(
+            $"the stale binding (connector type '{connectorParameterType}') must be superseded by " +
+            $"identity even though Roslyn spells the same parameter as '{roslynParameterDeclaration}'");
+    }
+
     // ── HasExpressionChanges ────────────────────────────────────────────────────
 
     [Fact]
