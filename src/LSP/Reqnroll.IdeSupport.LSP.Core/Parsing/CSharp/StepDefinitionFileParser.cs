@@ -123,15 +123,22 @@ public class StepDefinitionFileParser
             var implementation =
                 new ProjectBindingImplementation(FullMethodName(method), parameterTypes, sourceLocation);
 
+            // Structural validation shared by every attribute on this method (issue #514 —
+            // ports Reqnroll.Bindings.Discovery.BindingSourceProcessor.ValidateType/ValidateMethod).
+            // A hook-specific rule (must be static for the four non-scenario-scoped hook types)
+            // is layered on top per hook type below, since it doesn't apply to step definitions.
+            var structuralError = GetStructuralError(method);
+
             foreach (var attribute in EnumerateAttributes(method.AttributeLists))
             {
                 var attributeName = GetAttributeName(attribute);
 
                 if (StepDefinitionAttributes.TryGetValue(attributeName, out var blocks))
                     AddStepDefinitions(stepDefinitions, attribute, blocks, combinedScope, implementation,
-                        method.Identifier.Text, parameterNames);
+                        method.Identifier.Text, parameterNames, structuralError);
                 else if (HookAttributes.TryGetValue(attributeName, out var hookType))
-                    hooks.Add(CreateHook(attribute, hookType, combinedScope, implementation));
+                    hooks.Add(CreateHook(attribute, hookType, combinedScope, implementation,
+                        structuralError ?? GetHookStaticError(hookType, method)));
             }
         }
 
@@ -140,7 +147,7 @@ public class StepDefinitionFileParser
 
     private static void AddStepDefinitions(List<ProjectStepDefinitionBinding> target, AttributeSyntax attribute,
         ScenarioBlock[] blocks, RawScope scope, ProjectBindingImplementation implementation,
-        string methodName, IReadOnlyList<string> parameterNames)
+        string methodName, IReadOnlyList<string> parameterNames, string structuralError)
     {
         var expression = GetStepDefinitionExpression(attribute);
 
@@ -157,7 +164,7 @@ public class StepDefinitionFileParser
             // the regex is computed per-block rather than once for the whole attribute.
             var regex = expression != null ? BuildRegex(expression) : BuildMethodNameRegex(block, methodName, parameterNames);
             target.Add(new ProjectStepDefinitionBinding(block, regex, BuildScope(scope), implementation, expression,
-                attributeSourceLine: attrLine));
+                error: structuralError, attributeSourceLine: attrLine));
         }
     }
 
@@ -306,12 +313,64 @@ public class StepDefinitionFileParser
     }
 
     private static ProjectHookBinding CreateHook(AttributeSyntax attribute, HookType hookType, RawScope methodScope,
-        ProjectBindingImplementation implementation)
+        ProjectBindingImplementation implementation, string error)
     {
         var hookTags = GetHookTags(attribute);
         var order = GetHookOrder(attribute);
         var scope = BuildScope(CombineWithHookTags(methodScope, hookTags));
-        return new ProjectHookBinding(implementation, scope, hookType, order, null);
+        return new ProjectHookBinding(implementation, scope, hookType, order, error);
+    }
+
+    // The four hook types below run once for the whole test run/feature rather than once per
+    // scenario, so there is no scenario-scoped instance to invoke a non-static method on.
+    private static readonly HashSet<HookType> StaticOnlyHookTypes = new()
+    {
+        HookType.BeforeTestRun, HookType.AfterTestRun, HookType.BeforeFeature, HookType.AfterFeature
+    };
+
+    /// <summary>
+    /// Ports the structural checks from <c>Reqnroll.Bindings.Discovery.BindingSourceProcessor</c>
+    /// (issue #514) shared by every binding attribute on <paramref name="method"/>:
+    /// <c>ValidateType</c> (the containing type must be a class, not a generic type definition)
+    /// and <c>ValidateMethod</c> (a method on an abstract type must be static; the method must not
+    /// be async void). Returns <see langword="null"/> when the method/type are structurally valid.
+    /// </summary>
+    private static string GetStructuralError(MethodDeclarationSyntax method)
+    {
+        if (method.Parent is TypeDeclarationSyntax typeDecl)
+        {
+            if (typeDecl is not ClassDeclarationSyntax)
+                return $"Binding type '{typeDecl.Identifier.Text}' must be a class.";
+
+            if (typeDecl.TypeParameterList is { Parameters.Count: > 0 })
+                return $"Binding type '{typeDecl.Identifier.Text}' must not be a generic type definition.";
+
+            if (typeDecl.Modifiers.Any(SyntaxKind.AbstractKeyword)
+                && !method.Modifiers.Any(SyntaxKind.StaticKeyword))
+                return $"Binding method '{method.Identifier.Text}' must be static because its " +
+                       $"containing type '{typeDecl.Identifier.Text}' is abstract.";
+        }
+
+        var returnsVoid = method.ReturnType is PredefinedTypeSyntax predefined
+            && predefined.Keyword.IsKind(SyntaxKind.VoidKeyword);
+        if (method.Modifiers.Any(SyntaxKind.AsyncKeyword) && returnsVoid)
+            return $"Binding method '{method.Identifier.Text}' must not be async void.";
+
+        return null;
+    }
+
+    /// <summary>
+    /// Ports the hook-specific half of <c>BindingSourceProcessor.ValidateHook</c>: the four
+    /// non-scenario-scoped hook types (<see cref="StaticOnlyHookTypes"/>) must be static, since
+    /// there is no scenario-scoped instance for them to run on. Returns <see langword="null"/>
+    /// for hook types without this requirement, or when the method is already static.
+    /// </summary>
+    private static string GetHookStaticError(HookType hookType, MethodDeclarationSyntax method)
+    {
+        if (!StaticOnlyHookTypes.Contains(hookType) || method.Modifiers.Any(SyntaxKind.StaticKeyword))
+            return null;
+
+        return $"Hook method '{method.Identifier.Text}' must be static for hook type '{hookType}'.";
     }
 
     private static IEnumerable<AttributeSyntax> EnumerateAttributes(SyntaxList<AttributeListSyntax> attributeLists) =>
@@ -418,12 +477,15 @@ public class StepDefinitionFileParser
     {
         // Point to the method identifier (name token) — consistent with standard LSP convention
         // where textDocument/definition returns the span of the symbol being defined, not the
-        // full declaration.  This produces a zero-width highlight at the method name regardless
-        // of whether the method has a block body, expression body, or attributes.
-        var pos = method.Identifier.GetLocation().GetLineSpan().StartLinePosition;
+        // full declaration. Captures the full identifier span (not just its start) so consumers
+        // that need a real, non-zero-width range — e.g. issue #514's .cs diagnostics squiggles —
+        // don't have to re-derive it via a live-buffer text search. ToLspLocation() (used for
+        // textDocument/definition) still discards the end position and renders a zero-width
+        // point, so this doesn't change Go to Definition's behavior.
+        var span = method.Identifier.GetLocation().GetLineSpan();
         return new SourceLocation(sourceFile,
-            pos.Line + 1, pos.Character + 1,
-            pos.Line + 1, pos.Character + 1);
+            span.StartLinePosition.Line + 1, span.StartLinePosition.Character + 1,
+            span.EndLinePosition.Line + 1, span.EndLinePosition.Character + 1);
     }
 
     private static RawScope ReadScopeAttributes(SyntaxList<AttributeListSyntax> attributeLists)

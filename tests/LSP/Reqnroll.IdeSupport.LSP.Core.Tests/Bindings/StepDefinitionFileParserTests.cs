@@ -573,10 +573,12 @@ namespace TestProject
     }
 
     [Fact]
-    public async Task Source_location_is_zero_width_range_at_method_identifier()
+    public async Task Source_location_spans_the_full_method_identifier()
     {
-        // LSP convention: definition range is the identifier span, not the full declaration.
-        // Start and end must be the same position (zero-width).
+        // Issue #514: the range must span the whole identifier (not be zero-width) so consumers
+        // like .cs diagnostics squiggles don't need to re-derive the span via a live-buffer text
+        // search. ToLspLocation() (used for textDocument/definition) still discards the end
+        // position and renders zero-width, so this doesn't change Go to Definition's behavior.
         var stepDefinitions = await ParseStepDefinitions(
             @"[Given(""x"")]
               public void Method()
@@ -587,7 +589,7 @@ namespace TestProject
         location.SourceFile.Should().Be(FilePath);
         location.HasEndPosition.Should().BeTrue();
         location.SourceFileLine.Should().Be(location.SourceFileEndLine!.Value);
-        location.SourceFileColumn.Should().Be(location.SourceFileEndColumn!.Value);
+        (location.SourceFileEndColumn!.Value - location.SourceFileColumn).Should().Be("Method".Length);
     }
 
     [Fact]
@@ -605,7 +607,191 @@ namespace TestProject
         location.SourceFileLine.Should().Be(9);      // method signature line, not attribute (line 8)
         location.SourceFileColumn.Should().Be(13);   // "public void " = 12 chars → identifier at col 13
         location.SourceFileEndLine.Should().Be(9);
-        location.SourceFileEndColumn.Should().Be(13);
+        location.SourceFileEndColumn.Should().Be(13 + "TargetMethod".Length);
+    }
+
+    // ── Structural validation (issue #514) ────────────────────────────────────────
+    // Ports Reqnroll.Bindings.Discovery.BindingSourceProcessor.ValidateType/ValidateMethod/
+    // ValidateHook. A binding with a structural error is excluded from matching (IsValid is
+    // false whenever Error is set — see ProjectBinding.IsValid) exactly like a connector-reported
+    // import error, riding the same mechanism rather than a separate one.
+
+    private static async Task<StepDefinitionFileBindings> ParseRaw(string content)
+    {
+        var file = FileDetails.FromPath(FilePath).WithCSharpContent(content);
+        return await new StepDefinitionFileParser().ParseBindings(file);
+    }
+
+    [Fact]
+    public async Task Struct_binding_type_is_reported_invalid()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public struct Steps
+    {
+        [Given(""x"")]
+        public void Method() { }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("must be a class");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Generic_binding_type_is_reported_invalid()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps<T>
+    {
+        [Given(""x"")]
+        public void Method() { }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("must not be a generic type definition");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Non_static_method_on_abstract_binding_type_is_reported_invalid()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public abstract class Steps
+    {
+        [Given(""x"")]
+        public void Method() { }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("must be static");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Static_method_on_abstract_binding_type_is_valid()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public abstract class Steps
+    {
+        [Given(""x"")]
+        public static void Method() { }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().BeNull();
+        binding.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Async_void_method_is_reported_invalid()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [Given(""x"")]
+        public async void Method() { await System.Threading.Tasks.Task.Delay(1); }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("must not be async void");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Async_Task_method_is_valid()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [Given(""x"")]
+        public async System.Threading.Tasks.Task Method() { await System.Threading.Tasks.Task.Delay(1); }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().BeNull();
+        binding.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("BeforeTestRun")]
+    [InlineData("AfterTestRun")]
+    [InlineData("BeforeFeature")]
+    [InlineData("AfterFeature")]
+    public async Task Non_static_non_scenario_scoped_hook_is_reported_invalid(string attribute)
+    {
+        var bindings = await ParseRaw($@"
+namespace TestProject
+{{
+    [Binding]
+    public class Hooks
+    {{
+        [{attribute}]
+        public void Method() {{ }}
+    }}
+}}");
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Error.Should().Contain("must be static");
+        hook.IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("BeforeTestRun")]
+    [InlineData("AfterTestRun")]
+    [InlineData("BeforeFeature")]
+    [InlineData("AfterFeature")]
+    public async Task Static_non_scenario_scoped_hook_is_valid(string attribute)
+    {
+        var bindings = await ParseRaw($@"
+namespace TestProject
+{{
+    [Binding]
+    public class Hooks
+    {{
+        [{attribute}]
+        public static void Method() {{ }}
+    }}
+}}");
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Error.Should().BeNull();
+        hook.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Non_static_scenario_scoped_hook_is_valid()
+    {
+        // BeforeScenario/AfterScenario etc. run against a scenario-scoped instance, so they're
+        // exempt from the static-only rule that applies to the four non-scenario-scoped hooks.
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public class Hooks
+    {
+        [BeforeScenario]
+        public void Method() { }
+    }
+}");
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Error.Should().BeNull();
+        hook.IsValid.Should().BeTrue();
     }
 
     [Fact]
