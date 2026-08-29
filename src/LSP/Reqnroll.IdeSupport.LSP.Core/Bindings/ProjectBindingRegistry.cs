@@ -578,6 +578,17 @@ public record ProjectBindingRegistry
     }
 
     /// <summary>
+    /// Returns whether this registry already has at least one step-definition or hook binding whose
+    /// source location points at <paramref name="filePath"/>. Used to distinguish "this file was
+    /// already reconciled" from "a connector run merely happened for its project" — see issue #517.
+    /// </summary>
+    public bool HasAnyBindingFor(string filePath)
+    {
+        return StepDefinitions.Any(b => IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, filePath)) ||
+            Hooks.Any(b => IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, filePath));
+    }
+
+    /// <summary>
     /// Finds the first step-definition binding whose source location covers
     /// <paramref name="location"/> (same file, line within leeway — see
     /// <see cref="BindingLocationMatcher.CoversQuery"/>). When the binding was syntax-discovered
