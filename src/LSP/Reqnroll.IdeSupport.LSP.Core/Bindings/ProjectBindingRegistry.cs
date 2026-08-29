@@ -303,15 +303,28 @@ public record ProjectBindingRegistry
     /// <c>(StepDefinitionType, Method, ParameterTypes)</c> rather than source line -- an edit
     /// elsewhere in the file shifts line numbers without changing binding identity, and line
     /// number is deliberately excluded from this comparison. Returns <see langword="true"/> if a
-    /// binding for this file was added, removed, or had its matched expression change; edits to
-    /// method bodies, comments, or anything else that doesn't touch a step's matched expression
-    /// report no change.
+    /// binding for this file was added, removed, had its matched expression change, or had its
+    /// <see cref="ProjectBinding.Error"/> change; edits to method bodies, comments, or anything
+    /// else that doesn't touch either report no change.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A method can carry multiple attributes of the same step type with the same parameter
     /// types but different expression text (e.g. two <c>[When(...)]</c> on one method), which
     /// collapse to the same key. Bindings are therefore grouped by key and compared as a sorted
-    /// multiset of expressions per key, rather than a single expression per key.
+    /// multiset of expression/error pairs per key, rather than a single expression per key.
+    /// </para>
+    /// <para>
+    /// <see cref="ProjectBinding.Error"/> is included (issue #514) because a binding's validity
+    /// affects matching independent of its expression text: <c>ProjectStepDefinitionBinding.Match</c>
+    /// returns <see langword="null"/> whenever <c>!IsValid</c>, so a binding transitioning
+    /// valid⇄invalid (e.g. a step-definition method losing/gaining a required <c>static</c>
+    /// modifier, with no expression text touched at all) changes which steps this binding
+    /// matches -- and, for .cs binding-validation diagnostics specifically, is the only thing
+    /// that changed at all. Without this, that edit would report no change and callers relying
+    /// on this method to decide whether to notify (<c>ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync</c>)
+    /// would silently skip it.
+    /// </para>
     /// </remarks>
     public static bool HasExpressionChanges(
         ProjectBindingRegistry before, ProjectBindingRegistry after, string sourceFile)
@@ -319,13 +332,16 @@ public record ProjectBindingRegistry
         static string Key(ProjectStepDefinitionBinding b) =>
             $"{b.StepDefinitionType}|{b.Implementation.Method}|{string.Join(",", b.Implementation.ParameterTypes)}";
 
+        static string Signature(ProjectStepDefinitionBinding b) =>
+            $"{b.Expression}|{b.Error}";
+
         bool OwnedByFile(ProjectStepDefinitionBinding b) =>
             IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, sourceFile);
 
         static Dictionary<string, List<string>> GroupExpressionsByKey(IEnumerable<ProjectStepDefinitionBinding> bindings) =>
             bindings.GroupBy(Key).ToDictionary(
                 g => g.Key,
-                g => g.Select(b => b.Expression).OrderBy(e => e, StringComparer.Ordinal).ToList());
+                g => g.Select(Signature).OrderBy(s => s, StringComparer.Ordinal).ToList());
 
         var beforeByKey = GroupExpressionsByKey(before.StepDefinitions.Where(OwnedByFile));
         var afterByKey  = GroupExpressionsByKey(after.StepDefinitions.Where(OwnedByFile));
@@ -347,8 +363,9 @@ public record ProjectBindingRegistry
     /// <paramref name="before"/> and <paramref name="after"/>, keyed by
     /// <c>(HookType, Method, ParameterTypes)</c> the same way <see cref="HasExpressionChanges"/>
     /// keys step definitions. Returns <see langword="true"/> if a hook for this file was added,
-    /// removed, or had its scope or order change; edits to method bodies, comments, or anything
-    /// else that doesn't touch a hook's scope/order report no change.
+    /// removed, had its scope or order change, or had its <see cref="ProjectBinding.Error"/>
+    /// change; edits to method bodies, comments, or anything else that doesn't touch any of those
+    /// report no change.
     /// </summary>
     /// <remarks>
     /// Added alongside <see cref="HasExpressionChanges"/> to close a gap where hook-only edits
@@ -359,6 +376,10 @@ public record ProjectBindingRegistry
     /// next full rebuild. There is no single "expression" for a hook the way there is for a step
     /// definition, so scope (formatted via <see cref="Documents.BindingScope.ToString"/>) and
     /// order are compared instead — the two hook properties that affect what actually fires.
+    /// <see cref="ProjectBinding.Error"/> was added to this signature for the same reason
+    /// <see cref="HasExpressionChanges"/>'s remarks give: a hook transitioning valid⇄invalid
+    /// (e.g. losing/gaining a required <c>static</c> modifier for a non-scenario-scoped hook
+    /// type) changes whether it actually fires, with no scope/order text touched at all.
     /// </remarks>
     public static bool HasHookChanges(
         ProjectBindingRegistry before, ProjectBindingRegistry after, string sourceFile)
@@ -367,7 +388,7 @@ public record ProjectBindingRegistry
             $"{b.HookType}|{b.Implementation.Method}|{string.Join(",", b.Implementation.ParameterTypes)}";
 
         static string Signature(ProjectHookBinding b) =>
-            $"{b.Scope?.ToString() ?? string.Empty}|{b.HookOrder}";
+            $"{b.Scope?.ToString() ?? string.Empty}|{b.HookOrder}|{b.Error}";
 
         bool OwnedByFile(ProjectHookBinding b) =>
             IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, sourceFile);

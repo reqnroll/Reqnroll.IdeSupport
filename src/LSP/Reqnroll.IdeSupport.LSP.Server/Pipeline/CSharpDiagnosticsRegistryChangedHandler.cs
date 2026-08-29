@@ -8,15 +8,15 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// <summary>
 /// Handles <see cref="BindingRegistryChangedNotification"/> by re-pushing binding-validation
 /// diagnostics (issue #514) for every currently-open <c>.cs</c> file owned by the affected
-/// project.
+/// project. This is the sole trigger for <c>.cs</c> diagnostics — see
+/// <see cref="ICSharpDiagnosticsPublisher"/>'s remarks for the two cases folded into this one
+/// notification: a live doc-sync edit (including one that changes only a binding's validity, not
+/// its expression or scope/order) and a registry change that didn't originate from this file's
+/// own doc-sync events at all (e.g. the connector's startup reconciliation
+/// (<see cref="BindingRegistryChangedHandler.RediscoverCsFilesAsync"/>) racing this file's own
+/// <c>didOpen</c>).
 /// </summary>
 /// <remarks>
-/// <see cref="ICSharpDiagnosticsPublisher"/>'s remarks explain why this is needed alongside the
-/// direct push from <see cref="Features.TextSync.TextDocumentSyncHandler"/>'s own doc-sync
-/// handlers: a registry change that didn't originate from this file's own <c>didOpen</c>/
-/// <c>didChange</c> — most notably the connector's startup reconciliation
-/// (<see cref="BindingRegistryChangedHandler.RediscoverCsFilesAsync"/>) racing this file's own
-/// <c>didOpen</c> — would otherwise leave its diagnostics stale until the user's next edit.
 /// Every open <c>.cs</c> file owned by the project is re-pushed unconditionally on any change
 /// (not diffed first) — mirroring <see cref="BindingRegistryChangedHandler.ReparseOpenFilesAsync"/>'s
 /// equivalent handling for <c>.feature</c> files, and cheap for the same reason: re-aggregating a

@@ -1113,6 +1113,24 @@ namespace S
     }
 
     [Fact]
+    public void HasExpressionChanges_returns_true_when_only_validity_changes()
+    {
+        // Issue #514: a binding transitioning valid<->invalid (e.g. losing/gaining a required
+        // `static` modifier) changes matching even though its expression text is untouched --
+        // ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync relies on this method (and
+        // HasHookChanges) to decide whether to notify at all, so a validity-only edit must be
+        // detected here or it would be silently skipped end to end.
+        var before = new ProjectBindingRegistry(
+            new[] { BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath, error: null) },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            new[] { BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath, error: "must be static") },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        ProjectBindingRegistry.HasExpressionChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
     public void HasExpressionChanges_returns_true_when_a_binding_is_added()
     {
         var before = new ProjectBindingRegistry(
@@ -1211,14 +1229,16 @@ namespace S
     }
 
     private static ProjectStepDefinitionBinding BuildStepDefinition(string regex, string method, string sourceFile,
-        ScenarioBlock stepDefinitionType = ScenarioBlock.Given) =>
+        ScenarioBlock stepDefinitionType = ScenarioBlock.Given, string? error = null) =>
         new(stepDefinitionType, new Regex(regex), null,
-            new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)));
+            new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)),
+            error: error);
 
     private static ProjectHookBinding BuildHook(
-        HookType hookType, string method, string sourceFile, BindingScope? scope = null, int? hookOrder = null) =>
+        HookType hookType, string method, string sourceFile, BindingScope? scope = null, int? hookOrder = null,
+        string? error = null) =>
         new(new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)),
-            scope, hookType, hookOrder, null);
+            scope, hookType, hookOrder, error);
 
     // ── HasHookChanges ───────────────────────────────────────────────────────────
 
@@ -1233,6 +1253,22 @@ namespace S
             new[] { BuildHook(HookType.BeforeScenario, "Hooks.Method", FilePath) }, projectHash: 0);
 
         ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasHookChanges_returns_true_when_only_validity_changes()
+    {
+        // Issue #514: mirrors HasExpressionChanges_returns_true_when_only_validity_changes for
+        // hooks -- e.g. a [BeforeTestRun] method losing its required `static` modifier changes
+        // whether the hook fires, with no scope/order text touched at all.
+        var before = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeTestRun, "Hooks.Method", FilePath, error: null) }, projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            new[] { BuildHook(HookType.BeforeTestRun, "Hooks.Method", FilePath, error: "must be static") }, projectHash: 0);
+
+        ProjectBindingRegistry.HasHookChanges(before, after, FilePath).Should().BeTrue();
     }
 
     [Fact]
