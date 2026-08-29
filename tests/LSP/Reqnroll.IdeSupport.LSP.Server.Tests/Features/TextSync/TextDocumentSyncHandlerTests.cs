@@ -273,8 +273,11 @@ public class TextDocumentSyncHandlerTests
         // Closing a .cs file must not invalidate feature match state; bindings are retained until rebuild.
         _bindingMatchService.DidNotReceiveWithAnyArgs().InvalidateAllForDocument(default!);
         await _taggerService.DidNotReceiveWithAnyArgs().RescanClosedFileAsync(default!);
-        // No diagnostics push — the server does not own diagnostics for .cs files.
-        _languageServer.DidNotReceive().SendNotification(Arg.Any<string>(), Arg.Any<PublishDiagnosticsParams>());
+        // Issue #514: the server clears any binding-validation diagnostics it pushed for the
+        // file, the same clear-on-close convention used for .feature files.
+        _languageServer.Received(1).SendNotification(
+            "textDocument/publishDiagnostics",
+            Arg.Is<PublishDiagnosticsParams>(p => p.Uri == CsUri && !p.Diagnostics.Any()));
     }
 
     [Fact]

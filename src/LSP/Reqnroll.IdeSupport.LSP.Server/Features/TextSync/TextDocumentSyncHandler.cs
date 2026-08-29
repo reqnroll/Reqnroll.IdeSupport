@@ -184,6 +184,17 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         if (IsCSharp(uri))
         {
             _csharpFileTextCache.Remove(uri);
+
+            // Clear any squiggles pushed for this file (issue #514) — same clear-on-close
+            // convention as the .feature path below.
+            _languageServer.SendNotification(
+                LspMethodNames.TextDocumentPublishDiagnostics,
+                new PublishDiagnosticsParams
+                {
+                    Uri = uri,
+                    Diagnostics = new Container<Diagnostic>()
+                });
+
             return Unit.Value;
         }
 

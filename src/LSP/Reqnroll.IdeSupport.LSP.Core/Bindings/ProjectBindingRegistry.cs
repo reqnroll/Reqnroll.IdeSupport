@@ -145,10 +145,11 @@ public record ProjectBindingRegistry
         // bindings whose statically-known literal text is actually present in this step, via one
         // Aho-Corasick scan instead of a per-binding regex attempt. See StepLiteralIndex's remarks
         // for why this can never exclude a binding that would have genuinely matched.
-        var sdMatches = LiteralIndex.GetCandidates(stepText)
+        var candidates = LiteralIndex.GetCandidates(stepText).ToArray();
+        var sdMatches = candidates
             .Select(sd => sd.Match(step, context, stepText)).Where(m => m != null).ToArray();
         if (!sdMatches.Any())
-            return new[] {MatchResultItem.CreateUndefined(step, stepText)};
+            return new[] {MatchResultItem.CreateUndefined(step, stepText, FindNearMissErrors(candidates, step, context, stepText))};
 
         sdMatches = HandleDataTableOverloads(step, sdMatches);
         sdMatches = HandleDocStringOverloads(step, sdMatches);
@@ -159,6 +160,35 @@ public record ProjectBindingRegistry
             return new[] {sdMatches[0]};
 
         return sdMatches.Select(mi => mi.CloneToAmbiguousItem()).ToArray();
+    }
+
+    /// <summary>
+    /// Issue #514's "cheap first step": when a step has no valid match, checks whether any
+    /// <em>invalid</em> candidate binding's regex/scope would otherwise have matched it (via
+    /// <see cref="ProjectStepDefinitionBinding.WouldMatchIgnoringValidity"/>, which — unlike
+    /// <see cref="ProjectStepDefinitionBinding.Match"/> — doesn't short-circuit on
+    /// <c>!IsValid</c>) and, if so, returns that binding's <see cref="ProjectBinding.Error"/> so
+    /// the step's "undefined" diagnostic can name the real reason instead of a generic "not
+    /// found" — e.g. a step-definition method that lost its required <c>static</c> modifier is
+    /// still reported as the specific validation failure, not silently as if no binding had ever
+    /// existed for it. Returns <see langword="null"/> when no invalid candidate matches
+    /// structurally, preserving the existing generic message.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="candidates"/> is <see cref="LiteralIndex"/>'s own prefiltered set — already
+    /// narrowed to bindings whose literal text could possibly appear in <paramref name="stepText"/>
+    /// (soundly, per <see cref="StepLiteralIndex"/>'s remarks), so this re-checks only the regex
+    /// and scope, not the literal prefilter.
+    /// </remarks>
+    private static string[]? FindNearMissErrors(
+        IEnumerable<ProjectStepDefinitionBinding> candidates, Step step, IGherkinDocumentContext context, string stepText)
+    {
+        var errors = candidates
+            .Where(b => b.Error != null && b.WouldMatchIgnoringValidity(step, context, stepText))
+            .Select(b => b.Error)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return errors.Length == 0 ? null : errors;
     }
 
     /// <summary>
@@ -303,15 +333,28 @@ public record ProjectBindingRegistry
     /// <c>(StepDefinitionType, Method, ParameterTypes)</c> rather than source line -- an edit
     /// elsewhere in the file shifts line numbers without changing binding identity, and line
     /// number is deliberately excluded from this comparison. Returns <see langword="true"/> if a
-    /// binding for this file was added, removed, or had its matched expression change; edits to
-    /// method bodies, comments, or anything else that doesn't touch a step's matched expression
-    /// report no change.
+    /// binding for this file was added, removed, had its matched expression change, or had its
+    /// <see cref="ProjectBinding.Error"/> change; edits to method bodies, comments, or anything
+    /// else that doesn't touch either report no change.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A method can carry multiple attributes of the same step type with the same parameter
     /// types but different expression text (e.g. two <c>[When(...)]</c> on one method), which
     /// collapse to the same key. Bindings are therefore grouped by key and compared as a sorted
-    /// multiset of expressions per key, rather than a single expression per key.
+    /// multiset of expression/error pairs per key, rather than a single expression per key.
+    /// </para>
+    /// <para>
+    /// <see cref="ProjectBinding.Error"/> is included (issue #514) because a binding's validity
+    /// affects matching independent of its expression text: <c>ProjectStepDefinitionBinding.Match</c>
+    /// returns <see langword="null"/> whenever <c>!IsValid</c>, so a binding transitioning
+    /// valid⇄invalid (e.g. a step-definition method losing/gaining a required <c>static</c>
+    /// modifier, with no expression text touched at all) changes which steps this binding
+    /// matches -- and, for .cs binding-validation diagnostics specifically, is the only thing
+    /// that changed at all. Without this, that edit would report no change and callers relying
+    /// on this method to decide whether to notify (<c>ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync</c>)
+    /// would silently skip it.
+    /// </para>
     /// </remarks>
     public static bool HasExpressionChanges(
         ProjectBindingRegistry before, ProjectBindingRegistry after, string sourceFile)
@@ -319,13 +362,16 @@ public record ProjectBindingRegistry
         static string Key(ProjectStepDefinitionBinding b) =>
             $"{b.StepDefinitionType}|{b.Implementation.Method}|{string.Join(",", b.Implementation.ParameterTypes)}";
 
+        static string Signature(ProjectStepDefinitionBinding b) =>
+            $"{b.Expression}|{b.Error}";
+
         bool OwnedByFile(ProjectStepDefinitionBinding b) =>
             IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, sourceFile);
 
         static Dictionary<string, List<string>> GroupExpressionsByKey(IEnumerable<ProjectStepDefinitionBinding> bindings) =>
             bindings.GroupBy(Key).ToDictionary(
                 g => g.Key,
-                g => g.Select(b => b.Expression).OrderBy(e => e, StringComparer.Ordinal).ToList());
+                g => g.Select(Signature).OrderBy(s => s, StringComparer.Ordinal).ToList());
 
         var beforeByKey = GroupExpressionsByKey(before.StepDefinitions.Where(OwnedByFile));
         var afterByKey  = GroupExpressionsByKey(after.StepDefinitions.Where(OwnedByFile));
@@ -347,8 +393,9 @@ public record ProjectBindingRegistry
     /// <paramref name="before"/> and <paramref name="after"/>, keyed by
     /// <c>(HookType, Method, ParameterTypes)</c> the same way <see cref="HasExpressionChanges"/>
     /// keys step definitions. Returns <see langword="true"/> if a hook for this file was added,
-    /// removed, or had its scope or order change; edits to method bodies, comments, or anything
-    /// else that doesn't touch a hook's scope/order report no change.
+    /// removed, had its scope or order change, or had its <see cref="ProjectBinding.Error"/>
+    /// change; edits to method bodies, comments, or anything else that doesn't touch any of those
+    /// report no change.
     /// </summary>
     /// <remarks>
     /// Added alongside <see cref="HasExpressionChanges"/> to close a gap where hook-only edits
@@ -359,6 +406,10 @@ public record ProjectBindingRegistry
     /// next full rebuild. There is no single "expression" for a hook the way there is for a step
     /// definition, so scope (formatted via <see cref="Documents.BindingScope.ToString"/>) and
     /// order are compared instead — the two hook properties that affect what actually fires.
+    /// <see cref="ProjectBinding.Error"/> was added to this signature for the same reason
+    /// <see cref="HasExpressionChanges"/>'s remarks give: a hook transitioning valid⇄invalid
+    /// (e.g. losing/gaining a required <c>static</c> modifier for a non-scenario-scoped hook
+    /// type) changes whether it actually fires, with no scope/order text touched at all.
     /// </remarks>
     public static bool HasHookChanges(
         ProjectBindingRegistry before, ProjectBindingRegistry after, string sourceFile)
@@ -367,7 +418,7 @@ public record ProjectBindingRegistry
             $"{b.HookType}|{b.Implementation.Method}|{string.Join(",", b.Implementation.ParameterTypes)}";
 
         static string Signature(ProjectHookBinding b) =>
-            $"{b.Scope?.ToString() ?? string.Empty}|{b.HookOrder}";
+            $"{b.Scope?.ToString() ?? string.Empty}|{b.HookOrder}|{b.Error}";
 
         bool OwnedByFile(ProjectHookBinding b) =>
             IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, sourceFile);

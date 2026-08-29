@@ -19,8 +19,9 @@ public class ProjectHookBinding : ProjectBinding
     public int HookOrder { get; }
 
     /// <summary>Creates a hook binding, defaulting its order to <see cref="DefaultHookOrder"/> when not specified.</summary>
-    public ProjectHookBinding(ProjectBindingImplementation implementation, BindingScope scope, HookType hookType, int? hookOrder, string error)
-        : base(implementation, scope, error)
+    public ProjectHookBinding(ProjectBindingImplementation implementation, BindingScope scope, HookType hookType,
+        int? hookOrder, string error, SourceLocation errorLocation = null)
+        : base(implementation, scope, error, errorLocation)
     {
         HookType = hookType;
         HookOrder = hookOrder ?? DefaultHookOrder;

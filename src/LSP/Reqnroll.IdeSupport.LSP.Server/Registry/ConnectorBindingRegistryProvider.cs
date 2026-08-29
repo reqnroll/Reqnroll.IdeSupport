@@ -207,15 +207,19 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         if (!notify)
             return;
 
-        // Skip the notification entirely when no binding's matched expression/scope actually
-        // changed (e.g. a method-body or comment edit). Publishing here drives feature-file
-        // reparsing downstream (BindingRegistryChangedHandler), which can only produce a
-        // different result when a step definition's expression or a hook's scope/order was
-        // added, removed, or edited -- so there's nothing for that pipeline to do, and running
-        // it anyway would just burn CPU on every keystroke. Both checks are needed: a hook-only
-        // edit (e.g. adding [BeforeScenario]) doesn't touch any step definition, so relying on
-        // HasExpressionChanges alone left the hook-count CodeLens stale until the next full
-        // rebuild (issue #372 follow-up).
+        // Skip the notification entirely when no binding's matched expression/scope/validity
+        // actually changed (e.g. a method-body or comment edit). Publishing here drives
+        // feature-file reparsing downstream (BindingRegistryChangedHandler) and .cs
+        // binding-validation diagnostics (CSharpDiagnosticsRegistryChangedHandler, issue #514),
+        // both of which can only produce a different result when a step definition's expression,
+        // a hook's scope/order, or any binding's Error was added, removed, or edited -- so
+        // there's nothing for either pipeline to do otherwise, and running them anyway would just
+        // burn CPU on every keystroke. Both checks are needed: a hook-only edit (e.g. adding
+        // [BeforeScenario]) doesn't touch any step definition, so relying on HasExpressionChanges
+        // alone left the hook-count CodeLens stale until the next full rebuild (issue #372
+        // follow-up). Error is included in both checks' own comparison (see their remarks) rather
+        // than added as a third check here, since a binding can carry an Error independent of
+        // whether it's a step definition or a hook.
         if (!ProjectBindingRegistry.HasExpressionChanges(previous, updated, file.FullName)
             && !ProjectBindingRegistry.HasHookChanges(previous, updated, file.FullName))
             return;

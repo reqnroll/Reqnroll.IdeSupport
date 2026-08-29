@@ -41,6 +41,7 @@
 - [F24 · Hook Match CodeLens (Feature/Scenario/Step)](#f24--hook-match-codelens-featurescenariostep)
 - [F25 · Hook Match Count CodeLens (Hook Bindings)](#f25--hook-match-count-codelens-hook-bindings)
 - [F26 · Test Runner Integration (Run/Debug + Failed-Step Highlight)](#f26--test-runner-integration-rundebug--failed-step-highlight)
+- [F27 · C# Binding Validation Diagnostics](#f27--c-binding-validation-diagnostics)
 - [Appendix B · Deferred / Future Features](#appendix-b--deferred--future-features)
 
 ---
@@ -332,7 +333,7 @@ We are **not** addressing this at this time. Closing the gap would mean feeding 
 
 Two categories of diagnostic are displayed for `.feature` files:
 
-- **Binding mismatches** (`DiagnosticSeverity.Warning`, yellow squiggle, `source: "reqnroll.binding"`): steps that have no matching binding are underlined. Hovering shows "Step definition not found."
+- **Binding mismatches** (`DiagnosticSeverity.Warning`, yellow squiggle, `source: "reqnroll.binding"`): steps that have no matching binding are underlined. Hovering shows "Step definition not found." — or, when the step structurally matches a binding that exists but is invalid (its `Error` set by the connector's import failure, or by [F27](#f27--c-binding-validation-diagnostics)'s validation), that binding's specific error instead, e.g. *"Binding method 'Setup' must be static because its containing type 'Hooks' is abstract."*
 - **Parse errors** (`DiagnosticSeverity.Error`, red squiggle, `source: "reqnroll.parser"`): structurally invalid Gherkin (e.g., missing `Feature:` header, invalid tag syntax) is underlined with a description.
 
 Both categories are computed after every edit and pushed as a **single** `textDocument/publishDiagnostics` message. The LSP specification requires that one message delivers the complete diagnostic set for a URI; separate messages would clear previously delivered diagnostics of the other category. A `DiagnosticsAggregator` combines both sources before sending.
@@ -392,7 +393,7 @@ Parsing and binding matching are **not separate pipeline stages**: `DeveroomTagP
 
 #### Sequence diagram — binding registry change (C# file saved or build completed)
 
-> **Diagnostic ownership note**: When the Binding Registry changes due to a `.cs` file edit or a build, the Reqnroll LSP server pushes updated `textDocument/publishDiagnostics` messages **only for `.feature` file URIs**. Diagnostics for `.cs` files (C# parse errors, type errors, etc.) are the exclusive domain of the native C# language server in each IDE; the Reqnroll LSP must not publish competing diagnostics for `.cs` URIs. Binding-level annotations on `.cs` files (e.g., unused step warnings) are delivered separately via Code Lens (F18) rather than diagnostics.
+> **Diagnostic ownership note (superseded by F27)**: this section originally stated that the server pushes `textDocument/publishDiagnostics` only for `.feature` file URIs, leaving `.cs` diagnostics exclusively to each IDE's native C# language server. [F27 · C# Binding Validation Diagnostics](#f27--c-binding-validation-diagnostics) revisits that decision: the server now also pushes binding-validation diagnostics for `.cs` files, confirmed live to merge cleanly alongside each IDE's native C# diagnostics for the same file with no special handling on either side. C# parse errors, type errors, and anything else genuinely owned by the C# compiler remain exclusively the native language server's domain — F27 only ever reports Reqnroll binding-shape problems (e.g. a step-definition method that isn't static where required), never general C# correctness.
 
 ```mermaid
 sequenceDiagram
@@ -1840,6 +1841,155 @@ stopped at, with a hover tooltip carrying the captured error.
   instead gained `RunTestTargetCache`, an identity-keyed per-scenario cache invalidated by the same
   `reqnroll/refreshCodeLenses` signal the Hook/StepUsages CodeVision providers already act on. See
   design doc §3's correction for the full per-client breakdown.
+
+---
+
+### F27 · C# Binding Validation Diagnostics
+
+**Status: Implemented.** Tracks issue
+[#514](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/514). A throwaway feasibility spike
+(branch `spike/514-cs-file-diagnostics`, kept for reference only — not merged) proved the
+mechanism live in Visual Studio, VS Code, and Rider before the real implementation was built; its
+findings are recorded as a comment on the issue.
+
+#### End-user experience
+
+A `.cs` binding method that fails one of Reqnroll's structural validation rules (see below) gets a
+warning squiggle on its identifier, with a hover message naming the specific rule violated —
+e.g. *"Binding method 'Setup' must be static because its containing type 'Hooks' is abstract."*
+The squiggle appears via each IDE's own C# editor surface, alongside whatever that IDE's native C#
+language server already reports for the same file — confirmed live that VS, VS Code, and Rider all
+merge the two sources with no visible conflict. In Rider the message also surfaces in the Problems
+pane, grouped under the `.cs` file's name, the same as any other diagnostic source.
+
+#### IDE support matrix
+
+| VS Code | Visual Studio | Rider |
+|---------|---------------|-------|
+| ✅ Generic | ✅ Generic | ✅ Generic |
+
+Push (`textDocument/publishDiagnostics`) requires no capability declaration and needed no IDE-
+specific code in any of the three clients. A `diagnosticProvider` (pull) capability was
+deliberately **not** declared: the spike found VS polling `textDocument/diagnostic` every 7–15s
+and VS Code polling it occasionally, both for zero benefit (no handler exists to answer it, so
+every poll just fails) — declaring it would have been pure overhead.
+
+#### Validated rules
+
+Ports the structural checks from Reqnroll's own `Reqnroll.Bindings.Discovery.BindingSourceProcessor`
+— purely structural, no business logic:
+
+| Rule | Applies to |
+|---|---|
+| Binding type must be a class (not struct/interface/record) | Every binding on the type |
+| Binding type must not be a generic type definition | Every binding on the type |
+| A method on an abstract binding type must be static | Every binding on the method |
+| A method must not be async void | Every binding on the method |
+| The four non-scenario-scoped hook types (`BeforeTestRun`/`AfterTestRun`/`BeforeFeature`/`AfterFeature`) must be static | That hook attribute only |
+| The step-definition expression must be a valid Cucumber Expression or regex | That step-definition attribute only |
+| `[Scope(Tag = "...")]`'s tag expression must be valid | Every binding under that scope (type- or method-level, step definition or hook) |
+
+The last two aren't new grammar work — both already ran via the real libraries
+(`Cucumber.CucumberExpressions` for step expressions, `Cucumber.TagExpressions` for `Scope.Tag`,
+the same library Reqnroll v4 is adding scope tag-expression support on top of) before this
+addition; they just discarded the failure instead of setting `Error`. See
+[Architecture §7](LSP-IDE-Support-Architecture.md#7-binding-connector) note below for the parity
+this restores with the connector path, which already combined both into `ProjectBinding.Error`.
+
+Both of these two are also anchored at the specific attribute that failed (`[Given/When/Then]` for
+an expression error, the binding's own attribute for a scope error), via `ProjectBinding.ErrorLocation`
+— unlike a structural error, which is shared by every attribute on the method and stays anchored at
+the method identifier so it dedupes to one squiggle rather than one per attribute. `ErrorLocation`
+is only populated on the Roslyn path; the connector's PDB-derived data has no per-attribute
+location to offer, so a connector-reported failure still anchors at the method.
+
+`[StepArgumentTransformation]` validation is out of scope: `StepDefinitionFileParser` doesn't
+discover that attribute at all today (only `StepDefinitionAttributes`/`HookAttributes` are
+recognized), a separate, larger prerequisite closed independently.
+
+#### LSP messages
+
+| Direction | Method | Purpose |
+|-----------|--------|---------|
+| Server → Client | `textDocument/publishDiagnostics` | Push the complete current diagnostic set for one `.cs` URI |
+
+#### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant IDE
+
+    box LightBlue LSP Server
+        participant SDFP as StepDefinitionFileParser
+        participant BR as Binding Registry
+        participant CDRCH as CSharpDiagnosticsRegistryChangedHandler
+        participant CDA as CSharpDiagnosticsAggregator
+        participant CDP as CSharpDiagnosticsPublisher
+    end
+
+    Note over IDE,BR: .cs file edited (Roslyn re-parse), or the connector<br/>completes a post-build run — either raises BindingRegistryChangedNotification
+    SDFP->>BR: Sets Error on any binding that fails a structural check
+    BR-->>CDRCH: [internal] BindingRegistryChangedNotification
+    loop For each open .cs file owned by the affected project
+        CDRCH->>CDP: Publish(uri)
+        CDP->>BR: GetRegistryForUri(uri)
+        CDP->>CDA: Aggregate(registry, filePath)
+        CDA-->>CDP: CSharpBindingDiagnostic[] (deduped by method location)
+        CDP-->>IDE: textDocument/publishDiagnostics (uri)
+    end
+    IDE-->>IDE: .cs squiggles updated
+```
+
+#### Implementation notes
+
+- **A single trigger, not one per doc-sync event.** `CSharpDiagnosticsRegistryChangedHandler`
+  (`LSP.Server/Pipeline/`) subscribes to the same `BindingRegistryChangedNotification` [F2](#f2--binding-discovery)'s
+  `.feature` re-match pipeline does, and on any change re-pushes diagnostics for every currently-open
+  `.cs` file owned by the affected project — mirroring `BindingRegistryChangedHandler.ReparseOpenFilesAsync`'s
+  equivalent handling for `.feature` files. Earlier drafts also pushed directly from
+  `TextDocumentSyncHandler`'s `.cs` `didOpen`/`didChange` handlers, to work around
+  `ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync`'s notify-gate
+  (`ProjectBindingRegistry.HasExpressionChanges`/`HasHookChanges`) not considering a binding's
+  `Error` — a validity-only edit (e.g. removing `static`) touches neither a step's matched
+  expression nor a hook's scope/order, so the gate never fired for it. That gate now includes
+  `Error` in its comparison directly, so the single registry-changed trigger is sufficient; see
+  [Architecture §5 Internal Event Architecture](LSP-IDE-Support-Architecture.md#internal-event-architecture)
+  for the full before/after and the resulting bonus fix to `.feature` diagnostics.
+- **Dedup by method, not by binding.** `ICSharpDiagnosticsAggregator` (`LSP.Core/Diagnostics/`,
+  protocol-agnostic — no OmniSharp dependency, mirroring [F3](#f3--gherkin-file-diagnostics)'s
+  `DiagnosticsAggregator`) groups bindings by their identifier's source location before emitting a
+  diagnostic. A method carrying several step-definition/hook attributes produces one
+  `ProjectBinding` per attribute, all sharing one `SourceLocation` — without this, the same error
+  rendered as duplicate diagnostics stacked on one squiggle, one per attribute (a spike finding).
+- **Real (non-zero-width) diagnostic ranges.** `StepDefinitionFileParser.GetSourceLocation` used to
+  report a deliberately zero-width location at the identifier's start (fine for Go to Definition's
+  `ToLspLocation`, which discards end-position data anyway). For a diagnostic that rendered as a
+  barely-visible one-character squiggle. Fixed at the source by capturing
+  `GetLocation().GetLineSpan()`'s `EndLinePosition` too, rather than re-deriving the span
+  downstream via a live-buffer text search.
+- **Rides the existing binding-replacement mechanism**, per the issue's own recommendation: `Error`
+  is a plain property on `ProjectBinding`, and connector (whole-registry replace) vs. Roslyn
+  (per-file `ProjectBindingRegistry.ReplaceBindings`) already replace bindings — including their
+  `Error` — using the same mechanism as everything else about a binding. No separate merge/override
+  logic was needed or written.
+- **Known related bug, not caused by this feature**:
+  [#515](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/515) — when a project's compiled
+  DLL was built with source paths that don't match what the LSP client reports for the same files
+  (e.g. built inside a devcontainer, opened natively afterward), `ReplaceBindings`'s path-based
+  file-identity check never recognizes the two as the same file, so every binding in the affected
+  file is registered twice and every step matching it is reported ambiguous. Confirmed present
+  before F27 existed; unrelated to this feature, but worth knowing about since it can look like an
+  F27 regression.
+- **The issue's "cheap first step" is also implemented**: `.feature`-file "step not found"
+  diagnostics ([F3](#f3--gherkin-file-diagnostics)) now name the real reason when the step
+  structurally matches an *invalid* binding, instead of a generic "not found." Since
+  `ProjectStepDefinitionBinding.Match` returns `null` on `!IsValid` before ever trying the regex —
+  making an invalid binding invisible to real matching, correctly — a separate
+  `WouldMatchIgnoringValidity` check (regex + scope only, never used for real step-execution
+  matching) runs only when a step has no valid match at all, and its result flows through
+  `MatchResultItem`'s existing `Errors`/`MatchResult.GetErrorMessage()` mechanism — the same one
+  the Ambiguous case already used — so `DiagnosticsAggregator` needed only a one-line change to
+  stop discarding it.
 
 ---
 
