@@ -142,6 +142,7 @@ graph TB
             BindingRegistry["Binding Registry\n(match cache)"]
             SemTokenSvc["Semantic Token\nService"]
             DiagSvc["Diagnostics\nAggregator"]
+            CSharpDiagSvc["C# Diagnostics\nAggregator (F27)"]
             CompletionSvc["Completion\nService"]
             FmtSvc["Formatting\nService"]
             BindingMatch["Binding Match\nService"]
@@ -154,12 +155,14 @@ graph TB
             BindingMatch --> BindingRegistry
             InlayHintSvc --> BindingMatch
             TestTargetResolver --> CSharpTreeCache
+            CSharpDiagSvc --> BindingRegistry
         end
 
         Handlers --> GherkinParser
         Handlers --> DocBuffer
         Handlers --> SemTokenSvc
         Handlers --> DiagSvc
+        Handlers --> CSharpDiagSvc
         Handlers --> CompletionSvc
         Handlers --> FmtSvc
         Handlers --> BindingMatch
@@ -207,7 +210,7 @@ All subsequent requests for a document (semantic tokens, outline, folding, diagn
 
 Binding information enters the registry from two sources:
 
-- **Roslyn Discovery** (in-process, in LSP.Core): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate.
+- **Roslyn Discovery** (in-process, in LSP.Core): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures.
 - **Reflection Discovery** (out-of-process Connector): when a build is detected (see [Q9](LSP-IDE-Support-Open-Questions.md) for per-IDE detection reliability), the Connector scans the compiled assembly and replaces the full registry.
 
 **3 · Binding Match Service**
@@ -299,6 +302,7 @@ The server registers interest in both `*.feature` files and `*.cs` files. It doe
 - Receiving `textDocument/didOpen` / `didChange` to trigger Roslyn-based binding re-discovery (see [F2](LSP-IDE-Support-Feature-Designs.md#f2--binding-discovery))
 - Providing `textDocument/references` and `reqnroll/findStepUsages` (step usages, from a C# binding method — see [F14](LSP-IDE-Support-Feature-Designs.md#f14--find-step-definition-usages))
 - Providing `textDocument/codeLens` (usage counts on binding attributes)
+- Pushing `textDocument/publishDiagnostics` for binding-validation errors ([F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) — push-only, no `diagnosticProvider` (pull) capability declared; confirmed live that VS Code and Visual Studio both merge these alongside the native C# language server's own diagnostics for the same file with no special handling required
 
 A single OmniSharp text-document sync handler, `TextDocumentSyncHandler`, registers a document selector covering **both** `**/*.feature` and `**/*.cs` and routes by file extension — a single handler avoids OmniSharp's ambiguity when two `TextDocumentSyncHandlerBase` implementations claim overlapping documents. `.cs` files are deliberately **not** stored in the Gherkin document buffer.
 
@@ -428,11 +432,13 @@ The rename pipeline's `WorkspaceEdit` response is built by `WorkspaceEditBuilder
 | Notification | Produced by | Consumed by |
 |-------------|-------------|-------------|
 | `MatchCacheChangedNotification` | `TextDocumentSyncHandler`, after parsing and matching a `.feature` file in one pass (`DeveroomTagParser`, via `GherkinDocumentTaggerService`) — and separately by `BindingRegistryChangedHandler`, after re-matching each open `.feature` file against an updated registry | `DiagnosticsPublishHandler` (pushes `textDocument/publishDiagnostics`); `SemanticTokensPushHandler` (Visual Studio only — pushes `reqnroll/semanticTokens`, see [F1](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)) |
-| `BindingRegistryChangedNotification` | `BindingRegistryProviderRouter`, relaying `ConnectorBindingRegistryProvider.BindingRegistryChanged` — raised by both the in-process Roslyn patch (`ICSharpBindingDiscoveryService`, on a `.cs` save) and the out-of-process reflection Connector refresh (on a detected build) | `BindingRegistryChangedHandler`, which re-parses every open `.feature` file against the updated registry and republishes `MatchCacheChangedNotification` for each |
+| `BindingRegistryChangedNotification` | `BindingRegistryProviderRouter`, relaying `ConnectorBindingRegistryProvider.BindingRegistryChanged` — raised by both the in-process Roslyn patch (`ICSharpBindingDiscoveryService`, on a `.cs` save) and the out-of-process reflection Connector refresh (on a detected build) | `BindingRegistryChangedHandler`, which re-parses every open `.feature` file against the updated registry and republishes `MatchCacheChangedNotification` for each; `CSharpDiagnosticsRegistryChangedHandler` ([F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)), which re-pushes binding-validation diagnostics for every open `.cs` file owned by the affected project |
 
 `DeveroomTagParser` fuses Gherkin parsing and step-binding matching into a single AST walk, producing one `DeveroomTag[]` tree that carries both structural classification and match results (see [F1](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)). Because of that fusion, there is no separate "parse" notification stage between a document change and a match-cache update — `TextDocumentSyncHandler` calls the parser synchronously and publishes `MatchCacheChangedNotification` directly once the tag tree and match set are stored.
 
 The C# / Roslyn path follows the same principle of going straight to the relevant service rather than through an extra notification hop: on a `.cs` `didOpen`/`didChange`, `TextDocumentSyncHandler` calls `ICSharpBindingDiscoveryService` directly. That service patches the owning project's `ConnectorBindingRegistryProvider`, which raises its `BindingRegistryChanged` event; `BindingRegistryProviderRouter` publishes the `BindingRegistryChangedNotification` shown in the table above, and the established re-match path runs from there (`BindingRegistryChangedHandler` → re-parse open feature files → `MatchCacheChangedNotification` → semantic-token refresh). The out-of-process reflection discovery (post-build) raises the same `BindingRegistryChangedNotification`, so both discovery sources converge on one re-match path regardless of which one produced the update.
+
+`CSharpDiagnosticsRegistryChangedHandler` ([F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) subscribes to the same `BindingRegistryChangedNotification` as `BindingRegistryChangedHandler`, independently: on any change it re-pushes `textDocument/publishDiagnostics` for every open `.cs` file owned by the affected project, reading each binding's `Error` from the current registry via `ICSharpDiagnosticsAggregator`. A single trigger is sufficient — earlier drafts of this feature also pushed directly from `TextDocumentSyncHandler`'s `.cs` doc-sync handlers, to work around `ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync`'s notify-gate (`ProjectBindingRegistry.HasExpressionChanges`/`HasHookChanges`) not considering a binding's `Error`; that gate now includes `Error` in its comparison, so a validity-only edit (e.g. removing `static`) correctly raises `BindingRegistryChangedNotification` on its own, and the direct push was removed as redundant. That widening has a second effect worth noting: since `ProjectStepDefinitionBinding.Match` returns `null` whenever a binding is invalid, a binding's validity also affects `.feature` step matching — a validity-only edit now correctly refreshes `.feature` "undefined step" diagnostics too, which the notify-gate previously missed for the same reason.
 
 ---
 
@@ -656,6 +662,7 @@ For every shipped feature, each IDE's **client-side implementation** falls into 
 | F23 · Inlay Hints (step binding info) | OOB (`textDocument/inlayHint`, native rendering) | OOB | Glue — `ReqnrollFeatureInlayHintsController` calls the standard request directly and renders via `Editor.inlayModel`, since Rider's generic client has no rendering-side consumer for inlay hints either | No |
 | F24 · Hook Match CodeLens (Feature/Scenario/Step) | Glue — `hookCodeLens.ts` registers a `CodeLensProvider` directly (same pattern as F18) and calls `textDocument/codeLens`; click reuses F17's `reqnroll/goToHooks` with `alwaysShowPicker` forced on | **Custom** — classic (non-Roslyn) `Microsoft.VisualStudio.Language.CodeLens` API (`HookCodeLensTaggerProvider` + two data point providers), not VS.Extensibility's `ICodeLensProvider` (used for F18), which has no producer-side extension point for a custom language; data points run out-of-process and call back into `devenv.exe` via `ICodeLensCallbackService`/`HookCodeLensCallbackListener`. Like Rider, needs two providers (`HookCodeLensDataPointProvider` own-level + `StepHooksCodeLensDataPointProvider`) to render both lens kinds on a `Scenario:` line — but they share **one** line-scoped tag rather than getting one each ([#400](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/400)/[#407](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/407)). [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372)/[#398](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/398). See [Feature Designs §F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) for the full component inventory and flow diagrams | Glue — two `CodeVisionProvider`s (`HookCodeVisionProvider` for the own-level lens, `StepHooksCodeVisionProvider` for the step-hooks lens, ordered after via `CodeVisionRelativeOrderingAfter`) since one provider can't render two entries on the same line; shared logic in `HookLensSupport`; click via `GoToHooksRunner.runAndShow(alwaysShowPicker = true)` | No |
 | F25 · Hook Match Count CodeLens (hook bindings) | Glue — shares F18's `.cs` `CodeLensProvider` registration; click via `goToMatchingScenarios.ts`, always shows a QuickPick | **Custom** — `HookMatchCountCodeLensProvider`, a second `ICodeLensProvider` alongside `StepCodeLensProvider`, reusing `StepCodeLensState`'s method-start-line registry *and* (since [#400](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/400)) its `IInvalidatableLens` refresh registry, without which the lens never repainted after a rebuild; results shown in the Find-Usages (F14) results window rather than a modal picker | Glue — the existing `StepUsagesCodeVisionProvider` (F18) dispatches by command name to `GoToMatchingScenariosRunner`, always shows a picker rather than auto-navigating | No |
+| F27 · C# Binding Validation Diagnostics | OOB (`textDocument/publishDiagnostics`) | OOB | OOB | No |
 
 > **This table is authoritative** for current per-IDE implementation status; it supersedes the per-feature "IDE support matrix" tables in the [Feature Designs](LSP-IDE-Support-Feature-Designs.md) doc wherever they disagree. Last verified 2026-07-30.
 
