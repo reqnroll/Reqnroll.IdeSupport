@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Gherkin.Ast;
@@ -372,22 +373,49 @@ public record ProjectBindingRegistry
         ["short"] = "Int16", ["ushort"] = "UInt16", ["string"] = "String", ["object"] = "Object",
     };
 
+    // Matches each dotted identifier chain within a parameter-type string (the type itself, and
+    // every generic type argument), so a generic/array/nullable type's namespace-qualified pieces
+    // -- e.g. the "System.Collections.Generic"/"String"/"Int32" inside
+    // "System.Collections.Generic.Dictionary<String,Int32>" -- are each reduced independently,
+    // rather than only the string's own trailing segment (which a plain Split('.').Last() would
+    // do, incorrectly leaving everything up to the first type argument's namespace untouched).
+    private static readonly Regex DottedIdentifierRegex =
+        new(@"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*", RegexOptions.Compiled);
+
     /// <summary>
-    /// Reduces a parameter type to its simple (unqualified) CLR type name, for the same reason
+    /// Reduces a parameter type to a spelling-independent canonical form, for the same reason
     /// <see cref="NormalizeMethodIdentity"/> reduces a method name: the connector reports a
-    /// parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable" --
-    /// built from <c>Type.FullName</c>), while Roslyn reports the literal source-code type text
-    /// (e.g. "int", "DataTable" -- <c>ParameterSyntax.Type.ToString()</c>), which for a C#
-    /// primitive keyword doesn't even share a spelling with its CLR name. Confirmed live against
-    /// the Quickstart sample (issue #515 follow-up): without this, a binding with a parameterless
-    /// signature was correctly recognized as the same method across connector/Roslyn, but a
-    /// parameterized one (e.g. <c>Int32</c> vs. <c>int</c>) was not, leaving it duplicated.
+    /// parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable",
+    /// "System.Collections.Generic.List&lt;String&gt;", "System.Int32?" -- effectively
+    /// <c>Type.FullName</c>, confirmed by running the actual connector's discovery command against
+    /// a probe assembly), while Roslyn reports the literal source-code type text (e.g. "int",
+    /// "DataTable", "List&lt;string&gt;", "int?" -- <c>ParameterSyntax.Type.ToString()</c>), which
+    /// for a C# primitive keyword doesn't even share a spelling with its CLR name, and can vary in
+    /// namespace-qualification and whitespace independently of the connector's. This strips
+    /// whitespace, then reduces every dotted identifier chain in the string -- the type itself
+    /// *and* each of its generic type arguments -- to its trailing segment, mapping a C# primitive
+    /// keyword to its CLR simple name; array (<c>[]</c>), generic (<c>&lt;,&gt;</c>), and nullable
+    /// (<c>?</c>) punctuation is left as-is, which is already spelled identically on both sides.
     /// </summary>
+    /// <remarks>
+    /// Confirmed live against the Quickstart sample (issue #515 follow-up): fixing only the
+    /// top-level type name (treating the whole string as one identifier) corrected parameterless
+    /// and simple-typed methods, but left every generic/array/nullable-typed method duplicated --
+    /// e.g. the connector's "System.Collections.Generic.Dictionary&lt;String,Int32&gt;" never
+    /// matched Roslyn's "Dictionary&lt;string, int&gt;" even after that narrower fix, since neither
+    /// the inner type arguments' spelling nor the space after the comma were normalized.
+    /// </remarks>
     private static string NormalizeParameterType(string type)
     {
-        var simpleName = type.Split('.').Last();
-        return CSharpKeywordToClrTypeName.TryGetValue(simpleName, out var clrName) ? clrName : simpleName;
+        var withoutWhitespace = WhitespaceRegex.Replace(type, string.Empty);
+        return DottedIdentifierRegex.Replace(withoutWhitespace, match =>
+        {
+            var simpleName = match.Value.Split('.').Last();
+            return CSharpKeywordToClrTypeName.TryGetValue(simpleName, out var clrName) ? clrName : simpleName;
+        });
     }
+
+    private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
 
     /// <summary>
     /// Reduces a binding's <see cref="ProjectBindingImplementation.Method"/> to its trailing

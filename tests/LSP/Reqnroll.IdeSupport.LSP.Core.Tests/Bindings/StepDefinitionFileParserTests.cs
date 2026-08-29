@@ -1297,6 +1297,56 @@ namespace TestProject
             "\"int\"/\"string\"");
     }
 
+    // Real wire values captured by running the actual reqnroll-ide-connector's discovery command
+    // against a probe assembly (issue #515 follow-up) -- these are exactly what
+    // ProjectBindingImplementation.ParameterTypes holds for a connector-discovered binding.
+    [Theory]
+    [InlineData("System.Collections.Generic.List<String>", "using System.Collections.Generic;",
+        "List<string> items")]
+    [InlineData("System.Collections.Generic.Dictionary<String,Int32>", "using System.Collections.Generic;",
+        "Dictionary<string, int> map")]
+    [InlineData("System.String[]", "", "string[] items")]
+    [InlineData("System.Int32?", "", "int? value")]
+    public async Task ReplaceBindings_removes_a_stale_binding_for_generic_array_and_nullable_parameter_types(
+        string connectorParameterType, string usingDirective, string roslynParameterDeclaration)
+    {
+        // Generic/array/nullable types compound the plain-primitive mismatch above: the connector
+        // reports "System.Collections.Generic.Dictionary<String,Int32>" (its own friendly
+        // generic-name format, confirmed via the probe -- not raw reflection FullName, which would
+        // carry backticks/arity/assembly-qualified names instead), while Roslyn reports the literal
+        // source text, e.g. "Dictionary<string, int>" -- differing in the type argument's spelling
+        // *and* in whitespace after the comma. A naive "normalize the whole string as one
+        // identifier" fix (treating the type name and its generic arguments as an opaque unit)
+        // would still fail to match these, since neither the inner type arguments' casing nor the
+        // comma-space were addressed.
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent($@"
+{usingDirective}
+namespace TestProject
+{{
+    [Binding]
+    public class Steps
+    {{
+        [Given(""expression"")]
+        public void Method({roslynParameterDeclaration}) {{ }}
+    }}
+}}");
+
+        var staleBinding = new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^expression$"), null,
+            new ProjectBindingImplementation("Steps.Method(...)", new[] { connectorParameterType },
+                new SourceLocation("/workspaces/host-solution/Steps.cs", 0, 0)));
+
+        var registry = new ProjectBindingRegistry(
+            new[] { staleBinding },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var updated = await registry.ReplaceBindings(changedFile);
+
+        updated.StepDefinitions.Should().ContainSingle(
+            $"the stale binding (connector type '{connectorParameterType}') must be superseded by " +
+            $"identity even though Roslyn spells the same parameter as '{roslynParameterDeclaration}'");
+    }
+
     // ── HasExpressionChanges ────────────────────────────────────────────────────
 
     [Fact]
