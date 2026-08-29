@@ -29,6 +29,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IBindingMatchService _bindingMatchService;
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService;
     private readonly ICSharpFileTextCache _csharpFileTextCache;
+    private readonly ICSharpDiagnosticsPublisher _csharpDiagnosticsPublisher;
     private readonly IMediator _mediator;
     private readonly ILanguageServerFacade _languageServer;
     private readonly IIdeSupportLogger _logger;
@@ -49,6 +50,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IBindingMatchService bindingMatchService,
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         ICSharpFileTextCache csharpFileTextCache,
+        ICSharpDiagnosticsPublisher csharpDiagnosticsPublisher,
         IMediator mediator,
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
@@ -60,6 +62,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _bindingMatchService = bindingMatchService;
         _csharpDiscoveryService = csharpDiscoveryService;
         _csharpFileTextCache = csharpFileTextCache;
+        _csharpDiagnosticsPublisher = csharpDiagnosticsPublisher;
         _mediator = mediator;
         _languageServer = languageServer;
         _logger = logger;
@@ -99,10 +102,14 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             // the coordinator still guarantees this file's own edits apply in order. The PERF
             // measurement moves inside the scheduled work so it still reflects actual parse
             // duration (Layer 4) rather than the now near-instant synchronous handler body.
-            _parseCoordinator.Schedule(uri, ct =>
+            _parseCoordinator.Schedule(uri, async ct =>
             {
                 using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
-                return _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, true, ct);
+                await _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, true, ct).ConfigureAwait(false);
+                // Unconditional (issue #514): ApplyRoslynFileUpdateAsync's own notification is
+                // gated on expression/hook-scope changes, which a validity-only edit doesn't
+                // touch — see ICSharpDiagnosticsPublisher's remarks.
+                _csharpDiagnosticsPublisher.Publish(uri, version);
             });
             return Task.FromResult(Unit.Value);
         }
@@ -140,10 +147,12 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             _logger.LogInfo($"C# document changed: {uri} (version {version})");
             _csharpFileTextCache.Update(uri, text);
             // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
-            _parseCoordinator.Schedule(uri, ct =>
+            _parseCoordinator.Schedule(uri, async ct =>
             {
                 using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
-                return _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, false, ct);
+                await _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, false, ct).ConfigureAwait(false);
+                // Unconditional (issue #514) -- see the matching didOpen comment.
+                _csharpDiagnosticsPublisher.Publish(uri, version);
             });
             return Task.FromResult(Unit.Value);
         }
@@ -184,6 +193,17 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         if (IsCSharp(uri))
         {
             _csharpFileTextCache.Remove(uri);
+
+            // Clear any squiggles pushed for this file (issue #514) — same clear-on-close
+            // convention as the .feature path below.
+            _languageServer.SendNotification(
+                LspMethodNames.TextDocumentPublishDiagnostics,
+                new PublishDiagnosticsParams
+                {
+                    Uri = uri,
+                    Diagnostics = new Container<Diagnostic>()
+                });
+
             return Unit.Value;
         }
 

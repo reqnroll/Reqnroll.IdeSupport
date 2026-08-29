@@ -18,7 +18,7 @@ Background:
             public class CalculatorHooks
             {
                 [BeforeFeature]
-                public void BeforeFeature() { }
+                public static void BeforeFeature() { }
 
                 [BeforeScenario]
                 public void BeforeScenario() { }

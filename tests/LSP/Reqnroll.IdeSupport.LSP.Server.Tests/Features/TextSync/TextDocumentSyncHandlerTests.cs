@@ -18,6 +18,7 @@ public class TextDocumentSyncHandlerTests
     private readonly IBindingMatchService _bindingMatchService = Substitute.For<IBindingMatchService>();
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly ICSharpFileTextCache _csharpFileTextCache = new CSharpFileTextCache();
+    private readonly ICSharpDiagnosticsPublisher _csharpDiagnosticsPublisher = Substitute.For<ICSharpDiagnosticsPublisher>();
     private readonly IMediator _mediator = Substitute.For<IMediator>();
     private readonly ILanguageServerFacade _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
@@ -31,7 +32,8 @@ public class TextDocumentSyncHandlerTests
 
     private TextDocumentSyncHandler CreateSut() =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
-            _csharpFileTextCache, _mediator, _languageServer, _logger, _parseCoordinator);
+            _csharpFileTextCache, _csharpDiagnosticsPublisher, _mediator, _languageServer, _logger,
+            _parseCoordinator);
 
     /// <summary>Awaits the coordinator's pending entry for <paramref name="uri"/> so a test can observe the effects of Handle's scheduled (not awaited) parse/discovery work.</summary>
     private Task WaitForScheduledWorkAsync(DocumentUri uri) =>
@@ -227,6 +229,8 @@ public class TextDocumentSyncHandlerTests
         await _csharpDiscoveryService.Received(1)
             .UpdateFromSourceAsync(CsUri, source, true, Arg.Any<CancellationToken>());
         await _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
+        // Issue #514: unconditional, not gated behind BindingRegistryChangedNotification.
+        _csharpDiagnosticsPublisher.Received(1).Publish(CsUri, 1);
     }
 
     [Fact]
@@ -249,6 +253,7 @@ public class TextDocumentSyncHandlerTests
         _bufferService.TryGet(CsUri, out _).Should().BeFalse();
         _csharpFileTextCache.TryGet(CsUri, out var cachedText).Should().BeTrue();
         cachedText.Should().Be(source);
+        _csharpDiagnosticsPublisher.Received(1).Publish(CsUri, 2);
     }
 
     [Fact]
@@ -273,8 +278,11 @@ public class TextDocumentSyncHandlerTests
         // Closing a .cs file must not invalidate feature match state; bindings are retained until rebuild.
         _bindingMatchService.DidNotReceiveWithAnyArgs().InvalidateAllForDocument(default!);
         await _taggerService.DidNotReceiveWithAnyArgs().RescanClosedFileAsync(default!);
-        // No diagnostics push — the server does not own diagnostics for .cs files.
-        _languageServer.DidNotReceive().SendNotification(Arg.Any<string>(), Arg.Any<PublishDiagnosticsParams>());
+        // Issue #514: the server clears any binding-validation diagnostics it pushed for the
+        // file, the same clear-on-close convention used for .feature files.
+        _languageServer.Received(1).SendNotification(
+            "textDocument/publishDiagnostics",
+            Arg.Is<PublishDiagnosticsParams>(p => p.Uri == CsUri && !p.Diagnostics.Any()));
     }
 
     [Fact]

@@ -173,6 +173,8 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
             .AddSingleton<ISemanticTokenService, SemanticTokenService>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
+            .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()
+            .AddSingleton<ICSharpDiagnosticsPublisher, CSharpDiagnosticsPublisher>()
             .AddSingleton<IGherkinFoldingRangeService, GherkinFoldingRangeService>()
             .AddSingleton<ICommentToggleService, CommentToggleService>()
             .AddSingleton<IGherkinInlayHintService, GherkinInlayHintService>();
