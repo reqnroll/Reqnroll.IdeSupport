@@ -1219,6 +1219,46 @@ namespace TestProject
         binding.ErrorLocation.Should().BeNull();
     }
 
+    [Fact]
+    public async Task ReplaceBindings_removes_a_stale_binding_by_identity_even_when_the_source_path_disagrees()
+    {
+        // Issues #469/#503/#515: the reflection connector and Roslyn can disagree on a binding's
+        // source-file path for the very same file -- a PDB path baked in from a devcontainer/CI
+        // build vs. the live workspace path, a stale/unreadable PDB location resolving to null, or
+        // a stale IDE-side cache. When path comparison alone can't recognize the stale binding as
+        // belonging to the file being reconciled, it must still be evicted by identity, or it
+        // survives alongside its freshly Roslyn-parsed replacement -- surfacing as a false
+        // "ambiguous step" (same method reported twice: once under the connector's short
+        // "Type.Method(ParamType)" form, once under Roslyn's fully-qualified "Namespace.Type.Method").
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [When(""expression"")]
+        public void Method() { }
+    }
+}");
+
+        // The stale binding's source path (simulating a devcontainer-built PDB path, or a null
+        // resolution) does not string-match FilePath, so IsSameSourceFile alone would miss it.
+        var registry = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^expression$", "Steps.Method()", "/workspaces/host-solution/Steps.cs",
+                    ScenarioBlock.When)
+            },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var updated = await registry.ReplaceBindings(changedFile);
+
+        updated.StepDefinitions.Should().ContainSingle(
+            "the stale connector-discovered binding must be superseded by identity, " +
+            "not left in place alongside the freshly Roslyn-parsed one");
+    }
+
     // ── HasExpressionChanges ────────────────────────────────────────────────────
 
     [Fact]
