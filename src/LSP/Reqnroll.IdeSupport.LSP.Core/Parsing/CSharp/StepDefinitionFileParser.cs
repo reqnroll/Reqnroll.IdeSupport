@@ -150,6 +150,7 @@ public class StepDefinitionFileParser
         string methodName, IReadOnlyList<string> parameterNames, string structuralError)
     {
         var expression = GetStepDefinitionExpression(attribute);
+        var bindingScope = BuildScope(scope);
 
         // Capture the exact attribute line so FindBindingAtLocation can resolve clicks
         // on the attribute itself using AST information rather than a heuristic window.
@@ -162,10 +163,29 @@ public class StepDefinitionFileParser
             // way Reqnroll's runtime StepDefinitionRegexCalculator does it. The prefix stripped
             // (e.g. "Given") depends on which block this particular attribute registers for, so
             // the regex is computed per-block rather than once for the whole attribute.
-            var regex = expression != null ? BuildRegex(expression) : BuildMethodNameRegex(block, methodName, parameterNames);
-            target.Add(new ProjectStepDefinitionBinding(block, regex, BuildScope(scope), implementation, expression,
-                error: structuralError, attributeSourceLine: attrLine));
+            // A method-name-style binding (no explicit expression) is always constructible from
+            // the method name/parameters, so it never has a regexError.
+            string regexError = null;
+            var regex = expression != null
+                ? BuildRegex(expression, out regexError)
+                : BuildMethodNameRegex(block, methodName, parameterNames);
+            var error = CombineErrors(structuralError, regexError, bindingScope?.Error);
+            target.Add(new ProjectStepDefinitionBinding(block, regex, bindingScope, implementation, expression,
+                error: error, attributeSourceLine: attrLine));
         }
+    }
+
+    /// <summary>
+    /// Combines every non-empty error into one message (issue #514's expression/scope validation
+    /// follow-up), mirroring <c>BindingImporter.GetBindingError</c>'s equivalent combining step
+    /// for the connector (reflection) discovery path — <see cref="ProjectBinding.Error"/> is the
+    /// one field every diagnostics consumer reads, so both discovery paths must feed it the same
+    /// way. Returns <see langword="null"/> when none apply.
+    /// </summary>
+    private static string CombineErrors(params string[] errors)
+    {
+        var nonEmpty = errors.Where(e => !string.IsNullOrEmpty(e)).ToArray();
+        return nonEmpty.Length == 0 ? null : string.Join("\n", nonEmpty);
     }
 
     private static readonly IParameterTypeRegistry CucumberExpressionParameterTypeRegistry = new LspCucumberExpressionParameterTypeRegistry();
@@ -196,13 +216,16 @@ public class StepDefinitionFileParser
     /// may not contain a parameter") can throw for a malformed expression where the old
     /// hand-rolled version never did; those are caught and surfaced as an unmatchable binding
     /// (<see langword="null"/> regex, <see cref="ProjectStepDefinitionBinding.IsValid"/> false)
-    /// rather than aborting discovery of every other binding in the file.
+    /// rather than aborting discovery of every other binding in the file. The caught exception's
+    /// own message is returned via <paramref name="error"/> (issue #514 follow-up) rather than
+    /// discarded, so the binding carries a real reason instead of failing silently.
     /// </para>
     /// </remarks>
-    private static Regex BuildRegex(string expression)
+    private static Regex BuildRegex(string expression, out string error)
     {
         try
         {
+            error = null;
             if (!CucumberExpressionDetector.IsCucumberExpression(expression))
                 return new Regex(GetWholeTextMatchRegexSource(expression), RegexOptions.CultureInvariant);
 
@@ -216,6 +239,7 @@ public class StepDefinitionFileParser
             // text is itself malformed). Anything else is an unexpected bug -- e.g. in
             // LspCucumberExpressionParameterTypeRegistry -- and should propagate rather than
             // being silently reported as merely an invalid binding with no diagnostic trail.
+            error = $"Invalid step expression '{expression}': {ex.Message}";
             return null;
         }
     }
@@ -318,7 +342,7 @@ public class StepDefinitionFileParser
         var hookTags = GetHookTags(attribute);
         var order = GetHookOrder(attribute);
         var scope = BuildScope(CombineWithHookTags(methodScope, hookTags));
-        return new ProjectHookBinding(implementation, scope, hookType, order, error);
+        return new ProjectHookBinding(implementation, scope, hookType, order, CombineErrors(error, scope?.Error));
     }
 
     // The four hook types below run once for the whole test run/feature rather than once per

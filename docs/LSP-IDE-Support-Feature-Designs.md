@@ -1886,6 +1886,15 @@ Ports the structural checks from Reqnroll's own `Reqnroll.Bindings.Discovery.Bin
 | A method on an abstract binding type must be static | Every binding on the method |
 | A method must not be async void | Every binding on the method |
 | The four non-scenario-scoped hook types (`BeforeTestRun`/`AfterTestRun`/`BeforeFeature`/`AfterFeature`) must be static | That hook attribute only |
+| The step-definition expression must be a valid Cucumber Expression or regex | That step-definition attribute only |
+| `[Scope(Tag = "...")]`'s tag expression must be valid | Every binding under that scope (type- or method-level, step definition or hook) |
+
+The last two aren't new grammar work — both already ran via the real libraries
+(`Cucumber.CucumberExpressions` for step expressions, `Cucumber.TagExpressions` for `Scope.Tag`,
+the same library Reqnroll v4 is adding scope tag-expression support on top of) before this
+addition; they just discarded the failure instead of setting `Error`. See
+[Architecture §7](LSP-IDE-Support-Architecture.md#7-binding-connector) note below for the parity
+this restores with the connector path, which already combined both into `ProjectBinding.Error`.
 
 `[StepArgumentTransformation]` validation is out of scope: `StepDefinitionFileParser` doesn't
 discover that attribute at all today (only `StepDefinitionAttributes`/`HookAttributes` are

@@ -1081,6 +1081,111 @@ namespace S
             .Which.Regex!.ToString().Should().Be("^the firs number is (.*)$");
     }
 
+    // ── Expression / scope validation (issue #514 follow-up) ───────────────────────
+    // Both the Cucumber Expression grammar (step-definition text) and the Cucumber tag-expression
+    // grammar (Scope's Tag) already run today via the real libraries; this only confirms their
+    // failures now reach ProjectBinding.Error instead of being silently discarded.
+
+    [Fact]
+    public async Task Malformed_cucumber_expression_is_reported_invalid()
+    {
+        // "an optional may not contain a parameter" -- a real Cucumber Expression grammar rule.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""({int})"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex.Should().BeNull();
+        binding.Error.Should().Contain("({int})");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Malformed_plain_regex_is_reported_invalid()
+    {
+        // A leading "^" routes this through CucumberExpressionDetector's plain-regex branch
+        // (see its remarks) rather than being auto-escaped as Cucumber Expression literal text.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""^an unclosed [character class"")]
+              public void Method() { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Regex.Should().BeNull();
+        binding.Error.Should().Contain("an unclosed [character class");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Valid_cucumber_expression_has_no_error()
+    {
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given(""the {int} is valid"")]
+              public void Method(int n) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().BeNull();
+        binding.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Malformed_scope_tag_expression_on_a_step_definition_is_reported_invalid()
+    {
+        // Dangling "and" with no right-hand operand -- invalid per the real Cucumber
+        // tag-expression grammar (Cucumber.TagExpressions, already in use for Scope.Tag).
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Scope(Tag = ""@a and"")]
+              [Given(""x"")]
+              public void Method() { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("@a and");
+        binding.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Malformed_scope_tag_expression_on_a_hook_is_reported_invalid()
+    {
+        var bindings = await ParseBindings(
+            @"[Scope(Tag = ""@a and"")]
+              [BeforeScenario]
+              public void Setup() { }");
+
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Error.Should().Contain("@a and");
+        hook.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Valid_scope_tag_expression_has_no_error()
+    {
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Scope(Tag = ""@mytag and @othertag"")]
+              [Given(""x"")]
+              public void Method() { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().BeNull();
+        binding.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Structural_and_scope_errors_are_both_reported_when_both_apply()
+    {
+        var bindings = await ParseRaw(@"
+namespace TestProject
+{
+    [Binding]
+    public struct Steps
+    {
+        [Scope(Tag = ""@a and"")]
+        [Given(""x"")]
+        public void Method() { }
+    }
+}");
+        var binding = bindings.StepDefinitions.Should().ContainSingle().Subject!;
+        binding.Error.Should().Contain("must be a class").And.Contain("@a and");
+    }
+
     // ── HasExpressionChanges ────────────────────────────────────────────────────
 
     [Fact]
