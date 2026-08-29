@@ -68,19 +68,24 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
             cancellationToken.ThrowIfCancellationRequested();
 
             // On a mere didOpen (not an edit), skip the parse+patch once the project's connector
-            // has already succeeded at least once: BindingRegistryChangedHandler.RediscoverCsFilesAsync
-            // already covers this exact file (with this exact buffer text, via
-            // ICSharpFileTextCache) as part of that reconciliation, so reparsing here repeats that
-            // work for zero new information -- confirmed live, the same file parsed twice within
-            // 7 seconds with nothing having changed in between. Only applies once a real connector
-            // run has landed (see HasSuccessfulConnectorRun's remarks): an unbuilt project has no
-            // other source for this project's bindings, so didOpen must still run there -- VS Code
-            // routinely starts every session in exactly that state (issue #471).
-            if (isOpen && HasSuccessfulConnectorRun(project))
+            // has already succeeded at least once *and* the registry already has bindings for this
+            // exact file: BindingRegistryChangedHandler.RediscoverCsFilesAsync already covers this
+            // exact file (with this exact buffer text, via ICSharpFileTextCache) as part of that
+            // reconciliation, so reparsing here repeats that work for zero new information --
+            // confirmed live, the same file parsed twice within 7 seconds with nothing having
+            // changed in between. HasSuccessfulConnectorRun alone only proves a connector run
+            // happened for the *project*, not that *this file* was actually covered by that
+            // reconciliation pass -- a didOpen arriving after RediscoverCsFilesAsync took its
+            // snapshot (e.g. while the IDE is still restoring tabs) would otherwise never get
+            // Roslyn-parsed until the user's first edit (issue #517). Checking HasAnyBindingFor
+            // closes that gap while still skipping the redundant parse for a file that genuinely
+            // was already reconciled.
+            if (isOpen && HasSuccessfulConnectorRun(project, out var provider) &&
+                provider!.Current.HasAnyBindingFor(filePath))
             {
                 _logger.LogVerbose(
                     $"[Roslyn] '{uri}' opened but '{project.ProjectName}' already has a successful " +
-                    "connector run; skipping redundant source-level parse.");
+                    "connector run with bindings for this file; skipping redundant source-level parse.");
                 continue;
             }
 
@@ -140,11 +145,20 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
         }
     }
 
-    /// <summary>True when <paramref name="project"/> has a connector provider that has already completed a successful discovery run. See <see cref="ConnectorBindingRegistryProvider.HasSuccessfulConnectorRun"/>'s remarks (issue #471).</summary>
-    private static bool HasSuccessfulConnectorRun(LspReqnrollProject project) =>
-        project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)
-        && obj is ConnectorBindingRegistryProvider provider
-        && provider.HasSuccessfulConnectorRun;
+    /// <summary>True when <paramref name="project"/> has a connector provider that has already completed a successful discovery run. See <see cref="ConnectorBindingRegistryProvider.HasSuccessfulConnectorRun"/>'s remarks (issue #471). When true, <paramref name="provider"/> is the provider found, so callers can inspect its current registry (issue #517).</summary>
+    private static bool HasSuccessfulConnectorRun(LspReqnrollProject project, out ConnectorBindingRegistryProvider? provider)
+    {
+        if (project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)
+            && obj is ConnectorBindingRegistryProvider candidate
+            && candidate.HasSuccessfulConnectorRun)
+        {
+            provider = candidate;
+            return true;
+        }
+
+        provider = null;
+        return false;
+    }
 
     /// <summary>
     /// Parses <paramref name="text"/> and replaces <paramref name="filePath"/>'s entries in

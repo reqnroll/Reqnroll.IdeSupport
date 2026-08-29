@@ -1,5 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
@@ -319,7 +320,7 @@ namespace S
     // ── isOpen gated on HasSuccessfulConnectorRun (issue #471) ────────────────────
 
     [Fact]
-    public async Task UpdateFromSourceAsync_skips_the_parse_on_didOpen_once_the_project_has_a_successful_connector_run()
+    public async Task UpdateFromSourceAsync_skips_the_parse_on_didOpen_once_this_file_was_already_reconciled()
     {
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
@@ -337,15 +338,61 @@ namespace S
         await Task.WhenAny(connectorDone.Task, Task.Delay(5000));
         provider.HasSuccessfulConnectorRun.Should().BeTrue("test setup: the connector run must have landed before asserting the skip");
 
+        var csPath = Path.Combine(_root1, "Steps.cs");
+        var csUri = DocumentUri.FromFileSystemPath(csPath);
+
+        // Simulate BindingRegistryChangedHandler.RediscoverCsFilesAsync having already reconciled
+        // this exact file (with this exact buffer text) as part of that startup reconciliation pass.
+        var file = FileDetails.FromPath(csPath).WithCSharpContent(StepDefinitionSource);
+        await provider.ApplyRoslynFileUpdateAsync(file, notify: false);
+        provider.Current.StepDefinitions.Should().ContainSingle(
+            "test setup: the file must already be reconciled before asserting the didOpen skip");
+
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sut = CreateSutWithTelemetry(telemetry);
+
+        await sut.UpdateFromSourceAsync(csUri, StepDefinitionSource, isOpen: true, CancellationToken.None);
+
+        provider.Current.StepDefinitions.Should().ContainSingle(
+            "the file was already reconciled; a redundant didOpen parse must not run");
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    // Issue #517: a didOpen arriving after RediscoverCsFilesAsync's snapshot (but before the user's
+    // first edit) must still parse the file, even though the project already has a successful
+    // connector run -- HasSuccessfulConnectorRun alone proves nothing about *this* file.
+    [Fact]
+    public async Task UpdateFromSourceAsync_still_parses_on_didOpen_when_this_file_was_never_reconciled()
+    {
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var discovery = Substitute.For<IConnectorDiscoveryService>();
+        discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((new ProjectBindingRegistry(
+                ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
+        var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(new[] { project });
+
+        // Drive a real, successful connector run -- for the project as a whole -- but this
+        // particular file's didOpen arrived too late for RediscoverCsFilesAsync's snapshot, so it
+        // was never reconciled: the registry has nothing for it.
+        var connectorDone = new TaskCompletionSource();
+        provider.BindingRegistryChanged += (_, _) => connectorDone.TrySetResult();
+        provider.TriggerRefresh();
+        await Task.WhenAny(connectorDone.Task, Task.Delay(5000));
+        provider.HasSuccessfulConnectorRun.Should().BeTrue("test setup: the connector run must have landed first");
+        provider.Current.StepDefinitions.Should().BeEmpty("test setup: this file must not have been reconciled yet");
+
+        var sut = CreateSut();
         var csUri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "Steps.cs"));
 
         await sut.UpdateFromSourceAsync(csUri, StepDefinitionSource, isOpen: true, CancellationToken.None);
 
-        provider.Current.StepDefinitions.Should().BeEmpty(
-            "the connector's (empty) result must not be overwritten by a redundant didOpen parse");
-        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+        provider.Current.StepDefinitions.Should().ContainSingle(
+            "the file was never reconciled, so didOpen must still parse it despite the project's successful connector run");
 
         provider.Dispose();
         project.Dispose();

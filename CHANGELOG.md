@@ -16,6 +16,7 @@
 * Fixed the step-usage "N step usages" CodeLens rendering below the binding method's declaration instead of above it, for connector-discovered bindings (LSP server) - see #484
 * Fixed F2 doing nothing (or erroring "Rename not available at this location") on a `.cs` binding attribute - now runs Reqnroll's Rename Step, falling back to the native C# rename everywhere else in a `.cs` file so it doesn't hijack renaming an ordinary symbol, including the binding method's own name (VS Code) - see #506
 * Fixed every step and hook showing as falsely ambiguous when the reflection connector's and Roslyn's source-file paths for the same file disagree (e.g. a PDB path baked in from a devcontainer/CI build vs. the live workspace path, or a stale/unreadable PDB location) - stale connector-discovered bindings are now also superseded by a path-independent identity check (LSP server) - see #469, #503, #515
+* Fixed step-usage CodeLens (and other live-diagnostics features) staying empty for a `.cs` file that was already open when startup reconciliation completed, until the user's first edit - the `didOpen` skip-check now confirms the registry actually has bindings for that specific file instead of only checking that the project's connector had run at all (LSP server) - see #517
 
 *Contributors of this release (in alphabetical order):*
 
