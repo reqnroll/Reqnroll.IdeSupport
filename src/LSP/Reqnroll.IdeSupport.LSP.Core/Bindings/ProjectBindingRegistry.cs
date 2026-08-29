@@ -355,12 +355,39 @@ public record ProjectBindingRegistry
 
     /// <summary>
     /// A path-independent identity for a binding's implementation: its method identity (see
-    /// <see cref="NormalizeMethodIdentity"/>) plus its parameter types. Used by
-    /// <see cref="ReplaceBindings"/> to recognize that an existing binding and a freshly parsed
-    /// one describe the same method even when their source-file paths don't match.
+    /// <see cref="NormalizeMethodIdentity"/>) plus its parameter types, each normalized (see
+    /// <see cref="NormalizeParameterType"/>). Used by <see cref="ReplaceBindings"/> to recognize
+    /// that an existing binding and a freshly parsed one describe the same method even when their
+    /// source-file paths don't match.
     /// </summary>
     private static string BindingIdentity(ProjectBindingImplementation implementation) =>
-        $"{NormalizeMethodIdentity(implementation.Method)}|{string.Join(",", implementation.ParameterTypes)}";
+        $"{NormalizeMethodIdentity(implementation.Method)}|" +
+        $"{string.Join(",", implementation.ParameterTypes.Select(NormalizeParameterType))}";
+
+    private static readonly Dictionary<string, string> CSharpKeywordToClrTypeName = new(StringComparer.Ordinal)
+    {
+        ["bool"] = "Boolean", ["byte"] = "Byte", ["sbyte"] = "SByte", ["char"] = "Char",
+        ["decimal"] = "Decimal", ["double"] = "Double", ["float"] = "Single",
+        ["int"] = "Int32", ["uint"] = "UInt32", ["long"] = "Int64", ["ulong"] = "UInt64",
+        ["short"] = "Int16", ["ushort"] = "UInt16", ["string"] = "String", ["object"] = "Object",
+    };
+
+    /// <summary>
+    /// Reduces a parameter type to its simple (unqualified) CLR type name, for the same reason
+    /// <see cref="NormalizeMethodIdentity"/> reduces a method name: the connector reports a
+    /// parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable" --
+    /// built from <c>Type.FullName</c>), while Roslyn reports the literal source-code type text
+    /// (e.g. "int", "DataTable" -- <c>ParameterSyntax.Type.ToString()</c>), which for a C#
+    /// primitive keyword doesn't even share a spelling with its CLR name. Confirmed live against
+    /// the Quickstart sample (issue #515 follow-up): without this, a binding with a parameterless
+    /// signature was correctly recognized as the same method across connector/Roslyn, but a
+    /// parameterized one (e.g. <c>Int32</c> vs. <c>int</c>) was not, leaving it duplicated.
+    /// </summary>
+    private static string NormalizeParameterType(string type)
+    {
+        var simpleName = type.Split('.').Last();
+        return CSharpKeywordToClrTypeName.TryGetValue(simpleName, out var clrName) ? clrName : simpleName;
+    }
 
     /// <summary>
     /// Reduces a binding's <see cref="ProjectBindingImplementation.Method"/> to its trailing

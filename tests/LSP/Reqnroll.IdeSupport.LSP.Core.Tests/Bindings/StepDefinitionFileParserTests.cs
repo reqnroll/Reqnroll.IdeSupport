@@ -1259,6 +1259,44 @@ namespace TestProject
             "not left in place alongside the freshly Roslyn-parsed one");
     }
 
+    [Fact]
+    public async Task ReplaceBindings_removes_a_stale_binding_when_only_its_parameter_type_spelling_differs()
+    {
+        // Follow-up to issues #469/#503/#515, confirmed live against the Quickstart sample: the
+        // identity check above only fixed parameterless methods. The connector reports a
+        // parameter's fully-qualified CLR type name (e.g. "System.Int32", "Reqnroll.DataTable" --
+        // from reflection's Type.FullName), while Roslyn reports the literal source-code type text
+        // (e.g. "int", "DataTable" -- ParameterSyntax.Type.ToString()). Without normalizing both to
+        // the same spelling, a parameterized method's identity never matches across the two, so it
+        // stayed duplicated even after the path-independent eviction was added.
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [Given(""the client added {int} pcs of {string} to the basket"")]
+        public void Method(int quantity, string product) { }
+    }
+}");
+
+        var staleBinding = new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^stale$"), null,
+            new ProjectBindingImplementation("Steps.Method(Int32, System.String)", new[] { "Int32", "System.String" },
+                new SourceLocation("/workspaces/host-solution/Steps.cs", 0, 0)));
+
+        var registry = new ProjectBindingRegistry(
+            new[] { staleBinding },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var updated = await registry.ReplaceBindings(changedFile);
+
+        updated.StepDefinitions.Should().ContainSingle(
+            "the stale binding must be superseded by identity even though the connector's " +
+            "\"Int32\"/\"System.String\" parameter types are spelled differently from Roslyn's " +
+            "\"int\"/\"string\"");
+    }
+
     // ── HasExpressionChanges ────────────────────────────────────────────────────
 
     [Fact]
