@@ -25,25 +25,30 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
     {
         /// <inheritdoc />
         /// <remarks>
-        /// <c>LoadedWhen</c> (issue #533, phase 2) declares the extension's load trigger instead
-        /// of leaving it to whichever contribution VS happens to activate first — today that is
-        /// <c>StepCodeLensProvider</c> when a <c>.cs</c> file opens, which is what makes the eager
-        /// server startup in <see cref="OnInitializedAsync"/> fire at a time that varies with the
-        /// user's tab layout (see that method's remarks).
-        /// <para>
-        /// The union of <see cref="SolutionState.NoSolution"/> and <see cref="SolutionState.Exists"/>
-        /// is deliberately total. <c>LoadedWhen</c> is a gate, not a hint: a narrower constraint
-        /// (e.g. <c>Exists</c> alone) would stop the extension loading in the single-file /
-        /// open-folder case, which is precisely the scenario VS's LSP support is designed for. The
-        /// goal here is only to make loading <em>eager and deterministic</em>, never to restrict it,
-        /// so the constraint is written so it can only ever fire earlier than the status quo.
-        /// </para>
+        /// Deliberately no <c>LoadedWhen</c> (issue #533). It was tried — a total
+        /// <c>SolutionState.NoSolution | SolutionState.Exists</c> union, meant to make extension
+        /// load deterministic rather than depending on whichever contribution VS activates first —
+        /// and measurement rejected it on both counts:
+        /// <list type="bullet">
+        /// <item>
+        /// It fixed nothing. Without it, VS activates the <c>LanguageServerProvider</c> ~1.1–1.4s
+        /// after extension load for a solution whose only restored tab is a <c>.feature</c> file
+        /// (three runs, 2026-08-30). The delayed activation the issue was filed about did not
+        /// reproduce.
+        /// </item>
+        /// <item>
+        /// It looked actively harmful on the first launch after a deploy: both deploys carrying it
+        /// produced a bad first run (once 13.4s to activate, once no activation at all within the
+        /// ~20s the session lasted), while the build without it was fine on its own
+        /// first-after-deploy run. <c>LoadedWhen</c> is a gate VS must evaluate while it is
+        /// rebuilding the extension cache; with no gate there is nothing to get wrong.
+        /// </item>
+        /// </list>
+        /// Do not reintroduce it without a measured problem it solves.
         /// </remarks>
         public override ExtensionConfiguration ExtensionConfiguration => new()
         {
             RequiresInProcessHosting = true,
-            LoadedWhen = ActivationConstraint.SolutionState(SolutionState.NoSolution)
-                         | ActivationConstraint.SolutionState(SolutionState.Exists),
         };
 
         /// <inheritdoc />

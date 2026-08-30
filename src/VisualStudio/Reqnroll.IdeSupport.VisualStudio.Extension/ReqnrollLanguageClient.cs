@@ -95,11 +95,17 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     /// <remarks>
     /// <c>AppliesTo</c> is what VS uses to decide when to <em>activate</em> this provider: it does
     /// so when a document of a listed type is opened. <c>CSharp</c> is listed alongside Gherkin
-    /// (issue #533, phase 1) because a restored <c>.feature</c> tab is not an opened document —
-    /// VS reopens solutions with the restored tabs as pending-initialization "stub frames" and
-    /// only realizes them when the user selects one, so a Gherkin-only filter leaves the provider
-    /// unactivated until the user clicks. A foreground <c>.cs</c> tab is realized on restore and
-    /// opens that gate instead.
+    /// (issue #533) so a session whose restored tabs are all <c>.cs</c> — no feature file in sight —
+    /// still activates the server, which is the failure <see cref="ReqnrollPluginPackage"/>'s
+    /// autoload comment calls "scenario A".
+    /// <para>
+    /// It is <em>not</em> what makes a restored <c>.feature</c> tab work. The original theory —
+    /// that restored tabs sit as pending-initialization "stub frames" until clicked, leaving a
+    /// Gherkin-only filter dormant — was measured and refuted (2026-08-30): the restored
+    /// <c>.feature</c> document is already initialized ~76ms after extension load, with zero stubs,
+    /// and the Gherkin filter alone activates the provider in ~1.1–1.4s. This filter is untested
+    /// cover for the C#-only case, not a fix for anything currently known to be broken.
+    /// </para>
     /// <para>
     /// This is not a traffic change: the server's own <c>TextDocumentSyncHandler</c> already
     /// registers <c>**/*.cs</c> in its document selector and routes <c>.cs</c> didOpen/didChange
