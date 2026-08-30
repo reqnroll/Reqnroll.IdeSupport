@@ -1,6 +1,6 @@
 using MediatR;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;

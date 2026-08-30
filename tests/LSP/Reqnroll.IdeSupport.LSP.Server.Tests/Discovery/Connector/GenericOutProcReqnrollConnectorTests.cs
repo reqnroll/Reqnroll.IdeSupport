@@ -1,10 +1,11 @@
-﻿using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 public class GenericOutProcReqnrollConnectorTests
 {

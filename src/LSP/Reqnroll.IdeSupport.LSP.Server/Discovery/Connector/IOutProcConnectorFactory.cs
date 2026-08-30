@@ -1,6 +1,7 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
 /// Creates the <see cref="OutProcReqnrollConnector"/> appropriate for a project scope.

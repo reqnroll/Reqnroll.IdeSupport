@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.LSP.Connector.Models;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 public class ConnectorJsonSerializationTests
 {

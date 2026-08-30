@@ -1,11 +1,13 @@
-﻿using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Registry;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
 /// Per-project <see cref="IBindingRegistryProvider"/> backed by
