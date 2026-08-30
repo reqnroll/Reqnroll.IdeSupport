@@ -243,7 +243,7 @@ Reqnroll.IdeSupport/
 │   │       ├── Configuration/                   # reqnroll.json, .editorconfig loaders
 │   │       ├── Logging/                         # IIdeSupportLogger and friends
 │   │       ├── ProjectSystem/                   # IDE-agnostic file/project abstractions
-│   │       └── Telemetry/                       # HTTP-based telemetry (cross-platform)
+│   │       └── Telemetry/                       # ITelemetryService interfaces/DTOs; each IDE host owns its concrete transmitter (see §9 Telemetry)
 │   │
 │   ├── LSP/
 │   │   ├── Reqnroll.IdeSupport.LSP.Core/        # Protocol-agnostic LSP logic (netstandard2.0)
@@ -283,11 +283,14 @@ Reqnroll.IdeSupport/
 │
 └── tests/
     ├── Core/
+    │   └── Reqnroll.IdeSupport.Common.Tests/
     ├── LSP/
     │   ├── Reqnroll.IdeSupport.LSP.Core.Tests/       # Unit tests for LSP.Core services
     │   ├── Reqnroll.IdeSupport.LSP.Server.Tests/     # Unit tests for LSP handlers
     │   ├── Reqnroll.IdeSupport.LSP.Server.Specs/     # Integration specs (simulates IDE client)
-    │   └── Reqnroll.IdeSupport.LSP.Connector.Tests/
+    │   ├── Reqnroll.IdeSupport.LSP.Server.Specs.BindingsFixture/
+    │   ├── Reqnroll.IdeSupport.LSP.Connector.Tests/
+    │   └── Reqnroll.IdeSupport.LSP.TestStubs/
     └── VisualStudio/
         ├── Reqnroll.IdeSupport.VisualStudio.Tests/       # Unit tests for VS extension
         ├── Reqnroll.IdeSupport.VisualStudio.VsxStubs/    # Test doubles for VS SDK types
@@ -310,7 +313,7 @@ OmniSharp supports both static (declared in `initialize` response) and dynamic (
 
 The server accepts a `--ide <ide>` command-line flag at startup (e.g., `--ide visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic.
 
-> **OmniSharp implementation note**: OmniSharp's handler base classes (e.g., `SemanticTokenHandlerBase`) use dynamic registration by default. For capabilities requiring static registration, we will either build alternate base classes or patch the underlying OmniSharp registration — this is a known implementation risk for Phase 1.
+**OmniSharp implementation note (as-built)**: OmniSharp's handler base classes (e.g., `SemanticTokenHandlerBase`) use dynamic registration by default. Rather than building alternate base classes or patching OmniSharp's registration internals, capabilities needing static registration are wired manually via `options.OnRequest<>` in `LanguageServerOptionsExtensions.cs` (semantic tokens, references, document symbol, code lens/`codeLens/resolve`, inlay hint, folding range, prepare-rename/rename, rename targets), alongside `AddHandler<>` dynamic registration for the rest.
 
 ### Document Scope
 
@@ -337,9 +340,9 @@ Beyond the standard LSP surface, each IDE glue layer sends a small set of Reqnro
 
 ### Workspace Model
 
-Each opened workspace folder maps to an `LspWorkspaceScope` containing one or more `LspProjectScope` instances. Project detection reads `*.csproj` files to discover `reqnroll.json` configuration and output assembly paths for the Binding Connector.
+Each opened workspace folder maps to an `LspWorkspaceScopeManager` containing one or more `LspProjectScope` instances. Project detection reads `*.csproj` files to discover `reqnroll.json` configuration and output assembly paths for the Binding Connector.
 
-**Multi-root configuration divergence**: In a workspace with multiple root folders (e.g., a monorepo with separate application and test projects), each root may carry a different `reqnroll.json`. The `LspWorkspaceScope` maintains a separate `LspProjectScope` — and thus a separate Binding Registry — per project. Feature files are resolved against the registry of the project(s) that own them, using the authoritative membership index described next. A naive fallback to a merged view of all registries is not realistic for production use.
+**Multi-root configuration divergence**: In a workspace with multiple root folders (e.g., a monorepo with separate application and test projects), each root may carry a different `reqnroll.json`. The `LspWorkspaceScopeManager` maintains a separate `LspProjectScope` — and thus a separate Binding Registry — per project. Feature files are resolved against the registry of the project(s) that own them, using the authoritative membership index described next. A naive fallback to a merged view of all registries is not realistic for production use.
 
 #### Project membership: the `path → {projects}` index
 
@@ -376,7 +379,7 @@ The Document Buffer stores the effective dialect alongside each file's AST. The 
 
 ### Debounce, Cancellation, and Request Priority
 
-**Debounce policy**: `textDocument/didChange` events arrive on every keystroke. Rather than immediately triggering the full parse-and-match pipeline on each event, the server applies a configurable debounce window (default: **200 ms**) before publishing `FeatureFileChangedNotification`. This prevents the binding match pipeline from thrashing during rapid typing and avoids unnecessary `publishDiagnostics` pushes mid-word.
+**Debounce policy (as-built)**: raw `textDocument/didChange` events on a `.feature` file are parsed and matched synchronously on every keystroke (see [§3 sync-first model](#3-server-architecture)) — there is no debounce on that path. Debouncing instead applies downstream, to the more expensive work a *registry* change triggers: `FeatureRescanDebouncer` (`Pipeline/FeatureRescanDebouncer.cs`, 500 ms, keyed per project) gates re-parsing every open `.feature` file after a `BindingRegistryChangedNotification`, and `RefreshDebouncer` (`Pipeline/RefreshDebouncer.cs`, generic `Schedule(key, delay, action)`) gates the `codeLens/refresh`/`inlayHint/refresh`/`semanticTokens/refresh` push notifications (`CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, each at 500 ms) fired after a registry or match-cache change. This prevents a burst of `.cs` saves or a rebuild from re-triggering downstream client refreshes once per intermediate event.
 
 **Cancellation**: All protocol handlers that produce responses (semantic tokens, completions, definition) accept a `CancellationToken`. If a superseding request arrives before the previous one completes, the client may send `$/cancelRequest`; OmniSharp propagates this as a cancelled token. Handlers must not leave the Document Buffer or Binding Registry in an inconsistent state if cancelled mid-flight — the previous value must remain valid until the new value is atomically committed.
 
@@ -438,7 +441,8 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `RenameBindingResolver` | (not a handler) — read-only binding-resolution primitives (cursor → candidate bindings) shared by `RenameHandler` and `RenameTargetsHandler` |
 | `NewNameReconciler` | (not a handler) — reconciles the user-entered new name against the existing step-text/regex shape before the edit is built |
 | `RenamePostApplyCoordinator` | (not a handler) — post-`WorkspaceEdit` steps: pushes a genuine `workspace/applyEdit` to VS only (its rename pipe swallows the handler's return value) and invalidates the match cache for closed `.feature` files the rename touched |
-| `StepCodeLensHandler` | `textDocument/codeLens`, `codeLens/resolve` |
+| `StepCodeLensHandler` | `textDocument/codeLens` |
+| `CodeLensResolveHandler` | `codeLens/resolve` — dispatches to whichever handler produced the lens, based on the `kind` discriminator embedded in `CodeLens.Data` (issue #471) |
 | `HookCodeLensHandler` | `textDocument/codeLens` (`.feature` files only — [F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) hook-match CodeLens; click reuses F17's `reqnroll/goToHooks`) |
 | `HookMatchCountCodeLensHandler` | `textDocument/codeLens` (`.cs` files — [F25](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings) hook-binding match-count CodeLens; coexists with `StepCodeLensHandler` in the same response, `reqnroll/goToMatchingScenarios` on click) |
 
@@ -463,7 +467,7 @@ The C# / Roslyn path follows the same principle of going straight to the relevan
 
 ### 6.1 VS Code
 
-A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Nearly all Gherkin intelligence lives in the LSP server; the extension is intentionally thin. Table cell decoration (T3) is deferred to a future iteration — it requires client-side VS Code decoration APIs that LSP semantic tokens cannot express.
+A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Nearly all Gherkin intelligence lives in the LSP server; the extension is intentionally thin. Table cell decoration (T3) is implemented client-side via `tableHighlightService.ts` — it requires VS Code decoration APIs that LSP semantic tokens cannot express.
 
 #### Extension manifest (`package.json`)
 
@@ -483,10 +487,14 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 | File | Purpose |
 |------|---------|
 | `src/extension.ts` | Entry point: resolves server path, registers command stubs, creates output + trace channels, starts `LanguageClient`, wires `ProjectManager` and `StatusBarManager` |
-| `src/projectManager.ts` | Watches `.csproj`/`.sln`/`.slnx` files; sends `reqnroll/projectLoaded` and `reqnroll/projectUnloaded` custom notifications; uses `msbuildEvaluator.ts` for MSBuild property evaluation (v2) |
-| `src/msbuildEvaluator.ts` | Shells `dotnet msbuild -getProperty` to populate `OutputAssemblyPath`, `TargetFrameworkMoniker`, `RootNamespace`, and package references from `project.assets.json` |
+| `src/lsp/projectManager.ts` | Watches `.csproj`/`.sln`/`.slnx` files; sends `reqnroll/projectLoaded` and `reqnroll/projectUnloaded` custom notifications; uses `msbuildEvaluator.ts` for MSBuild property evaluation (v2) |
+| `src/lsp/msbuildEvaluator.ts` | Shells `dotnet msbuild -getProperty` to populate `OutputAssemblyPath`, `TargetFrameworkMoniker`, `RootNamespace`, and package references from `project.assets.json` |
 | `src/statusBar.ts` | Status bar item (right-aligned) that reflects LSP server lifecycle state (`Starting` / `Running` / `Stopped`) via `client.onDidChangeState` |
-| `src/lspInspectorLogger.ts` | Creates a `LogOutputChannel` that tees to a timestamped `reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log` file when tracing is enabled; produces the same `{"isLSPMessage":true,...}` JSON format as the VS extension inspector |
+| `src/lsp/lspInspectorLogger.ts` | Creates a `LogOutputChannel` that tees to a timestamped `reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log` file when tracing is enabled; produces the same `{"isLSPMessage":true,...}` JSON format as the VS extension inspector |
+| `src/lsp/codeLensSuppression.ts`, `src/lsp/executeCommandDedupe.ts`, `src/lsp/manualDocumentSync.ts` | LSP client-side glue: suppressing duplicate CodeLens requests, deduplicating `workspace/executeCommand` calls, and manual document-sync handling |
+| `src/tableHighlightService.ts` | Client-side data-table cell/header decoration (T3, see above) |
+| `src/telemetry.ts` | `TelemetryReporter` wiring for the `telemetry/event` notification (see [§9 Telemetry](LSP-IDE-Support-Architecture.md#telemetry)) |
+| `src/commands/` | One file per custom command (`stepUsages.ts`, `findUnusedStepDefinitions.ts`, `goToHooks.ts`, `goToMatchingScenarios.ts`, `hookCodeLens.ts`, `stepCodeLens.ts`, `stepNavigation.ts`, `renameStep.ts`, `commentToggle.ts`, `codeLensRefresh.ts`) |
 | `syntaxes/gherkin.tmLanguage.json` | TextMate grammar — provides keyword/tag/comment colouring before LSP semantic tokens arrive |
 | `language-configuration.json` | Comment configuration, bracket pairs, and indentation rules for the `gherkin` language |
 
@@ -545,7 +553,8 @@ A hybrid extension using **VS.Extensibility** as the primary API, with **VSSDK**
 | Component | API Used | Reason |
 |-----------|----------|--------|
 | LSP client (`ReqnrollLanguageClient`) | VS.Extensibility | First-class LSP support |
-| Code Lens | VSSDK | Not yet available in VS.Extensibility |
+| Code Lens on `.cs` files (F18, F25) | VS.Extensibility (`ICodeLensProvider`) | `StepCodeLensProvider`/`HookMatchCountCodeLensProvider` implement `ICodeLensProvider` directly |
+| Code Lens on `.feature` files (F24, F26) | VSSDK (classic `Microsoft.VisualStudio.Language.CodeLens`) | VS.Extensibility has no generic `textDocument/codeLens` consumer for `.feature` files; `HookCodeLensDataPointProvider`/`RunTestCodeLensDataPointProvider` bridge the classic API instead |
 | New Project / Item Wizards | VSSDK | Wizard interfaces not in VS.Extensibility |
 
 The embedded `LSPServer.exe` is published to the VSIX under the `LSPServer/` subfolder and launched on extension activation with `--ide visualstudio`.
@@ -587,6 +596,9 @@ The Rider plugin is a **Kotlin-only** IntelliJ Platform plugin — there is no R
 | `fileType` | `ReqnrollFeatureFileType` | Registers `.feature` as the "Reqnroll Feature" language |
 | `postStartupActivity` (×3) | `ReqnrollRunnableProjectsListener`, `ReqnrollProjectFilesSync`, `ReqnrollDocumentActivationSync` | Project/file membership and activation sync (F2) |
 | `codeInsight.codeVisionProvider` | `StepUsagesCodeVisionProvider` | "N step usages" lens (F18) |
+| `codeInsight.codeVisionProvider` | `HookCodeVisionProvider` | Hook-match CodeLens on `.feature` files (F24) |
+| `codeInsight.codeVisionProvider` | `StepHooksCodeVisionProvider` | Hook-binding match-count lens on `.cs` files (F25) |
+| `codeInsight.codeVisionProvider` | `RunTestCodeVisionProvider` | Run/debug + pass-fail lens on `.feature` files (F26) |
 | `editorFactoryListener` (×2) | `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureFoldingController` | Step-binding-info inlay hints (F23) / Code Folding (F10) |
 | `typedHandler` | `ReqnrollFeatureOnTypeFormattingHandler` | `\|`-triggered data-table column realignment (F12) |
 | `action` (×3) | `FindUnusedStepDefinitionsAction`, `FindStepUsagesAction`, `GoToHooksAction` | F15 (Tools menu) / F14 (Tools menu + editor context menu) / F17 (Tools menu + editor context menu) |
@@ -595,6 +607,7 @@ The Rider plugin is a **Kotlin-only** IntelliJ Platform plugin — there is no R
 | `toolWindow` (`id="Reqnroll Structure"`) | `ReqnrollStructureToolWindowFactory` | Feature/Rule/Scenario/Step document outline (F9), as a dedicated tool window (Alt+7) |
 | `fileBreadcrumbsCollector` | `ReqnrollFeatureBreadcrumbsCollector` | Editor breadcrumbs above `.feature` files, mirroring the Structure View hierarchy |
 | `action` (×2) | `RenameFeatureStepAction`, `RenameCSharpStepAction` | Step Rename refactoring (F16) — editor context menu, `.feature` side bound to Shift+F6; `.cs` side context-menu only |
+| `action` | `ReqnrollToggleFeatureInlayHintsAction` | "Show Feature Inlay Hints" toggle for F23 |
 
 Rider's declared module dependencies are `com.intellij.modules.rider` and `com.intellij.modules.platform` — **not** `com.intellij.modules.lsp`, which isn't a registered module in Rider's distribution (confirmed via `runIde`: requiring it fails with "no such plugin found"). The `com.intellij.platform.lsp.api.*` classes used throughout are part of the core platform artifact and don't sit behind a separate module dependency.
 
@@ -641,8 +654,8 @@ Key Gradle tasks: `buildPlugin` (packages the `.zip`), `verifyPlugin` (JetBrains
 #### Packaging and distribution
 
 - Published to the JetBrains Marketplace as a `.zip` plugin package
-- `pluginSinceBuild`/`pluginUntilBuild` = `243`–`251.*` (`gradle.properties`); developed and verified against Rider `2024.3.5` (`platformVersion`)
-- Kotlin 2.0.21, JVM toolchain 21, `org.jetbrains.intellij.platform` Gradle plugin 2.2.1
+- `pluginSinceBuild`/`pluginUntilBuild` = `243`–`262.*` (`gradle.properties`; range widened to `262.*` in #368 to catch up with the then-current Rider 2026.2 release); developed and verified against Rider `2024.3.5` (`platformVersion`)
+- Kotlin 2.4.10 (compiled at language/API level 2.0 for bytecode compatibility), JVM toolchain 21, `org.jetbrains.intellij.platform` Gradle plugin 2.18.1
 
 ### 6.4 Cross-IDE client implementation & server-conditional-logic matrix
 
@@ -712,7 +725,7 @@ In-process (LSP.Core)                Out-of-process
 
 The Connector code is ported from `Reqnroll.VisualStudio.ReqnrollConnector.Generic` in the legacy VS extension — the team already understands its assembly-loading and discovery logic. One addition beyond the ported code: the Connector also ships .NET Framework TFM variants (net462/net472/net481) that use `AppDomain` isolation to analyze .NET Framework test projects, since the cross-platform LSP server cannot load a .NET Framework assembly into an `AssemblyLoadContext` directly. The LSP server selects the appropriate connector variant based on the target project's TFM.
 
-> **Open question (Q15)**: The IPC mechanism between the LSP server and the Binding Connector has not been finalized. Three candidates are: (a) **stdin/stdout** — server launches Connector as a child process and communicates over its standard streams (simplest, no port conflict); (b) **local named pipe** — supports long-running Connector process that can be reused across builds; (c) **localhost TCP with a randomized port** — most flexible but adds port-management complexity. The choice also affects the security model (see §9 Security) and the Connector process lifecycle answer (Q4). See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+**Resolved (Q15)**: the IPC mechanism is (a) **stdin/stdout** — `ProcessHelper.RunProcess` launches the Connector executable and captures stdout, with no persistent pipe or port. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
 
 ---
 
@@ -890,7 +903,7 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 - The Rider plugin `.zip` is published via the JetBrains Marketplace API using an authenticated token stored as a CI secret.
 - The bundled LSP server executable inherits signing from its containing package.
 
-**IPC channel security**: The mechanism connecting the LSP server to the Binding Connector is an open question (see [Q15](LSP-IDE-Support-Open-Questions.md)). Whichever mechanism is chosen, the channel must be restricted to the local machine and accessible only to the process that launched the Connector. Unauthenticated remote access must not be possible.
+**IPC channel security**: The LSP server connects to the Binding Connector via stdin/stdout of a directly-launched child process (see [Q15](LSP-IDE-Support-Open-Questions.md)), which is inherently restricted to the local machine and accessible only to the launching process — there is no network-exposed channel to secure.
 
 **Telemetry and privacy**
 - The `OpenProject` event must not transmit absolute file paths, project names, or any content that identifies the user's codebase. Only aggregate counts (feature file count, step definition count) are transmitted.
@@ -902,17 +915,16 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 
 The project uses **GitHub Actions** as its CI platform, consistent with other Reqnroll repositories.
 
+There are only two workflow files: `ci.yml` and `test-lsp.yml` (a reusable workflow `ci.yml` calls). There is no `package.yml`, `publish-vscode.yml`, `publish-rider.yml`, or `publish-vs.yml`.
+
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | Push / PR to `main` | Build server + all clients, run unit tests, run integration specs |
-| `package.yml` | Tag `v*` | Build and package `.vsix` (VS), `.vsix` (VS Code), `.zip` (Rider) |
-| `publish-vscode.yml` | Manual dispatch / tag | Publish to VS Code Marketplace via `vsce` |
-| `publish-rider.yml` | Manual dispatch / tag | Publish to JetBrains Marketplace via Gradle `publishPlugin` |
-| `publish-vs.yml` | Manual dispatch / tag | Publish to Visual Studio Marketplace |
+| `ci.yml` | Push to `master` / PR / manual dispatch, path-filtered to `src/{Core,LSP,VisualStudio,VSCode,Rider}/**` and the matching `tests/**` trees | Orchestrates everything below via jobs, gated per-client on which paths changed (`changes` job) |
+| `test-lsp.yml` | Called by `ci.yml`'s `lsp` job | Builds the LSP server as a self-contained executable for all four RIDs and runs `LSP.Core.Tests`/`LSP.Server.Tests`/`LSP.Server.Specs` |
 
-**Build matrix**: The LSP server is built as a self-contained executable for `win-x64`, `linux-x64`, and `osx-arm64` in the `package` workflow. Each IDE extension bundles the platform-appropriate server binary. Testing the server in isolation on Linux in CI is a concrete benefit of the LSP separation from IDE-specific code.
+`ci.yml`'s per-client jobs (`build-vs-extension` → `test-vs-extension`/`test-vs-wizards` → `publish-vsix`; `build-vscode-extension`/`tsc-only`; `build-rider-plugin` → `test-rider-plugin` → `publish-rider-plugin`) are jobs inside that one file, not separate workflows. Despite their names, `publish-vsix` and `publish-rider-plugin` only upload the built package as a CI artifact — actual Marketplace publication is not automated by either job today.
 
-**Phase verification gates**: Each phase milestone is tagged in git. The `package` workflow is not run for intermediate commits; it runs only on milestone tags, producing a set of co-versioned extension packages ready for internal testing before marketplace publication.
+**Build matrix**: The LSP server is built as a self-contained executable for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64` (`test-lsp.yml`'s matrix). Each IDE extension bundles the platform-appropriate server binary/binaries. Testing the server in isolation on Linux in CI is a concrete benefit of the LSP separation from IDE-specific code.
 
 ### Versioning and Compatibility
 
@@ -920,7 +932,7 @@ The project uses **GitHub Actions** as its CI platform, consistent with other Re
 
 **LSP protocol capability negotiation**: The server declares its capabilities in the `initialize` response. If a client does not advertise support for a capability (e.g., an older IDE version that does not support `textDocument/semanticTokens`), the server must not send that capability's messages for that client session. OmniSharp's capability negotiation handles standard capabilities automatically.
 
-**.NET version**: The server targets `net9` for Phase 1. The project will upgrade to the current .NET LTS version on a cadence aligned with Reqnroll's runtime library. IDE clients are unaffected — they launch the server binary and do not reference it as a library.
+**.NET version**: The server targets `net10.0`. The project will continue to upgrade to the current .NET version on a cadence aligned with Reqnroll's runtime library. IDE clients are unaffected — they launch the server binary and do not reference it as a library.
 
 **`reqnroll.json` schema**: Breaking schema changes require a migration guide. The Configuration Loader must handle both old and new schemas gracefully during a transition period of at least one major version.
 
@@ -966,7 +978,7 @@ Each IDE client exposes a dedicated output surface for runtime diagnostics:
 
 ### Server Lifecycle
 
-- The LSP server process is launched by the IDE extension on first `.feature` file open
+- Launch timing differs per IDE: **Visual Studio** launches eagerly at extension activation via `LspServerConnectionService` (see [§6.2](#62-visual-studio)), not on first `.feature` file open — `LanguageServerProvider.CreateServerConnectionAsync` is still invoked lazily by VS itself, but that call now just awaits a connection `LspServerConnectionService` already started. **Rider** launches eagerly at IDE/project startup via its `postStartupActivity` extension points. **VS Code** launches lazily, activated by its `onLanguage:gherkin`/`onLanguage:plaintext` activation events on first matching file open.
 - It is terminated when the IDE workspace is closed
 - A single server instance serves all open workspace folders (multi-root support)
 - If the server process terminates unexpectedly, the client restarts it up to 3 times per session before surfacing an error to the user (see [Error Handling and Resilience](#error-handling-and-resilience) above)
