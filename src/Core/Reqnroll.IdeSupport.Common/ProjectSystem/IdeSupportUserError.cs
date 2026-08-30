@@ -1,6 +1,6 @@
 #nullable disable
 
-namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>IdeSupportUserErrorCategory</summary>
 public enum IdeSupportUserErrorCategory
