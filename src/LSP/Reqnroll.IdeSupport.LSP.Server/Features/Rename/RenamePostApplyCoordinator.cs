@@ -137,8 +137,12 @@ internal sealed class RenamePostApplyCoordinator
         if (csFileUri is null || newCsText == null)
             return;
 
-        await _csharpDiscoveryService.UpdateFromSourceAsync(csFileUri, newCsText, isOpen: false, cancellationToken);
+        // Cache updated before the discovery call, not after: UpdateFromSourceAsync now has its
+        // own staleness short-circuit that compares its `text` parameter against the live-text
+        // cache's current content (see its remarks), so the cache must already reflect this
+        // edit's text by the time that call runs, or it would look superseded and be skipped.
         _csharpFileTextCache.Update(csFileUri, newCsText);
+        await _csharpDiscoveryService.UpdateFromSourceAsync(csFileUri, newCsText, isOpen: false, cancellationToken);
         _logger.LogVerbose($"RenamePostApplyCoordinator: self-refreshed C# binding registry for '{csFileUri}'");
     }
 }

@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -44,7 +45,9 @@ public class CSharpBindingDiscoveryServiceTests : IDisposable
         try { if (Directory.Exists(_root2)) Directory.Delete(_root2, recursive: true); } catch { }
     }
 
-    private CSharpBindingDiscoveryService CreateSut() => new(_scopeManager, _logger);
+    private readonly ICSharpFileTextCache _csharpFileTextCache = new CSharpFileTextCache();
+
+    private CSharpBindingDiscoveryService CreateSut() => new(_scopeManager, _logger, _csharpFileTextCache);
 
     // Non-empty source with a real binding: BindingRegistryChanged is only raised when a
     // binding's matched expression actually changes, so an empty-to-empty "update" (the
@@ -61,7 +64,7 @@ namespace S
 }";
 
     private CSharpBindingDiscoveryService CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
-        new(_scopeManager, _logger, telemetry);
+        new(_scopeManager, _logger, _csharpFileTextCache, telemetry);
 
     // ── I2 unowned gate ───────────────────────────────────────────────────────
 
@@ -146,6 +149,68 @@ namespace S
         provider2.Dispose();
         project1.Dispose();
         project2.Dispose();
+    }
+
+    // ── Staleness short-circuit (rapid-typing pileup) ────────────────────────────
+
+    [Fact]
+    public async Task UpdateFromSourceAsync_skips_when_superseded_by_a_newer_edit_in_the_text_cache()
+    {
+        // Simulates a rapid-typing pileup: IParseCoordinator chains every scheduled didChange
+        // rather than cancelling superseded ones (by design -- see its remarks), so an older
+        // scheduled call can still take its turn after a newer edit already landed and updated
+        // the live-text cache. That older call's text is stale and its parse result would never
+        // be observed, so it must skip before doing any owner-resolution or Roslyn work.
+        _csharpFileTextCache.Update(CsUri, "newer text a later edit already wrote");
+
+        await CreateSut().UpdateFromSourceAsync(
+            CsUri, "stale text from an older, now-superseded edit", false, CancellationToken.None);
+
+        _scopeManager.DidNotReceive().ResolveOwners(Arg.Any<DocumentUri>());
+    }
+
+    [Fact]
+    public async Task UpdateFromSourceAsync_proceeds_when_the_text_cache_still_matches()
+    {
+        _csharpFileTextCache.Update(CsUri, StepDefinitionSource);
+
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+
+        var changed = false;
+        provider.BindingRegistryChanged += (_, _) => changed = true;
+
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(new[] { project });
+
+        await CreateSut().UpdateFromSourceAsync(CsUri, StepDefinitionSource, false, CancellationToken.None);
+
+        changed.Should().BeTrue("the cache's current text matches this call's text, so it is not superseded");
+
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    [Fact]
+    public async Task UpdateFromSourceAsync_proceeds_when_nothing_is_cached_yet()
+    {
+        // No cache entry (TryGet returns false) means nothing to compare against -- must not be
+        // treated as "superseded", or the very first parse for a URI would always be skipped.
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+
+        var changed = false;
+        provider.BindingRegistryChanged += (_, _) => changed = true;
+
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(new[] { project });
+
+        await CreateSut().UpdateFromSourceAsync(CsUri, StepDefinitionSource, false, CancellationToken.None);
+
+        changed.Should().BeTrue("an uncached URI has nothing to compare against, so the parse must proceed");
+
+        provider.Dispose();
+        project.Dispose();
     }
 
     // ── UpdateFromSourceForProjectAsync (index-bypassing, startup reconciliation) ─
