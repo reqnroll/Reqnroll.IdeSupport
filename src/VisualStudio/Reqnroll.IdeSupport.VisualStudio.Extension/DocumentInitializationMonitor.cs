@@ -65,8 +65,10 @@ internal static class RdtDocumentInitialization
 
 /// <summary>
 /// Logs the Running Document Table's document inventory at package load and every subsequent
-/// stub-to-initialized transition, so the distance between "package loaded", "the document became
-/// real" and "VS activated the language server provider" is measurable (issue #533, phase 2).
+/// lifecycle event for the documents that can activate the language server provider — locks,
+/// window shows and hides, and initialization — each timestamped relative to package load, so the
+/// distance between "package loaded", "the document became real", "the tab was shown" and "VS
+/// activated the language server provider" is measurable (issue #533).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -74,12 +76,24 @@ internal static class RdtDocumentInitialization
 /// touches the <c>LanguageServerProvider</c>.
 /// </para>
 /// <para>
-/// Originally scoped to <c>.feature</c> files only. Widened after the first three logged runs
-/// (2026-08-30) showed the restored <c>.feature</c> document was already initialized 76ms after
-/// extension load in every run, with zero stubs — refuting the stub-frame theory for that document
-/// while leaving the state of the co-restored <c>.cs</c> tab unmeasured, which is exactly what is
-/// needed to tell whether the Gherkin or the C# document filter is opening the activation gate.
+/// Originally scoped to <c>.feature</c> files only, and to initialization events only. Widened
+/// twice as measurement kept outrunning it (all 2026-08-30):
 /// </para>
+/// <list type="number">
+/// <item>
+/// To all activation-relevant documents, after three runs showed the restored <c>.feature</c>
+/// document already initialized 76ms after extension load with zero stubs — refuting the
+/// stub-frame theory while leaving the co-restored <c>.cs</c> tab's state unmeasured.
+/// </item>
+/// <item>
+/// To every window show/hide and document lock, after a cold run showed the provider activating
+/// 244ms after a <em>first</em> show — which turned out to be the user closing and reopening the
+/// file, not clicking the restored tab. First-show-only logging could not tell those apart, and
+/// the restored tab's own show had happened before this monitor was even advised. Logging every
+/// show makes a plain tab click visible, which is what separates "focus re-triggers activation"
+/// from "only a fresh document open does".
+/// </item>
+/// </list>
 /// <para>
 /// The inventory scan deliberately goes through <see cref="IVsRunningDocumentTable4"/>
 /// (<c>GetDocumentMoniker</c> + <c>GetDocumentFlags</c>) rather than
@@ -222,7 +236,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
             && RdtDocumentInitialization.IsActivationRelevant(moniker))
         {
             _logger.LogInfo(
-                $"DocumentInitializationMonitor: {moniker} initialized {_sinceAdvise.ElapsedMilliseconds}ms after package load.");
+                $"DocumentInitializationMonitor: {moniker} — initialized at +{_sinceAdvise.ElapsedMilliseconds}ms.");
         }
 
         return VSConstants.S_OK;
@@ -231,45 +245,72 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
     /// <inheritdoc />
     public int OnAfterAttributeChange(uint docCookie, uint grfAttribs) => VSConstants.S_OK;
 
-    /// <inheritdoc />
+    /// <summary>Logs the first lock taken on a document — the closest RDT signal to "this document was opened".</summary>
     public int OnAfterFirstDocumentLock(uint docCookie, uint dwRDTLockType, uint dwReadLocksRemaining, uint dwEditLocksRemaining)
-        => VSConstants.S_OK;
+    {
+        LogDocumentEvent(docCookie, "first document lock", $"lockType=0x{dwRDTLockType:X}");
+        return VSConstants.S_OK;
+    }
 
-    /// <inheritdoc />
+    /// <summary>Logs the last lock being released — the closest RDT signal to "this document was closed".</summary>
     public int OnBeforeLastDocumentUnlock(uint docCookie, uint dwRDTLockType, uint dwReadLocksRemaining, uint dwEditLocksRemaining)
-        => VSConstants.S_OK;
+    {
+        LogDocumentEvent(docCookie, "last document unlock", $"lockType=0x{dwRDTLockType:X}");
+        return VSConstants.S_OK;
+    }
 
     /// <inheritdoc />
     public int OnAfterSave(uint docCookie) => VSConstants.S_OK;
 
     /// <summary>
-    /// Logs the first time a document window is shown, which is the moment a restored tab the user
-    /// clicks stops being a stub — the transition the issue's original theory turned on.
+    /// Logs <em>every</em> document window show, first or not.
     /// </summary>
+    /// <remarks>
+    /// Originally first-show only, which turned out to be unreadable: on a cold start the restored
+    /// tab's first show happens before this monitor is advised, so the only line that ever appeared
+    /// was for a document the user closed and reopened — easy to mistake for the user clicking the
+    /// restored tab. Logging every show makes a plain tab click visible as such, which is what
+    /// distinguishes "focus/show re-triggers activation" from "only a fresh document open does".
+    /// </remarks>
     public int OnBeforeDocumentWindowShow(uint docCookie, int fFirstShow, IVsWindowFrame pFrame)
     {
-        if (fFirstShow != 0 && _rdt is IVsRunningDocumentTable4 rdt4)
-        {
-            try
-            {
-                var moniker = rdt4.GetDocumentMoniker(docCookie);
-                if (RdtDocumentInitialization.IsActivationRelevant(moniker))
-                {
-                    _logger.LogInfo(
-                        $"DocumentInitializationMonitor: {moniker} shown for the first time {_sinceAdvise.ElapsedMilliseconds}ms after package load.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogException(ex, "DocumentInitializationMonitor: OnBeforeDocumentWindowShow logging failed.");
-            }
-        }
-
+        LogDocumentEvent(docCookie, "window show", $"firstShow={fFirstShow != 0}");
         return VSConstants.S_OK;
     }
 
-    /// <inheritdoc />
-    public int OnAfterDocumentWindowHide(uint docCookie, IVsWindowFrame pFrame) => VSConstants.S_OK;
+    /// <summary>Logs a document window being hidden — the other half of a tab switch.</summary>
+    public int OnAfterDocumentWindowHide(uint docCookie, IVsWindowFrame pFrame)
+    {
+        LogDocumentEvent(docCookie, "window hide", null);
+        return VSConstants.S_OK;
+    }
+
+    /// <summary>
+    /// Logs one RDT event for a document, timestamped relative to package load, filtered to the
+    /// document kinds that can activate the language server provider so the log stays readable.
+    /// </summary>
+    private void LogDocumentEvent(uint docCookie, string what, string? detail)
+    {
+        try
+        {
+            if (_rdt is not IVsRunningDocumentTable4 rdt4)
+                return;
+
+            // Stub-safe: GetDocumentMoniker does not create the doc data.
+            var moniker = rdt4.GetDocumentMoniker(docCookie);
+            if (!RdtDocumentInitialization.IsActivationRelevant(moniker))
+                return;
+
+            _logger.LogInfo(
+                $"DocumentInitializationMonitor: {moniker} — {what}" +
+                $"{(detail is null ? string.Empty : $" ({detail})")} " +
+                $"at +{_sinceAdvise.ElapsedMilliseconds}ms.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, $"DocumentInitializationMonitor: logging '{what}' failed.");
+        }
+    }
 
     /// <inheritdoc />
     public void Dispose()
