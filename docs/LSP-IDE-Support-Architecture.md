@@ -79,9 +79,9 @@ A standard LSP client *pulls* semantic tokens by sending `textDocument/semanticT
 1. VS's built-in semantic-token colorizer maps token-type names through a fixed internal `switch` that recognises only standard LSP types and a small set of C++/Roslyn/Razor names. Every unrecognised name — including all `reqnroll.*` names — falls through to plain `"text"`. Registering same-named `ClassificationTypeDefinition` entries in the MEF registry is **not** consulted; the mapping is hardcoded.
 2. VS pulls `semanticTokens/full` lazily and inconsistently via its own tagger lifecycle; in practice it sometimes never requests tokens for an open document.
 
-The workaround is a **server-push + client-classifier** path that bypasses VS's native token pull entirely. When launched with `--client visualstudio`, the server pushes encoded tokens to the VS client via a custom `reqnroll/semanticTokens` notification every time step binding matches change [ `MatchCacheChangedNotification`]. The VS extension captures this notification, decodes the token data, and caches it in a process-wide `SemanticTokenClassificationStore`. A classic MEF `IClassifierProvider` / `GherkinSemanticClassifier` then reads those cached tokens and emits `ClassificationSpan`s using the existing `DeveroomClassifications` entries — the same classification names the existing VS extension uses, so users see no change in behavior of coloring (compared to the existing extension). VS Code and Rider are unaffected and use the standard pull flow.
+The workaround is a **server-push + client-classifier** path that bypasses VS's native token pull entirely. When launched with `--ide visualstudio`, the server pushes encoded tokens to the VS client via a custom `reqnroll/semanticTokens` notification every time step binding matches change [ `MatchCacheChangedNotification`]. The VS extension captures this notification, decodes the token data, and caches it in a process-wide `SemanticTokenClassificationStore`. A classic MEF `IClassifierProvider` / `GherkinSemanticClassifier` then reads those cached tokens and emits `ClassificationSpan`s using the existing `IdeSupportClassifications` entries — the same classification names the existing VS extension uses, so users see no change in behavior of coloring (compared to the existing extension). VS Code and Rider are unaffected and use the standard pull flow.
 
-The `--client` flag is the only place where the server behaves differently per IDE at the protocol level; the rest of the server is client-agnostic.
+The `--ide` flag is the only place where the server behaves differently per IDE at the protocol level; the rest of the server is client-agnostic.
 
 Full detail is in [F1 · Client-side token-type mapping](LSP-IDE-Support-Feature-Designs.md#client-side-token-type-mapping).
 
@@ -93,11 +93,11 @@ The protocol handler therefore performs the initial synchronous write to the Doc
 
 The trade-off is that the call graph is less linear: a `textDocument/didChange` triggers work across multiple handlers in sequence. The sequence diagrams in [Appendix A](LSP-IDE-Support-Feature-Designs.md) document each chain explicitly. See also [Internal Event Architecture](#internal-event-architecture) in §5.
 
-### Per-IDE capability registration via `--client` flag
+### Per-IDE capability registration via `--ide` flag
 
 OmniSharp's handler base classes (e.g. `SemanticTokenHandlerBase`) register capabilities dynamically by default. Visual Studio requires static registration for semantic tokens and certain other capabilities — it cannot handle `client/registerCapability` reliably for these.
 
-Rather than encoding per-IDE logic inside each handler class, the server accepts a `--client <ide>` flag at startup and uses it to decide, once during `initialize`, whether to register each capability statically or dynamically. This keeps all IDE-specific registration logic in one place (the startup path) while leaving handler implementations client-agnostic.
+Rather than encoding per-IDE logic inside each handler class, the server accepts a `--ide <ide>` flag at startup and uses it to decide, once during `initialize`, whether to register each capability statically or dynamically. This keeps all IDE-specific registration logic in one place (the startup path) while leaving handler implementations client-agnostic.
 
 ### Custom `reqnroll/*` notifications for project-system information
 
@@ -131,15 +131,16 @@ graph TB
         Rider["Rider Plugin\n(Kotlin — thin wrapper only)"]
     end
 
-    subgraph Server["LSP Server  ·  Reqnroll.IdeSupport.LSP.Server\n(net9+, cross-platform executable)"]
+    subgraph Server["LSP Server  ·  Reqnroll.IdeSupport.LSP.Server\n(net10.0, cross-platform executable)"]
         direction TB
         Handlers["LSP Handlers\n(OmniSharp.Extensions.LanguageServer)"]
+        RoslynDiscovery["Roslyn Discovery\n(source analysis, LSP.Server/Discovery/Roslyn)"]
+        ReflectionDiscovery["Reflection Discovery client\n(LSP.Server/Discovery/Connector)"]
 
         subgraph Core["Reqnroll.IdeSupport.LSP.Core  (netstandard2.0)"]
             GherkinParser["Gherkin Parser\n& AST Builder"]
             DocBuffer["Document Buffer\nService (AST cache)"]
-            RoslynDiscovery["Roslyn Discovery\n(source analysis)"]
-            BindingRegistry["Binding Registry\n(match cache)"]
+            BindingRegistry["Binding Registry\n(Bindings/)"]
             SemTokenSvc["Semantic Token\nService"]
             DiagSvc["Diagnostics\nAggregator"]
             CSharpDiagSvc["C# Diagnostics\nAggregator (F27)"]
@@ -151,13 +152,13 @@ graph TB
             CSharpTreeCache["C# Syntax Tree\nCache (#491)"]
             TestTargetResolver["Scenario Test Target\nResolver"]
 
-            RoslynDiscovery --> BindingRegistry
             BindingMatch --> BindingRegistry
             InlayHintSvc --> BindingMatch
             TestTargetResolver --> CSharpTreeCache
             CSharpDiagSvc --> BindingRegistry
         end
 
+        RoslynDiscovery --> BindingRegistry
         Handlers --> GherkinParser
         Handlers --> DocBuffer
         Handlers --> SemTokenSvc
@@ -170,8 +171,8 @@ graph TB
         Handlers --> InlayHintSvc
     end
 
-    subgraph Connector["Binding Connector  (out-of-process)"]
-        ReflectionDiscovery["Reflection Discovery\n(compiled assemblies)"]
+    subgraph Connector["Reqnroll.IdeSupport.LSP.Connector  (out-of-process)"]
+        ReflectionScan["Reflection scan\n(compiled assemblies)"]
     end
 
     subgraph Common["Reqnroll.IdeSupport.Common  (netstandard2.0)"]
@@ -186,8 +187,8 @@ graph TB
 
     Core   --> ConfigLoader
     Core   --> Logging
-    Server -.->|"IPC"| Connector
-    Connector -.->|"BindingDiscoveryResult"| BindingRegistry
+    ReflectionDiscovery -.->|"IPC"| Connector
+    ReflectionScan -.->|"BindingDiscoveryResult"| BindingRegistry
 ```
 
 ### Transport
@@ -200,24 +201,24 @@ Three distinct components form the core of the server's intelligence. Each has i
 
 **1 · Gherkin Parser & Document Buffer**
 
-On `textDocument/didOpen` and `textDocument/didChange`, the sync handler invokes `DeveroomTagParser`, which runs the Gherkin parser and step-binding match in a **single combined AST walk**. The output is a `DeveroomTag[]` tree that encodes both structural classification (keywords, tags, descriptions, doc strings, data tables, parse errors) and step match results (`DefinedStep`, `UndefinedStep`, `StepParameter`, `ScenarioOutlinePlaceholder`). This tag tree is stored in the Document Buffer keyed by URI. A `FeatureBindingMatchSet` is derived from the match-result tags and stored separately in the Binding Match Service.
+On `textDocument/didOpen` and `textDocument/didChange`, the sync handler invokes `IdeSupportTagParser`, which runs the Gherkin parser and step-binding match in a **single combined AST walk**. The output is a `IdeSupportTag[]` tree that encodes both structural classification (keywords, tags, descriptions, doc strings, data tables, parse errors) and step match results (`DefinedStep`, `UndefinedStep`, `StepParameter`, `ScenarioOutlinePlaceholder`). This tag tree is stored in the Document Buffer keyed by URI. A `FeatureBindingMatchSet` is derived from the match-result tags and stored separately in the Binding Match Service.
 
 All subsequent requests for a document (semantic tokens, outline, folding, diagnostics) read from the cached tag tree; they do not re-parse.
 
-> **Note**: Although `textDocument/didChange` may carry only the incremental text delta, `DeveroomTagParser` always re-parses the entire file. Because Gherkin AST nodes carry absolute location information, inserting or deleting a line shifts the location of every subsequent node; partial re-parse is not practical.
+> **Note**: Although `textDocument/didChange` may carry only the incremental text delta, `IdeSupportTagParser` always re-parses the entire file. Because Gherkin AST nodes carry absolute location information, inserting or deleting a line shifts the location of every subsequent node; partial re-parse is not practical.
 
 **2 · Binding Registry**
 
 Binding information enters the registry from two sources:
 
-- **Roslyn Discovery** (in-process, in LSP.Core): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures.
+- **Roslyn Discovery** (in-process, in `LSP.Server/Discovery/Roslyn/`; the binding data itself lives in `LSP.Core/Bindings/`): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` (`LSP.Core/Parsing/CSharp/`, behind `IStepDefinitionFileParser`) also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures.
 - **Reflection Discovery** (out-of-process Connector): when a build is detected (see [Q9](LSP-IDE-Support-Open-Questions.md) for per-IDE detection reliability), the Connector scans the compiled assembly and replaces the full registry.
 
 **3 · Binding Match Service**
 
 The Binding Match Service holds the `FeatureBindingMatchSet` cache derived from the tag tree (see above). Because matching is fused into the parse pass rather than being a separate stage, the cache is not updated independently of the Document Buffer — both are written together by the sync handler on every `didOpen` / `didChange`.
 
-When the **Binding Registry** changes (C# file save or post-build reflection scan), the server cannot rely on the tag tree already encoding the new match results. `BindingRegistryChangedHandler` therefore re-runs `DeveroomTagParser` for each open feature file against the updated registry, atomically replacing both the tag tree in the Document Buffer and the match set in the Binding Match Service. Any change to the match cache triggers the Diagnostics Aggregator to recompute and push diagnostics for affected files.
+When the **Binding Registry** changes (C# file save or post-build reflection scan), the server cannot rely on the tag tree already encoding the new match results. `BindingRegistryChangedHandler` therefore re-runs `IdeSupportTagParser` for each open feature file against the updated registry, atomically replacing both the tag tree in the Document Buffer and the match set in the Binding Match Service. Any change to the match cache triggers the Diagnostics Aggregator to recompute and push diagnostics for affected files.
 
 **4 · C# Syntax Tree Cache**
 
@@ -237,47 +238,63 @@ Bounded by a small MRU cap rather than a per-URI document lifecycle, since it ha
 ```
 Reqnroll.IdeSupport/
 ├── src/
-│   ├── Reqnroll.IdeSupport.Common/             # Shared infrastructure (netstandard2.0)
-│   │   ├── Configuration/                      # reqnroll.json, .editorconfig loaders
-│   │   ├── Logging/                            # Cross-platform logging abstractions
-│   │   ├── ProjectSystem/                      # IDE-agnostic file/project abstractions
-│   │   └── Telemetry/                          # HTTP-based telemetry (cross-platform)
+│   ├── Core/
+│   │   └── Reqnroll.IdeSupport.Common/          # Shared infrastructure (netstandard2.0)
+│   │       ├── Configuration/                   # reqnroll.json, .editorconfig loaders
+│   │       ├── Logging/                         # IIdeSupportLogger and friends
+│   │       ├── ProjectSystem/                   # IDE-agnostic file/project abstractions
+│   │       └── Telemetry/                       # HTTP-based telemetry (cross-platform)
 │   │
-│   ├── Reqnroll.IdeSupport.LSP.Core/           # Protocol-agnostic LSP logic (netstandard2.0)
-│   │   ├── Parsing/                            # DeveroomGherkinParser, AST builder
-│   │   ├── Discovery/                          # RoslynDiscovery, BindingRegistry
-│   │   ├── Matching/                           # BindingMatchService, match cache
-│   │   └── Editor/                             # SemanticTokenService, FormattingService, etc.
+│   ├── LSP/
+│   │   ├── Reqnroll.IdeSupport.LSP.Core/        # Protocol-agnostic LSP logic (netstandard2.0)
+│   │   │   ├── Bindings/                        # ProjectBindingRegistry and binding data types
+│   │   │   ├── Parsing/                         # IdeSupportGherkinParser, StepDefinitionFileParser, AST builder
+│   │   │   ├── Matching/                        # BindingMatchService, match cache
+│   │   │   ├── Completions/, Formatting/, InlayHints/, Folding/,
+│   │   │   │   Diagnostics/, DocumentOutline/, Commenting/, Rename/,
+│   │   │   │   Scaffolding/, TagExpressions/, TestTargets/, Documents/
+│   │   │   │                                    # one folder per capability (flat, no "Editor/" grouping)
+│   │   │   └── globalUsings.cs
+│   │   │
+│   │   ├── Reqnroll.IdeSupport.LSP.Server/      # OmniSharp LSP host (net10.0, exe)
+│   │   │   ├── Protocol/                        # OmniSharp handler classes (LSP messages)
+│   │   │   ├── Pipeline/                        # MediatR notification handlers + ParseCoordinator (internal events)
+│   │   │   ├── Features/                        # per-capability handler + wiring (e.g. Features/Completions, Features/Formatting)
+│   │   │   ├── Discovery/
+│   │   │   │   ├── Roslyn/                      # in-process .cs discovery
+│   │   │   │   └── Connector/                   # IPC client for the reflection-based Connector, incl. AssemblyReflection/
+│   │   │   ├── Registry/                        # registry-facing orchestration atop LSP.Core/Bindings
+│   │   │   ├── Workspace/                       # WorkspaceScopeManager, ProjectScope
+│   │   │   └── Program.cs
+│   │   │
+│   │   └── Reqnroll.IdeSupport.LSP.Connector/   # Reflection-based binding discovery (exe)
+│   │       └── Reqnroll.IdeSupport.LSP.Connector.Models/  # DTOs for reflection discovery results
 │   │
-│   ├── Reqnroll.IdeSupport.LSP.Server/         # OmniSharp LSP host (net9+, exe)
-│   │   ├── Handlers/
-│   │   │   ├── Protocol/                       # OmniSharp handler classes (LSP messages)
-│   │   │   └── Internal/                       # MediatR notification handlers (internal events)
-│   │   ├── Workspace/                          # WorkspaceScopeManager, ProjectScope
-│   │   └── Program.cs
+│   ├── VisualStudio/
+│   │   ├── Reqnroll.IdeSupport.VisualStudio.Extension/     # VSIX (net481)
+│   │   │   ├── LanguageClient/                  # ReqnrollLanguageClient (VS.Extensibility)
+│   │   │   ├── Inspection/                      # LspInterceptingPipe (debug tracing)
+│   │   │   └── LSPServer/                       # Embedded server exe
+│   │   ├── Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/  # VSSDK fallback helpers, IdeSupportClassifications
+│   │   └── Reqnroll.IdeSupport.VisualStudio.Wizards{,.Core,.UI}/  # New Project/Item wizards
 │   │
-│   ├── Reqnroll.IdeSupport.LSP.Connector.Models/  # DTOs for reflection discovery results
-│   ├── Reqnroll.IdeSupport.LSP.Connector/         # Reflection-based binding discovery (exe)
-│   │
-│   └── clients/
-│       ├── visualStudio
-│       |   ├── Reqnroll.IdeSupport.VisualStudio.Extension/     # VSIX (net481)
-│       │   |   ├── LanguageClient/                 # ReqnrollLanguageClient (VS.Extensibility)
-│       │   |   ├── Inspection/                     # LspInterceptingPipe (debug tracing)
-│       │   |   └── LSPServer/                      # Embedded server exe
-│       |   ├── Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/  # VSSDK fallback helpers
-│       |   └── Reqnroll.IdeSupport.VisualStudio.Wizards*/           # New Project/Item wizards
-│       ├── vscode/                             # TypeScript VS Code extension
-│       └── rider/                              # Kotlin Rider plugin (thin wrapper)
+│   ├── VSCode/                                  # TypeScript VS Code extension
+│   └── Rider/                                   # Kotlin Rider plugin (thin wrapper)
 │
 └── tests/
-    ├── Reqnroll.IdeSupport.LSP.Core.Tests/         # Unit tests for LSP.Core services
-    ├── Reqnroll.IdeSupport.LSP.Server.Tests/        # Unit tests for LSP handlers
-    ├── Reqnroll.IdeSupport.LSP.Server.Specs/        # Integration specs (simulates IDE client)
-    ├── Reqnroll.IdeSupport.VisualStudio.Tests/      # Unit tests for VS extension
-    ├── Reqnroll.IdeSupport.VisualStudio.Specs/      # Integration specs for VS extension
-    └── Reqnroll.IdeSupport.Specs/                   # End-to-end BDD specs (Reqnroll)
+    ├── Core/
+    ├── LSP/
+    │   ├── Reqnroll.IdeSupport.LSP.Core.Tests/       # Unit tests for LSP.Core services
+    │   ├── Reqnroll.IdeSupport.LSP.Server.Tests/     # Unit tests for LSP handlers
+    │   ├── Reqnroll.IdeSupport.LSP.Server.Specs/     # Integration specs (simulates IDE client)
+    │   └── Reqnroll.IdeSupport.LSP.Connector.Tests/
+    └── VisualStudio/
+        ├── Reqnroll.IdeSupport.VisualStudio.Tests/       # Unit tests for VS extension
+        ├── Reqnroll.IdeSupport.VisualStudio.VsxStubs/    # Test doubles for VS SDK types
+        └── Reqnroll.IdeSupport.VisualStudio.Wizards.Tests/
 ```
+
+There is no `src/clients/` grouping folder today — `VisualStudio/`, `VSCode/`, and `Rider/` are top-level siblings of `Core/` and `LSP/`. Whether to nest them under a `clients/` folder is still an open question ([Q10](LSP-IDE-Support-Open-Questions.md)).
 
 > **Convention**: projects named `*.Tests` are unit tests; projects named `*.Specs` are integration/BDD tests. Client-side unit and integration tests should be considered for each IDE client as the clients mature (see [Q8](LSP-IDE-Support-Open-Questions.md)).
 
@@ -291,7 +308,7 @@ The server is a self-contained executable built on `OmniSharp.Extensions.Languag
 
 OmniSharp supports both static (declared in `initialize` response) and dynamic (via `client/registerCapability`) registration. Visual Studio has known issues with dynamic registration for some capabilities (see per-feature notes).
 
-The server accepts a `--client <ide>` command-line flag at startup (e.g., `--client visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic.
+The server accepts a `--ide <ide>` command-line flag at startup (e.g., `--ide visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic.
 
 > **OmniSharp implementation note**: OmniSharp's handler base classes (e.g., `SemanticTokenHandlerBase`) use dynamic registration by default. For capabilities requiring static registration, we will either build alternate base classes or patch the underlying OmniSharp registration — this is a known implementation risk for Phase 1.
 
@@ -374,19 +391,19 @@ The Document Buffer stores the effective dialect alongside each file's AST. The 
 
 ### Internal Event Architecture
 
-Protocol handlers (in `Handlers/Protocol/`) are the OmniSharp-based classes that directly handle incoming LSP messages. Rather than orchestrating service calls inline, they publish typed **MediatR notifications** that trigger further processing asynchronously.
+Protocol handlers (in `Protocol/`) are the OmniSharp-based classes that directly handle incoming LSP messages. Rather than orchestrating service calls inline, they publish typed **MediatR notifications** that trigger further processing asynchronously.
 
-Internal handlers (in `Handlers/Internal/`) subscribe to these notifications and perform the actual work, each publishing further notifications in turn. This yields an event-driven pipeline with no single orchestrating manager:
+Internal handlers (in `Pipeline/`) subscribe to these notifications and perform the actual work, each publishing further notifications in turn. This yields an event-driven pipeline with no single orchestrating manager:
 
 The pipeline uses a **sync-first, async-rest** model. The Protocol Handler directly performs the first state-changing step (parsing and storing in the Document Buffer), because the tag tree is needed synchronously to respond to the current LSP request (e.g., `semanticTokens/full` must return the cached tags immediately). All downstream effects — diagnostics — are then dispatched asynchronously via MediatR.
 
-Parsing and binding matching are **not separate pipeline stages**: `DeveroomTagParser` performs both in a single AST walk (see [F1 · Gherkin Syntax Highlighting](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)), producing a `DeveroomTag[]` that carries both structural classification and step match results together. The sync handler stores that tag tree plus the derived `FeatureBindingMatchSet` in one synchronous step, then publishes a single `MatchCacheChangedNotification` via MediatR:
+Parsing and binding matching are **not separate pipeline stages**: `IdeSupportTagParser` performs both in a single AST walk (see [F1 · Gherkin Syntax Highlighting](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)), producing a `IdeSupportTag[]` that carries both structural classification and step match results together. The sync handler stores that tag tree plus the derived `FeatureBindingMatchSet` in one synchronous step, then publishes a single `MatchCacheChangedNotification` via MediatR:
 
 ```
 LSP Client message
   → Protocol Handler (OmniSharp base class)
-      → [sync] Parses document + matches steps in one AST walk (DeveroomTagParser),
-               stores DeveroomTag[] + MatchSet in DocBuffer/BindingMatchService
+      → [sync] Parses document + matches steps in one AST walk (IdeSupportTagParser),
+               stores IdeSupportTag[] + MatchSet in DocBuffer/BindingMatchService
       → publishes MatchCacheChangedNotification (async, via MediatR)
           → Internal Handler (aggregates diagnostics)
               → pushes textDocument/publishDiagnostics
@@ -410,31 +427,31 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `FoldingRangeHandler` | `textDocument/foldingRange` |
 | `InlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
 | `FormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
-| `ReqnrollCommandHandler` | `workspace/executeCommand` |
-| `StepReferencesHandler` | `textDocument/references` (from `.cs` cursors; two-state) |
+| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspMethodNames` like every other method) |
+| `ReferencesHandler` | `textDocument/references` (from `.cs` cursors; two-state) |
 | `FindStepUsagesHandler` | `reqnroll/findStepUsages` (custom; three-state: isBinding false / 0 usages / locations) |
-| `StepRenameHandler` | `textDocument/prepareRename`, `textDocument/rename`, `reqnroll/selectRenameTarget` (retains the session state for a picked disambiguation target between requests) |
-| `RenameTargetsHandler` | `reqnroll/renameTargets` (extracted from `StepRenameHandler` in #139 — enumerates candidate binding attributes at the cursor for the multi-attribute picker; stateless) |
-| `WorkspaceEditBuilder` | (not a handler) — builds the `StepRenameHandler`/`RenameTargetsHandler` response `WorkspaceEdit`, negotiating per-request between the annotated `DocumentChanges` shape (clients advertising `changeAnnotationSupport`) and the legacy `Changes` map (VS) |
+| `RenameHandler` | `textDocument/prepareRename`, `textDocument/rename`, `reqnroll/selectRenameTarget` (retains the session state for a picked disambiguation target between requests) |
+| `RenameTargetsHandler` | `reqnroll/renameTargets` (extracted from `RenameHandler` in #139 — enumerates candidate binding attributes at the cursor for the multi-attribute picker; stateless) |
+| `WorkspaceEditBuilder` | (not a handler) — builds the `RenameHandler`/`RenameTargetsHandler` response `WorkspaceEdit`, negotiating per-request between the annotated `DocumentChanges` shape (clients advertising `changeAnnotationSupport`) and the legacy `Changes` map (VS) |
 | `RenameChangeAnnotations` | (not a handler) — holds the `reqnroll.rename.feature` / `reqnroll.rename.binding` annotation-id constants consumed by `WorkspaceEditBuilder` |
-| `CSharpAttributeLiteralResolver` | (not a handler) — resolves a binding's C# attribute literal (source location + text) shared by `StepRenameHandler` and `RenameTargetsHandler` |
-| `RenameBindingResolver` | (not a handler) — read-only binding-resolution primitives (cursor → candidate bindings) shared by `StepRenameHandler` and `RenameTargetsHandler` |
+| `CSharpAttributeLiteralResolver` | (not a handler) — resolves a binding's C# attribute literal (source location + text) shared by `RenameHandler` and `RenameTargetsHandler` |
+| `RenameBindingResolver` | (not a handler) — read-only binding-resolution primitives (cursor → candidate bindings) shared by `RenameHandler` and `RenameTargetsHandler` |
 | `NewNameReconciler` | (not a handler) — reconciles the user-entered new name against the existing step-text/regex shape before the edit is built |
 | `RenamePostApplyCoordinator` | (not a handler) — post-`WorkspaceEdit` steps: pushes a genuine `workspace/applyEdit` to VS only (its rename pipe swallows the handler's return value) and invalidates the match cache for closed `.feature` files the rename touched |
 | `StepCodeLensHandler` | `textDocument/codeLens`, `codeLens/resolve` |
 | `HookCodeLensHandler` | `textDocument/codeLens` (`.feature` files only — [F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) hook-match CodeLens; click reuses F17's `reqnroll/goToHooks`) |
 | `HookMatchCountCodeLensHandler` | `textDocument/codeLens` (`.cs` files — [F25](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings) hook-binding match-count CodeLens; coexists with `StepCodeLensHandler` in the same response, `reqnroll/goToMatchingScenarios` on click) |
 
-The rename pipeline's `WorkspaceEdit` response is built by `WorkspaceEditBuilder` (`Features/Rename/`, used by both `StepRenameHandler` and `RenameTargetsHandler`), which negotiates per-request whether the client advertised LSP 3.16 change-annotation support (`documentChanges` + `changeAnnotationSupport` in `ClientSettings.Capabilities.Workspace.WorkspaceEdit`) and emits either an annotated `DocumentChanges` edit (grouped/labelled preview — VS Code) or the legacy `Changes` map (VS, which never advertises `changeAnnotationSupport`). `RenameChangeAnnotations` holds the two annotation-id constants (`reqnroll.rename.feature`, `reqnroll.rename.binding`) that label the edit groups. `RenamePostApplyCoordinator` handles what happens after the edit is built: it pushes the edit to VS via a genuine `workspace/applyEdit` (VS's rename pipe swallows the handler's return value, so VS needs a real push rather than relying on its client to apply the response), and invalidates the match cache for closed `.feature` files the edit touched. See [Feature Designs — Rename change annotations](LSP-IDE-Support-Feature-Designs.md#rename-change-annotations---as-built) for the full negotiation and known limitations.
+The rename pipeline's `WorkspaceEdit` response is built by `WorkspaceEditBuilder` (`Features/Rename/`, used by both `RenameHandler` and `RenameTargetsHandler`), which negotiates per-request whether the client advertised LSP 3.16 change-annotation support (`documentChanges` + `changeAnnotationSupport` in `ClientSettings.Capabilities.Workspace.WorkspaceEdit`) and emits either an annotated `DocumentChanges` edit (grouped/labelled preview — VS Code) or the legacy `Changes` map (VS, which never advertises `changeAnnotationSupport`). `RenameChangeAnnotations` holds the two annotation-id constants (`reqnroll.rename.feature`, `reqnroll.rename.binding`) that label the edit groups. `RenamePostApplyCoordinator` handles what happens after the edit is built: it pushes the edit to VS via a genuine `workspace/applyEdit` (VS's rename pipe swallows the handler's return value, so VS needs a real push rather than relying on its client to apply the response), and invalidates the match cache for closed `.feature` files the edit touched. See [Feature Designs — Rename change annotations](LSP-IDE-Support-Feature-Designs.md#rename-change-annotations---as-built) for the full negotiation and known limitations.
 
 **Key internal MediatR notifications** and the handlers that consume them:
 
 | Notification | Produced by | Consumed by |
 |-------------|-------------|-------------|
-| `MatchCacheChangedNotification` | `TextDocumentSyncHandler`, after parsing and matching a `.feature` file in one pass (`DeveroomTagParser`, via `GherkinDocumentTaggerService`) — and separately by `BindingRegistryChangedHandler`, after re-matching each open `.feature` file against an updated registry | `DiagnosticsPublishHandler` (pushes `textDocument/publishDiagnostics`); `SemanticTokensPushHandler` (Visual Studio only — pushes `reqnroll/semanticTokens`, see [F1](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)) |
+| `MatchCacheChangedNotification` | `TextDocumentSyncHandler`, after parsing and matching a `.feature` file in one pass (`IdeSupportTagParser`, via `GherkinDocumentTaggerService`) — and separately by `BindingRegistryChangedHandler`, after re-matching each open `.feature` file against an updated registry | `DiagnosticsPublishHandler` (pushes `textDocument/publishDiagnostics`); `SemanticTokensPushHandler` (Visual Studio only — pushes `reqnroll/semanticTokens`, see [F1](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)) |
 | `BindingRegistryChangedNotification` | `BindingRegistryProviderRouter`, relaying `ConnectorBindingRegistryProvider.BindingRegistryChanged` — raised by both the in-process Roslyn patch (`ICSharpBindingDiscoveryService`, on a `.cs` save) and the out-of-process reflection Connector refresh (on a detected build) | `BindingRegistryChangedHandler`, which re-parses every open `.feature` file against the updated registry and republishes `MatchCacheChangedNotification` for each; `CSharpDiagnosticsRegistryChangedHandler` ([F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)), which re-pushes binding-validation diagnostics for every open `.cs` file owned by the affected project |
 
-`DeveroomTagParser` fuses Gherkin parsing and step-binding matching into a single AST walk, producing one `DeveroomTag[]` tree that carries both structural classification and match results (see [F1](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)). Because of that fusion, there is no separate "parse" notification stage between a document change and a match-cache update — `TextDocumentSyncHandler` calls the parser synchronously and publishes `MatchCacheChangedNotification` directly once the tag tree and match set are stored.
+`IdeSupportTagParser` fuses Gherkin parsing and step-binding matching into a single AST walk, producing one `IdeSupportTag[]` tree that carries both structural classification and match results (see [F1](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting)). Because of that fusion, there is no separate "parse" notification stage between a document change and a match-cache update — `TextDocumentSyncHandler` calls the parser synchronously and publishes `MatchCacheChangedNotification` directly once the tag tree and match set are stored.
 
 The C# / Roslyn path follows the same principle of going straight to the relevant service rather than through an extra notification hop: on a `.cs` `didOpen`/`didChange`, `TextDocumentSyncHandler` calls `ICSharpBindingDiscoveryService` directly. That service patches the owning project's `ConnectorBindingRegistryProvider`, which raises its `BindingRegistryChanged` event; `BindingRegistryProviderRouter` publishes the `BindingRegistryChangedNotification` shown in the table above, and the established re-match path runs from there (`BindingRegistryChangedHandler` → re-parse open feature files → `MatchCacheChangedNotification` → semantic-token refresh). The out-of-process reflection discovery (post-build) raises the same `BindingRegistryChangedNotification`, so both discovery sources converge on one re-match path regardless of which one produced the update.
 
@@ -531,7 +548,7 @@ A hybrid extension using **VS.Extensibility** as the primary API, with **VSSDK**
 | Code Lens | VSSDK | Not yet available in VS.Extensibility |
 | New Project / Item Wizards | VSSDK | Wizard interfaces not in VS.Extensibility |
 
-The embedded `LSPServer.exe` is published to the VSIX under the `LSPServer/` subfolder and launched on extension activation with `--client visualstudio`.
+The embedded `LSPServer.exe` is published to the VSIX under the `LSPServer/` subfolder and launched on extension activation with `--ide visualstudio`.
 
 **Eager server startup (`LspServerConnectionService`)**. VS's own `LanguageServerProvider.CreateServerConnectionAsync` is invoked lazily — VS only calls it once a document matching `ReqnrollLanguageClient`'s `DocumentFilter` (`.feature`) is opened/realized, which would otherwise put process launch, pipe construction, and interceptor wiring on the critical path to the editor becoming usable on the first `.feature`-file-open.
 
@@ -814,10 +831,10 @@ first (see Security below).
 other member is a VS-lifecycle concern (project wizards, welcome/upgrade dialogs) that `LSP.Core`
 has no business depending on, and every LSP-side implementation (`NullTelemetryService`, then
 `LspErrorTelemetryService`) had to stub out all of them just to satisfy the interface. `MonitorError`
-now lives on its own `IErrorTelemetryService`, which `ITelemetryService` extends; `DeveroomGherkinParser`,
-`DeveroomTagParser`, and `CompletionContextResolver` depend on the narrow interface directly, while
+now lives on its own `IErrorTelemetryService`, which `ITelemetryService` extends; `IdeSupportGherkinParser`,
+`IdeSupportTagParser`, and `CompletionContextResolver` depend on the narrow interface directly, while
 `IIdeScope.TelemetryService` (needed by both VS's wizard flows and, via
-`ProjectScopeDeveroomConfigurationProvider`/`WatchedFilesHandler`, the LSP server) stays typed as
+`ProjectScopeIdeSupportConfigurationProvider`/`WatchedFilesHandler`, the LSP server) stays typed as
 the full `ITelemetryService` — both interfaces resolve to the same DI singleton on the LSP server. A
 related, previously-unnoticed bug surfaced during this split: `LspIdeScope.TelemetryService` was
 hardcoded to `NullTelemetryService` rather than the DI-registered service, so errors reported
@@ -855,7 +872,7 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 
 | Field | Rationale |
 |-------|-----------|
-| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from `--client` flag; enables per-IDE breakdown of all events |
+| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from `--ide` flag; enables per-IDE breakdown of all events |
 | `DiscoveryType` (`roslyn` / `reflection`) | Added to `ReqnrollDiscovery` event; helps understand cache hit rates and build dependency |
 | `ExtensionInstalled` / `ExtensionUpgraded` origin | These events fire before the LSP server starts; must be sent by the IDE client, not the server — reinforces the open question on telemetry origin (Q11) |
 
@@ -974,7 +991,7 @@ This section records key architectural decisions and the alternatives that were 
 
 **Trade-offs accepted**:
 - Some capabilities (Code Lens in VS, Go to Definition in Rider, Comment/Uncomment in all three) still require IDE-specific plugin code. The LSP boundary reduces but does not eliminate client work.
-- The `--client` flag and static/dynamic registration complexity would not exist in a fully native approach.
+- The `--ide` flag and static/dynamic registration complexity would not exist in a fully native approach.
 
 ---
 
