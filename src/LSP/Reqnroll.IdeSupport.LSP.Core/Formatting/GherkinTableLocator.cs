@@ -49,7 +49,7 @@ public static class GherkinTableLocator
     /// whose first row starts at <paramref name="startLine0Based"/> (zero-based).
     /// Returns <see langword="null"/> when no table is found at that line.
     /// </summary>
-    public static IHasRows? FindTableAtLine(DeveroomGherkinDocument doc, int startLine0Based)
+    public static IHasRows? FindTableAtLine(IdeSupportGherkinDocument doc, int startLine0Based)
     {
         if (doc?.Feature == null) return null;
         var targetLine1Based = startLine0Based + 1;

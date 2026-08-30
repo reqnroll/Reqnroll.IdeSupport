@@ -19,7 +19,7 @@ public interface ITelemetryService : IErrorTelemetryService
     void MonitorOpenFeatureFile(ProjectSettings projectSettings);
     // MonitorParserParse(ProjectSettings, Dictionary<string, object>) — retired, not just unwired:
     // VS no longer parses .feature files locally (all parsing moved server-side, uniformly across
-    // every IDE, into LSP.Core's DeveroomGherkinParser). The modern equivalent of "parse
+    // every IDE, into LSP.Core's IdeSupportGherkinParser). The modern equivalent of "parse
     // duration/file size" is the LSP server's perf-sampling telemetry (PerfSample events for
     // textDocument/didOpen and textDocument/didChange via IOperationDurationRecorder — see
     // TextDocumentSyncHandler), not a business event on this interface. Restoring this member would

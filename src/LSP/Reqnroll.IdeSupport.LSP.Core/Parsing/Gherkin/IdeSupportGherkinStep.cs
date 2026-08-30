@@ -6,10 +6,10 @@ namespace Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 /// A Gherkin AST step extended with Reqnroll-specific metadata: the resolved keyword enum and
 /// the Given/When/Then block it belongs to.
 /// </summary>
-public class DeveroomGherkinStep : Step
+public class IdeSupportGherkinStep : Step
 {
     /// <summary>Creates a step node from its parsed parts plus Reqnroll-specific metadata.</summary>
-    public DeveroomGherkinStep(Location location, string keyword, StepKeywordType keywordType, string text, StepArgument argument,
+    public IdeSupportGherkinStep(Location location, string keyword, StepKeywordType keywordType, string text, StepArgument argument,
         StepKeyword stepKeyword, ScenarioBlock scenarioBlock) : base(location, keyword, keywordType, text, argument)
     {
         StepKeyword = stepKeyword;

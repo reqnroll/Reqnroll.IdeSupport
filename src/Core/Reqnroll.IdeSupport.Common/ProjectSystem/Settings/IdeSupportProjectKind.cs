@@ -1,7 +1,7 @@
 namespace Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 
-/// <summary>DeveroomProjectKind</summary>
-public enum DeveroomProjectKind
+/// <summary>IdeSupportProjectKind</summary>
+public enum IdeSupportProjectKind
 {
     /// <summary>The project kind could not be determined.</summary>
     Unknown,

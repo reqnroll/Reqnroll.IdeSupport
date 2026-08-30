@@ -30,16 +30,16 @@ public class CompletionContextResolverTests
         "Feature: F\nScenario: S\n    Given some text\n    When I do it";
 
     // Step placed on line 2 (0-based).  Gherkin Location.Line is 1-based, so Line=3.
-    private static readonly DeveroomGherkinStep StepLine2 =
+    private static readonly IdeSupportGherkinStep StepLine2 =
         new(new GherkinLocation(3, 5), "Given ", StepKeywordType.Context,
             "some text", null!, StepKeyword.Given, ScenarioBlock.Given);
 
     // Step placed on line 3 (0-based) — used for "different line" tests.
-    private static readonly DeveroomGherkinStep StepLine3 =
+    private static readonly IdeSupportGherkinStep StepLine3 =
         new(new GherkinLocation(4, 5), "When ", StepKeywordType.Action,
             "I do it", null!, StepKeyword.When, ScenarioBlock.When);
 
-    private readonly IDeveroomTagParser _tagParser  = Substitute.For<IDeveroomTagParser>();
+    private readonly IIdeSupportTagParser _tagParser  = Substitute.For<IIdeSupportTagParser>();
     private readonly ITelemetryService _monitoring = Substitute.For<ITelemetryService>();
     private readonly CompletionContextResolver _sut;
 
@@ -54,7 +54,7 @@ public class CompletionContextResolverTests
     public void No_step_tags_returns_KeywordCompletionContext()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<DeveroomTag>());
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<IdeSupportTag>());
 
         var ctx = _sut.Resolve(snapshot, 0, 0, ProjectBindingRegistry.Invalid, "en");
 
@@ -190,7 +190,7 @@ public class CompletionContextResolverTests
     public void Fallback_language_used_when_no_document_tag()
     {
         var snapshot = Snapshot(DocText);
-        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<DeveroomTag>());
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<IdeSupportTag>());
 
         var ctx = (KeywordCompletionContext)_sut.Resolve(snapshot, 0, 0, ProjectBindingRegistry.Invalid, "de")!;
 
@@ -202,7 +202,7 @@ public class CompletionContextResolverTests
     public void Parsed_document_dialect_takes_priority_over_fallback_language()
     {
         var deDialect = new GherkinDialectProvider("de").DefaultDialect;
-        var deDoc     = new DeveroomGherkinDocument(
+        var deDoc     = new IdeSupportGherkinDocument(
             null!, Enumerable.Empty<global::Gherkin.Ast.Comment>(), "",
             deDialect, new List<int>());
 
@@ -234,11 +234,11 @@ public class CompletionContextResolverTests
 
     private static IGherkinTextSnapshot Snapshot(string text) => new FakeSnapshot(text);
 
-    private static DeveroomTag StepTag(DeveroomGherkinStep step, IGherkinTextSnapshot snapshot)
-        => new(DeveroomTagTypes.StepBlock, GherkinRange.Empty, step);
+    private static IdeSupportTag StepTag(IdeSupportGherkinStep step, IGherkinTextSnapshot snapshot)
+        => new(IdeSupportTagTypes.StepBlock, GherkinRange.Empty, step);
 
-    private static DeveroomTag DocTag(DeveroomGherkinDocument doc, IGherkinTextSnapshot snapshot)
-        => new(DeveroomTagTypes.Document, GherkinRange.Empty, doc);
+    private static IdeSupportTag DocTag(IdeSupportGherkinDocument doc, IGherkinTextSnapshot snapshot)
+        => new(IdeSupportTagTypes.Document, GherkinRange.Empty, doc);
 
     // ── Inline snapshot (avoids a dependency on the Server layer) ─────────────
 

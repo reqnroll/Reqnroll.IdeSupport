@@ -40,7 +40,7 @@ public class TextDocumentSyncHandlerTests
     [Fact]
     public async Task Handle_DidOpen_stores_document_and_publishes_match_cache_changed_notification()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         _taggerService.ParseAsync(FeatureUri, 3).Returns(tags);
 
         var sut = CreateSut();
@@ -79,7 +79,7 @@ public class TextDocumentSyncHandlerTests
     {
         _bufferService.Update(FeatureUri, 1, "Feature: Old\n");
 
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         _taggerService.ParseAsync(FeatureUri, 2).Returns(tags);
 
         var sut = CreateSut();
@@ -114,7 +114,7 @@ public class TextDocumentSyncHandlerTests
     [Fact]
     public async Task Handle_DidChange_with_empty_changes_uses_empty_string_and_publishes()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         _taggerService.ParseAsync(FeatureUri, 4).Returns(tags);
 
         var sut = CreateSut();

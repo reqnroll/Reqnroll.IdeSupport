@@ -1,6 +1,7 @@
 // Ported from Reqnroll.VisualStudio\SafeDispatcherTimer.cs
 // Only used by VsSimulatedItemAddWizardBase — kept in VsIntegration because
 // it has a hard WPF (DispatcherTimer / MessageBox) dependency.
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
@@ -14,10 +15,10 @@ public class SafeDispatcherTimer
 {
     private readonly Func<bool> _action;
     private readonly DispatcherTimer _dispatcherTimer;
-    private readonly IDeveroomLogger? _logger;
+    private readonly IIdeSupportLogger? _logger;
     private readonly IWizardTelemetryLogger? _telemetryService;
 
-    private SafeDispatcherTimer(int intervalSeconds, IDeveroomLogger? logger, IWizardTelemetryLogger? telemetryService,
+    private SafeDispatcherTimer(int intervalSeconds, IIdeSupportLogger? logger, IWizardTelemetryLogger? telemetryService,
         Action action)
     {
         _action = () => { action(); return false; };
@@ -30,7 +31,7 @@ public class SafeDispatcherTimer
             Dispatcher.CurrentDispatcher);
     }
 
-    private SafeDispatcherTimer(int intervalSeconds, IDeveroomLogger? logger, IWizardTelemetryLogger? telemetryService,
+    private SafeDispatcherTimer(int intervalSeconds, IIdeSupportLogger? logger, IWizardTelemetryLogger? telemetryService,
         Func<bool> action)
     {
         _action = action;
@@ -47,7 +48,7 @@ public class SafeDispatcherTimer
     /// Creates a timer that fires <paramref name="action"/> once after
     /// <paramref name="intervalSeconds"/> and then stops.
     /// </summary>
-    public static SafeDispatcherTimer CreateOneTime(int intervalSeconds, IDeveroomLogger? logger,
+    public static SafeDispatcherTimer CreateOneTime(int intervalSeconds, IIdeSupportLogger? logger,
         IWizardTelemetryLogger? telemetryService, Action action)
     {
         if (action == null) throw new ArgumentNullException(nameof(action));
@@ -58,7 +59,7 @@ public class SafeDispatcherTimer
     /// Creates a timer that fires <paramref name="action"/> every
     /// <paramref name="intervalSeconds"/> as long as it returns <c>true</c>.
     /// </summary>
-    public static SafeDispatcherTimer CreateContinuing(int intervalSeconds, IDeveroomLogger? logger,
+    public static SafeDispatcherTimer CreateContinuing(int intervalSeconds, IIdeSupportLogger? logger,
         IWizardTelemetryLogger? telemetryService, Func<bool> action)
     {
         if (action == null) throw new ArgumentNullException(nameof(action));
@@ -79,7 +80,8 @@ public class SafeDispatcherTimer
         }
         catch (Exception ex)
         {
-            _logger?.LogException(_telemetryService, ex);
+            _telemetryService?.MonitorError(ex);
+            _logger?.LogException(ex);
             if (_logger == null)
                 MessageBox.Show("Unhandled exception: " + ex, "Reqnroll error",
                     MessageBoxButton.OK, MessageBoxImage.Error);

@@ -1,12 +1,12 @@
 ﻿
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Gherkin.Parsing;
 
-public class DeveroomGherkinParserTests
+public class IdeSupportGherkinParserTests
 {
     [Fact]
     public void Should_provide_parse_result_when_unexpected_end_of_file()
     {
-        var sut = new DeveroomGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
+        var sut = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
             Substitute.For<ITelemetryService>());
 
         var result = sut.ParseAndCollectErrors(@"
@@ -21,7 +21,7 @@ Feature: Addition
     [Fact]
     public void Should_tolerate_backslash_at_end_of_line_in_DataTable()
     {
-        var sut = new DeveroomGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
+        var sut = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
             Substitute.For<ITelemetryService>());
 
         var result = sut.ParseAndCollectErrors(@"
@@ -39,7 +39,7 @@ Scenario: Add two numbers
     [Fact]
     public void Should_tolerate_unfinished_DataTable()
     {
-        var sut = new DeveroomGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
+        var sut = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
             Substitute.For<ITelemetryService>());
 
         var result = sut.ParseAndCollectErrors(@"
@@ -57,7 +57,7 @@ Scenario: Add two numbers
     [Fact]
     public void Should_provide_parse_result_when_file_ends_with_open_docstring()
     {
-        var sut = new DeveroomGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
+        var sut = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
             Substitute.For<ITelemetryService>());
 
         var result = sut.ParseAndCollectErrors(@"

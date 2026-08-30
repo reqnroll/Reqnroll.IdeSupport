@@ -20,7 +20,7 @@ public class OutProcReqnrollConnectorTests
 
         public FakeOutProcReqnrollConnector(string connectorPath)
             : base(
-                new DeveroomConfiguration(),
+                new IdeSupportConfiguration(),
                 Substitute.For<IIdeSupportLogger>(),
                 TargetFrameworkMoniker.Create(".NETCoreApp,Version=v8.0"),
                 AppContext.BaseDirectory,

@@ -92,12 +92,12 @@ public static class ServiceCollectionExtensions
             // dropped LSP.Core exceptions (e.g. Gherkin parse errors) — issue #255.
             .AddSingleton<ITelemetryService>(sp => new LspErrorTelemetryService(
                 sp.GetRequiredService<ILspTelemetryService>()))
-            // IErrorTelemetryService is the actual LSP.Core-facing contract (DeveroomGherkinParser,
-            // DeveroomTagParser, CompletionContextResolver depend on this narrow interface, not the
+            // IErrorTelemetryService is the actual LSP.Core-facing contract (IdeSupportGherkinParser,
+            // IdeSupportTagParser, CompletionContextResolver depend on this narrow interface, not the
             // full ITelemetryService above) — same singleton, resolved via interface inheritance
             // (issue #255/#259's ISP split).
             .AddSingleton<IErrorTelemetryService>(sp => sp.GetRequiredService<ITelemetryService>())
-            .AddSingleton<IDeveroomConfigurationProvider, ProjectSystemDeveroomConfigurationProvider>()
+            .AddSingleton<IIdeSupportConfigurationProvider, ProjectSystemIdeSupportConfigurationProvider>()
             .AddSingleton<IEditorConfigOptionsProvider>(sp =>
                 new FileSystemEditorConfigOptionsProvider(sp.GetRequiredService<IIdeScope>().FileSystem))
             // Performance Verification, Layer 4: field instrumentation. The recorder writes
@@ -135,7 +135,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
             // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).
             .AddSingleton<IScenarioTestTargetResolver, ScenarioTestTargetResolver>()
-            .AddSingleton<IDeveroomTagParser, DeveroomTagParser>()
+            .AddSingleton<IIdeSupportTagParser, IdeSupportTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch
             // whose binding expressions actually changed (BindingRegistryChangedHandler).
             .AddSingleton<IFeatureRescanDebouncer, FeatureRescanDebouncer>()

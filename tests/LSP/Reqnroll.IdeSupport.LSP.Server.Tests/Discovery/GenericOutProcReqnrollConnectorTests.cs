@@ -17,7 +17,7 @@ public class GenericOutProcReqnrollConnectorTests
     {
         public TestableGenericConnector(string tfm, string extensionFolder)
             : base(
-                new DeveroomConfiguration(),
+                new IdeSupportConfiguration(),
                 Substitute.For<IIdeSupportLogger>(),
                 TargetFrameworkMoniker.Create(tfm),
                 extensionFolder,

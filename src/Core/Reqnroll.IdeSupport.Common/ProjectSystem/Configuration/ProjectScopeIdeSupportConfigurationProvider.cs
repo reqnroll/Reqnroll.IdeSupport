@@ -13,8 +13,8 @@ using Newtonsoft.Json.Linq;
 
 namespace Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
-/// <summary>ProjectScopeDeveroomConfigurationProvider</summary>
-public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationProvider, IDisposable
+/// <summary>ProjectScopeIdeSupportConfigurationProvider</summary>
+public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurationProvider, IDisposable
 {
     /// <summary>File name of the modern Reqnroll JSON configuration file.</summary>
     public const string ReqnrollJsonConfigFileName = "reqnroll.json";
@@ -25,13 +25,13 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
     /// <summary>File name of the SpecSync JSON configuration file.</summary>
     public const string SpecSyncJsonConfigFileName = "specsync.json";
     /// <summary>File name of the legacy Deveroom JSON configuration file.</summary>
-    public const string DeveroomConfigFileName = "deveroom.json";
+    public const string IdeSupportConfigFileName = "deveroom.json";
 
     private readonly IProjectScope _projectScope;
     private ConfigCache _configCache;
 
-    /// <summary>Initializes a new instance of the <see cref="ProjectScopeDeveroomConfigurationProvider"/> class.</summary>
-    public ProjectScopeDeveroomConfigurationProvider(IProjectScope projectScope)
+    /// <summary>Initializes a new instance of the <see cref="ProjectScopeIdeSupportConfigurationProvider"/> class.</summary>
+    public ProjectScopeIdeSupportConfigurationProvider(IProjectScope projectScope)
     {
         _projectScope = projectScope ?? throw new ArgumentNullException(nameof(projectScope));
         InitializeConfiguration();
@@ -45,14 +45,14 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
 
     //public event EventHandler<EventArgs> WeakConfigurationChanged
     //{
-    //    add => WeakEventManager<ProjectScopeDeveroomConfigurationProvider, EventArgs>.AddHandler(this,
+    //    add => WeakEventManager<ProjectScopeIdeSupportConfigurationProvider, EventArgs>.AddHandler(this,
     //        nameof(ConfigurationChanged), value);
-    //    remove => WeakEventManager<ProjectScopeDeveroomConfigurationProvider, EventArgs>.RemoveHandler(this,
+    //    remove => WeakEventManager<ProjectScopeIdeSupportConfigurationProvider, EventArgs>.RemoveHandler(this,
     //        nameof(ConfigurationChanged), value);
     //}
 
     /// <summary>Returns the currently cached, resolved configuration for the project.</summary>
-    public DeveroomConfiguration GetConfiguration() => _configCache.Configuration;
+    public IdeSupportConfiguration GetConfiguration() => _configCache.Configuration;
 
     /// <summary>No-op: reserved for unsubscribing project-build event handlers if that wiring is re-enabled.</summary>
     public void Dispose()
@@ -98,7 +98,7 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
         }
     }
 
-    private DeveroomConfiguration GetDefaultConfiguration() => new();
+    private IdeSupportConfiguration GetDefaultConfiguration() => new();
 
     private IEnumerable<ConfigSource> GetConfigSources()
     {
@@ -126,7 +126,7 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
         if (specSyncConfigSource != null)
             yield return specSyncConfigSource;
 
-        var deveroomConfigSource = GetProjectConfigFilePath(DeveroomConfigFileName);
+        var deveroomConfigSource = GetProjectConfigFilePath(IdeSupportConfigFileName);
         if (deveroomConfigSource != null)
             yield return deveroomConfigSource;
     }
@@ -189,8 +189,8 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
                 if (SpecSyncJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
                     LoadFromSpecSyncJsonConfig(configSource.FilePath, configuration);
 
-                if (DeveroomConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromDeveroomConfig(configSource.FilePath, configuration);
+                if (IdeSupportConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
+                    LoadFromIdeSupportConfig(configSource.FilePath, configuration);
 
                 configuration.CheckConfiguration();
 
@@ -213,23 +213,23 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
         {
             Logger.LogWarning($"Invalid Reqnroll Visual Studio configuration: {ex.Message}");
             Logger.LogVerboseException(TelemetryService, ex, "Configuration error, using default config");
-            configuration = new DeveroomConfiguration();
+            configuration = new IdeSupportConfiguration();
         }
 
         return new ConfigCache(configuration, loadedSources.ToArray());
     }
 
-    private void LoadFromDeveroomConfig(string configSourceFilePath, DeveroomConfiguration configuration)
+    private void LoadFromIdeSupportConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
     {
         Logger.LogVerbose($"Loading Deveroom config from '{configSourceFilePath}'");
-        var loader = DeveroomConfigurationLoader.CreateDeveroomJsonConfigurationLoader(FileSystem);
+        var loader = IdeSupportConfigurationLoader.CreateIdeSupportJsonConfigurationLoader(FileSystem);
         loader.Update(configuration, configSourceFilePath);
     }
 
     private string XPathEvaluateAttribute(XDocument doc, string xpath) => (doc.XPathEvaluate(xpath) as IEnumerable)
         ?.OfType<XAttribute>().FirstOrDefault()?.Value;
 
-    private void LoadFromSpecFlowXmlConfig(string configSourceFilePath, DeveroomConfiguration configuration)
+    private void LoadFromSpecFlowXmlConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
     {
         var fileContent = FileSystem.File.ReadAllText(configSourceFilePath);
         var configDoc = XDocument.Parse(fileContent);
@@ -241,25 +241,25 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
             configuration.ConfiguredBindingCulture = bindingCulture;
     }
 
-    private void LoadFromReqnrollJsonConfig(string configSourceFilePath, DeveroomConfiguration configuration)
+    private void LoadFromReqnrollJsonConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
     {
         Logger.LogVerbose($"Loading configuration from '{configSourceFilePath}'");
-        var configLoader = DeveroomConfigurationLoader.CreateReqnrollJsonConfigurationLoader(FileSystem);
+        var configLoader = IdeSupportConfigurationLoader.CreateReqnrollJsonConfigurationLoader(FileSystem);
         configLoader.Update(configuration, configSourceFilePath);
     }
 
-    private void LoadFromSpecFlowJsonConfig(string configSourceFilePath, DeveroomConfiguration configuration)
+    private void LoadFromSpecFlowJsonConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
     {
         LoadFromReqnrollJsonConfig(configSourceFilePath, configuration);
     }
 
-    private void LoadFromSpecSyncJsonConfig(string configSourceFilePath, DeveroomConfiguration configuration)
+    private void LoadFromSpecSyncJsonConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
     {
         var fileContent = FileSystem.File.ReadAllText(configSourceFilePath);
         UpdateFromSpecSyncJsonConfig(configuration, fileContent);
     }
 
-    internal static void UpdateFromSpecSyncJsonConfig(DeveroomConfiguration configuration, string fileContent)
+    internal static void UpdateFromSpecSyncJsonConfig(IdeSupportConfiguration configuration, string fileContent)
     {
         var configDoc = JObject.Parse(fileContent);
 
@@ -297,5 +297,5 @@ public class ProjectScopeDeveroomConfigurationProvider : IDeveroomConfigurationP
 
     /// <summary>Returns a string identifying this provider and the config sources it loaded from.</summary>
     public override string ToString() =>
-        $"{nameof(ProjectScopeDeveroomConfigurationProvider)}({string.Join(",", _configCache.ConfigSources.Select(cs => cs.ToString()))})";
+        $"{nameof(ProjectScopeIdeSupportConfigurationProvider)}({string.Join(",", _configCache.ConfigSources.Select(cs => cs.ToString()))})";
 }

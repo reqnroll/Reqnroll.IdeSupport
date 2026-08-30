@@ -7,16 +7,16 @@ namespace ReqnrollConnector.SourceDiscovery;
 public class SymbolReaderCache
 {
     private readonly ILogger _log;
-    private readonly Dictionary<string, DeveroomSymbolReader?> _symbolReaders = new(2);
+    private readonly Dictionary<string, IdeSupportSymbolReader?> _symbolReaders = new(2);
 
     public SymbolReaderCache(ILogger log)
     {
         _log = log;
     }
 
-    public DeveroomSymbolReader? this[string assemblyLocation] => GetOrCreateSymbolReader(assemblyLocation);
+    public IdeSupportSymbolReader? this[string assemblyLocation] => GetOrCreateSymbolReader(assemblyLocation);
 
-    private DeveroomSymbolReader? GetOrCreateSymbolReader(string assemblyLocation)
+    private IdeSupportSymbolReader? GetOrCreateSymbolReader(string assemblyLocation)
     {
         if (_symbolReaders.TryGetValue(assemblyLocation, out var symbolReader))
             return symbolReader;
@@ -39,7 +39,7 @@ public class SymbolReaderCache
         return null;
     }
 
-    protected DeveroomSymbolReader? CreateSymbolReader(string assemblyFilePath)
+    protected IdeSupportSymbolReader? CreateSymbolReader(string assemblyFilePath)
     {
         var factories = SymbolReaderFactories(assemblyFilePath);
         var readerOptions = factories.Select(TryCreateReader).ToList();
@@ -55,15 +55,15 @@ public class SymbolReaderCache
         return null;
     }
 
-    private IEnumerable<Func<DeveroomSymbolReader>> SymbolReaderFactories(string path)
+    private IEnumerable<Func<IdeSupportSymbolReader>> SymbolReaderFactories(string path)
     {
         return new[]
         {
-            () => DnLibDeveroomSymbolReader.Create(_log, path)
+            () => DnLibIdeSupportSymbolReader.Create(_log, path)
         };
     }
 
-    private DeveroomSymbolReader? TryCreateReader(Func<DeveroomSymbolReader> factory)
+    private IdeSupportSymbolReader? TryCreateReader(Func<IdeSupportSymbolReader> factory)
     {
         try
         {

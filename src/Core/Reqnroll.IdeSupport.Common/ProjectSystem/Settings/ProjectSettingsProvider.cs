@@ -39,7 +39,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         _retryDelay = retryDelay;
         InitializeProjectSettings();
 
-        //_projectScope.GetDeveroomConfigurationProvider().WeakConfigurationChanged += OnConfigurationChanged;
+        //_projectScope.GetIdeSupportConfigurationProvider().WeakConfigurationChanged += OnConfigurationChanged;
         //_projectScope.IdeScope.WeakProjectsBuilt += ProjectSystemOnProjectsBuilt;
     }
 
@@ -50,7 +50,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     public void Dispose()
     {
         StopRetryInitializeTimer();
-        //_projectScope.GetDeveroomConfigurationProvider().WeakConfigurationChanged -= OnConfigurationChanged;
+        //_projectScope.GetIdeSupportConfigurationProvider().WeakConfigurationChanged -= OnConfigurationChanged;
         //_projectScope.IdeScope.WeakProjectsBuilt -= ProjectSystemOnProjectsBuilt;
     }
 
@@ -181,19 +181,19 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         return ProjectPlatformTarget.Unknown;
     }
 
-    private DeveroomProjectKind GetKind(bool isInvalid, bool isReqnrollProject, bool hasFeatureFiles)
+    private IdeSupportProjectKind GetKind(bool isInvalid, bool isReqnrollProject, bool hasFeatureFiles)
     {
         if (isInvalid)
-            return DeveroomProjectKind.Uninitialized;
+            return IdeSupportProjectKind.Uninitialized;
 
         if (!isReqnrollProject)
             return hasFeatureFiles
-                ? DeveroomProjectKind.FeatureFileContainerProject
-                : DeveroomProjectKind.OtherProject;
+                ? IdeSupportProjectKind.FeatureFileContainerProject
+                : IdeSupportProjectKind.OtherProject;
 
         return hasFeatureFiles
-            ? DeveroomProjectKind.ReqnrollTestProject
-            : DeveroomProjectKind.ReqnrollLibProject;
+            ? IdeSupportProjectKind.ReqnrollTestProject
+            : IdeSupportProjectKind.ReqnrollLibProject;
     }
 
     private static ProjectProgrammingLanguage GetProgrammingLanguage(string projectFullName)

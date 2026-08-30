@@ -85,11 +85,11 @@ public class SemanticTokenServiceTests
     public async Task GetSemanticTokensAsync_returns_non_null_when_tags_available()
     {
         // Build a buffer with at least one tag that maps to a token type.
-        // We need a real DeveroomTag with a valid GherkinRange; use a minimal
+        // We need a real IdeSupportTag with a valid GherkinRange; use a minimal
         // stub snapshot so the range/position calculation works.
         var snapshot = new TestGherkinSnapshot("Feature: Test\n  Scenario: S\n    Given something\n");
         var range = new GherkinRange(snapshot, 0, snapshot.Length);
-        var tag = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, range);
+        var tag = new IdeSupportTag(IdeSupportTagTypes.DefinitionLineKeyword, range);
 
         var buf = new DocumentBuffer(FeatureUri, 2, snapshot.GetText());
         buf = buf with { Tags = new[] { tag } };
@@ -106,7 +106,7 @@ public class SemanticTokenServiceTests
     {
         var snapshot = new TestGherkinSnapshot("Feature: Test\n");
         var range = new GherkinRange(snapshot, 0, 7);
-        var tag = new DeveroomTag(DeveroomTagTypes.StepKeyword, range);
+        var tag = new IdeSupportTag(IdeSupportTagTypes.StepKeyword, range);
 
         var buf = new DocumentBuffer(FeatureUri, 3, snapshot.GetText());
         buf = buf with { Tags = new[] { tag } };
@@ -126,10 +126,10 @@ public class SemanticTokenServiceTests
     [Fact]
     public async Task GetSemanticTokensAsync_emits_a_DataTable_token_for_every_row_of_a_multiline_table()
     {
-        // Mirrors DeveroomTagParser's real output shape for a multi-row table: one DataTable
+        // Mirrors IdeSupportTagParser's real output shape for a multi-row table: one DataTable
         // block tag spanning the whole table (header row through the last row), with
         // DataTableHeader cell tags nested only on the header row -- data rows have no
-        // per-cell tags of their own (see DeveroomTagParser.TagRowCells, only ever called for
+        // per-cell tags of their own (see IdeSupportTagParser.TagRowCells, only ever called for
         // the header row), so each data row must surface as its own whole-line DataTable
         // token via Encode's multi-line "middle/last line" handling, not be silently dropped.
         var text =
@@ -143,13 +143,13 @@ public class SemanticTokenServiceTests
 
         int tableStart = text.IndexOf("| col1", StringComparison.Ordinal);
         int tableEnd = text.IndexOf("| d    |", StringComparison.Ordinal) + "| d    |".Length;
-        var tableTag = new DeveroomTag(DeveroomTagTypes.DataTable, new GherkinRange(snapshot, tableStart, tableEnd - tableStart));
+        var tableTag = new IdeSupportTag(IdeSupportTagTypes.DataTable, new GherkinRange(snapshot, tableStart, tableEnd - tableStart));
 
         int header1Start = text.IndexOf("col1", StringComparison.Ordinal);
-        var header1 = new DeveroomTag(DeveroomTagTypes.DataTableHeader,
+        var header1 = new IdeSupportTag(IdeSupportTagTypes.DataTableHeader,
             new GherkinRange(snapshot, header1Start, "col1".Length));
         int header2Start = text.IndexOf("col2", StringComparison.Ordinal);
-        var header2 = new DeveroomTag(DeveroomTagTypes.DataTableHeader,
+        var header2 = new IdeSupportTag(IdeSupportTagTypes.DataTableHeader,
             new GherkinRange(snapshot, header2Start, "col2".Length));
 
         var buf = new DocumentBuffer(FeatureUri, 5, text) with { Tags = new[] { tableTag, header1, header2 } };
@@ -179,8 +179,8 @@ public class SemanticTokenServiceTests
         var firstOffset = text.IndexOf("Given x", StringComparison.Ordinal);
         var lastOffset  = text.LastIndexOf("Given x", StringComparison.Ordinal);
 
-        var tag1 = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, firstOffset, 7));
-        var tag2 = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, lastOffset, 7));
+        var tag1 = new IdeSupportTag(IdeSupportTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, firstOffset, 7));
+        var tag2 = new IdeSupportTag(IdeSupportTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, lastOffset, 7));
 
         var buf = new DocumentBuffer(FeatureUri, 1, snapshot.GetText()) with { Tags = new[] { tag1, tag2 } };
         SetupBuffer(buf);
@@ -205,7 +205,7 @@ public class SemanticTokenServiceTests
         var text = "Feature: F\n" + string.Concat(Enumerable.Repeat("  Scenario: S\n    Given x\n", 10));
         var snapshot = new TestGherkinSnapshot(text);
         var offset = text.IndexOf("Given x", StringComparison.Ordinal);
-        var tag = new DeveroomTag(DeveroomTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, offset, 7));
+        var tag = new IdeSupportTag(IdeSupportTagTypes.DefinitionLineKeyword, new GherkinRange(snapshot, offset, 7));
 
         var buf = new DocumentBuffer(FeatureUri, 1, snapshot.GetText()) with { Tags = new[] { tag } };
         SetupBuffer(buf);

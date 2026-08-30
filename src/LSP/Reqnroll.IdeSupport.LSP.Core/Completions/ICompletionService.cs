@@ -27,7 +27,7 @@ public interface ICompletionService
     /// <see cref="ScenarioBlock"/> type, ranked by <paramref name="matcher"/>.
     /// </summary>
     CompletionResult GetStepCompletions(
-        DeveroomGherkinStep                    step,
+        IdeSupportGherkinStep                    step,
         string                                 typedAfterKeyword,
         ProjectBindingRegistry                 registry,
         Func<ProjectStepDefinitionBinding, int> usageCounter,

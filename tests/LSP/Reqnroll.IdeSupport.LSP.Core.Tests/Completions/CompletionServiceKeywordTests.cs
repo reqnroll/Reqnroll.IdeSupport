@@ -34,7 +34,7 @@ public class CompletionServiceKeywordTests
         var result = _sut.GetKeywordCompletions(new[] { TokenType.StepLine }, EnDialect());
 
         // "* " is the bullet keyword; should NOT appear for Given/When/Then/But
-        // (it is kept for And because legacy DeveroomCompletionSource keeps it there)
+        // (it is kept for And because legacy IdeSupportCompletionSource keeps it there)
         var nonAndLabels = result.Entries
             .Where(e => e.Detail != "Used to combine steps in a readable format" ||
                         // include But entries in the check

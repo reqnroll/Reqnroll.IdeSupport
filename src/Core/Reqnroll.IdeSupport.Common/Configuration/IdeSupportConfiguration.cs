@@ -6,8 +6,8 @@ namespace Reqnroll.IdeSupport.Common.Configuration;
 
 // TODO: mention of SpecFlow has been commented out in preparation for full removal.
 
-/// <summary>DeveroomConfiguration</summary>
-public class DeveroomConfiguration
+/// <summary>IdeSupportConfiguration</summary>
+public class IdeSupportConfiguration
 {
     /// <summary>Gets or sets the configuration change time.</summary>
     public DateTimeOffset ConfigurationChangeTime { get; set; } = DateTimeOffset.MinValue;
@@ -64,7 +64,7 @@ public class DeveroomConfiguration
     #region Equality
 
     /// <summary>Determines whether this instance has the same setting values as <paramref name="other"/>.</summary>
-    protected bool Equals(DeveroomConfiguration other) =>
+    protected bool Equals(IdeSupportConfiguration other) =>
         string.Equals(ConfigurationBaseFolder, other.ConfigurationBaseFolder) && 
         Equals(Reqnroll, other.Reqnroll) &&
         //Equals(SpecFlow, other.SpecFlow) &&
@@ -75,13 +75,13 @@ public class DeveroomConfiguration
         string.Equals(DefaultFeatureLanguage, other.DefaultFeatureLanguage) &&
         string.Equals(ConfiguredBindingCulture, other.ConfiguredBindingCulture);
 
-    /// <summary>Determines whether <paramref name="obj"/> is a <see cref="DeveroomConfiguration"/> with the same setting values.</summary>
+    /// <summary>Determines whether <paramref name="obj"/> is a <see cref="IdeSupportConfiguration"/> with the same setting values.</summary>
     public override bool Equals(object obj)
     {
         if (ReferenceEquals(null, obj)) return false;
         if (ReferenceEquals(this, obj)) return true;
         if (obj.GetType() != GetType()) return false;
-        return Equals((DeveroomConfiguration) obj);
+        return Equals((IdeSupportConfiguration) obj);
     }
 
     /// <summary>Returns a hash code derived from the configuration's setting values.</summary>

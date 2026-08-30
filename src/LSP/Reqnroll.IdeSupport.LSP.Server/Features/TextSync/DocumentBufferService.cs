@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 
 /// <summary>The in-memory snapshot of an open document's URI, version, text, and any cached Gherkin tags.</summary>
-public record DocumentBuffer(DocumentUri Uri, int? Version, string Text, IReadOnlyCollection<DeveroomTag>? Tags = null);
+public record DocumentBuffer(DocumentUri Uri, int? Version, string Text, IReadOnlyCollection<IdeSupportTag>? Tags = null);
 
 /// <summary>Tracks the live text and tag state of documents opened in the editor.</summary>
 public interface IDocumentBufferService
@@ -12,7 +12,7 @@ public interface IDocumentBufferService
     /// <summary>Replaces the buffer for the given document with new text and version, discarding any cached tags.</summary>
     void Update(DocumentUri uri, int? version, string text);
     /// <summary>Updates the cached Gherkin tags for a document, creating an empty buffer entry if none exists yet.</summary>
-    void UpdateTags(DocumentUri uri, IReadOnlyCollection<DeveroomTag> tags);
+    void UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags);
     /// <summary>Removes the buffer for the given document, typically when it is closed.</summary>
     void Remove(DocumentUri uri);
     /// <summary>Attempts to retrieve the current buffer for the given document.</summary>
@@ -32,7 +32,7 @@ public class DocumentBufferService : IDocumentBufferService
         => _buffers[uri.ToString()] = new DocumentBuffer(uri, version, text);
 
     /// <inheritdoc/>
-    public void UpdateTags(DocumentUri uri, IReadOnlyCollection<DeveroomTag> tags)
+    public void UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
         => _buffers.AddOrUpdate(
             uri.ToString(),
             _ => new DocumentBuffer(uri, null, string.Empty, tags),

@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// "Go to Hooks"/#269's hook-match CodeLens already exercise -- no separate matching code needed.
 /// </summary>
 /// <remarks>
-/// Deliberately excludes <c>Background</c> blocks (which share <see cref="DeveroomTagTypes.ScenarioDefinitionBlock"/>
+/// Deliberately excludes <c>Background</c> blocks (which share <see cref="IdeSupportTagTypes.ScenarioDefinitionBlock"/>
 /// with real scenarios but aren't independently executed/countable) and counts a Scenario Outline
 /// once regardless of its Examples row count (per #373's decided semantics -- a static count of
 /// scenario *definitions*, not expanded runtime executions).
@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 public sealed class FeatureScenarioInfo
 {
     /// <summary>Initializes a new instance of the <see cref="FeatureScenarioInfo"/> class.</summary>
-    public FeatureScenarioInfo(string featureDocumentId, DeveroomTag scenarioTag)
+    public FeatureScenarioInfo(string featureDocumentId, IdeSupportTag scenarioTag)
     {
         FeatureDocumentId = featureDocumentId ?? throw new ArgumentNullException(nameof(featureDocumentId));
         ScenarioTag       = scenarioTag ?? throw new ArgumentNullException(nameof(scenarioTag));
@@ -35,7 +35,7 @@ public sealed class FeatureScenarioInfo
     /// inherited Feature-level tags, so passing it directly to <c>ProjectHookBinding.Match</c>
     /// correctly evaluates hooks scoped to either level with no special-casing.
     /// </summary>
-    public DeveroomTag ScenarioTag { get; }
+    public IdeSupportTag ScenarioTag { get; }
 
     /// <summary>The scenario/scenario outline's title, or <see langword="null"/> if untitled.</summary>
     public string? Name => (ScenarioTag.Data as Gherkin.Ast.IHasDescription)?.Name is { Length: > 0 } name ? name : null;

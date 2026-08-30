@@ -1,8 +1,8 @@
 namespace Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
-internal class DeveroomTagPositionComparer : IComparer<DeveroomTag>
+internal class IdeSupportTagPositionComparer : IComparer<IdeSupportTag>
 {
-    public int Compare(DeveroomTag t1, DeveroomTag t2)
+    public int Compare(IdeSupportTag t1, IdeSupportTag t2)
     {
         if (ReferenceEquals(t1, t2)) return 0;
         if (ReferenceEquals(null, t2)) return 1;

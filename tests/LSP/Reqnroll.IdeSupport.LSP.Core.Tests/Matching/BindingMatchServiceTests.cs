@@ -12,11 +12,11 @@ public class BindingMatchServiceTests
 
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ITelemetryService _telemetryService = Substitute.For<ITelemetryService>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
     public BindingMatchServiceTests()
     {
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
@@ -31,9 +31,9 @@ public class BindingMatchServiceTests
     private static ProjectBindingRegistry RegistryWith(params ProjectStepDefinitionBinding[] bindings) =>
         new(bindings, Array.Empty<ProjectHookBinding>(), 0);
 
-    private IReadOnlyCollection<DeveroomTag> ParseTags(string text, ProjectBindingRegistry registry)
+    private IReadOnlyCollection<IdeSupportTag> ParseTags(string text, ProjectBindingRegistry registry)
     {
-        var parser = new DeveroomTagParser(_logger, _telemetryService, _configProvider);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
         return parser.Parse(new StubGherkinTextSnapshot(text), registry);
     }
 

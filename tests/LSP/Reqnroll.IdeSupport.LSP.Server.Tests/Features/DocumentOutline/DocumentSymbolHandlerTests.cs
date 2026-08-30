@@ -28,7 +28,7 @@ public class DocumentSymbolHandlerTests
     private static DocumentSymbolParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
 
-    private void SetupBuffer(DocumentUri uri, string text, IReadOnlyCollection<DeveroomTag>? tags)
+    private void SetupBuffer(DocumentUri uri, string text, IReadOnlyCollection<IdeSupportTag>? tags)
     {
         var buf = new DocumentBuffer(uri, 1, text, tags);
         DocumentBuffer? outBuf;
@@ -76,8 +76,8 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Returns_null_when_service_returns_no_symbols_Async()
     {
-        SetupBuffer(FeatureUri, "Feature: X\n", tags: Array.Empty<DeveroomTag>());
-        _symbolService.BuildSymbols(Arg.Any<IReadOnlyCollection<DeveroomTag>>())
+        SetupBuffer(FeatureUri, "Feature: X\n", tags: Array.Empty<IdeSupportTag>());
+        _symbolService.BuildSymbols(Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
                       .Returns(Array.Empty<GherkinDocumentSymbol>());
 
         var result = await CreateSut().Handle(RequestFor(FeatureUri), CancellationToken.None);
@@ -90,7 +90,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Returns_container_when_symbols_exist_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("X", GherkinSymbolKind.Feature) });
@@ -103,7 +103,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Top_level_symbol_has_correct_name_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("MyFeature", GherkinSymbolKind.Feature) });
@@ -118,7 +118,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Feature_symbol_maps_to_Module_kind_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("X", GherkinSymbolKind.Feature) });
@@ -131,7 +131,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Scenario_symbol_maps_to_Method_kind_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("X", GherkinSymbolKind.Scenario) });
@@ -144,7 +144,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Step_symbol_maps_to_Field_kind_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("Given a step", GherkinSymbolKind.Step) });
@@ -157,9 +157,9 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Calls_symbol_service_with_buffer_tags_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
-        _symbolService.BuildSymbols(Arg.Any<IReadOnlyCollection<DeveroomTag>>())
+        _symbolService.BuildSymbols(Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
                       .Returns(Array.Empty<GherkinDocumentSymbol>());
 
         await CreateSut().Handle(RequestFor(FeatureUri), CancellationToken.None);
@@ -177,7 +177,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Hierarchical_support_false_returns_flat_SymbolInformation_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("MyFeature", GherkinSymbolKind.Feature) });
@@ -200,7 +200,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Hierarchical_support_false_flattens_children_with_parent_as_containerName_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         var scenario = MakeSymbol("Add two numbers", GherkinSymbolKind.Scenario,
             new[] { MakeSymbol("Given a step", GherkinSymbolKind.Step) });
@@ -227,7 +227,7 @@ public class DocumentSymbolHandlerTests
     [Fact]
     public async Task Hierarchical_support_true_returns_nested_DocumentSymbol_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, "Feature: X\n", tags);
         _symbolService.BuildSymbols(tags)
                       .Returns(new[] { MakeSymbol("MyFeature", GherkinSymbolKind.Feature) });

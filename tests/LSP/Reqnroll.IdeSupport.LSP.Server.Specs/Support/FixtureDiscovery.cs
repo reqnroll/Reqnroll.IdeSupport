@@ -33,7 +33,7 @@ public static class FixtureDiscovery
 
     public static ProjectBindingRegistry Discover()
     {
-        var logger = new SilentDeveroomLogger();
+        var logger = new SilentIdeSupportLogger();
         var scope = BuildScope(logger);
         var factory = new OutProcReqnrollConnectorFactory(logger);
         var service = new ConnectorDiscoveryService(logger, factory, new FileSystemForIDE());
@@ -62,7 +62,7 @@ public static class FixtureDiscovery
         return new LspReqnrollProject(info, ideScope);
     }
 
-    private sealed class SilentDeveroomLogger : IIdeSupportLogger
+    private sealed class SilentIdeSupportLogger : IIdeSupportLogger
     {
         public TraceLevel Level => TraceLevel.Off;
         public void Log(LogMessage message) { }

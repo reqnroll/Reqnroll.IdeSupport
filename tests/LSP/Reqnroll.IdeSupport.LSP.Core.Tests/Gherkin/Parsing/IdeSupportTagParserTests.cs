@@ -2,21 +2,21 @@
 
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Gherkin.Parsing;
 
-public class DeveroomTagParserTests
+public class IdeSupportTagParserTests
 {
     private readonly IIdeSupportLogger _logger;
     private readonly ITelemetryService _telemetryService;
-    private readonly IDeveroomConfigurationProvider _configProvider;
+    private readonly IIdeSupportConfigurationProvider _configProvider;
 
-    public DeveroomTagParserTests()
+    public IdeSupportTagParserTests()
     {
         _logger = Substitute.For<IIdeSupportLogger>();
         _telemetryService = Substitute.For<ITelemetryService>();
-        _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
-    private DeveroomTagParser CreateSut() =>
+    private IdeSupportTagParser CreateSut() =>
         new(_logger, _telemetryService, _configProvider);
 
     private static IGherkinTextSnapshot Snap(string text) =>
@@ -33,17 +33,17 @@ public class DeveroomTagParserTests
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private IReadOnlyCollection<DeveroomTag> ParseTags(string text,
+    private IReadOnlyCollection<IdeSupportTag> ParseTags(string text,
         ProjectBindingRegistry? registry = null)
     {
         var sut = CreateSut();
         return sut.Parse(Snap(text), registry ?? ProjectBindingRegistry.Invalid);
     }
 
-    private static IEnumerable<DeveroomTag> OfType(IReadOnlyCollection<DeveroomTag> tags, string type) =>
+    private static IEnumerable<IdeSupportTag> OfType(IReadOnlyCollection<IdeSupportTag> tags, string type) =>
         tags.Where(t => t.Type == type);
 
-    private static DeveroomTag Single(IReadOnlyCollection<DeveroomTag> tags, string type) =>
+    private static IdeSupportTag Single(IReadOnlyCollection<IdeSupportTag> tags, string type) =>
         tags.Single(t => t.Type == type);
 
     // ScenarioOutlinePlaceholder tags come from two independent sources: TagRowCells tags every
@@ -51,8 +51,8 @@ public class DeveroomTagParserTests
     // tags each <placeholder> found within a step's own text (Data is a
     // MatchedScenarioOutlinePlaceholder). Tests about step-text placeholder detection need to
     // filter to the latter, not just the tag type, or they'll also match unrelated header cells.
-    private static IEnumerable<DeveroomTag> StepTextPlaceholderTags(IReadOnlyCollection<DeveroomTag> tags) =>
-        OfType(tags, DeveroomTagTypes.ScenarioOutlinePlaceholder)
+    private static IEnumerable<IdeSupportTag> StepTextPlaceholderTags(IReadOnlyCollection<IdeSupportTag> tags) =>
+        OfType(tags, IdeSupportTagTypes.ScenarioOutlinePlaceholder)
             .Where(t => t.Data is MatchedScenarioOutlinePlaceholder);
 
     // ── empty file ────────────────────────────────────────────────────────────
@@ -61,14 +61,14 @@ public class DeveroomTagParserTests
     public void Empty_file_produces_no_FeatureBlock_tag()
     {
         var tags = ParseTags(string.Empty);
-        tags.Any(t => t.Type == DeveroomTagTypes.FeatureBlock).Should().BeFalse();
+        tags.Any(t => t.Type == IdeSupportTagTypes.FeatureBlock).Should().BeFalse();
     }
 
     [Fact]
     public void Whitespace_only_file_produces_no_FeatureBlock_tag()
     {
         var tags = ParseTags("   \n  \n");
-        tags.Any(t => t.Type == DeveroomTagTypes.FeatureBlock).Should().BeFalse();
+        tags.Any(t => t.Type == IdeSupportTagTypes.FeatureBlock).Should().BeFalse();
     }
 
     // ── Feature block ─────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: My Feature\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.FeatureBlock).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.FeatureBlock).Should().BeTrue();
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: My Feature\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.DefinitionLineKeyword).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.DefinitionLineKeyword).Should().BeTrue();
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: My Feature\n  As a user\n  I want things\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.Description).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.Description).Should().BeTrue();
     }
 
     // ── Scenario ──────────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given a step\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.ScenarioDefinitionBlock).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.ScenarioDefinitionBlock).Should().BeTrue();
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given step1\n  When step2\n  Then step3\n";
         var tags = ParseTags(text);
-        OfType(tags, DeveroomTagTypes.StepBlock).Should().HaveCount(3);
+        OfType(tags, IdeSupportTagTypes.StepBlock).Should().HaveCount(3);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given a step\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.StepKeyword).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.StepKeyword).Should().BeTrue();
     }
 
     // ── Undefined / Defined steps ─────────────────────────────────────────────
@@ -133,7 +133,7 @@ public class DeveroomTagParserTests
             Array.Empty<ProjectStepDefinitionBinding>(), Array.Empty<ProjectHookBinding>(), 0);
         var text = "Feature: F\nScenario: S\n  Given an unmatched step\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.UndefinedStep).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.UndefinedStep).Should().BeTrue();
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class DeveroomTagParserTests
         var registry = RegistryWith(GivenBinding("a matched step"));
         var text = "Feature: F\nScenario: S\n  Given a matched step\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.DefinedStep).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.DefinedStep).Should().BeTrue();
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class DeveroomTagParserTests
         var registry = RegistryWith(GivenBinding("a matched step"));
         var text = "Feature: F\nScenario: S\n  Given a matched step\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.UndefinedStep).Should().BeFalse();
+        tags.Any(t => t.Type == IdeSupportTagTypes.UndefinedStep).Should().BeFalse();
     }
 
     // ── Ambiguous step ────────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ public class DeveroomTagParserTests
 
         var text = "Feature: F\nScenario: S\n  Given ambiguous step\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.AmbiguousStep).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.AmbiguousStep).Should().BeTrue();
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class DeveroomTagParserTests
 
         var text = "Feature: F\nScenario: S\n  Given ambiguous step\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.BindingError).Should().BeFalse();
+        tags.Any(t => t.Type == IdeSupportTagTypes.BindingError).Should().BeFalse();
     }
 
     // ── Step with parameter ───────────────────────────────────────────────────
@@ -201,7 +201,7 @@ public class DeveroomTagParserTests
 
         var text = "Feature: F\nScenario: S\n  Given I have 5 items\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.StepParameter).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.StepParameter).Should().BeTrue();
     }
 
     // ── DataTable argument ────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given a table step\n    | col1 | col2 |\n    | a    | b    |\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.DataTable).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.DataTable).Should().BeTrue();
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given a table step\n    | col1 | col2 |\n    | a    | b    |\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.DataTableHeader).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.DataTableHeader).Should().BeTrue();
     }
 
     // ── DocString argument ────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given a docstring step\n    \"\"\"\n    hello world\n    \"\"\"\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.DocString).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.DocString).Should().BeTrue();
     }
 
     // ── ScenarioOutline ───────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario Outline: SO\n  Given <param>\n  Examples:\n    | param |\n    | v1    |\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.ScenarioDefinitionBlock).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.ScenarioDefinitionBlock).Should().BeTrue();
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario Outline: SO\n  Given I have <count> items\n  Examples:\n    | count |\n    | 5     |\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.ScenarioOutlinePlaceholder).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.ScenarioOutlinePlaceholder).Should().BeTrue();
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario Outline: SO\n  Given <p>\n  Examples:\n    | p |\n    | x |\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.ExamplesBlock).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.ExamplesBlock).Should().BeTrue();
     }
 
     [Fact]
@@ -294,7 +294,7 @@ public class DeveroomTagParserTests
         var text = "Feature: F\nScenario Outline: SO\n  Given the count < 5 and total > 10 items\n" +
                     "  Examples:\n    | unused |\n    | x      |\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.StepParameter).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.StepParameter).Should().BeTrue();
     }
 
     // Compound cases: a real placeholder sharing a line with comparison-operator "<"/">" usage.
@@ -359,7 +359,7 @@ public class DeveroomTagParserTests
         var text = "Feature: F\nBackground:\n  Given a background step\nScenario: S\n  Given another step\n";
         var tags = ParseTags(text);
         // Background counts as a ScenarioDefinitionBlock
-        OfType(tags, DeveroomTagTypes.ScenarioDefinitionBlock).Should().NotBeEmpty();
+        OfType(tags, IdeSupportTagTypes.ScenarioDefinitionBlock).Should().NotBeEmpty();
     }
 
     // ── Gherkin Tags ──────────────────────────────────────────────────────────
@@ -369,7 +369,7 @@ public class DeveroomTagParserTests
     {
         var text = "@smoke\nFeature: F\n@fast\nScenario: S\n  Given a step\n";
         var tags = ParseTags(text);
-        OfType(tags, DeveroomTagTypes.Tag).Should().NotBeEmpty();
+        OfType(tags, IdeSupportTagTypes.Tag).Should().NotBeEmpty();
     }
 
     // ── Scenario hook (BeforeScenario) ────────────────────────────────────────
@@ -388,7 +388,7 @@ public class DeveroomTagParserTests
 
         var text = "Feature: F\nScenario: S\n  Given a step\n";
         var tags = ParseTags(text, registry);
-        tags.Any(t => t.Type == DeveroomTagTypes.ScenarioHookReference).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.ScenarioHookReference).Should().BeTrue();
     }
 
     // ── Parser error ──────────────────────────────────────────────────────────
@@ -398,7 +398,7 @@ public class DeveroomTagParserTests
     {
         var text = "not a feature file\nsome garbage\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.ParserError).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.ParserError).Should().BeTrue();
     }
 
     [Fact]
@@ -419,7 +419,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nRule: My Rule\nScenario: S\n  Given a step\n";
         var tags = ParseTags(text);
-        tags.Any(t => t.Type == DeveroomTagTypes.RuleBlock).Should().BeTrue();
+        tags.Any(t => t.Type == IdeSupportTagTypes.RuleBlock).Should().BeTrue();
     }
 
     // ── Multi-step scenario (Given/When/Then) ─────────────────────────────────
@@ -438,8 +438,8 @@ public class DeveroomTagParserTests
 
         var text = "Feature: F\nScenario: S\n  Given first step\n  When second step\n  Then third step\n";
         var tags = ParseTags(text, registry);
-        OfType(tags, DeveroomTagTypes.StepBlock).Should().HaveCount(3);
-        OfType(tags, DeveroomTagTypes.DefinedStep).Should().HaveCount(3);
+        OfType(tags, IdeSupportTagTypes.StepBlock).Should().HaveCount(3);
+        OfType(tags, IdeSupportTagTypes.DefinedStep).Should().HaveCount(3);
     }
 
     // ── Range properties ──────────────────────────────────────────────────────
@@ -460,7 +460,7 @@ public class DeveroomTagParserTests
         var snap = Snap(text);
         var sut = CreateSut();
         var tags = sut.Parse(snap, ProjectBindingRegistry.Invalid);
-        var featureBlock = tags.First(t => t.Type == DeveroomTagTypes.FeatureBlock);
+        var featureBlock = tags.First(t => t.Type == IdeSupportTagTypes.FeatureBlock);
         featureBlock.Range.Start.Should().Be(0);
         featureBlock.Range.End.Should().Be(snap.Length);
     }
@@ -472,7 +472,7 @@ public class DeveroomTagParserTests
     {
         var text = "Feature: F\nScenario: S\n  Given first step\n  And second step\n  But third step\n";
         var tags = ParseTags(text);
-        OfType(tags, DeveroomTagTypes.StepBlock).Should().HaveCount(3);
+        OfType(tags, IdeSupportTagTypes.StepBlock).Should().HaveCount(3);
     }
 
     // ── Unhandled exception guard ─────────────────────────────────────────────

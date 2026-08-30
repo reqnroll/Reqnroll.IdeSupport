@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 namespace Reqnroll.IdeSupport.LSP.Core.Folding;
 
 /// <summary>
-/// Walks the DeveroomTag tree to produce foldable region ranges (Code Folding).
+/// Walks the IdeSupportTag tree to produce foldable region ranges (Code Folding).
 /// Folding ranges are computed for:
 ///   - Feature blocks (body only, after the keyword line)
 ///   - Scenario / Scenario Outline / Background blocks
@@ -20,11 +20,11 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
 {
     /// <summary>Walks the parsed Deveroom tags to compute foldable regions for features, scenarios, rules, doc strings, data tables, and examples blocks.</summary>
     public IReadOnlyList<GherkinFoldingRange> BuildFoldingRanges(
-        IReadOnlyCollection<DeveroomTag> tags)
+        IReadOnlyCollection<IdeSupportTag> tags)
     {
         var result = new List<GherkinFoldingRange>();
 
-        var featureTag = tags.FirstOrDefault(t => t.Type == DeveroomTagTypes.FeatureBlock);
+        var featureTag = tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.FeatureBlock);
         if (featureTag is null)
             return result;
 
@@ -36,10 +36,10 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
         {
             switch (child.Type)
             {
-                case DeveroomTagTypes.ScenarioDefinitionBlock:
+                case IdeSupportTagTypes.ScenarioDefinitionBlock:
                     AddScenarioFold(child, result);
                     break;
-                case DeveroomTagTypes.RuleBlock:
+                case IdeSupportTagTypes.RuleBlock:
                     AddRuleFold(child, result);
                     break;
             }
@@ -50,7 +50,7 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
 
     // ── Feature body ───────────────────────────────────────────────────────
 
-    private static void AddFeatureBodyFold(DeveroomTag featureTag, List<GherkinFoldingRange> result)
+    private static void AddFeatureBodyFold(IdeSupportTag featureTag, List<GherkinFoldingRange> result)
     {
         var (_, featureEndLine) = GetLineRange(featureTag.Range);
         var featureStartLine = GetLineNumber(featureTag.Range);
@@ -65,7 +65,7 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
 
     // ── Scenario / Background ──────────────────────────────────────────────
 
-    private static void AddScenarioFold(DeveroomTag scenarioTag, List<GherkinFoldingRange> result)
+    private static void AddScenarioFold(IdeSupportTag scenarioTag, List<GherkinFoldingRange> result)
     {
         var (scenarioStartLine, scenarioEndLine) = GetLineRange(scenarioTag.Range);
         if (scenarioEndLine > scenarioStartLine)
@@ -80,10 +80,10 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
         {
             switch (inner.Type)
             {
-                case DeveroomTagTypes.StepBlock:
+                case IdeSupportTagTypes.StepBlock:
                     AddInlineContentFolds(inner, result);
                     break;
-                case DeveroomTagTypes.ExamplesBlock:
+                case IdeSupportTagTypes.ExamplesBlock:
                     AddExamplesFold(inner, result);
                     break;
             }
@@ -91,14 +91,14 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
     }
 
     /// <summary>Walks a StepBlock for DocString and DataTable children.</summary>
-    private static void AddInlineContentFolds(DeveroomTag stepTag, List<GherkinFoldingRange> result)
+    private static void AddInlineContentFolds(IdeSupportTag stepTag, List<GherkinFoldingRange> result)
     {
         foreach (var inner in stepTag.ChildTags)
         {
             switch (inner.Type)
             {
-                case DeveroomTagTypes.DocString:
-                case DeveroomTagTypes.DataTable:
+                case IdeSupportTagTypes.DocString:
+                case IdeSupportTagTypes.DataTable:
                     AddContentFold(inner, result);
                     break;
             }
@@ -107,7 +107,7 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
 
     // ── Rule ───────────────────────────────────────────────────────────────
 
-    private static void AddRuleFold(DeveroomTag ruleTag, List<GherkinFoldingRange> result)
+    private static void AddRuleFold(IdeSupportTag ruleTag, List<GherkinFoldingRange> result)
     {
         var (ruleStartLine, ruleEndLine) = GetLineRange(ruleTag.Range);
         if (ruleEndLine > ruleStartLine)
@@ -120,14 +120,14 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
         // Scenarios inside rules
         foreach (var inner in ruleTag.ChildTags)
         {
-            if (inner.Type == DeveroomTagTypes.ScenarioDefinitionBlock)
+            if (inner.Type == IdeSupportTagTypes.ScenarioDefinitionBlock)
                 AddScenarioFold(inner, result);
         }
     }
 
     // ── Examples ───────────────────────────────────────────────────────────
 
-    private static void AddExamplesFold(DeveroomTag examplesTag, List<GherkinFoldingRange> result)
+    private static void AddExamplesFold(IdeSupportTag examplesTag, List<GherkinFoldingRange> result)
     {
         var (examplesStartLine, examplesEndLine) = GetLineRange(examplesTag.Range);
         if (examplesEndLine > examplesStartLine)
@@ -140,14 +140,14 @@ public class GherkinFoldingRangeService : IGherkinFoldingRangeService
         // Data table inside examples
         foreach (var inner in examplesTag.ChildTags)
         {
-            if (inner.Type == DeveroomTagTypes.DataTable)
+            if (inner.Type == IdeSupportTagTypes.DataTable)
                 AddContentFold(inner, result);
         }
     }
 
     // ── DocString / DataTable (inline content folds) ───────────────────────
 
-    private static void AddContentFold(DeveroomTag tag, List<GherkinFoldingRange> result)
+    private static void AddContentFold(IdeSupportTag tag, List<GherkinFoldingRange> result)
     {
         var (startLine, endLine) = GetLineRange(tag.Range);
         if (endLine > startLine)

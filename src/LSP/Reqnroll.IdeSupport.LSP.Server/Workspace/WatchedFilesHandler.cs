@@ -146,8 +146,8 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
         _logger.LogInfo(
             $"reqnroll.json {changeType}: reloading config for project '{project.ProjectName}'");
 
-        var provider = project.GetDeveroomConfigurationProvider()
-            as ProjectScopeDeveroomConfigurationProvider;
+        var provider = project.GetIdeSupportConfigurationProvider()
+            as ProjectScopeIdeSupportConfigurationProvider;
         provider?.Reload();
 
         await _mediator.Publish(
@@ -182,8 +182,8 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
 
         foreach (var project in scope.Projects)
         {
-            var provider = project.GetDeveroomConfigurationProvider()
-                as ProjectScopeDeveroomConfigurationProvider;
+            var provider = project.GetIdeSupportConfigurationProvider()
+                as ProjectScopeIdeSupportConfigurationProvider;
             provider?.Reload();
 
             await _mediator.Publish(

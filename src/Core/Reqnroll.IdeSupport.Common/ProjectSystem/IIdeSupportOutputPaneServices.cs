@@ -1,7 +1,7 @@
 namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 
-/// <summary>IDeveroomOutputPaneServices</summary>
-public interface IDeveroomOutputPaneServices
+/// <summary>IIdeSupportOutputPaneServices</summary>
+public interface IIdeSupportOutputPaneServices
 {
     /// <summary>Writes a line of text to the output pane.</summary>
     void WriteLine(string text);

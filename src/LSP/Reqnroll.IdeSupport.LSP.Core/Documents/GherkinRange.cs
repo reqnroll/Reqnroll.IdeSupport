@@ -124,7 +124,7 @@ public class GherkinRange : IEquatable<GherkinRange>
         return (lo, resolved.End - resolved.Start);
     }
 
-    // Used by VoidDeveroomTag
+    // Used by VoidIdeSupportTag
     /// <summary>A zero-length placeholder range backed by a null snapshot, used where no real range applies.</summary>
     public static readonly GherkinRange Empty = new GherkinRange(NullSnapshot.Instance, 0, 0);
 }

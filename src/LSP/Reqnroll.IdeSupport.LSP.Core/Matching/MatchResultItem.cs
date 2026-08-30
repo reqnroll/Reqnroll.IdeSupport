@@ -28,7 +28,7 @@ public class UndefinedStepDescriptor
     /// <summary>The effective step text: <see cref="CustomStepText"/> if set, otherwise the original step's text.</summary>
     public string StepText => CustomStepText ?? UndefinedStep.Text;
     /// <summary>The Given/When/Then block the step belongs to.</summary>
-    public ScenarioBlock ScenarioBlock => ((DeveroomGherkinStep) UndefinedStep).ScenarioBlock;
+    public ScenarioBlock ScenarioBlock => ((IdeSupportGherkinStep) UndefinedStep).ScenarioBlock;
     /// <summary>True when the step has a data table argument.</summary>
     public bool HasDataTable => UndefinedStep.Argument is DataTable;
     /// <summary>True when the step has a doc string argument.</summary>

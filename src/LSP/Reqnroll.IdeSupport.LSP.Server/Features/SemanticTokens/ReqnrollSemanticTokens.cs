@@ -5,18 +5,18 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 
 /// <summary>
-/// The fixed Reqnroll semantic-token legend and the <see cref="DeveroomTag"/>→token mapping.
+/// The fixed Reqnroll semantic-token legend and the <see cref="IdeSupportTag"/>→token mapping.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The server advertises one <b>shared</b> set of custom semantic token types whose names
 /// (<c>reqnroll.keyword</c>, <c>reqnroll.tag</c>, …) match the custom
 /// <c>ClassificationTypeDefinition</c> names used by the existing Reqnroll Visual Studio
-/// extension (<c>DeveroomClassifications</c>).  The legend is identical for every IDE client;
+/// extension (<c>IdeSupportClassifications</c>).  The legend is identical for every IDE client;
 /// it is the <i>client's</i> responsibility to map each legend name to a concrete editor colour:
 /// </para>
 /// <list type="bullet">
-///   <item><b>Visual Studio</b> re-uses the <c>DeveroomClassifications</c> MEF exports, so each
+///   <item><b>Visual Studio</b> re-uses the <c>IdeSupportClassifications</c> MEF exports, so each
 ///         legend name resolves to the classification of the same name.</item>
 ///   <item><b>VS Code</b> maps the names via <c>semanticTokenScopes</c> / <c>configurationDefaults</c>.</item>
 ///   <item><b>Rider</b> registers a <c>TextAttributesKey</c> per name and maps via the LSP descriptor.</item>
@@ -60,61 +60,61 @@ public static class ReqnrollSemanticTokens
     };
 
     /// <summary>
-    /// Maps a <see cref="DeveroomTag"/> to a zero-based index into <see cref="Legend"/> token
+    /// Maps a <see cref="IdeSupportTag"/> to a zero-based index into <see cref="Legend"/> token
     /// types and a modifier bitmask.
     /// </summary>
     /// <returns>
     /// <see langword="true"/> if the tag should produce a semantic token; <see langword="false"/>
     /// if it should be silently skipped (block/container tags and unclassified artifacts).
     /// </returns>
-    public static bool TryGetToken(DeveroomTag tag, out int tokenTypeIndex, out int tokenModifierBitset)
+    public static bool TryGetToken(IdeSupportTag tag, out int tokenTypeIndex, out int tokenModifierBitset)
     {
         tokenModifierBitset = 0;
 
         switch (tag.Type)
         {
-            case DeveroomTagTypes.StepKeyword:
-            case DeveroomTagTypes.DefinitionLineKeyword:
+            case IdeSupportTagTypes.StepKeyword:
+            case IdeSupportTagTypes.DefinitionLineKeyword:
                 tokenTypeIndex = (int)T.Keyword;
                 return true;
 
-            case DeveroomTagTypes.Tag:
+            case IdeSupportTagTypes.Tag:
                 tokenTypeIndex = (int)T.Tag;
                 return true;
 
-            case DeveroomTagTypes.Description:
+            case IdeSupportTagTypes.Description:
                 tokenTypeIndex = (int)T.Description;
                 return true;
 
-            case DeveroomTagTypes.Comment:
+            case IdeSupportTagTypes.Comment:
                 tokenTypeIndex = (int)T.Comment;
                 return true;
 
-            case DeveroomTagTypes.DocString:
+            case IdeSupportTagTypes.DocString:
                 tokenTypeIndex = (int)T.DocString;
                 return true;
 
-            case DeveroomTagTypes.DataTable:
+            case IdeSupportTagTypes.DataTable:
                 tokenTypeIndex = (int)T.DataTable;
                 return true;
 
-            case DeveroomTagTypes.DataTableHeader:
+            case IdeSupportTagTypes.DataTableHeader:
                 tokenTypeIndex = (int)T.DataTableHeader;
                 return true;
 
-            case DeveroomTagTypes.StepParameter:
+            case IdeSupportTagTypes.StepParameter:
                 tokenTypeIndex = (int)T.StepParameter;
                 return true;
 
-            case DeveroomTagTypes.ScenarioOutlinePlaceholder:
+            case IdeSupportTagTypes.ScenarioOutlinePlaceholder:
                 tokenTypeIndex = (int)T.ScenarioOutlinePlaceholder;
                 return true;
 
-            case DeveroomTagTypes.UndefinedStep:
+            case IdeSupportTagTypes.UndefinedStep:
                 tokenTypeIndex = (int)T.UndefinedStep;
                 return true;
 
-            case DeveroomTagTypes.AmbiguousStep:
+            case IdeSupportTagTypes.AmbiguousStep:
                 tokenTypeIndex = (int)T.AmbiguousStep;
                 return true;
 

@@ -39,7 +39,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
 
         public FakeConnector(DiscoveryResult result)
             : base(
-                new DeveroomConfiguration(),
+                new IdeSupportConfiguration(),
                 Substitute.For<IIdeSupportLogger>(),
                 TargetFrameworkMoniker.Create(".NETCoreApp,Version=v8.0"),
                 AppContext.BaseDirectory,
@@ -199,7 +199,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     {
         public ThrowingConnector()
             : base(
-                new DeveroomConfiguration(),
+                new IdeSupportConfiguration(),
                 Substitute.For<IIdeSupportLogger>(),
                 TargetFrameworkMoniker.Create(".NETCoreApp,Version=v8.0"),
                 AppContext.BaseDirectory,

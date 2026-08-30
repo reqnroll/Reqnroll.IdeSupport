@@ -49,7 +49,7 @@ public class VsWizardTelemetry : IWizardTelemetry, IWizardTelemetryLogger
     private static OriginalProjectSettings MapSettings(WizardProjectSettings wps)
         {
         var kind = wps.IsReqnrollProject || wps.IsSpecFlowProject ? 
-                    DeveroomProjectKind.ReqnrollTestProject : DeveroomProjectKind.Unknown;
+                    IdeSupportProjectKind.ReqnrollTestProject : IdeSupportProjectKind.Unknown;
         var reqnrollVersion = wps.ReqnrollVersionLabel is not null ? 
                 new NuGetVersion(wps.ReqnrollVersionLabel, null) : new NuGetVersion("0.0.0", null);
         var traits = ReqnrollProjectTraits.None;

@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tagging
     {
         /// <summary>Parses the open document's current buffer into tags, matching it against its project's binding registry and storing the resulting match set.</summary>
         /// <param name="version">The expected document version; if it does not match the buffer's current version, parsing is skipped and an empty collection is returned.</param>
-        Task<IReadOnlyCollection<DeveroomTag>> ParseAsync(DocumentUri uri, int? version);
+        Task<IReadOnlyCollection<IdeSupportTag>> ParseAsync(DocumentUri uri, int? version);
 
         /// <summary>
         /// Parses <paramref name="text"/> as the content of <paramref name="uri"/> using

@@ -41,13 +41,13 @@ public class ScenarioTestTargetResolverTests : IDisposable
 
     // ── Test infrastructure ─────────────────────────────────────────────────────
 
-    private static IReadOnlyCollection<DeveroomTag> ParseTags(string text)
+    private static IReadOnlyCollection<IdeSupportTag> ParseTags(string text)
     {
         var logger = Substitute.For<IIdeSupportLogger>();
         var telemetry = Substitute.For<ITelemetryService>();
-        var configProvider = Substitute.For<IDeveroomConfigurationProvider>();
-        configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
-        var parser = new DeveroomTagParser(logger, telemetry, configProvider);
+        var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
+        configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
+        var parser = new IdeSupportTagParser(logger, telemetry, configProvider);
         return parser.Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid);
     }
 
@@ -81,7 +81,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         return new Uri(featurePath);
     }
 
-    private static GherkinRange RangeAtLine(IReadOnlyCollection<DeveroomTag> tags, int lineNumber)
+    private static GherkinRange RangeAtLine(IReadOnlyCollection<IdeSupportTag> tags, int lineNumber)
     {
         var snapshot = tags.First().Range.Snapshot;
         var line = snapshot.GetLineFromLineNumber(lineNumber);
@@ -90,7 +90,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
     }
 
     /// <summary>Finds the range at the first line of <paramref name="text"/> containing <paramref name="substring"/> — avoids hand-counting line numbers in the fixtures above.</summary>
-    private static GherkinRange RangeAtLineContaining(IReadOnlyCollection<DeveroomTag> tags, string text, string substring)
+    private static GherkinRange RangeAtLineContaining(IReadOnlyCollection<IdeSupportTag> tags, string text, string substring)
     {
         var lines = text.Replace("\r\n", "\n").Split('\n');
         var lineNumber = Array.FindIndex(lines, l => l.Contains(substring, StringComparison.Ordinal));

@@ -18,16 +18,16 @@ public sealed class DiagnosticsAggregator : IDiagnosticsAggregator
 
     /// <inheritdoc/>
     public IReadOnlyList<GherkinDiagnostic> Aggregate(
-        IReadOnlyCollection<DeveroomTag> tags,
+        IReadOnlyCollection<IdeSupportTag> tags,
         FeatureBindingMatchSet matchSet)
     {
         var diagnostics = new List<GherkinDiagnostic>();
 
-        // Parser-error diagnostics: each is stored as a DeveroomTag of type ParserError whose
+        // Parser-error diagnostics: each is stored as a IdeSupportTag of type ParserError whose
         // Data holds the parser exception message string.
         foreach (var tag in tags)
         {
-            if (tag.Type != DeveroomTagTypes.ParserError)
+            if (tag.Type != IdeSupportTagTypes.ParserError)
                 continue;
 
             var message = tag.Data as string ?? "Gherkin parse error.";

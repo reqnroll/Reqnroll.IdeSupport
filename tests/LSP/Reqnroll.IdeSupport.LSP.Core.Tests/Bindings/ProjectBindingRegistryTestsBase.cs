@@ -16,7 +16,7 @@ public abstract class ProjectBindingRegistryTestsBase
     }
 
     protected Step CreateStep(StepKeyword stepKeyword = StepKeyword.Given, string text = "my step",
-        StepArgument? stepArgument = null) => new DeveroomGherkinStep(new GherkinLocation(0, 0), stepKeyword + " ", StepKeywordType.Context, text, stepArgument!,
+        StepArgument? stepArgument = null) => new IdeSupportGherkinStep(new GherkinLocation(0, 0), stepKeyword + " ", StepKeywordType.Context, text, stepArgument!,
         stepKeyword, (ScenarioBlock) stepKeyword);
 
     protected ProjectStepDefinitionBinding CreateStepDefinitionBinding(string regex,
@@ -71,7 +71,7 @@ public abstract class ProjectBindingRegistryTestsBase
 
     protected BindingScope CreateTagScope(string tagName) => new() {Tag = ReqnrollTagExpressionParser.CreateTagLiteral(tagName)};
 
-    private DeveroomTag CreateFeatureStructure(string[]? featureTags, string[]? scenarioTags,
+    private IdeSupportTag CreateFeatureStructure(string[]? featureTags, string[]? scenarioTags,
         string[]? scenarioOutlineTags = null, string[]? soHeaders = null, string[][]? soCells = null,
         bool includeScenario = true, bool includeOutline = true, string[]? outlineExamplesTags = null)
     {
@@ -100,20 +100,20 @@ public abstract class ProjectBindingRegistryTestsBase
 
         var feature = new Feature(featureTags.Select(t => new Tag(new GherkinLocation(0, 0), t)).ToArray(), new GherkinLocation(0, 0), "en", "Feature",
             "my feature", null, scenarioDefinitions.ToArray());
-        var featureTag = new DeveroomTag(DeveroomTagTypes.FeatureBlock, default, feature);
-        var backgroundTag = new DeveroomTag(DeveroomTagTypes.ScenarioDefinitionBlock, default,
+        var featureTag = new IdeSupportTag(IdeSupportTagTypes.FeatureBlock, default, feature);
+        var backgroundTag = new IdeSupportTag(IdeSupportTagTypes.ScenarioDefinitionBlock, default,
             feature.Children.OfType<Background>().First());
         featureTag.AddChild(backgroundTag);
         if (includeScenario)
         {
-            var scenarioTag = new DeveroomTag(DeveroomTagTypes.ScenarioDefinitionBlock, default,
+            var scenarioTag = new IdeSupportTag(IdeSupportTagTypes.ScenarioDefinitionBlock, default,
                 feature.Children.OfType<Scenario>().First());
             featureTag.AddChild(scenarioTag);
         }
 
         if (includeOutline)
         {
-            var scenarioOutlineTag = new DeveroomTag(DeveroomTagTypes.ScenarioDefinitionBlock, default,
+            var scenarioOutlineTag = new IdeSupportTag(IdeSupportTagTypes.ScenarioDefinitionBlock, default,
                 feature.Children.OfType<ScenarioOutline>().First());
             featureTag.AddChild(scenarioOutlineTag);
         }

@@ -30,7 +30,7 @@ public class ReqnrollConfiguration
         FixEmptyContainers();
 
         if (Version != null && !Regex.IsMatch(Version, @"^(?:\.?[0-9]+){2,}(?:\-[\-a-z0-9]*)?$"))
-            throw new DeveroomConfigurationException("'reqnroll/version' was not in a correct format");
+            throw new IdeSupportConfigurationException("'reqnroll/version' was not in a correct format");
     }
 
     #region Equality
