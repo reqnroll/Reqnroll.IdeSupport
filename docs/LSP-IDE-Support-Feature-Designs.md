@@ -96,7 +96,7 @@ Adopt the [`path → {projects}` membership index](LSP-IDE-Support-Architecture.
 
 ### Implementation Plan
 
-The concrete code changes across the LSP server and VS extension — DTOs, the index in `LspWorkspaceScopeManager`, consumer re-gating, VS manifest production, phasing, and tests — are documented in [Q17 Membership Index Implementation Plan](Q17-membership-index-implementation-plan.md).
+The concrete code changes across the LSP server and VS extension — DTOs, the index in `LspWorkspaceScopeManager`, consumer re-gating, VS manifest production, phasing, and tests — are documented in [Q17 Membership Index Implementation Plan](Archive/Q17-membership-index-implementation-plan.md).
 
 ---
 
@@ -166,8 +166,9 @@ The server advertises these names in the `legend.tokenTypes` array of its `textD
 | `reqnroll.step_parameter` | `StepParameter` | Bound step argument values |
 | `reqnroll.scenario_outline_placeholder` | `ScenarioOutlinePlaceholder` | Scenario Outline parameter placeholders `<param>` |
 | `reqnroll.undefined_step` | `UndefinedStep` | Step text of a step with no matching binding (emitted once binding discovery — F2 — is available; in Phase 1 all step text is emitted without this type) |
+| `reqnroll.ambiguous_step` | `AmbiguousStep` | Step text of a step matching more than one binding (ambiguous match) |
 
-> **Note**: `reqnroll.undefined_step` depends on binding match results from F2 and therefore only carries meaning from Phase 2 onward. Its name is reserved in the legend from Phase 1 so the legend does not change across phases (a stable legend simplifies client-side mapping and avoids re-registration).
+> **Note**: `reqnroll.undefined_step` and `reqnroll.ambiguous_step` depend on binding match results from F2 and therefore only carries meaning from Phase 2 onward. Its name is reserved in the legend from Phase 1 so the legend does not change across phases (a stable legend simplifies client-side mapping and avoids re-registration).
 
 > **Why custom names instead of standard LSP types**: The standard types force a lossy mapping (e.g., both tags and data tables would collapse onto a host theme's generic `string`/`type` scopes, and there is no standard type that expresses "undefined step" or "scenario outline placeholder"). Custom names move the mapping decision to each client, where the existing color story can be reproduced faithfully. The trade-off is that a client that does **not** map these names gets no coloring at all for unmapped types (rather than a generic fallback); each client therefore ships a complete mapping (see below), and the VS Code client additionally ships a TextMate grammar fallback (see [Architecture §6.1](LSP-IDE-Support-Architecture.md#61-vs-code)) for the activation gap.
 
@@ -309,9 +310,9 @@ The Roslyn (source-level) path is **implemented**. `TextDocumentSyncHandler` is 
 
 **Behavioural nuance**: a step renders as *unbound* (a `reqnroll.undefined_step` token / "step definition not found" diagnostic) only once the owning project has a **valid** (non-`Invalid`) registry — i.e. after any discovery has completed, whether the startup reflection run **or** the first Roslyn `.cs` open. Against an `Invalid` registry (no discovery yet) the tag parser skips step matching, leaving steps unclassified rather than unbound.
 
-The reflection (post-build) trigger shown in the lower half of the diagram is also implemented: `WatchedFilesHandler` registers `workspace/didChangeWatchedFiles` watchers for `**/bin/**/*.dll` (and `**/reqnroll.json`) and calls `ConnectorBindingRegistryProvider.TriggerRefresh()` for the project whose output path matches. An initial run is likewise triggered on `reqnroll/projectLoaded`. VS Code was confirmed to reliably deliver those watched-file events on build via its standard LSP client with no IDE-specific glue ([Q9](LSP-IDE-Support-Open-Questions.md), resolved for VS Code); VS doesn't need this signal at all, since `VsProjectEventMonitor` hooks `DTE.Events.BuildEvents.OnBuildDone` directly; Rider was not part of that verification.
+The reflection (post-build) trigger shown in the lower half of the diagram is also implemented: `WatchedFilesHandler` registers `workspace/didChangeWatchedFiles` watchers for `**/reqnroll.json`, `**/.editorconfig`, and `**/bin/**/*.dll`, and calls `ConnectorBindingRegistryProvider.TriggerRefresh()` for the project whose output path matches. An initial run is likewise triggered on `reqnroll/projectLoaded`. VS Code was confirmed to reliably deliver those watched-file events on build via its standard LSP client with no IDE-specific glue ([Q9](LSP-IDE-Support-Open-Questions.md), resolved for VS Code); VS doesn't need this signal at all, since `VsProjectEventMonitor` hooks `DTE.Events.BuildEvents.OnBuildDone` directly; Rider was not part of that verification.
 
-> **Planned change — index-driven, multi-project routing.** As built, `CSharpBindingDiscoveryService` routes a `.cs` edit to a **single** owning project via `ILspWorkspaceScopeManager.GetProjectForUri` (longest folder-prefix match). Under the [membership-index design](LSP-IDE-Support-Architecture.md#project-membership-the-path--projects-index) this becomes a lookup returning the **set** of owning projects, and the per-file Roslyn patch fans out to *each* of their registries (a linked `.cs` legitimately belongs to several projects, so one edit invalidates several registries). The same lookup **gates** the patch: a `.cs` that no project's index claims — e.g. one excluded from its `.csproj` but opened in the editor — contributes bindings to **no** registry, preventing phantom bindings that would otherwise be wiped on the next build. The folder-prefix match is retained only as the fallback for projects that have not (yet) sent a `reqnroll/projectFiles` baseline.
+**As-built — index-driven, multi-project routing.** `CSharpBindingDiscoveryService` routes a `.cs` edit via `ILspWorkspaceScopeManager.ResolveOwners`, which returns the **set** of owning projects (per the [membership-index design](LSP-IDE-Support-Architecture.md#project-membership-the-path--projects-index)), consulting the index first and falling back to longest folder-prefix match only for a project that hasn't yet sent a `reqnroll/projectFiles` baseline. The per-file Roslyn patch fans out to *each* owning project's registry — a linked `.cs` legitimately belongs to several projects, so one edit can invalidate several registries. The same lookup **gates** the patch: a `.cs` that no project's index claims — e.g. one excluded from its `.csproj` but opened in the editor — contributes bindings to **no** registry, preventing phantom bindings that would otherwise be wiped on the next build.
 
 #### Known limitations
 
@@ -327,7 +328,7 @@ We are **not** addressing this at this time. Closing the gap would mean feeding 
 
 **Phase 2** — covers both missing step warnings and parse errors
 
-> **Open question (Q19)**: Should the server also support diagnostic pull (`textDocument/diagnostic` request, LSP 3.17+) in addition to the push model described here? See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+**Resolved — abandoned (Q19)**: diagnostic pull (`textDocument/diagnostic` request, LSP 3.17+) was investigated in addition to the push model described here, but abandoned — OmniSharp.Extensions.LanguageServer 0.19.9's server-side (write) JSON converters for the pull-diagnostics report types are `NotImplementedException` stubs. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
 
 #### End-user experience
 
@@ -460,7 +461,7 @@ Parse errors are produced by `IdeSupportTagParser` whenever a `.feature` file is
 
 Pressing **Go to Definition** (F12 / Ctrl+Click) on a step in a `.feature` file navigates to the matching `[Given]` / `[When]` / `[Then]` method in the C# binding class. If multiple bindings match (ambiguous), a picker is shown.
 
-> **Open question (Q20)**: Should this feature use `textDocument/definition` or `textDocument/implementation`? In LSP semantics, a step text is closer to a specification (definition) while the binding method is its implementation. The correct choice affects how IDEs route the navigation gesture. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+**Resolved (Q20)**: `textDocument/definition`, via `DefinitionHandler`. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
 
 > **Open question (Q21)**: Should the server also support `textDocument/documentLink`? This would annotate step lines as Ctrl+hover hyperlinks — a complementary navigation path that requires no keystroke. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
 
@@ -734,7 +735,7 @@ sequenceDiagram
     IDE-->>IDE: Render outline panel
 ```
 
-`DocumentSymbolService` (`LSP.Core`) walks the `IdeSupportTag` tree — the same tree F1's semantic tokens read — and returns a `GherkinDocumentSymbol` hierarchy as a protocol-agnostic model. `DocumentSymbolHandler` (`LSP.Server`) converts that into OmniSharp `DocumentSymbol[]` and registers via `AddHandler<>`. Symbol kind mapping: Feature→Module, Background→Constructor, Rule→Namespace, Scenario/ScenarioOutline→Method, Step→Field, Examples→Array. `DocumentSymbol.Children` is `init`-only, so children are wrapped in `Container<DocumentSymbol>` and set in the object initializer. VS Code and Rider receive the outline via this generic handler; Visual Studio's separate route is covered below.
+`DocumentSymbolService` (`LSP.Core`) walks the `IdeSupportTag` tree — the same tree F1's semantic tokens read — and returns a `GherkinDocumentSymbol` hierarchy as a protocol-agnostic model. `DocumentSymbolHandler` (`LSP.Server`) converts that into OmniSharp `DocumentSymbol[]` and registers via `AddHandler<>`. Symbol kind mapping: Feature→Module, Background→Constructor, Rule→Namespace, Scenario/ScenarioOutline→Method, Step→Field, Examples→Array. `DocumentSymbol.Children` is `init`-only, so children are wrapped in `Container<DocumentSymbol>` and set in the object initializer. VS Code and Rider receive the outline via this generic handler; Visual Studio's separate route (`reqnroll/documentSymbolHierarchical` + `GherkinNavigationBarSymbolService`/`IVsDropdownBarClient`) is covered in [Architecture §6.4](LSP-IDE-Support-Architecture.md#64-cross-ide-client-implementation--server-conditional-logic-matrix).
 
 ---
 
@@ -986,11 +987,9 @@ The plugin (issue #159) instead adds a competing action bound to the same keystr
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| ⚠️ Config | ⚠️ Config | ⚠️ Config |
+| 🔧 Plugin | 🔧 Plugin | 🔧 Plugin |
 
-**Dispatch ambiguity note**: In a `.cs` file, both the native C# language server and the Reqnroll LSP server register for `textDocument/references`. The intent is that when the caret is positioned on a **binding attribute** (e.g., `[Given("step text")]`), the IDE dispatches the request to the Reqnroll server, returning matching `.feature` step locations. When the caret is on the **method signature or body**, the C# server handles it normally.
-
-Whether IDEs reliably dispatch based on caret position within a file that has multiple registered servers is not guaranteed. If the dispatch is unreliable, the feature will be surfaced as a custom menu/context-menu command (requiring 🔧 Plugin work for each IDE) that explicitly invokes `workspace/executeCommand` rather than relying on `textDocument/references`.
+**Dispatch ambiguity note (resolved — Q13)**: dispatch based on caret position within a `.cs` file that has multiple registered servers is unreliable on all three IDEs, so every client ships the same custom `reqnroll/findStepUsages` message rather than relying on generic `textDocument/references` dispatch (see [implementation status](#f14--find-step-definition-usages) below and [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md)).
 
 #### LSP messages
 
@@ -1291,7 +1290,7 @@ sequenceDiagram
 
 - **LSP handler placement.** `RenameHandler` lives in `src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/`. The handler registers for `textDocument/prepareRename` and `textDocument/rename` via the OmniSharp `ILanguageServer` router (same pattern as `DefinitionHandler`).
 - **Validator class.** The validation rules (Rules 1-8) are extracted to a shared `StepRenameValidator` in `LSP.Core/Rename/` to separate concerns from the OmniSharp handler layer and enable unit testing.
-- **Reuse existing expression parsing.** The Cucumber-expression parsing and parameter-slot extraction used by the existing VS `RenameStepCommand` lives in `Reqnroll.IdeSupport.Common/StepDefinitionExpressionParser`. The LSP server references the same library; `StepRenameValidator` delegates to it rather than reimplementing.
+- **Parameter-slot detection.** `StepRenameValidator` (`LSP.Core/Rename/StepRenameValidator.cs`) is self-contained: it detects parameter slots via its own `ParameterSlotPattern` regex (`(\([^)]*\)|\{\w+\})`, matching both regex capture groups and Cucumber Expression `{param}` placeholders) and its own `ExpressionOperators` character set, rather than delegating to a shared parsing library.
 - **WorkspaceEdit construction.** The `WorkspaceEdit` builder (`Changes` / `DocumentChanges` dictionary) is populated from two sources: (a) `StepDefinitionFileParser.GetAttributeStringInfo` result for the C# attribute string edit (span + replacement text with correct escaping), and (b) each matching `.feature` step location from the binding-match result (step `SourceLocation` → `TextEdit` replacing the step text).
 - **Phase 4 migration path for VS.** The existing `RenameStepCommand` (VSSDK) is retained and acts as a façade: for single-binding positions it delegates to the LSP `textDocument/rename` flow (via the same `LspInterceptingPipe` used by F14's custom command). For multi-attribute positions it shows the existing picker + `RenameStepViewModel` dialog. This dual-path approach lets the LSP rename ship in Phase 4 without regressing the rich VS validation UX, and the VS-specific code can be retired in a later release once the LSP dialog ecosystem catches up.
 - **Linked files.** When the membership index (Q17) reports that a binding `.cs` file belongs to multiple projects, the rename handler unions the feature files from **all** including projects into the WorkspaceEdit. The handler calls `ILspWorkspaceScopeManager.GetProjectsForUri(bindingCsFile)` to get the owning set, then iterates each project's registry to find matching feature steps. This is the same multi-project routing already designed for F14/F15; the rename handler uses the same `GetProjectsForUri` API.
@@ -1302,11 +1301,11 @@ F16's **single-binding** case is implemented on `master` as a thin pass-through 
 
 **Multi-attribute disambiguation is not yet on `master`.** As designed above, when the cursor resolves to more than one candidate binding, the server returns `null` from `prepareRename`, which makes VS Code report the standard "You cannot rename this element" message with no path to disambiguate — there is currently no VS Code-side consumer of the server's `reqnroll/renameTargets` / `reqnroll/selectRenameTarget` custom requests. This matches the "⚠️ Config" (not "🔧 Plugin") rating in the IDE support matrix above: today, VS Code relies entirely on the user manually clicking into the specific attribute string before invoking rename.
 
-An open PR ([#27](https://github.com/clrudolphi/Reqnroll.IdeSupport/pull/27), branch `feat/vscode-rename-disambiguation`, unmerged as of this writing) adds a client-side `RenameMiddleware.prepareRename` override (`src/VSCode/src/renameDisambiguation.ts`) that queries `reqnroll/renameTargets` first: 0–1 candidates pass straight through to native `prepareRename` (no behavior change from what's on `master` today); 2+ candidates show a `vscode.window.showQuickPick` and send `reqnroll/selectRenameTarget` with the chosen index before letting the native rename input box open. The PR requires no server-side changes, since `reqnroll/renameTargets` and `reqnroll/selectRenameTarget` already exist for the Visual Studio disambiguation dialog. Until it merges, this parity gap with Visual Studio's picker-based disambiguation remains open.
+An open PR ([#27](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/27), branch `feat/vscode-rename-disambiguation`, unmerged as of this writing) adds a client-side `RenameMiddleware.prepareRename` override (`src/VSCode/src/renameDisambiguation.ts`) that queries `reqnroll/renameTargets` first: 0–1 candidates pass straight through to native `prepareRename` (no behavior change from what's on `master` today); 2+ candidates show a `vscode.window.showQuickPick` and send `reqnroll/selectRenameTarget` with the chosen index before letting the native rename input box open. The PR requires no server-side changes, since `reqnroll/renameTargets` and `reqnroll/selectRenameTarget` already exist for the Visual Studio disambiguation dialog. Until it merges, this parity gap with Visual Studio's picker-based disambiguation remains open.
 
 #### Rename change annotations — as-built
 
-**Status: Implemented (2026-07-11).** [#70](https://github.com/clrudolphi/Reqnroll.IdeSupport/issues/70) / [#133](https://github.com/clrudolphi/Reqnroll.IdeSupport/pull/133). `RenameHandler.HandleRenameAsync` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/RenameHandler.cs`) builds its `WorkspaceEdit` through a `WorkspaceEditBuilder`, which negotiates the returned shape per request rather than always emitting the legacy `Changes` map:
+**Status: Implemented (2026-07-11).** [#70](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/70) / [#133](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/133). `RenameHandler.HandleRenameAsync` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/RenameHandler.cs`) builds its `WorkspaceEdit` through a `WorkspaceEditBuilder`, which negotiates the returned shape per request rather than always emitting the legacy `Changes` map:
 
 - **Negotiation.** Read once per rename from `ILanguageServerFacade.ClientSettings.Capabilities.Workspace.WorkspaceEdit`: the client must advertise both `DocumentChanges == true` and a non-null `ChangeAnnotationSupport`. Both are true for VS Code (`{ "groupsOnLabel": true }`); VS advertises `documentChanges` but never `changeAnnotationSupport`, so it always negotiates down to the plain `Changes` shape.
 - **`WorkspaceEditBuilder`** (`Features/Rename/WorkspaceEditBuilder.cs`) accumulates `(DocumentUri, TextEdit)` pairs and emits either shape from `Build()`. It also exposes `GetEditsByUri()` so the VS-only `workspace/applyEdit` push (below) can reuse the same accumulated edits regardless of the negotiated shape.
@@ -1538,7 +1537,7 @@ None directly — installation and upgrade UX is entirely IDE-side. However, the
 
 ### F23 · Inlay Hints (Step Binding Info)
 
-**Status: Implemented** (shipped #43, follow-up fixes #57, #77), per [docs/InlayHints-Implementation-Plan.md](InlayHints-Implementation-Plan.md).
+**Status: Implemented** (shipped #43, follow-up fixes #57, #77), per [docs/InlayHints-Implementation-Plan.md](Archive/InlayHints-Implementation-Plan.md).
 
 #### End-user experience
 
@@ -1562,7 +1561,7 @@ Each defined step in a `.feature` file shows a dimmed, non-editable inline annot
 
 #### Implementation notes
 
-`InlayHintService` (`LSP.Core/InlayHints/`) projects a `FeatureBindingMatchSet` directly into `GherkinInlayHint`s — one per step with a `Defined`/`Ambiguous`/`Templated` result. `InlayHintHandler` (`LSP.Server/Features/InlayHints/`) resolves the requesting document's primary owner ([Q22](LSP-IDE-Support-Open-Questions.md) primary-owner rule) to key into `IBindingMatchService`, builds hints, then filters to the requested viewport. There is no per-request options object and no resolve support: the handler computes the full label *and* tooltip eagerly in one pass, and `InlayHintProvider.ResolveProvider = false` is declared statically — acceptable because the tooltip text (a method signature string, already resolved in the match set) is cheap to format with no I/O or additional lookups needed at hint-build time.
+`InlayHintService` (`LSP.Core/InlayHints/`) projects a `FeatureBindingMatchSet` directly into `GherkinInlayHint`s — one per step with a `Defined`/`Ambiguous`/`Templated` result. `InlayHintHandler` (`LSP.Server/Features/InlayHints/`) resolves the requesting document's primary owner (the primary-owner `(uri, project)`-keying rule from [`Archive/Q22-uri-project-keying-scope.md`](Archive/Q22-uri-project-keying-scope.md) — not to be confused with [Q22](LSP-IDE-Support-Open-Questions.md#open-questions) in the Open Questions register, which is the unrelated F9 VS-integration question) to key into `IBindingMatchService`, builds hints, then filters to the requested viewport. There is no per-request options object and no resolve support: the handler computes the full label *and* tooltip eagerly in one pass, and `InlayHintProvider.ResolveProvider = false` is declared statically — acceptable because the tooltip text (a method signature string, already resolved in the match set) is cheap to format with no I/O or additional lookups needed at hint-build time.
 
 `GherkinInlayHintKind` has three values: `Binding` and `Ambiguous` cover a single row's step text resolving to one or several matches; `Templated` covers a Scenario Outline/Background step whose single merged `MatchResult` (one entry per template line, not per expanded example row) itself resolves to more than one *distinct* Defined binding across different rows, reported as `→ {n} bindings` and kept distinct from the `Ambiguous` case. There are no parameter-type hints (annotating captured-argument spans with `:type`) and no settings surface (`reqnroll.inlayHints.showBindingTarget` / `showParameterTypes`) — the feature is unconditionally on.
 
@@ -1770,10 +1769,9 @@ The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): e
 
 ### F26 · Test Runner Integration (Run/Debug + Failed-Step Highlight)
 
-**Status: Ready for implementation** — design drafted and all feasibility spikes resolved 2026-08-05
-(test-result correlation confirmed live across VS, VS Code, and Rider; see the design doc's status
-header for the full item-by-item resolution). Not yet implemented. Tracks issue
-[#262](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/262). Full design, including the
+**Status: Implemented.** Shipped per issue
+[#262](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/262), with the per-target resolution
+fix from issue #495 (2026-08-26) below. Full design, including the
 decompiled ground truth for how Reqnroll's generator names/maps scenarios to test methods, in
 [docs/Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md).
 
@@ -1997,17 +1995,7 @@ sequenceDiagram
 
 The following features were identified during planning (see [discussion #1077](https://github.com/orgs/reqnroll/discussions/1077)) as valuable but out of scope for the initial phases. They are recorded here to inform architectural decisions — implementations should avoid foreclosing these options.
 
-### Ambiguity Diagnostics
-
-When a step in a `.feature` file matches more than one binding (ambiguous match), the step is flagged with a diagnostic and the code action menu offers navigation to each matching binding. This extends the Binding Match Service to return a `MatchResult` with multiple bindings rather than a single one.
-
-### Regex Validation in Step Attributes
-
-When editing a `[Given("...")]` attribute string in C#, the regex pattern is validated in real time. Malformed patterns are shown as error squiggles in the `.cs` file. Requires the LSP server to understand binding attribute context within C# files and the ability of the IDE client to combine built-in C# diagnostics with those provided by the Reqnroll LSP.
-
-### Scope Expression Validation
-
-`[Scope(Tag = "...")]` expressions are validated via the Tag Expression parser. Invalid tag expressions are highlighted with warning squiggle (via LSP Diagnostics; same caveats apply from above).
+Ambiguity diagnostics, regex validation in step attributes, and scope-expression validation — all originally listed here — have since shipped; see [F3 · Gherkin File Diagnostics](#f3--gherkin-file-diagnostics) and [F27 · C# Binding Validation Diagnostics](#f27--c-binding-validation-diagnostics)'s Validated Rules table.
 
 ### Debug Support for Feature Files
 
