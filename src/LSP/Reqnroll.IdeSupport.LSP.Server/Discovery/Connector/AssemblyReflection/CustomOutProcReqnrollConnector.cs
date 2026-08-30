@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.Common.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 
 /// <summary>Connector that runs a user-configured discovery connector executable or DLL, as specified by <c>BindingDiscovery.ConnectorPath</c> in configuration.</summary>
 public class CustomOutProcReqnrollConnector : OutProcReqnrollConnector

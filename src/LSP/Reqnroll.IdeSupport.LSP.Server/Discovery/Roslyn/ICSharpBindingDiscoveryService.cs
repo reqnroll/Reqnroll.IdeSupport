@@ -1,7 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 
 /// <summary>
 /// Applies an immediate, source-level (Roslyn) binding update for a single <c>.cs</c> file,

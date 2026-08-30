@@ -1,8 +1,9 @@
-﻿using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 public class OutProcReqnrollConnectorFactoryTests
 {

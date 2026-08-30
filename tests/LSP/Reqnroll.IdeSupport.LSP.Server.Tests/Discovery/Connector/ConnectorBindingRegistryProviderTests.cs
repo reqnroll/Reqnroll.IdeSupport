@@ -1,14 +1,16 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 
 public class ConnectorBindingRegistryProviderTests : IDisposable
 {

@@ -1,6 +1,3 @@
-global using Reqnroll;
-//global using Reqnroll.VisualStudio.Discovery.TagExpressions;
-global using Reqnroll.IdeSupport.LSP.Connector.Models;
 global using Reqnroll.IdeSupport.Common.Logging;
 global using Reqnroll.IdeSupport.Common.Configuration;
 global using System;
