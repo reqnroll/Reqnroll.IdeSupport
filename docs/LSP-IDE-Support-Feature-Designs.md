@@ -134,7 +134,7 @@ Keywords (`Feature:`, `Scenario:`, `Given`, `When`, `Then`, `And`, `But`), step 
 |---------|---------------|-------|
 | ✅ Generic | ⚠️ Static registration required | ✅ Generic |
 
-**Visual Studio note**: VS has unreliable support for dynamic registration of `textDocument/semanticTokens`. The server declares semantic token capabilities statically in the `initialize` response when launched with `--client visualstudio`. See the OmniSharp implementation note in [Architecture §5](LSP-IDE-Support-Architecture.md#capability-registration).
+**Visual Studio note**: VS has unreliable support for dynamic registration of `textDocument/semanticTokens`. The server declares semantic token capabilities statically in the `initialize` response when launched with `--ide visualstudio`. See the OmniSharp implementation note in [Architecture §5](LSP-IDE-Support-Architecture.md#capability-registration).
 
 #### LSP messages
 
@@ -150,11 +150,11 @@ Keywords (`Feature:`, `Scenario:`, `Given`, `When`, `Then`, `And`, `But`), step 
 
 **Semantic token types used** (custom Reqnroll token types):
 
-Rather than emitting the generic LSP standard token types (`keyword`, `string`, `parameter`, …), the server declares a set of **custom semantic token types** whose names match the custom `ClassificationTypeDefinition` names already used by the existing `Reqnroll.VisualStudio` extension (`DeveroomClassifications`). This preserves an exact one-to-one correspondence between the LSP server's output and the classification concepts the existing extension's users already see, and lets each IDE map a Reqnroll-specific concept to a Reqnroll-specific color rather than overloading a host theme's generic scopes.
+Rather than emitting the generic LSP standard token types (`keyword`, `string`, `parameter`, …), the server declares a set of **custom semantic token types** whose names match the custom `ClassificationTypeDefinition` names already used by the existing `Reqnroll.VisualStudio` extension (`IdeSupportClassifications`). This preserves an exact one-to-one correspondence between the LSP server's output and the classification concepts the existing extension's users already see, and lets each IDE map a Reqnroll-specific concept to a Reqnroll-specific color rather than overloading a host theme's generic scopes.
 
 The server advertises these names in the `legend.tokenTypes` array of its `textDocument/semanticTokens` server capability (in the `initialize` response). The token type index emitted in each 5-tuple is an index into this legend. The legend is the contract between the server and every client; all three clients must map these same names.
 
-| Custom token type (legend name) | `DeveroomClassifications` constant | Gherkin element |
+| Custom token type (legend name) | `IdeSupportClassifications` constant | Gherkin element |
 |------------|------------|----------------|
 | `reqnroll.keyword` | `Keyword` | `Feature:`, `Scenario:`, `Given`, `When`, `Then`, `And`, `But`, `Background:`, `Rule:`, `Examples:`, `Scenario Outline:` |
 | `reqnroll.tag` | `Tag` | Tag (`@tag`) |
@@ -175,7 +175,7 @@ The server advertises these names in the `legend.tokenTypes` array of its `textD
 
 The LSP `legend` only names the token types; it is the responsibility of **each IDE client** to map each legend name to a concrete editor color / classification. The mapping is intentionally pushed to the client so each IDE can honor its own theming system and the user's customized colors.
 
-**Visual Studio** — The VSSDK side of the new extension (`Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration`) **re-uses the existing `DeveroomClassifications` class verbatim**, including its MEF exports (`ClassificationTypeDefinition`, `EditorFormatDefinition`/`ClassificationFormatDefinition`, and the `[Name(...)]` exports), so the custom classification types and their default formats (italic Description, the `#887DBA` Undefined Step foreground, etc.) are registered exactly as before.
+**Visual Studio** — The VSSDK side of the new extension (`Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration`) **re-uses the existing `IdeSupportClassifications` class verbatim**, including its MEF exports (`ClassificationTypeDefinition`, `EditorFormatDefinition`/`ClassificationFormatDefinition`, and the `[Name(...)]` exports), so the custom classification types and their default formats (italic Description, the `#887DBA` Undefined Step foreground, etc.) are registered exactly as before.
 
 > **Important — VS does not map custom LSP token types by name, and does not reliably pull them.** Two confirmed VS limitations break the naïve approach:
 > 1. Visual Studio's built-in LSP semantic-token colorizer (`Microsoft.VisualStudio.LanguageServer.Client.SemanticTokensTaggerBase.ClassificationTypeNameForTokenType`) maps token-type names to classifications through a **fixed internal `switch`** that only recognizes the standard LSP token types (plus C++/Roslyn/Razor sets); every unrecognized name — including all `reqnroll.*` names — falls through to plain `"text"`. It never consults the classification registry by the raw legend name, so registering same-named classifications is **not sufficient** in VS (unlike VS Code / Rider).
@@ -186,17 +186,17 @@ The LSP `legend` only names the token types; it is the responsibility of **each 
 To restore the custom colors reliably, VS uses a **server-push + client-classifier** path that does not depend on VS's native semantic-token pull or its token-type mapping:
 - **Server push** — when launched with `--ide visualstudio`, the server's `SemanticTokensPushHandler` reacts to each `MatchCacheChangedNotification` by encoding the file's tokens and pushing them to the client via a custom `reqnroll/semanticTokens` notification (`{ uri, version, data[] }`). Every other client ignores this notification and uses the standard pull flow. (This is the one place the retained `--ide` flag changes server behaviour.)
 - **Client capture** — a `SemanticTokensClassificationInterceptor` on the existing `LspInterceptingPipe` captures the `reqnroll/semanticTokens` notification (and the legend from the `initialize` response), decodes the 5-int data, and caches absolute tokens per file in a process-wide `SemanticTokenClassificationStore`. Messages pass through untouched.
-- **Client classifier** — a classic MEF `IClassifierProvider` (`[ContentType("Gherkin")]`) returns a `GherkinSemanticClassifier` that reads those cached tokens and emits `ClassificationSpan`s, resolving each token's legend name to the `DeveroomClassifications` classification of the **same name** via `IClassificationTypeRegistryService`.
+- **Client classifier** — a classic MEF `IClassifierProvider` (`[ContentType("Gherkin")]`) returns a `GherkinSemanticClassifier` that reads those cached tokens and emits `ClassificationSpan`s, resolving each token's legend name to the `IdeSupportClassifications` classification of the **same name** via `IClassificationTypeRegistryService`.
 
 The net effect is still **pixel-for-pixel continuity** (existing users keep their configured Reqnroll colors under Tools → Options → Fonts and Colors with no migration) and the server's token encoding stays shared with the other IDEs — only the *delivery* (push vs pull) and the *color mapping* (our classifier vs VS's native colorizer) are VS-specific. VS's native colorizer, if it does pull, produces harmless `"text"` tags for the same spans; the derived Reqnroll classifications take precedence. **Note:** structural coloring (keywords, tags, comments, descriptions, doc strings, tables, placeholders) is fully covered; `reqnroll.undefined_step` coloring depends on binding match results and therefore only appears once F2 discovery is active.
 
 **VS Code** — The client maps each custom token type to a color in one of two ways:
 - A `semanticTokenScopes` contribution in `package.json` that associates each `reqnroll.*` token type with one or more TextMate scopes, so existing color themes light them up automatically; and/or
-- A `configurationDefaults` block setting `editor.semanticTokenColorCustomizations` to supply default Reqnroll colors (mirroring the `DeveroomClassifications` defaults) for themes that do not style the mapped scopes.
+- A `configurationDefaults` block setting `editor.semanticTokenColorCustomizations` to supply default Reqnroll colors (mirroring the `IdeSupportClassifications` defaults) for themes that do not style the mapped scopes.
 
 The token-type names registered here must match the server legend exactly. (Table cell/header per-pipe coloring is additionally refined by the client-side `TableHighlightService` decorations described in [Architecture §6.1](LSP-IDE-Support-Architecture.md#61-vs-code); the `reqnroll.data_table*` token types provide the base coloring.)
 
-**Rider / IntelliJ Platform** — Rider's built-in LSP client exposes a hook for translating LSP semantic token types into IntelliJ `TextAttributesKey`s. The Rider plugin registers a set of custom `TextAttributesKey`s (one per `reqnroll.*` legend name, with default colors mirroring `DeveroomClassifications`) and overrides the LSP server descriptor's semantic-tokens customization (e.g., `LspSemanticTokensSupport.getTextAttributesKey(tokenType, modifiers)`) to return the matching key for each legend name. Registering these keys against a Reqnroll color-settings page also lets users recolor them under Settings → Editor → Color Scheme. This is additional Kotlin code in the Rider client beyond the thin-wrapper baseline and should be added to the `plugin.xml` extension-point list in [Architecture §6.3](LSP-IDE-Support-Architecture.md#63-rider).
+**Rider / IntelliJ Platform** — Rider's built-in LSP client exposes a hook for translating LSP semantic token types into IntelliJ `TextAttributesKey`s. The Rider plugin registers a set of custom `TextAttributesKey`s (one per `reqnroll.*` legend name, with default colors mirroring `IdeSupportClassifications`) and overrides the LSP server descriptor's semantic-tokens customization (e.g., `LspSemanticTokensSupport.getTextAttributesKey(tokenType, modifiers)`) to return the matching key for each legend name. Registering these keys against a Reqnroll color-settings page also lets users recolor them under Settings → Editor → Color Scheme. This is additional Kotlin code in the Rider client beyond the thin-wrapper baseline and should be added to the `plugin.xml` extension-point list in [Architecture §6.3](LSP-IDE-Support-Architecture.md#63-rider).
 
 > **Legend stability is a cross-client contract**: Adding, removing, or reordering legend entries is a breaking change for all three client mappings simultaneously. The legend is therefore versioned with the server/clients as a unit (see [Versioning and Compatibility](LSP-IDE-Support-Architecture.md#versioning-and-compatibility)), and new token types are appended (never reordered) so older index assumptions remain valid.
 
@@ -209,7 +209,7 @@ sequenceDiagram
 
     box LightBlue LSP Server
         participant TDS as TextDocumentSyncHandler
-        participant DTP as DeveroomTagParser
+        participant DTP as IdeSupportTagParser
         participant DB as Document Buffer
         participant BMS as Binding Match Service
         participant STH as SemanticTokensHandler
@@ -219,21 +219,21 @@ sequenceDiagram
     User->>IDE: Opens / edits .feature file
     IDE->>TDS: textDocument/didOpen (or didChange)
     TDS->>DTP: Parse document + match steps against registry (GherkinDocumentTaggerService)
-    DTP-->>TDS: DeveroomTag[] (structural + parse error + match tags, one AST walk)
-    TDS->>DB: Store (URI, version, DeveroomTag[])
+    DTP-->>TDS: IdeSupportTag[] (structural + parse error + match tags, one AST walk)
+    TDS->>DB: Store (URI, version, IdeSupportTag[])
     TDS->>BMS: Store FeatureBindingMatchSet (derived from tags)
 
     Note over IDE,STH: Client requests token coloring
     IDE->>STH: textDocument/semanticTokens/full
-    STH->>DB: Retrieve DeveroomTag[] by URI
-    DB-->>STH: DeveroomTag[]
-    STH->>STS: Compute tokens from DeveroomTag[]
+    STH->>DB: Retrieve IdeSupportTag[] by URI
+    DB-->>STH: IdeSupportTag[]
+    STH->>STS: Compute tokens from IdeSupportTag[]
     STS-->>STH: SemanticTokens[]
     STH-->>IDE: SemanticTokens response
     IDE-->>User: Colored keywords, tags, parameters
 ```
 
-`DeveroomTagParser` (`GherkinDocumentTaggerService`) wraps `DeveroomGherkinParser` (the Gherkin parse step) and in one AST walk produces a `DeveroomTag[]` tree encoding every downstream-needed piece of classification info together: structural spans (keywords, tags, descriptions, comments, doc strings, data tables), parse error spans, and — once a binding registry is available — step match results (`DefinedStep`, `UndefinedStep`, `StepParameter`, `ScenarioOutlinePlaceholder`, hook references). The Document Buffer stores this tag tree rather than a raw AST, and `SemanticTokenService` reads it directly. A `FeatureBindingMatchSet` is derived from the tags in the same pass and stored in the `BindingMatchService`, where Go to Definition, diagnostics, and find-usages features read it. This combined-pass design avoids joining AST structural info with match results at render time, and mirrors the approach `Reqnroll.VisualStudio` used.
+`IdeSupportTagParser` (`GherkinDocumentTaggerService`) wraps `IdeSupportGherkinParser` (the Gherkin parse step) and in one AST walk produces a `IdeSupportTag[]` tree encoding every downstream-needed piece of classification info together: structural spans (keywords, tags, descriptions, comments, doc strings, data tables), parse error spans, and — once a binding registry is available — step match results (`DefinedStep`, `UndefinedStep`, `StepParameter`, `ScenarioOutlinePlaceholder`, hook references). The Document Buffer stores this tag tree rather than a raw AST, and `SemanticTokensService` reads it directly. A `FeatureBindingMatchSet` is derived from the tags in the same pass and stored in the `BindingMatchService`, where Go to Definition, diagnostics, and find-usages features read it. This combined-pass design avoids joining AST structural info with match results at render time, and mirrors the approach `Reqnroll.VisualStudio` used.
 
 Although `textDocument/didChange` may carry only the incremental text delta, the Gherkin parser always re-parses the **entire file**. Gherkin AST nodes carry absolute line/column locations; inserting or deleting a line shifts the position of every subsequent node, making partial re-parse impractical.
 
@@ -364,7 +364,7 @@ sequenceDiagram
 
     box LightBlue LSP Server
         participant TDS as TextDocumentSyncHandler
-        participant DTP as DeveroomTagParser
+        participant DTP as IdeSupportTagParser
         participant BR as Binding Registry
         participant DB as Document Buffer
         participant BMS as Binding Match Service
@@ -377,8 +377,8 @@ sequenceDiagram
     TDS->>DTP: Parse document + match steps in one AST walk
     DTP->>BR: Look up current bindings (per project)
     BR-->>DTP: ProjectBindingRegistry
-    DTP-->>TDS: DeveroomTag[] (structural + parse error + match tags together)
-    TDS->>DB: Store updated DeveroomTag[]
+    DTP-->>TDS: IdeSupportTag[] (structural + parse error + match tags together)
+    TDS->>DB: Store updated IdeSupportTag[]
     TDS->>BMS: Store FeatureBindingMatchSet (derived from tags)
     TDS-->>DPH: [internal] MatchCacheChangedNotification
     DPH->>DB: Retrieve ParserError tags for this URI
@@ -389,7 +389,7 @@ sequenceDiagram
     IDE-->>User: Error squiggles (red, parse errors) + warning squiggles (yellow, unmatched steps)
 ```
 
-Parsing and binding matching are **not separate pipeline stages**: `DeveroomTagParser` performs both in a single AST walk (see [F1](#f1--gherkin-syntax-highlighting)), so there is no intermediate hop between a document change and a diagnostics push. Parse errors emerge as `DeveroomTag` items of type `ParserError` — not a separate `ParseErrors[]` array — so `DiagnosticsAggregator` (`LSP.Core/Diagnostics/`, protocol-agnostic) retrieves them from the tag tree alongside `UndefinedStep` and `BindingError` tags and converts them into `GherkinDiagnostic` records. `DiagnosticsPublishHandler` (`LSP.Server/Handlers/InternalHandlers/`) is the `MatchCacheChangedNotification` consumer shown above: it calls the aggregator, converts each `GherkinDiagnostic.Range` to an LSP `Position`, and pushes via `ILanguageServerFacade.SendNotification("textDocument/publishDiagnostics", ...)`. The `textDocument/didClose` empty-diagnostics push is handled inline in `TextDocumentSyncHandler.Handle(DidCloseTextDocumentParams)` rather than via a separate notification, since no fan-out is required there.
+Parsing and binding matching are **not separate pipeline stages**: `IdeSupportTagParser` performs both in a single AST walk (see [F1](#f1--gherkin-syntax-highlighting)), so there is no intermediate hop between a document change and a diagnostics push. Parse errors emerge as `IdeSupportTag` items of type `ParserError` — not a separate `ParseErrors[]` array — so `DiagnosticsAggregator` (`LSP.Core/Diagnostics/`, protocol-agnostic) retrieves them from the tag tree alongside `UndefinedStep` and `BindingError` tags and converts them into `GherkinDiagnostic` records. `DiagnosticsPublishHandler` (`LSP.Server/Pipeline/`) is the `MatchCacheChangedNotification` consumer shown above: it calls the aggregator, converts each `GherkinDiagnostic.Range` to an LSP `Position`, and pushes via `ILanguageServerFacade.SendNotification("textDocument/publishDiagnostics", ...)`. The `textDocument/didClose` empty-diagnostics push is handled inline in `TextDocumentSyncHandler.Handle(DidCloseTextDocumentParams)` rather than via a separate notification, since no fan-out is required there.
 
 #### Sequence diagram — binding registry change (C# file saved or build completed)
 
@@ -402,7 +402,7 @@ sequenceDiagram
     box LightBlue LSP Server
         participant BR as Binding Registry
         participant BMH as BindingRegistryChangedHandler
-        participant DTP as DeveroomTagParser
+        participant DTP as IdeSupportTagParser
         participant DB as Document Buffer
         participant BMS as Binding Match Service
         participant DPH as DiagnosticsPublishHandler
@@ -413,8 +413,8 @@ sequenceDiagram
     BR-->>BMH: [internal] BindingRegistryChangedNotification
     loop For each open .feature file
         BMH->>DTP: Re-parse + re-match (updated registry, from snapshot text)
-        DTP-->>BMH: DeveroomTag[] (updated match tags)
-        BMH->>DB: Store updated DeveroomTag[]
+        DTP-->>BMH: IdeSupportTag[] (updated match tags)
+        BMH->>DB: Store updated IdeSupportTag[]
         BMH->>BMS: Store updated FeatureBindingMatchSet
         BMH-->>DPH: [internal] MatchCacheChangedNotification (featureURI)
         DPH->>DB: Retrieve ParserError tags for featureURI
@@ -426,9 +426,9 @@ sequenceDiagram
     IDE-->>IDE: Feature file squiggles updated
 ```
 
-When the registry changes, `BindingRegistryChangedHandler` re-invokes `DeveroomTagParser` for each open feature file, taking the snapshot text (not a cached AST) as input — so the Gherkin text is re-parsed on every registry-change re-tag, a minor cost accepted because Gherkin parsing is fast and caching the intermediate `DeveroomGherkinDocument` separately from the tag tree would add complexity without a compelling user-visible benefit.
+When the registry changes, `BindingRegistryChangedHandler` re-invokes `IdeSupportTagParser` for each open feature file, taking the snapshot text (not a cached AST) as input — so the Gherkin text is re-parsed on every registry-change re-tag, a minor cost accepted because Gherkin parsing is fast and caching the intermediate `IdeSupportGherkinDocument` separately from the tag tree would add complexity without a compelling user-visible benefit.
 
-`DiagnosticsAggregator` (`LSP.Core/Diagnostics/`) is a protocol-agnostic service with no OmniSharp dependency; `DiagnosticsPublishHandler` (`LSP.Server/Handlers/InternalHandlers/`) is the `INotificationHandler<MatchCacheChangedNotification>` that retrieves tags and the match set, calls the aggregator, converts each `GherkinDiagnostic.Range` to an LSP `Position` (the same `ResolvePosition` algorithm `SemanticTokenService` uses), and pushes via `ILanguageServerFacade.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams)` — the same pattern `SemanticTokensPushHandler` uses. `DiagnosticsPublishHandler` is auto-discovered by the `AddMediatR(typeof(Program))` scan; no explicit DI registration is needed.
+`DiagnosticsAggregator` (`LSP.Core/Diagnostics/`) is a protocol-agnostic service with no OmniSharp dependency; `DiagnosticsPublishHandler` (`LSP.Server/Pipeline/`) is the `INotificationHandler<MatchCacheChangedNotification>` that retrieves tags and the match set, calls the aggregator, converts each `GherkinDiagnostic.Range` to an LSP `Position` (the same `ResolvePosition` algorithm `SemanticTokensService` uses), and pushes via `ILanguageServerFacade.SendNotification("textDocument/publishDiagnostics", PublishDiagnosticsParams)` — the same pattern `SemanticTokensPushHandler` uses. `DiagnosticsPublishHandler` is auto-discovered by the `AddMediatR(typeof(Program))` scan; no explicit DI registration is needed.
 
 ---
 
@@ -448,7 +448,7 @@ Structural errors in `.feature` files (e.g., missing `Feature:` header, invalid 
 
 #### Implementation note
 
-Parse errors are produced by `DeveroomTagParser` whenever a `.feature` file is parsed (`textDocument/didOpen` or `didChange`). Rather than a separate `ParseErrors[]` array, each parse error is stored as a `DeveroomTag` of type `ParserError` in the tag tree alongside structural and match tags. The `DiagnosticsAggregator` reads these `ParserError` tags from the Document Buffer and emits them as `DiagnosticSeverity.Error` items with `source: "reqnroll.parser"` to distinguish them from binding mismatch warnings. The complete combined `textDocument/publishDiagnostics` flow is described in [F3](#f3--gherkin-file-diagnostics).
+Parse errors are produced by `IdeSupportTagParser` whenever a `.feature` file is parsed (`textDocument/didOpen` or `didChange`). Rather than a separate `ParseErrors[]` array, each parse error is stored as a `IdeSupportTag` of type `ParserError` in the tag tree alongside structural and match tags. The `DiagnosticsAggregator` reads these `ParserError` tags from the Document Buffer and emits them as `DiagnosticSeverity.Error` items with `source: "reqnroll.parser"` to distinguish them from binding mismatch warnings. The complete combined `textDocument/publishDiagnostics` flow is described in [F3](#f3--gherkin-file-diagnostics).
 
 ---
 
@@ -567,9 +567,9 @@ sequenceDiagram
 
 #### Implementation notes
 
-- **Handler**: `CompletionHandler` (`LSP.Server/Handlers/ProtocolHandlers/`) implements `ICompletionHandler` and is registered via OmniSharp dynamic registration (`AddHandler<CompletionHandler>()`, document selector `**/*.feature`).
-- **Core logic**: `CompletionService.GetKeywordCompletions(TokenType[], GherkinDialect)` and `GetDefaultKeywordCompletions(GherkinDialect)` in `LSP.Core/Editor/Completions/`.
-- **Token dispatch**: `DeveroomGherkinDocument.GetExpectedTokens(line, monitoringService)` → switch on `TokenType`; fallback is the default keyword set (Feature, Scenario, steps).
+- **Handler**: `CompletionHandler` (`LSP.Server/Features/Completions/`) implements `ICompletionHandler` and is registered via OmniSharp dynamic registration (`AddHandler<CompletionHandler>()`, document selector `**/*.feature`).
+- **Core logic**: `CompletionService.GetKeywordCompletions(TokenType[], GherkinDialect)` and `GetDefaultKeywordCompletions(GherkinDialect)` in `LSP.Core/Completions/`.
+- **Token dispatch**: `IdeSupportGherkinDocument.GetExpectedTokens(line, monitoringService)` → switch on `TokenType`; fallback is the default keyword set (Feature, Scenario, steps).
 - **Keyword format**: Block keywords (FeatureLine, ScenarioLine, etc.) get `": "` appended because Gherkin dialect keywords have no trailing colon. Step keywords from the dialect already include a trailing space.
 - **Dialect fallback**: `new GherkinDialectProvider(lang).DefaultDialect` (public API) rather than the `internal` `ReqnrollGherkinDialectProvider`.
 - **Insert text**: `TextEditOrInsertReplaceEdit` wrapping a `TextEdit` spanning the keyword range on the current line.
@@ -626,9 +626,9 @@ sequenceDiagram
 
 #### Implementation notes
 
-- **Handler**: same `CompletionHandler` as F7. Step completion is dispatched when the cursor is on a step line (`DeveroomTagTypes.StepBlock` tag) and `cursorOffset >= stepTextStart` (past the keyword).
+- **Handler**: same `CompletionHandler` as F7. Step completion is dispatched when the cursor is on a step line (`IdeSupportTagTypes.StepBlock` tag) and `cursorOffset >= stepTextStart` (past the keyword).
 - **Step text start**: `snapshotLine.Start + (step.Location.Column - 1) + step.Keyword.Length` (1-based Gherkin location, keyword includes trailing space).
-- **Core logic**: `CompletionService.GetStepCompletions(step, typedAfterKeyword, registry, usageCounter, matcher)` in `LSP.Core/Editor/Completions/`.
+- **Core logic**: `CompletionService.GetStepCompletions(step, typedAfterKeyword, registry, usageCounter, matcher)` in `LSP.Core/Completions/`.
   - Filters `ProjectStepDefinitionBinding` by `ScenarioBlock` matching the step keyword.
   - Samples each binding via `StepDefinitionSampler.GetStepDefinitionSample()` (ported from Reqnroll.VisualStudio).
   - Deduplicates identical samples.
@@ -721,12 +721,12 @@ sequenceDiagram
     box LightBlue LSP Server
         participant FDSH as DocumentSymbolHandler
         participant DB as Document Buffer
-        participant SS as GherkinDocumentSymbolService
+        participant SS as DocumentSymbolService
     end
 
     IDE->>FDSH: textDocument/documentSymbol
-    FDSH->>DB: Retrieve DeveroomTag tree by URI
-    DB-->>FDSH: DeveroomTag[]
+    FDSH->>DB: Retrieve IdeSupportTag tree by URI
+    DB-->>FDSH: IdeSupportTag[]
     FDSH->>SS: Build symbol hierarchy from tag tree
     SS-->>FDSH: GherkinDocumentSymbol[] (nested, protocol-agnostic)
     FDSH->>FDSH: Convert to OmniSharp DocumentSymbol[]
@@ -734,7 +734,7 @@ sequenceDiagram
     IDE-->>IDE: Render outline panel
 ```
 
-`GherkinDocumentSymbolService` (`LSP.Core`) walks the `DeveroomTag` tree — the same tree F1's semantic tokens read — and returns a `GherkinDocumentSymbol` hierarchy as a protocol-agnostic model. `DocumentSymbolHandler` (`LSP.Server`) converts that into OmniSharp `DocumentSymbol[]` and registers via `AddHandler<>`. Symbol kind mapping: Feature→Module, Background→Constructor, Rule→Namespace, Scenario/ScenarioOutline→Method, Step→Field, Examples→Array. `DocumentSymbol.Children` is `init`-only, so children are wrapped in `Container<DocumentSymbol>` and set in the object initializer. VS Code and Rider receive the outline via this generic handler; Visual Studio's separate route is covered below.
+`DocumentSymbolService` (`LSP.Core`) walks the `IdeSupportTag` tree — the same tree F1's semantic tokens read — and returns a `GherkinDocumentSymbol` hierarchy as a protocol-agnostic model. `DocumentSymbolHandler` (`LSP.Server`) converts that into OmniSharp `DocumentSymbol[]` and registers via `AddHandler<>`. Symbol kind mapping: Feature→Module, Background→Constructor, Rule→Namespace, Scenario/ScenarioOutline→Method, Step→Field, Examples→Array. `DocumentSymbol.Children` is `init`-only, so children are wrapped in `Container<DocumentSymbol>` and set in the object initializer. VS Code and Rider receive the outline via this generic handler; Visual Studio's separate route is covered below.
 
 ---
 
@@ -841,11 +841,11 @@ sequenceDiagram
 
 | Component | Location |
 |-----------|----------|
-| `GherkinDocumentFormatter` | `LSP.Core/Editor/Services/Formatting/GherkinDocumentFormatter.cs` |
-| `GherkinFormatSettings` | `LSP.Core/Editor/Services/Formatting/GherkinFormatSettings.cs` |
-| `DocumentLinesEditBuffer` | `LSP.Core/Editor/Services/Formatting/DocumentLinesEditBuffer.cs` |
-| `FormattingHandler` | `LSP.Server/Handlers/ProtocolHandlers/FormattingHandler.cs` |
-| Unit tests | `LSP.Core.Tests/Editor/Services/Formatting/GherkinDocumentFormatterTests.cs` |
+| `GherkinDocumentFormatter` (behind `IGherkinDocumentFormatter`, DI-registered) | `LSP.Core/Formatting/GherkinDocumentFormatter.cs` |
+| `GherkinFormatSettings` | `LSP.Core/Formatting/GherkinFormatSettings.cs` |
+| `DocumentLinesEditBuffer` | `LSP.Core/Formatting/DocumentLinesEditBuffer.cs` |
+| `FormattingHandler` | `LSP.Server/Features/Formatting/FormattingHandler.cs` |
+| Unit tests | `LSP.Core.Tests/Formatting/GherkinDocumentFormatterTests.cs` |
 | Spec tests | `LSP.Server.Specs/Features/Editor/DocumentFormatting.feature` |
 
 - A single `TextEdit` replacing the entire document is returned for `textDocument/formatting` and `textDocument/rangeFormatting`. For range formatting, extra blank lines at the start/end of the range are trimmed.
@@ -1029,8 +1029,8 @@ F14 is **implemented**. VS does not dispatch `textDocument/references` to second
 
 | Component | Detail |
 |---|---|
-| `StepReferencesHandler` — `textDocument/references` | Registered via `options.OnRequest` (same static-registration pattern as semantic tokens) to avoid OmniSharp dynamic-registration ambiguity with the C# language server on `.cs` files (see Q13). Serves VS Code / Rider / spec-test compatibility. |
-| `FindStepUsagesHandler` — `reqnroll/findStepUsages` | Custom request handler ([FindStepUsagesHandler.cs](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Handlers/ProtocolHandlers/FindStepUsagesHandler.cs)). Delivers the full three-state contract: `{isBinding:false}` = not a binding; `{isBinding:true, locations:[]}` = 0 usages; `{isBinding:true, locations:[...]}` = usages. Response type: `FindStepUsagesResponse` ([Protocol/FindStepUsagesResponse.cs](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/FindStepUsagesResponse.cs)). Each location includes `stepText` (extracted from in-memory snapshot), `keyword`, `scenarioName`, `projectName`. **Protocol note:** returns `{isBinding:false}` rather than JSON null — OmniSharp's `OnRequest` framework sends an error response for null returns from custom-method handlers, so `IsBinding=false` is the "not a binding" sentinel. |
+| `ReferencesHandler` — `textDocument/references` | Registered via `options.OnRequest` (same static-registration pattern as semantic tokens) to avoid OmniSharp dynamic-registration ambiguity with the C# language server on `.cs` files (see Q13). Serves VS Code / Rider / spec-test compatibility. |
+| `FindStepUsagesHandler` — `reqnroll/findStepUsages` | Custom request handler ([FindStepUsagesHandler.cs](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/References/FindStepUsagesHandler.cs)). Delivers the full three-state contract: `{isBinding:false}` = not a binding; `{isBinding:true, locations:[]}` = 0 usages; `{isBinding:true, locations:[...]}` = usages. Response type: `FindStepUsagesResponse` ([FindStepUsagesResponse.cs](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/References/FindStepUsagesResponse.cs)). Each location includes `stepText` (extracted from in-memory snapshot), `keyword`, `scenarioName`, `projectName`. **Protocol note:** returns `{isBinding:false}` rather than JSON null — OmniSharp's `OnRequest` framework sends an error response for null returns from custom-method handlers, so `IsBinding=false` is the "not a binding" sentinel. |
 | Binding location lookup | `IBindingMatchService.FindUsages(SourceLocation)` — iterates all cached `FeatureBindingMatchSet` entries and returns every `StepBindingMatch` whose `BindingLocations` match the supplied file + line (column is ignored; line is 1-based) |
 | Document ID on match results | `StepBindingMatch.FeatureDocumentId` carries the feature file's document URI, eliminating the need for a tuple return from `FindUsages` |
 | LSP position → `SourceLocation` conversion | Handlers convert 0-based LSP line/character to 1-based `SourceLocation(file, line+1, char+1)` |
@@ -1134,7 +1134,7 @@ Key behavioural properties:
 
 #### Validation rules
 
-The `StepRenameHandler` applies the following validations in order. Any validation failure causes the rename to return an error with a human-readable message.
+The `RenameHandler` applies the following validations in order. Any validation failure causes the rename to return an error with a human-readable message.
 
 | # | Rule | Error message | Scope |
 |---|------|---------------|-------|
@@ -1200,7 +1200,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant SRenH as StepRenameHandler
+        participant SRenH as RenameHandler
         participant BM as Binding Match Service
         participant BR as Binding Registry
         participant SFP as StepDefinitionFileParser.GetAttributeStringInfo
@@ -1246,7 +1246,7 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant SRenH as StepRenameHandler
+        participant SRenH as RenameHandler
         participant BM as Binding Match Service
         participant SFP as StepDefinitionFileParser.GetAttributeStringInfo
     end
@@ -1289,7 +1289,7 @@ sequenceDiagram
 
 #### Implementation notes
 
-- **LSP handler placement.** `StepRenameHandler` lives alongside the other OmniSharp handlers in `src/LSP/Reqnroll.IdeSupport.LSP.Server/Handlers/`. The handler registers for `textDocument/prepareRename` and `textDocument/rename` via the OmniSharp `ILanguageServer` router (same pattern as `DefinitionHandler`).
+- **LSP handler placement.** `RenameHandler` lives in `src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/`. The handler registers for `textDocument/prepareRename` and `textDocument/rename` via the OmniSharp `ILanguageServer` router (same pattern as `DefinitionHandler`).
 - **Validator class.** The validation rules (Rules 1-8) are extracted to a shared `StepRenameValidator` in `LSP.Core/Rename/` to separate concerns from the OmniSharp handler layer and enable unit testing.
 - **Reuse existing expression parsing.** The Cucumber-expression parsing and parameter-slot extraction used by the existing VS `RenameStepCommand` lives in `Reqnroll.IdeSupport.Common/StepDefinitionExpressionParser`. The LSP server references the same library; `StepRenameValidator` delegates to it rather than reimplementing.
 - **WorkspaceEdit construction.** The `WorkspaceEdit` builder (`Changes` / `DocumentChanges` dictionary) is populated from two sources: (a) `StepDefinitionFileParser.GetAttributeStringInfo` result for the C# attribute string edit (span + replacement text with correct escaping), and (b) each matching `.feature` step location from the binding-match result (step `SourceLocation` → `TextEdit` replacing the step text).
@@ -1306,7 +1306,7 @@ An open PR ([#27](https://github.com/clrudolphi/Reqnroll.IdeSupport/pull/27), br
 
 #### Rename change annotations — as-built
 
-**Status: Implemented (2026-07-11).** [#70](https://github.com/clrudolphi/Reqnroll.IdeSupport/issues/70) / [#133](https://github.com/clrudolphi/Reqnroll.IdeSupport/pull/133). `StepRenameHandler.HandleRenameAsync` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/StepRenameHandler.cs`) builds its `WorkspaceEdit` through a `WorkspaceEditBuilder`, which negotiates the returned shape per request rather than always emitting the legacy `Changes` map:
+**Status: Implemented (2026-07-11).** [#70](https://github.com/clrudolphi/Reqnroll.IdeSupport/issues/70) / [#133](https://github.com/clrudolphi/Reqnroll.IdeSupport/pull/133). `RenameHandler.HandleRenameAsync` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/RenameHandler.cs`) builds its `WorkspaceEdit` through a `WorkspaceEditBuilder`, which negotiates the returned shape per request rather than always emitting the legacy `Changes` map:
 
 - **Negotiation.** Read once per rename from `ILanguageServerFacade.ClientSettings.Capabilities.Workspace.WorkspaceEdit`: the client must advertise both `DocumentChanges == true` and a non-null `ChangeAnnotationSupport`. Both are true for VS Code (`{ "groupsOnLabel": true }`); VS advertises `documentChanges` but never `changeAnnotationSupport`, so it always negotiates down to the plain `Changes` shape.
 - **`WorkspaceEditBuilder`** (`Features/Rename/WorkspaceEditBuilder.cs`) accumulates `(DocumentUri, TextEdit)` pairs and emits either shape from `Build()`. It also exposes `GetEditsByUri()` so the VS-only `workspace/applyEdit` push (below) can reuse the same accumulated edits regardless of the negotiated shape.
@@ -1383,7 +1383,7 @@ sequenceDiagram
     User->>IDE: Right-click → "Go to Hooks" in .feature editor
     IDE->>HH: reqnroll/goToHooks (uri, position)
     HH->>DB: Retrieve AST + tags by URI
-    DB-->>HH: Gherkin AST + DeveroomTags
+    DB-->>HH: Gherkin AST + IdeSupportTags
     HH->>HH: Determine position context (Feature/Scenario/Step level)\nand collect tags in scope
     HH->>BR: Filter Hooks by context level + scope expressions
     BR-->>HH: GoToHooksResponse { hooks[] }
@@ -1562,7 +1562,7 @@ Each defined step in a `.feature` file shows a dimmed, non-editable inline annot
 
 #### Implementation notes
 
-`GherkinInlayHintService` (`LSP.Core/InlayHints/`) projects a `FeatureBindingMatchSet` directly into `GherkinInlayHint`s — one per step with a `Defined`/`Ambiguous`/`Templated` result. `InlayHintHandler` (`LSP.Server/Features/InlayHints/`) resolves the requesting document's primary owner ([Q22](LSP-IDE-Support-Open-Questions.md) primary-owner rule) to key into `IBindingMatchService`, builds hints, then filters to the requested viewport. There is no per-request options object and no resolve support: the handler computes the full label *and* tooltip eagerly in one pass, and `InlayHintProvider.ResolveProvider = false` is declared statically — acceptable because the tooltip text (a method signature string, already resolved in the match set) is cheap to format with no I/O or additional lookups needed at hint-build time.
+`InlayHintService` (`LSP.Core/InlayHints/`) projects a `FeatureBindingMatchSet` directly into `GherkinInlayHint`s — one per step with a `Defined`/`Ambiguous`/`Templated` result. `InlayHintHandler` (`LSP.Server/Features/InlayHints/`) resolves the requesting document's primary owner ([Q22](LSP-IDE-Support-Open-Questions.md) primary-owner rule) to key into `IBindingMatchService`, builds hints, then filters to the requested viewport. There is no per-request options object and no resolve support: the handler computes the full label *and* tooltip eagerly in one pass, and `InlayHintProvider.ResolveProvider = false` is declared statically — acceptable because the tooltip text (a method signature string, already resolved in the match set) is cheap to format with no I/O or additional lookups needed at hint-build time.
 
 `GherkinInlayHintKind` has three values: `Binding` and `Ambiguous` cover a single row's step text resolving to one or several matches; `Templated` covers a Scenario Outline/Background step whose single merged `MatchResult` (one entry per template line, not per expanded example row) itself resolves to more than one *distinct* Defined binding across different rows, reported as `→ {n} bindings` and kept distinct from the `Ambiguous` case. There are no parameter-type hints (annotating captured-argument spans with `:type`) and no settings surface (`reqnroll.inlayHints.showBindingTarget` / `showParameterTypes`) — the feature is unconditionally on.
 
@@ -1570,7 +1570,7 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 
 #### Known limitations
 
-- **No parameter-type hints or settings surface.** Adding them would need a second projection pass in `GherkinInlayHintService.Build` over each step's regex capture groups (see IH-3's parameter-offset-mapping concern in the Open Questions register) and `InlayHintOptions` threaded from config into the handler.
+- **No parameter-type hints or settings surface.** Adding them would need a second projection pass in `InlayHintService.Build` over each step's regex capture groups (see IH-3's parameter-offset-mapping concern in the Open Questions register) and `InlayHintOptions` threaded from config into the handler.
 - **No conflict with a VS built-in hint provider** — VS has no built-in inline-hint provider for `.feature` files, so there is nothing to conflict with the server's hints.
 
 ---
