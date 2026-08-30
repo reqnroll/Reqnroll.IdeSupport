@@ -116,7 +116,38 @@ family — which VS gives us for **package/extension load** but not for **LSP ac
 
 ## 3. Techniques worth trying, in the order I'd try them
 
-### T1 — Realize restored `.feature` stub frames from the autoloaded package, after solution load *(recommended first)*
+### T1 — Broaden `AppliesTo` so activation isn't `.feature`-gated *(cheapest first move)*
+
+```csharp
+public override LanguageServerProviderConfiguration LanguageServerProviderConfiguration =>
+    new("Reqnroll Language Client",
+        new[]
+        {
+            DocumentFilter.FromDocumentType(GherkinDocumentType.GherkinDocument),
+            DocumentFilter.FromDocumentType("CSharp"),   // <-- new
+        });
+```
+
+A restored `.cs` tab (very common in the foreground) then opens gate 2, and the `.feature` tab's
+`didOpen` arrives as soon as its frame is realized. This is cheap and needs no VSSDK plumbing, and
+it removes the dependency on *which* tab happens to be foreground.
+
+Considerations before doing it:
+
+* Traffic is a smaller concern than it first appears. The server already receives and handles
+  `.cs` `didOpen`/`didChange` — the binding-discovery pipeline is built on them — so broadening
+  `AppliesTo` changes which documents the VS client forwards, not whether the server knows what to
+  do with them. There is no new handling to write. An inspector-log comparison on a large solution
+  is still worth doing to size the *volume* against the in-flight `.cs` staleness work.
+* `DocumentFilter.FromGlobPattern("**/*.cs", relativePath: true)` is a narrower alternative if the
+  `CSharp` document type pulls in more than we want.
+* It does **not** help the "only a `.feature` tab was restored" case — that still needs T2.
+
+**Risk:** low — volume only, no new server behaviour. **Payoff:** covers the common mixed-tabs
+restore for a two-line change, which is why it is worth trying before T2. Complement, not a
+replacement.
+
+### T2 — Realize restored `.feature` stub frames from the autoloaded package, after solution load *(the complete fix)*
 
 Directly attacks the documented root cause. Move (a copy of) the `VsStubFrameInitializer` work out
 of `OnServerInitializationResultAsync` and into `ReqnrollPluginPackage`, driven by
@@ -143,35 +174,6 @@ races VS's own restore. Keep the existing `LspServerConnectionService` caching i
 **Risk:** medium (this is the code path that broke before). **Payoff:** highest — it is the only
 option that makes the *foreground restored `.feature` tab itself* the activation trigger.
 
-### T2 — Broaden `AppliesTo` so activation isn't `.feature`-gated
-
-```csharp
-public override LanguageServerProviderConfiguration LanguageServerProviderConfiguration =>
-    new("Reqnroll Language Client",
-        new[]
-        {
-            DocumentFilter.FromDocumentType(GherkinDocumentType.GherkinDocument),
-            DocumentFilter.FromDocumentType("CSharp"),   // <-- new
-        });
-```
-
-A restored `.cs` tab (very common in the foreground) then opens gate 2, and the `.feature` tab's
-`didOpen` arrives as soon as its frame is realized. This is cheap and needs no VSSDK plumbing, and
-it removes the dependency on *which* tab happens to be foreground.
-
-Considerations before doing it:
-
-* VS will forward `didOpen`/`didChange` for every `.cs` document to our server. The server already
-  consumes `.cs` for binding discovery, so this may be net-positive — but it changes the traffic
-  profile and interacts with the `.cs` staleness work currently in flight. Measure with the
-  inspector log before and after.
-* `DocumentFilter.FromGlobPattern("**/*.cs", relativePath: true)` is a narrower alternative if the
-  `CSharp` document type pulls in more than we want.
-* It does **not** help the "only a `.feature` tab was restored" case — that still needs T1.
-
-**Risk:** low-medium (traffic volume, not correctness). **Payoff:** covers the common mixed-tabs
-restore. Good complement to T1, not a replacement.
-
 ### T3 — Make extension load deterministic with `ExtensionConfiguration.LoadedWhen`
 
 Today `ExtensionEntrypoint`'s remarks admit the eager startup depends on *whichever contribution VS
@@ -187,11 +189,11 @@ public override ExtensionConfiguration ExtensionConfiguration => new()
 };
 ```
 
-This does **not** activate the LSP provider by itself — but it makes gate 1 and the T1 timer fire
-on a defined signal instead of a coincidence, which is what makes T1 reproducible.
+This does **not** activate the LSP provider by itself — but it makes gate 1 and the T2 timer fire
+on a defined signal instead of a coincidence, which is what makes T2 reproducible.
 ([Rule-based activation constraints](https://learn.microsoft.com/visualstudio/extensibility/visualstudio.extensibility/inside-the-sdk/activation-constraints?view=visualstudio))
 
-**Risk:** low. **Payoff:** indirect, but a prerequisite for trusting T1's timing.
+**Risk:** low. **Payoff:** indirect, but a prerequisite for trusting T2's timing.
 
 ### T4 — Subscribe to RDT stub→initialized events instead of polling
 
@@ -210,7 +212,7 @@ arrives the response is a cache hit. This doesn't make features appear *before* 
 collapses the click-to-paint delay. Partly done already via eager process launch; the remaining
 piece is warming the document/binding caches rather than just the process.
 
-**Risk:** low. **Payoff:** fallback value if T1 stays unsafe.
+**Risk:** low. **Payoff:** fallback value if T2 stays unsafe.
 
 ### T6 — Ask Microsoft for the missing API
 
