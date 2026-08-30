@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Formatting;
 public interface IGherkinDocumentFormatter
 {
     /// <summary>Applies indentation, tag normalization, table alignment, and step-keyword ("And") formatting to the whole document.</summary>
-    void FormatGherkinDocument(DeveroomGherkinDocument gherkinDocument, DocumentLinesEditBuffer lines,
+    void FormatGherkinDocument(IdeSupportGherkinDocument gherkinDocument, DocumentLinesEditBuffer lines,
         GherkinFormatSettings formatSettings);
 
     /// <summary>Aligns and rewrites the cells of the given table's rows, applying the configured cell padding and indent.</summary>
