@@ -1,13 +1,70 @@
 # Getting the VS LSP client to activate before the user touches a `.feature` tab
 
-**Status:** research note / options paper. Nothing here is implemented.
-**Date:** 2026-08-30
-**Problem:** a `.feature` file left open as the foreground tab from the previous session gets no
-LSP features until the user clicks, navigates, or types in it.
+**Status:** research note, **superseded in part by measurement**. See §0 before relying on
+anything below.
+**Date:** 2026-08-30 (findings added the same day)
+**Problem as originally stated:** a `.feature` file left open as the foreground tab from the
+previous session gets no LSP features until the user clicks, navigates, or types in it.
+**Tracked in:** [#533](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/533)
 
 ---
 
-## 1. Where the delay actually comes from
+## 0. Findings — what measurement changed
+
+Phases 0–2 of the plan in #533 were implemented and run a dozen-plus times in the experimental
+instance. Three corrections, in order of importance. **Read them before §1–§3, which are kept as
+originally written and are wrong in the places noted.**
+
+### The everyday symptom does not exist
+
+On a warm start, with a `.feature` file as the only restored tab, VS activates the
+`LanguageServerProvider` **1.1–1.4 s after extension load, every run, on unmodified master**, with
+no user interaction. Eleven-plus runs across both branches. There is no "restored tab is dead until
+you click it" bug.
+
+### The stub-frame root cause in §1 is refuted
+
+The restored `.feature` document is already **fully initialized ~76 ms after extension load, with
+zero stubs**, and its view has a Gherkin drop-down bar attached 100 ms later. VS's `[Stub]` tab
+caption (§4) was enabled and never appeared — correctly, because nothing was ever a stub. Delayed
+document loading is real, and it is not what was happening here.
+
+### The real bug: activation is edge-triggered on document *open*
+
+There is a genuine defect, and it is much narrower. On the **first launch after an install or
+update**, an already-open `.feature` file never activates the provider for that entire session.
+Measured on a cold run, one user action at a time:
+
+| Action | Result |
+|---|---|
+| Click the tab header | `window show (firstShow=False)` — no activation |
+| Click inside the file | `window show (firstShow=False)` — no activation |
+| Switch to Test Explorer and back | hide + show — no activation |
+| Edit the feature | no activation |
+| **Close and reopen the file** | new document locks + `firstShow=True` → **activation 233 ms later** |
+
+So **VS activates a `LanguageServerProvider` on the document-open edge and never re-evaluates
+documents that are already open.** A document open at a moment when VS does not yet know the
+provider exists — which is the case while the contribution cache is rebuilt after a deploy — stays
+invisible to it for the life of the session. (That last clause is inference; the edge behaviour
+itself is measured.)
+
+### What this does to the techniques in §3
+
+| | Verdict |
+|---|---|
+| **T1** — broaden `AppliesTo` | Implemented and kept, but **not load-bearing**: the feature-only runs had no C# document open at all, so the Gherkin filter alone was doing the work. Kept as cover for the C#-only restore case, at the cost of activating in non-Reqnroll solutions. |
+| **T2** — realize stub frames | **No premise.** There are no stubs to realize. Not built. |
+| **T3** — `LoadedWhen` | Implemented, measured, **reverted**. It changed nothing. (It was briefly also blamed for regressing cold starts; that charge was withdrawn when a build without it failed the same way.) |
+| **T4** — RDT event sink | Implemented and kept as `DocumentInitializationMonitor`. Every conclusion here rests on it. |
+| **T5** — server prewarm | Not built. Still the only idea that would help the cold case, and only by shortening it. |
+| **T6** — upstream ask | **Now the main lever.** VisualStudio.Extensibility has no equivalent of `ILanguageClientBroker.LoadAsync`, so an extension cannot recover from a missed activation edge. §2.1 and §2.2 below are still accurate and are the substance of that report. |
+
+The market survey in §2 stands unchanged — it was never about the mechanism.
+
+---
+
+## 1. Where the delay actually comes from — **REFUTED, see §0**
 
 There are three separate gates between "VS starts" and "the restored `.feature` tab has LSP
 features". Only one of them is still open.
@@ -116,7 +173,7 @@ family — which VS gives us for **package/extension load** but not for **LSP ac
 
 ## 3. Techniques worth trying, in the order I'd try them
 
-### T1 — Broaden `AppliesTo` so activation isn't `.feature`-gated *(cheapest first move)*
+### T1 — Broaden `AppliesTo` so activation isn't `.feature`-gated — **shipped, not load-bearing**
 
 ```csharp
 public override LanguageServerProviderConfiguration LanguageServerProviderConfiguration =>
@@ -147,7 +204,7 @@ Considerations before doing it:
 restore for a two-line change, which is why it is worth trying before T2. Complement, not a
 replacement.
 
-### T2 — Realize restored `.feature` stub frames from the autoloaded package, after solution load *(the complete fix)*
+### T2 — Realize restored `.feature` stub frames from the autoloaded package, after solution load — **NO PREMISE, see §0**
 
 Directly attacks the documented root cause. Move (a copy of) the `VsStubFrameInitializer` work out
 of `OnServerInitializationResultAsync` and into `ReqnrollPluginPackage`, driven by
@@ -174,7 +231,7 @@ races VS's own restore. Keep the existing `LspServerConnectionService` caching i
 **Risk:** medium (this is the code path that broke before). **Payoff:** highest — it is the only
 option that makes the *foreground restored `.feature` tab itself* the activation trigger.
 
-### T3 — Make extension load deterministic with `ExtensionConfiguration.LoadedWhen`
+### T3 — Make extension load deterministic with `ExtensionConfiguration.LoadedWhen` — **tried and reverted**
 
 Today `ExtensionEntrypoint`'s remarks admit the eager startup depends on *whichever contribution VS
 activates first* — in practice `StepCodeLensProvider` when a `.cs` file opens. That's accidental.

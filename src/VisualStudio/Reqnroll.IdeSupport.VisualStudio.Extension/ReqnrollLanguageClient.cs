@@ -92,11 +92,41 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <c>AppliesTo</c> is what VS uses to decide when to <em>activate</em> this provider: it does
+    /// so when a document of a listed type is opened. <c>CSharp</c> is listed alongside Gherkin
+    /// (issue #533) so a session whose restored tabs are all <c>.cs</c> — no feature file in sight —
+    /// still activates the server, which is the failure <see cref="ReqnrollPluginPackage"/>'s
+    /// autoload comment calls "scenario A".
+    /// <para>
+    /// It is <em>not</em> what makes a restored <c>.feature</c> tab work. The original theory —
+    /// that restored tabs sit as pending-initialization "stub frames" until clicked, leaving a
+    /// Gherkin-only filter dormant — was measured and refuted (2026-08-30): the restored
+    /// <c>.feature</c> document is already initialized ~76ms after extension load, with zero stubs,
+    /// and the Gherkin filter alone activates the provider in ~1.1–1.4s.
+    /// </para>
+    /// <para>
+    /// Kept as a deliberate call rather than a proven fix, with a known cost: VS will now activate
+    /// this provider — full <c>initialize</c>, plus document sync for every C# file — in any
+    /// solution where a <c>.cs</c> file is opened, including solutions with no Reqnroll in them at
+    /// all, where the provider would previously have stayed dormant. The server process itself
+    /// already starts eagerly regardless (see <c>LspServerConnectionService</c>), so the added cost
+    /// is the handshake and <c>.cs</c> sync, not a new process. If that shows up as a complaint,
+    /// this filter is the first thing to reconsider.
+    /// </para>
+    /// <para>
+    /// This is not a traffic change: the server's own <c>TextDocumentSyncHandler</c> already
+    /// registers <c>**/*.cs</c> in its document selector and routes <c>.cs</c> didOpen/didChange
+    /// into <c>ICSharpBindingDiscoveryService</c>, so there is no new server-side handling here —
+    /// only an additional way for VS to decide the provider should be running.
+    /// </para>
+    /// </remarks>
     public override LanguageServerProviderConfiguration LanguageServerProviderConfiguration =>
         new("Reqnroll Language Client",
             new[]
             {
                 DocumentFilter.FromDocumentType(GherkinDocumentType.GherkinDocument),
+                DocumentFilter.FromDocumentType("CSharp"),
             });
 
     /// <inheritdoc />

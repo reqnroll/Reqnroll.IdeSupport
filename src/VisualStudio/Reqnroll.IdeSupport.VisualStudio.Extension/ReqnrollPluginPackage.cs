@@ -49,6 +49,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private IIdeSupportLogger _logger = new IdeSupportNullLogger();
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
+    private DocumentInitializationMonitor? _documentInitializationMonitor;
 
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
@@ -70,6 +71,13 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         await ResolveLoggerAndTelemetryAsync(cancellationToken);
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
+
+        // Advise before the solution-load wait, not after: the restored .feature stubs we want to
+        // observe are realized *during* restore, so a subscription taken afterwards would miss the
+        // very transitions this is here to time (issue #533, phase 2). Diagnostic only — it never
+        // forces a document to initialize.
+        await AdviseDocumentInitializationMonitorAsync(cancellationToken);
+
         _logger.LogInfo("Waiting for solution load...");
 
         await WaitForSolutionLoadAsync(cancellationToken);
@@ -274,6 +282,30 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         }
     }
 
+    /// <summary>
+    /// Subscribes <see cref="DocumentInitializationMonitor"/> to the Running Document Table so the
+    /// document inventory and every stub realization are logged (issue #533, phase 2).
+    /// Best-effort: a failure here must not abort package initialization.
+    /// </summary>
+    private async Task AdviseDocumentInitializationMonitorAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            var rdt = await GetServiceAsync(typeof(SVsRunningDocumentTable)) as IVsRunningDocumentTable;
+            _documentInitializationMonitor = DocumentInitializationMonitor.TryAdvise(rdt, _logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: could not advise the document initialization monitor.");
+        }
+    }
+
     private async Task WaitForSolutionLoadAsync(CancellationToken cancellationToken)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
@@ -302,9 +334,15 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && _telemetryTransmitter is IAsyncDisposable d)
+        if (disposing)
         {
-            ThreadHelper.JoinableTaskFactory.Run(() => d.DisposeAsync().AsTask());
+            _documentInitializationMonitor?.Dispose();
+            _documentInitializationMonitor = null;
+
+            if (_telemetryTransmitter is IAsyncDisposable d)
+            {
+                ThreadHelper.JoinableTaskFactory.Run(() => d.DisposeAsync().AsTask());
+            }
         }
         base.Dispose(disposing);
     }

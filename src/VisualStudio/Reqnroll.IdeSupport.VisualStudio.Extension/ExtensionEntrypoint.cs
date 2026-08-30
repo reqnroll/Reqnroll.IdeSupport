@@ -24,6 +24,28 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
     internal class ExtensionEntrypoint : Microsoft.VisualStudio.Extensibility.Extension
     {
         /// <inheritdoc />
+        /// <remarks>
+        /// Deliberately no <c>LoadedWhen</c> (issue #533). It was tried — a total
+        /// <c>SolutionState.NoSolution | SolutionState.Exists</c> union, meant to make extension
+        /// load deterministic rather than depending on whichever contribution VS activates first —
+        /// and measurement rejected it on both counts:
+        /// <list type="bullet">
+        /// <item>
+        /// It fixed nothing. Without it, VS activates the <c>LanguageServerProvider</c> ~1.1–1.4s
+        /// after extension load for a solution whose only restored tab is a <c>.feature</c> file
+        /// (three runs, 2026-08-30). The delayed activation the issue was filed about did not
+        /// reproduce.
+        /// </item>
+        /// <item>
+        /// It looked actively harmful on the first launch after a deploy: both deploys carrying it
+        /// produced a bad first run (once 13.4s to activate, once no activation at all within the
+        /// ~20s the session lasted), while the build without it was fine on its own
+        /// first-after-deploy run. <c>LoadedWhen</c> is a gate VS must evaluate while it is
+        /// rebuilding the extension cache; with no gate there is nothing to get wrong.
+        /// </item>
+        /// </list>
+        /// Do not reintroduce it without a measured problem it solves.
+        /// </remarks>
         public override ExtensionConfiguration ExtensionConfiguration => new()
         {
             RequiresInProcessHosting = true,
