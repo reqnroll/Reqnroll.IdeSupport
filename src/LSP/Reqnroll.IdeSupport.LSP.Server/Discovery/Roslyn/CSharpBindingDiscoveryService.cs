@@ -3,6 +3,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -27,22 +28,44 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
 {
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly IIdeSupportLogger _logger;
+    private readonly ICSharpFileTextCache _csharpFileTextCache;
     private readonly ILspTelemetryService? _telemetryService;
 
     /// <summary>Initializes a new instance of the <see cref="CSharpBindingDiscoveryService"/> class.</summary>
     public CSharpBindingDiscoveryService(
         ILspWorkspaceScopeManager scopeManager,
         IIdeSupportLogger logger,
+        ICSharpFileTextCache csharpFileTextCache,
         ILspTelemetryService? telemetryService = null)
     {
         _scopeManager = scopeManager;
         _logger = logger;
+        _csharpFileTextCache = csharpFileTextCache;
         _telemetryService = telemetryService;
     }
 
     /// <summary>Resolves the project(s) that own <paramref name="uri"/> via the membership index, re-parses the given source text into each project's binding registry, and emits a discovery telemetry event.</summary>
     public async Task UpdateFromSourceAsync(DocumentUri uri, string text, bool isOpen, CancellationToken cancellationToken)
     {
+        // Staleness short-circuit, mirroring GherkinDocumentTaggerService.ParseAsync's
+        // version-mismatch guard for the .feature path: IParseCoordinator chains every scheduled
+        // didOpen/didChange rather than cancelling superseded ones (its own contract requires
+        // that -- see its remarks), so on rapid typing several of these can be queued at once. If
+        // the live-text cache no longer holds the exact text this call was scheduled with, a
+        // later edit already landed and updated it first, and that later call -- chained to run
+        // after this one -- will do the real (and only relevant) parse. Reparsing this superseded
+        // text here would just be a full Roslyn parse + registry patch for a result nothing will
+        // ever observe. Every caller of this method updates the cache with its own text before
+        // calling in (TextDocumentSyncHandler synchronously, RenamePostApplyCoordinator
+        // explicitly), so a mismatch here can only mean a newer write already happened; no cache
+        // entry at all (TryGet returns false) means nothing to compare against, so proceed.
+        if (_csharpFileTextCache.TryGet(uri, out var currentText) && currentText != text)
+        {
+            _logger.LogVerbose(
+                $"[Roslyn] '{uri}': superseded by a newer edit before this scheduled parse ran; skipping.");
+            return;
+        }
+
         var owners = _scopeManager.ResolveOwners(uri);
 
         if (owners.Count == 0)
