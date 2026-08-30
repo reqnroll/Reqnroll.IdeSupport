@@ -332,7 +332,8 @@ public record ProjectBindingRegistry
     /// reported twice, once by its connector-style short name and once by its Roslyn-style
     /// fully-qualified name).
     /// </remarks>
-    public async Task<ProjectBindingRegistry> ReplaceBindings(CSharpStepDefinitionFile stepDefinitionFile)
+    public async Task<ProjectBindingRegistry> ReplaceBindings(
+        CSharpStepDefinitionFile stepDefinitionFile, Action<string>? diagnostics = null)
     {
         var parsed = await StepDefinitionParser.ParseBindings(stepDefinitionFile);
 
@@ -351,6 +352,40 @@ public record ProjectBindingRegistry
         bool NotSupersededHook(ProjectHookBinding h) =>
             FromOtherFile(h) &&
             !newHookIdentities.Contains((h.HookType, BindingIdentity(h.Implementation)));
+
+        // Diagnostic safety net for the #469/#503/#515 duplicate-bindings failure mode: an
+        // existing binding whose source file *name* matches the file being reconciled but whose
+        // full path doesn't (SameSourceFile=false) is exactly the shape that identity requires
+        // is caught. Silent in the overwhelmingly common case (nothing matches by name alone);
+        // only logs when that shape is actually present, so it's cheap to leave in permanently
+        // rather than needing to be specially deployed to catch a rare recurrence. Superseded
+        // should always read true here — it's the signal to watch for a false reading of that.
+        if (diagnostics != null)
+        {
+            var targetFileName = Path.GetFileName(stepDefinitionFile.FullName);
+            var suspects = StepDefinitions
+                .Where(sd => string.Equals(
+                    sd.Implementation.SourceLocation?.SourceFile is { } f ? Path.GetFileName(f) : null,
+                    targetFileName, StringComparison.OrdinalIgnoreCase))
+                .Where(FromOtherFile)
+                .ToList();
+
+            if (suspects.Count > 0)
+            {
+                diagnostics(
+                    $"[DIAG-DUP] '{stepDefinitionFile.FullName}': {suspects.Count} existing binding(s) " +
+                    "share this file's name under a different path — verifying identity-based supersede:");
+                foreach (var sd in suspects)
+                {
+                    var identity = BindingIdentity(sd.Implementation);
+                    var superseded = newStepDefinitionIdentities.Contains((sd.StepDefinitionType, identity));
+                    diagnostics(
+                        $"[DIAG-DUP]   {sd.StepDefinitionType} Method='{sd.Implementation.Method}' " +
+                        $"Identity='{identity}' OldSourceFile='{sd.Implementation.SourceLocation?.SourceFile}' " +
+                        $"Superseded={superseded}");
+                }
+            }
+        }
 
         return new ProjectBindingRegistry(
             StepDefinitions.Where(NotSupersededStepDefinition).Concat(parsed.StepDefinitions),
