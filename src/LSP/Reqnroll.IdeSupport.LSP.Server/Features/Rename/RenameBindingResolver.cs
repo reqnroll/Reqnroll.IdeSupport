@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Resolves the step-definition binding(s) at a cursor position for the rename feature.
-/// Extracted from <see cref="StepRenameHandler"/> (issue #139) — "resolve binding at cursor" was
+/// Extracted from <see cref="RenameHandler"/> (issue #139) — "resolve binding at cursor" was
 /// duplicated in spirit across <c>HandlePrepareRenameAsync</c>, <c>HandleRenameAsync</c>, and the
 /// <c>reqnroll/renameTargets</c> handlers; this centralises the shared primitives.
 /// </summary>

@@ -605,6 +605,8 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
                 (Feature("f"), ProjectFileRole.Feature)),
             CancellationToken.None);
 
+        await WaitForPublishAsync();
+
         _ = _mediator.Received(1).Publish(
             Arg.Is<BindingRegistryChangedNotification>(n => n.IsFullReplacement),
             Arg.Any<CancellationToken>());

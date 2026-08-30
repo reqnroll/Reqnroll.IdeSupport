@@ -247,7 +247,7 @@ public class Program
                 // for VS would silently break token decoding for the push path too.
                 var isVisualStudio = string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase);
 
-                var tokenService = languageServer.Services.GetRequiredService<ISemanticTokenService>();
+                var tokenService = languageServer.Services.GetRequiredService<ISemanticTokensService>();
 
                 response.Capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
                 {

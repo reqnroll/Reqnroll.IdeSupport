@@ -10,8 +10,9 @@ using Reqnroll.IdeSupport.LSP.Core.Completions;
 using Reqnroll.IdeSupport.LSP.Core.Completions.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
-using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefs;
+using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Core.Folding;
+using Reqnroll.IdeSupport.LSP.Core.Formatting;
 using Reqnroll.IdeSupport.LSP.Core.InlayHints;
 
 
@@ -30,7 +31,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
-using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefs;
+using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
@@ -89,7 +90,7 @@ public static class ServiceCollectionExtensions
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
             // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "Error"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server
-            // has no equivalent of). Previously registered as NullTelemetryService, which silently
+            // has no equivalent of). Previously registered as NullLspTelemetryService, which silently
             // dropped LSP.Core exceptions (e.g. Gherkin parse errors) — issue #255.
             .AddSingleton<ITelemetryService>(sp => new LspErrorTelemetryService(
                 sp.GetRequiredService<ILspTelemetryService>()))
@@ -104,7 +105,7 @@ public static class ServiceCollectionExtensions
             // Performance Verification, Layer 4: field instrumentation. The recorder writes
             // PERF lines to the log and (when REQNROLL_PERF_TELEMETRY_SAMPLE is set) emits sampled
             // PerfSample telemetry. Singleton so the sampler's RNG is shared across handlers.
-            .AddSingleton<IPerfTelemetrySampler>(_ => PerfTelemetrySampler.FromEnvironment())
+            .AddSingleton<IPerformanceTelemetrySampler>(_ => PerformanceTelemetrySampler.FromEnvironment())
             // F41: tracks the LSP `trace` level (--trace / InitializeParams.Trace / $/setTrace) and
             // issues $/logTrace notifications. Singleton so the level set by $/setTrace is visible
             // to every consumer (currently OperationDurationRecorder's PERF lines).
@@ -115,7 +116,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IIdeSupportLogger>(),
                 sp.GetRequiredService<ClientIdeContext>(),
                 sp.GetRequiredService<ILspTelemetryService>(),
-                sp.GetRequiredService<IPerfTelemetrySampler>(),
+                sp.GetRequiredService<IPerformanceTelemetrySampler>(),
                 sp.GetRequiredService<ITraceService>()));
     }
 
@@ -172,13 +173,14 @@ public static class ServiceCollectionExtensions
             // the Go to Definition / diagnostics consumers (readers).
             .AddSingleton<IBindingMatchService, BindingMatchService>()
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
-            .AddSingleton<ISemanticTokenService, SemanticTokenService>()
+            .AddSingleton<ISemanticTokensService, SemanticTokensService>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsPublisher, CSharpDiagnosticsPublisher>()
-            .AddSingleton<IGherkinFoldingRangeService, GherkinFoldingRangeService>()
+            .AddSingleton<IFoldingRangeService, FoldingRangeService>()
             .AddSingleton<ICommentToggleService, CommentToggleService>()
-            .AddSingleton<IGherkinInlayHintService, GherkinInlayHintService>();
+            .AddSingleton<IInlayHintService, InlayHintService>()
+            .AddSingleton<IGherkinDocumentFormatter, GherkinDocumentFormatter>();
     }
 
     /// <summary>
@@ -201,7 +203,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<WorkspaceFoldersHandler>()
             .AddSingleton<WatchedFilesHandler>()
             .AddSingleton<SemanticTokensHandler>()
-            .AddSingleton<StepReferencesHandler>()
+            .AddSingleton<ReferencesHandler>()
             .AddSingleton<FindStepUsagesHandler>()
             .AddSingleton<ICompletionContextResolver, CompletionContextResolver>()
             .AddSingleton<ICompletionService, CompletionService>()
@@ -221,11 +223,11 @@ public static class ServiceCollectionExtensions
             .AddSingleton<FindUnusedStepDefinitionsHandler>()
             .AddSingleton<DocumentActivatedHandler>()
             .AddSingleton<FormattingHandler>()
-            .AddSingleton<IGherkinDocumentSymbolService, GherkinDocumentSymbolService>()
+            .AddSingleton<IDocumentSymbolService, DocumentSymbolService>()
             .AddSingleton<DocumentSymbolHandler>()
             .AddSingleton<FoldingRangeHandler>()
             .AddSingleton<CommentToggleHandler>()
-            .AddSingleton<StepRenameHandler>()
+            .AddSingleton<RenameHandler>()
             .AddSingleton<RenameSessionManager>()
             .AddSingleton<RenameBindingResolver>()
             .AddSingleton<CSharpAttributeLiteralResolver>()

@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 
 /// <summary>
 /// Handles <c>textDocument/semanticTokens/full</c>, <c>textDocument/semanticTokens/full/delta</c>,
-/// and <c>textDocument/semanticTokens/range</c> requests by delegating to <see cref="ISemanticTokenService"/>.
+/// and <c>textDocument/semanticTokens/range</c> requests by delegating to <see cref="ISemanticTokensService"/>.
 /// </summary>
 public class SemanticTokensHandler
 {
@@ -19,14 +19,14 @@ public class SemanticTokensHandler
     // Return this instead of null whenever the service has no tokens yet.
     private static readonly LspSemanticTokens EmptyTokens = new() { Data = [] };
 
-    private readonly ISemanticTokenService _semanticTokenService;
+    private readonly ISemanticTokensService _semanticTokenService;
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
 
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensHandler"/> class.</summary>
     public SemanticTokensHandler(
-        ISemanticTokenService semanticTokenService,
+        ISemanticTokensService semanticTokenService,
         IDocumentBufferService documentBufferService,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)

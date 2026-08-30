@@ -38,6 +38,10 @@ public record ProjectBindingRegistry
     // mutation, so the index only ever needs building once per instance (issue #471).
     private static readonly ConditionalWeakTable<ProjectBindingRegistry, StepLiteralIndex> _literalIndexCache = new();
 
+    // Stateless (all fields are static readonly), so one shared instance avoids a fresh
+    // allocation on every ReplaceStepDefinitions/ReplaceBindings call.
+    private static readonly IStepDefinitionFileParser StepDefinitionParser = new StepDefinitionFileParser();
+
     private StepLiteralIndex LiteralIndex =>
         _literalIndexCache.GetValue(this, r => StepLiteralIndex.Build(r.StepDefinitions));
 
@@ -305,8 +309,7 @@ public record ProjectBindingRegistry
     /// <summary>Re-parses <paramref name="stepDefinitionFile"/> and replaces its step definitions, leaving bindings from other files untouched.</summary>
     public async Task<ProjectBindingRegistry> ReplaceStepDefinitions(CSharpStepDefinitionFile stepDefinitionFile)
     {
-        var stepDefinitionParser = new StepDefinitionFileParser();
-        var projectStepDefinitionBindings = await stepDefinitionParser.Parse(stepDefinitionFile);
+        var projectStepDefinitionBindings = await StepDefinitionParser.Parse(stepDefinitionFile);
         return Where(binding => !IsSameSourceFile(binding.Implementation.SourceLocation?.SourceFile, stepDefinitionFile.FullName))
             .WithStepDefinitions(projectStepDefinitionBindings);
     }
@@ -331,8 +334,7 @@ public record ProjectBindingRegistry
     /// </remarks>
     public async Task<ProjectBindingRegistry> ReplaceBindings(CSharpStepDefinitionFile stepDefinitionFile)
     {
-        var stepDefinitionParser = new StepDefinitionFileParser();
-        var parsed = await stepDefinitionParser.ParseBindings(stepDefinitionFile);
+        var parsed = await StepDefinitionParser.ParseBindings(stepDefinitionFile);
 
         bool FromOtherFile(ProjectBinding binding) =>
             !IsSameSourceFile(binding.Implementation.SourceLocation?.SourceFile, stepDefinitionFile.FullName);

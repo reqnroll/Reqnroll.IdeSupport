@@ -2,6 +2,7 @@ using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
+using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.Telemetry;
@@ -50,7 +51,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryEnabled();
 
-        sut.TransmitEvent(new GenericEvent(eventName));
+        sut.TransmitEvent(new VsGenericEvent(eventName));
 
         _telemetryChannel.SentTelemtries.Should().HaveCount(1);
         _telemetryChannel.SentTelemtries.Single()
@@ -112,7 +113,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryDisabled();
 
-        sut.TransmitEvent(new GenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
 
         // Not transmitted (opted out) but still mirrored for debugging.
         _telemetryChannel.SentTelemtries.Should().BeEmpty();
@@ -131,7 +132,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryEnabled();
 
-        sut.TransmitEvent(new GenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
 
         _telemetryChannel.SentTelemtries.Should().HaveCount(1);
         _debugLog.Records.Should().ContainSingle();
@@ -149,7 +150,7 @@ public class TelemetryTransmitterTests
         GivenTelemetryEnabled();
         _telemetryChannel.ThrowOnSend = true;
 
-        sut.TransmitEvent(new GenericEvent("Extension loaded"));
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
 
         _debugLog.Records.Should().Contain(r => r.Transmitted == false && r.Error != null);
     }

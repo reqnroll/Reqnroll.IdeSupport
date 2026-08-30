@@ -19,13 +19,53 @@ using System.Threading.Tasks;
 namespace Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 
 /// <summary>
+/// Information about a string literal token in a binding attribute argument — its source
+/// span, syntax kind (regular string or raw string), and raw source text.
+/// </summary>
+#nullable enable
+public sealed record AttributeStringInfo(
+    TextSpan Span,
+    SyntaxKind LiteralKind,
+    string RawText);
+#nullable disable
+
+/// <summary>
 /// Roslyn/C# source-level binding discovery. Scans a single
 /// C# syntax tree for Reqnroll step-definition and hook attributes and produces the
 /// corresponding <see cref="ProjectStepDefinitionBinding"/> / <see cref="ProjectHookBinding"/>
 /// instances. Discovery is syntax-only — no compilation or build is required — so it can run
 /// immediately as the user edits a <c>.cs</c> file.
 /// </summary>
-public class StepDefinitionFileParser
+public interface IStepDefinitionFileParser
+{
+    /// <summary>
+    /// Discovers only the step-definition bindings in the file. Retained for backwards
+    /// compatibility; prefer <see cref="ParseBindings"/> to also obtain hooks.
+    /// </summary>
+    Task<List<ProjectStepDefinitionBinding>> Parse(CSharpStepDefinitionFile stepDefinitionFile);
+
+    /// <summary>
+    /// Discovers all bindings (step definitions and hooks) declared in the file.
+    /// </summary>
+    Task<StepDefinitionFileBindings> ParseBindings(CSharpStepDefinitionFile stepDefinitionFile);
+
+    /// <summary>
+    /// Locates the string-literal argument of a binding attribute at the given source position
+    /// and attribute index, and returns information about its token. Returns <c>null</c> when
+    /// the argument is not a literal string expression (e.g. a constant reference or nameof).
+    /// </summary>
+#nullable enable
+    Task<AttributeStringInfo?> GetAttributeStringInfo(
+        CSharpStepDefinitionFile file,
+        int methodLine,
+        int methodColumn,
+        int attributeIndex,
+        string expression);
+#nullable disable
+}
+
+/// <inheritdoc cref="IStepDefinitionFileParser"/>
+public class StepDefinitionFileParser : IStepDefinitionFileParser
 {
     private const string AttributeSuffix = "Attribute";
 
@@ -653,15 +693,6 @@ public class StepDefinitionFileParser
     private sealed record RawScope(string Tag, string Feature, string Scenario);
 
 #nullable enable
-    /// <summary>
-    /// Information about a string literal token in a binding attribute argument — its source
-    /// span, syntax kind (regular string or raw string), and raw source text.
-    /// </summary>
-    public sealed record AttributeStringInfo(
-        TextSpan Span,
-        SyntaxKind LiteralKind,
-        string RawText);
-
     /// <summary>
     /// Locates the string-literal argument of a binding attribute at the given source position
     /// and attribute index, and returns information about its token. Returns <c>null</c> when

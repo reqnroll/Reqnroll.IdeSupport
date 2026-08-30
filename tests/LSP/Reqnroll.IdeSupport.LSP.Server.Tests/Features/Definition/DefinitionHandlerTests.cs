@@ -393,7 +393,7 @@ public class DefinitionHandlerTests
     {
         var ideScope = new LspIdeScope(Substitute.For<IIdeSupportLogger>());
         var project  = new LspReqnrollProject(
-            new Protocol.ReqnrollProjectLoadedParams
+            new ReqnrollProjectLoadedParams
             {
                 WorkspaceFolder        = "/workspace",
                 ProjectFile            = "C:/proj/A.csproj",

@@ -30,7 +30,7 @@ public sealed class InlayHintHandler
 {
     private readonly IBindingMatchService      _matchService;
     private readonly ILspWorkspaceScopeManager _scopeManager;
-    private readonly IGherkinInlayHintService  _hintService;
+    private readonly IInlayHintService  _hintService;
     private readonly IIdeSupportLogger           _logger;
     private readonly IOperationDurationRecorder _recorder;
 
@@ -38,7 +38,7 @@ public sealed class InlayHintHandler
     public InlayHintHandler(
         IBindingMatchService      matchService,
         ILspWorkspaceScopeManager scopeManager,
-        IGherkinInlayHintService  hintService,
+        IInlayHintService  hintService,
         IIdeSupportLogger           logger,
         IOperationDurationRecorder? recorder = null)
     {
@@ -69,7 +69,7 @@ public sealed class InlayHintHandler
         }
 
         // An end position at column 0 means "the start of that line", so that line is outside the
-        // requested range (LSP convention). Same adjustment SemanticTokenService applies for
+        // requested range (LSP convention). Same adjustment SemanticTokensService applies for
         // textDocument/semanticTokens/range — the two range-scoped requests must agree on what an
         // exclusive end position means. The Intersects filter below would also drop those hints,
         // but only after Build had already computed them.

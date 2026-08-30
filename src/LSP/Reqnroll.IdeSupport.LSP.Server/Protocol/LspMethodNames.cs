@@ -88,6 +88,8 @@ public static class LspMethodNames
     public const string WorkspaceCodeLensRefresh = "workspace/codeLens/refresh";
     /// <summary>Method name for the <c>workspace/didChangeWatchedFiles</c> notification.</summary>
     public const string WorkspaceDidChangeWatchedFiles = "workspace/didChangeWatchedFiles";
+    /// <summary>Method name for the <c>workspace/executeCommand</c> request.</summary>
+    public const string WorkspaceExecuteCommand = "workspace/executeCommand";
     /// <summary>Method name for the <c>workspace/didChangeWorkspaceFolders</c> notification.</summary>
     public const string WorkspaceDidChangeWorkspaceFolders = "workspace/didChangeWorkspaceFolders";
     /// <summary>Method name for the <c>workspace/semanticTokens/refresh</c> request.</summary>
