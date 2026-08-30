@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
 using System.IO.Abstractions;
+using System.Linq;
 using Microsoft.Extensions.FileSystemGlobbing;
-using Reqnroll.IdeSupport.Common.Configuration;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration;
 
 /// <summary>
 /// Reads <c>.editorconfig</c> files from the file system and resolves the merged settings
@@ -152,7 +155,7 @@ public sealed class FileSystemEditorConfigOptionsProvider : IEditorConfigOptions
         matcher.AddInclude(normalized);
 
         // Match the target path relative to the .editorconfig's directory
-        var relative = Path.GetRelativePath(editorConfigDir, targetFilePath)
+        var relative = GetRelativePath(editorConfigDir, targetFilePath)
                            .Replace(Path.DirectorySeparatorChar, '/');
 
         return matcher.Match(relative).HasMatches;
@@ -171,6 +174,24 @@ public sealed class FileSystemEditorConfigOptionsProvider : IEditorConfigOptions
         if (!pattern.Contains('/') && !pattern.Contains('\\'))
             return "**/" + pattern;
         return pattern;
+    }
+
+    /// <summary>
+    /// netstandard2.0-safe substitute for <c>Path.GetRelativePath</c> (added in .NET Standard 2.1,
+    /// not part of this project's target). <paramref name="targetPath"/> is always an ancestor-
+    /// relative path under <paramref name="basePath"/> here — both come from the upward directory
+    /// walk in <see cref="CollectEditorConfigFiles"/> — so a simple prefix strip is sufficient.
+    /// </summary>
+    private static string GetRelativePath(string basePath, string targetPath)
+    {
+        var normalizedBase = basePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (targetPath.StartsWith(normalizedBase, StringComparison.OrdinalIgnoreCase))
+        {
+            var relative = targetPath.Substring(normalizedBase.Length);
+            return relative.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        return targetPath;
     }
 
     // ── Private data types ────────────────────────────────────────────────────

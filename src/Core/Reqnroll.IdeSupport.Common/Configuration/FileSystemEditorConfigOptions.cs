@@ -1,6 +1,7 @@
-using Reqnroll.IdeSupport.Common.Configuration;
+using System;
+using System.Collections.Generic;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Configuration;
+namespace Reqnroll.IdeSupport.Common.Configuration;
 
 /// <summary>
 /// EditorConfig settings resolved for a specific file path, backed by a flat key→value
