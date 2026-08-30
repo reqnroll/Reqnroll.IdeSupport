@@ -35,7 +35,7 @@ public interface IProjectBindingRegistryLookup
     /// <summary>
     /// Returns <see langword="true"/> when any registry owned by the projects that contain
     /// <paramref name="csUri"/> has a step-definition binding whose source span covers
-    /// <paramref name="query"/>. Used by <see cref="Handlers.ProtocolHandlers.StepReferencesHandler"/>
+    /// <paramref name="query"/>. Used by <see cref="Handlers.ProtocolHandlers.ReferencesHandler"/>
     /// to distinguish "no binding at this location" (return <see langword="null"/>) from
     /// "binding with zero matching steps" (return empty).
     /// </summary>

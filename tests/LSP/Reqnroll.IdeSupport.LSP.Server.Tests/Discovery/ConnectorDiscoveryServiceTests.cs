@@ -46,7 +46,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
                 ProcessorArchitectureSetting.UseSystem,
                 DiscoveryTestSupport.MinimalProjectSettings(
                     TargetFrameworkMoniker.Create(".NETCoreApp,Version=v8.0")),
-                NullTelemetryService.Instance)
+                NullLspTelemetryService.Instance)
         {
             _result = result;
         }
@@ -206,7 +206,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
                 ProcessorArchitectureSetting.UseSystem,
                 DiscoveryTestSupport.MinimalProjectSettings(
                     TargetFrameworkMoniker.Create(".NETCoreApp,Version=v8.0")),
-                NullTelemetryService.Instance)
+                NullLspTelemetryService.Instance)
         {
         }
 

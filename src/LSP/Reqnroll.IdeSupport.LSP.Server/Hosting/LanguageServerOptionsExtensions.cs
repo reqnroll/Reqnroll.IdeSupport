@@ -8,11 +8,12 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
+using Reqnroll.IdeSupport.LSP.Server.Features.Commenting;
 using Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
-using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefs;
+using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
@@ -60,6 +61,7 @@ public static class LanguageServerOptionsExtensions
                .AddHandler<CodeActionHandler>()
                .AddHandler<FormattingHandler>()
                .AddHandler<DocumentSymbolHandler>()
+               .AddHandler<CommentToggleHandler>()
                // F41: standard $/setTrace notification, letting the client change the trace
                // level at runtime.
                .AddHandler<SetTraceNotificationHandler>();
@@ -157,7 +159,7 @@ public static class LanguageServerOptionsExtensions
 
         options.OnRequest<ReferenceParams, LocationOrLocationLinks>(
             LspMethodNames.TextDocumentReferences,
-            (request, ct) => resolver!.Get<StepReferencesHandler>().HandleAsync(request, ct));
+            (request, ct) => resolver!.Get<ReferencesHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ReferenceParams, FindStepUsagesResponse>(
             LspMethodNames.ReqnrollFindStepUsages,
@@ -248,14 +250,14 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.TextDocumentPrepareRename,
             async (request, ct) =>
             {
-                var result = await resolver!.Get<StepRenameHandler>().HandlePrepareRenameAsync(request, ct);
+                var result = await resolver!.Get<RenameHandler>().HandlePrepareRenameAsync(request, ct);
                 return result != null ? (JToken)JObject.FromObject(result, CamelCaseSerializer) : JValue.CreateNull();
             });
 
         options.OnRequest<RenameParams, WorkspaceEdit>(
             LspMethodNames.TextDocumentRename,
             async (request, ct) =>
-                await resolver!.Get<StepRenameHandler>().HandleRenameAsync(request, ct)
+                await resolver!.Get<RenameHandler>().HandleRenameAsync(request, ct)
                 ?? new WorkspaceEdit());
 
         options.OnRequest<RenameTargetsParams, RenameTargetsResponse>(
@@ -266,7 +268,7 @@ public static class LanguageServerOptionsExtensions
 
         options.OnNotification<SelectRenameTargetParams>(
             LspMethodNames.ReqnrollSelectRenameTarget,
-            (request, ct) => resolver!.Get<StepRenameHandler>().HandleSelectRenameTargetAsync(request, ct));
+            (request, ct) => resolver!.Get<RenameHandler>().HandleSelectRenameTargetAsync(request, ct));
     }
 
     /// <summary>

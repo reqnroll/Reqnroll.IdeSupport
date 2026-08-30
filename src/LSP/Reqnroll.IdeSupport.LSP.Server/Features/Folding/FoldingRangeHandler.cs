@@ -25,7 +25,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 public sealed class FoldingRangeHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
-    private readonly IGherkinFoldingRangeService    _foldingService;
+    private readonly IFoldingRangeService    _foldingService;
     private readonly IFeatureParseCoordinator      _parseCoordinator;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder     _recorder;
@@ -33,7 +33,7 @@ public sealed class FoldingRangeHandler
     /// <summary>Initializes a new instance of the <see cref="FoldingRangeHandler"/> class.</summary>
     public FoldingRangeHandler(
         IDocumentBufferService documentBufferService,
-        IGherkinFoldingRangeService foldingService,
+        IFoldingRangeService foldingService,
         IFeatureParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)

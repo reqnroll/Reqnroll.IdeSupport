@@ -17,7 +17,7 @@ public sealed class LspIdeScope : IIdeScope
     {
         Logger = logger;
         FileSystem = new FileSystemForIDE();
-        TelemetryService = telemetryService ?? NullTelemetryService.Instance;
+        TelemetryService = telemetryService ?? NullLspTelemetryService.Instance;
         Actions = new LspIdeActions(logger);
     }
 
@@ -28,7 +28,7 @@ public sealed class LspIdeScope : IIdeScope
     /// <summary>
     /// Telemetry sink — the same DI-registered <see cref="LspErrorTelemetryService"/> singleton
     /// used everywhere else on the LSP server. Previously hardcoded to
-    /// <see cref="NullTelemetryService"/>, which silently dropped errors reported through this
+    /// <see cref="NullLspTelemetryService"/>, which silently dropped errors reported through this
     /// property (e.g. <c>ProjectScopeDeveroomConfigurationProvider</c>'s config-load exceptions via
     /// <c>WatchedFilesHandler</c>) even after issue #255's fix — that fix only reached consumers
     /// that resolve <see cref="Common.Telemetry.IErrorTelemetryService"/>/<see cref="ITelemetryService"/>

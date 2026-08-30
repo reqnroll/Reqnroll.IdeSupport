@@ -10,13 +10,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
 /// LSP-server-side <see cref="ITelemetryService"/>. Every VS/host-lifecycle member (project
-/// wizards, dialogs, project-system open) is a no-op here, same as <see cref="NullTelemetryService"/>
+/// wizards, dialogs, project-system open) is a no-op here, same as <see cref="NullLspTelemetryService"/>
 /// — those only make sense from a host UI, which the server doesn't have.
 /// <see cref="IErrorTelemetryService.MonitorError"/> is the one exception: it forwards to
 /// <see cref="ILspTelemetryService"/> as an "Error" <c>telemetry/event</c>, so exceptions raised
 /// inside LSP.Core (e.g. <c>DeveroomGherkinParser</c>/<c>DeveroomTagParser</c> via
 /// <c>IdeSupportLoggerExtensions.LogException</c>) actually reach telemetry instead of being
-/// silently dropped. Previously the server was wired with <see cref="NullTelemetryService"/> for
+/// silently dropped. Previously the server was wired with <see cref="NullLspTelemetryService"/> for
 /// every <see cref="ITelemetryService"/> consumer, including these (issue #255).
 /// <para>
 /// This class still implements the full <see cref="ITelemetryService"/> (not just

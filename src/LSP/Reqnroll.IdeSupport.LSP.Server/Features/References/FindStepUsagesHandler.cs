@@ -31,7 +31,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 /// </para>
 /// </summary>
 /// <remarks>
-/// Shares the same dependency set as <see cref="StepReferencesHandler"/>;
+/// Shares the same dependency set as <see cref="ReferencesHandler"/>;
 /// both are registered in <c>Program.cs</c> and resolved as singletons from the DI container.
 /// </remarks>
 public sealed class FindStepUsagesHandler

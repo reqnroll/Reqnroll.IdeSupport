@@ -26,7 +26,7 @@ public sealed class FormattingHandler
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
-    private readonly GherkinDocumentFormatter _formatter = new();
+    private readonly IGherkinDocumentFormatter _formatter;
 
     // Scheme is set explicitly (not just Pattern) because Rider's client-side document-selector
     // matcher for the formatting-exclusivity check (decompiled from LspServerImpl: the private
@@ -44,12 +44,14 @@ public sealed class FormattingHandler
         IDeveroomConfigurationProvider configurationProvider,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService = null,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IGherkinDocumentFormatter? formatter = null)
     {
         _documentBufferService = documentBufferService;
         _editorConfigOptionsProvider = editorConfigOptionsProvider;
         _configurationProvider = configurationProvider;
         _logger = logger;
+        _formatter = formatter ?? new GherkinDocumentFormatter();
         _telemetryService = telemetryService;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
@@ -253,7 +255,7 @@ public sealed class FormattingHandler
     {
         var language = _configurationProvider.GetConfiguration().DefaultFeatureLanguage ?? "en";
         var dialectProvider = ReqnrollGherkinDialectProvider.Get(language);
-        var parser = new DeveroomGherkinParser(dialectProvider, NullTelemetryService.Instance);
+        var parser = new DeveroomGherkinParser(dialectProvider, NullLspTelemetryService.Instance);
         parser.ParseAndCollectErrors(text, _logger, out var gherkinDocument, out _);
         return gherkinDocument;
     }

@@ -24,7 +24,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     private readonly IIdeSupportLogger _logger;
     private readonly ClientIdeContext _ide;
     private readonly ILspTelemetryService? _telemetry;
-    private readonly IPerfTelemetrySampler _sampler;
+    private readonly IPerformanceTelemetrySampler _sampler;
     private readonly ITraceService? _trace;
 
     /// <summary>Initializes a new instance of the <see cref="OperationDurationRecorder"/> class.</summary>
@@ -32,13 +32,13 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         IIdeSupportLogger logger,
         ClientIdeContext ide,
         ILspTelemetryService? telemetry = null,
-        IPerfTelemetrySampler? sampler = null,
+        IPerformanceTelemetrySampler? sampler = null,
         ITraceService? trace = null)
     {
         _logger = logger;
         _ide = ide;
         _telemetry = telemetry;
-        _sampler = sampler ?? PerfTelemetrySampler.FromEnvironment();
+        _sampler = sampler ?? PerformanceTelemetrySampler.FromEnvironment();
         _trace = trace;
     }
 

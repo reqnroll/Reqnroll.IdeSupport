@@ -158,7 +158,7 @@ public abstract class OutProcReqnrollConnector
         if (!string.IsNullOrEmpty(discoveryResult.ErrorMessage))
             discoveryResult.TelemetryProperties["Error"] = discoveryResult.ErrorMessage;
 
-        // Discovery-result telemetry is not implemented in the LSP server yet; NullTelemetryService no-ops it.
+        // Discovery-result telemetry is not implemented in the LSP server yet; NullLspTelemetryService no-ops it.
 
         return discoveryResult;
     }

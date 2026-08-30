@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 
 /// <summary>
 /// Visual Studio's MEF-exported <see cref="ITelemetryService"/> implementation: raises the
-/// well-known Reqnroll telemetry events by building a <see cref="GenericEvent"/> with the
+/// well-known Reqnroll telemetry events by building a <see cref="VsGenericEvent"/> with the
 /// relevant project-settings properties and handing it to the <see cref="ITelemetryTransmitter"/>.
 /// </summary>
 [Export(typeof(ITelemetryService))]
@@ -32,13 +32,13 @@ public class TelemetryService : ITelemetryService
     {
         //_welcomeService.OnIdeScopeActivityStarted(ideScope, this);
 
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Extension loaded"));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Extension loaded"));
     }
 
     /// <summary>Transmits the "Project loaded" event with project settings and feature-file count.</summary>
     public void MonitorOpenProject(ProjectSettings settings, int? featureFileCount)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Project loaded",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Project loaded",
             GetProjectSettingsProps(settings,
                 new Dictionary<string, object>
                 {
@@ -50,14 +50,14 @@ public class TelemetryService : ITelemetryService
     /// <summary>Transmits the "Feature file opened" event with project settings.</summary>
     public void MonitorOpenFeatureFile(ProjectSettings projectSettings)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Feature file opened",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Feature file opened",
             GetProjectSettingsProps(projectSettings)));
     }
 
     /// <summary>Transmits the "Feature file parsed" event with project settings and additional properties.</summary>
     public void MonitorParserParse(ProjectSettings settings, Dictionary<string, object> additionalProps)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Feature file parsed",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Feature file parsed",
             GetProjectSettingsProps(settings, additionalProps)));
     }
 
@@ -67,13 +67,13 @@ public class TelemetryService : ITelemetryService
     /// <summary>Transmits the "Extension installed" event.</summary>
     public void MonitorExtensionInstalled()
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Extension installed"));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Extension installed"));
     }
 
     /// <summary>Transmits the "Extension upgraded" event with the previous version.</summary>
     public void MonitorExtensionUpgraded(string oldExtensionVersion)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Extension upgraded",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Extension upgraded",
             new Dictionary<string, object>
             {
                 {"OldExtensionVersion", oldExtensionVersion}
@@ -83,7 +83,7 @@ public class TelemetryService : ITelemetryService
     /// <summary>Transmits a "{usageDays} day usage" event.</summary>
     public void MonitorExtensionDaysOfUsage(int usageDays)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent($"{usageDays} day usage"));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent($"{usageDays} day usage"));
     }
 
 
@@ -92,14 +92,14 @@ public class TelemetryService : ITelemetryService
     /// <summary>Transmits the "Feature file added" event with project settings.</summary>
     public void MonitorCommandAddFeatureFile(ProjectSettings settings)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Feature file added",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Feature file added",
             GetProjectSettingsProps(settings)));
     }
 
     /// <summary>Transmits the "Reqnroll config added" event with project settings.</summary>
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings settings)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Reqnroll config added",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Reqnroll config added",
             GetProjectSettingsProps(settings)));
     }
 
@@ -108,7 +108,7 @@ public class TelemetryService : ITelemetryService
     /// <summary>Transmits the "Reqnroll Generation executed" event with the failure flag and project settings.</summary>
     public void MonitorReqnrollGeneration(bool isFailed, ProjectSettings projectSettings)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Reqnroll Generation executed",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Reqnroll Generation executed",
             GetProjectSettingsProps(projectSettings,
                 new Dictionary<string, object>
                 {
@@ -133,14 +133,14 @@ public class TelemetryService : ITelemetryService
     /// <summary>Transmits the "Project Template Wizard Started" event.</summary>
     public void MonitorProjectTemplateWizardStarted()
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Project Template Wizard Started"));
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Project Template Wizard Started"));
     }
 
     /// <summary>Transmits the "Project Template Wizard Completed" event with the selected wizard options.</summary>
     public void MonitorProjectTemplateWizardCompleted(string dotNetFramework, string unitTestFramework,
         bool addFluentAssertions)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Project Template Wizard Completed",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Project Template Wizard Completed",
             new Dictionary<string, object>
             {
                 {"SelectedDotNetFramework", dotNetFramework},
@@ -152,13 +152,13 @@ public class TelemetryService : ITelemetryService
 
     //public void MonitorNotificationShown(NotificationData notification)
     //{
-    //    _telemetryTransmitter.TransmitEvent(new GenericEvent("Notification shown",
+    //    _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Notification shown",
     //        GetNotificationProps(notification)));
     //}
 
     //public void MonitorNotificationDismissed(NotificationData notification)
     //{
-    //    _telemetryTransmitter.TransmitEvent(new GenericEvent("Notification dismissed",
+    //    _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Notification dismissed",
     //        GetNotificationProps(notification)));
     //}
 
@@ -168,21 +168,21 @@ public class TelemetryService : ITelemetryService
         additionalProps ??= new Dictionary<string, object>();
         additionalProps.Add("Source", source);
         additionalProps.Add("URL", url);
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Link clicked",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Link clicked",
             additionalProps));
     }
 
     /// <summary>Transmits the "Upgrade dialog dismissed" event.</summary>
     public void MonitorUpgradeDialogDismissed(Dictionary<string, object> additionalProps)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Upgrade dialog dismissed",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Upgrade dialog dismissed",
             additionalProps));
     }
 
     /// <summary>Transmits the "Welcome dialog dismissed" event.</summary>
     public void MonitorWelcomeDialogDismissed(Dictionary<string, object> additionalProps)
     {
-        _telemetryTransmitter.TransmitEvent(new GenericEvent("Welcome dialog dismissed",
+        _telemetryTransmitter.TransmitEvent(new VsGenericEvent("Welcome dialog dismissed",
             additionalProps));
     }
 

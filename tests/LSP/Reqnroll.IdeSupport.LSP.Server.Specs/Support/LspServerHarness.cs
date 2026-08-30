@@ -82,7 +82,7 @@ public sealed class LspServerHarness : IAsyncDisposable
 
             // Issue #70: opt-in only (defaults to false) so every other spec keeps negotiating
             // the legacy WorkspaceEdit.Changes shape unchanged — only scenarios that explicitly
-            // start the harness this way exercise StepRenameHandler's annotated DocumentChanges path.
+            // start the harness this way exercise RenameHandler's annotated DocumentChanges path.
             if (supportsChangeAnnotations)
             {
                 options.WithCapability(new WorkspaceEditCapability

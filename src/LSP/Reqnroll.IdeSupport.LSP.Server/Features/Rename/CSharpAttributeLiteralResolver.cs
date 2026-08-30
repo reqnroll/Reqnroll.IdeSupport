@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Locates and rewrites a step-definition binding's C# attribute string literal via Roslyn.
-/// Extracted from <see cref="StepRenameHandler"/> (issue #139) as a self-contained module —
+/// Extracted from <see cref="RenameHandler"/> (issue #139) as a self-contained module —
 /// "given a binding, find or rewrite its attribute literal" — with no feature-file concerns.
 /// </summary>
 internal sealed class CSharpAttributeLiteralResolver

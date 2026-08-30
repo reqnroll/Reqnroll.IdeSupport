@@ -10,7 +10,19 @@ namespace Reqnroll.IdeSupport.LSP.Core.Formatting;
 /// Works on a <see cref="DocumentLinesEditBuffer"/> so that callers control which lines
 /// are included in the output.
 /// </summary>
-public class GherkinDocumentFormatter
+public interface IGherkinDocumentFormatter
+{
+    /// <summary>Applies indentation, tag normalization, table alignment, and step-keyword ("And") formatting to the whole document.</summary>
+    void FormatGherkinDocument(DeveroomGherkinDocument gherkinDocument, DocumentLinesEditBuffer lines,
+        GherkinFormatSettings formatSettings);
+
+    /// <summary>Aligns and rewrites the cells of the given table's rows, applying the configured cell padding and indent.</summary>
+    void FormatTable(DocumentLinesEditBuffer lines, IHasRows hasRows, GherkinFormatSettings formatSettings,
+        string indent, int[]? widths = null);
+}
+
+/// <inheritdoc cref="IGherkinDocumentFormatter"/>
+public class GherkinDocumentFormatter : IGherkinDocumentFormatter
 {
     /// <summary>Applies indentation, tag normalization, table alignment, and step-keyword ("And") formatting to the whole document.</summary>
     public void FormatGherkinDocument(DeveroomGherkinDocument gherkinDocument, DocumentLinesEditBuffer lines,

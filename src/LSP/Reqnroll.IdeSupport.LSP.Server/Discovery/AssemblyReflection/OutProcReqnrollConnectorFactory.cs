@@ -38,11 +38,11 @@ public sealed class OutProcReqnrollConnectorFactory : IOutProcConnectorFactory
         if (configuration.BindingDiscovery.ConnectorPath is not null)
             return new CustomOutProcReqnrollConnector(
                 configuration, _logger, tfm, extensionFolder,
-                processorArch, projectSettings, NullTelemetryService.Instance);
+                processorArch, projectSettings, NullLspTelemetryService.Instance);
 
         return new GenericOutProcReqnrollConnector(
             configuration, _logger, tfm, extensionFolder,
-            processorArch, projectSettings, NullTelemetryService.Instance);
+            processorArch, projectSettings, NullLspTelemetryService.Instance);
     }
 
     private static ProcessorArchitectureSetting ResolveProcessorArchitecture(DeveroomConfiguration configuration)

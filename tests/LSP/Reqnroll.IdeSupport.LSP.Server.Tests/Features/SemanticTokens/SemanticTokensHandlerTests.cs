@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.SemanticTokens;
 
 public class SemanticTokensHandlerTests
 {
-    private readonly ISemanticTokenService _tokenService = Substitute.For<ISemanticTokenService>();
+    private readonly ISemanticTokensService _tokenService = Substitute.For<ISemanticTokensService>();
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 

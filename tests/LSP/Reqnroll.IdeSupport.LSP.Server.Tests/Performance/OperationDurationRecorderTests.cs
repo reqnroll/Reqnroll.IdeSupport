@@ -16,7 +16,7 @@ public class OperationDurationRecorderTests
         public void Log(LogMessage message) => Messages.Add(message.Message);
     }
 
-    private sealed class FixedSampler : IPerfTelemetrySampler
+    private sealed class FixedSampler : IPerformanceTelemetrySampler
     {
         private readonly bool _sample;
         public FixedSampler(bool sample) => _sample = sample;

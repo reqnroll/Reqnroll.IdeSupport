@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// edit to Visual Studio (which needs a genuine <c>workspace/applyEdit</c> push, unlike other
 /// clients), invalidating the match cache for closed <c>.feature</c> files the edit touched, and
 /// self-refreshing the C# binding registry for an edited <c>.cs</c> file. Extracted from
-/// <see cref="StepRenameHandler.HandleRenameAsync"/> (issue #139) — these are "what happens after
+/// <see cref="RenameHandler.HandleRenameAsync"/> (issue #139) — these are "what happens after
 /// the edit is built" concerns, distinct from "how the edit is built."
 /// </summary>
 internal sealed class RenamePostApplyCoordinator
