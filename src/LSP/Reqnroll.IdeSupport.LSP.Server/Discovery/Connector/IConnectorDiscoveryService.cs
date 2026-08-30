@@ -1,7 +1,7 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
 /// Orchestrates a single binding-discovery run for a project scope.

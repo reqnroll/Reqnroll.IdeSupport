@@ -1,7 +1,4 @@
-﻿using Reqnroll.IdeSupport.LSP.Core.Bindings;
-using Reqnroll.IdeSupport.LSP.Server.Registry;
-
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
+﻿namespace Reqnroll.IdeSupport.LSP.Core.Tests.Bindings;
 
 public class NullBindingRegistryProviderTests
 {

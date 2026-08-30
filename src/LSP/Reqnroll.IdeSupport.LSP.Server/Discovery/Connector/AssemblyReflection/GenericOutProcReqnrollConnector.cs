@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.Common.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 
 /// <summary>Connector that selects and runs the bundled generic Reqnroll discovery connector matching the project's target framework.</summary>
 public class GenericOutProcReqnrollConnector : OutProcReqnrollConnector

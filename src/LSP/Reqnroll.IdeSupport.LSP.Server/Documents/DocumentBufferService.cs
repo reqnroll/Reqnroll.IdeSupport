@@ -1,7 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+namespace Reqnroll.IdeSupport.LSP.Server.Documents;
 
 /// <summary>The in-memory snapshot of an open document's URI, version, text, and any cached Gherkin tags.</summary>
 public record DocumentBuffer(DocumentUri Uri, int? Version, string Text, IReadOnlyCollection<IdeSupportTag>? Tags = null);

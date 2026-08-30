@@ -1,6 +1,6 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+namespace Reqnroll.IdeSupport.LSP.Server.Documents;
 
 /// <summary>The live (possibly unsaved) text of an open <c>.cs</c> document, keyed by URI.</summary>
 public record CSharpFileText(DocumentUri Uri, string Text);

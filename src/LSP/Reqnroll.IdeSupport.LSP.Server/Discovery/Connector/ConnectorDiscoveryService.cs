@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
 /// Orchestrates one binding-discovery run against a project scope.

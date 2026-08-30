@@ -1,6 +1,6 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Documents;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+namespace Reqnroll.IdeSupport.LSP.Server.Documents;
 
 /// <summary>DocumentBufferExtensions</summary>
 public static class DocumentBufferExtensions

@@ -3,9 +3,10 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 
 /// <summary>
 /// Default <see cref="IOutProcConnectorFactory"/>.  Builds a generic connector for the
