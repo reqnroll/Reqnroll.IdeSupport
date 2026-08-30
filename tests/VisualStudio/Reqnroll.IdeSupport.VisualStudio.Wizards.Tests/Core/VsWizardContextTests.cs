@@ -99,7 +99,7 @@ public class VsWizardContextTests
 
     private static ProjectSettings CreateProjectSettings(ReqnrollProjectTraits traits)
         => new(
-            Kind: DeveroomProjectKind.ReqnrollTestProject,
+            Kind: IdeSupportProjectKind.ReqnrollTestProject,
             TargetFrameworkMoniker: TargetFrameworkMoniker.Create(".NETCoreApp,Version=v8.0")!,
             TargetFrameworkMonikers: "net8.0",
             PlatformTarget: ProjectPlatformTarget.x64,

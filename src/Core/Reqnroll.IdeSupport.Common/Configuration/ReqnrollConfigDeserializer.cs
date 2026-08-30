@@ -6,12 +6,12 @@ using System.Collections.Generic;
 namespace Reqnroll.IdeSupport.Common.Configuration;
 
 /// <summary>ReqnrollConfigDeserializer</summary>
-public class ReqnrollConfigDeserializer : IConfigDeserializer<DeveroomConfiguration>
+public class ReqnrollConfigDeserializer : IConfigDeserializer<IdeSupportConfiguration>
 {
     private readonly JsonNetConfigDeserializer<ReqnrollJsonConfiguration> _reqnrollConfigDeserializer = new();
 
     /// <summary>Parses the given <c>reqnroll.json</c> content and applies its settings onto <paramref name="config"/>.</summary>
-    public void Populate(string jsonString, DeveroomConfiguration config)
+    public void Populate(string jsonString, IdeSupportConfiguration config)
     {
         var reqnrollJsonConfiguration = new ReqnrollJsonConfiguration {Ide = config};
         _reqnrollConfigDeserializer.Populate(jsonString, reqnrollJsonConfiguration);
@@ -39,7 +39,7 @@ public class ReqnrollConfigDeserializer : IConfigDeserializer<DeveroomConfigurat
 
     private class ReqnrollJsonConfiguration
     {
-        public DeveroomConfiguration Ide { get; set; }
+        public IdeSupportConfiguration Ide { get; set; }
         public Dictionary<string, string> Language { get; set; }
         public Dictionary<string, string> BindingCulture { get; set; }
         public Dictionary<string, string> Trace { get; set; }

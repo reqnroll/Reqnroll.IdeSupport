@@ -4,10 +4,10 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Formatting;
 
 public class GherkinTableLocatorTests
 {
-    private DeveroomGherkinDocument ParseDocument(params string[] lines)
+    private IdeSupportGherkinDocument ParseDocument(params string[] lines)
     {
         var text = string.Join(Environment.NewLine, lines);
-        var parser = new DeveroomGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
+        var parser = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("en-US"),
             Substitute.For<ITelemetryService>());
         parser.ParseAndCollectErrors(text, new IdeSupportNullLogger(), out var gherkinDocument, out _);
         return gherkinDocument;

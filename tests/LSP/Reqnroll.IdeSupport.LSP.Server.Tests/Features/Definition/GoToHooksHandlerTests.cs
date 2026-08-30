@@ -32,26 +32,26 @@ public class GoToHooksHandlerTests
     private static readonly DocumentUri CsUri =
         DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
 
-    // DeveroomTag ranges relative to FeatureText:
+    // IdeSupportTag ranges relative to FeatureText:
     //   FeatureBlock covers the full text            [0, 40)
     //   ScenarioDefinitionBlock covers lines 1-2     [11, 40)
     //   StepBlock covers line 2                      [23, 40)
     private static readonly LspTextSnapshot Snapshot =
         new(FeatureUri.ToString(), 1, FeatureText);
 
-    private static readonly DeveroomTag FeatureBlockTag = new(
-        DeveroomTagTypes.FeatureBlock,
+    private static readonly IdeSupportTag FeatureBlockTag = new(
+        IdeSupportTagTypes.FeatureBlock,
         new GherkinRange(Snapshot, 0, FeatureText.Length));
 
-    private static readonly DeveroomTag ScenarioDefTag = new(
-        DeveroomTagTypes.ScenarioDefinitionBlock,
+    private static readonly IdeSupportTag ScenarioDefTag = new(
+        IdeSupportTagTypes.ScenarioDefinitionBlock,
         new GherkinRange(Snapshot, 11, 29));    // "Scenario: S\n    Given a step\n"
 
-    private static readonly DeveroomTag StepBlockTag = new(
-        DeveroomTagTypes.StepBlock,
+    private static readonly IdeSupportTag StepBlockTag = new(
+        IdeSupportTagTypes.StepBlock,
         new GherkinRange(Snapshot, 23, 17));    // "    Given a step\n"
 
-    private static readonly IReadOnlyList<DeveroomTag> AllTags =
+    private static readonly IReadOnlyList<IdeSupportTag> AllTags =
         new[] { FeatureBlockTag, ScenarioDefTag, StepBlockTag };
 
     public GoToHooksHandlerTests()
@@ -79,7 +79,7 @@ public class GoToHooksHandlerTests
 
     private void SetupBuffer(
         DocumentUri uri, string text,
-        IReadOnlyCollection<DeveroomTag>? tags = null)
+        IReadOnlyCollection<IdeSupportTag>? tags = null)
     {
         var buf = new DocumentBuffer(uri, 1, text, tags);
         DocumentBuffer? ignored;
@@ -163,7 +163,7 @@ public class GoToHooksHandlerTests
     public async Task Handle_cursor_outside_all_tags_returns_empty_Async()
     {
         // Use a buffer where no tags cover any position
-        SetupBuffer(FeatureUri, FeatureText, tags: Array.Empty<DeveroomTag>());
+        SetupBuffer(FeatureUri, FeatureText, tags: Array.Empty<IdeSupportTag>());
 
         _registryLookup.GetRegistryForUri(FeatureUri)
                        .Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));

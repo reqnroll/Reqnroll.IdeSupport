@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tagging;
 /// <summary>Default implementation of <see cref="IGherkinDocumentTaggerService"/> that parses Gherkin tags and maintains binding match sets for feature documents.</summary>
 public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
 {
-    private readonly IDeveroomTagParser            _tagParser;
+    private readonly IIdeSupportTagParser            _tagParser;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly ISemanticTokenService         _semanticTokenService;
     private readonly IBindingMatchService          _bindingMatchService;
@@ -31,7 +31,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     /// <summary>Creates the tagger service with its collaborating document, registry, and match-set dependencies.</summary>
     public GherkinDocumentTaggerService(
         IDocumentBufferService        documentBufferService,
-        IDeveroomTagParser            tagParser,
+        IIdeSupportTagParser            tagParser,
         IProjectBindingRegistryLookup registryLookup,
         ISemanticTokenService         semanticTokenService,
         IBindingMatchService          bindingMatchService,
@@ -50,25 +50,25 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     }
 
     /// <inheritdoc/>
-    public Task<IReadOnlyCollection<DeveroomTag>> ParseAsync(DocumentUri uri, int? version)
+    public Task<IReadOnlyCollection<IdeSupportTag>> ParseAsync(DocumentUri uri, int? version)
     {
         if (!_documentBufferService.TryGet(uri, out var buffer))
-            return Task.FromResult<IReadOnlyCollection<DeveroomTag>>(Array.Empty<DeveroomTag>());
+            return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
 
         var snapshot = buffer?.ToGherkinTextSnapshot();
 
         if (snapshot == null)
-            return Task.FromResult<IReadOnlyCollection<DeveroomTag>>(Array.Empty<DeveroomTag>());
+            return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
 
         if (version.HasValue && snapshot.Version != version)
         {
             _logger.LogWarning($"Version mismatch for document {uri}: expected {version}, got {snapshot.Version}");
-            return Task.FromResult<IReadOnlyCollection<DeveroomTag>>(Array.Empty<DeveroomTag>());
+            return Task.FromResult<IReadOnlyCollection<IdeSupportTag>>(Array.Empty<IdeSupportTag>());
         }
 
         // Route to the per-project binding registry for this document URI.
         // Returns ProjectBindingRegistry.Invalid when the project has not yet been
-        // discovered or its first discovery run has not completed; DeveroomTagParser
+        // discovered or its first discovery run has not completed; IdeSupportTagParser
         // gracefully skips step-matching in that case.
         var registry = _registryLookup.GetRegistryForUri(uri);
         var tags     = _tagParser.Parse(snapshot, registry);

@@ -6,20 +6,20 @@ using ILogger = ReqnrollConnector.Logging.ILogger;
 
 namespace ReqnrollConnector.SourceDiscovery.DnLib;
 
-public class DnLibDeveroomSymbolReader : DeveroomSymbolReader
+public class DnLibIdeSupportSymbolReader : IdeSupportSymbolReader
 {
     private readonly ModuleDefMD _moduleDefMd;
 
-    public DnLibDeveroomSymbolReader(ModuleDefMD moduleDefMd)
+    public DnLibIdeSupportSymbolReader(ModuleDefMD moduleDefMd)
     {
         _moduleDefMd = moduleDefMd;
     }
 
-    public static DeveroomSymbolReader Create(ILogger log, string assemblyPath)
+    public static IdeSupportSymbolReader Create(ILogger log, string assemblyPath)
     {
-        log.Info($"Creating {nameof(DnLibDeveroomSymbolReader)}");
+        log.Info($"Creating {nameof(DnLibIdeSupportSymbolReader)}");
         var moduleDefMd = ModuleDefMD.Load(assemblyPath);
-        return new DnLibDeveroomSymbolReader(moduleDefMd);
+        return new DnLibIdeSupportSymbolReader(moduleDefMd);
     }
 
     public override IEnumerable<MethodSymbolSequencePoint> ReadMethodSymbol(int token)
@@ -120,5 +120,5 @@ public class DnLibDeveroomSymbolReader : DeveroomSymbolReader
 
     private string GetSourcePath(PdbDocument document) => document.Url;
 
-    public override string ToString() => $"{nameof(DnLibDeveroomSymbolReader)}({_moduleDefMd})";
+    public override string ToString() => $"{nameof(DnLibIdeSupportSymbolReader)}({_moduleDefMd})";
 }

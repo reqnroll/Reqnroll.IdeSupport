@@ -47,7 +47,7 @@ public class CommentToggleHandlerTests
 
     private void SetupBuffer(DocumentUri uri, string text)
     {
-        var buf = new DocumentBuffer(uri, 1, text, Array.Empty<DeveroomTag>());
+        var buf = new DocumentBuffer(uri, 1, text, Array.Empty<IdeSupportTag>());
         DocumentBuffer? outBuf;
         _bufferService.TryGet(uri, out outBuf)
             .Returns(x =>

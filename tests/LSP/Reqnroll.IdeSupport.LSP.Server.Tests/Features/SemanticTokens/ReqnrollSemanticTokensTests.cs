@@ -27,22 +27,22 @@ public class ReqnrollSemanticTokensTests
 
     private static readonly IGherkinTextSnapshot Snapshot = new StubSnapshot();
 
-    private static DeveroomTag Tag(string type) =>
+    private static IdeSupportTag Tag(string type) =>
         new(type, new GherkinRange(Snapshot, 0, 1));
 
     [Theory]
-    [InlineData(DeveroomTagTypes.StepKeyword, ReqnrollClassificationTypeNames.Keyword)]
-    [InlineData(DeveroomTagTypes.DefinitionLineKeyword, ReqnrollClassificationTypeNames.Keyword)]
-    [InlineData(DeveroomTagTypes.Tag, ReqnrollClassificationTypeNames.Tag)]
-    [InlineData(DeveroomTagTypes.Description, ReqnrollClassificationTypeNames.Description)]
-    [InlineData(DeveroomTagTypes.Comment, ReqnrollClassificationTypeNames.Comment)]
-    [InlineData(DeveroomTagTypes.DocString, ReqnrollClassificationTypeNames.DocString)]
-    [InlineData(DeveroomTagTypes.DataTable, ReqnrollClassificationTypeNames.DataTable)]
-    [InlineData(DeveroomTagTypes.DataTableHeader, ReqnrollClassificationTypeNames.DataTableHeader)]
-    [InlineData(DeveroomTagTypes.StepParameter, ReqnrollClassificationTypeNames.StepParameter)]
-    [InlineData(DeveroomTagTypes.ScenarioOutlinePlaceholder, ReqnrollClassificationTypeNames.ScenarioOutlinePlaceholder)]
-    [InlineData(DeveroomTagTypes.UndefinedStep, ReqnrollClassificationTypeNames.UndefinedStep)]
-    [InlineData(DeveroomTagTypes.AmbiguousStep, ReqnrollClassificationTypeNames.AmbiguousStep)]
+    [InlineData(IdeSupportTagTypes.StepKeyword, ReqnrollClassificationTypeNames.Keyword)]
+    [InlineData(IdeSupportTagTypes.DefinitionLineKeyword, ReqnrollClassificationTypeNames.Keyword)]
+    [InlineData(IdeSupportTagTypes.Tag, ReqnrollClassificationTypeNames.Tag)]
+    [InlineData(IdeSupportTagTypes.Description, ReqnrollClassificationTypeNames.Description)]
+    [InlineData(IdeSupportTagTypes.Comment, ReqnrollClassificationTypeNames.Comment)]
+    [InlineData(IdeSupportTagTypes.DocString, ReqnrollClassificationTypeNames.DocString)]
+    [InlineData(IdeSupportTagTypes.DataTable, ReqnrollClassificationTypeNames.DataTable)]
+    [InlineData(IdeSupportTagTypes.DataTableHeader, ReqnrollClassificationTypeNames.DataTableHeader)]
+    [InlineData(IdeSupportTagTypes.StepParameter, ReqnrollClassificationTypeNames.StepParameter)]
+    [InlineData(IdeSupportTagTypes.ScenarioOutlinePlaceholder, ReqnrollClassificationTypeNames.ScenarioOutlinePlaceholder)]
+    [InlineData(IdeSupportTagTypes.UndefinedStep, ReqnrollClassificationTypeNames.UndefinedStep)]
+    [InlineData(IdeSupportTagTypes.AmbiguousStep, ReqnrollClassificationTypeNames.AmbiguousStep)]
     public void TryGetToken_maps_known_leaf_tags_to_the_matching_reqnroll_token_type(string tagType, string expectedName)
     {
         ReqnrollSemanticTokens.TryGetToken(Tag(tagType), out var typeIndex, out var modBits).Should().BeTrue();
@@ -54,8 +54,8 @@ public class ReqnrollSemanticTokensTests
     [Theory]
     // DefinedStep and BindingError have no Reqnroll classification — they render as normal
     // step text, so the server emits no token for them.
-    [InlineData(DeveroomTagTypes.DefinedStep)]
-    [InlineData(DeveroomTagTypes.BindingError)]
+    [InlineData(IdeSupportTagTypes.DefinedStep)]
+    [InlineData(IdeSupportTagTypes.BindingError)]
     [InlineData("SomeUnmappedContainerTag")]
     public void TryGetToken_returns_false_for_unclassified_or_container_tags(string tagType)
     {

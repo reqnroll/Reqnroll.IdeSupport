@@ -34,15 +34,15 @@ public class ResolveTestTargetsHandlerTests
     private static readonly LspTextSnapshot Snapshot =
         new(FeatureUri.ToString(), 1, FeatureText);
 
-    private static readonly DeveroomTag FeatureBlockTag = new(
-        DeveroomTagTypes.FeatureBlock,
+    private static readonly IdeSupportTag FeatureBlockTag = new(
+        IdeSupportTagTypes.FeatureBlock,
         new GherkinRange(Snapshot, 0, FeatureText.Length));
 
-    private static readonly DeveroomTag ScenarioDefTag = new(
-        DeveroomTagTypes.ScenarioDefinitionBlock,
+    private static readonly IdeSupportTag ScenarioDefTag = new(
+        IdeSupportTagTypes.ScenarioDefinitionBlock,
         new GherkinRange(Snapshot, 11, 29)); // "Scenario: S\n    Given a step\n"
 
-    private static readonly IReadOnlyList<DeveroomTag> AllTags =
+    private static readonly IReadOnlyList<IdeSupportTag> AllTags =
         new[] { FeatureBlockTag, ScenarioDefTag };
 
     public ResolveTestTargetsHandlerTests()
@@ -64,7 +64,7 @@ public class ResolveTestTargetsHandlerTests
             Range = new LspRange(new Position(startLine, startChar), new Position(endLine, endChar)),
         };
 
-    private void SetupBuffer(DocumentUri uri, string text, IReadOnlyCollection<DeveroomTag>? tags = null)
+    private void SetupBuffer(DocumentUri uri, string text, IReadOnlyCollection<IdeSupportTag>? tags = null)
     {
         var buf = new DocumentBuffer(uri, 1, text, tags);
         DocumentBuffer? ignored;
@@ -114,7 +114,7 @@ public class ResolveTestTargetsHandlerTests
     [Fact]
     public async Task Handle_resolver_returning_empty_list_returns_empty_targets_Async()
     {
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
             .Returns(Array.Empty<ScenarioTestTarget>());
 
         var result = await CreateSut().HandleAsync(
@@ -128,7 +128,7 @@ public class ResolveTestTargetsHandlerTests
     [Fact]
     public async Task Handle_maps_a_non_parameterized_target_to_a_dto_Async()
     {
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
             .Returns(new[] { new ScenarioTestTarget("Tests.FFeature", "S", false, null, null) });
 
         var result = await CreateSut().HandleAsync(
@@ -146,7 +146,7 @@ public class ResolveTestTargetsHandlerTests
     public async Task Handle_maps_a_parameterized_row_target_to_a_dto_Async()
     {
         var rowArgs = new Dictionary<string, string> { ["a"] = "1", ["b"] = "2" };
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
             .Returns(new[] { new ScenarioTestTarget("Tests.FFeature", "S", true, rowArgs, 2) });
 
         var result = await CreateSut().HandleAsync(
@@ -161,7 +161,7 @@ public class ResolveTestTargetsHandlerTests
     [Fact]
     public async Task Handle_maps_multiple_targets_in_order_Async()
     {
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
             .Returns(new[]
             {
                 new ScenarioTestTarget("Tests.FFeature", "S", true, null, 0),
@@ -191,13 +191,13 @@ public class ResolveTestTargetsHandlerTests
             },
             Substitute.For<IIdeScope>());
         _scopeManager.ResolvePrimaryOwner(FeatureUri).Returns(project);
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string?>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string?>())
             .Returns(Array.Empty<ScenarioTestTarget>());
 
         await CreateSut().HandleAsync(RequestAt(FeatureUri, 1, 0, 1, 11), CancellationToken.None);
 
         _resolver.Received(1).Resolve(
-            Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(),
+            Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(),
             Arg.Any<IReadOnlyCollection<string>>(), projectFolder);
     }
 
@@ -205,13 +205,13 @@ public class ResolveTestTargetsHandlerTests
     public async Task Handle_passes_a_null_project_folder_when_no_owner_resolves_Async()
     {
         _scopeManager.ResolvePrimaryOwner(FeatureUri).Returns((LspReqnrollProject?)null);
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string?>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>(), Arg.Any<string?>())
             .Returns(Array.Empty<ScenarioTestTarget>());
 
         await CreateSut().HandleAsync(RequestAt(FeatureUri, 1, 0, 1, 11), CancellationToken.None);
 
         _resolver.Received(1).Resolve(
-            Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(),
+            Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(),
             Arg.Any<IReadOnlyCollection<string>>(), (string?)null);
     }
 
@@ -220,7 +220,7 @@ public class ResolveTestTargetsHandlerTests
     [Fact]
     public async Task HandleAsync_emits_command_telemetry_Async()
     {
-        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
+        _resolver.Resolve(Arg.Any<Uri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<GherkinRange>(), Arg.Any<IReadOnlyCollection<string>>())
             .Returns(Array.Empty<ScenarioTestTarget>());
         var telemetry = Substitute.For<ILspTelemetryService>();
 

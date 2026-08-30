@@ -16,7 +16,7 @@ public abstract class OutProcReqnrollConnector
     private const string BindingDiscoveryCommandName = "binding discovery";
 
     /// <summary>The Deveroom/Reqnroll configuration for the project being discovered.</summary>
-    protected readonly DeveroomConfiguration _configuration;
+    protected readonly IdeSupportConfiguration _configuration;
     /// <summary>Root folder of the IDE extension, used to locate bundled connector executables.</summary>
     protected readonly string _extensionFolder;
     /// <summary>Logger used to record connector invocation and diagnostic output.</summary>
@@ -33,7 +33,7 @@ public abstract class OutProcReqnrollConnector
     protected NuGetVersion ReqnrollVersion => _projectSettings.ReqnrollVersion;
 
     /// <summary>Initializes the connector's shared configuration, logging, and project settings.</summary>
-    protected OutProcReqnrollConnector(DeveroomConfiguration configuration, IIdeSupportLogger logger,
+    protected OutProcReqnrollConnector(IdeSupportConfiguration configuration, IIdeSupportLogger logger,
         TargetFrameworkMoniker targetFrameworkMoniker, string extensionFolder,
         ProcessorArchitectureSetting processorArchitecture, ProjectSettings projectSettings,
         ITelemetryService telemetryService)

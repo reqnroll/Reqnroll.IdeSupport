@@ -29,7 +29,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Editor.Classification;
 /// exports are intentionally not duplicated here.
 /// </para>
 /// </remarks>
-internal static class DeveroomClassifications
+internal static class IdeSupportClassifications
 {
     public const string Keyword = ReqnrollClassificationTypeNames.Keyword;
     public const string Tag = ReqnrollClassificationTypeNames.Tag;

@@ -3,7 +3,7 @@ using Gherkin.Ast;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
-internal class DeveroomGherkinAstBuilder : AstBuilder<DeveroomGherkinDocument>, IAstBuilder<DeveroomGherkinDocument>
+internal class IdeSupportGherkinAstBuilder : AstBuilder<IdeSupportGherkinDocument>, IAstBuilder<IdeSupportGherkinDocument>
 {
     private readonly Func<GherkinDialect> _documentDialectProvider;
     private readonly List<ParserException> _errors = new();
@@ -11,7 +11,7 @@ internal class DeveroomGherkinAstBuilder : AstBuilder<DeveroomGherkinDocument>, 
     private readonly List<int> _statesForLines = new();
     private ScenarioBlock _scenarioBlock = ScenarioBlock.Given;
 
-    public DeveroomGherkinAstBuilder(string sourceFilePath, Func<GherkinDialect> documentDialectProvider)
+    public IdeSupportGherkinAstBuilder(string sourceFilePath, Func<GherkinDialect> documentDialectProvider)
     {
         _sourceFilePath = sourceFilePath;
         _documentDialectProvider = documentDialectProvider;
@@ -59,7 +59,7 @@ internal class DeveroomGherkinAstBuilder : AstBuilder<DeveroomGherkinDocument>, 
         var stepKeyword = GetStepKeyword(token.MatchedGherkinDialect, keyword);
         _scenarioBlock = stepKeyword.ToScenarioBlock() ?? _scenarioBlock;
 
-        return new DeveroomGherkinStep(location, keyword, keywordType, text, argument, stepKeyword, _scenarioBlock);
+        return new IdeSupportGherkinStep(location, keyword, keywordType, text, argument, stepKeyword, _scenarioBlock);
     }
 
     private void ResetBlock()
@@ -69,7 +69,7 @@ internal class DeveroomGherkinAstBuilder : AstBuilder<DeveroomGherkinDocument>, 
 
     protected override GherkinDocument CreateGherkinDocument(Feature feature, IEnumerable<Comment> gherkinDocumentComments,
         AstNode node) =>
-        new DeveroomGherkinDocument(feature, gherkinDocumentComments, _sourceFilePath,
+        new IdeSupportGherkinDocument(feature, gherkinDocumentComments, _sourceFilePath,
             _documentDialectProvider(), _statesForLines);
 
     protected override Scenario CreateScenario(IEnumerable<Tag> tags, Location location, string keyword, string name,

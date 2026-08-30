@@ -10,7 +10,7 @@ public class ReqnrollConfigDeserializerTests
     {
         // Arrange
         var deserializer = new ReqnrollConfigDeserializer();
-        var config = new DeveroomConfiguration();
+        var config = new IdeSupportConfiguration();
         var json = """
         {
           "language": {
@@ -34,7 +34,7 @@ public class ReqnrollConfigDeserializerTests
     {
         // Arrange
         var deserializer = new ReqnrollConfigDeserializer();
-        var config = new DeveroomConfiguration();
+        var config = new IdeSupportConfiguration();
         var json = """
         {
           "trace": {
@@ -57,7 +57,7 @@ public class ReqnrollConfigDeserializerTests
     {
         // Arrange
         var deserializer = new ReqnrollConfigDeserializer();
-        var config = new DeveroomConfiguration();
+        var config = new IdeSupportConfiguration();
         var json = """
         {
           "bindingCulture": {
@@ -80,7 +80,7 @@ public class ReqnrollConfigDeserializerTests
     {
         // Arrange
         var deserializer = new ReqnrollConfigDeserializer();
-        var config = new DeveroomConfiguration();
+        var config = new IdeSupportConfiguration();
         var json = """
         {
           "language": {
@@ -113,7 +113,7 @@ public class ReqnrollConfigDeserializerTests
     {
         // Arrange
         var deserializer = new ReqnrollConfigDeserializer();
-        var config = new DeveroomConfiguration();
+        var config = new IdeSupportConfiguration();
         var styleJson = styleValue != null
             ? $@"
             {{

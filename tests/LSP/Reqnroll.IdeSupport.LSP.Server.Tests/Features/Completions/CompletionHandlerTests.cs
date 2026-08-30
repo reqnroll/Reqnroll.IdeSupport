@@ -27,7 +27,7 @@ public class CompletionHandlerTests
     private readonly ILspWorkspaceScopeManager     _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly IIdeSupportLogger               _logger = Substitute.For<IIdeSupportLogger>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
@@ -35,7 +35,7 @@ public class CompletionHandlerTests
     public CompletionHandlerTests()
     {
         _scopeManager.GetConfigurationProviderForUri(Arg.Any<DocumentUri>()).Returns(_configProvider);
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
     private CompletionHandler CreateSut(bool isVisualStudio = false) =>

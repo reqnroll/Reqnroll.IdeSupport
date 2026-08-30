@@ -8,12 +8,12 @@ namespace Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 /// state, letting callers ask what tokens would be valid at a given line (used for error
 /// recovery / completion suggestions).
 /// </summary>
-public class DeveroomGherkinDocument : GherkinDocument
+public class IdeSupportGherkinDocument : GherkinDocument
 {
     private readonly List<int> _statesForLines;
 
     /// <summary>Creates a document from its parsed parts plus per-line parser state.</summary>
-    public DeveroomGherkinDocument(Feature feature, IEnumerable<Comment> comments, string sourceFilePath,
+    public IdeSupportGherkinDocument(Feature feature, IEnumerable<Comment> comments, string sourceFilePath,
         GherkinDialect gherkinDialect, List<int> statesForLines) : base(feature, comments)
     {
         _statesForLines = statesForLines;
@@ -32,6 +32,6 @@ public class DeveroomGherkinDocument : GherkinDocument
         var state = _statesForLines[line];
         if (state < 0)
             return new TokenType[0];
-        return DeveroomGherkinParser.GetExpectedTokens(state, telemetryService);
+        return IdeSupportGherkinParser.GetExpectedTokens(state, telemetryService);
     }
 }

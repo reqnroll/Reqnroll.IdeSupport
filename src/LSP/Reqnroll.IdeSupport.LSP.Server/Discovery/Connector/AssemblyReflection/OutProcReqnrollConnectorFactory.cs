@@ -30,7 +30,7 @@ public sealed class OutProcReqnrollConnectorFactory : IOutProcConnectorFactory
     /// <inheritdoc/>
     public OutProcReqnrollConnector Create(IProjectScope scope)
     {
-        var configuration   = scope.GetDeveroomConfiguration();
+        var configuration   = scope.GetIdeSupportConfiguration();
         var tfm             = TargetFrameworkMoniker.Create(scope.TargetFrameworkMoniker);
         var extensionFolder = AppContext.BaseDirectory;
         var processorArch   = ResolveProcessorArchitecture(configuration);
@@ -46,7 +46,7 @@ public sealed class OutProcReqnrollConnectorFactory : IOutProcConnectorFactory
             processorArch, projectSettings, NullTelemetryService.Instance);
     }
 
-    private static ProcessorArchitectureSetting ResolveProcessorArchitecture(DeveroomConfiguration configuration)
+    private static ProcessorArchitectureSetting ResolveProcessorArchitecture(IdeSupportConfiguration configuration)
         => configuration.ProcessorArchitecture != ProcessorArchitectureSetting.AutoDetect
             ? configuration.ProcessorArchitecture
             : ProcessorArchitectureSetting.UseSystem;
@@ -58,7 +58,7 @@ public sealed class OutProcReqnrollConnectorFactory : IOutProcConnectorFactory
     /// </summary>
     private static ProjectSettings BuildMinimalProjectSettings(TargetFrameworkMoniker? tfm)
         => new(
-            DeveroomProjectKind.ReqnrollTestProject,
+            IdeSupportProjectKind.ReqnrollTestProject,
             tfm!,
             tfm?.Value ?? string.Empty,
             ProjectPlatformTarget.AnyCpu,

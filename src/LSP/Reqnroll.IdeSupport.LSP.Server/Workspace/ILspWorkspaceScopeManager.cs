@@ -83,11 +83,11 @@ public interface ILspWorkspaceScopeManager
     LspReqnrollProject? GetProjectByOutputPath(string assemblyPath);
 
     /// <summary>
-    /// Returns the <see cref="IDeveroomConfigurationProvider"/> for the project that
+    /// Returns the <see cref="IIdeSupportConfigurationProvider"/> for the project that
     /// covers <paramref name="uri"/>, falling back to a default provider when no
     /// project or workspace matches.
     /// </summary>
-    IDeveroomConfigurationProvider GetConfigurationProviderForUri(DocumentUri uri);
+    IIdeSupportConfigurationProvider GetConfigurationProviderForUri(DocumentUri uri);
 
     // ── Primary-owner resolution / shared-feature scoping (phase 2A) ─────────
 

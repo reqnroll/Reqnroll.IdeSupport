@@ -22,7 +22,7 @@ public sealed class FormattingHandler
 {
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider;
-    private readonly IDeveroomConfigurationProvider _configurationProvider;
+    private readonly IIdeSupportConfigurationProvider _configurationProvider;
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
@@ -41,7 +41,7 @@ public sealed class FormattingHandler
     public FormattingHandler(
         IDocumentBufferService documentBufferService,
         IEditorConfigOptionsProvider editorConfigOptionsProvider,
-        IDeveroomConfigurationProvider configurationProvider,
+        IIdeSupportConfigurationProvider configurationProvider,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService = null,
         IOperationDurationRecorder? recorder = null)
@@ -249,11 +249,11 @@ public sealed class FormattingHandler
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private DeveroomGherkinDocument ParseDocument(string text)
+    private IdeSupportGherkinDocument ParseDocument(string text)
     {
         var language = _configurationProvider.GetConfiguration().DefaultFeatureLanguage ?? "en";
         var dialectProvider = ReqnrollGherkinDialectProvider.Get(language);
-        var parser = new DeveroomGherkinParser(dialectProvider, NullTelemetryService.Instance);
+        var parser = new IdeSupportGherkinParser(dialectProvider, NullTelemetryService.Instance);
         parser.ParseAndCollectErrors(text, _logger, out var gherkinDocument, out _);
         return gherkinDocument;
     }

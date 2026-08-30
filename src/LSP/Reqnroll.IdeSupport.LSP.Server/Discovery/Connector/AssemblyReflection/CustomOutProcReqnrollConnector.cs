@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 public class CustomOutProcReqnrollConnector : OutProcReqnrollConnector
 {
     /// <summary>Creates a connector that runs the connector path configured for the project.</summary>
-    public CustomOutProcReqnrollConnector(DeveroomConfiguration configuration, IIdeSupportLogger logger, TargetFrameworkMoniker targetFrameworkMoniker, string extensionFolder, ProcessorArchitectureSetting processorArchitecture, ProjectSettings projectSettings, ITelemetryService telemetryService) : base(configuration, logger, targetFrameworkMoniker, extensionFolder, processorArchitecture, projectSettings, telemetryService)
+    public CustomOutProcReqnrollConnector(IdeSupportConfiguration configuration, IIdeSupportLogger logger, TargetFrameworkMoniker targetFrameworkMoniker, string extensionFolder, ProcessorArchitectureSetting processorArchitecture, ProjectSettings projectSettings, ITelemetryService telemetryService) : base(configuration, logger, targetFrameworkMoniker, extensionFolder, processorArchitecture, projectSettings, telemetryService)
     {
     }
 

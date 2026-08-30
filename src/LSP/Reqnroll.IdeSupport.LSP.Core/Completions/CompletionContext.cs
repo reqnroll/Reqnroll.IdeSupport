@@ -34,7 +34,7 @@ public sealed class KeywordCompletionContext : CompletionContext
 public sealed class StepCompletionContext : CompletionContext
 {
     /// <summary>The Gherkin step the cursor is on, used to filter completions by <c>ScenarioBlock</c>.</summary>
-    public DeveroomGherkinStep Step               { get; }
+    public IdeSupportGherkinStep Step               { get; }
 
     /// <summary>Text the user has typed after the keyword and its trailing space.</summary>
     public string              TypedAfterKeyword  { get; }
@@ -44,7 +44,7 @@ public sealed class StepCompletionContext : CompletionContext
 
     /// <summary>Initializes a new instance of the <see cref="StepCompletionContext"/> class.</summary>
     public StepCompletionContext(
-        DeveroomGherkinStep step,
+        IdeSupportGherkinStep step,
         string              typedAfterKeyword,
         int                 stepTextStartColumn)
     {

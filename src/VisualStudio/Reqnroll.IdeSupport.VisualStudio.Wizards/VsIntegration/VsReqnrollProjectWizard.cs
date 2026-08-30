@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 /// <summary>
 /// Ported from VsReqnrollProjectWizard.
 /// ReqnrollProjectTemplateWizard is resolved via MEF from the original
-/// extension's component model so it can receive IDeveroomWindowManager
+/// extension's component model so it can receive IIdeSupportWindowManager
 /// and ITelemetryService — these are replaced by the IWizardContext
 /// services constructed in VsTemplateWizardBase.RunStarted.
 /// </summary>

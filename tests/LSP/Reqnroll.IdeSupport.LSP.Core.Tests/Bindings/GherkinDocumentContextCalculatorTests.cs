@@ -10,10 +10,10 @@ public class GherkinDocumentContextCalculatorTests
     private readonly ITelemetryService _monitoring = Substitute.For<ITelemetryService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
-    private DeveroomGherkinDocument ParseFeature(string text)
+    private IdeSupportGherkinDocument ParseFeature(string text)
     {
         var dialect = ReqnrollGherkinDialectProvider.Get("en");
-        var parser = new DeveroomGherkinParser(dialect, _monitoring);
+        var parser = new IdeSupportGherkinParser(dialect, _monitoring);
         parser.ParseAndCollectErrors(text, _logger, out var doc, out _);
         return doc;
     }

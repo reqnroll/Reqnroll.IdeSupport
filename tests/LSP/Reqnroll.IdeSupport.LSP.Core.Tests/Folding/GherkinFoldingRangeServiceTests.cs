@@ -7,13 +7,13 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Folding;
 
 public class GherkinFoldingRangeServiceTests
 {
-    private static IReadOnlyCollection<DeveroomTag> ParseTags(string text)
+    private static IReadOnlyCollection<IdeSupportTag> ParseTags(string text)
     {
         var logger = Substitute.For<IIdeSupportLogger>();
         var monitoring = Substitute.For<ITelemetryService>();
-        var configProvider = Substitute.For<IDeveroomConfigurationProvider>();
-        configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
-        var parser = new DeveroomTagParser(logger, monitoring, configProvider);
+        var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
+        configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
+        var parser = new IdeSupportTagParser(logger, monitoring, configProvider);
         return parser.Parse(new StubGherkinTextSnapshot(text), ProjectBindingRegistry.Invalid);
     }
 
@@ -24,7 +24,7 @@ public class GherkinFoldingRangeServiceTests
     [Fact]
     public void Empty_tag_collection_returns_empty_list()
     {
-        var result = CreateSut().BuildFoldingRanges(Array.Empty<DeveroomTag>());
+        var result = CreateSut().BuildFoldingRanges(Array.Empty<IdeSupportTag>());
         result.Should().BeEmpty();
     }
 

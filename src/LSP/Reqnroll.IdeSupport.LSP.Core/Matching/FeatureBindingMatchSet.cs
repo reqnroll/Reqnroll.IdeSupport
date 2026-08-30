@@ -83,9 +83,9 @@ public sealed class FeatureBindingMatchSet
     public StepBindingMatch? FindAt(int offset) => Steps.FirstOrDefault(s => s.Contains(offset));
 
     /// <summary>
-    /// Builds a match set from the flattened tag collection produced by <c>DeveroomTagParser</c>.
-    /// Each <see cref="DeveroomTagTypes.DefinedStep"/> / <see cref="DeveroomTagTypes.UndefinedStep"/> /
-    /// <see cref="DeveroomTagTypes.AmbiguousStep"/> tag carries the step text span as its range and the
+    /// Builds a match set from the flattened tag collection produced by <c>IdeSupportTagParser</c>.
+    /// Each <see cref="IdeSupportTagTypes.DefinedStep"/> / <see cref="IdeSupportTagTypes.UndefinedStep"/> /
+    /// <see cref="IdeSupportTagTypes.AmbiguousStep"/> tag carries the step text span as its range and the
     /// computed <see cref="MatchResult"/> as its data; this method projects those into
     /// <see cref="StepBindingMatch"/> entries.
     /// </summary>
@@ -98,10 +98,10 @@ public sealed class FeatureBindingMatchSet
         string documentId,
         int? documentVersion,
         int registryVersion,
-        IEnumerable<DeveroomTag> tags,
+        IEnumerable<IdeSupportTag> tags,
         ProjectOwner owner = default)
     {
-        var tagList = tags as IReadOnlyCollection<DeveroomTag> ?? tags.ToList();
+        var tagList = tags as IReadOnlyCollection<IdeSupportTag> ?? tags.ToList();
         var byStart = new Dictionary<int, StepBindingMatch>();
 
         // Short project name for the Project column (e.g. "Minimal", "Minimalnet481").
@@ -111,7 +111,7 @@ public sealed class FeatureBindingMatchSet
 
         foreach (var tag in tagList)
         {
-            if (tag.Type is not (DeveroomTagTypes.DefinedStep or DeveroomTagTypes.UndefinedStep or DeveroomTagTypes.AmbiguousStep))
+            if (tag.Type is not (IdeSupportTagTypes.DefinedStep or IdeSupportTagTypes.UndefinedStep or IdeSupportTagTypes.AmbiguousStep))
                 continue;
             if (tag.Data is not MatchResult match)
                 continue;
@@ -135,13 +135,13 @@ public sealed class FeatureBindingMatchSet
                 // FeatureBlock, so keep climbing past it (and any other intermediate tags) until we
                 // reach the FeatureBlock rather than assuming exactly one level up.
                 var ruleTag = scenarioDefTag?.ParentTag;
-                while (ruleTag != null && ruleTag.Type is not (DeveroomTagTypes.RuleBlock or DeveroomTagTypes.FeatureBlock))
+                while (ruleTag != null && ruleTag.Type is not (IdeSupportTagTypes.RuleBlock or IdeSupportTagTypes.FeatureBlock))
                     ruleTag = ruleTag.ParentTag;
-                var ruleName = ruleTag?.Type == DeveroomTagTypes.RuleBlock ? (ruleTag.Data as IHasDescription)?.Name : null;
+                var ruleName = ruleTag?.Type == IdeSupportTagTypes.RuleBlock ? (ruleTag.Data as IHasDescription)?.Name : null;
                 if (string.IsNullOrEmpty(ruleName)) ruleName = null;
 
                 var featureTag = ruleTag;
-                while (featureTag != null && featureTag.Type != DeveroomTagTypes.FeatureBlock)
+                while (featureTag != null && featureTag.Type != IdeSupportTagTypes.FeatureBlock)
                     featureTag = featureTag.ParentTag;
                 var featureName       = (featureTag?.Data as Feature)?.Name;
                 if (string.IsNullOrEmpty(featureName)) featureName = null;
@@ -156,7 +156,7 @@ public sealed class FeatureBindingMatchSet
         // Background shares ScenarioDefinitionBlock with real scenarios but isn't independently
         // executed/countable, so it's excluded here (issue #373).
         var scenarios = tagList
-            .Where(t => t.Type == DeveroomTagTypes.ScenarioDefinitionBlock)
+            .Where(t => t.Type == IdeSupportTagTypes.ScenarioDefinitionBlock)
             .Where(t => !((IGherkinDocumentContext)t).IsBackground())
             .Select(t => new FeatureScenarioInfo(documentId, t))
             .OrderBy(s => s.Range.Start)

@@ -80,7 +80,7 @@ public static class HookMatching
     /// (see <see cref="GetOwnLevelHookTypes"/>) instead of the cumulative set.
     /// </summary>
     public static IReadOnlyList<ProjectHookBinding> ResolveMatchingHooks(
-        ProjectBindingRegistry registry, HookContextLevel level, DeveroomTag contextTag,
+        ProjectBindingRegistry registry, HookContextLevel level, IdeSupportTag contextTag,
         bool ownLevelOnly = false)
     {
         var applicableTypes = ownLevelOnly ? GetOwnLevelHookTypes(level) : GetApplicableHookTypes(level);
@@ -97,41 +97,41 @@ public static class HookMatching
 
     /// <summary>
     /// Determines the Gherkin context level at <paramref name="offset"/> from the flat
-    /// <paramref name="tags"/> collection (produced by <c>DeveroomTagParser</c>) and returns
+    /// <paramref name="tags"/> collection (produced by <c>IdeSupportTagParser</c>) and returns
     /// the deepest matching tag for use as an <c>IGherkinDocumentContext</c> in scope matching.
     /// </summary>
-    public static (HookContextLevel level, DeveroomTag contextTag) ResolveContext(
-        IReadOnlyCollection<DeveroomTag> tags, int offset)
+    public static (HookContextLevel level, IdeSupportTag contextTag) ResolveContext(
+        IReadOnlyCollection<IdeSupportTag> tags, int offset)
     {
         // Check from innermost to outermost: Step → Scenario → Feature.
         // A StepBlock hit means we're on a step line — use the enclosing ScenarioDefinitionBlock
         // as context because steps carry no tags; only scenario and feature blocks do.
-        var stepTag = FindTag(tags, DeveroomTagTypes.StepBlock, offset);
+        var stepTag = FindTag(tags, IdeSupportTagTypes.StepBlock, offset);
         if (stepTag is not null)
         {
-            var enclosingScenario = FindTag(tags, DeveroomTagTypes.ScenarioDefinitionBlock, offset);
+            var enclosingScenario = FindTag(tags, IdeSupportTagTypes.ScenarioDefinitionBlock, offset);
             return (HookContextLevel.Step, enclosingScenario ?? stepTag);
         }
 
-        var scenarioTag = FindTag(tags, DeveroomTagTypes.ScenarioDefinitionBlock, offset);
+        var scenarioTag = FindTag(tags, IdeSupportTagTypes.ScenarioDefinitionBlock, offset);
         if (scenarioTag is not null)
             return (HookContextLevel.Scenario, scenarioTag);
 
-        var featureTag = FindTag(tags, DeveroomTagTypes.FeatureBlock, offset);
+        var featureTag = FindTag(tags, IdeSupportTagTypes.FeatureBlock, offset);
         if (featureTag is not null)
             return (HookContextLevel.Feature, featureTag);
 
         return (HookContextLevel.None, null!);
     }
 
-    private static DeveroomTag? FindTag(IReadOnlyCollection<DeveroomTag> tags, string type, int offset)
+    private static IdeSupportTag? FindTag(IReadOnlyCollection<IdeSupportTag> tags, string type, int offset)
         => tags.FirstOrDefault(t => t.Type == type && ContainsOffset(t, offset));
 
     // StepBlock/ScenarioDefinitionBlock/FeatureBlock tags are already full-line spans
-    // (DeveroomTagParser.GetBlockSpan uses GherkinRange.FromLines, so Range.End is the offset
+    // (IdeSupportTagParser.GetBlockSpan uses GherkinRange.FromLines, so Range.End is the offset
     // right past the last character of the block's last line). The upper bound must be
     // inclusive so a click at end-of-line still resolves — Gherkin is line-oriented, and this
     // is the same class of off-by-one that made Go to Definition miss in #101.
-    private static bool ContainsOffset(DeveroomTag tag, int offset)
+    private static bool ContainsOffset(IdeSupportTag tag, int offset)
         => offset >= tag.Range.Start && offset <= tag.Range.End;
 }

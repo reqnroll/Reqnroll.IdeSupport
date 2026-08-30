@@ -238,14 +238,14 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     }
 
     /// <summary>Returns the owning project's configuration provider for <paramref name="uri"/>, or a default configuration provider when no project covers it.</summary>
-    public IDeveroomConfigurationProvider GetConfigurationProviderForUri(DocumentUri uri)
+    public IIdeSupportConfigurationProvider GetConfigurationProviderForUri(DocumentUri uri)
     {
         var project = GetProjectForUri(uri);
         if (project is not null)
-            return project.GetDeveroomConfigurationProvider();
+            return project.GetIdeSupportConfigurationProvider();
 
         // Fallback: default configuration when no project covers the URI.
-        return new ProjectSystemDeveroomConfigurationProvider(_ideScope);
+        return new ProjectSystemIdeSupportConfigurationProvider(_ideScope);
     }
 
     // ── Membership index (workspace scope / project membership tracking) ────

@@ -83,7 +83,7 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     /// </summary>
     public MatchResultItem Match(Step step, IGherkinDocumentContext context, string stepText = null)
     {
-        if (!IsValid || !(step is DeveroomGherkinStep deveroomGherkinStep))
+        if (!IsValid || !(step is IdeSupportGherkinStep deveroomGherkinStep))
             return null;
         if (deveroomGherkinStep.ScenarioBlock != StepDefinitionType)
             return null;
@@ -108,7 +108,7 @@ public class ProjectStepDefinitionBinding : ProjectBinding
     /// </summary>
     public bool WouldMatchIgnoringValidity(Step step, IGherkinDocumentContext context, string stepText = null)
     {
-        if (Regex is null || !(step is DeveroomGherkinStep deveroomGherkinStep))
+        if (Regex is null || !(step is IdeSupportGherkinStep deveroomGherkinStep))
             return false;
         if (deveroomGherkinStep.ScenarioBlock != StepDefinitionType)
             return false;

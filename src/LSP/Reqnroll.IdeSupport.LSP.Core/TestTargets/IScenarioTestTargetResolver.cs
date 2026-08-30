@@ -37,7 +37,7 @@ public interface IScenarioTestTargetResolver
     /// <returns>Zero or more resolved targets. Never <see langword="null"/>.</returns>
     IReadOnlyList<ScenarioTestTarget> Resolve(
         Uri featureUri,
-        IReadOnlyCollection<DeveroomTag> tags,
+        IReadOnlyCollection<IdeSupportTag> tags,
         GherkinRange scenarioRange,
         IReadOnlyCollection<string> projectPackageIds,
         string? projectFolder = null);

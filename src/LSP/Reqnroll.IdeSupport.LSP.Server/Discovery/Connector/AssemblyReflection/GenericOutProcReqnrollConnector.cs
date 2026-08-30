@@ -27,7 +27,7 @@ public class GenericOutProcReqnrollConnector : OutProcReqnrollConnector
 
     /// <summary>Creates a connector that discovers bindings for a project targeting <paramref name="targetFrameworkMoniker"/>.</summary>
     public GenericOutProcReqnrollConnector(
-        DeveroomConfiguration configuration,
+        IdeSupportConfiguration configuration,
         IIdeSupportLogger logger,
         TargetFrameworkMoniker targetFrameworkMoniker,
         string extensionFolder,
