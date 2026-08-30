@@ -35,7 +35,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
-    private readonly IGherkinDocumentSymbolService _symbolService;
+    private readonly IDocumentSymbolService _symbolService;
     private readonly IFeatureParseCoordinator      _parseCoordinator;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
@@ -52,7 +52,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     /// <summary>Initializes a new instance of the <see cref="DocumentSymbolHandler"/> class.</summary>
     public DocumentSymbolHandler(
         IDocumentBufferService documentBufferService,
-        IGherkinDocumentSymbolService symbolService,
+        IDocumentSymbolService symbolService,
         IFeatureParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)

@@ -23,7 +23,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedNotification>
 {
     private readonly ILanguageServerFacade _languageServer;
-    private readonly ISemanticTokenService _tokenService;
+    private readonly ISemanticTokensService _tokenService;
     private readonly ClientIdeContext _clientIde;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
@@ -31,7 +31,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
     /// <summary>Initializes a new instance of the <see cref="SemanticTokensPushHandler"/> class.</summary>
     public SemanticTokensPushHandler(
         ILanguageServerFacade languageServer,
-        ISemanticTokenService tokenService,
+        ISemanticTokensService tokenService,
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)

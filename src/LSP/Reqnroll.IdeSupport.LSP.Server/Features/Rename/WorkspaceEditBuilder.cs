@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// every other client (Visual Studio does not advertise <c>changeAnnotationSupport</c> as of
 /// Phase 0's capability survey). Byte-identical to the handler's pre-#70 output.</description></item>
 /// </list>
-/// Centralising the branch here keeps <see cref="StepRenameHandler.HandleRenameAsync"/> free of
+/// Centralising the branch here keeps <see cref="RenameHandler.HandleRenameAsync"/> free of
 /// shape-negotiation logic — it only calls <see cref="Add"/> and <see cref="Build"/>.
 /// </summary>
 internal sealed class WorkspaceEditBuilder
@@ -71,7 +71,7 @@ internal sealed class WorkspaceEditBuilder
     /// <summary>
     /// Groups the accumulated edits by document URI. Exposed so callers that need the plain
     /// per-file edit list outside the returned <see cref="WorkspaceEdit"/> — e.g. the VS-only
-    /// <c>workspace/applyEdit</c> push in <see cref="StepRenameHandler.HandleRenameAsync"/>,
+    /// <c>workspace/applyEdit</c> push in <see cref="RenameHandler.HandleRenameAsync"/>,
     /// which VS's rename-interception pipe requires regardless of this builder's negotiated
     /// shape — don't have to re-derive it.
     /// </summary>

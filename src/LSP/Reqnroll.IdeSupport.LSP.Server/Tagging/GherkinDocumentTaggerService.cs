@@ -21,7 +21,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
 {
     private readonly IIdeSupportTagParser            _tagParser;
     private readonly IProjectBindingRegistryLookup _registryLookup;
-    private readonly ISemanticTokenService         _semanticTokenService;
+    private readonly ISemanticTokensService         _semanticTokenService;
     private readonly IBindingMatchService          _bindingMatchService;
     private readonly IIdeSupportLogger               _logger;
     private readonly IDocumentBufferService        _documentBufferService;
@@ -33,7 +33,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         IDocumentBufferService        documentBufferService,
         IIdeSupportTagParser            tagParser,
         IProjectBindingRegistryLookup registryLookup,
-        ISemanticTokenService         semanticTokenService,
+        ISemanticTokensService         semanticTokenService,
         IBindingMatchService          bindingMatchService,
         ILspWorkspaceScopeManager     scopeManager,
         IIdeSupportLogger               logger,

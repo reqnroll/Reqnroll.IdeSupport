@@ -281,7 +281,7 @@ public class FindStepUsagesHandlerTests
     {
         var ideScope = new LspIdeScope(Substitute.For<IIdeSupportLogger>());
         var project  = new LspReqnrollProject(
-            new Reqnroll.IdeSupport.LSP.Server.Protocol.ReqnrollProjectLoadedParams
+            new Reqnroll.IdeSupport.LSP.Server.Workspace.ReqnrollProjectLoadedParams
             {
                 WorkspaceFolder        = "/workspace",
                 ProjectFile            = "/workspace/My.csproj",

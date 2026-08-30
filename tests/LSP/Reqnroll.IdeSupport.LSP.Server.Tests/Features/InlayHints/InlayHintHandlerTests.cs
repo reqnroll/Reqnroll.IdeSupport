@@ -18,7 +18,7 @@ public class InlayHintHandlerTests
 {
     private readonly BindingMatchService _matchService = new();
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
-    private readonly IGherkinInlayHintService _hintService = new GherkinInlayHintService();
+    private readonly IInlayHintService _hintService = new InlayHintService();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
     private static readonly DocumentUri FeatureUri =
@@ -98,7 +98,7 @@ public class InlayHintHandlerTests
     [Fact]
     public async Task HandleAsync_passes_the_requested_ranges_line_bounds_to_Build()
     {
-        var hintService = Substitute.For<IGherkinInlayHintService>();
+        var hintService = Substitute.For<IInlayHintService>();
         var sut = new InlayHintHandler(_matchService, _scopeManager, hintService, _logger);
 
         var step = MakeMatch("N.S1", startOffset: 33, length: 6, pattern: "a step");

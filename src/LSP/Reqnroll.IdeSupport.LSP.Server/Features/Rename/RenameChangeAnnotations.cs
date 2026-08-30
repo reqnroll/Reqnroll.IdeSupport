@@ -2,7 +2,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// Annotation ids tagging the two kinds of edit a step rename produces, referenced by
-/// <see cref="StepRenameHandler.HandleRenameAsync"/> via <see cref="WorkspaceEditBuilder"/>.
+/// <see cref="RenameHandler.HandleRenameAsync"/> via <see cref="WorkspaceEditBuilder"/>.
 /// A compliant client (LSP 3.16 <c>changeAnnotationSupport</c>) groups the resulting
 /// <c>WorkspaceEdit</c> preview by these ids instead of applying every edit silently.
 /// </summary>

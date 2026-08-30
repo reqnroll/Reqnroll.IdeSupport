@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 public class SemanticTokensPushHandlerTests
 {
     private readonly ILanguageServerFacade _facade = Substitute.For<ILanguageServerFacade>();
-    private readonly ISemanticTokenService _tokenService = Substitute.For<ISemanticTokenService>();
+    private readonly ISemanticTokensService _tokenService = Substitute.For<ISemanticTokensService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");

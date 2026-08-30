@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 /// <summary>
 /// Handles <c>reqnroll/renameTargets</c> — enumerates all binding attributes at the cursor
 /// position for the Step Rename feature's multi-attribute picker flow. Extracted from
-/// <see cref="StepRenameHandler"/> (issue #139): a distinct LSP custom method with no session
+/// <see cref="RenameHandler"/> (issue #139): a distinct LSP custom method with no session
 /// state of its own, sharing only the read-only binding-resolution primitives in
 /// <see cref="RenameBindingResolver"/>.
 /// </summary>

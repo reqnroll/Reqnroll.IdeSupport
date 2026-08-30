@@ -20,7 +20,7 @@ public class GherkinDocumentTaggerServiceTests
     private readonly IDocumentBufferService        _bufferService       = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportTagParser            _tagParser           = Substitute.For<IIdeSupportTagParser>();
     private readonly IProjectBindingRegistryLookup _registryLookup      = Substitute.For<IProjectBindingRegistryLookup>();
-    private readonly ISemanticTokenService         _semanticTokenService = Substitute.For<ISemanticTokenService>();
+    private readonly ISemanticTokensService         _semanticTokenService = Substitute.For<ISemanticTokensService>();
     private readonly IBindingMatchService          _bindingMatchService  = Substitute.For<IBindingMatchService>();
     private readonly ILspWorkspaceScopeManager     _scopeManager         = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IIdeSupportLogger               _logger               = Substitute.For<IIdeSupportLogger>();
@@ -45,7 +45,7 @@ public class GherkinDocumentTaggerServiceTests
     {
         var ideScope = new LspIdeScope(Substitute.For<IIdeSupportLogger>());
         return new LspReqnrollProject(
-            new Reqnroll.IdeSupport.LSP.Server.Protocol.ReqnrollProjectLoadedParams
+            new Reqnroll.IdeSupport.LSP.Server.Workspace.ReqnrollProjectLoadedParams
             {
                 WorkspaceFolder        = folder,
                 ProjectFile            = folder + "/My.csproj",

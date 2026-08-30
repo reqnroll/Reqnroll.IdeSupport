@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <c>LSP.Core</c> has no business depending on — before this split, every <c>LSP.Core</c> class
 /// that only ever needed to report a parse exception (<c>IdeSupportGherkinParser</c>,
 /// <c>IdeSupportTagParser</c>, <c>CompletionContextResolver</c>) took a full <see cref="ITelemetryService"/>
-/// dependency, and every implementation of it (<c>NullTelemetryService</c>,
+/// dependency, and every implementation of it (<c>NullLspTelemetryService</c>,
 /// <c>LspErrorTelemetryService</c>) had to stub out those ~15 unrelated members just to satisfy the
 /// interface (issue #255/#259).
 /// </para>
