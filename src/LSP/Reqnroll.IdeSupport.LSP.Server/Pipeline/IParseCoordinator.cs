@@ -30,7 +30,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// see its remarks) observe the same pending work instead of reading state out from under it.
 /// </para>
 /// </remarks>
-public interface IFeatureParseCoordinator
+public interface IParseCoordinator
 {
     /// <summary>
     /// Schedules <paramref name="work"/> to run for <paramref name="uri"/>, chained after any

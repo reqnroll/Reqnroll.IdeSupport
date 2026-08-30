@@ -25,7 +25,7 @@ public class TextDocumentSyncHandlerTests
 
     // Real implementation, not a mock: Handle now schedules its parse/discovery work through this
     // instead of awaiting it inline (issue #471), so tests need the scheduled work to actually run.
-    private readonly IFeatureParseCoordinator _parseCoordinator = new FeatureParseCoordinator(Substitute.For<IIdeSupportLogger>());
+    private readonly IParseCoordinator _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
     private static readonly DocumentUri CsUri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
@@ -67,7 +67,7 @@ public class TextDocumentSyncHandlerTests
         // Tag storage and match-set computation are delegated to IGherkinDocumentTaggerService.ParseAsync
         // (mocked here); the handler only publishes the match-cache-changed notification afterwards.
 
-        // Handle schedules the parse/publish through IFeatureParseCoordinator instead of awaiting
+        // Handle schedules the parse/publish through IParseCoordinator instead of awaiting
         // it inline (issue #471) — wait for that scheduled work before asserting its effects.
         await WaitForScheduledWorkAsync(FeatureUri);
         await _mediator.Received(1).Publish(

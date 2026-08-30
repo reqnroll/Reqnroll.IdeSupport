@@ -4,8 +4,8 @@ using Reqnroll.IdeSupport.Common.Logging;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
-/// <inheritdoc cref="IFeatureParseCoordinator"/>
-public sealed class FeatureParseCoordinator : IFeatureParseCoordinator
+/// <inheritdoc cref="IParseCoordinator"/>
+public sealed class ParseCoordinator : IParseCoordinator
 {
     private readonly IIdeSupportLogger _logger;
 
@@ -14,8 +14,8 @@ public sealed class FeatureParseCoordinator : IFeatureParseCoordinator
     private readonly ConcurrentDictionary<string, Task> _pending =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureParseCoordinator"/> class.</summary>
-    public FeatureParseCoordinator(IIdeSupportLogger logger)
+    /// <summary>Initializes a new instance of the <see cref="ParseCoordinator"/> class.</summary>
+    public ParseCoordinator(IIdeSupportLogger logger)
     {
         _logger = logger;
     }
@@ -68,7 +68,7 @@ public sealed class FeatureParseCoordinator : IFeatureParseCoordinator
         }
         catch (Exception ex)
         {
-            _logger.LogWarning($"[FeatureParseCoordinator] Scheduled work for '{uri}' failed: {ex.Message}");
+            _logger.LogWarning($"[ParseCoordinator] Scheduled work for '{uri}' failed: {ex.Message}");
         }
     }
 }

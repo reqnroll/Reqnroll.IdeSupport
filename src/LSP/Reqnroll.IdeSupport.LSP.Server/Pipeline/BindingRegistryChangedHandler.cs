@@ -50,7 +50,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
     private readonly IMediator                        _mediator;
     private readonly ICSharpBindingDiscoveryService   _csharpDiscoveryService;
     private readonly IFeatureRescanDebouncer          _rescanDebouncer;
-    private readonly IFeatureParseCoordinator         _parseCoordinator;
+    private readonly IParseCoordinator         _parseCoordinator;
     private readonly IIdeSupportLogger                  _logger;
     private readonly IOperationDurationRecorder         _recorder;
     private readonly IFileSystemForIDE                  _fileSystem;
@@ -66,7 +66,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         IMediator mediator,
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         IFeatureRescanDebouncer rescanDebouncer,
-        IFeatureParseCoordinator parseCoordinator,
+        IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IFileSystemForIDE fileSystem,
         IOperationDurationRecorder? recorder = null)
@@ -263,7 +263,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
 
     /// <summary>Returns the number of open feature files scheduled for reparse, for the caller's PERF-line size tag (issue #471 investigation).</summary>
     /// <remarks>
-    /// Routes each buffer's reparse through <see cref="IFeatureParseCoordinator"/> instead of
+    /// Routes each buffer's reparse through <see cref="IParseCoordinator"/> instead of
     /// awaiting it inline (issue #471): this reconciliation is already reached via a detached,
     /// unawaited path (<c>BindingRegistryProviderRouter.OnProviderChanged</c>'s <c>_ =
     /// _mediator.Publish(...)</c>), so routing through the coordinator here isn't about freeing a

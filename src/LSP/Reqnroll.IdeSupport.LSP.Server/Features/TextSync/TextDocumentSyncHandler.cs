@@ -35,7 +35,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly ILanguageServerFacade _languageServer;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
-    private readonly IFeatureParseCoordinator _parseCoordinator;
+    private readonly IParseCoordinator _parseCoordinator;
 
     private static readonly TextDocumentSelector _documentSelector = new(
         new TextDocumentFilter { Pattern = "**/*.feature" },
@@ -54,7 +54,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IMediator mediator,
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
-        IFeatureParseCoordinator parseCoordinator,
+        IParseCoordinator parseCoordinator,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService = documentBufferService;
@@ -117,9 +117,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // handed to the coordinator instead of awaited inline, so this handler returns without
         // holding up other files' didOpen/didChange or newly-arriving Parallel requests.
         // FoldingRangeHandler/DocumentSymbolHandler -- the two pull handlers with no
-        // server-initiated refresh capability -- await IFeatureParseCoordinator.WaitForReadyAsync
+        // server-initiated refresh capability -- await IParseCoordinator.WaitForReadyAsync
         // before reading buffer.Tags, so this doesn't reintroduce the race a raw fire-and-forget
-        // would (see IFeatureParseCoordinator's remarks).
+        // would (see IParseCoordinator's remarks).
         _parseCoordinator.Schedule(uri, async ct =>
         {
             using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);

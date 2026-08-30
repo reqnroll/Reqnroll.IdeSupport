@@ -16,7 +16,7 @@ public class DocumentSymbolHandlerTests
 {
     private readonly IDocumentBufferService       _bufferService  = Substitute.For<IDocumentBufferService>();
     private readonly IDocumentSymbolService _symbolService  = Substitute.For<IDocumentSymbolService>();
-    private readonly IFeatureParseCoordinator     _parseCoordinator = Substitute.For<IFeatureParseCoordinator>();
+    private readonly IParseCoordinator     _parseCoordinator = Substitute.For<IParseCoordinator>();
     private readonly IIdeSupportLogger               _logger         = Substitute.For<IIdeSupportLogger>();
 
     private static readonly DocumentUri FeatureUri =

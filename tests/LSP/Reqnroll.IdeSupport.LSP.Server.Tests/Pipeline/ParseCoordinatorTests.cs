@@ -5,18 +5,18 @@ using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
 /// <summary>
-/// Tests for <see cref="FeatureParseCoordinator"/>: <see cref="IFeatureParseCoordinator.Schedule"/>
+/// Tests for <see cref="ParseCoordinator"/>: <see cref="IParseCoordinator.Schedule"/>
 /// must run its work off the caller's thread (so a Serial-lane handler can return immediately —
 /// issue #471), chain same-URI work in order rather than run it concurrently, never let a fault
-/// propagate back into an unrelated <see cref="IFeatureParseCoordinator.WaitForReadyAsync"/> caller,
-/// and let <see cref="IFeatureParseCoordinator.WaitForReadyAsync"/> observe whatever is currently
+/// propagate back into an unrelated <see cref="IParseCoordinator.WaitForReadyAsync"/> caller,
+/// and let <see cref="IParseCoordinator.WaitForReadyAsync"/> observe whatever is currently
 /// pending for that URI.
 /// </summary>
-public class FeatureParseCoordinatorTests
+public class ParseCoordinatorTests
 {
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
-    private FeatureParseCoordinator CreateSut() => new(_logger);
+    private ParseCoordinator CreateSut() => new(_logger);
 
     private static readonly DocumentUri UriA = DocumentUri.FromFileSystemPath("/workspace/a.feature");
     private static readonly DocumentUri UriB = DocumentUri.FromFileSystemPath("/workspace/b.feature");
