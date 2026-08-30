@@ -1260,6 +1260,67 @@ namespace TestProject
     }
 
     [Fact]
+    public async Task ReplaceBindings_diagnostics_callback_fires_when_a_same_named_stale_binding_is_superseded()
+    {
+        // Recon for a suspected #469/#503/#515 recurrence (step-usage counts doubling in VS,
+        // 2026-08-30): this diagnostic hook only needs to prove the identity-based eviction above
+        // actually ran for a same-filename/different-path binding, so it should stay silent unless
+        // that exact shape is present.
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [When(""expression"")]
+        public void Method() { }
+    }
+}");
+
+        var registry = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^expression$", "Steps.Method()", "/workspaces/host-solution/Steps.cs",
+                    ScenarioBlock.When)
+            },
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var messages = new List<string>();
+        await registry.ReplaceBindings(changedFile, messages.Add);
+
+        messages.Should().NotBeEmpty("a same-named binding under a different path was present");
+        messages.Should().Contain(m => m.Contains("Superseded=True"),
+            "the stale binding should have been evicted by identity");
+    }
+
+    [Fact]
+    public async Task ReplaceBindings_diagnostics_callback_is_silent_when_no_same_named_stale_binding_exists()
+    {
+        var changedFile = FileDetails.FromPath(FilePath).WithCSharpContent(@"
+namespace TestProject
+{
+    [Binding]
+    public class Steps
+    {
+        [When(""expression"")]
+        public void Method() { }
+    }
+}");
+
+        var registry = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(),
+            Array.Empty<ProjectHookBinding>(),
+            projectHash: 0);
+
+        var messages = new List<string>();
+        await registry.ReplaceBindings(changedFile, messages.Add);
+
+        messages.Should().BeEmpty(
+            "the diagnostic must stay silent in the normal case so it's cheap to leave in permanently");
+    }
+
+    [Fact]
     public async Task ReplaceBindings_removes_a_stale_binding_when_only_its_parameter_type_spelling_differs()
     {
         // Follow-up to issues #469/#503/#515, confirmed live against the Quickstart sample: the

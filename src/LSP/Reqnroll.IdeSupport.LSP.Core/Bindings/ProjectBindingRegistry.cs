@@ -353,38 +353,37 @@ public record ProjectBindingRegistry
             FromOtherFile(h) &&
             !newHookIdentities.Contains((h.HookType, BindingIdentity(h.Implementation)));
 
-        // TEMPORARY diagnostic for the #469/#503/#515 recurrence reported against the Quickstart
-        // sample (2026-08-30): dumps every freshly-parsed binding's identity alongside any
-        // existing binding whose source file *name* matches this file (regardless of full-path
-        // equality) so a path-mismatch-driven duplicate — the path check says "other file", the
-        // identity check should still catch it but apparently isn't — is visible directly in the
-        // log instead of only showing up as a doubled step-usage count downstream. Remove once
-        // the root cause is found.
+        // Diagnostic safety net for the #469/#503/#515 duplicate-bindings failure mode: an
+        // existing binding whose source file *name* matches the file being reconciled but whose
+        // full path doesn't (SameSourceFile=false) is exactly the shape that identity requires
+        // is caught. Silent in the overwhelmingly common case (nothing matches by name alone);
+        // only logs when that shape is actually present, so it's cheap to leave in permanently
+        // rather than needing to be specially deployed to catch a rare recurrence. Superseded
+        // should always read true here — it's the signal to watch for a false reading of that.
         if (diagnostics != null)
         {
             var targetFileName = Path.GetFileName(stepDefinitionFile.FullName);
-            diagnostics($"[DIAG-DUP] Reconciling '{stepDefinitionFile.FullName}'");
-            foreach (var sd in parsed.StepDefinitions)
-            {
-                diagnostics($"[DIAG-DUP]   NEW  {sd.StepDefinitionType} Method='{sd.Implementation.Method}' " +
-                            $"Params=[{string.Join(",", sd.Implementation.ParameterTypes)}] " +
-                            $"Identity='{BindingIdentity(sd.Implementation)}' " +
-                            $"SourceFile='{sd.Implementation.SourceLocation?.SourceFile}'");
-            }
-            foreach (var sd in StepDefinitions)
-            {
-                var existingFileName = sd.Implementation.SourceLocation?.SourceFile is { } f
-                    ? Path.GetFileName(f) : null;
-                if (!string.Equals(existingFileName, targetFileName, StringComparison.OrdinalIgnoreCase))
-                    continue;
+            var suspects = StepDefinitions
+                .Where(sd => string.Equals(
+                    sd.Implementation.SourceLocation?.SourceFile is { } f ? Path.GetFileName(f) : null,
+                    targetFileName, StringComparison.OrdinalIgnoreCase))
+                .Where(FromOtherFile)
+                .ToList();
 
-                var identity = BindingIdentity(sd.Implementation);
-                var superseded = newStepDefinitionIdentities.Contains((sd.StepDefinitionType, identity));
-                diagnostics($"[DIAG-DUP]   OLD  {sd.StepDefinitionType} Method='{sd.Implementation.Method}' " +
-                            $"Params=[{string.Join(",", sd.Implementation.ParameterTypes)}] " +
-                            $"Identity='{identity}' " +
-                            $"SourceFile='{sd.Implementation.SourceLocation?.SourceFile}' " +
-                            $"SameSourceFile={!FromOtherFile(sd)} Superseded={superseded}");
+            if (suspects.Count > 0)
+            {
+                diagnostics(
+                    $"[DIAG-DUP] '{stepDefinitionFile.FullName}': {suspects.Count} existing binding(s) " +
+                    "share this file's name under a different path — verifying identity-based supersede:");
+                foreach (var sd in suspects)
+                {
+                    var identity = BindingIdentity(sd.Implementation);
+                    var superseded = newStepDefinitionIdentities.Contains((sd.StepDefinitionType, identity));
+                    diagnostics(
+                        $"[DIAG-DUP]   {sd.StepDefinitionType} Method='{sd.Implementation.Method}' " +
+                        $"Identity='{identity}' OldSourceFile='{sd.Implementation.SourceLocation?.SourceFile}' " +
+                        $"Superseded={superseded}");
+                }
             }
         }
 
