@@ -4,7 +4,7 @@ using EnvDTE;
 using Microsoft.VisualStudio.TemplateWizard;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.VisualStudio.Package.ProjectSystem;
+using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Core;
 

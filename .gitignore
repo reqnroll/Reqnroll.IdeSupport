@@ -138,6 +138,11 @@ DocProject/Help/html
 # Click-Once directory
 publish/
 
+# Stray `dotnet publish -o` output landing under a project's own tree, typically from a
+# mis-quoted -o argument (e.g. `-o "publish-output --nologo -v quiet"`) picking up the rest
+# of the command line as part of the folder name.
+publish-output*/
+
 # Publish Web Output
 *.[Pp]ublish.xml
 *.azurePubxml

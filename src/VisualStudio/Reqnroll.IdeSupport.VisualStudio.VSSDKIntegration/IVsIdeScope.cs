@@ -2,7 +2,7 @@
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Package.ProjectSystem;
+namespace Reqnroll.IdeSupport.VisualStudio;
 
 /// <summary>
 /// Extends IIdeScope with the VS-SDK-specific ability to resolve a DTE Project

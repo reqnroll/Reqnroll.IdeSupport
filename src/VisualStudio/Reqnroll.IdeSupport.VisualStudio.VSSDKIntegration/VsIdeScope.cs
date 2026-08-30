@@ -6,12 +6,11 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio;
-using Reqnroll.IdeSupport.VisualStudio.Package.ProjectSystem;
 using System.Collections.Concurrent;
 using System.ComponentModel.Composition;
 using System.Threading.Tasks;
 
-namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+namespace Reqnroll.IdeSupport.VisualStudio;
 
 /// <summary>
 /// Visual Studio's MEF-exported <see cref="IIdeScope"/>/<see cref="IVsIdeScope"/> implementation:

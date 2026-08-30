@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.AssemblyReflection;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
 

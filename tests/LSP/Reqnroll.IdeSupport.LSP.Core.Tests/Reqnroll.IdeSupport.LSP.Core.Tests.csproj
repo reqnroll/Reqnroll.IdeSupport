@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <!-- The two deferred files below are the only ones needing MockableDiscoveryService/StubIdeScope
-       from Reqnroll.VisualStudio.VsxStubs (a net481 WPF project referencing the VSSDK), which is why
+       from Reqnroll.IdeSupport.VisualStudio.VsxStubs (a net481 WPF project referencing the VSSDK), which is why
        this project doesn't reference VsxStubs at all — every other test only needs the lightweight,
        dependency-free StubGherkinTextSnapshot from Reqnroll.IdeSupport.LSP.TestStubs below. Un-deferring
        either file means adding a VsxStubs ProjectReference back (and its net481 restore cost) alongside

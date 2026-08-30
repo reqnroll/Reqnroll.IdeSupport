@@ -1,5 +1,6 @@
 ﻿using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;

@@ -16,7 +16,7 @@
 # RuntimeIdentifier=win-x64 to drive the real out-of-process server. (LSP.Core.Tests
 # itself has no such requirement — its one VS-shaped dependency, StubGherkinTextSnapshot,
 # lives in the dependency-free Reqnroll.IdeSupport.LSP.TestStubs project, not the net481
-# Reqnroll.VisualStudio.VsxStubs.) publish-lsp-server has no such constraint — self-contained
+# Reqnroll.IdeSupport.VisualStudio.VsxStubs.) publish-lsp-server has no such constraint — self-contained
 # publish for any RID is just a NuGet runtime-pack download, not a host-OS requirement —
 # so it runs on cheaper ubuntu-latest runners, same as build-vscode-extension.yml's old
 # publish-server job.

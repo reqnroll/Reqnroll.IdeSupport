@@ -2,6 +2,7 @@
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 

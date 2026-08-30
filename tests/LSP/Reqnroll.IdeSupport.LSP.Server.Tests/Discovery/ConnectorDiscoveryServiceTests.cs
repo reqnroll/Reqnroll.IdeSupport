@@ -7,6 +7,7 @@ using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;

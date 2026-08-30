@@ -7,7 +7,6 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.Common.Telemetry;
-using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 using Microsoft.VisualStudio.Shell;
 using System.Collections.Concurrent;
 

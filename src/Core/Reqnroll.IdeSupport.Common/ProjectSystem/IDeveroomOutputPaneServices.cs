@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>IDeveroomOutputPaneServices</summary>
 public interface IDeveroomOutputPaneServices

@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.AssemblyReflection;
 
 /// <summary>Base class for connectors that run Reqnroll binding discovery in a separate out-of-process worker and deserialize its result.</summary>
 public abstract class OutProcReqnrollConnector

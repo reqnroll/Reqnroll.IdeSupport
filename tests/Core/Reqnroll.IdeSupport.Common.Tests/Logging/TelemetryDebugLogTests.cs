@@ -1,7 +1,7 @@
 using System.IO;
 using Newtonsoft.Json.Linq;
 
-namespace Reqnroll.IdeSupport.Common.Tests.Diagnostics;
+namespace Reqnroll.IdeSupport.Common.Tests.Logging;
 
 public class TelemetryDebugLogTests
 {
