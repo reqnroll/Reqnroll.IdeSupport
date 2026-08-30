@@ -34,7 +34,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly IFeatureRescanDebouncer      _rescanDebouncer = Substitute.For<IFeatureRescanDebouncer>();
     // Real implementation, not a mock: ReparseOpenFilesAsync now schedules each buffer's reparse
     // through this instead of awaiting it inline (issue #471), so tests need it to actually run.
-    private readonly IFeatureParseCoordinator     _parseCoordinator = new FeatureParseCoordinator(Substitute.For<IIdeSupportLogger>());
+    private readonly IParseCoordinator     _parseCoordinator = new ParseCoordinator(Substitute.For<IIdeSupportLogger>());
     private readonly IIdeSupportLogger              _logger        = Substitute.For<IIdeSupportLogger>();
     private readonly IFileSystemForIDE            _fileSystem    = new FileSystemForIDE();
 
@@ -227,7 +227,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         // ReparseOpenFilesAsync now schedules each buffer's reparse through
-        // IFeatureParseCoordinator instead of awaiting it inline (issue #471).
+        // IParseCoordinator instead of awaiting it inline (issue #471).
         await _parseCoordinator.WaitForReadyAsync(ownedUri, CancellationToken.None);
         await _taggerService.Received(1).ParseAsync(ownedUri,   Arg.Any<int?>());
         await _taggerService.DidNotReceive().ParseAsync(foreignUri, Arg.Any<int?>());

@@ -14,7 +14,7 @@ public class FoldingRangeHandlerTests
 {
     private readonly IDocumentBufferService         _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IFoldingRangeService     _foldingService = Substitute.For<IFoldingRangeService>();
-    private readonly IFeatureParseCoordinator       _parseCoordinator = Substitute.For<IFeatureParseCoordinator>();
+    private readonly IParseCoordinator       _parseCoordinator = Substitute.For<IParseCoordinator>();
     private readonly IIdeSupportLogger                 _logger        = Substitute.For<IIdeSupportLogger>();
 
     private static readonly DocumentUri FeatureUri =

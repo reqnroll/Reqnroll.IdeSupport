@@ -148,10 +148,10 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IRefreshDebouncer, RefreshDebouncer>()
             // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
             // preserving correctness for pull handlers with no refresh capability (issue #471) —
-            // see IFeatureParseCoordinator's remarks. Singleton for the same reason as
+            // see IParseCoordinator's remarks. Singleton for the same reason as
             // IRefreshDebouncer above: the per-URI pending-work state must outlive any single
             // transient handler instance.
-            .AddSingleton<IFeatureParseCoordinator, FeatureParseCoordinator>();
+            .AddSingleton<IParseCoordinator, ParseCoordinator>();
     }
 
     /// <summary>

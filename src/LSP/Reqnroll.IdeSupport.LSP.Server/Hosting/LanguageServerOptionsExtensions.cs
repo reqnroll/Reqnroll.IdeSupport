@@ -113,7 +113,7 @@ public static class LanguageServerOptionsExtensions
         // onto the Serial lane preserves the client's send order for project lifecycle events,
         // which is worth the shared-FIFO-lane cost here because these fire rarely (project
         // load/unload/file-list changes), unlike the high-frequency per-keystroke handlers this
-        // codebase deliberately keeps off that lane (see IFeatureParseCoordinator's remarks).
+        // codebase deliberately keeps off that lane (see IParseCoordinator's remarks).
         var serialOptions = new JsonRpcHandlerOptions { RequestProcessType = RequestProcessType.Serial };
 
         options.OnNotification<ReqnrollProjectLoadedParams>(

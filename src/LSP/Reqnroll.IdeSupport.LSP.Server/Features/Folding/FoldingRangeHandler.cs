@@ -26,7 +26,7 @@ public sealed class FoldingRangeHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly IFoldingRangeService    _foldingService;
-    private readonly IFeatureParseCoordinator      _parseCoordinator;
+    private readonly IParseCoordinator      _parseCoordinator;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder     _recorder;
 
@@ -34,7 +34,7 @@ public sealed class FoldingRangeHandler
     public FoldingRangeHandler(
         IDocumentBufferService documentBufferService,
         IFoldingRangeService foldingService,
-        IFeatureParseCoordinator parseCoordinator,
+        IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)
     {
@@ -57,7 +57,7 @@ public sealed class FoldingRangeHandler
 
         // foldingRange has no LSP refresh capability (issue #471) -- unlike codeLens/semanticTokens/
         // inlayHint, a stale/empty answer here can never be corrected by the server later, so this
-        // must wait for any parse the sync handler handed off to IFeatureParseCoordinator instead
+        // must wait for any parse the sync handler handed off to IParseCoordinator instead
         // of reading buffer.Tags out from under it.
         await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
 

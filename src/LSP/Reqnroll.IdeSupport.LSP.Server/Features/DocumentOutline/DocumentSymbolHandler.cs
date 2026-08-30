@@ -36,7 +36,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
 {
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly IDocumentSymbolService _symbolService;
-    private readonly IFeatureParseCoordinator      _parseCoordinator;
+    private readonly IParseCoordinator      _parseCoordinator;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
 
@@ -53,7 +53,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     public DocumentSymbolHandler(
         IDocumentBufferService documentBufferService,
         IDocumentSymbolService symbolService,
-        IFeatureParseCoordinator parseCoordinator,
+        IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)
     {
