@@ -332,7 +332,8 @@ public record ProjectBindingRegistry
     /// reported twice, once by its connector-style short name and once by its Roslyn-style
     /// fully-qualified name).
     /// </remarks>
-    public async Task<ProjectBindingRegistry> ReplaceBindings(CSharpStepDefinitionFile stepDefinitionFile)
+    public async Task<ProjectBindingRegistry> ReplaceBindings(
+        CSharpStepDefinitionFile stepDefinitionFile, Action<string>? diagnostics = null)
     {
         var parsed = await StepDefinitionParser.ParseBindings(stepDefinitionFile);
 
@@ -351,6 +352,41 @@ public record ProjectBindingRegistry
         bool NotSupersededHook(ProjectHookBinding h) =>
             FromOtherFile(h) &&
             !newHookIdentities.Contains((h.HookType, BindingIdentity(h.Implementation)));
+
+        // TEMPORARY diagnostic for the #469/#503/#515 recurrence reported against the Quickstart
+        // sample (2026-08-30): dumps every freshly-parsed binding's identity alongside any
+        // existing binding whose source file *name* matches this file (regardless of full-path
+        // equality) so a path-mismatch-driven duplicate — the path check says "other file", the
+        // identity check should still catch it but apparently isn't — is visible directly in the
+        // log instead of only showing up as a doubled step-usage count downstream. Remove once
+        // the root cause is found.
+        if (diagnostics != null)
+        {
+            var targetFileName = Path.GetFileName(stepDefinitionFile.FullName);
+            diagnostics($"[DIAG-DUP] Reconciling '{stepDefinitionFile.FullName}'");
+            foreach (var sd in parsed.StepDefinitions)
+            {
+                diagnostics($"[DIAG-DUP]   NEW  {sd.StepDefinitionType} Method='{sd.Implementation.Method}' " +
+                            $"Params=[{string.Join(",", sd.Implementation.ParameterTypes)}] " +
+                            $"Identity='{BindingIdentity(sd.Implementation)}' " +
+                            $"SourceFile='{sd.Implementation.SourceLocation?.SourceFile}'");
+            }
+            foreach (var sd in StepDefinitions)
+            {
+                var existingFileName = sd.Implementation.SourceLocation?.SourceFile is { } f
+                    ? Path.GetFileName(f) : null;
+                if (!string.Equals(existingFileName, targetFileName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var identity = BindingIdentity(sd.Implementation);
+                var superseded = newStepDefinitionIdentities.Contains((sd.StepDefinitionType, identity));
+                diagnostics($"[DIAG-DUP]   OLD  {sd.StepDefinitionType} Method='{sd.Implementation.Method}' " +
+                            $"Params=[{string.Join(",", sd.Implementation.ParameterTypes)}] " +
+                            $"Identity='{identity}' " +
+                            $"SourceFile='{sd.Implementation.SourceLocation?.SourceFile}' " +
+                            $"SameSourceFile={!FromOtherFile(sd)} Superseded={superseded}");
+            }
+        }
 
         return new ProjectBindingRegistry(
             StepDefinitions.Where(NotSupersededStepDefinition).Concat(parsed.StepDefinitions),

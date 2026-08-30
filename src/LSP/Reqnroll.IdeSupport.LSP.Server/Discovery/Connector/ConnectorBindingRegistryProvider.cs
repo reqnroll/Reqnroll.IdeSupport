@@ -198,7 +198,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         try
         {
             previous = _current;
-            updated = await previous.ReplaceBindings(file).ConfigureAwait(false);
+            updated = await previous.ReplaceBindings(file, msg => _logger.LogInfo(msg)).ConfigureAwait(false);
             _current = updated;
         }
         finally
