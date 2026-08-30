@@ -92,11 +92,27 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <c>AppliesTo</c> is what VS uses to decide when to <em>activate</em> this provider: it does
+    /// so when a document of a listed type is opened. <c>CSharp</c> is listed alongside Gherkin
+    /// (issue #533, phase 1) because a restored <c>.feature</c> tab is not an opened document —
+    /// VS reopens solutions with the restored tabs as pending-initialization "stub frames" and
+    /// only realizes them when the user selects one, so a Gherkin-only filter leaves the provider
+    /// unactivated until the user clicks. A foreground <c>.cs</c> tab is realized on restore and
+    /// opens that gate instead.
+    /// <para>
+    /// This is not a traffic change: the server's own <c>TextDocumentSyncHandler</c> already
+    /// registers <c>**/*.cs</c> in its document selector and routes <c>.cs</c> didOpen/didChange
+    /// into <c>ICSharpBindingDiscoveryService</c>, so there is no new server-side handling here —
+    /// only an additional way for VS to decide the provider should be running.
+    /// </para>
+    /// </remarks>
     public override LanguageServerProviderConfiguration LanguageServerProviderConfiguration =>
         new("Reqnroll Language Client",
             new[]
             {
                 DocumentFilter.FromDocumentType(GherkinDocumentType.GherkinDocument),
+                DocumentFilter.FromDocumentType("CSharp"),
             });
 
     /// <inheritdoc />

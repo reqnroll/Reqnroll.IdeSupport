@@ -24,9 +24,26 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
     internal class ExtensionEntrypoint : Microsoft.VisualStudio.Extensibility.Extension
     {
         /// <inheritdoc />
+        /// <remarks>
+        /// <c>LoadedWhen</c> (issue #533, phase 2) declares the extension's load trigger instead
+        /// of leaving it to whichever contribution VS happens to activate first — today that is
+        /// <c>StepCodeLensProvider</c> when a <c>.cs</c> file opens, which is what makes the eager
+        /// server startup in <see cref="OnInitializedAsync"/> fire at a time that varies with the
+        /// user's tab layout (see that method's remarks).
+        /// <para>
+        /// The union of <see cref="SolutionState.NoSolution"/> and <see cref="SolutionState.Exists"/>
+        /// is deliberately total. <c>LoadedWhen</c> is a gate, not a hint: a narrower constraint
+        /// (e.g. <c>Exists</c> alone) would stop the extension loading in the single-file /
+        /// open-folder case, which is precisely the scenario VS's LSP support is designed for. The
+        /// goal here is only to make loading <em>eager and deterministic</em>, never to restrict it,
+        /// so the constraint is written so it can only ever fire earlier than the status quo.
+        /// </para>
+        /// </remarks>
         public override ExtensionConfiguration ExtensionConfiguration => new()
         {
             RequiresInProcessHosting = true,
+            LoadedWhen = ActivationConstraint.SolutionState(SolutionState.NoSolution)
+                         | ActivationConstraint.SolutionState(SolutionState.Exists),
         };
 
         /// <inheritdoc />
