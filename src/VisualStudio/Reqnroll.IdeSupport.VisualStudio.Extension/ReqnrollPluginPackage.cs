@@ -49,7 +49,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private IIdeSupportLogger _logger = new IdeSupportNullLogger();
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
-    private FeatureDocumentInitializationMonitor? _documentInitializationMonitor;
+    private DocumentInitializationMonitor? _documentInitializationMonitor;
 
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
@@ -283,8 +283,8 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     }
 
     /// <summary>
-    /// Subscribes <see cref="FeatureDocumentInitializationMonitor"/> to the Running Document Table
-    /// so restored <c>.feature</c> stub realizations are logged (issue #533, phase 2).
+    /// Subscribes <see cref="DocumentInitializationMonitor"/> to the Running Document Table so the
+    /// document inventory and every stub realization are logged (issue #533, phase 2).
     /// Best-effort: a failure here must not abort package initialization.
     /// </summary>
     private async Task AdviseDocumentInitializationMonitorAsync(CancellationToken cancellationToken)
@@ -294,7 +294,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
             var rdt = await GetServiceAsync(typeof(SVsRunningDocumentTable)) as IVsRunningDocumentTable;
-            _documentInitializationMonitor = FeatureDocumentInitializationMonitor.TryAdvise(rdt, _logger);
+            _documentInitializationMonitor = DocumentInitializationMonitor.TryAdvise(rdt, _logger);
         }
         catch (OperationCanceledException)
         {
