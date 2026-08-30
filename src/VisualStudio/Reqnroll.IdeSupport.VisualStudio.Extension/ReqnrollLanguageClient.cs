@@ -103,8 +103,16 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     /// that restored tabs sit as pending-initialization "stub frames" until clicked, leaving a
     /// Gherkin-only filter dormant — was measured and refuted (2026-08-30): the restored
     /// <c>.feature</c> document is already initialized ~76ms after extension load, with zero stubs,
-    /// and the Gherkin filter alone activates the provider in ~1.1–1.4s. This filter is untested
-    /// cover for the C#-only case, not a fix for anything currently known to be broken.
+    /// and the Gherkin filter alone activates the provider in ~1.1–1.4s.
+    /// </para>
+    /// <para>
+    /// Kept as a deliberate call rather than a proven fix, with a known cost: VS will now activate
+    /// this provider — full <c>initialize</c>, plus document sync for every C# file — in any
+    /// solution where a <c>.cs</c> file is opened, including solutions with no Reqnroll in them at
+    /// all, where the provider would previously have stayed dormant. The server process itself
+    /// already starts eagerly regardless (see <c>LspServerConnectionService</c>), so the added cost
+    /// is the handshake and <c>.cs</c> sync, not a new process. If that shows up as a complaint,
+    /// this filter is the first thing to reconsider.
     /// </para>
     /// <para>
     /// This is not a traffic change: the server's own <c>TextDocumentSyncHandler</c> already

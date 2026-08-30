@@ -71,6 +71,13 @@ internal static class RdtDocumentInitialization
 /// activated the language server provider" is measurable (issue #533).
 /// </summary>
 /// <remarks>
+/// Two log levels on purpose. The inventory and initialization lines are <c>Info</c>: one-off, and
+/// the ones worth having in an ordinary bug report. The per-event lines (lock, show, hide) are
+/// <c>Verbose</c>: they fire on every tab switch, and the extension's file logger is at
+/// <c>Info</c> in shipped builds, so logging them at <c>Info</c> would put a line in every user's
+/// log every time they change tabs.
+/// </remarks>
+/// <remarks>
 /// <para>
 /// Instrumentation, not behaviour: this class never forces a document to initialize and never
 /// touches the <c>LanguageServerProvider</c>.
@@ -289,8 +296,17 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
     /// Logs one RDT event for a document, timestamped relative to package load, filtered to the
     /// document kinds that can activate the language server provider so the log stays readable.
     /// </summary>
+    /// <remarks>
+    /// Verbose, unlike the inventory and initialization lines. These fire on every tab switch, and
+    /// the extension's file logger runs at <see cref="TraceLevel.Info"/> in shipped builds too —
+    /// at Info this would write a line per tab switch, in every session, for every user, forever.
+    /// The level check comes first so an ordinary session does not even pay for the RDT lookup.
+    /// </remarks>
     private void LogDocumentEvent(uint docCookie, string what, string? detail)
     {
+        if (!_logger.IsLogging(TraceLevel.Verbose))
+            return;
+
         try
         {
             if (_rdt is not IVsRunningDocumentTable4 rdt4)
@@ -301,7 +317,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
             if (!RdtDocumentInitialization.IsActivationRelevant(moniker))
                 return;
 
-            _logger.LogInfo(
+            _logger.LogVerbose(
                 $"DocumentInitializationMonitor: {moniker} — {what}" +
                 $"{(detail is null ? string.Empty : $" ({detail})")} " +
                 $"at +{_sinceAdvise.ElapsedMilliseconds}ms.");
