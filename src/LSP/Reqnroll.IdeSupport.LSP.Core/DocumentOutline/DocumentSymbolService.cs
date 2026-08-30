@@ -11,9 +11,9 @@ namespace Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
 public class DocumentSymbolService : IDocumentSymbolService
 {
     /// <summary>Builds the document-outline symbol tree (feature, rules, scenarios, steps, examples) from the parsed Deveroom tags.</summary>
-    public IReadOnlyList<GherkinDocumentSymbol> BuildSymbols(IReadOnlyCollection<DeveroomTag> tags)
+    public IReadOnlyList<GherkinDocumentSymbol> BuildSymbols(IReadOnlyCollection<IdeSupportTag> tags)
     {
-        var featureTag = tags.FirstOrDefault(t => t.Type == DeveroomTagTypes.FeatureBlock);
+        var featureTag = tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.FeatureBlock);
         if (featureTag is null)
             return Array.Empty<GherkinDocumentSymbol>();
 
@@ -22,7 +22,7 @@ public class DocumentSymbolService : IDocumentSymbolService
 
     // ── Symbol builders ───────────────────────────────────────────────────────
 
-    private static GherkinDocumentSymbol BuildFeatureSymbol(DeveroomTag featureTag)
+    private static GherkinDocumentSymbol BuildFeatureSymbol(IdeSupportTag featureTag)
     {
         var feature = (Feature)featureTag.Data;
         return new GherkinDocumentSymbol(
@@ -34,17 +34,17 @@ public class DocumentSymbolService : IDocumentSymbolService
             Children: BuildFeatureChildren(featureTag));
     }
 
-    private static IReadOnlyList<GherkinDocumentSymbol> BuildFeatureChildren(DeveroomTag parent)
+    private static IReadOnlyList<GherkinDocumentSymbol> BuildFeatureChildren(IdeSupportTag parent)
     {
         var result = new List<GherkinDocumentSymbol>();
         foreach (var child in parent.ChildTags)
         {
             switch (child.Type)
             {
-                case DeveroomTagTypes.ScenarioDefinitionBlock:
+                case IdeSupportTagTypes.ScenarioDefinitionBlock:
                     result.Add(BuildScenarioSymbol(child));
                     break;
-                case DeveroomTagTypes.RuleBlock:
+                case IdeSupportTagTypes.RuleBlock:
                     result.Add(BuildRuleSymbol(child));
                     break;
             }
@@ -52,7 +52,7 @@ public class DocumentSymbolService : IDocumentSymbolService
         return result;
     }
 
-    private static GherkinDocumentSymbol BuildRuleSymbol(DeveroomTag ruleTag)
+    private static GherkinDocumentSymbol BuildRuleSymbol(IdeSupportTag ruleTag)
     {
         var rule = (Rule)ruleTag.Data;
         return new GherkinDocumentSymbol(
@@ -64,7 +64,7 @@ public class DocumentSymbolService : IDocumentSymbolService
             Children: BuildFeatureChildren(ruleTag));
     }
 
-    private static GherkinDocumentSymbol BuildScenarioSymbol(DeveroomTag scenarioTag)
+    private static GherkinDocumentSymbol BuildScenarioSymbol(IdeSupportTag scenarioTag)
     {
         var stepsContainer = (StepsContainer)scenarioTag.Data;
         var (name, kind) = stepsContainer switch
@@ -80,10 +80,10 @@ public class DocumentSymbolService : IDocumentSymbolService
         {
             switch (child.Type)
             {
-                case DeveroomTagTypes.StepBlock:
+                case IdeSupportTagTypes.StepBlock:
                     children.Add(BuildStepSymbol(child));
                     break;
-                case DeveroomTagTypes.ExamplesBlock:
+                case IdeSupportTagTypes.ExamplesBlock:
                     children.Add(BuildExamplesSymbol(child));
                     break;
             }
@@ -103,7 +103,7 @@ public class DocumentSymbolService : IDocumentSymbolService
             Children: children);
     }
 
-    private static GherkinDocumentSymbol BuildStepSymbol(DeveroomTag stepTag)
+    private static GherkinDocumentSymbol BuildStepSymbol(IdeSupportTag stepTag)
     {
         var step = (Step)stepTag.Data;
         return new GherkinDocumentSymbol(
@@ -115,7 +115,7 @@ public class DocumentSymbolService : IDocumentSymbolService
             Children: Array.Empty<GherkinDocumentSymbol>());
     }
 
-    private static GherkinDocumentSymbol BuildExamplesSymbol(DeveroomTag examplesTag)
+    private static GherkinDocumentSymbol BuildExamplesSymbol(IdeSupportTag examplesTag)
     {
         var examples = (Examples)examplesTag.Data;
         return new GherkinDocumentSymbol(

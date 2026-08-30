@@ -15,11 +15,11 @@ public class FeatureBindingMatchSetTests
 
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ITelemetryService _telemetryService = Substitute.For<ITelemetryService>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
     public FeatureBindingMatchSetTests()
     {
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
@@ -34,9 +34,9 @@ public class FeatureBindingMatchSetTests
     private static ProjectBindingRegistry RegistryWith(params ProjectStepDefinitionBinding[] bindings) =>
         new(bindings, Array.Empty<ProjectHookBinding>(), 0);
 
-    private IReadOnlyCollection<DeveroomTag> ParseTags(string text, ProjectBindingRegistry registry)
+    private IReadOnlyCollection<IdeSupportTag> ParseTags(string text, ProjectBindingRegistry registry)
     {
-        var parser = new DeveroomTagParser(_logger, _telemetryService, _configProvider);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
         return parser.Parse(new StubGherkinTextSnapshot(text), registry);
     }
 
@@ -188,7 +188,7 @@ public class FeatureBindingMatchSetTests
     [Fact]
     public void FromTags_empty_tag_collection_produces_empty_steps_and_scenarios()
     {
-        var set = FeatureBindingMatchSet.FromTags(Uri, 1, 0, Array.Empty<DeveroomTag>());
+        var set = FeatureBindingMatchSet.FromTags(Uri, 1, 0, Array.Empty<IdeSupportTag>());
 
         set.Steps.Should().BeEmpty();
         set.Scenarios.Should().BeEmpty();

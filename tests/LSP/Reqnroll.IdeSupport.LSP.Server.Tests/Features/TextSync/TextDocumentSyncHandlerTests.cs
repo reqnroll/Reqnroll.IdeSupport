@@ -1,10 +1,11 @@
-﻿using MediatR;
+using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
@@ -40,7 +41,7 @@ public class TextDocumentSyncHandlerTests
     [Fact]
     public async Task Handle_DidOpen_stores_document_and_publishes_match_cache_changed_notification()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         _taggerService.ParseAsync(FeatureUri, 3).Returns(tags);
 
         var sut = CreateSut();
@@ -79,7 +80,7 @@ public class TextDocumentSyncHandlerTests
     {
         _bufferService.Update(FeatureUri, 1, "Feature: Old\n");
 
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         _taggerService.ParseAsync(FeatureUri, 2).Returns(tags);
 
         var sut = CreateSut();
@@ -114,7 +115,7 @@ public class TextDocumentSyncHandlerTests
     [Fact]
     public async Task Handle_DidChange_with_empty_changes_uses_empty_string_and_publishes()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         _taggerService.ParseAsync(FeatureUri, 4).Returns(tags);
 
         var sut = CreateSut();

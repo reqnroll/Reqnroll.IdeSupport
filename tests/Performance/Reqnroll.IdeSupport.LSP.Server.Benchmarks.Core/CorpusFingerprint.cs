@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Corpus;
@@ -41,7 +41,7 @@ public sealed record CorpusFingerprint(
     {
         var registry = await BuildRegistryAsync(Path.Combine(corpusRoot, "Bindings")).ConfigureAwait(false);
 
-        var tagParser = new DeveroomTagParser(
+        var tagParser = new IdeSupportTagParser(
             new IdeSupportNullLogger(), NullLspTelemetryService.Instance, new DefaultConfigurationProvider());
 
         var featureFiles = Directory
@@ -85,7 +85,7 @@ public sealed record CorpusFingerprint(
 
     private static void CountScenarios(string featureText, ref int scenarios, ref int outlines)
     {
-        var parser = new DeveroomGherkinParser(
+        var parser = new IdeSupportGherkinParser(
             ReqnrollGherkinDialectProvider.Get("en"), NullLspTelemetryService.Instance);
         parser.ParseAndCollectErrors(featureText, new IdeSupportNullLogger(), out var doc, out _);
         if (doc?.Feature is null) return;
@@ -127,10 +127,10 @@ public sealed record CorpusFingerprint(
     }
 
     /// <summary>Minimal provider returning a default configuration (English dialect).</summary>
-    private sealed class DefaultConfigurationProvider : IDeveroomConfigurationProvider
+    private sealed class DefaultConfigurationProvider : IIdeSupportConfigurationProvider
     {
-        private readonly DeveroomConfiguration _configuration = new();
+        private readonly IdeSupportConfiguration _configuration = new();
         public event EventHandler? ConfigurationChanged { add { } remove { } }
-        public DeveroomConfiguration GetConfiguration() => _configuration;
+        public IdeSupportConfiguration GetConfiguration() => _configuration;
     }
 }

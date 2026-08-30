@@ -186,10 +186,10 @@ public class StubWpfTextView : IWpfTextView
     }
 #endif
 
-#if false // Deferred: DeveroomTag and GetUpToDateDeveroomTagsForSpan not yet ported
+#if false // Deferred: IdeSupportTag and GetUpToDateDeveroomTagsForSpan not yet ported
     public void ForceReparse(ITaggerProvider taggerProvider)
     {
-        var tagger = taggerProvider.CreateTagger<DeveroomTag>(TextBuffer);
+        var tagger = taggerProvider.CreateTagger<IdeSupportTag>(TextBuffer);
         var span = new SnapshotSpan(TextSnapshot, 0, TextSnapshot.Length);
         tagger.GetUpToDateDeveroomTagsForSpan(span);
     }

@@ -3,6 +3,7 @@
 using EnvDTE;
 using Microsoft.VisualStudio.TemplateWizard;
 using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.VisualStudio.Package.ProjectSystem;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
@@ -23,7 +24,7 @@ public abstract class VsTemplateWizardBase<TWizard> : IWizard
     protected TWizard _wizard;
     protected IWizardContext _wizardContext;
 
-    protected IDeveroomLogger Logger =>
+    protected IIdeSupportLogger Logger =>
         (_wizardContext as VsWizardContext) != null
             ? null  // logger is accessed through VS infra; null-safe below
             : null;

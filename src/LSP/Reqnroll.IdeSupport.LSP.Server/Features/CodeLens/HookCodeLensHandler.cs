@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -92,20 +92,20 @@ public sealed class HookCodeLensHandler
 
         foreach (var tag in buffer.Tags)
         {
-            if (tag.Type == DeveroomTagTypes.FeatureBlock)
+            if (tag.Type == IdeSupportTagTypes.FeatureBlock)
             {
                 AddOwnLevelLens(lenses, uri, registry, HookContextLevel.Feature, tag, clickTargetTag: tag);
             }
-            else if (tag.Type == DeveroomTagTypes.ScenarioDefinitionBlock && tag.Data is not Background)
+            else if (tag.Type == IdeSupportTagTypes.ScenarioDefinitionBlock && tag.Data is not Background)
             {
-                // DeveroomTagTypes.ScenarioDefinitionBlock covers Background blocks too (see
+                // IdeSupportTagTypes.ScenarioDefinitionBlock covers Background blocks too (see
                 // its doc comment), but a Background has no tags/scope of its own — which hooks
                 // apply to its steps depends entirely on whichever Scenario is currently pulling
                 // them in, so there is nothing correct to count or navigate to here. Excluded via
                 // tag.Data (the underlying Gherkin.Ast node) rather than a Type check, since
                 // Background and Scenario share the same tag Type. Rule blocks need no equivalent
                 // check: HookContextLevel/HookType have no Rule-level concept at all, so
-                // DeveroomTagTypes.RuleBlock is never matched by the `if`/`else if` above.
+                // IdeSupportTagTypes.RuleBlock is never matched by the `if`/`else if` above.
                 AddOwnLevelLens(lenses, uri, registry, HookContextLevel.Scenario, tag, clickTargetTag: tag);
                 AddStepHooksLens(lenses, uri, registry, tag, buffer.Tags);
             }
@@ -126,8 +126,8 @@ public sealed class HookCodeLensHandler
         DocumentUri            uri,
         ProjectBindingRegistry registry,
         HookContextLevel       level,
-        DeveroomTag            displayTag,
-        DeveroomTag            clickTargetTag)
+        IdeSupportTag            displayTag,
+        IdeSupportTag            clickTargetTag)
     {
         var hooks = HookMatching.ResolveMatchingHooks(registry, level, displayTag, ownLevelOnly: true);
         if (hooks.Count == 0)
@@ -162,11 +162,11 @@ public sealed class HookCodeLensHandler
         List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> lenses,
         DocumentUri              uri,
         ProjectBindingRegistry   registry,
-        DeveroomTag              scenarioTag,
-        IReadOnlyCollection<DeveroomTag> allTags)
+        IdeSupportTag              scenarioTag,
+        IReadOnlyCollection<IdeSupportTag> allTags)
     {
         var firstStepTag = allTags
-            .Where(t => t.Type == DeveroomTagTypes.StepBlock
+            .Where(t => t.Type == IdeSupportTagTypes.StepBlock
                      && t.Range.Start >= scenarioTag.Range.Start && t.Range.Start < scenarioTag.Range.End)
             .OrderBy(t => t.Range.Start)
             .FirstOrDefault();

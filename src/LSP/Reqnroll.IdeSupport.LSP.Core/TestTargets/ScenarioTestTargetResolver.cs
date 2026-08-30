@@ -33,7 +33,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
     /// <inheritdoc/>
     public IReadOnlyList<ScenarioTestTarget> Resolve(
         Uri featureUri,
-        IReadOnlyCollection<DeveroomTag> tags,
+        IReadOnlyCollection<IdeSupportTag> tags,
         GherkinRange scenarioRange,
         IReadOnlyCollection<string> projectPackageIds,
         string? projectFolder = null)
@@ -52,7 +52,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         if (root is null)
             return Array.Empty<ScenarioTestTarget>(); // not built yet — see design doc §3's trade-off table
 
-        if (tags.FirstOrDefault(t => t.Type == DeveroomTagTypes.FeatureBlock)?.Data is not Feature feature)
+        if (tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.FeatureBlock)?.Data is not Feature feature)
             return Array.Empty<ScenarioTestTarget>();
 
         var scenarioTag = FindScenarioTag(tags, scenarioRange);
@@ -170,8 +170,8 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 
     // ── Gherkin-side context resolution ─────────────────────────────────────────────────────────
 
-    private static DeveroomTag? FindScenarioTag(IReadOnlyCollection<DeveroomTag> tags, GherkinRange range) =>
-        tags.FirstOrDefault(t => t.Type == DeveroomTagTypes.ScenarioDefinitionBlock && t.Range.IntersectsWith(range));
+    private static IdeSupportTag? FindScenarioTag(IReadOnlyCollection<IdeSupportTag> tags, GherkinRange range) =>
+        tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.ScenarioDefinitionBlock && t.Range.IntersectsWith(range));
 
     private static string? GetScenarioName(object? data) => data switch
     {
@@ -186,10 +186,10 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
     /// Examples: row" case from design doc §3.
     /// </summary>
     private static (Examples Examples, TableRow Row)? FindSelectedExamplesRow(
-        IReadOnlyCollection<DeveroomTag> tags, GherkinRange range)
+        IReadOnlyCollection<IdeSupportTag> tags, GherkinRange range)
     {
         var examplesTag = tags.FirstOrDefault(t =>
-            t.Type == DeveroomTagTypes.ExamplesBlock && t.Range.IntersectsWith(range));
+            t.Type == IdeSupportTagTypes.ExamplesBlock && t.Range.IntersectsWith(range));
         if (examplesTag?.Data is not Examples examples || examples.TableBody is null)
             return null;
 

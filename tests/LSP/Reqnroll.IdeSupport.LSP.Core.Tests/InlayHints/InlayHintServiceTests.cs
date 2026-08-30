@@ -9,23 +9,23 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.InlayHints;
 
 /// <summary>
 /// Unit tests for <see cref="InlayHintService"/> (F23). Construction of
-/// <see cref="FeatureBindingMatchSet"/> uses real tag parsing (via <see cref="DeveroomTagParser"/>)
+/// <see cref="FeatureBindingMatchSet"/> uses real tag parsing (via <see cref="IdeSupportTagParser"/>)
 /// for the defined/undefined/ambiguous cases, matching <c>DiagnosticsAggregatorTests</c>'s
 /// approach. The templated (Scenario Outline, varies-by-row) case is built directly against a
 /// hand-crafted <see cref="MatchResult"/> since it represents what FromTags's row-merging already
 /// produces for that scenario, without needing a full outline-example parsing pipeline.
 /// </summary>
-public class GherkinInlayHintServiceTests
+public class InlayHintServiceTests
 {
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ITelemetryService _telemetryService = Substitute.For<ITelemetryService>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
     private const string DocumentId = "file:///c:/proj/test.feature";
 
-    public GherkinInlayHintServiceTests()
+    public InlayHintServiceTests()
     {
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
     private InlayHintService CreateSut() => new();
@@ -43,7 +43,7 @@ public class GherkinInlayHintServiceTests
 
     private FeatureBindingMatchSet MatchSetFor(string text, ProjectBindingRegistry? registry = null)
     {
-        var parser = new DeveroomTagParser(_logger, _telemetryService, _configProvider);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
         var reg = registry ?? RegistryWith();
         var tags = parser.Parse(Snap(text), reg);
         return FeatureBindingMatchSet.FromTags(DocumentId, 1, reg.Version, tags);
@@ -88,7 +88,7 @@ public class GherkinInlayHintServiceTests
     {
         // Unlike Template_step_resolving_to_multiple_distinct_bindings_across_rows_produces_a_Templated_hint
         // (which hand-crafts the merged MatchResult), this drives the real pipeline end-to-end:
-        // DeveroomTagParser -> ProjectBindingRegistry.MatchStep -> GetScenarioOutlineStepsWithContexts
+        // IdeSupportTagParser -> ProjectBindingRegistry.MatchStep -> GetScenarioOutlineStepsWithContexts
         // substitutes each Examples row into the step text and matches it independently, so two
         // rows that are each unambiguously bound to a *different* step definition should merge into
         // a single "{n} bindings" Templated hint (see issue #392's investigation).

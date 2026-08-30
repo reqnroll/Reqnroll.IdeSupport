@@ -6,5 +6,5 @@ namespace Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
 public interface IDocumentSymbolService
 {
     /// <summary>Builds the outline symbol tree (feature/rule/scenario/steps) from a feature document's flattened tags.</summary>
-    IReadOnlyList<GherkinDocumentSymbol> BuildSymbols(IReadOnlyCollection<DeveroomTag> tags);
+    IReadOnlyList<GherkinDocumentSymbol> BuildSymbols(IReadOnlyCollection<IdeSupportTag> tags);
 }

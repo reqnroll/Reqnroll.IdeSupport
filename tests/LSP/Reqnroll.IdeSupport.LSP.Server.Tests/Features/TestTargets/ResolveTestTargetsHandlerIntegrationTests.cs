@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestTargets;
 
 /// <summary>
 /// Exercises <see cref="ResolveTestTargetsHandler"/> against a <em>real</em>
-/// <see cref="ScenarioTestTargetResolver"/> and real <see cref="DeveroomTagParser"/>-produced tags,
+/// <see cref="ScenarioTestTargetResolver"/> and real <see cref="IdeSupportTagParser"/>-produced tags,
 /// rather than the mocked <c>IScenarioTestTargetResolver</c> the other tests in this folder use.
 /// </summary>
 /// <remarks>
@@ -65,7 +65,7 @@ public class ResolveTestTargetsHandlerIntegrationTests : IDisposable
 
     /// <summary>
     /// Parses <paramref name="text"/> the same way the live pipeline populates
-    /// <c>DocumentBuffer.Tags</c> (via <see cref="DeveroomTagParser"/>), writes a matching generated
+    /// <c>DocumentBuffer.Tags</c> (via <see cref="IdeSupportTagParser"/>), writes a matching generated
     /// <c>.feature.cs</c> fixture beside a temp <c>.feature</c> path, and registers both with the
     /// buffer service under that path's URI.
     /// </summary>
@@ -79,9 +79,9 @@ public class ResolveTestTargetsHandlerIntegrationTests : IDisposable
 
         var parserLogger = Substitute.For<IIdeSupportLogger>();
         var parserTelemetry = Substitute.For<ITelemetryService>();
-        var configProvider = Substitute.For<IDeveroomConfigurationProvider>();
-        configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
-        var parser = new DeveroomTagParser(parserLogger, parserTelemetry, configProvider);
+        var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
+        configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
+        var parser = new IdeSupportTagParser(parserLogger, parserTelemetry, configProvider);
         var tags = parser.Parse(new LspTextSnapshot(uri.ToString(), 1, text), Core.Bindings.ProjectBindingRegistry.Invalid);
 
         var buffer = new DocumentBuffer(uri, 1, text, tags);

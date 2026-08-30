@@ -28,11 +28,11 @@ public class HookMatchCountCodeLensHandlerTests
 
     private readonly IIdeSupportLogger _parserLogger = Substitute.For<IIdeSupportLogger>();
     private readonly ITelemetryService _parserTelemetry = Substitute.For<ITelemetryService>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
     public HookMatchCountCodeLensHandlerTests()
     {
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
         _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(Array.Empty<LspReqnrollProject>());
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
         _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(Array.Empty<FeatureBindingMatchSet>());
@@ -71,7 +71,7 @@ public class HookMatchCountCodeLensHandlerTests
 
     private FeatureBindingMatchSet BuildMatchSet(string text, ProjectBindingRegistry registry, string docId)
     {
-        var parser = new DeveroomTagParser(_parserLogger, _parserTelemetry, _configProvider);
+        var parser = new IdeSupportTagParser(_parserLogger, _parserTelemetry, _configProvider);
         var tags   = parser.Parse(new LspTextSnapshot(docId, 1, text), registry);
         return FeatureBindingMatchSet.FromTags(docId, 1, registry.Version, tags);
     }

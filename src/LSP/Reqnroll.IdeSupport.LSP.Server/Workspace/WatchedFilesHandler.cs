@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -6,7 +6,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -146,8 +147,8 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
         _logger.LogInfo(
             $"reqnroll.json {changeType}: reloading config for project '{project.ProjectName}'");
 
-        var provider = project.GetDeveroomConfigurationProvider()
-            as ProjectScopeDeveroomConfigurationProvider;
+        var provider = project.GetIdeSupportConfigurationProvider()
+            as ProjectScopeIdeSupportConfigurationProvider;
         provider?.Reload();
 
         await _mediator.Publish(
@@ -182,8 +183,8 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
 
         foreach (var project in scope.Projects)
         {
-            var provider = project.GetDeveroomConfigurationProvider()
-                as ProjectScopeDeveroomConfigurationProvider;
+            var provider = project.GetIdeSupportConfigurationProvider()
+                as ProjectScopeIdeSupportConfigurationProvider;
             provider?.Reload();
 
             await _mediator.Publish(

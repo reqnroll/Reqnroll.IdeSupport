@@ -155,7 +155,7 @@ public class VsProjectScope : IProjectScope
     /// <summary>Registers the configuration provider and project-settings provider for this project scope.</summary>
     public void InitializeServices()
     {
-        ConfigurationProjectSystemExtensions.GetDeveroomConfigurationProvider(this);
+        ConfigurationProjectSystemExtensions.GetIdeSupportConfigurationProvider(this);
         this.GetProjectSettingsProvider();
     }
 }

@@ -2,7 +2,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.SemanticTokens;
 

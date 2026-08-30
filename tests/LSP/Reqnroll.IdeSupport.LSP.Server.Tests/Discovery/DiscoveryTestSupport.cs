@@ -19,7 +19,7 @@ internal static class DiscoveryTestSupport
     /// </summary>
     public static ProjectSettings MinimalProjectSettings(TargetFrameworkMoniker? tfm)
         => new(
-            DeveroomProjectKind.ReqnrollTestProject,
+            IdeSupportProjectKind.ReqnrollTestProject,
             tfm!,
             tfm?.Value ?? string.Empty,
             ProjectPlatformTarget.AnyCpu,
@@ -34,7 +34,7 @@ internal static class DiscoveryTestSupport
     /// <summary>
     /// Creates a real <see cref="LspReqnrollProject"/> and seeds its property bag with a
     /// configuration provider returning <paramref name="connectorPath"/> so that
-    /// <c>GetDeveroomConfiguration()</c> does not touch the file system.
+    /// <c>GetIdeSupportConfiguration()</c> does not touch the file system.
     /// </summary>
     public static LspReqnrollProject MakeProject(
         IIdeScope ideScope,
@@ -55,14 +55,14 @@ internal static class DiscoveryTestSupport
 
         var project = new LspReqnrollProject(info, ideScope);
 
-        var config = new DeveroomConfiguration();
+        var config = new IdeSupportConfiguration();
         config.BindingDiscovery.ConnectorPath = connectorPath;
 
-        var configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+        var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
         configProvider.GetConfiguration().Returns(config);
 
-        // Seed the cache slot that GetDeveroomConfiguration() reads from.
-        project.Properties[typeof(IDeveroomConfigurationProvider)] = configProvider;
+        // Seed the cache slot that GetIdeSupportConfiguration() reads from.
+        project.Properties[typeof(IIdeSupportConfigurationProvider)] = configProvider;
 
         return project;
     }

@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Formatting;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -22,7 +22,7 @@ public sealed class FormattingHandler
 {
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider;
-    private readonly IDeveroomConfigurationProvider _configurationProvider;
+    private readonly IIdeSupportConfigurationProvider _configurationProvider;
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
@@ -41,7 +41,7 @@ public sealed class FormattingHandler
     public FormattingHandler(
         IDocumentBufferService documentBufferService,
         IEditorConfigOptionsProvider editorConfigOptionsProvider,
-        IDeveroomConfigurationProvider configurationProvider,
+        IIdeSupportConfigurationProvider configurationProvider,
         IIdeSupportLogger logger,
         ILspTelemetryService? telemetryService = null,
         IOperationDurationRecorder? recorder = null,
@@ -251,11 +251,11 @@ public sealed class FormattingHandler
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private DeveroomGherkinDocument ParseDocument(string text)
+    private IdeSupportGherkinDocument ParseDocument(string text)
     {
         var language = _configurationProvider.GetConfiguration().DefaultFeatureLanguage ?? "en";
         var dialectProvider = ReqnrollGherkinDialectProvider.Get(language);
-        var parser = new DeveroomGherkinParser(dialectProvider, NullLspTelemetryService.Instance);
+        var parser = new IdeSupportGherkinParser(dialectProvider, NullLspTelemetryService.Instance);
         parser.ParseAndCollectErrors(text, _logger, out var gherkinDocument, out _);
         return gherkinDocument;
     }

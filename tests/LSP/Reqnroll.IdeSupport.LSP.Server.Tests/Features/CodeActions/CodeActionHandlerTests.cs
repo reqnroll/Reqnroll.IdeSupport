@@ -17,7 +17,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -30,7 +30,7 @@ public class CodeActionHandlerTests
     private readonly ILspWorkspaceScopeManager   _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IDocumentBufferService      _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportLogger             _logger        = Substitute.For<IIdeSupportLogger>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
     private readonly ILspTelemetryService        _telemetryService = Substitute.For<ILspTelemetryService>();
     private readonly IFileSystemForIDE           _fileSystem = new FileSystemForIDE();
 
@@ -49,7 +49,7 @@ public class CodeActionHandlerTests
                      .Returns(_configProvider);
 
         _configProvider.GetConfiguration()
-                       .Returns(new DeveroomConfiguration());
+                       .Returns(new IdeSupportConfiguration());
     }
 
     private CodeActionHandler CreateSut() =>
@@ -457,7 +457,7 @@ public class CodeActionHandlerTests
             ScenarioBlock.When  => "When ",
             _                   => "Then "
         };
-        var gherkinStep = new DeveroomGherkinStep(
+        var gherkinStep = new IdeSupportGherkinStep(
             new Gherkin.Ast.Location(0, 0), keyword, StepKeywordType.Context, text, null!,
             StepKeyword.Given, block);
 

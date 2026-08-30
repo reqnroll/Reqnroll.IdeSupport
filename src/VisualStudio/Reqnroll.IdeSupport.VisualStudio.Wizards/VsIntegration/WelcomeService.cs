@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 /// Orchestrates the first-install welcome flow and the upgrade/changelog flow.
 /// Ported from Reqnroll.VisualStudio\ProjectSystem\WelcomeService.cs.
 ///
-/// Uses IWizardDialogService instead of the legacy IDeveroomWindowManager pattern.
+/// Uses IWizardDialogService instead of the legacy IIdeSupportWindowManager pattern.
 /// Called from ReqnrollPluginPackage.InitializeAsync after solution load.
 /// </summary>
 public class WelcomeService : IWelcomeService

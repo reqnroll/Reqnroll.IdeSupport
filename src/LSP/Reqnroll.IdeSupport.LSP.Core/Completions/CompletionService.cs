@@ -102,7 +102,7 @@ public sealed class CompletionService : ICompletionService
 
     /// <summary>Builds ranked step-definition-sample completion entries matching the step's <c>ScenarioBlock</c> and the text typed so far.</summary>
     public CompletionResult GetStepCompletions(
-        DeveroomGherkinStep                     step,
+        IdeSupportGherkinStep                     step,
         string                                  typedAfterKeyword,
         ProjectBindingRegistry                  registry,
         Func<ProjectStepDefinitionBinding, int> usageCounter,

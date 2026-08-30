@@ -43,7 +43,7 @@ public class GherkinFormatSettings
         int tabSize, bool insertSpaces,
         IEditorConfigOptionsProvider editorConfigOptionsProvider,
         string filePath,
-        DeveroomConfiguration? configuration)
+        IdeSupportConfiguration? configuration)
     {
         var gherkinFormatConfig = configuration?.Editor?.GherkinFormat?.Clone() ?? new GherkinFormatConfiguration();
 

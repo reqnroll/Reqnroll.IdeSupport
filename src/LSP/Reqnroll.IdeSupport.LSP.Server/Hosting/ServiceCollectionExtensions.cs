@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
@@ -22,8 +22,8 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Core.TestTargets;
-using Reqnroll.IdeSupport.LSP.Server.Configuration;
-using Reqnroll.IdeSupport.LSP.Server.Discovery;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Features.Commenting;
@@ -39,6 +39,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -93,12 +94,12 @@ public static class ServiceCollectionExtensions
             // dropped LSP.Core exceptions (e.g. Gherkin parse errors) — issue #255.
             .AddSingleton<ITelemetryService>(sp => new LspErrorTelemetryService(
                 sp.GetRequiredService<ILspTelemetryService>()))
-            // IErrorTelemetryService is the actual LSP.Core-facing contract (DeveroomGherkinParser,
-            // DeveroomTagParser, CompletionContextResolver depend on this narrow interface, not the
+            // IErrorTelemetryService is the actual LSP.Core-facing contract (IdeSupportGherkinParser,
+            // IdeSupportTagParser, CompletionContextResolver depend on this narrow interface, not the
             // full ITelemetryService above) — same singleton, resolved via interface inheritance
             // (issue #255/#259's ISP split).
             .AddSingleton<IErrorTelemetryService>(sp => sp.GetRequiredService<ITelemetryService>())
-            .AddSingleton<IDeveroomConfigurationProvider, ProjectSystemDeveroomConfigurationProvider>()
+            .AddSingleton<IIdeSupportConfigurationProvider, ProjectSystemIdeSupportConfigurationProvider>()
             .AddSingleton<IEditorConfigOptionsProvider>(sp =>
                 new FileSystemEditorConfigOptionsProvider(sp.GetRequiredService<IIdeScope>().FileSystem))
             // Performance Verification, Layer 4: field instrumentation. The recorder writes
@@ -136,7 +137,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
             // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).
             .AddSingleton<IScenarioTestTargetResolver, ScenarioTestTargetResolver>()
-            .AddSingleton<IDeveroomTagParser, DeveroomTagParser>()
+            .AddSingleton<IIdeSupportTagParser, IdeSupportTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch
             // whose binding expressions actually changed (BindingRegistryChangedHandler).
             .AddSingleton<IFeatureRescanDebouncer, FeatureRescanDebouncer>()

@@ -202,7 +202,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         if (exception is AggregateException aggregateException)
             return aggregateException.InnerExceptions.All(IsNormalError);
         return
-            //exception is DeveroomConfigurationException ||
+            //exception is IdeSupportConfigurationException ||
             exception is TimeoutException ||
             exception is TaskCanceledException ||
             exception is OperationCanceledException ||
