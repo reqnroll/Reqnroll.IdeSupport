@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// LSP IDE Support design.
 /// </summary>
 /// <remarks>
-/// Match <em>computation</em> still happens in <c>DeveroomTagParser</c> while it walks the
+/// Match <em>computation</em> still happens in <c>IdeSupportTagParser</c> while it walks the
 /// document (it has the snapshot for span math and the tag tree for
 /// <c>IGherkinDocumentContext</c>. A <see cref="StepBindingMatch"/> captures the
 /// result of that computation so downstream features — Go to Step Definition, diagnostics

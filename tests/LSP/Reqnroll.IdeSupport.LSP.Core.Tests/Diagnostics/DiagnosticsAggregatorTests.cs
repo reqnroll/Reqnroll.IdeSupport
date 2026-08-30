@@ -6,20 +6,20 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Diagnostics;
 /// <summary>
 /// Unit tests for <see cref="DiagnosticsAggregator"/>.
 /// Construction of <see cref="FeatureBindingMatchSet"/> uses real tag parsing (via
-/// <see cref="DeveroomTagParser"/>) to stay in sync with how the server actually populates the
+/// <see cref="IdeSupportTagParser"/>) to stay in sync with how the server actually populates the
 /// match cache — the aggregator should never need to be rewritten when parser internals change.
 /// </summary>
 public class DiagnosticsAggregatorTests
 {
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ITelemetryService _telemetryService = Substitute.For<ITelemetryService>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
     private const string DocumentId = "file:///c:/proj/test.feature";
 
     public DiagnosticsAggregatorTests()
     {
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -37,9 +37,9 @@ public class DiagnosticsAggregatorTests
     private static ProjectBindingRegistry RegistryWith(params ProjectStepDefinitionBinding[] bindings) =>
         new(bindings, Array.Empty<ProjectHookBinding>(), 0);
 
-    private IReadOnlyCollection<DeveroomTag> ParseTags(string text, ProjectBindingRegistry? registry = null)
+    private IReadOnlyCollection<IdeSupportTag> ParseTags(string text, ProjectBindingRegistry? registry = null)
     {
-        var parser = new DeveroomTagParser(_logger, _telemetryService, _configProvider);
+        var parser = new IdeSupportTagParser(_logger, _telemetryService, _configProvider);
         return parser.Parse(Snap(text), registry ?? RegistryWith());
     }
 
@@ -50,9 +50,9 @@ public class DiagnosticsAggregatorTests
         return FeatureBindingMatchSet.FromTags(DocumentId, 1, reg.Version, tags);
     }
 
-    /// <summary>Builds a ParserError tag directly, as DeveroomTagParser does when Gherkin is invalid.</summary>
-    private static DeveroomTag ParserErrorTag(IGherkinTextSnapshot snapshot, int start, int length, string message) =>
-        new(DeveroomTagTypes.ParserError, GherkinRange.FromPoint(snapshot, start, length), message);
+    /// <summary>Builds a ParserError tag directly, as IdeSupportTagParser does when Gherkin is invalid.</summary>
+    private static IdeSupportTag ParserErrorTag(IGherkinTextSnapshot snapshot, int start, int length, string message) =>
+        new(IdeSupportTagTypes.ParserError, GherkinRange.FromPoint(snapshot, start, length), message);
 
     // ── F4: parse errors ──────────────────────────────────────────────────────
 
@@ -75,7 +75,7 @@ public class DiagnosticsAggregatorTests
     public void ParserError_tag_with_null_Data_uses_fallback_message()
     {
         var snapshot = Snap("bad\n");
-        var tag = new DeveroomTag(DeveroomTagTypes.ParserError, GherkinRange.FromPoint(snapshot, 0, 3));
+        var tag = new IdeSupportTag(IdeSupportTagTypes.ParserError, GherkinRange.FromPoint(snapshot, 0, 3));
         // Data is null (default)
 
         var result = CreateSut().Aggregate(new[] { tag }, FeatureBindingMatchSet.Empty);
@@ -89,7 +89,7 @@ public class DiagnosticsAggregatorTests
     {
         var snapshot = Snap("Feature: X\nScenario: bad");
         var expectedRange = GherkinRange.FromPoint(snapshot, 11, 8);  // "Scenario:"
-        var tag = new DeveroomTag(DeveroomTagTypes.ParserError, expectedRange, "error");
+        var tag = new IdeSupportTag(IdeSupportTagTypes.ParserError, expectedRange, "error");
 
         var result = CreateSut().Aggregate(new[] { tag }, FeatureBindingMatchSet.Empty);
 
@@ -120,7 +120,7 @@ public class DiagnosticsAggregatorTests
         const string feature = "Feature: F\nScenario: S\n    Given a step with no binding\n";
         var matchSet = MatchSetFor(feature);  // empty registry → all steps undefined
 
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
 
         result.Should().ContainSingle();
         var diag = result[0];
@@ -144,7 +144,7 @@ public class DiagnosticsAggregatorTests
         const string feature = "Feature: F\nScenario: S\n    Given the binding exists\n";
         var matchSet = MatchSetFor(feature, registry);
 
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
 
         result.Should().ContainSingle();
         var diag = result[0];
@@ -160,7 +160,7 @@ public class DiagnosticsAggregatorTests
         var registry = RegistryWith(GivenBinding("the binding exists"));
         var matchSet = MatchSetFor(feature, registry);
 
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
 
         result.Should().BeEmpty();
     }
@@ -171,7 +171,7 @@ public class DiagnosticsAggregatorTests
         const string feature = "Feature: F\nScenario: S\n    Given step one\n    And step two\n";
         var matchSet = MatchSetFor(feature);
 
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
 
         result.Should().HaveCount(2);
         result.Should().AllSatisfy(d => d.Severity.Should().Be(GherkinDiagnosticSeverity.Warning));
@@ -191,7 +191,7 @@ public class DiagnosticsAggregatorTests
         const string feature = "Feature: F\nScenario: S\n  Given ambiguous step\n";
         var matchSet = MatchSetFor(feature, registry);
 
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
 
         result.Should().ContainSingle();
         var diag = result[0];
@@ -215,7 +215,7 @@ public class DiagnosticsAggregatorTests
         const string feature = "Feature: F\nScenario: S\n  Given ambiguous step\n  And ambiguous step\n";
         var matchSet = MatchSetFor(feature, registry);
 
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), matchSet);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
 
         result.Should().HaveCount(2);
         result.Should().AllSatisfy(d => d.Severity.Should().Be(GherkinDiagnosticSeverity.Error));
@@ -267,7 +267,7 @@ public class DiagnosticsAggregatorTests
     [Fact]
     public void Empty_inputs_produce_no_diagnostics()
     {
-        var result = CreateSut().Aggregate(Array.Empty<DeveroomTag>(), FeatureBindingMatchSet.Empty);
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), FeatureBindingMatchSet.Empty);
 
         result.Should().BeEmpty();
     }

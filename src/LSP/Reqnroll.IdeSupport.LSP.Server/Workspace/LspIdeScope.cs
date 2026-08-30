@@ -29,7 +29,7 @@ public sealed class LspIdeScope : IIdeScope
     /// Telemetry sink — the same DI-registered <see cref="LspErrorTelemetryService"/> singleton
     /// used everywhere else on the LSP server. Previously hardcoded to
     /// <see cref="NullTelemetryService"/>, which silently dropped errors reported through this
-    /// property (e.g. <c>ProjectScopeDeveroomConfigurationProvider</c>'s config-load exceptions via
+    /// property (e.g. <c>ProjectScopeIdeSupportConfigurationProvider</c>'s config-load exceptions via
     /// <c>WatchedFilesHandler</c>) even after issue #255's fix — that fix only reached consumers
     /// that resolve <see cref="Common.Telemetry.IErrorTelemetryService"/>/<see cref="ITelemetryService"/>
     /// directly via DI, not this separate <see cref="IIdeScope.TelemetryService"/> access path

@@ -7,7 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
@@ -29,16 +29,16 @@ public class HookCodeLensHandlerTests
 
     private static readonly LspTextSnapshot Snapshot = new(FeatureUri.ToString(), 1, FeatureText);
 
-    private static readonly DeveroomTag FeatureBlockTag = new(
-        DeveroomTagTypes.FeatureBlock, new GherkinRange(Snapshot, 0, FeatureText.Length));
+    private static readonly IdeSupportTag FeatureBlockTag = new(
+        IdeSupportTagTypes.FeatureBlock, new GherkinRange(Snapshot, 0, FeatureText.Length));
 
-    private static readonly DeveroomTag ScenarioDefTag = new(
-        DeveroomTagTypes.ScenarioDefinitionBlock, new GherkinRange(Snapshot, 11, 29));
+    private static readonly IdeSupportTag ScenarioDefTag = new(
+        IdeSupportTagTypes.ScenarioDefinitionBlock, new GherkinRange(Snapshot, 11, 29));
 
-    private static readonly DeveroomTag StepBlockTag = new(
-        DeveroomTagTypes.StepBlock, new GherkinRange(Snapshot, 23, 17));
+    private static readonly IdeSupportTag StepBlockTag = new(
+        IdeSupportTagTypes.StepBlock, new GherkinRange(Snapshot, 23, 17));
 
-    private static readonly IReadOnlyList<DeveroomTag> AllTags =
+    private static readonly IReadOnlyList<IdeSupportTag> AllTags =
         new[] { FeatureBlockTag, ScenarioDefTag, StepBlockTag };
 
     // Second fixture: a scenario with two steps, used to verify the step-hooks lens is only
@@ -52,19 +52,19 @@ public class HookCodeLensHandlerTests
 
     private static readonly LspTextSnapshot TwoStepSnapshot = new(FeatureUri.ToString(), 1, TwoStepFeatureText);
 
-    private static readonly DeveroomTag TwoStepFeatureBlockTag = new(
-        DeveroomTagTypes.FeatureBlock, new GherkinRange(TwoStepSnapshot, 0, TwoStepFeatureText.Length));
+    private static readonly IdeSupportTag TwoStepFeatureBlockTag = new(
+        IdeSupportTagTypes.FeatureBlock, new GherkinRange(TwoStepSnapshot, 0, TwoStepFeatureText.Length));
 
-    private static readonly DeveroomTag TwoStepScenarioDefTag = new(
-        DeveroomTagTypes.ScenarioDefinitionBlock, new GherkinRange(TwoStepSnapshot, 11, 46));
+    private static readonly IdeSupportTag TwoStepScenarioDefTag = new(
+        IdeSupportTagTypes.ScenarioDefinitionBlock, new GherkinRange(TwoStepSnapshot, 11, 46));
 
-    private static readonly DeveroomTag FirstStepBlockTag = new(
-        DeveroomTagTypes.StepBlock, new GherkinRange(TwoStepSnapshot, 23, 17));
+    private static readonly IdeSupportTag FirstStepBlockTag = new(
+        IdeSupportTagTypes.StepBlock, new GherkinRange(TwoStepSnapshot, 23, 17));
 
-    private static readonly DeveroomTag SecondStepBlockTag = new(
-        DeveroomTagTypes.StepBlock, new GherkinRange(TwoStepSnapshot, 40, 17));
+    private static readonly IdeSupportTag SecondStepBlockTag = new(
+        IdeSupportTagTypes.StepBlock, new GherkinRange(TwoStepSnapshot, 40, 17));
 
-    private static readonly IReadOnlyList<DeveroomTag> TwoStepTags =
+    private static readonly IReadOnlyList<IdeSupportTag> TwoStepTags =
         new[] { TwoStepFeatureBlockTag, TwoStepScenarioDefTag, FirstStepBlockTag, SecondStepBlockTag };
 
     public HookCodeLensHandlerTests()
@@ -80,7 +80,7 @@ public class HookCodeLensHandlerTests
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
 
-    private void SetupBuffer(DocumentUri uri, string text, IReadOnlyCollection<DeveroomTag>? tags = null)
+    private void SetupBuffer(DocumentUri uri, string text, IReadOnlyCollection<IdeSupportTag>? tags = null)
     {
         var buf = new DocumentBuffer(uri, 1, text, tags);
         DocumentBuffer? ignored;
@@ -243,10 +243,10 @@ public class HookCodeLensHandlerTests
     [Fact]
     public async Task Handle_background_block_produces_no_lens()
     {
-        // ScenarioDefinitionBlock covers Background too (see DeveroomTagTypes doc comment) — a
+        // ScenarioDefinitionBlock covers Background too (see IdeSupportTagTypes doc comment) — a
         // Background carries no scenario tags of its own, so nothing should be counted/shown for it.
-        var backgroundTag = new DeveroomTag(
-            DeveroomTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
+        var backgroundTag = new IdeSupportTag(
+            IdeSupportTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
             new Background(new Gherkin.Ast.Location(2, 1), "Background", "B", "", Array.Empty<Step>()));
         SetupBuffer(FeatureUri, FeatureText, new[] { FeatureBlockTag, backgroundTag, StepBlockTag });
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(
@@ -262,8 +262,8 @@ public class HookCodeLensHandlerTests
     {
         // Confirms the Background exclusion is keyed off tag.Data's runtime type, not just
         // "any ScenarioDefinitionBlock tag with Data is excluded".
-        var scenarioTag = new DeveroomTag(
-            DeveroomTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
+        var scenarioTag = new IdeSupportTag(
+            IdeSupportTagTypes.ScenarioDefinitionBlock, ScenarioDefTag.Range,
             new Scenario(Array.Empty<Tag>(), new Gherkin.Ast.Location(2, 1), "Scenario", "S", "", Array.Empty<Step>(), Array.Empty<Examples>()));
         SetupBuffer(FeatureUri, FeatureText, new[] { FeatureBlockTag, scenarioTag, StepBlockTag });
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));

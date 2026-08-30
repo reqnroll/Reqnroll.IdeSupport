@@ -33,7 +33,7 @@ internal sealed class GherkinSemanticClassifierProvider : IClassifierProvider
 
 /// <summary>
 /// Reads the cached semantic tokens for the buffer's <c>.feature</c> file and produces
-/// classification spans against the <c>DeveroomClassifications</c> classification type whose name
+/// classification spans against the <c>IdeSupportClassifications</c> classification type whose name
 /// matches each token's legend type name (e.g. <c>reqnroll.keyword</c>).
 /// </summary>
 internal sealed class GherkinSemanticClassifier : IClassifier

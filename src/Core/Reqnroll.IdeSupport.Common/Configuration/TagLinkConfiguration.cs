@@ -26,9 +26,9 @@ public class TagLinkConfiguration
         FixEmptyContainers();
 
         if (string.IsNullOrEmpty(TagPattern))
-            throw new DeveroomConfigurationException("'traceability/tagLinks[]/tagPattern' must be specified");
+            throw new IdeSupportConfigurationException("'traceability/tagLinks[]/tagPattern' must be specified");
         if (string.IsNullOrEmpty(UrlTemplate))
-            throw new DeveroomConfigurationException("'traceability/tagLinks[]/urlTemplate' must be specified");
+            throw new IdeSupportConfigurationException("'traceability/tagLinks[]/urlTemplate' must be specified");
 
         try
         {
@@ -36,7 +36,7 @@ public class TagLinkConfiguration
         }
         catch (Exception e)
         {
-            throw new DeveroomConfigurationException(
+            throw new IdeSupportConfigurationException(
                 $"Invalid regular expression '{TagPattern}' was specified as 'traceability/tagLinks[]/tagPattern': {e.Message}");
         }
     }

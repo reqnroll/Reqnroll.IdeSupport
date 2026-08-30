@@ -228,7 +228,7 @@ public class StepSkeletonRendererTests
             ScenarioBlock.Then  => "Then ",
             _                   => "Given "
         };
-        var gherkinStep = new DeveroomGherkinStep(
+        var gherkinStep = new IdeSupportGherkinStep(
             new global::Gherkin.Ast.Location(0, 0), keyword, StepKeywordType.Context,
             text, argument: null!, StepKeyword.Given, block);
         return new UndefinedStepDescriptor(gherkinStep, text);

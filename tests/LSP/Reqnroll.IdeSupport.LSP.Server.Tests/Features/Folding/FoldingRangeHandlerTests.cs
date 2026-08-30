@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Folding;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.Folding;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Folding;
@@ -26,7 +26,7 @@ public class FoldingRangeHandlerTests
     private static FoldingRangeRequestParam RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
 
-    private void SetupBuffer(DocumentUri uri, IReadOnlyCollection<DeveroomTag>? tags)
+    private void SetupBuffer(DocumentUri uri, IReadOnlyCollection<IdeSupportTag>? tags)
     {
         var buf = new DocumentBuffer(uri, 1, "Feature: X\n", tags);
         DocumentBuffer? outBuf;
@@ -66,8 +66,8 @@ public class FoldingRangeHandlerTests
     [Fact]
     public async Task Returns_empty_when_service_returns_no_ranges_Async()
     {
-        SetupBuffer(FeatureUri, Array.Empty<DeveroomTag>());
-        _foldingService.BuildFoldingRanges(Arg.Any<IReadOnlyCollection<DeveroomTag>>())
+        SetupBuffer(FeatureUri, Array.Empty<IdeSupportTag>());
+        _foldingService.BuildFoldingRanges(Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
                        .Returns(Array.Empty<GherkinFoldingRange>());
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
@@ -81,7 +81,7 @@ public class FoldingRangeHandlerTests
     [Fact]
     public async Task Returns_folding_ranges_when_service_provides_them_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, tags);
         _foldingService.BuildFoldingRanges(tags)
             .Returns(new[]
@@ -100,7 +100,7 @@ public class FoldingRangeHandlerTests
     [Fact]
     public async Task Folding_ranges_have_no_set_kind_by_default_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, tags);
         _foldingService.BuildFoldingRanges(tags)
             .Returns(new[] { new GherkinFoldingRange(1, 2) });
@@ -114,9 +114,9 @@ public class FoldingRangeHandlerTests
     [Fact]
     public async Task Calls_folding_service_with_buffer_tags_Async()
     {
-        var tags = Array.Empty<DeveroomTag>();
+        var tags = Array.Empty<IdeSupportTag>();
         SetupBuffer(FeatureUri, tags);
-        _foldingService.BuildFoldingRanges(Arg.Any<IReadOnlyCollection<DeveroomTag>>())
+        _foldingService.BuildFoldingRanges(Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
                        .Returns(Array.Empty<GherkinFoldingRange>());
 
         await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);

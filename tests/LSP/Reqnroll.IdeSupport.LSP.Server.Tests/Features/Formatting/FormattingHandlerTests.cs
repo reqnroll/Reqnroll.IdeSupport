@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -15,7 +15,7 @@ public class FormattingHandlerTests
 
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IEditorConfigOptionsProvider _editorConfigOptionsProvider = Substitute.For<IEditorConfigOptionsProvider>();
-    private readonly IDeveroomConfigurationProvider _configProvider = Substitute.For<IDeveroomConfigurationProvider>();
+    private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ILspTelemetryService _telemetryService = Substitute.For<ILspTelemetryService>();
 
@@ -29,7 +29,7 @@ public class FormattingHandlerTests
                 x[1] = new DocumentBuffer(FeatureUri, 1, FeatureText);
                 return true;
             });
-        _configProvider.GetConfiguration().Returns(new DeveroomConfiguration());
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
         _editorConfigOptionsProvider.GetEditorConfigOptionsByPath(Arg.Any<string>())
             .Returns(Substitute.For<IEditorConfigOptions>());
     }

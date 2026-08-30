@@ -39,7 +39,7 @@ internal readonly struct ClassifiedToken
 /// that path entirely: <see cref="SemanticTokensClassificationInterceptor"/> observes the server's
 /// semantic-token responses as they flow through the connection and records them here, and
 /// <see cref="GherkinSemanticClassifier"/> reads them back and produces classification spans against
-/// the <c>DeveroomClassifications</c> classification types of the same name.
+/// the <c>IdeSupportClassifications</c> classification types of the same name.
 /// </para>
 /// <para>
 /// A static singleton is used (rather than MEF) because the interceptor is constructed by the

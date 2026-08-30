@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -63,7 +63,7 @@ public class DiagnosticsPublishHandlerTests
         return new GherkinDiagnostic(message, range, severity, source);
     }
 
-    private void SetupBuffer(IReadOnlyCollection<DeveroomTag> tags)
+    private void SetupBuffer(IReadOnlyCollection<IdeSupportTag> tags)
     {
         var buffer = new DocumentBuffer(FeatureUri, 1, "Feature: X\n", tags);
         _bufferService.TryGet(FeatureUri, out Arg.Any<DocumentBuffer?>())
@@ -79,7 +79,7 @@ public class DiagnosticsPublishHandlerTests
     private void SetupAggregator(params GherkinDiagnostic[] diagnostics)
     {
         _aggregator
-            .Aggregate(Arg.Any<IReadOnlyCollection<DeveroomTag>>(), Arg.Any<FeatureBindingMatchSet>())
+            .Aggregate(Arg.Any<IReadOnlyCollection<IdeSupportTag>>(), Arg.Any<FeatureBindingMatchSet>())
             .Returns(diagnostics);
     }
 
@@ -112,7 +112,7 @@ public class DiagnosticsPublishHandlerTests
     [Fact]
     public async Task Sends_textDocument_publishDiagnostics_notification()
     {
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator();
 
         await CreateSut().Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
@@ -125,7 +125,7 @@ public class DiagnosticsPublishHandlerTests
     [Fact]
     public async Task Pushed_params_contain_the_correct_URI()
     {
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator();
 
         await CreateSut().Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
@@ -140,7 +140,7 @@ public class DiagnosticsPublishHandlerTests
     [Fact]
     public async Task Pushes_empty_diagnostics_when_aggregator_returns_none()
     {
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator();  // returns empty array
 
         await CreateSut().Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
@@ -156,7 +156,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task Error_severity_maps_to_DiagnosticSeverity_Error()
     {
         const string featureText = "Feature: F\nScenario: S\n    Given step\n";
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator(MakeDiagnostic(featureText, 0, 7, GherkinDiagnosticSeverity.Error,
             DiagnosticsAggregator.ParserSource, "parse error"));
 
@@ -175,7 +175,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task Warning_severity_maps_to_DiagnosticSeverity_Warning()
     {
         const string featureText = "Feature: F\nScenario: S\n    Given step\n";
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator(MakeDiagnostic(featureText, 0, 7, GherkinDiagnosticSeverity.Warning,
             DiagnosticsAggregator.BindingSource, DiagnosticsAggregator.UndefinedStepMessage));
 
@@ -195,7 +195,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task Source_and_message_are_forwarded_to_the_LSP_Diagnostic()
     {
         const string featureText = "Feature: F\n";
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator(MakeDiagnostic(featureText, 0, 7, GherkinDiagnosticSeverity.Warning,
             DiagnosticsAggregator.BindingSource, DiagnosticsAggregator.UndefinedStepMessage));
 
@@ -214,7 +214,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task Error_with_BindingSource_forwards_source_and_message()
     {
         const string featureText = "Feature: F\n";
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator(MakeDiagnostic(featureText, 0, 7, GherkinDiagnosticSeverity.Error,
             DiagnosticsAggregator.BindingSource, "Ambiguous step definition."));
 
@@ -248,7 +248,7 @@ public class DiagnosticsPublishHandlerTests
         const int stepStart = 33;
         const int stepLen = 4;  // "step"
 
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         SetupAggregator(MakeDiagnostic(featureText, stepStart, stepLen,
             GherkinDiagnosticSeverity.Warning, DiagnosticsAggregator.BindingSource, "msg"));
 
@@ -289,7 +289,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task Aggregator_receives_empty_match_set_when_registry_is_Invalid()
     {
         // Arrange
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         // Registry stays Invalid (default from constructor).
         _matchService.TryGet(Arg.Any<MatchSetKey>(), out Arg.Any<FeatureBindingMatchSet>())
                      .Returns(x =>
@@ -305,7 +305,7 @@ public class DiagnosticsPublishHandlerTests
         // Assert — the real match set must NOT have been forwarded; the Q24 guard
         // substitutes FeatureBindingMatchSet.Empty when the registry is Invalid.
         _aggregator.Received(1).Aggregate(
-            Arg.Any<IReadOnlyCollection<DeveroomTag>>(),
+            Arg.Any<IReadOnlyCollection<IdeSupportTag>>(),
             FeatureBindingMatchSet.Empty);
     }
 
@@ -313,7 +313,7 @@ public class DiagnosticsPublishHandlerTests
     public async Task Aggregator_receives_real_match_set_when_registry_is_ready()
     {
         // Arrange
-        SetupBuffer(Array.Empty<DeveroomTag>());
+        SetupBuffer(Array.Empty<IdeSupportTag>());
         _registryLookup.GetRegistryForUri(FeatureUri).Returns(ReadyRegistry);
         _matchService.TryGet(Arg.Any<MatchSetKey>(), out Arg.Any<FeatureBindingMatchSet>())
                      .Returns(x =>
@@ -329,7 +329,7 @@ public class DiagnosticsPublishHandlerTests
         // Assert — the real match set IS forwarded because the registry is ready
         // (not the Invalid singleton).
         _aggregator.Received(1).Aggregate(
-            Arg.Any<IReadOnlyCollection<DeveroomTag>>(),
+            Arg.Any<IReadOnlyCollection<IdeSupportTag>>(),
             NonEmptyMatchSet);
     }
 
@@ -339,8 +339,8 @@ public class DiagnosticsPublishHandlerTests
         // Arrange
         const string featureText = "Feature: F\n  Scenario: S\n    Given step\n";
         var snapshot = new LspTextSnapshot(FeatureUri.ToString(), 1, featureText);
-        var parseErrorTag = new DeveroomTag(
-            DeveroomTagTypes.ParserError,
+        var parseErrorTag = new IdeSupportTag(
+            IdeSupportTagTypes.ParserError,
             GherkinRange.FromPoint(snapshot, 0, 10),
             "syntax error");
         SetupBuffer(new[] { parseErrorTag });

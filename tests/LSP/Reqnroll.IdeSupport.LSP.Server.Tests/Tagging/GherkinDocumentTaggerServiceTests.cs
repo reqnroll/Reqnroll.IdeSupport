@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Tagging;
 public class GherkinDocumentTaggerServiceTests
 {
     private readonly IDocumentBufferService        _bufferService       = Substitute.For<IDocumentBufferService>();
-    private readonly IDeveroomTagParser            _tagParser           = Substitute.For<IDeveroomTagParser>();
+    private readonly IIdeSupportTagParser            _tagParser           = Substitute.For<IIdeSupportTagParser>();
     private readonly IProjectBindingRegistryLookup _registryLookup      = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly ISemanticTokenService         _semanticTokenService = Substitute.For<ISemanticTokenService>();
     private readonly IBindingMatchService          _bindingMatchService  = Substitute.For<IBindingMatchService>();
@@ -104,7 +104,7 @@ public class GherkinDocumentTaggerServiceTests
             return true;
         });
 
-        var expectedTags = (IReadOnlyCollection<DeveroomTag>)Array.Empty<DeveroomTag>();
+        var expectedTags = (IReadOnlyCollection<IdeSupportTag>)Array.Empty<IdeSupportTag>();
         _tagParser.Parse(
                       Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
                       Arg.Any<ProjectBindingRegistry>())
@@ -132,7 +132,7 @@ public class GherkinDocumentTaggerServiceTests
         _bufferService.TryGet(FeatureUri, out _).Returns(x => { x[1] = buf; return true; });
         _tagParser.Parse(Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
                          Arg.Any<ProjectBindingRegistry>())
-                  .Returns(Array.Empty<DeveroomTag>());
+                  .Returns(Array.Empty<IdeSupportTag>());
 
         await CreateSut().ParseAsync(FeatureUri, version: 1);
 
@@ -153,7 +153,7 @@ public class GherkinDocumentTaggerServiceTests
         _bufferService.TryGet(FeatureUri, out _).Returns(x => { x[1] = buf; return true; });
         _tagParser.Parse(Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
                          Arg.Any<ProjectBindingRegistry>())
-                  .Returns(Array.Empty<DeveroomTag>());
+                  .Returns(Array.Empty<IdeSupportTag>());
 
         await CreateSut().ParseAsync(FeatureUri, version: 1);
 
@@ -174,7 +174,7 @@ public class GherkinDocumentTaggerServiceTests
             return true;
         });
 
-        var expectedTags = (IReadOnlyCollection<DeveroomTag>)Array.Empty<DeveroomTag>();
+        var expectedTags = (IReadOnlyCollection<IdeSupportTag>)Array.Empty<IdeSupportTag>();
         _tagParser.Parse(
                       Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
                       Arg.Any<ProjectBindingRegistry>())
@@ -220,7 +220,7 @@ public class GherkinDocumentTaggerServiceTests
             return false;
         });
 
-        var expectedTags = (IReadOnlyCollection<DeveroomTag>)Array.Empty<DeveroomTag>();
+        var expectedTags = (IReadOnlyCollection<IdeSupportTag>)Array.Empty<IdeSupportTag>();
         _tagParser.Parse(
                       Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
                       Arg.Any<ProjectBindingRegistry>())
@@ -255,7 +255,7 @@ public class GherkinDocumentTaggerServiceTests
             _bufferService.TryGet(uri, out none).Returns(x => { x[1] = (DocumentBuffer?)null; return false; });
             _tagParser.Parse(Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
                              Arg.Any<ProjectBindingRegistry>())
-                      .Returns(Array.Empty<DeveroomTag>());
+                      .Returns(Array.Empty<IdeSupportTag>());
 
             await CreateSut().RescanClosedFileAsync(uri);
 

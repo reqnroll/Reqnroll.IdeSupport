@@ -17,11 +17,11 @@ namespace Reqnroll.IdeSupport.LSP.Core.Completions;
 /// </summary>
 public sealed class CompletionContextResolver : ICompletionContextResolver
 {
-    private readonly IDeveroomTagParser _tagParser;
+    private readonly IIdeSupportTagParser _tagParser;
     private readonly IErrorTelemetryService _telemetryService;
 
     /// <summary>Initializes a new instance of the <see cref="CompletionContextResolver"/> class.</summary>
-    public CompletionContextResolver(IDeveroomTagParser tagParser, IErrorTelemetryService telemetryService)
+    public CompletionContextResolver(IIdeSupportTagParser tagParser, IErrorTelemetryService telemetryService)
     {
         _tagParser         = tagParser;
         _telemetryService = telemetryService;
@@ -37,8 +37,8 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
     {
         var tags = _tagParser.Parse(snapshot, registry);
 
-        var docTag     = tags.FirstOrDefault(t => t.Type == DeveroomTagTypes.Document);
-        var gherkinDoc = docTag?.Data as DeveroomGherkinDocument;
+        var docTag     = tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.Document);
+        var gherkinDoc = docTag?.Data as IdeSupportGherkinDocument;
         var dialect    = gherkinDoc?.GherkinDialect
                       ?? new GherkinDialectProvider(fallbackLanguage).DefaultDialect;
 
@@ -46,11 +46,11 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
         // Cursor must be on a recognised step line and at or past the step text start
         // (i.e. after the keyword and its trailing space).
         var stepTag = tags.FirstOrDefault(t =>
-            t.Type == DeveroomTagTypes.StepBlock &&
-            t.Data is DeveroomGherkinStep s &&
+            t.Type == IdeSupportTagTypes.StepBlock &&
+            t.Data is IdeSupportGherkinStep s &&
             s.Location.Line - 1 == cursorLine);   // Gherkin lines are 1-based
 
-        if (stepTag?.Data is DeveroomGherkinStep cursorStep)
+        if (stepTag?.Data is IdeSupportGherkinStep cursorStep)
         {
             var snapshotLine = snapshot.GetLineFromLineNumber(cursorLine);
             var cursorOffset = snapshotLine.Start + cursorChar;

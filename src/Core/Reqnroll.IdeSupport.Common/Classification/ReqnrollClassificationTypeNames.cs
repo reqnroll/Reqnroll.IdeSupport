@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.Common.Classification;
 /// <list type="bullet">
 ///   <item>the LSP server's semantic-token legend (advertised in the <c>initialize</c> response), and</item>
 ///   <item>the Visual Studio extension's MEF <c>ClassificationTypeDefinition</c> exports
-///         (<c>DeveroomClassifications</c>), which map each name to a concrete editor colour.</item>
+///         (<c>IdeSupportClassifications</c>), which map each name to a concrete editor colour.</item>
 /// </list>
 /// <para>
 /// Rather than emitting the generic LSP standard token types (<c>keyword</c>, <c>string</c>,

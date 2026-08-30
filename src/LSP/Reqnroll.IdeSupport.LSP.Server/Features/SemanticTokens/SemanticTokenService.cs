@@ -3,7 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 
@@ -11,7 +11,7 @@ using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 
 /// <summary>
-/// Maps <see cref="DeveroomTag"/> instances to LSP semantic token integer tuples
+/// Maps <see cref="IdeSupportTag"/> instances to LSP semantic token integer tuples
 /// on demand and caches the encoded result per document version.
 /// Encoding is deferred until the client sends a semantic tokens request.
 /// The token type legend and the tag→token mapping are the fixed Reqnroll definitions
@@ -122,7 +122,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
 
     // ── Encoding ──────────────────────────────────────────────────────────────
     /// <summary>
-    /// Converts a flat collection of <see cref="DeveroomTag"/> instances into the
+    /// Converts a flat collection of <see cref="IdeSupportTag"/> instances into the
     /// LSP semantic token integer encoding (5 ints per token):
     /// deltaLine, deltaStartChar, length, tokenTypeIndex, tokenModifierBitset.
     /// Only leaf-level tags that map to a token type are emitted; container
@@ -130,7 +130,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// children are processed recursively.
     /// </summary>
     private static List<int> Encode(
-        IReadOnlyCollection<DeveroomTag> tags, int? startLine = null, int? endLine = null)
+        IReadOnlyCollection<IdeSupportTag> tags, int? startLine = null, int? endLine = null)
     {
         // Collect all leaf tokens in document order (line asc, char asc).
         var entries = new List<(int Line, int Char, int Length, int TypeIdx, int ModBits)>();
@@ -278,7 +278,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// </para>
     /// </summary>
     private readonly record struct PositionedTag(
-        DeveroomTag Tag,
+        IdeSupportTag Tag,
         int StartLine, int StartChar,
         int EndLine, int EndChar,
         int TypeIdx, int ModBits);
@@ -289,7 +289,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// resolved, so this costs exactly the two position resolutions per *emitted* tag that
     /// <see cref="CollectLeafTokens"/> used to make on its own.
     /// </summary>
-    private static IEnumerable<PositionedTag> ResolveTokenTags(IEnumerable<DeveroomTag> tags)
+    private static IEnumerable<PositionedTag> ResolveTokenTags(IEnumerable<IdeSupportTag> tags)
     {
         foreach (var tag in tags)
         {
@@ -317,7 +317,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
     /// </para>
     /// </summary>
     private static IEnumerable<PositionedTag> FilterToLineRange(
-        IEnumerable<DeveroomTag> tags, int startLine, int endLine)
+        IEnumerable<IdeSupportTag> tags, int startLine, int endLine)
     {
         foreach (var tag in tags)
         {
@@ -374,7 +374,7 @@ public sealed class SemanticTokenService : ISemanticTokenService
 
             // Do NOT recurse into ChildTags – the flat collection passed from
             // GherkinDocumentTaggerService already contains all descendants
-            // (DeveroomTagParser.GetAllTags flattens the tree before caching).
+            // (IdeSupportTagParser.GetAllTags flattens the tree before caching).
         }
     }
 

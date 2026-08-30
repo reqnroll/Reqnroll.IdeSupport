@@ -2,7 +2,7 @@
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
-using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 
@@ -24,7 +24,7 @@ public class DocumentActivatedHandlerTests
     public async Task HandleAsync_reparses_and_publishes_match_cache_changed_for_an_open_document()
     {
         _bufferService.Update(FeatureUri, version: 5, "Feature: F\nScenario: S\n  Given step\n");
-        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<DeveroomTag>());
+        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<IdeSupportTag>());
 
         await CreateSut().HandleAsync(new DocumentActivatedParams { Uri = FeatureUri }, CancellationToken.None);
 
@@ -38,7 +38,7 @@ public class DocumentActivatedHandlerTests
     public async Task HandleAsync_publishes_version_zero_when_the_buffer_has_no_version()
     {
         _bufferService.Update(FeatureUri, version: null, "Feature: F\n");
-        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<DeveroomTag>());
+        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<IdeSupportTag>());
 
         await CreateSut().HandleAsync(new DocumentActivatedParams { Uri = FeatureUri }, CancellationToken.None);
 
@@ -52,7 +52,7 @@ public class DocumentActivatedHandlerTests
     {
         // No buffer for this URI — e.g. the VS-side activation signal raced ahead of didOpen.
         // Must not throw and must not republish anything for a document the server doesn't know about.
-        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<DeveroomTag>());
+        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<IdeSupportTag>());
 
         var act = async () => await CreateSut().HandleAsync(
             new DocumentActivatedParams { Uri = FeatureUri }, CancellationToken.None);
@@ -67,7 +67,7 @@ public class DocumentActivatedHandlerTests
     {
         // ParseAsync itself is the "force a fresh recompute" step; it must always be attempted
         // regardless of whether a buffer turns out to exist afterward.
-        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<DeveroomTag>());
+        _taggerService.ParseAsync(FeatureUri, null).Returns(Array.Empty<IdeSupportTag>());
 
         await CreateSut().HandleAsync(new DocumentActivatedParams { Uri = FeatureUri }, CancellationToken.None);
 

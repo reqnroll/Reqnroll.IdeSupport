@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 /// <param name="ReqnrollProjectTraits">The project traits flags.</param>
 /// <param name="ProgrammingLanguage">The programming language.</param>
 public record ProjectSettings(
-    DeveroomProjectKind Kind,
+    IdeSupportProjectKind Kind,
     TargetFrameworkMoniker TargetFrameworkMoniker,
     string TargetFrameworkMonikers,
     ProjectPlatformTarget PlatformTarget,
@@ -27,11 +27,11 @@ public record ProjectSettings(
 )
 {
     /// <summary>Gets a value indicating whether the project is uninitialized.</summary>
-    public bool IsUninitialized => Kind == DeveroomProjectKind.Uninitialized;
+    public bool IsUninitialized => Kind == IdeSupportProjectKind.Uninitialized;
     /// <summary>Gets a value indicating whether this is a Reqnroll test project.</summary>
-    public bool IsReqnrollTestProject => Kind == DeveroomProjectKind.ReqnrollTestProject;
+    public bool IsReqnrollTestProject => Kind == IdeSupportProjectKind.ReqnrollTestProject;
     /// <summary>Gets a value indicating whether this is a Reqnroll library project.</summary>
-    public bool IsReqnrollLibProject => Kind == DeveroomProjectKind.ReqnrollLibProject;
+    public bool IsReqnrollLibProject => Kind == IdeSupportProjectKind.ReqnrollLibProject;
     /// <summary>Gets a value indicating whether this is a Reqnroll project.</summary>
     public bool IsReqnrollProject => IsReqnrollTestProject || IsReqnrollLibProject;
     /// <summary>Gets a value indicating whether this is a SpecFlow project.</summary>

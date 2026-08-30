@@ -119,7 +119,7 @@ public class LspWorkspaceScopeManagerTests : IDisposable
     public void GetConfigurationProviderForUri_returns_fallback_when_no_workspace_covers_uri()
     {
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "a.feature"));
-        // No workspace opened — should fall back to ProjectSystemDeveroomConfigurationProvider
+        // No workspace opened — should fall back to ProjectSystemIdeSupportConfigurationProvider
         _sut.GetConfigurationProviderForUri(uri).Should().NotBeNull();
     }
 

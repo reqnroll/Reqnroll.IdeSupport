@@ -33,7 +33,7 @@ public class ReqnrollProjectSettingsProvider
 
     private ReqnrollSettings UpdateReqnrollSettingsFromConfig(ReqnrollSettings reqnrollSettings)
     {
-        var configuration = _projectScope.GetDeveroomConfiguration();
+        var configuration = _projectScope.GetIdeSupportConfiguration();
         if (configuration.Reqnroll.IsReqnrollProject == null
             //&& configuration.SpecFlow.IsSpecFlowProject == null
             )
@@ -236,10 +236,10 @@ public class ReqnrollProjectSettingsProvider
     private static string GetConfigFileInPath(IFileSystemForIDE fileSystem, string folder)
     {
       return fileSystem.GetFilePathIfExists(Path.Combine(folder,
-               ProjectScopeDeveroomConfigurationProvider.ReqnrollJsonConfigFileName)) ??
+               ProjectScopeIdeSupportConfigurationProvider.ReqnrollJsonConfigFileName)) ??
              fileSystem.GetFilePathIfExists(Path.Combine(folder,
-               ProjectScopeDeveroomConfigurationProvider.SpecFlowJsonConfigFileName)) ??
+               ProjectScopeIdeSupportConfigurationProvider.SpecFlowJsonConfigFileName)) ??
              fileSystem.GetFilePathIfExists(Path.Combine(folder,
-               ProjectScopeDeveroomConfigurationProvider.SpecFlowAppConfigFileName));
+               ProjectScopeIdeSupportConfigurationProvider.SpecFlowAppConfigFileName));
     }
 }

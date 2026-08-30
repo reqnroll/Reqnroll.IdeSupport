@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Formatting;
 public class GherkinDocumentFormatter
 {
     /// <summary>Applies indentation, tag normalization, table alignment, and step-keyword ("And") formatting to the whole document.</summary>
-    public void FormatGherkinDocument(DeveroomGherkinDocument gherkinDocument, DocumentLinesEditBuffer lines,
+    public void FormatGherkinDocument(IdeSupportGherkinDocument gherkinDocument, DocumentLinesEditBuffer lines,
         GherkinFormatSettings formatSettings)
     {
         if (gherkinDocument.Feature == null)
@@ -60,7 +60,7 @@ public class GherkinDocumentFormatter
             var stepIndentLevel = indentLevel + formatSettings.StepIndentLevelWithinStepContainer;
             var newKeyword = step.Keyword;
 
-            if (step is DeveroomGherkinStep { StepKeyword: StepKeyword.And or StepKeyword.But })
+            if (step is IdeSupportGherkinStep { StepKeyword: StepKeyword.And or StepKeyword.But })
             {
                 stepIndentLevel += formatSettings.AndStepIndentLevelWithinSteps;
             }
@@ -189,7 +189,7 @@ public class GherkinDocumentFormatter
     {
         var indent = GetIndent(formatSettings, indentLevel);
         var docStringStartLine = docString.Location.Line;
-        var docStringContentLines = DeveroomTagParser.NewLineRe.Split(docString.Content);
+        var docStringContentLines = IdeSupportTagParser.NewLineRe.Split(docString.Content);
         if (string.IsNullOrEmpty(docString.Content) &&
             !string.IsNullOrWhiteSpace(lines.GetLineOneBased(docStringStartLine + 1)))
             docStringContentLines = Array.Empty<string>();

@@ -36,7 +36,7 @@ public static class ProcessHelper
         timeout = timeout ?? DefaultTimeout;
 
         if (workingDirectory == null || !Directory.Exists(workingDirectory))
-            throw new DeveroomConfigurationException($"Unable to find directory: {workingDirectory}");
+            throw new IdeSupportConfigurationException($"Unable to find directory: {workingDirectory}");
 
         // A bare command name (no directory component, e.g. "dotnet") is meant to be resolved by
         // the OS via PATH when the process launches — File.Exists can't check that, so only
@@ -44,7 +44,7 @@ public static class ProcessHelper
         // resolvable, Process.Start below throws and that failure is surfaced normally.
         var looksLikeFilePath = executablePath != null && !string.IsNullOrEmpty(Path.GetDirectoryName(executablePath));
         if (executablePath == null || (looksLikeFilePath && !File.Exists(executablePath)))
-            throw new DeveroomConfigurationException($"Unable to find process: {executablePath}");
+            throw new IdeSupportConfigurationException($"Unable to find process: {executablePath}");
 
         ProcessStartInfo psi = new ProcessStartInfo(executablePath, parameters)
         {

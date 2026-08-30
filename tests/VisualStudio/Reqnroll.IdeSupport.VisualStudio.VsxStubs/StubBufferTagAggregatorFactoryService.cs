@@ -1,4 +1,4 @@
-#if false // Deferred: DeveroomTag tagger not yet ported to VS layer
+#if false // Deferred: IdeSupportTag tagger not yet ported to VS layer
 namespace Reqnroll.VisualStudio.VsxStubs;
 
 public class StubBufferTagAggregatorFactoryService : IBufferTagAggregatorFactoryService
@@ -15,9 +15,9 @@ public class StubBufferTagAggregatorFactoryService : IBufferTagAggregatorFactory
 
     public ITagAggregator<T> CreateTagAggregator<T>(ITextBuffer textBuffer, TagAggregatorOptions options) where T : ITag
     {
-        if (typeof(T) == typeof(DeveroomTag))
+        if (typeof(T) == typeof(IdeSupportTag))
         {
-            var tagger = _taggerProvider.CreateTagger<DeveroomTag>(textBuffer);
+            var tagger = _taggerProvider.CreateTagger<IdeSupportTag>(textBuffer);
 
             return new StubTagAggregator<T>((ITagger<T>) tagger,
                 VsxStubObjects.BufferGraphFactoryService.CreateBufferGraph(textBuffer));

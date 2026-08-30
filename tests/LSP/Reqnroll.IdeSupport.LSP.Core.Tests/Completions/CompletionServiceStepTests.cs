@@ -10,7 +10,7 @@ public class CompletionServiceStepTests
     private readonly CompletionService _sut = new();
     private readonly ReturnAllCompletionMatcher _matcher = new();
 
-    private static DeveroomGherkinStep MakeStep(ScenarioBlock block)
+    private static IdeSupportGherkinStep MakeStep(ScenarioBlock block)
         => new(new GherkinLocation(1, 1),
                block == ScenarioBlock.Given ? "Given " : block == ScenarioBlock.When ? "When " : "Then ",
                StepKeywordType.Context,

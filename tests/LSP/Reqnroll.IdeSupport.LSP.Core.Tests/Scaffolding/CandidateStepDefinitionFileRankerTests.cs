@@ -90,7 +90,7 @@ public class CandidateStepDefinitionFileRankerTests
 
     private static StepBindingMatch UndefinedMatch(string text)
     {
-        var gherkinStep = new DeveroomGherkinStep(
+        var gherkinStep = new IdeSupportGherkinStep(
             new global::Gherkin.Ast.Location(0, 0), "Given ", StepKeywordType.Context, text, null!,
             StepKeyword.Given, ScenarioBlock.Given);
 
