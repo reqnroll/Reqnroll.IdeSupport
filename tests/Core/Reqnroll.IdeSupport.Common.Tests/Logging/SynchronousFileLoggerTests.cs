@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace Reqnroll.IdeSupport.Common.Tests.Diagnostics;
+namespace Reqnroll.IdeSupport.Common.Tests.Logging;
 
 // Isolates REQNROLLVS_DEBUG per test: some dev machines have it set ambiently (e.g. from the
 // legacy Reqnroll.VisualStudio extension), which would otherwise leak into unrelated assertions.

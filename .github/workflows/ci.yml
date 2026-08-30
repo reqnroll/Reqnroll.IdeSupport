@@ -106,7 +106,7 @@ env:
   # same build number.
   BUILD_NUMBER_ARG: -p:ReqnrollBuildNumber=${{ github.run_number }}
   EXTENSION_PROJECT: src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/Reqnroll.IdeSupport.VisualStudio.Extension.csproj
-  TESTS_PROJECT: tests/VisualStudio/Reqnroll.VisualStudio.Tests/Reqnroll.VisualStudio.Tests.csproj
+  TESTS_PROJECT: tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Tests/Reqnroll.IdeSupport.VisualStudio.Tests.csproj
   WIZARDS_TESTS_PROJECT: tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Wizards.Tests/Reqnroll.IdeSupport.VisualStudio.Wizards.Tests.csproj
 
 jobs:
@@ -256,7 +256,7 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
-  # Test VS extension — Reqnroll.VisualStudio.Tests (client parse/transform
+  # Test VS extension — Reqnroll.IdeSupport.VisualStudio.Tests (client parse/transform
   # logic; see src/VisualStudio/CONTRIBUTING.md for what belongs here vs. the
   # LSP server specs). Runs in parallel with test-vs-wizards.
   # ---------------------------------------------------------------------------
@@ -287,7 +287,7 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Download published LSP server (win-x64)
-        # Reqnroll.VisualStudio.Tests references the Extension project, which by default
+        # Reqnroll.IdeSupport.VisualStudio.Tests references the Extension project, which by default
         # builds LSP.Server itself via ProjectReference — see build-vs-extension's identical
         # step for why this instead reuses the artifact the lsp job already published.
         uses: actions/download-artifact@v8

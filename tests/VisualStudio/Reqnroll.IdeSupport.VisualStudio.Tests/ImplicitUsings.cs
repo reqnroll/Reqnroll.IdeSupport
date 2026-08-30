@@ -27,7 +27,6 @@ global using Reqnroll.IdeSupport.LSP.Connector.Models;
 // Reqnroll.IdeSupport.VisualStudio.Telemetry excluded from global using to avoid ambiguity with Common.Telemetry
 // Reqnroll.IdeSupport.VisualStudio.Logging excluded from global using to avoid ambiguity with Common.Logging
 global using Reqnroll.IdeSupport.VisualStudio;
-global using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 // Stubs project namespaces
 global using Reqnroll.VisualStudio.VsxStubs;
 // Old interface alias: IFileSystemForVs -> IFileSystemForIDE

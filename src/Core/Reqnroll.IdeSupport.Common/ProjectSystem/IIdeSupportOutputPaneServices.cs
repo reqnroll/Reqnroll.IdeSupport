@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>IIdeSupportOutputPaneServices</summary>
 public interface IIdeSupportOutputPaneServices

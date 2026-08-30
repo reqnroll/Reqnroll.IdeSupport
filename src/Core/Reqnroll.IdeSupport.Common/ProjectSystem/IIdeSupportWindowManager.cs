@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>IIdeSupportWindowManager</summary>
 public interface IIdeSupportWindowManager

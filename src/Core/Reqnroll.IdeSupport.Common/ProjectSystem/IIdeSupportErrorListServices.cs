@@ -2,7 +2,7 @@
 
 using System.Collections.Generic;
 
-namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>IIdeSupportErrorListServices</summary>
 public interface IIdeSupportErrorListServices

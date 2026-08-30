@@ -30,6 +30,6 @@
     <ProjectReference Include="../../../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration.csproj" />
     <ProjectReference Include="../../../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/Reqnroll.IdeSupport.VisualStudio.Extension.csproj" />
     <ProjectReference Include="../../../src/LSP/Reqnroll.IdeSupport.LSP.Core/Reqnroll.IdeSupport.LSP.Core.csproj" />
-    <ProjectReference Include="../Reqnroll.VisualStudio.VsxStubs/Reqnroll.VisualStudio.VsxStubs.csproj" />
+    <ProjectReference Include="../Reqnroll.IdeSupport.VisualStudio.VsxStubs/Reqnroll.IdeSupport.VisualStudio.VsxStubs.csproj" />
   </ItemGroup>
 </Project>

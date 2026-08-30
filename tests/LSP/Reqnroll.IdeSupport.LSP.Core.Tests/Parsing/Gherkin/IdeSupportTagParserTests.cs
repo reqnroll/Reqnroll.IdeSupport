@@ -1,6 +1,6 @@
 ﻿using Reqnroll.IdeSupport.LSP.TestStubs;
 
-namespace Reqnroll.IdeSupport.LSP.Core.Tests.Gherkin.Parsing;
+namespace Reqnroll.IdeSupport.LSP.Core.Tests.Parsing.Gherkin;
 
 public class IdeSupportTagParserTests
 {
