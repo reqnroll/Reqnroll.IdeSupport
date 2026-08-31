@@ -12,9 +12,19 @@ interface UnusedStepDefinitionItem {
   className?: string;
   methodName?: string;
   bindingExpression?: string;
+  /** Absent when the binding's source file does not exist on this machine — see `isResolved`. */
   sourceFile?: string;
   sourceLine: number;
   sourceChar: number;
+  /**
+   * Whether `sourceFile` names a file that exists here. False when the assembly was built
+   * elsewhere (a container, a CI agent, another machine, an external binding package) and the
+   * source path it recorded could not be mapped onto this workspace. Older servers omit the
+   * field; `?? true` below keeps those behaving exactly as before.
+   */
+  isResolved?: boolean;
+  /** The path the compiled assembly records, when it differs from `sourceFile`. */
+  recordedSourceFile?: string;
 }
 
 /**
@@ -50,10 +60,15 @@ export async function doFindUnusedStepDefinitions(client: LanguageClient): Promi
 
   const items = response.items.map((item) => {
     const name = [item.className, item.methodName].filter(Boolean).join('.');
+    // An entry whose source isn't on this machine can't be navigated to, so it gets a different
+    // icon and says so in the row rather than looking identical and then doing nothing on click.
+    const resolved = item.isResolved ?? true;
     return {
-      label: `$(warning) ${name}`,
+      label: resolved ? `$(warning) ${name}` : `$(error) ${name}`,
       description: item.bindingExpression,
-      detail: item.projectName,
+      detail: resolved
+        ? item.projectName
+        : [item.projectName, 'source not on this machine'].filter(Boolean).join(' — '),
       item,
     };
   });
@@ -63,7 +78,19 @@ export async function doFindUnusedStepDefinitions(client: LanguageClient): Promi
     matchOnDescription: true,
     matchOnDetail: true,
   });
-  if (!picked?.item.sourceFile) return;
+  if (!picked) return;
+
+  // Explain rather than no-op. The server nulls sourceFile precisely so this branch is reachable
+  // instead of us handing vscode.Uri.file a path that cannot open.
+  if (!picked.item.sourceFile) {
+    const recorded = picked.item.recordedSourceFile;
+    void vscode.window.showWarningMessage(
+      recorded
+        ? `Reqnroll: this step definition's source isn't on this machine. The compiled assembly records it at "${recorded}". Rebuild the project locally to navigate to it.`
+        : "Reqnroll: this step definition's source isn't on this machine. Rebuild the project locally to navigate to it.",
+    );
+    return;
+  }
 
   await openAndReveal(
     vscode.Uri.file(picked.item.sourceFile),

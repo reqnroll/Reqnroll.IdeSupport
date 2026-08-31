@@ -54,6 +54,8 @@ public sealed class FindUnusedStepDefinitionsHandler
             SourceFile = u.SourceFile,
             SourceLine = u.SourceLine - 1,     // 1-based → 0-based
             SourceChar = u.SourceColumn - 1,   // 1-based → 0-based
+            IsResolved = u.IsResolved,
+            RecordedSourceFile = u.RecordedSourceFile,
         }).ToList();
 
         _telemetryService?.SendEvent("FindUnusedStepDefinitions command executed", new()

@@ -82,6 +82,10 @@ internal sealed class FindUnusedStepDefinitionsService
                 SourceFile        = item["sourceFile"]?.Value<string>(),
                 SourceLine        = item["sourceLine"]?.Value<int>() ?? 0,
                 SourceChar        = item["sourceChar"]?.Value<int>() ?? 0,
+                // Absent on an older server, which never reported an unresolvable source; default
+                // to true there so the row stays navigable exactly as it was (issue #540).
+                IsResolved        = item["isResolved"]?.Value<bool>() ?? true,
+                RecordedSourceFile = item["recordedSourceFile"]?.Value<string>(),
             });
         }
         return result;

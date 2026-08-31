@@ -50,4 +50,45 @@ class FindUnusedStepDefinitionsActionTest {
             FindUnusedStepDefinitionsAction.renderLabel(item),
         )
     }
+
+    // ── Unresolvable source paths (issue #540) ──────────────────────────────────
+
+    @Test
+    fun `renderLabel marks an entry whose source is not on this machine`() {
+        // Such a row cannot be navigated to, so it must not look identical to every other row and
+        // then do nothing when chosen.
+        val item = UnusedStepDefinitionItem(
+            projectName = "Calculator",
+            className = "CalculatorSteps",
+            methodName = "GivenIHaveEnteredNumber",
+            bindingExpression = "I have entered {int}",
+            sourceFile = null,
+            sourceLine = 12,
+            sourceChar = 4,
+            isResolved = false,
+            recordedSourceFile = "/workspaces/host-solution/Specs/CalculatorSteps.cs",
+        )
+
+        assertEquals(
+            "CalculatorSteps.GivenIHaveEnteredNumber — I have entered {int} [Calculator]" +
+                " (source not on this machine)",
+            FindUnusedStepDefinitionsAction.renderLabel(item),
+        )
+    }
+
+    @Test
+    fun `renderLabel leaves a resolved entry unmarked`() {
+        // Also covers back-compat: a response from a server predating issue #540 omits isResolved,
+        // and the data class default keeps those rows rendering exactly as before.
+        val item = UnusedStepDefinitionItem(
+            className = "CalculatorSteps",
+            methodName = "GivenIHaveEnteredNumber",
+            sourceFile = "/repo/CalculatorSteps.cs",
+        )
+
+        assertEquals(
+            "CalculatorSteps.GivenIHaveEnteredNumber",
+            FindUnusedStepDefinitionsAction.renderLabel(item),
+        )
+    }
 }

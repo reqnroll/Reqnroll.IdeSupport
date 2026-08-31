@@ -59,8 +59,28 @@ class FindUnusedStepDefinitionsAction : AnAction() {
             "${response.items.size} Unused Step Definition(s)",
             response.items,
             render = { item -> renderLabel(item) },
-            onChosen = { item -> ReqnrollResultPopup.navigateToPath(project, item.sourceFile, item.sourceLine, item.sourceChar) },
+            onChosen = { item -> navigateOrExplain(project, item) },
         )
+    }
+
+    /**
+     * Navigates to the picked binding, or explains why it cannot be opened. The server sends a null
+     * [UnusedStepDefinitionItem.sourceFile] when the binding's source is not on this machine, so
+     * navigating would otherwise silently do nothing (issue #540).
+     */
+    private fun navigateOrExplain(project: Project, item: UnusedStepDefinitionItem) {
+        if (item.sourceFile.isNullOrBlank()) {
+            val recorded = item.recordedSourceFile
+            val where = if (recorded != null) " The compiled assembly records it at \"$recorded\"." else ""
+            Messages.showWarningDialog(
+                project,
+                "This step definition's source isn't on this machine.$where " +
+                    "Rebuild the project locally to navigate to it.",
+                "Find Unused Step Definitions")
+            return
+        }
+
+        ReqnrollResultPopup.navigateToPath(project, item.sourceFile, item.sourceLine, item.sourceChar)
     }
 
     companion object {
@@ -69,7 +89,10 @@ class FindUnusedStepDefinitionsAction : AnAction() {
             val name = listOfNotNull(item.className, item.methodName).joinToString(".")
             val expression = item.bindingExpression?.let { " — $it" } ?: ""
             val project = item.projectName?.let { " [$it]" } ?: ""
-            return "$name$expression$project"
+            // Marks a row that cannot be navigated to, so the popup doesn't present it as
+            // identical to the rest and then do nothing when it's chosen (issue #540).
+            val unresolved = if (item.isResolved) "" else " (source not on this machine)"
+            return "$name$expression$project$unresolved"
         }
     }
 }

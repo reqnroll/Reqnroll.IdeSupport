@@ -15,12 +15,22 @@ internal sealed class UnusedStepLocation
     public string? MethodName        { get; set; }
     /// <summary>The step-definition's binding expression/regex.</summary>
     public string? BindingExpression { get; set; }
-    /// <summary>Absolute path to the source file declaring the step definition.</summary>
+    /// <summary>Absolute path to the source file declaring the step definition, or null when no
+    /// such file exists on this machine — see <see cref="IsResolved"/>.</summary>
     public string? SourceFile        { get; set; }
     /// <summary>0-based source line of the step-definition declaration.</summary>
     public int     SourceLine        { get; set; }  // 0-based
     /// <summary>0-based source character of the step-definition declaration.</summary>
     public int     SourceChar        { get; set; }  // 0-based
+    /// <summary>
+    /// Whether <see cref="SourceFile"/> names a file that exists here. False when the assembly was
+    /// built elsewhere and the source path it recorded could not be mapped onto this machine
+    /// (issue #540); such a row is listed but not navigable. Defaults to true so a response from an
+    /// older server, which omits the field, behaves exactly as before.
+    /// </summary>
+    public bool    IsResolved        { get; set; } = true;
+    /// <summary>The path the compiled assembly records, when it differs from <see cref="SourceFile"/>.</summary>
+    public string? RecordedSourceFile { get; set; }
 }
 
 /// <summary>Parsed result from a <c>reqnroll/findUnusedStepDefinitions</c> response.</summary>

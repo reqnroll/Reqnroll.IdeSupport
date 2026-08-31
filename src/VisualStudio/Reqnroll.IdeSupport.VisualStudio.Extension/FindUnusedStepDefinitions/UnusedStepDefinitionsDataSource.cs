@@ -55,7 +55,7 @@ internal sealed class UnusedStepDefinitionsDataSource : ITableDataSource
         // "[Definition:Unknown]".  Class-level grouping is therefore not achievable for custom
         // non-Roslyn data sources.  Instead we embed ClassName in the Code column text so all
         // three pieces of information are visible in the flat or "Project then File" views.
-        var code = BuildCodeText(item.ClassName, item.MethodName, item.BindingExpression);
+        var code = BuildCodeText(item.ClassName, item.MethodName, item.BindingExpression, item.IsResolved);
         entry.TrySetValue(StandardTableKeyNames.Text, code);
 
         if (item.ProjectName is { Length: > 0 })
@@ -68,7 +68,8 @@ internal sealed class UnusedStepDefinitionsDataSource : ITableDataSource
         return entry;
     }
 
-    private static string BuildCodeText(string? className, string? methodName, string? expression)
+    private static string BuildCodeText(string? className, string? methodName, string? expression,
+        bool isResolved = true)
     {
         // "ClassName.MethodName  ·  expression"  or graceful fallback for missing parts
         var cm = className  is { Length: > 0 } ? className  : null;
@@ -83,7 +84,12 @@ internal sealed class UnusedStepDefinitionsDataSource : ITableDataSource
             _                    => "(unknown)",
         };
 
-        return ex is null ? identifier : $"{identifier}  ·  {ex}";
+        var text = ex is null ? identifier : $"{identifier}  ·  {ex}";
+
+        // A row with no DocumentName has no File column and does nothing on double-click. Saying so
+        // in the one content column VS gives us is the only place a user can find out why
+        // (issue #540); the recorded path itself goes to the log, since it would swamp this column.
+        return isResolved ? text : $"{text}  ·  (source not on this machine — rebuild locally)";
     }
 
     private sealed class SinkRegistration : IDisposable

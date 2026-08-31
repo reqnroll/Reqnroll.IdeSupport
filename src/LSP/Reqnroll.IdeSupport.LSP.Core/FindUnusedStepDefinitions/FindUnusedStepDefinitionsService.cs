@@ -1,4 +1,5 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
@@ -75,6 +76,16 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
 
                 var (className, methodName) = ParseMethod(sd.Implementation!.Method);
 
+                // The entry is still reported — "this step definition is unused" is true and useful
+                // regardless of where its source lives — but it travels with IsResolved so the
+                // client can say why it cannot be opened instead of appearing to do nothing when
+                // the user clicks it (issue #540).
+                if (!loc.IsResolved)
+                    _logger.LogInfo(
+                        $"FindUnusedStepDefinitionsService: '{className}.{methodName}' is unused, but the " +
+                        $"compiled assembly records it at '{loc.RecordedSourceFile}', which does not exist on " +
+                        "this machine — it will be listed as not openable. Rebuild the project locally.");
+
                 items.Add(new UnusedStepDefinition(
                     ProjectName: projectName,
                     ClassName: className,
@@ -83,9 +94,22 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
                     // uses DisplayExpression, not the `expression` identity key above, so a
                     // method-name-style binding's raw auto-generated regex isn't shown (issue #344).
                     BindingExpression: sd.DisplayExpression,
-                    SourceFile: loc.SourceFile,
+                    // Null, not the recorded path, when it cannot be opened here: every client
+                    // already guards SourceFile for emptiness before navigating, so this alone stops
+                    // a click from silently going nowhere. IsResolved/RecordedSourceFile are what let
+                    // a client go further and explain it.
+                    SourceFile: loc.IsResolved ? loc.SourceFile : null,
                     SourceLine: loc.SourceFileLine,
-                    SourceColumn: loc.SourceFileColumn));
+                    SourceColumn: loc.SourceFileColumn,
+                    IsResolved: loc.IsResolved,
+                    // Suppressed only when it would duplicate a SourceFile the client already has.
+                    // When unresolved there is no SourceFile to duplicate and this is the only path
+                    // the client gets, so it must always be sent — nulling it there would leave the
+                    // client with nothing to show but "it didn't work".
+                    RecordedSourceFile: loc.IsResolved
+                                        && PathUtils.IsSamePath(loc.SourceFile, loc.RecordedSourceFile)
+                        ? null
+                        : loc.RecordedSourceFile));
             }
         }
 

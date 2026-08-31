@@ -89,7 +89,16 @@ data class FindUnusedStepDefinitionsResponse(
     val items: List<UnusedStepDefinitionItem> = emptyList(),
 )
 
-/** One step-definition binding with zero matching steps across the workspace. */
+/**
+ * One step-definition binding with zero matching steps across the workspace.
+ *
+ * [sourceFile] is null when the binding's source does not exist on this machine — the assembly was
+ * built elsewhere (a container, a CI agent, another machine, an external binding package) and the
+ * path it recorded could not be mapped onto this workspace. [isResolved] says so explicitly and
+ * [recordedSourceFile] carries the path the assembly does record, which is the only thing that can
+ * explain the entry to a user. Older servers omit both fields, and the defaults below keep those
+ * behaving exactly as before.
+ */
 data class UnusedStepDefinitionItem(
     val projectName: String? = null,
     val className: String? = null,
@@ -98,6 +107,8 @@ data class UnusedStepDefinitionItem(
     val sourceFile: String? = null,
     val sourceLine: Int = 0,
     val sourceChar: Int = 0,
+    val isResolved: Boolean = true,
+    val recordedSourceFile: String? = null,
 )
 
 /**
