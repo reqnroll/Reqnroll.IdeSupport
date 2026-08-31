@@ -105,9 +105,22 @@ public sealed class DefinitionHandler : IDefinitionHandler
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
-        var locations = step.Result.Items
+        var candidates = step.Result.Items
             .Select(item => item.MatchedStepDefinition?.Implementation)
             .Where(impl => impl?.SourceLocation?.SourceFile is not (null or ""))
+            .ToArray();
+
+        // A binding whose source file could not be found on this machine has no navigation target
+        // here, and emitting one anyway is the issue #540 incident: the URI is well-formed, the IDE
+        // accepts it, and Go To Definition silently does nothing. Drop it and say why.
+        foreach (var impl in candidates.Where(i => i!.SourceLocation!.IsResolved == false))
+            _logger.LogInfo(
+                $"DefinitionHandler: no local file for '{impl!.Method}' — the compiled assembly records it at " +
+                $"'{impl.SourceLocation!.RecordedSourceFile}', which does not exist on this machine. " +
+                "Rebuild the project locally to restore navigation for this binding.");
+
+        var locations = candidates
+            .Where(impl => impl!.SourceLocation!.IsResolved)
             .Select(impl => impl!.SourceLocation!.WithIdentifierLocation(impl.Method, _fileSystem))
             .Select(loc => new LocationOrLocationLink(loc.ToLspLocation()))
             .ToArray();
@@ -115,7 +128,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         if (locations.Length == 0)
         {
             _logger.LogVerbose(
-                $"DefinitionHandler: step at offset {offset} in {uri} has no binding locations (undefined/ambiguous)");
+                $"DefinitionHandler: step at offset {offset} in {uri} has no binding locations (undefined/ambiguous/unresolved)");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 

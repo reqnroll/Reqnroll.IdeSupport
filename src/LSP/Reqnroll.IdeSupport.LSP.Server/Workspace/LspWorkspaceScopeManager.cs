@@ -230,11 +230,14 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         if (string.IsNullOrEmpty(assemblyPath))
             return null;
 
+        // PathUtils.IsSamePath rather than a raw string compare: the watcher reports the path the
+        // client observed, which need not be byte-identical to the OutputAssemblyPath MSBuild gave
+        // us for the same DLL (separators, a "bin\Debug\..\Debug" segment, casing). A miss here
+        // silently drops the rebuild trigger -- see issue #542, where this is the second, latent
+        // break in that chain (issue #540 F4).
         return _scopes.Values
             .SelectMany(s => s.Projects)
-            .FirstOrDefault(p => string.Equals(
-                p.OutputAssemblyPath, assemblyPath,
-                StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(p => PathUtils.IsSamePath(p.OutputAssemblyPath, assemblyPath));
     }
 
     /// <summary>Returns the owning project's configuration provider for <paramref name="uri"/>, or a default configuration provider when no project covers it.</summary>

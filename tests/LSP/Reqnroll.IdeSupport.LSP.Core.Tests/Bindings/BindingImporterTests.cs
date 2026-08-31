@@ -461,6 +461,170 @@ public class BindingImporterTests
 
         result.Should().BeNull();
     }
+
+    // ── Source-path resolution state (issue #540 F1/F2) ───────────────────────────────────
+
+    [Fact]
+    public void An_unresolvable_source_path_is_imported_as_an_unresolved_location()
+    {
+        // This is the incident: the assembly was built in a devcontainer, so every binding's source
+        // path was /workspaces/... . The registry used to store it verbatim with nothing marking it
+        // as unusable, and every navigation feature then handed it to the IDE.
+        var sut = CreateSut();
+
+        var result = sut.ImportStepDefinition(
+            CreateStepDefinition(sourceLocation: "/workspaces/host-solution/Specs/Steps.cs|12|5"));
+
+        var location = result.Implementation.SourceLocation;
+        location.Should().NotBeNull();
+        location!.IsResolved.Should().BeFalse();
+        location.RecordedSourceFile.Should().Be("/workspaces/host-solution/Specs/Steps.cs");
+        location.SourceFileLine.Should().Be(12);
+    }
+
+    [Fact]
+    public void An_unresolvable_hook_source_path_is_imported_as_an_unresolved_location()
+    {
+        // Hooks were the visible casualty: they got no backfill at all, so nothing on their path
+        // ever looked at whether the file existed.
+        var sut = CreateSut();
+
+        var result = sut.ImportHook(new Hook
+        {
+            Method = "Hooks.BeforeScenario()",
+            Type = "BeforeScenario",
+            SourceLocation = "/workspaces/host-solution/Specs/Support/Hooks.cs|9|3"
+        });
+
+        var location = result.Implementation.SourceLocation;
+        location.Should().NotBeNull();
+        location!.IsResolved.Should().BeFalse();
+        location.RecordedSourceFile.Should().Be("/workspaces/host-solution/Specs/Support/Hooks.cs");
+    }
+
+    [Fact]
+    public void A_resolvable_source_path_is_imported_as_a_resolved_location()
+    {
+        var path = System.IO.Path.GetTempFileName();
+        try
+        {
+            var sut = CreateSut();
+
+            var result = sut.ImportStepDefinition(CreateStepDefinition(sourceLocation: $"{path}|12|5"));
+
+            result.Implementation.SourceLocation!.IsResolved.Should().BeTrue();
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Unresolved_source_paths_are_reported_once_per_distinct_path()
+    {
+        // One devcontainer-built assembly yields one unresolved path per binding *file* but dozens
+        // of bindings; the discovery run reports the distinct set, not one warning per binding.
+        var sut = CreateSut();
+
+        sut.ImportStepDefinition(CreateStepDefinition(method: "A", sourceLocation: "/workspaces/host/Steps.cs|1|1"));
+        sut.ImportStepDefinition(CreateStepDefinition(method: "B", sourceLocation: "/workspaces/host/Steps.cs|9|1"));
+        sut.ImportHook(new Hook
+        {
+            Method = "Hooks.BeforeScenario()",
+            Type = "BeforeScenario",
+            SourceLocation = "/workspaces/host/Hooks.cs|4|1"
+        });
+
+        sut.UnresolvedSourceFiles.Should().BeEquivalentTo(
+            ["/workspaces/host/Steps.cs", "/workspaces/host/Hooks.cs"]);
+    }
+
+    [Fact]
+    public void A_resolvable_import_reports_no_unresolved_source_files()
+    {
+        var path = System.IO.Path.GetTempFileName();
+        try
+        {
+            var sut = CreateSut();
+            sut.ImportStepDefinition(CreateStepDefinition(sourceLocation: $"{path}|12|5"));
+
+            sut.UnresolvedSourceFiles.Should().BeEmpty();
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void A_backfilled_hook_identifier_location_replaces_the_pdb_position()
+    {
+        // Hooks now get the same method-identifier backfill step definitions have had since #471:
+        // the PDB sequence point is the first executable statement, not the declaration line.
+        var path = System.IO.Path.GetTempFileName();
+        try
+        {
+            var sut = CreateSut();
+
+            var result = sut.ImportHook(
+                new Hook { Method = "Hooks.BeforeScenario()", Type = "BeforeScenario", SourceLocation = $"{path}|11|9" },
+                methodIdentifierLocation: (7, 17));
+
+            result.Implementation.SourceLocation!.SourceFileLine.Should().Be(7);
+            result.Implementation.SourceLocation.SourceFileColumn.Should().Be(17);
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Backfilling_a_hook_position_does_not_mark_an_unresolved_location_resolved()
+    {
+        var sut = CreateSut();
+
+        var result = sut.ImportHook(
+            new Hook { Method = "Hooks.BeforeScenario()", Type = "BeforeScenario", SourceLocation = "/workspaces/host/Hooks.cs|11|9" },
+            methodIdentifierLocation: (7, 17));
+
+        result.Implementation.SourceLocation!.IsResolved.Should().BeFalse();
+        result.Implementation.SourceLocation.SourceFileLine.Should().Be(7);
+    }
+
+    [Fact]
+    public void A_supplied_resolver_remaps_a_foreign_path_at_import_time()
+    {
+        var projectFolder = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "BindingImporterResolve_" + Guid.NewGuid());
+        var localFile = System.IO.Path.Combine(projectFolder, "Support", "Hooks.cs");
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(localFile)!);
+        System.IO.File.WriteAllText(localFile, "// test");
+        try
+        {
+            var fileSystem = new FileSystemForIDE();
+            var sut = new BindingImporter(_sourceFiles, _typeNames, new IdeSupportNullLogger(), fileSystem,
+                new ProjectSourceFileResolver(projectFolder, fileSystem));
+
+            var result = sut.ImportHook(new Hook
+            {
+                Method = "Hooks.BeforeScenario()",
+                Type = "BeforeScenario",
+                SourceLocation = "/workspaces/host-solution/Specs/Support/Hooks.cs|9|3"
+            });
+
+            var location = result.Implementation.SourceLocation;
+            location!.IsResolved.Should().BeTrue();
+            location.SourceFile.Should().Be(localFile);
+            location.RecordedSourceFile.Should().Be("/workspaces/host-solution/Specs/Support/Hooks.cs");
+            sut.UnresolvedSourceFiles.Should().BeEmpty();
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(projectFolder, recursive: true); } catch { /* best effort */ }
+        }
+    }
 }
 
 public class BindingImporterTryGetAttributeSourceLineTests : IDisposable

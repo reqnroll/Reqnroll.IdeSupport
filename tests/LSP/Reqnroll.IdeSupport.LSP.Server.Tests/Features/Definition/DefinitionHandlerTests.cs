@@ -3,6 +3,7 @@
 using System.Text.RegularExpressions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
+using System.Diagnostics;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -99,6 +100,96 @@ public class DefinitionHandlerTests
         var result = MatchResult.CreateMultiMatch(new[] { item });
 
         return new StepBindingMatch(FeatureUri.ToString(), range, result);
+    }
+
+    /// <summary>
+    /// Like <see cref="MakeDefinedMatch"/>, but the binding's source file is one that binding
+    /// discovery recorded and could not be resolved to anything on this machine — a PDB written
+    /// inside a devcontainer, on CI, or on another developer's machine (issue #540).
+    /// </summary>
+    private static StepBindingMatch MakeUnresolvedMatch(string recordedFile, int csLine = 10, int csColumn = 5)
+    {
+        var snapshot = new LspTextSnapshot(FeatureUri.ToString(), 1, FeatureText);
+        var range    = GherkinRange.FromPoint(snapshot, 33, 6);
+
+        var binding = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given,
+            new Regex("^a step$"),
+            null,
+            new ProjectBindingImplementation(
+                "AStep",
+                null,
+                SourceLocation.Unresolved(recordedFile, csLine, csColumn)));
+
+        var item   = MatchResultItem.CreateMatch(binding, ParameterMatch.NotMatch);
+        var result = MatchResult.CreateMultiMatch(new[] { item });
+
+        return new StepBindingMatch(FeatureUri.ToString(), range, result);
+    }
+
+    // ── Unresolved binding source path (issue #540) ───────────────────────────
+
+    [Fact]
+    public async Task Handle_binding_whose_source_file_is_not_on_this_machine_returns_no_location_Async()
+    {
+        // The incident: DocumentUri.FromFileSystemPath happily produces
+        // "file:///workspaces/host-solution/Steps.cs", the client accepts it, and Go To Definition
+        // silently does nothing. Returning no location at all is the agreed behaviour — the
+        // accompanying log line is what makes it non-silent.
+        var step = MakeUnresolvedMatch("/workspaces/host-solution/Specs/Steps.cs");
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+
+        var result = await CreateSut().Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_unresolved_binding_logs_the_recorded_path_Async()
+    {
+        var step = MakeUnresolvedMatch("/workspaces/host-solution/Specs/Steps.cs");
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+
+        await CreateSut().Handle(RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        // LogInfo is a static extension method — verify via the underlying Log() call.
+        _logger.Received().Log(Arg.Is<LogMessage>(m =>
+            m.Level == TraceLevel.Info &&
+            m.Message.Contains("/workspaces/host-solution/Specs/Steps.cs")));
+    }
+
+    [Fact]
+    public async Task Handle_returns_only_the_resolvable_locations_of_an_ambiguous_step_Async()
+    {
+        // A partially rebuilt solution: one binding's file exists here, another's does not. The
+        // resolvable one must still navigate rather than being suppressed alongside it.
+        var snapshot = new LspTextSnapshot(FeatureUri.ToString(), 1, FeatureText);
+        var range    = GherkinRange.FromPoint(snapshot, 33, 6);
+
+        ProjectStepDefinitionBinding Binding(string method, SourceLocation loc) =>
+            new(ScenarioBlock.Given, new Regex("^a step$"), null,
+                new ProjectBindingImplementation(method, null, loc));
+
+        var result = MatchResult.CreateMultiMatch(new[]
+        {
+            MatchResultItem.CreateMatch(
+                Binding("Local", new SourceLocation("/workspace/Steps.cs", 10, 5)), ParameterMatch.NotMatch),
+            MatchResultItem.CreateMatch(
+                Binding("Foreign", SourceLocation.Unresolved("/workspaces/host/Other.cs", 20, 1)), ParameterMatch.NotMatch),
+        });
+
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1,
+            new[] { new StepBindingMatch(FeatureUri.ToString(), range, result) }));
+
+        var locations = await CreateSut().Handle(RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        locations!.Should().ContainSingle();
+        locations!.Single().Location!.Uri.GetFileSystemPath().Should().Be("/workspace/Steps.cs");
     }
 
     // ── Non-.feature URI ──────────────────────────────────────────────────────

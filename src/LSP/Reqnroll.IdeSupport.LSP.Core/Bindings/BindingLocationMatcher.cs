@@ -1,4 +1,5 @@
 using System;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
@@ -26,7 +27,13 @@ public static class BindingLocationMatcher
         if (loc == null)
             return false;
 
-        if (!string.Equals(loc.SourceFile, query.SourceFile, StringComparison.OrdinalIgnoreCase))
+        // PathUtils.IsSamePath, not a raw string compare: the query path comes from an LSP document
+        // URI while the binding's path came from the PDB or a Roslyn parse, and those two can differ
+        // in separators, casing and relative segments for the very same file. This was the strictest
+        // comparison in the codebase sitting under the features most likely to see a mismatched pair
+        // -- Find All References, Find Step Usages and rename-from-C# all reach here via
+        // ProjectBindingRegistry.FindBindingAtLocation (issue #540 F4).
+        if (!PathUtils.IsSamePath(loc.SourceFile, query.SourceFile))
             return false;
 
         // AST-based: when the attribute line is known, match it exactly or the method line.

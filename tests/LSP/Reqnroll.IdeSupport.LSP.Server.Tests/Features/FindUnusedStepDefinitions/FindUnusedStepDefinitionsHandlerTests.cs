@@ -73,6 +73,42 @@ public class FindUnusedStepDefinitionsHandlerTests
         item.MethodName.Should().Be("GivenSomething");
         item.BindingExpression.Should().Be("the sum is {int}");
         item.SourceFile.Should().Be("/ws/MySteps.cs");
+        item.IsResolved.Should().BeTrue();
+        item.RecordedSourceFile.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleAsync_maps_an_unresolved_source_path_onto_the_wire_item()
+    {
+        // The wire contract for issue #540: a binding whose source is not on this machine travels
+        // with no sourceFile (so a client that only null-guards already stops navigating), plus
+        // isResolved/recordedSourceFile so a client can explain it.
+        SetupRegistries(("A", new ProjectOwner("/ws/A.csproj", "net8.0"),
+            ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+                .Returns(new[]
+                {
+                    new UnusedStepDefinition(
+                        ProjectName: "MyProject",
+                        ClassName: "StepDefs",
+                        MethodName: "GivenSomething",
+                        BindingExpression: "the sum is {int}",
+                        SourceFile: null,
+                        SourceLine: 10,
+                        SourceColumn: 5,
+                        IsResolved: false,
+                        RecordedSourceFile: "/workspaces/host-solution/Specs/Steps.cs"),
+                });
+
+        var result = await CreateSut().HandleAsync(CancellationToken.None);
+
+        var item = result.Items.Single();
+        item.SourceFile.Should().BeNull();
+        item.IsResolved.Should().BeFalse();
+        item.RecordedSourceFile.Should().Be("/workspaces/host-solution/Specs/Steps.cs");
+        // The position still crosses the 1-based → 0-based boundary, unresolved or not.
+        item.SourceLine.Should().Be(9);
+        item.SourceChar.Should().Be(4);
     }
 
     [Fact]

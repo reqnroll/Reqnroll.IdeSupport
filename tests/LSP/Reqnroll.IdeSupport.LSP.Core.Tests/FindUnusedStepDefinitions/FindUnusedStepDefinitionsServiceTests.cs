@@ -393,4 +393,80 @@ public class FindUnusedStepDefinitionsServiceTests
               .Should().BeEquivalentTo(
                   new[] { "unused expr A1", "unused expr A2", "unused expr B2" });
     }
+
+    // ── Unresolvable source paths (issue #540) ─────────────────────────────────
+
+    /// <summary>
+    /// A binding whose source file discovery recorded but could not place on this machine — the
+    /// assembly was built in a container, on CI, or on another developer's machine.
+    /// </summary>
+    private static ProjectStepDefinitionBinding MakeUnresolvedBinding(
+        string recordedFile = "/workspaces/host-solution/Specs/Steps.cs",
+        int line            = 1,
+        string method       = "StepDefinitions.GivenSomething()",
+        string expression   = "something")
+    {
+        var loc  = SourceLocation.Unresolved(recordedFile, line, 1);
+        var impl = new ProjectBindingImplementation(method, null, loc);
+        return new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex("^something$"), null, impl, expression);
+    }
+
+    [Fact]
+    public void An_unresolved_binding_is_still_reported_as_unused()
+    {
+        // "This step definition is unused" stays true and useful regardless of where its source
+        // lives — the entry must not be dropped just because it cannot be navigated to.
+        var binding = MakeUnresolvedBinding();
+
+        var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) });
+
+        result.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void An_unresolved_binding_reports_no_source_file_and_carries_the_recorded_path()
+    {
+        // SourceFile is nulled deliberately: every client already guards it before navigating, so
+        // this alone stops a click from silently opening nothing.
+        var binding = MakeUnresolvedBinding("/workspaces/host-solution/Specs/Steps.cs");
+
+        var item = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) }).Single();
+
+        item.SourceFile.Should().BeNull();
+        item.IsResolved.Should().BeFalse();
+        item.RecordedSourceFile.Should().Be("/workspaces/host-solution/Specs/Steps.cs");
+    }
+
+    [Fact]
+    public void A_resolved_binding_reports_its_source_file_and_no_recorded_path()
+    {
+        // RecordedSourceFile stays null when it would just duplicate SourceFile, so clients can
+        // treat its presence as "this came from somewhere else".
+        var binding = MakeBinding("/ws/Steps.cs", line: 10);
+
+        var item = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) }).Single();
+
+        item.SourceFile.Should().Be("/ws/Steps.cs");
+        item.IsResolved.Should().BeTrue();
+        item.RecordedSourceFile.Should().BeNull();
+    }
+
+    [Fact]
+    public void A_remapped_binding_reports_the_local_path_and_keeps_the_recorded_one()
+    {
+        // The resolver mapped a devcontainer path onto this machine. Navigation works, and the
+        // provenance stays visible.
+        var loc  = SourceLocation.Resolved(@"C:\ws\Specs\Steps.cs",
+            "/workspaces/host-solution/Specs/Steps.cs", 10, 1);
+        var impl = new ProjectBindingImplementation("StepDefs.GivenSomething()", null, loc);
+        var binding = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex("^something$"), null, impl, "something");
+
+        var item = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", binding) }).Single();
+
+        item.SourceFile.Should().Be(@"C:\ws\Specs\Steps.cs");
+        item.IsResolved.Should().BeTrue();
+        item.RecordedSourceFile.Should().Be("/workspaces/host-solution/Specs/Steps.cs");
+    }
 }

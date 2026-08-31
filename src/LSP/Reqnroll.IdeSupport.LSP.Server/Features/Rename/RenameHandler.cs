@@ -462,7 +462,21 @@ public sealed class RenameHandler
         if (csEdit == null)
             return (null, null);
 
-        var csFileUri = path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        // An unresolved source location must not become an edit target. Unlike a dead navigation
+        // target, which merely does nothing, a workspace/applyEdit against a file that does not
+        // exist can apply the feature-file half of the rename while silently dropping the attribute
+        // half, leaving the binding broken (issue #540 F7).
+        var isCsDocument = path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
+        if (!isCsDocument && binding.Implementation?.SourceLocation?.IsResolved == false)
+        {
+            _logger.LogWarning(
+                $"RenameHandler: skipping the C# side of the rename for '{binding.Implementation.Method}' — " +
+                $"the compiled assembly records it at '{binding.Implementation.SourceLocation.RecordedSourceFile}', " +
+                "which does not exist on this machine. Rebuild the project locally and rename again.");
+            return (null, null);
+        }
+
+        var csFileUri = isCsDocument
             ? uri
             : DocumentUri.FromFileSystemPath(binding.Implementation!.SourceLocation!.SourceFile);
         builder.Add(csFileUri, csEdit.Range, csEdit.NewText, RenameChangeAnnotations.Binding);

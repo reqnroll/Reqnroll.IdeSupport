@@ -2,6 +2,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -242,9 +243,5 @@ public sealed class StepCodeLensHandler
     private static bool IsCSharp(DocumentUri uri) =>
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsSameFile(string a, string b) =>
-        string.Equals(
-            Path.GetFullPath(a),
-            Path.GetFullPath(b),
-            StringComparison.OrdinalIgnoreCase);
+    private static bool IsSameFile(string a, string b) => PathUtils.IsSamePath(a, b);
 }

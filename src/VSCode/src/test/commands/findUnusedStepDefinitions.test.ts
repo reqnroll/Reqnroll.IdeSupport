@@ -14,6 +14,7 @@ async function withStubbedWindow<T>(
     showErrorMessage: typeof vscode.window.showErrorMessage;
     showInformationMessage: typeof vscode.window.showInformationMessage;
     showQuickPick: typeof vscode.window.showQuickPick;
+    showWarningMessage: typeof vscode.window.showWarningMessage;
   }>,
   fn: () => Promise<T>,
 ): Promise<T> {
@@ -97,6 +98,103 @@ suite('findUnusedStepDefinitions', () => {
       assert.strictEqual(quickPickItems?.length, 1);
       assert.match(quickPickItems[0].label, /MySteps\.GivenSomething/);
       assert.strictEqual(quickPickItems[0].description, 'I have something');
+    });
+
+    // ── Unresolvable source paths (issue #540) ──────────────────────────────
+
+    test('marks an entry whose source is not on this machine', async () => {
+      const client = fakeClient(() =>
+        Promise.resolve({
+          items: [
+            {
+              className: 'MySteps',
+              methodName: 'GivenSomething',
+              projectName: 'MyProject',
+              sourceLine: 3,
+              sourceChar: 0,
+              isResolved: false,
+              recordedSourceFile: '/workspaces/host-solution/Specs/Steps.cs',
+            },
+          ],
+        }),
+      );
+      let quickPickItems:
+        readonly { label: string; description?: string; detail?: string }[] | undefined;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: ((
+            items: readonly { label: string; description?: string; detail?: string }[],
+          ) => {
+            quickPickItems = items;
+            return Promise.resolve(undefined);
+          }) as unknown as typeof vscode.window.showQuickPick,
+        },
+        () => doFindUnusedStepDefinitions(client),
+      );
+
+      assert.match(quickPickItems?.[0].label ?? '', /\$\(error\)/);
+      assert.match(quickPickItems?.[0].detail ?? '', /source not on this machine/);
+    });
+
+    test('explains rather than silently doing nothing when the picked entry has no source file', async () => {
+      const item = {
+        className: 'MySteps',
+        methodName: 'GivenSomething',
+        projectName: 'MyProject',
+        sourceLine: 3,
+        sourceChar: 0,
+        isResolved: false,
+        recordedSourceFile: '/workspaces/host-solution/Specs/Steps.cs',
+      };
+      const client = fakeClient(() => Promise.resolve({ items: [item] }));
+      let warning: string | undefined;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: ((items: readonly { item: unknown }[]) =>
+            Promise.resolve(items[0])) as unknown as typeof vscode.window.showQuickPick,
+          showWarningMessage: (msg: string) => {
+            warning = msg;
+            return Promise.resolve(undefined);
+          },
+        },
+        () => doFindUnusedStepDefinitions(client),
+      );
+
+      assert.match(warning ?? '', /isn't on this machine/);
+      assert.match(warning ?? '', /\/workspaces\/host-solution\/Specs\/Steps\.cs/);
+    });
+
+    test('treats an item from an older server with no isResolved field as navigable', async () => {
+      // Back-compat: the field is absent in responses from a server predating issue #540.
+      const client = fakeClient(() =>
+        Promise.resolve({
+          items: [
+            {
+              className: 'MySteps',
+              methodName: 'GivenSomething',
+              sourceFile: '/ws/Steps.cs',
+              sourceLine: 3,
+              sourceChar: 0,
+            },
+          ],
+        }),
+      );
+      let quickPickItems: readonly { label: string; detail?: string }[] | undefined;
+
+      await withStubbedWindow(
+        {
+          showQuickPick: ((items: readonly { label: string; detail?: string }[]) => {
+            quickPickItems = items;
+            return Promise.resolve(undefined);
+          }) as unknown as typeof vscode.window.showQuickPick,
+        },
+        () => doFindUnusedStepDefinitions(client),
+      );
+
+      assert.match(quickPickItems?.[0].label ?? '', /\$\(warning\)/);
+      assert.doesNotMatch(quickPickItems?.[0].detail ?? '', /not on this machine/);
     });
   });
 });
