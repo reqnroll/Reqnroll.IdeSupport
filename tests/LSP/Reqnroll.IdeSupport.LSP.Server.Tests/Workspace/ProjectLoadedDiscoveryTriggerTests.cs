@@ -11,8 +11,12 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
 
 /// <summary>
 /// Verifies that a <c>reqnroll/projectLoaded</c> notification for an <em>already-known</em>
-/// project re-runs binding discovery when (and only when) the output assembly path or target
-/// framework changed — covering the path-change case the output-assembly file watcher can miss.
+/// project always re-runs binding discovery, whether or not the output assembly path or target
+/// framework changed. This covers both the path-change case the output-assembly file watcher can
+/// miss, and a plain rebuild (issue #542): Visual Studio re-sends projectLoaded after every
+/// successful build with identical OutputAssemblyPath/TFM, and that re-send is its only rebuild
+/// signal because it doesn't register the watcher at all. The assembly-hash guard downstream in
+/// ConnectorDiscoveryService makes a redundant trigger a cheap no-op when nothing actually changed.
 /// </summary>
 public class ProjectLoadedDiscoveryTriggerTests : IDisposable
 {
@@ -113,16 +117,18 @@ public class ProjectLoadedDiscoveryTriggerTests : IDisposable
     }
 
     [Fact]
-    public async Task Reloading_with_unchanged_inputs_does_not_trigger_rediscovery()
+    public async Task Reloading_with_unchanged_inputs_still_triggers_rediscovery()
     {
         var outputPath = Path.Combine(_root, "bin", "Debug", "Proj.dll");
         await LoadInitialProjectWithProviderAsync(outputPath);
         var signal = ArmDiscoverySignal();
 
-        // Identical notification — nothing relevant changed.
+        // Identical notification, e.g. VsProjectEventMonitor.OnBuildDone re-sending
+        // projectLoaded after a plain rebuild that didn't move the output path or TFM.
         await _manager.HandleProjectLoadedAsync(Params(outputPath), CancellationToken.None);
 
-        (await WaitForDiscoveryAsync(signal, 1200)).Should().BeFalse(
-            "an unchanged reload must not re-run discovery");
+        (await WaitForDiscoveryAsync(signal, 4000)).Should().BeTrue(
+            "a rebuild must re-run discovery even when the output path/TFM are unchanged (issue #542), " +
+            "since Visual Studio's OnBuildDone re-send is the only rebuild signal it has");
     }
 }
