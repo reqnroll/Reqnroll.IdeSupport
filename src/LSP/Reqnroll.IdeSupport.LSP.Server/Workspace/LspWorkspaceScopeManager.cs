@@ -101,7 +101,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             return newScope;
         });
 
-        var (project, isNew, discoveryInputChanged) = scope.AddOrUpdateProject(parameters);
+        var (project, isNew, _) = scope.AddOrUpdateProject(parameters);
 
         if (isNew)
         {
@@ -119,13 +119,16 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
                 $"Project updated: {project.ProjectName} " +
                 $"[{project.TargetFrameworkMoniker}] → {project.OutputAssemblyPath}");
 
-            // An existing project whose output assembly path or target framework changed
-            // (e.g. a rebuild, or a Debug→Release switch that moves the output path) must
-            // re-run binding discovery.  The output-assembly file watcher does not reliably
-            // cover the path-change case: GetProjectByOutputPath matches on the *old* path
-            // until this update lands, so the watcher event for the new DLL can be dropped.
-            if (discoveryInputChanged)
-                TriggerBindingDiscovery(project);
+            // Always re-run binding discovery for an existing project's re-send, not just when
+            // OutputAssemblyPath/TFM changed. Visual Studio re-sends projectLoaded after every
+            // successful build (VsProjectEventMonitor.OnBuildDone) as its only rebuild signal,
+            // because it does not advertise dynamicRegistration for didChangeWatchedFiles, so the
+            // output-assembly file watcher (WatchedFilesHandler) never gets registered there and
+            // a plain rebuild — same output path, same TFM — would otherwise trigger nothing at
+            // all. The assembly-hash guard in ConnectorDiscoveryService.ComputeHash already makes
+            // a redundant trigger a cheap no-op, so being unconditional here costs nothing when
+            // the output path/TFM didn't change and the assembly is actually unchanged (issue #542).
+            TriggerBindingDiscovery(project);
         }
 
         // The project's baseline may have already arrived (see HandleProjectFilesAsync) before
@@ -162,13 +165,13 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             && obj is ConnectorBindingRegistryProvider provider)
         {
             _logger.LogVerbose(
-                $"[{project.ProjectName}] Discovery inputs changed; triggering re-discovery.");
+                $"[{project.ProjectName}] projectLoaded re-send; triggering re-discovery.");
             provider.TriggerRefresh();
         }
         else
         {
             _logger.LogVerbose(
-                $"[{project.ProjectName}] Discovery inputs changed but no binding provider " +
+                $"[{project.ProjectName}] projectLoaded re-send but no binding provider " +
                 $"registered yet; skipping refresh.");
         }
     }
