@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Gherkin.Ast;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -600,20 +601,14 @@ public record ProjectBindingRegistry
     }
 
     /// <summary>
-    /// Compares two source-file paths for identity. The comparison normalizes the paths and is
-    /// case-insensitive: the reflection connector records source paths from the PDB (often with an
-    /// upper-case drive letter), while Roslyn discovery derives them from an LSP document URI (which
-    /// can carry a lower-case drive letter). A case-sensitive compare would treat those as different
-    /// files and fail to replace a file's previous bindings, leaving a stale binding behind.
+    /// Compares two source-file paths for identity. Delegates to <see cref="PathUtils.IsSamePath"/>,
+    /// which is the single normalization/comparison rule shared with every other "is this the same
+    /// file?" site in the server — the CodeLens handlers, <see cref="BindingLocationMatcher"/> and
+    /// the workspace scope manager all used to carry their own subtly different copy of it, and
+    /// #469 / #503 / #515 were all failures of exactly that divergence (issue #540 F4).
     /// </summary>
-    internal static bool IsSameSourceFile(string? sourceFile, string targetFullName)
-    {
-        if (string.IsNullOrEmpty(sourceFile) || string.IsNullOrEmpty(targetFullName))
-            return false;
-
-        return string.Equals(NormalizePath(sourceFile!), NormalizePath(targetFullName),
-            StringComparison.OrdinalIgnoreCase);
-    }
+    internal static bool IsSameSourceFile(string? sourceFile, string targetFullName) =>
+        PathUtils.IsSamePath(sourceFile, targetFullName);
 
     /// <summary>
     /// Returns whether this registry already has at least one step-definition or hook binding whose
@@ -640,11 +635,5 @@ public record ProjectBindingRegistry
         return StepDefinitions
             .FirstOrDefault(b => b.Implementation.SourceLocation != null &&
                 BindingLocationMatcher.CoversQuery(b, location));
-    }
-
-    private static string NormalizePath(string path)
-    {
-        try { return Path.GetFullPath(path); }
-        catch { return path; }
     }
 }

@@ -32,16 +32,36 @@ public class BindingImporter
     private readonly ReqnrollTagExpressionParser _tagExpressionParser = new();
     private readonly Dictionary<string, string> _typeNames;
     private readonly IFileSystemForIDE _fileSystem;
+    private readonly ISourceFileResolver _sourceFileResolver;
+    private readonly HashSet<string> _unresolvedSourceFiles = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Initializes a new instance of the <see cref="BindingImporter"/> class.</summary>
+    /// <param name="sourceFileResolver">
+    /// Maps the source paths recorded by discovery onto paths that exist here (issue #540). Pass a
+    /// <see cref="ProjectSourceFileResolver"/> when the project folder is known, which is what lets
+    /// a devcontainer- or CI-built PDB's paths be remapped instead of stored as-is. Defaults to
+    /// <see cref="LocalOnlySourceFileResolver"/>: existence-checked, never remapped.
+    /// </param>
     public BindingImporter(Dictionary<string, string> sourceFiles, Dictionary<string, string> typeNames,
-        IIdeSupportLogger logger, IFileSystemForIDE fileSystem)
+        IIdeSupportLogger logger, IFileSystemForIDE fileSystem, ISourceFileResolver sourceFileResolver = null)
     {
         _sourceFiles = sourceFiles;
         _typeNames = typeNames;
         _logger = logger;
         _fileSystem = fileSystem;
+        _sourceFileResolver = sourceFileResolver ?? new LocalOnlySourceFileResolver(fileSystem);
     }
+
+    /// <summary>
+    /// The distinct source paths this importer was given that could not be resolved to a file on
+    /// this machine, as recorded by discovery. Empty for a locally built project.
+    /// </summary>
+    /// <remarks>
+    /// Reported once per discovery run rather than once per binding: one devcontainer-built
+    /// assembly produces one unresolved path per binding <em>file</em> but dozens of bindings, and
+    /// a warning per binding would bury the signal it exists to give.
+    /// </remarks>
+    public IReadOnlyCollection<string> UnresolvedSourceFiles => _unresolvedSourceFiles;
 
     /// <summary>Parses a C# source file into a syntax tree root, for use with the
     /// <see cref="TryGetAttributeSourceLine(SyntaxNode,string,ScenarioBlock)"/> overload. Callers that
@@ -181,10 +201,10 @@ public class BindingImporter
             sourceRef = resolvedPath;
 
         // The PDB records the absolute source path from the machine that built the assembly
-        // (e.g. a CI runner, or a plugin built elsewhere), which may not exist on this machine —
-        // most commonly for reflection-discovered bindings contributed by an external/dynamically
-        // loaded Reqnroll plugin assembly. Treat a missing file the same as a missing location.
-        return _fileSystem.File.Exists(sourceRef) ? sourceRef : null;
+        // (e.g. a CI runner, a devcontainer, or a plugin built elsewhere), which may not exist on
+        // this machine. The resolver gets one chance to map it onto something local; a path it
+        // cannot place is treated the same as a missing location.
+        return ResolveSourceFile(sourceRef);
     }
 
     /// <summary>Converts a wire-format step definition DTO into a <see cref="ProjectStepDefinitionBinding"/>, or null if it's invalid.</summary>
@@ -206,8 +226,11 @@ public class BindingImporter
                 // Prefer the AST-backfilled method-identifier location over the connector's own
                 // PDB-derived one (see TryGetMethodIdentifierLocation's remarks) when the same
                 // backfill pass that resolved it for this method succeeded.
-                if (methodIdentifierLocation.HasValue)
-                    sourceLocation = new SourceLocation(sourceLocation.SourceFile,
+                // WithPosition, not a fresh SourceLocation: rebuilding it through the public
+                // constructor would silently re-assert IsResolved, discarding the fact that this
+                // binding's file could not be found on this machine (issue #540 F1).
+                if (methodIdentifierLocation.HasValue && sourceLocation != null)
+                    sourceLocation = sourceLocation.WithPosition(
                         methodIdentifierLocation.Value.Line, methodIdentifierLocation.Value.Column,
                         sourceLocation.SourceFileEndLine, sourceLocation.SourceFileEndColumn);
 
@@ -228,7 +251,16 @@ public class BindingImporter
     }
 
     /// <summary>Converts a wire-format hook DTO into a <see cref="ProjectHookBinding"/>, or null if it's invalid.</summary>
-    public ProjectHookBinding ImportHook(Hook hook)
+    /// <param name="hook">The wire-format hook to import.</param>
+    /// <param name="methodIdentifierLocation">
+    /// The AST-backfilled method-identifier position, when the caller resolved and parsed the hook's
+    /// source file — see <see cref="TryGetMethodIdentifierLocation"/>. Hooks used to get no backfill
+    /// at all while step definitions did, which left every hook anchored on its raw PDB sequence
+    /// point (the first executable statement in the body, not the declaration line) and, because the
+    /// backfill is also what forces a source path to be resolved, made hook navigation the first
+    /// casualty of a foreign-path build (issue #540 F2).
+    /// </param>
+    public ProjectHookBinding ImportHook(Hook hook, (int Line, int Column)? methodIdentifierLocation = null)
     {
         try
         {
@@ -240,6 +272,11 @@ public class BindingImporter
 
             if (!_implementations.TryGetValue(hook.Method, out var implementation))
             {
+                if (methodIdentifierLocation.HasValue && sourceLocation != null)
+                    sourceLocation = sourceLocation.WithPosition(
+                        methodIdentifierLocation.Value.Line, methodIdentifierLocation.Value.Column,
+                        sourceLocation.SourceFileEndLine, sourceLocation.SourceFileEndColumn);
+
                 implementation =
                     new ProjectBindingImplementation(hook.Method, null, sourceLocation);
                 _implementations.Add(hook.Method, implementation);
@@ -312,7 +349,27 @@ public class BindingImporter
             if (_sourceFiles.TryGetValue(sourceFile.Substring(1), out var sourceFileAtIndex))
                 sourceFile = sourceFileAtIndex;
 
-        return new SourceLocation(sourceFile, line, column, endLineOrNull, endColumnOrNull);
+        // Resolve here, once, rather than at each use site: this is the only place that sees the
+        // recorded path before anything downstream can turn it into a navigation target, and the
+        // only place with the project context needed to remap it (issue #540 F1). Before this, a
+        // foreign path was stored verbatim and every consumer handed it to the IDE unchecked.
+        var resolved = ResolveSourceFile(sourceFile);
+        return resolved != null
+            ? SourceLocation.Resolved(resolved, sourceFile, line, column, endLineOrNull, endColumnOrNull)
+            : SourceLocation.Unresolved(sourceFile, line, column, endLineOrNull, endColumnOrNull);
+    }
+
+    /// <summary>Resolves one recorded source path, remembering the ones that could not be placed.</summary>
+    private string ResolveSourceFile(string recordedPath)
+    {
+        if (string.IsNullOrWhiteSpace(recordedPath))
+            return null;
+
+        var resolved = _sourceFileResolver.Resolve(recordedPath);
+        if (resolved == null)
+            _unresolvedSourceFiles.Add(recordedPath);
+
+        return resolved;
     }
 
     private BindingScope ParseScope(StepScope bindingScope)

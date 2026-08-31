@@ -1,4 +1,5 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using System.Diagnostics;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -111,6 +112,70 @@ public class GoToHooksHandlerTests
         => ProjectBindingRegistry.FromBindings(
             Array.Empty<ProjectStepDefinitionBinding>(),
             hooks);
+
+    /// <summary>
+    /// A hook whose source file binding discovery recorded but could not resolve on this machine —
+    /// the shape that made every hook in the issue #540 incident navigate nowhere.
+    /// </summary>
+    private static ProjectHookBinding MakeUnresolvedHook(
+        HookType hookType,
+        string   recordedFile = "/workspaces/host-solution/Specs/Support/Hooks.cs",
+        int      csLine       = 10,
+        int      csColumn     = 5)
+        => new(
+            new ProjectBindingImplementation(
+                "MyHook",
+                parameterTypes: null,
+                SourceLocation.Unresolved(recordedFile, csLine, csColumn)),
+            scope: null,
+            hookType,
+            hookOrder: null,
+            error: null);
+
+    // ── Unresolved hook source path (issue #540) ──────────────────────────────
+
+    [Fact]
+    public async Task Handle_hook_whose_source_file_is_not_on_this_machine_is_excluded_Async()
+    {
+        // Distinct from Handle_hook_without_source_location_is_excluded below: the location is
+        // present and well-formed, it just names a file that does not exist here.
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(RegistryWith(MakeUnresolvedHook(HookType.BeforeFeature)));
+
+        var result = await CreateSut().HandleAsync(
+            RequestAt(FeatureUri, 0, 0), CancellationToken.None);
+
+        result.Hooks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_unresolved_hook_logs_the_recorded_path_Async()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(RegistryWith(MakeUnresolvedHook(HookType.BeforeFeature)));
+
+        await CreateSut().HandleAsync(RequestAt(FeatureUri, 0, 0), CancellationToken.None);
+
+        // LogInfo is a static extension method — verify via the underlying Log() call.
+        _logger.Received().Log(Arg.Is<LogMessage>(m =>
+            m.Level == TraceLevel.Info &&
+            m.Message.Contains("/workspaces/host-solution/Specs/Support/Hooks.cs")));
+    }
+
+    [Fact]
+    public async Task Handle_returns_resolvable_hooks_alongside_an_unresolved_one_Async()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(RegistryWith(
+                           MakeUnresolvedHook(HookType.BeforeFeature),
+                           MakeHook(HookType.AfterFeature, "/workspace/Hooks.cs")));
+
+        var result = await CreateSut().HandleAsync(
+            RequestAt(FeatureUri, 0, 0), CancellationToken.None);
+
+        result.Hooks.Should().ContainSingle();
+        result.Hooks.Single().HookType.Should().Be(nameof(HookType.AfterFeature));
+    }
 
     // ── Guard rails ───────────────────────────────────────────────────────────
 

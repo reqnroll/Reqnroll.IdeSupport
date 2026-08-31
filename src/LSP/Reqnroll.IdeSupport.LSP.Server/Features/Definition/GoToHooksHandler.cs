@@ -100,6 +100,18 @@ public sealed class GoToHooksHandler
         var locations = new List<GoToHookLocation>(hooks.Count);
         foreach (var hook in hooks)
         {
+            // Same rule as DefinitionHandler: no local file, no navigation target. Hooks were the
+            // visible casualty in issue #540 -- every one of them pointed into a devcontainer path.
+            var src = hook.Implementation?.SourceLocation;
+            if (src is not null && !src.IsResolved)
+            {
+                _logger.LogInfo(
+                    $"GoToHooksHandler: no local file for hook '{hook.Implementation!.Method}' — the compiled " +
+                    $"assembly records it at '{src.RecordedSourceFile}', which does not exist on this machine. " +
+                    "Rebuild the project locally to restore navigation for this hook.");
+                continue;
+            }
+
             var loc = ToLocation(hook);
             if (loc is not null)
                 locations.Add(loc);

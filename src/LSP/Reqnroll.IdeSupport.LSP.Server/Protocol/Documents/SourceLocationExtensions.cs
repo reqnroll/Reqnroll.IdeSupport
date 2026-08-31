@@ -73,9 +73,14 @@ public static class SourceLocationExtensions
                     return new SourceLocation(loc.SourceFile, i + 1, col + 1, i + 1, col + simpleName.Length);
             }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                     or ArgumentException or NotSupportedException)
         {
-            // Source file not accessible — return the original location.
+            // Source file not accessible, or not a path this platform can even open — return the
+            // original location. IOException alone was too narrow: loc.SourceFile is a path this
+            // method never validated (it can come straight from a PDB written on another platform),
+            // and the argument/permission failures that shape can produce were escaping into the
+            // definition handler and faulting the whole request (issue #540 F8).
         }
 
         return loc;

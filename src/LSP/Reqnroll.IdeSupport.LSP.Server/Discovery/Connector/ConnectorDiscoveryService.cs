@@ -114,7 +114,11 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
     private ProjectBindingRegistry BuildRegistry(IProjectScope scope, DiscoveryResult result)
     {
-        var importer = new BindingImporter(result.SourceFiles, result.TypeNames, _logger, _fileSystem);
+        // A project-scoped resolver, so a source path recorded on the build machine can be remapped
+        // onto this one instead of stored as-is (issue #540). scope.ProjectFolder is the re-rooting
+        // target; without it the resolver degrades to a plain existence check.
+        var importer = new BindingImporter(result.SourceFiles, result.TypeNames, _logger, _fileSystem,
+            new ProjectSourceFileResolver(scope.ProjectFolder, _fileSystem));
 
         // Parsed once per unique source file (not per step definition) and reused below, since a
         // single binding class typically contributes many step definitions from the same file.
@@ -139,7 +143,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 // passing sd.Method straight through made both backfills silently miss on every real
                 // connector-discovered binding, matching only in unit tests whose fixtures used an
                 // already-bare name that never occurs in production).
-                var root = TryGetParsedRoot(importer, sd, parsedFiles, _fileSystem, _logger);
+                var root = TryGetParsedRoot(importer, sd.SourceLocation, sd.Method, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
                 var bareMethodName = BindingImporter.ExtractBareMethodName(sd.Method);
                 var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock);
@@ -169,10 +173,25 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             .Where(sd => sd is not null)
             .ToList();
 
+        // Hooks get the same method-identifier backfill as step definitions above. They used to get
+        // none, which left them on the raw PDB sequence point -- inside the method body rather than
+        // on its declaration -- and skipped the source-file resolution the backfill performs on the
+        // way (issue #540 F2). Hooks carry no attribute line (ProjectHookBinding does not model one),
+        // so only the identifier location is backfilled here.
         var hooks = (result.Hooks ?? [])
-            .Select(h => importer.ImportHook(h))
+            .Select(h => {
+                var root = TryGetParsedRoot(importer, h.SourceLocation, h.Method, parsedFiles, _fileSystem, _logger);
+                var bareMethodName = BindingImporter.ExtractBareMethodName(h.Method);
+                var methodLocation = root == null
+                    ? null
+                    : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
+
+                return importer.ImportHook(h, methodLocation);
+            })
             .Where(h => h is not null)
             .ToList();
+
+        ReportUnresolvedSourceFiles(scope, importer);
 
         // Use a stable hash of the output path as the project hash so the registry
         // can participate in the version-monotonicity guard in ProjectBindingRegistry.
@@ -208,15 +227,16 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// isn't available locally (see <see cref="BindingImporter.ResolveSourceFilePath"/>'s remarks),
     /// so that's verbose-only; a resolved file that fails to parse is unexpected and worth a warning
     /// (once per file, not per step definition, since <paramref name="parsedFiles"/> caches the miss too).
-    private static SyntaxNode? TryGetParsedRoot(BindingImporter importer, StepDefinition sd,
-        Dictionary<string, SyntaxNode> parsedFiles, IFileSystemForIDE fileSystem, IIdeSupportLogger logger)
+    private static SyntaxNode? TryGetParsedRoot(BindingImporter importer, string? rawSourceLocation,
+        string? method, Dictionary<string, SyntaxNode> parsedFiles, IFileSystemForIDE fileSystem,
+        IIdeSupportLogger logger)
     {
-        var sourceFile = importer.ResolveSourceFilePath(sd.SourceLocation);
+        var sourceFile = importer.ResolveSourceFilePath(rawSourceLocation);
         if (sourceFile == null)
         {
             logger.LogVerbose(
-                $"[Connector] No local source file resolved for '{sd.Method}' (source location " +
-                $"'{sd.SourceLocation}'); method-identifier backfill skipped, using the connector's " +
+                $"[Connector] No local source file resolved for '{method}' (source location " +
+                $"'{rawSourceLocation}'); method-identifier backfill skipped, using the connector's " +
                 "raw PDB-derived location.");
             return null;
         }
@@ -229,11 +249,40 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             if (root == null)
                 logger.LogWarning(
                     $"[Connector] Failed to parse resolved source file '{sourceFile}' for method-identifier " +
-                    $"backfill (binding '{sd.Method}'); every binding from this file will fall back to the " +
+                    $"backfill (binding '{method}'); every binding from this file will fall back to the " +
                     "connector's raw PDB-derived location.");
         }
 
         return root;
+    }
+
+    /// <summary>
+    /// Reports, once per discovery run, the source paths this run could not place on this machine.
+    /// </summary>
+    /// <remarks>
+    /// This is the "fail loudly" half of the issue #540 decision. Everything downstream now omits a
+    /// navigation target it cannot resolve rather than emitting a dead one, which fixes the wrong
+    /// behaviour but is still invisible on its own — a user whose Go To Definition does nothing
+    /// needs to be able to find out why. One warning per run naming the count, the example path and
+    /// the remedy; the full list at verbose.
+    /// </remarks>
+    private void ReportUnresolvedSourceFiles(IProjectScope scope, BindingImporter importer)
+    {
+        var unresolved = importer.UnresolvedSourceFiles;
+        if (unresolved.Count == 0)
+            return;
+
+        _logger.LogWarning(
+            $"[{scope.ProjectName}] {unresolved.Count} binding source file(s) recorded in the compiled " +
+            $"assembly do not exist on this machine (e.g. '{unresolved.First()}'), and could not be " +
+            $"mapped onto '{scope.ProjectFolder}'. This normally means the assembly was built " +
+            "somewhere else — a container, a CI agent, another machine, or an external binding " +
+            "package. Binding matching, diagnostics and CodeLens counts are unaffected, but Go To " +
+            "Definition, hook navigation and inlay hints have no local target for these bindings and " +
+            "will do nothing. Rebuilding the project locally resolves it.");
+
+        foreach (var path in unresolved)
+            _logger.LogVerbose($"[{scope.ProjectName}] Unresolved binding source path: '{path}'");
     }
 
     private static string FindConfigFilePath(IFileSystemForIDE fileSystem, IProjectScope scope)
