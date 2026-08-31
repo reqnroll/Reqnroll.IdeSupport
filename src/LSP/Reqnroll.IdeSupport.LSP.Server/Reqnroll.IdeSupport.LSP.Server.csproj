@@ -9,6 +9,20 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
+  <!-- Precompile to native code at publish time instead of JIT-ing on first launch (issue #541).
+       R2R only applies to `dotnet publish` (never to `dotnet build`), so this is scoped to
+       Release: every real publish path that ships to users already uses Release (CI's
+       publish-lsp-server matrix, VS Code's publish-server.sh/dev-publish-server.mjs, Rider's
+       buildPlugin/CI path) — the one exception is Rider's `runIde` local dev loop, which
+       deliberately publishes Debug for a fast inner loop, and R2R would only slow that down for
+       no benefit since it's never what ships. Trimming/AOT are not attempted here: the server
+       depends on OmniSharp's LSP libraries and Roslyn, which are reflection-heavy enough that
+       #541 calls AOT a separate, unproven spike — R2R alone doesn't remove any code, so it
+       carries none of that risk. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="8.*" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.0" />
