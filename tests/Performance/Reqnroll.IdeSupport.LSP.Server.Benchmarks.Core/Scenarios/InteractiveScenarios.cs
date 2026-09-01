@@ -383,6 +383,51 @@ public sealed class InteractiveScenarios
         return recorder.Summarize();
     }
 
+    /// <summary>
+    /// Diagnostics push for a <c>.cs</c> binding's structural validation (issues #514/#516):
+    /// toggles a binding method between a valid <c>void</c> body and an invalid <c>async void</c> one
+    /// (<c>StepDefinitionFileParser.GetStructuralError</c>'s "must not be async void" rule) and times
+    /// from the edit to <c>publishDiagnostics</c> for that <c>.cs</c> URI. Mirrors
+    /// <see cref="DiagnosticsPushAsync"/>'s "trigger, then wait for the push" shape, but for the
+    /// binding-file diagnostics path introduced by #514, which had no benchmark coverage at all —
+    /// the sibling scenario only ever edits <c>.feature</c> documents.
+    /// </summary>
+    public async Task<LatencySummary> CSharpDiagnosticsPushAsync(string corpusRoot)
+    {
+        var csUri = DocumentUri.FromFileSystemPath(
+            Path.Combine(corpusRoot, "Bindings", "BenchmarkCSharpDiagnosticsPush.cs"));
+        var recorder = new LatencyRecorder(PerfTargets.CSharpDiagnosticsPush.Operation);
+
+        _harness.OpenCSharp(csUri, 1, StructuralBindingSource(asyncVoid: false));
+        await Task.Delay(200).ConfigureAwait(false); // let the initial (valid) open settle
+
+        var version = 2;
+        var invalid = true;
+        for (var i = 0; i < _warmup + _measured; i++)
+        {
+            var start = Stopwatch.GetTimestamp();
+            _harness.ChangeCSharp(csUri, version++, StructuralBindingSource(asyncVoid: invalid));
+            invalid = !invalid;
+            var ms = await _harness.WaitForDiagnosticsAsync(csUri, start).ConfigureAwait(false);
+            if (i >= _warmup && ms is not null) recorder.Add(ms.Value);
+        }
+
+        return recorder.Summarize();
+    }
+
+    private static string StructuralBindingSource(bool asyncVoid) => $$"""
+        using Reqnroll;
+
+        namespace Benchmark.CSharpDiagnosticsPush;
+
+        [Binding]
+        public class DiagnosticsPushProbe
+        {
+            [When(@"diagnostics push probe step")]
+            public {{(asyncVoid ? "async void" : "void")}} Probe() { }
+        }
+        """;
+
     private async Task<LatencySummary> RunAsync(string operation, Func<int, Task> invoke)
     {
         var recorder = new LatencyRecorder(operation);

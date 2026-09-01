@@ -106,6 +106,7 @@ public static class BatchScenarios
             new SkippedBatchScenario(PerfTargets.ReflectionDiscovery, reason),
             new SkippedBatchScenario(PerfTargets.StepRename, reason),
             new SkippedBatchScenario(PerfTargets.FindUnusedStepDefinitions, reason),
+            new SkippedBatchScenario(PerfTargets.CSharpRapidEditBurst, reason),
         };
     }
 
@@ -337,6 +338,53 @@ public static class BatchScenarios
             results.Add((i, indent + "When undef".Length, stepText));
         }
         return results;
+    }
+
+    /// <summary>
+    /// Regression guard for the staleness short-circuit in
+    /// <c>CSharpBindingDiscoveryService.UpdateFromSourceAsync</c> (issue #531): fires a rapid burst of
+    /// superseded <c>.cs</c> edits — no delay between them, faster than Roslyn can parse a single one,
+    /// modelling fast typing — against a synthetic binding file, then a final edit that actually
+    /// matches one of the corpus's deliberately-unbound steps, and measures wall-clock from that FINAL
+    /// edit to the step resolving. <c>IParseCoordinator</c> chains every queued call rather than
+    /// cancelling superseded ones (by design), so before #531 every junk edit in the burst still did a
+    /// full, uncancellable Roslyn re-parse + registry patch; the short-circuit instead compares each
+    /// queued call's text against the current cache entry and skips the parse once a later edit has
+    /// already overwritten it. A regression that reintroduces the uncancellable pile-up should show up
+    /// here as this number growing with <paramref name="burstSize"/> instead of staying close to
+    /// <see cref="RoslynReDiscoveryAsync"/>'s single-edit number.
+    /// </summary>
+    public static async Task<LatencySummary> CSharpRapidEditBurstAsync(
+        BenchmarkLspHarness harness, string corpusRoot, DocumentUri featureUri, string featureText,
+        int repetitions = 3, int burstSize = 8, int timeoutMs = 2500)
+    {
+        var recorder = new LatencyRecorder(PerfTargets.CSharpRapidEditBurst.Operation);
+        var csUri = DocumentUri.FromFileSystemPath(
+            Path.Combine(corpusRoot, "Bindings", "BenchmarkRapidEditBurst.cs"));
+        var undefinedSteps = FindUndefinedStepPositions(featureText);
+
+        for (var rep = 0; rep < Math.Min(repetitions, undefinedSteps.Count); rep++)
+        {
+            var (line, character, stepText) = undefinedSteps[rep];
+            harness.OpenCSharp(csUri, 1, BindingSource("NonMatchingBurst" + rep, "no match at all " + rep));
+            await Task.Delay(200).ConfigureAwait(false); // let the no-op open settle before the burst
+
+            // The burst: several superseded edits fired back to back with no delay between them, so
+            // each queued call's cached text is already stale by the time UpdateFromSourceAsync would
+            // get to it — exactly the shape the short-circuit exists to skip.
+            for (var i = 0; i < burstSize; i++)
+                harness.ChangeCSharp(csUri, 2 + i,
+                    BindingSource($"BurstJunk{rep}_{i}", $"still no match {rep}_{i}"));
+
+            var start = Stopwatch.GetTimestamp();
+            harness.ChangeCSharp(csUri, 2 + burstSize, BindingSource("BurstFinal" + rep, Regex.Escape(stepText)));
+
+            var resolved = await PollDefinitionAsync(harness, featureUri, line, character, timeoutMs)
+                .ConfigureAwait(false);
+            if (resolved) recorder.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+        }
+
+        return recorder.Summarize();
     }
 
     /// <summary>
