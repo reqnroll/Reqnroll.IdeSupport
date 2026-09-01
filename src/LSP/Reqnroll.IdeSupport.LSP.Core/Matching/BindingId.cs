@@ -23,6 +23,18 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// multiset). Stable across repeated re-parses of unchanged source: <c>Method</c>,
 /// <c>ParameterTypes</c>, and attribute/block enumeration order are pure functions of the syntax
 /// tree's content.
+/// <para>
+/// <c>Method</c> and each entry of <c>ParameterTypes</c> are normalized through
+/// <see cref="BindingMethodIdentity"/> before hashing — not compared as literal wire strings —
+/// because the connector and Roslyn spell the very same method differently (e.g.
+/// <c>"DeclaringType.MethodName(Int32)"</c> vs <c>"Namespace.DeclaringType.MethodName"</c> for an
+/// identical method). Without normalizing, the same physical binding discovered via both paths
+/// (e.g. a referenced project's own step definitions, picked up transitively by the referencing
+/// project's connector run while that referenced project's own registry gets its matching entry
+/// reconciled from source via Roslyn) hashes to two different <see cref="BindingId"/> values —
+/// defeating cross-registry dedup in Find Unused Step Definitions and usage lookups for CodeLens
+/// alike (issue #547/#548).
+/// </para>
 /// </remarks>
 public readonly record struct BindingId(ulong Value)
 {
@@ -45,9 +57,9 @@ public readonly record struct BindingId(ulong Value)
     {
         var canonical = new StringBuilder();
         canonical.Append((int)stepType).Append(Separator);
-        canonical.Append(method).Append(Separator);
+        canonical.Append(BindingMethodIdentity.NormalizeMethod(method)).Append(Separator);
         foreach (var parameterType in parameterTypes)
-            canonical.Append(parameterType).Append(Separator);
+            canonical.Append(BindingMethodIdentity.NormalizeParameterType(parameterType)).Append(Separator);
         canonical.Append(expression ?? string.Empty);
 
         // SHA-256 over the canonical identity string, truncated to its first 8 bytes -- an

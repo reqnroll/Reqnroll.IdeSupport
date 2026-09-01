@@ -12,5 +12,5 @@ public interface IFindUnusedStepDefinitionsService
     /// per step-definition binding expression with zero matching steps across the workspace.
     /// </summary>
     IReadOnlyList<UnusedStepDefinition> FindUnusedStepDefinitions(
-        IReadOnlyList<(string ProjectName, ProjectBindingRegistry Registry)> registries);
+        IReadOnlyList<(string ProjectName, string ProjectFolder, ProjectBindingRegistry Registry)> registries);
 }

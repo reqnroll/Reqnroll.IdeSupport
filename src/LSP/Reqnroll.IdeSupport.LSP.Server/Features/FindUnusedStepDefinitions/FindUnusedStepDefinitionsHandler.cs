@@ -42,8 +42,12 @@ public sealed class FindUnusedStepDefinitionsHandler
 
         var allRegistries = _registryLookup.GetAllRegistries();
 
+        // Owner.ProjectFile is the full .csproj path; its directory is what "this project's own
+        // folder" means for FindUnusedStepDefinitionsService's ownership attribution (issue #547).
         var unused = _service.FindUnusedStepDefinitions(
-            allRegistries.Select(r => (r.ProjectName, r.Registry)).ToList());
+            allRegistries
+                .Select(r => (r.ProjectName, Path.GetDirectoryName(r.Owner.ProjectFile) ?? string.Empty, r.Registry))
+                .ToList());
 
         var items = unused.Select(u => new UnusedStepDefinitionItem
         {

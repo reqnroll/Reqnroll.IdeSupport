@@ -57,6 +57,18 @@ public class StepCodeLensHandlerTests
         return new ProjectBindingRegistry(allBindings, Array.Empty<ProjectHookBinding>(), projectHash: 1);
     }
 
+    /// <summary>Creates a real (disposable) <see cref="LspReqnrollProject"/> for tests that need a genuine <see cref="ProjectOwner"/>-bearing project, not just a substitute.</summary>
+    private static LspReqnrollProject MakeProject(string projectFile) =>
+        new(new ReqnrollProjectLoadedParams
+            {
+                WorkspaceFolder        = "/workspace",
+                ProjectFile            = projectFile,
+                ProjectFolder          = System.IO.Path.GetDirectoryName(projectFile)!,
+                OutputAssemblyPath     = "/workspace/bin/Project.dll",
+                TargetFrameworkMoniker = "net8.0"
+            },
+            new LspIdeScope(Substitute.For<IIdeSupportLogger>()));
+
     // ── Non-.cs URI ───────────────────────────────────────────────────────────
 
     [Fact]
@@ -270,6 +282,90 @@ public class StepCodeLensHandlerTests
         _matchService.Received(1).FindUsages(
             Arg.Any<BindingId>(),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
+    }
+
+    // ── External-assembly usage scoping (issue #548) ──────────────────────────
+
+    /// <summary>
+    /// A project that references another Reqnroll-bearing project (a class library) discovers
+    /// that library's bindings too via its own connector run -- the same transitive-discovery
+    /// behaviour that produced duplicate Find Unused Step Definitions rows before BindingId
+    /// normalization (issue #547). That referencing project's feature files are legitimate usage
+    /// sites for the library's steps even though it doesn't "own" the .cs file that declares
+    /// them, so the project filter passed to FindUsages must include it -- not just the .cs
+    /// file's direct owner(s), which would always undercount to zero for a step used only from
+    /// the referencing project.
+    /// </summary>
+    [Fact]
+    public async Task Handle_expands_project_filter_to_projects_whose_registry_independently_reports_the_binding()
+    {
+        var csPath = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+        var bindingId = BindingId.For(binding);
+
+        var libraryProject = MakeProject("/workspace/MyLibrary/MyLibrary.csproj");
+        var referencingProject = MakeProject("/workspace/ReferencingProject/ReferencingProject.csproj");
+
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _scopeManager.ResolveOwners(CsUri).Returns(new[] { libraryProject });
+
+        // The referencing project's own registry independently reports the very same binding
+        // (same method/parameter-types/expression/type — the transitively-discovered copy).
+        var referencingProjectRegistry = MakeRegistry(binding);
+        _registryLookup.GetAllRegistries().Returns(new[]
+        {
+            ("MyLibrary", new ProjectOwner(libraryProject.ProjectFullName, libraryProject.TargetFrameworkMoniker), MakeRegistry(binding)),
+            ("ReferencingProject", new ProjectOwner(referencingProject.ProjectFullName, referencingProject.TargetFrameworkMoniker), referencingProjectRegistry),
+        });
+
+        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+
+        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        _matchService.Received(1).FindUsages(
+            bindingId,
+            Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
+                f != null
+                && f.Any(o => o.ProjectFile == libraryProject.ProjectFullName)
+                && f.Any(o => o.ProjectFile == referencingProject.ProjectFullName)));
+
+        libraryProject.Dispose();
+        referencingProject.Dispose();
+    }
+
+    [Fact]
+    public async Task Handle_does_not_expand_project_filter_to_projects_that_do_not_report_the_binding()
+    {
+        var csPath = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+        var unrelatedBinding = StepBindingBuilder.Create()
+            .AtSourceFile("/workspace/Unrelated/Other.cs").AtLine(1).AtColumn(1).Build();
+
+        var libraryProject = MakeProject("/workspace/MyLibrary/MyLibrary.csproj");
+        var unrelatedProject = MakeProject("/workspace/Unrelated/Unrelated.csproj");
+
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _scopeManager.ResolveOwners(CsUri).Returns(new[] { libraryProject });
+        _registryLookup.GetAllRegistries().Returns(new[]
+        {
+            ("MyLibrary", new ProjectOwner(libraryProject.ProjectFullName, libraryProject.TargetFrameworkMoniker), MakeRegistry(binding)),
+            ("Unrelated", new ProjectOwner(unrelatedProject.ProjectFullName, unrelatedProject.TargetFrameworkMoniker), MakeRegistry(unrelatedBinding)),
+        });
+        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+
+        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        _matchService.Received(1).FindUsages(
+            Arg.Any<BindingId>(),
+            Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
+                f != null
+                && f.Any(o => o.ProjectFile == libraryProject.ProjectFullName)
+                && !f.Any(o => o.ProjectFile == unrelatedProject.ProjectFullName)));
+
+        libraryProject.Dispose();
+        unrelatedProject.Dispose();
     }
 
     // ── BindingId passed to FindUsages ────────────────────────────────────────
