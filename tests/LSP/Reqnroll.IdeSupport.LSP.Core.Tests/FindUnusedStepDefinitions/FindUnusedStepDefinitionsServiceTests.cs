@@ -304,6 +304,32 @@ public class FindUnusedStepDefinitionsServiceTests
         result.Single().ProjectName.Should().Be("A");
     }
 
+    [Fact]
+    public void Duplicate_binding_dedupes_and_attributes_correctly_even_when_discovery_paths_spell_the_method_differently()
+    {
+        // End-to-end regression for issue #547/#548: the referencing project's copy comes from
+        // the connector (reflection-derived "DeclaringType.MethodName(...)"), while MyLibrary's
+        // own copy of the very same method has been Roslyn-reconciled (an open buffer, or edited
+        // since the last build), which spells it "Namespace.DeclaringType.MethodName" instead.
+        // Without BindingId normalizing across these two spellings, this pair would never even
+        // reach the same dictionary bucket -- both the duplicate row AND the ownership tiebreak
+        // depend on the two being recognized as identical here.
+        var connectorSideBinding = MakeBinding(
+            "/ws/MyLibrary/ExtraSteps.cs", line: 9,
+            method: "ExtraSteps.AnUnusedStep()");
+        var roslynSideBinding = MakeBinding(
+            "/ws/MyLibrary/ExtraSteps.cs", line: 9,
+            method: "MyLibrary.StepDefinitions.ExtraSteps.AnUnusedStep");
+
+        var referencingProjectEntry = MakeEntry("ReferencingProject", "/ws/ReferencingProject", connectorSideBinding);
+        var libraryEntry            = MakeEntry("MyLibrary", "/ws/MyLibrary", roslynSideBinding);
+
+        var result = CreateSut().FindUnusedStepDefinitions(new[] { referencingProjectEntry, libraryEntry });
+
+        result.Should().ContainSingle();
+        result.Single().ProjectName.Should().Be("MyLibrary");
+    }
+
     // ── FindUsages is called with no project filter (global intersection) ──────
 
     [Fact]
