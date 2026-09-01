@@ -100,6 +100,7 @@ public static class BenchmarkRunner
             (PerfTargets.RangeFormatting, await scenarios.RangeFormattingAsync().ConfigureAwait(false)),
             (PerfTargets.OnTypeFormatting, await scenarios.OnTypeFormattingAsync().ConfigureAwait(false)),
             (PerfTargets.PublishDiagnostics, await scenarios.DiagnosticsPushAsync().ConfigureAwait(false)),
+            (PerfTargets.CSharpDiagnosticsPush, await scenarios.CSharpDiagnosticsPushAsync(corpusRoot).ConfigureAwait(false)),
         };
 
         // Batch scenarios (coarse wall-clock). Cold start spins up fresh servers, so it is opt-out
@@ -138,6 +139,9 @@ public static class BenchmarkRunner
             summaries.Add((PerfTargets.ReflectionDiscovery,
                 await BatchScenarios.ReflectionDiscoveryAsync(corpusRoot, corpusAssembly)
                     .ConfigureAwait(false)));
+            summaries.Add((PerfTargets.CSharpRapidEditBurst,
+                await BatchScenarios.CSharpRapidEditBurstAsync(harness, corpusRoot, features[0].Uri, features[0].Text)
+                    .ConfigureAwait(false)));
 
             Console.WriteLine("Running workspace-wide batch scenarios (step rename, find unused step definitions)...");
             summaries.Add((PerfTargets.StepRename,
@@ -165,6 +169,15 @@ public static class BenchmarkRunner
             var resolveTestTargetsContention = await ResolveTestTargetsContentionScenario.CreateAsync(
                 harness, corpusRoot, probe, new ResolveTestTargetsContentionOptions()).ConfigureAwait(false);
             contentionChecks.Add(await resolveTestTargetsContention.RunAsync().ConfigureAwait(false));
+
+            if (corpusAssembly is not null)
+            {
+                Console.WriteLine("Running dispatch-fairness scenario (repeated rebuild-refresh projectLoaded " +
+                                   "storm, issue #542)...");
+                contentionChecks.Add(await new RebuildRefreshContentionScenario(
+                    harness, corpusRoot, corpusAssembly, probe, new RebuildRefreshContentionOptions())
+                    .RunAsync().ConfigureAwait(false));
+            }
         }
 
         var results = summaries.Select(s => new OperationResult(s.Target, s.Summary)).ToList();

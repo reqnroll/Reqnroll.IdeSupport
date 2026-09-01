@@ -170,6 +170,23 @@ public static class PerfTargets
         new("workspace/codeLens/refresh", 0, PerfTargetKind.Batch, "Server-initiated code lens refresh push",
             IncludesFixedDelay: true);
 
+    // Issues #514/#516: live structural-validation diagnostics on .cs binding methods (non-static,
+    // async void, malformed step/tag expression) had no benchmark coverage -- the sibling
+    // PublishDiagnostics target above only ever exercises a .feature document's diagnostics push.
+    // Same "#..." wire-method-collision-avoidance suffix convention as the completion/codeLens
+    // variants above.
+    public static readonly PerfTarget CSharpDiagnosticsPush =
+        new("textDocument/publishDiagnostics#cs-binding", 0, PerfTargetKind.InteractiveP95,
+            "Diagnostics push from a .cs binding structural-validation edit (#514/#516)");
+
+    // Issue #531: CSharpBindingDiscoveryService.UpdateFromSourceAsync's staleness short-circuit for
+    // rapid .cs typing (mirrors the pre-existing Gherkin-side one) had no regression coverage --
+    // SessionScenario's supersede/cancel burst only ever edits .feature documents. Batch-classified
+    // like its sibling discovery scenarios: coarse wall-clock, not a per-request percentile.
+    public static readonly PerfTarget CSharpRapidEditBurst =
+        new("discovery/roslyn-rapid-cs-burst", 0, PerfTargetKind.Batch,
+            "Roslyn re-discovery after a rapid burst of superseded .cs edits (staleness short-circuit, #531)");
+
     /// <summary>All performance targets, in table order.</summary>
     public static readonly IReadOnlyList<PerfTarget> All = new[]
     {

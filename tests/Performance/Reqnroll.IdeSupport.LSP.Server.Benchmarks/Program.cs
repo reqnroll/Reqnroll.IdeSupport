@@ -95,7 +95,7 @@ public static class Program
                                      cold-start scan measure the real exe-launch cost.
               --server-exe <path>    Explicit server exe path (default: locate the built exe).
 
-            'run' also always includes two dispatch-fairness / head-of-line-blocking checks, both
+            'run' also always includes dispatch-fairness / head-of-line-blocking checks, each
             reported as a ratio of an under-load read's P95 to a same-run solo baseline (not an
             absolute-ms target -- that ratio is noisy across machines, but an absolute ms figure
             would be far noisier). Gated the same way as every other target: report-only unless
@@ -109,6 +109,11 @@ public static class Program
                 distinct scenario ranges in one synthetic ~2,000-scenario feature file (the Run
                 CodeLens bridge's per-target resolution, modelling many simultaneously-visible
                 Run lenses on a very large file) and races the same cheap foldingRange read.
+              - (issue #542, needs --corpus-assembly): fires a storm of repeated, identical
+                reqnroll/projectLoaded re-sends -- the shape Visual Studio's OnBuildDone takes
+                after several rapid rebuilds -- and races the same cheap foldingRange read,
+                checking that the assembly-hash guard really does keep a redundant rebuild-refresh
+                cheap rather than degrading dispatch fairness.
 
             'session' OPTIONS
               Models one user editing one active document: each edit fires a burst of requests
