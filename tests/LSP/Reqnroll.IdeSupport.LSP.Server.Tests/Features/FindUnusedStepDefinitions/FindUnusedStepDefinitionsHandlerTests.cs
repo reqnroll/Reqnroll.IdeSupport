@@ -32,19 +32,23 @@ public class FindUnusedStepDefinitionsHandlerTests
         _registryLookup.GetAllRegistries().Returns(entries.ToList());
 
     [Fact]
-    public async Task HandleAsync_delegates_to_service_with_project_name_and_registry_only()
+    public async Task HandleAsync_delegates_to_service_with_project_name_folder_and_registry()
     {
-        var owner    = new ProjectOwner("/ws/A.csproj", "net8.0");
+        var owner    = new ProjectOwner(@"/ws/A/A.csproj", "net8.0");
         var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>());
         SetupRegistries(("A", owner, registry));
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(Array.Empty<UnusedStepDefinition>());
 
         await CreateSut().HandleAsync(CancellationToken.None);
 
+        // ProjectFolder is derived from Owner.ProjectFile's directory (issue #547's ownership
+        // attribution needs the project's own folder, not just its name/registry).
         _service.Received(1).FindUnusedStepDefinitions(
-            Arg.Is<IReadOnlyList<(string ProjectName, ProjectBindingRegistry Registry)>>(
-                r => r.Count == 1 && r[0].ProjectName == "A" && r[0].Registry == registry));
+            Arg.Is<IReadOnlyList<(string ProjectName, string ProjectFolder, ProjectBindingRegistry Registry)>>(
+                r => r.Count == 1 && r[0].ProjectName == "A"
+                     && r[0].ProjectFolder == System.IO.Path.GetDirectoryName(owner.ProjectFile)
+                     && r[0].Registry == registry));
     }
 
     [Fact]
@@ -52,7 +56,7 @@ public class FindUnusedStepDefinitionsHandlerTests
     {
         SetupRegistries(("A", new ProjectOwner("/ws/A.csproj", "net8.0"),
             ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(new[]
                 {
                     new UnusedStepDefinition(
@@ -85,7 +89,7 @@ public class FindUnusedStepDefinitionsHandlerTests
         // isResolved/recordedSourceFile so a client can explain it.
         SetupRegistries(("A", new ProjectOwner("/ws/A.csproj", "net8.0"),
             ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(new[]
                 {
                     new UnusedStepDefinition(
@@ -116,7 +120,7 @@ public class FindUnusedStepDefinitionsHandlerTests
     {
         SetupRegistries(("A", new ProjectOwner("/ws/A.csproj", "net8.0"),
             ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(new[]
                 {
                     new UnusedStepDefinition("A", "C", "M", "x", "/ws/Steps.cs", SourceLine: 10, SourceColumn: 1),
@@ -132,7 +136,7 @@ public class FindUnusedStepDefinitionsHandlerTests
     {
         SetupRegistries(("A", new ProjectOwner("/ws/A.csproj", "net8.0"),
             ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(new[]
                 {
                     new UnusedStepDefinition("A", "C", "M", "x", "/ws/Steps.cs", SourceLine: 1, SourceColumn: 5),
@@ -147,7 +151,7 @@ public class FindUnusedStepDefinitionsHandlerTests
     public async Task HandleAsync_no_projects_returns_empty_response()
     {
         SetupRegistries();
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(Array.Empty<UnusedStepDefinition>());
 
         var result = await CreateSut().HandleAsync(CancellationToken.None);
@@ -160,7 +164,7 @@ public class FindUnusedStepDefinitionsHandlerTests
     {
         SetupRegistries(("TestProject", new ProjectOwner("", ""),
             ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
-        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, ProjectBindingRegistry)>>())
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
                 .Returns(new[]
                 {
                     new UnusedStepDefinition("TestProject", "C", "M", "unused step", "/workspace/Steps.cs", 1, 1),

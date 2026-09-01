@@ -79,9 +79,18 @@ public class FindUnusedStepDefinitionsServiceTests
         return new StepBindingMatch("file:///any.feature", range, result);
     }
 
-    private static (string ProjectName, ProjectBindingRegistry Registry)
+    // Default folder under which every MakeBinding/MakeUnresolvedBinding fixture's source file
+    // lives ("/ws/..."), so existing single- and multi-registry tests that don't care about
+    // ownership attribution keep working unchanged: every entry is trivially its own folder owner.
+    private const string DefaultProjectFolder = "/ws";
+
+    private static (string ProjectName, string ProjectFolder, ProjectBindingRegistry Registry)
         MakeEntry(string projectName, params ProjectStepDefinitionBinding[] bindings) =>
-        (projectName, ProjectBindingRegistry.FromBindings(bindings));
+        MakeEntry(projectName, DefaultProjectFolder, bindings);
+
+    private static (string ProjectName, string ProjectFolder, ProjectBindingRegistry Registry)
+        MakeEntry(string projectName, string projectFolder, params ProjectStepDefinitionBinding[] bindings) =>
+        (projectName, projectFolder, ProjectBindingRegistry.FromBindings(bindings));
 
     /// <summary>Stubs <see cref="IBindingMatchService.FindUsages(BindingId,IReadOnlyCollection{ProjectOwner})"/> for the given binding's identity to return <paramref name="usages"/>.</summary>
     private void StubUsagesFor(ProjectStepDefinitionBinding binding, params StepBindingMatch[] usages)
@@ -95,7 +104,7 @@ public class FindUnusedStepDefinitionsServiceTests
     [Fact]
     public void No_projects_returns_empty_result()
     {
-        var result = CreateSut().FindUnusedStepDefinitions(Array.Empty<(string, ProjectBindingRegistry)>());
+        var result = CreateSut().FindUnusedStepDefinitions(Array.Empty<(string, string, ProjectBindingRegistry)>());
 
         result.Should().BeEmpty();
     }
@@ -236,6 +245,65 @@ public class FindUnusedStepDefinitionsServiceTests
         result.Should().HaveCount(2);
     }
 
+    // ── Cross-project attribution (issue #547) ─────────────────────────────────
+    //
+    // A project that references another Reqnroll-bearing project (a class library) has that
+    // library's bindings show up in its own discovery run too, alongside the library's own
+    // separately-discovered registry reporting the very same binding under its own project name.
+    // The row must be reported exactly once, attributed to whichever project's own folder
+    // actually contains the binding's source -- the true owner -- not to whichever registry
+    // happened to be enumerated first.
+
+    [Fact]
+    public void Duplicate_binding_across_projects_is_attributed_to_the_project_whose_folder_owns_the_source()
+    {
+        // "MyLibrary" directly owns Steps.cs (it lives under its folder); "ReferencingProject"
+        // only sees it because its own discovery run transitively picked it up.
+        var binding = MakeBinding("/ws/MyLibrary/Steps.cs", line: 10);
+
+        var referencingProjectEntry = MakeEntry("ReferencingProject", "/ws/ReferencingProject", binding);
+        var libraryEntry            = MakeEntry("MyLibrary", "/ws/MyLibrary", binding);
+
+        // Registration order deliberately puts the non-owning project first, so a passing test
+        // proves the folder-ownership tiebreak is doing the work, not first-seen order.
+        var result = CreateSut().FindUnusedStepDefinitions(new[] { referencingProjectEntry, libraryEntry });
+
+        result.Should().ContainSingle();
+        result.Single().ProjectName.Should().Be("MyLibrary");
+    }
+
+    [Fact]
+    public void Duplicate_binding_across_projects_attributes_correctly_regardless_of_registration_order()
+    {
+        var binding = MakeBinding("/ws/MyLibrary/Steps.cs", line: 10);
+
+        var referencingProjectEntry = MakeEntry("ReferencingProject", "/ws/ReferencingProject", binding);
+        var libraryEntry            = MakeEntry("MyLibrary", "/ws/MyLibrary", binding);
+
+        // Owning project registered first this time -- same outcome either way.
+        var result = CreateSut().FindUnusedStepDefinitions(new[] { libraryEntry, referencingProjectEntry });
+
+        result.Should().ContainSingle();
+        result.Single().ProjectName.Should().Be("MyLibrary");
+    }
+
+    [Fact]
+    public void Duplicate_binding_reported_by_two_non_owning_projects_falls_back_to_first_seen()
+    {
+        // Neither registry's folder contains the source (e.g. a prebuilt external binding
+        // assembly whose declaring project isn't loaded in this workspace at all) -- previous,
+        // first-seen behaviour is preserved rather than dropping the row.
+        var binding = MakeBinding("/elsewhere/Steps.cs", line: 10);
+
+        var entryA = MakeEntry("A", "/ws/A", binding);
+        var entryB = MakeEntry("B", "/ws/B", binding);
+
+        var result = CreateSut().FindUnusedStepDefinitions(new[] { entryA, entryB });
+
+        result.Should().ContainSingle();
+        result.Single().ProjectName.Should().Be("A");
+    }
+
     // ── FindUsages is called with no project filter (global intersection) ──────
 
     [Fact]
@@ -291,7 +359,7 @@ public class FindUnusedStepDefinitionsServiceTests
     public void Skips_invalid_registry()
     {
         var result = CreateSut().FindUnusedStepDefinitions(
-            new[] { ("A", ProjectBindingRegistry.Invalid) });
+            new[] { ("A", DefaultProjectFolder, ProjectBindingRegistry.Invalid) });
 
         result.Should().BeEmpty();
     }
