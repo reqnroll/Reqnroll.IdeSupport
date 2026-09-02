@@ -308,6 +308,31 @@ public sealed class LspServerHarness : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Waits until no further <c>workspace/semanticTokens/refresh</c> request has arrived for
+    /// <paramref name="quietMs"/>, or the timeout elapses; returns true if it went quiet. Use
+    /// before asserting on <see cref="RefreshCount"/>: the refresh is debounced, so a count read
+    /// while the window is still open measures how fast the assertion ran, not how well the
+    /// server coalesced.
+    /// </summary>
+    public async Task<bool> WaitForRefreshQuiescenceAsync(int quietMs = 1500, int timeoutMs = 10000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            Task<int> wait;
+            lock (_refreshLock) wait = _refreshSignal.Task;
+
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            var quiet = Math.Min(quietMs, Math.Max(0, remaining));
+            var completed = await Task.WhenAny(wait, Task.Delay(quiet)).ConfigureAwait(false);
+
+            if (completed != wait)
+                return true;
+        }
+        return false;
+    }
+
     public ValueTask DisposeAsync()
     {
         try { (_client as IDisposable)?.Dispose(); } catch { }
