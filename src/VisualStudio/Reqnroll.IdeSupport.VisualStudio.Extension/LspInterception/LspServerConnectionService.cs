@@ -54,9 +54,18 @@ internal sealed class LspServerConnectionService : IDisposable
     // JoinableTask (not a plain Task) so GetConnectionAsync's await is JTF-aware — avoids the
     // VSTHRD003 "awaiting a foreign task" analyzer error for a task started outside the awaiting
     // method's own async context. StartAsync itself never touches the UI thread.
-    // Result is just success/failure now (issue #156): the actual IDuplexPipe handed to VS is no
-    // longer produced once and cached here -- see GetConnectionAsync/CreateFreshVsFacingPipe.
-    private readonly Microsoft.VisualStudio.Threading.JoinableTask<bool> _startTask;
+    // The result is the launched generation's LspInterceptingPipe, not the IDuplexPipe handed to VS
+    // — that is still built per call by CreateFreshVsFacingPipe (issue #156). Returning it from the
+    // task rather than only assigning a field matters for issue #555: a concurrent relaunch can null
+    // that field mid-swap, and a caller that read it then would return no connection at all, which
+    // disables the provider for the session. GetConnectionAsync validates this result against the
+    // current generation instead.
+    // No longer readonly (issue #555): a server that VS has ended with `exit` is replaced by a new
+    // launch, and this field points at whichever generation's launch is current. Guarded by
+    // _startLock.
+    private Microsoft.VisualStudio.Threading.JoinableTask<LspInterceptingPipe?> _startTask;
+    private readonly object _startLock = new object();
+    private int _generation = 1;
 
     private Process? _serverProcess;
     private LspInspectorLogger? _inspectorLogger;
@@ -93,7 +102,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
         // Fire off immediately; not awaited here. Consumers (ReqnrollLanguageClient) await
         // GetConnectionAsync() whenever they're ready, which may be well after this completes.
-        _startTask = ThreadHelper.JoinableTaskFactory.RunAsync(StartAsync);
+        _startTask = ThreadHelper.JoinableTaskFactory.RunAsync(() => StartAsync(_generation));
     }
 
     /// <summary>
@@ -135,11 +144,195 @@ internal sealed class LspServerConnectionService : IDisposable
     /// </returns>
     public async Task<IDuplexPipe?> GetConnectionAsync()
     {
-        var started = await _startTask.JoinAsync().ConfigureAwait(false);
-        if (!started || _interceptingPipe is null)
-            return null;
+        // Bounded retry, because a relaunch started by a *concurrent* caller can supersede the
+        // generation this call awaited, and neither obvious shortcut is safe: handing back the
+        // superseded generation's pipe reintroduces the dead-connection bug this class now exists to
+        // prevent, while re-reading the field can catch it momentarily null (mid-relaunch) and return
+        // null — which makes ReqnrollLanguageClient set Enabled = false and disable the provider for
+        // the rest of the session. So the generation is re-validated under the lock and, if it has
+        // been superseded, the call simply tries again against the new one.
+        const int maxAttempts = 3;
 
-        return _interceptingPipe.CreateFreshVsFacingPipe();
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            if (_disposed)
+                return null;
+
+            var pipe = await EnsureServerStarted().JoinAsync().ConfigureAwait(false);
+
+            // A launch that failed produces no pipe; that is terminal, exactly as before.
+            if (pipe is null)
+                return null;
+
+            lock (_startLock)
+            {
+                if (!_disposed && ReferenceEquals(pipe, _interceptingPipe) && !pipe.ServerTerminated)
+                    return pipe.CreateFreshVsFacingPipe();
+            }
+        }
+
+        _logger.LogWarning(
+            "LspServerConnectionService: gave up after {MaxAttempts} attempts — every server generation " +
+            "this call observed was superseded before a connection could be handed to VS.", maxAttempts);
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the launch task for a usable server, starting a replacement first if the current one
+    /// has gone (issue #555).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// VS ends an LSP session by sending <c>shutdown</c> then <c>exit</c>, and it does that on a
+    /// <b>solution close</b>, not only at IDE shutdown. Those messages reach the real server, which
+    /// obeys and terminates. VS then opens a fresh session against the new solution — a new
+    /// <c>CreateServerConnectionAsync</c> call followed by a fresh <c>initialize</c>. Before this,
+    /// that call was handed a new VS-facing pipe over the dead process's stdio, VS's
+    /// <c>initialize</c> went unanswered forever, and every later request hung until its own
+    /// cancellation token tripped: no LSP service again for the rest of the IDE session, whatever
+    /// the user reopened.
+    /// </para>
+    /// <para>
+    /// A new session therefore gets a new server process. That is also what the protocol expects —
+    /// <c>initialize</c> is specified to happen exactly once per server lifetime, so re-initializing
+    /// a surviving server was never an option, and a fresh process is the only thing that correctly
+    /// discards the previous solution's project/binding registries too.
+    /// </para>
+    /// <para>
+    /// The trigger is deliberately "the previous session was terminated", not "VS called
+    /// <c>CreateServerConnectionAsync</c> again". VS also makes that call mid-session for extension
+    /// hot-reload without any solution change (issue #156), and relaunching a healthy server on
+    /// every call would thrash; in that case the live server is reused exactly as before, with only
+    /// a fresh VS-facing pipe.
+    /// </para>
+    /// </remarks>
+    private Microsoft.VisualStudio.Threading.JoinableTask<LspInterceptingPipe?> EnsureServerStarted()
+    {
+        lock (_startLock)
+        {
+            // Re-checked here, not just in GetConnectionAsync: a caller that passed that check just
+            // before Dispose ran would otherwise launch a replacement server nothing will ever shut
+            // down, since Dispose has already captured and cleared the fields it tears down.
+            if (_disposed || !IsCurrentServerDead())
+                return _startTask;
+
+            var previousGeneration = _generation;
+            DiscardDeadGeneration();
+            _generation++;
+
+            _logger.LogInformation(
+                "LspServerConnectionService: server generation #{Previous} is gone (VS ended the LSP session, " +
+                "or the process exited); launching generation #{Next} for the new session (issue #555).",
+                previousGeneration, _generation);
+
+            // The previous generation's server knew the previous solution's documents; the new one
+            // starts empty and VS will re-open documents against it.
+            _activationState.Reset();
+
+            var generation = _generation;
+            _startTask = ThreadHelper.JoinableTaskFactory.RunAsync(() => StartAsync(generation));
+            return _startTask;
+        }
+    }
+
+    /// <summary>
+    /// Whether the server for the current generation is gone and a replacement is needed.
+    /// </summary>
+    /// <remarks>
+    /// A launch still in flight is not dead — <see cref="GetConnectionAsync"/> simply awaits it. A
+    /// launch that already failed is not "dead" either: it never produced a server, so it is left
+    /// alone rather than retried on every call, preserving the pre-existing behaviour where a
+    /// missing or unstartable server executable fails once and disables the provider.
+    /// </remarks>
+    private bool IsCurrentServerDead()
+    {
+        if (!_startTask.IsCompleted)
+            return false;
+
+        var pipe = _interceptingPipe;
+        if (pipe is null)
+            return false;
+
+        if (pipe.ServerTerminated)
+            return true;
+
+        try
+        {
+            return _serverProcess is null || _serverProcess.HasExited;
+        }
+        catch (InvalidOperationException)
+        {
+            // No process associated with the object any more — treat as gone.
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Releases the current generation's pipe, inspector log, process handle and job object so a
+    /// replacement can be launched. Called under <see cref="_startLock"/>.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="Dispose"/> this runs no <c>shutdown</c>/<c>exit</c> negotiation: it is only
+    /// reached when the server is already terminating or gone, so there is nothing left to negotiate
+    /// with. The wait-then-kill tail still runs on the thread pool, since the process may be a
+    /// few milliseconds from exiting and this method holds a lock.
+    /// </remarks>
+    private void DiscardDeadGeneration()
+    {
+        var interceptingPipe = _interceptingPipe;
+        var inspectorLogger  = _inspectorLogger;
+        var serverProcess    = _serverProcess;
+        var childJob         = _childJob;
+
+        // Releases anything still awaiting this server. Already true for the `exit` path (the send
+        // pump marks it as the notification goes out), but not when the process died on its own —
+        // a crash leaves callers waiting on responses that can never arrive.
+        interceptingPipe?.MarkServerTerminated("its generation is being discarded");
+
+        _codeLensRefreshInterceptor?.Dispose();
+        _codeLensRefreshInterceptor   = null;
+        _shutdownHandshakeInterceptor = null;
+        _interceptingPipe             = null;
+        _inspectorLogger              = null;
+        _serverProcess                = null;
+        _childJob                     = null;
+
+        FireAndForgetExtensions.FireAndForget(
+            () => DiscardServerAsync(interceptingPipe, serverProcess, inspectorLogger, childJob),
+            _logger, nameof(DiscardServerAsync));
+    }
+
+    /// <summary>Disposes a dead generation's resources, killing the process if it has not finished exiting.</summary>
+    private Task DiscardServerAsync(
+        LspInterceptingPipe? interceptingPipe,
+        Process? serverProcess,
+        LspInspectorLogger? inspectorLogger,
+        ChildProcessJob? childJob)
+    {
+        try
+        {
+            interceptingPipe?.Dispose();
+            inspectorLogger?.Dispose();
+
+            if (serverProcess is not null && !serverProcess.WaitForExit(GracefulExitTimeoutMs))
+            {
+                _logger.LogWarning(
+                    "LspServerConnectionService: replaced server (PID {ProcessId}) had not exited {TimeoutMs}ms " +
+                    "after being asked to; killing.", serverProcess.Id, GracefulExitTimeoutMs);
+                try { serverProcess.Kill(); } catch { /* best-effort */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "LspServerConnectionService: discarding the replaced server generation threw.");
+        }
+        finally
+        {
+            serverProcess?.Dispose();
+            childJob?.Dispose();
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -171,16 +364,18 @@ internal sealed class LspServerConnectionService : IDisposable
         "--ide visualstudio --log-level Warning --protocol-log-level Warning --trace Off";
 #endif
 
-    private async Task<bool> StartAsync()
+    private async Task<LspInterceptingPipe?> StartAsync(int generation)
     {
         var serverExe = ResolveServerExePath(typeof(LspServerConnectionService).Assembly.Location);
 
-        _logger.LogInformation("LspServerConnectionService: starting server. Server exe path: {ServerExe}", serverExe);
+        _logger.LogInformation(
+            "LspServerConnectionService: starting server (generation #{Generation}). Server exe path: {ServerExe}",
+            generation, serverExe);
 
         if (!File.Exists(serverExe))
         {
             _logger.LogError("LspServerConnectionService: server executable not found at {ServerExe}.", serverExe);
-            return false;
+            return null;
         }
 
         try
@@ -293,12 +488,12 @@ internal sealed class LspServerConnectionService : IDisposable
             // own internal CTS (cancelled in Dispose) provides the shutdown signal.
             await _interceptingPipe.StartAsync(CancellationToken.None).ConfigureAwait(false);
 
-            return true;
+            return _interceptingPipe;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "LspServerConnectionService: failed to start server.");
-            return false;
+            return null;
         }
     }
 

@@ -102,6 +102,24 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     private bool _disposed;
 
+    // ── Session termination (issue #555) ────────────────────────────────────
+    // Set once this connection's server has been told to terminate (VS's own `exit`) or is known to
+    // have gone. Everything downstream is then pointless: the process is on its way out, so injected
+    // traffic can only hang until its caller's token trips.
+    private volatile bool _serverTerminated;
+
+    /// <summary>
+    /// <see langword="true"/> once the server behind this pipe has been asked to <c>exit</c> (or is
+    /// otherwise known to be gone), meaning this connection can never serve another request.
+    /// </summary>
+    /// <remarks>
+    /// Issue #555: VS ends an LSP session by sending <c>shutdown</c> then <c>exit</c> — which it does
+    /// on a solution close, not only at IDE shutdown. Those go through to the real server, which
+    /// obeys and terminates. <see cref="LspServerConnectionService"/> reads this to know the
+    /// connection is spent and a fresh server must be launched for the next session.
+    /// </remarks>
+    public bool ServerTerminated => _serverTerminated;
+
     /// <summary>
     /// Initialises the intercepting pipe but does not start pumping yet.
     /// Call <see cref="StartAsync"/> to begin.
@@ -230,6 +248,50 @@ internal sealed class LspInterceptingPipe : IDisposable
 
         return new DuplexPipeAdapter(newToVsPipe.Reader, newFromVsPipe.Writer);
     }
+
+    /// <summary>
+    /// Records that the server behind this pipe is terminating, and releases everything still
+    /// waiting on it (issue #555).
+    /// </summary>
+    /// <param name="reason">Why the server is considered gone; logged.</param>
+    /// <remarks>
+    /// Idempotent, and safe to call from any thread or from
+    /// <see cref="LspServerConnectionService"/> when it notices the process has exited by some other
+    /// route (a crash, or being killed). Faulting the pending injected requests here is the point:
+    /// without it they sit until each caller's own <see cref="CancellationToken"/> trips, which is
+    /// what turned this failure into a stream of <c>OperationCanceledException</c>s from every
+    /// CodeLens and navigation-bar request for the rest of the session, rather than a prompt
+    /// "there is no server".
+    /// </remarks>
+    public void MarkServerTerminated(string reason)
+    {
+        if (_serverTerminated) return;
+        _serverTerminated = true;
+
+        _logger.LogInformation(
+            "LspInterceptingPipe: server considered terminated — {Reason}. This connection is spent; " +
+            "further injected traffic is refused and a new server must be launched for the next " +
+            "session (issue #555).", reason);
+
+        foreach (var kv in _pendingRequests)
+            kv.Value.TrySetResult(null);
+        _pendingRequests.Clear();
+    }
+
+    /// <summary>
+    /// True if <paramref name="body"/> is the LSP <c>exit</c> notification — a notification (no
+    /// <c>id</c>) whose method is <c>exit</c>. Per the spec this asks the server to terminate its
+    /// process, so it is the definitive end-of-session marker on the VS → server direction.
+    /// </summary>
+    /// <remarks>
+    /// An <c>id</c> present but JSON-null counts as absent: <c>JObject["id"]</c> returns a
+    /// <see cref="JTokenType.Null"/> token for <c>"id":null</c>, not a C# <see langword="null"/>, so
+    /// testing for the latter alone would miss such a frame and leave the connection looking alive
+    /// after its server had been told to leave — the whole failure this detection exists to prevent.
+    /// </remarks>
+    private static bool IsExitNotification(JObject body) =>
+        (body["id"] is null || body["id"]!.Type == JTokenType.Null) &&
+        string.Equals(body["method"]?.Value<string>(), "exit", StringComparison.Ordinal);
 
     /// <summary>Removes tracked request→session entries older than <paramref name="minimumLiveSessionId"/> (issue #395).</summary>
     private void PurgeStaleRequestSessions(int minimumLiveSessionId)
@@ -423,8 +485,15 @@ internal sealed class LspInterceptingPipe : IDisposable
                 var result  = await RunInterceptorsAsync(message, _sendInterceptors, ct).ConfigureAwait(false);
 
                 if (result == LspInterceptorResult.PassThrough)
+                {
                     await WriteFrameGuardedAsync(_serverPipe.Output, frame.RawBytes, lockDestination: true, ct)
                         .ConfigureAwait(false);
+
+                    // Only after the frame has actually gone out, and only if it did (an interceptor
+                    // that consumed `exit` means the server was never told to leave). Issue #555.
+                    if (IsExitNotification(body))
+                        MarkServerTerminated("VS sent `exit` on this connection");
+                }
             }
         }
         catch (OperationCanceledException) { /* normal shutdown, or superseded by a fresh session */ }
@@ -683,6 +752,17 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         if (_disposed) return;
 
+        // Issue #555: after `exit` the server is on its way out, so this would write into a stream
+        // nothing is reading. Observed in the wild: our own StepCodeLens/navigation-bar traffic kept
+        // being injected for ~200ms after VS's `exit` and on through the following session.
+        if (_serverTerminated)
+        {
+            _logger.LogInformation(
+                "LspInterceptingPipe: refusing to inject notification {Method} — the server on this " +
+                "connection has terminated.", method);
+            return;
+        }
+
         // Build the JSON-RPC notification frame.
         var body = string.IsNullOrEmpty(paramsJson)
             ? $"{{\"jsonrpc\":\"2.0\",\"method\":{JsonEscape(method)}}}"
@@ -739,6 +819,17 @@ internal sealed class LspInterceptingPipe : IDisposable
         CancellationToken cancellationToken)
     {
         if (_disposed) return null;
+
+        // Issue #555: see SendNotificationToServerAsync. A request is the worse case of the two —
+        // it would await a response that can never arrive, so the caller blocks until its own token
+        // trips rather than finding out immediately that there is no server.
+        if (_serverTerminated)
+        {
+            _logger.LogInformation(
+                "LspInterceptingPipe: refusing to inject request {Method} — the server on this " +
+                "connection has terminated.", method);
+            return null;
+        }
 
         var id  = RequestIdPrefix + Guid.NewGuid().ToString("N");
         var tcs = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);

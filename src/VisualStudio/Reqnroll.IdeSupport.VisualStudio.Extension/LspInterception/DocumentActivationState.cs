@@ -120,6 +120,26 @@ internal sealed class DocumentActivationState
         }
     }
 
+    /// <summary>
+    /// Forgets every file's phase, as when the server this state described has been replaced
+    /// (issue #555).
+    /// </summary>
+    /// <remarks>
+    /// This state is "what has this server already been told", so it only means anything relative to
+    /// one server process. A relaunched server has no documents open and has received no activation
+    /// notifications; carrying the old phases over would leave files stuck in
+    /// <see cref="DocumentActivationPhase.Activated"/> and suppress the notification the new server
+    /// still needs. The state object itself outlives the server because it is shared with the
+    /// UI-thread <c>WindowActivated</c> listener, so it is cleared rather than recreated.
+    /// </remarks>
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            _phases.Clear();
+        }
+    }
+
     private DocumentActivationPhase GetPhase(string filePath)
         => _phases.TryGetValue(filePath, out var phase) ? phase : DocumentActivationPhase.NotSeen;
 }
