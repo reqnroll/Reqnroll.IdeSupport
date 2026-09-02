@@ -111,11 +111,12 @@ public sealed class DiagnosticsSteps
         var uri = _ctx.UriFor(fileName);
 
         // Wait for the first publish so this cannot pass merely because nothing has arrived yet,
-        // then give the pipeline the rest of the window to settle before asserting the absence.
+        // then wait for the stream to go quiet. Absence must be asserted against the settled
+        // state: a step is briefly reported undefined while a registry update propagates, and
+        // asserting on the first set to arrive turns that flicker into a failure that reads
+        // exactly like a lost binding.
         await _ctx.Harness.WaitForDiagnosticsAsync(uri, p => p is not null).ConfigureAwait(false);
-        await _ctx.Harness.WaitForDiagnosticsAsync(uri, p =>
-            p is not null && p.Diagnostics.Any(d => d.Source == source), timeoutMs: 1000)
-            .ConfigureAwait(false);
+        await _ctx.Harness.WaitForDiagnosticsQuiescenceAsync().ConfigureAwait(false);
 
         var published = _ctx.Harness.PublishedDiagnosticsFor(uri);
         published.Should().NotBeNull(

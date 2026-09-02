@@ -231,6 +231,37 @@ public sealed class LspServerHarness : IAsyncDisposable
     }
 
     /// <summary>
+    /// Waits until no further <c>publishDiagnostics</c> notification has arrived for any URI for
+    /// <paramref name="quietMs"/>, or the timeout elapses; returns true if it went quiet.
+    /// <para>
+    /// Needed for any assertion about the <em>absence</em> of a diagnostic. The pipeline
+    /// republishes as bindings change, and intermediate states are genuinely observable on the
+    /// wire — a step can be briefly reported undefined while a registry update is still
+    /// propagating. Asserting on the first set that arrives would turn that flicker into a
+    /// failure and read as a lost binding, so absence is only ever asserted once the stream has
+    /// settled.
+    /// </para>
+    /// </summary>
+    public async Task<bool> WaitForDiagnosticsQuiescenceAsync(int quietMs = 750, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            Task<int> wait;
+            lock (_diagnosticsLock) wait = _diagnosticsSignal.Task;
+
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            var quiet = Math.Min(quietMs, Math.Max(0, remaining));
+            var completed = await Task.WhenAny(wait, Task.Delay(quiet)).ConfigureAwait(false);
+
+            // The quiet window elapsed with no new publish — the stream has settled.
+            if (completed != wait)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Waits until a <c>reqnroll/semanticTokens</c> push whose URI satisfies <paramref name="uriMatch"/>
     /// has been received, or the timeout elapses. Returns true if one arrived.
     /// </summary>

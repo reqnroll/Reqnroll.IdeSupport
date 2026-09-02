@@ -81,6 +81,23 @@ public sealed class CSharpBindingSteps
             $"binding registry change");
     }
 
+    /// <summary>
+    /// Same assertion with an explicit budget, for scenarios whose bindings come from the
+    /// out-of-process connector rather than the Roslyn live path: launching the connector process
+    /// and reflecting over a real assembly takes far longer than an in-process source parse, and
+    /// the first run in a test session pays the process's own cold start.
+    /// </summary>
+    [Then(@"the feature step ""([^""]*)"" is reported as bound within (\d+) seconds")]
+    public async Task ThenTheFeatureStepIsReportedAsBoundWithin(string stepText, int seconds)
+    {
+        var ok = await PollFeatureTokensAsync(
+            tokens => tokens.Count > 0 && !tokens.Any(t => IsUndefinedStepFor(t, stepText)),
+            timeoutMs: seconds * 1000);
+
+        ok.Should().BeTrue(
+            $"the step '{stepText}' should be matched within {seconds}s of discovery starting");
+    }
+
     [Then(@"the feature step ""(.*)"" is reported as bound")]
     public async Task ThenTheFeatureStepIsReportedAsBound(string stepText)
     {
