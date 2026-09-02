@@ -114,6 +114,12 @@ internal sealed class StepCodeLensState
     /// </summary>
     internal void InvalidateLensesForFile(string fileUri)
     {
+        // Always drop the cached server response for this file first (issue #552 follow-up),
+        // even when no lens instance is currently tracked for it below (e.g. the file isn't
+        // open) -- otherwise a stale cache entry would outlive this invalidation and get served
+        // to the next GetLensesAsync call regardless of the relabel this triggers.
+        Service?.InvalidateFile(fileUri);
+
         lock (_lensesLock)
         {
             if (!_lensesByFile.TryGetValue(fileUri, out var list))
@@ -142,6 +148,10 @@ internal sealed class StepCodeLensState
     /// </summary>
     internal void InvalidateAllTrackedLenses()
     {
+        // Drops every file's cached response up front, including files with no tracked lens
+        // instance below (the per-file loop only reaches files _lensesByFile already knows about).
+        Service?.InvalidateAll();
+
         List<string> fileUris;
         lock (_lensesLock)
         {

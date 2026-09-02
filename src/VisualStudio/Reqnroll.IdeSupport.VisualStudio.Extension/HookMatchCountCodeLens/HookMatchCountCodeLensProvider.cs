@@ -21,10 +21,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 /// <remarks>
 /// <para>
 /// A separate provider from <see cref="StepCodeLensProvider"/> rather than folding this lens kind
-/// into it: <see cref="StepCodeLensService"/> already round-trips the LSP server once per method
-/// with no caching, so a second provider issuing its own <c>textDocument/codeLens</c> request adds
-/// no new category of inefficiency, and keeping the two lens kinds in separate providers/files
-/// mirrors the LSP-server-side split (<c>StepCodeLensHandler</c> vs
+/// into it: both providers call the same shared <see cref="StepCodeLensState.Service"/>, whose
+/// internal per-file cache (issue #552 follow-up) amortises the <c>textDocument/codeLens</c> round
+/// trip across every method-level lens either provider asks for, so a second provider issuing its
+/// own request through it adds no new LSP traffic. Keeping the two lens kinds in separate
+/// providers/files mirrors the LSP-server-side split (<c>StepCodeLensHandler</c> vs
 /// <c>HookMatchCountCodeLensHandler</c>) and keeps the already-shipped step-usages code untouched
 /// apart from the command-name filter added alongside this provider (see
 /// <see cref="StepCodeLens.StepCodeLensProvider"/>).

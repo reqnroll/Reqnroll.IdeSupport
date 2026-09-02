@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -14,8 +15,15 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// list of <see cref="StepLensItem"/> records.
 /// </summary>
 /// <remarks>
-/// VS.Extensibility <c>ICodeLensProvider</c> calls this once per file refresh; the result is
-/// shared across all code-element lenses in the same file so the LSP round-trip is amortised.
+/// VS.Extensibility <c>ICodeLensProvider</c> calls <see cref="GetLensesAsync"/> once per
+/// method-level <c>CodeElement</c> in the active document (<see cref="StepCodeLens"/> and the
+/// separate <c>HookMatchCountCodeLens</c> provider both go through it), all requesting the same
+/// whole-document response — the internal cache amortises that down to one actual LSP round trip
+/// per file per paint cycle (issue #552 follow-up), shared by every concurrent caller for that
+/// file rather than each starting its own. Cleared via
+/// <see cref="InvalidateFile"/>/<see cref="InvalidateAll"/> whenever
+/// <see cref="StepCodeLensState"/> invalidates the lenses that would otherwise keep showing the
+/// stale cached result.
 /// </remarks>
 internal sealed class StepCodeLensService
 {
@@ -23,22 +31,33 @@ internal sealed class StepCodeLensService
 
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<StepCodeLensService> _logger;
+    private readonly StepCodeLensResultCache _cache;
 
     /// <summary>Creates the service over the given LSP transport pipe.</summary>
     public StepCodeLensService(LspInterceptingPipe pipe, ILogger<StepCodeLensService> logger)
     {
         _pipe   = pipe;
         _logger = logger;
+        _cache  = new StepCodeLensResultCache(FetchLensesAsync, ThreadHelper.JoinableTaskFactory);
     }
 
     /// <summary>
     /// Queries the LSP server for all step-binding lenses in <paramref name="fileUri"/>.
     /// Returns an empty list when the file has no step-binding attributes or has not yet
-    /// been discovered.
+    /// been discovered. Cached per file until <see cref="InvalidateFile"/>/<see cref="InvalidateAll"/>.
     /// </summary>
-    public async Task<IReadOnlyList<StepLensItem>> GetLensesAsync(
+    public Task<IReadOnlyList<StepLensItem>> GetLensesAsync(
         string            fileUri,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken) =>
+        _cache.GetLensesAsync(fileUri, cancellationToken);
+
+    /// <summary>Drops the cached response for <paramref name="fileUri"/> so the next <see cref="GetLensesAsync"/> call re-fetches it.</summary>
+    public void InvalidateFile(string fileUri) => _cache.InvalidateFile(fileUri);
+
+    /// <summary>Drops every cached response so the next <see cref="GetLensesAsync"/> call for any file re-fetches it.</summary>
+    public void InvalidateAll() => _cache.InvalidateAll();
+
+    private async Task<IReadOnlyList<StepLensItem>> FetchLensesAsync(string fileUri, CancellationToken cancellationToken)
     {
         var paramsJson = BuildParams(fileUri);
 
