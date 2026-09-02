@@ -283,8 +283,14 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// <c>id</c>) whose method is <c>exit</c>. Per the spec this asks the server to terminate its
     /// process, so it is the definitive end-of-session marker on the VS → server direction.
     /// </summary>
+    /// <remarks>
+    /// An <c>id</c> present but JSON-null counts as absent: <c>JObject["id"]</c> returns a
+    /// <see cref="JTokenType.Null"/> token for <c>"id":null</c>, not a C# <see langword="null"/>, so
+    /// testing for the latter alone would miss such a frame and leave the connection looking alive
+    /// after its server had been told to leave — the whole failure this detection exists to prevent.
+    /// </remarks>
     private static bool IsExitNotification(JObject body) =>
-        body["id"] is null &&
+        (body["id"] is null || body["id"]!.Type == JTokenType.Null) &&
         string.Equals(body["method"]?.Value<string>(), "exit", StringComparison.Ordinal);
 
     /// <summary>Removes tracked request→session entries older than <paramref name="minimumLiveSessionId"/> (issue #395).</summary>

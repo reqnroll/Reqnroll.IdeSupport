@@ -231,6 +231,25 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Exit_carrying_an_explicit_json_null_id_still_terminates_the_connection()
+    {
+        // JObject["id"] returns a JTokenType.Null token for "id":null, not a C# null, so a check for
+        // the latter alone would miss this frame — leaving the connection looking alive after its
+        // server had been told to leave, which is the exact failure the detection exists to prevent.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"id\":null,\"method\":\"exit\"}");
+        await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+
+        await WaitForAsync(() => _pipe.ServerTerminated, ShortTimeout);
+    }
+
+    [Fact]
     public async Task Shutdown_alone_does_not_terminate_the_connection()
     {
         // Only `exit` ends the process. A `shutdown` with no `exit` after it leaves a server that is
