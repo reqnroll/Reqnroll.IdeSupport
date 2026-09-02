@@ -44,7 +44,8 @@ public sealed class CSharpBindingSteps
     public async Task WhenTheCsharpFileIsOpenedAndSavedToDiskWith(string fileName, string content)
     {
         await WhenTheCsharpFileIsOpenedWith(fileName, content);
-        var path = Path.Combine(_ctx.WorkspaceFolder, fileName);
+        var path = _ctx.PathFor(fileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, content);
     }
 
