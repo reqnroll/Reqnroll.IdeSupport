@@ -186,6 +186,28 @@ public sealed class ProtocolSteps
         await Task.Delay(300).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Sends a <c>reqnroll/projectFiles</c> delta notification adding files to the project's
+    /// membership index — the path an IDE glue layer takes when a file is re-included in the
+    /// project without a full re-send, which the design requires to restore that file's ownership
+    /// (and with it its binding-dependent features).
+    /// </summary>
+    [When(@"the project files delta adds files for ""(.*)"" with")]
+    public async Task WhenTheProjectFilesDeltaAdds(string projectFileName, Table table)
+    {
+        var project = _ctx.GetProject(projectFileName);
+
+        _ctx.Harness.Client.SendProjectFiles(new
+        {
+            projectFile = project.ProjectFile,
+            targetFrameworkMoniker = project.TargetFrameworkMoniker,
+            kind  = 1,    // Delta
+            files = ToFileEntries(table, added: true)
+        });
+
+        await Task.Delay(300).ConfigureAwait(false);
+    }
+
     // ── Then: handshake / capabilities ──────────────────────────────────────────
 
     [Then("the server advertises a semantic tokens provider")]
