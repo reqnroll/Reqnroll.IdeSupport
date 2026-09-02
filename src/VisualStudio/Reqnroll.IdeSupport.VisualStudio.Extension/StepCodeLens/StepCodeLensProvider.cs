@@ -21,7 +21,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// VS.Extensibility <c>ICodeLensProvider</c> is called once per C# code element (method,
 /// property, type) in the active document.  Because VS's built-in C# tagger places code
 /// elements at method level (not attribute level), this provider shows one lens per method.
-/// The label aggregates usage counts for all step-binding attributes on that method.
+/// The server aggregates usage counts across all of that method's step-binding attributes
+/// into a single lens (issue #552); this provider just renders it.
 /// </para>
 /// <para>
 /// Clicking a lens delegates to <see cref="FindStepUsagesService"/> + <see cref="FindStepUsagesRenderer"/>,
@@ -81,8 +82,9 @@ internal sealed class StepCodeLensProvider : ExtensionPart, ICodeLensProvider
 }
 
 /// <summary>
-/// A single step-usage code lens created for a C# method.  Aggregates usage counts for all
-/// step-binding attributes that fall within a window just above the method declaration.
+/// A single step-usage code lens created for a C# method.  Renders the server's one lens for
+/// that method (its usage count already aggregated across every step-binding attribute on it,
+/// issue #552), matched by falling within a window just above the method declaration.
 /// </summary>
 internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
 {
@@ -117,8 +119,8 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
     private const int AttributeLookahead = 5;
 
     /// <summary>
-    /// Returns the aggregated usage label for this method's step-binding attributes,
-    /// or an empty label if the method is not a step binding.
+    /// Returns this method's step-usage label (already aggregated server-side across every
+    /// binding attribute on it, issue #552), or an empty label if the method is not a step binding.
     /// </summary>
     public override async Task<CodeLensLabel> GetLabelAsync(
         CodeElementContext context,
@@ -148,30 +150,27 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
                 "nextMethod={NextMethod}, upperBound={UpperBound}, serverLensLines=[{ServerLensLines}]",
                 currentStartLine, nextMethod, upperBound, string.Join(",", lenses.Select(l => l.RangeLine)));
 
-            // Server lens lines are at the method-declaration line (>= currentStartLine). Filter
-            // to step-usage lenses by command name: since #373, the combined textDocument/codeLens
-            // response for a .cs file can also carry hook-match-count lenses (reqnroll.goToMatchingScenarios)
-            // when a [Binding] class mixes step and hook methods — without this filter those would
-            // get summed into this method's step-usage count too.
-            var attrLenses = lenses
-                .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound)
-                .Where(l => l.CommandName is "reqnroll.findStepUsages" or "reqnroll.noStepUsages")
-                .ToList();
+            // The server returns at most one step-usage lens per method, its title already the
+            // aggregated "N step usages" text across every binding attribute on it (issue #552) --
+            // OrderBy+FirstOrDefault (rather than Single) is just a defensive tie-break, not a
+            // real "pick among several" case. Server lens lines are at the method-declaration
+            // line (>= currentStartLine); filtered to step-usage lenses by command name since
+            // #373, the combined textDocument/codeLens response for a .cs file can also carry
+            // hook-match-count lenses (reqnroll.goToMatchingScenarios) when a [Binding] class
+            // mixes step and hook methods — this must never pick one of those up.
+            var methodLens = lenses
+                .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound &&
+                            l.CommandName is "reqnroll.findStepUsages" or "reqnroll.noStepUsages")
+                .OrderBy(l => l.RangeLine)
+                .FirstOrDefault();
 
-            if (attrLenses.Count == 0)
+            if (methodLens is null)
                 return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
 
-            // Sum usage counts across all step-binding attributes on this method.
-            var totalUsages = attrLenses
-                .Select(l => ParseCount(l.Title))
-                .Sum();
-
-            var text    = totalUsages == 1 ? "1 step usage" : $"{totalUsages} step usages";
-            var tooltip = "Reqnroll step usages for this binding";
             _logger.LogInformation(
                 "StepCodeLens.GetLabelAsync: {Text} for method at line {CurrentStartLine} in {FileUri}",
-                text, currentStartLine, _fileUri);
-            return new CodeLensLabel { Text = text, Tooltip = tooltip };
+                methodLens.Title, currentStartLine, _fileUri);
+            return new CodeLensLabel { Text = methodLens.Title, Tooltip = "Reqnroll step usages for this binding" };
         }
         catch (Exception ex)
         {
@@ -182,8 +181,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
     }
 
     /// <summary>
-    /// Opens the Find All References window for the first step-binding attribute found
-    /// within the attribute-lookback window above this method.
+    /// Opens the Find All References window for this method's step-usage lens.
     /// </summary>
     public override async Task ExecuteAsync(
         CodeElementContext context,
@@ -212,23 +210,23 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
             var nextMethod2      = _state.GetNextMethodLine(_fileUri.ToString(), currentStartLine);
             var upperBound2      = nextMethod2 >= 0 ? nextMethod2 : currentStartLine + AttributeLookahead;
 
-            // Use the first (topmost) server lens in this method's attribute block. Filtered to
-            // step-usage lenses by command name for the same reason as GetLabelAsync above —
-            // a hook-match-count lens in the same window must never be executed as a find-usages click.
-            var firstAttr = lenses
-                .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound2)
-                .Where(l => l.CommandName is "reqnroll.findStepUsages" or "reqnroll.noStepUsages")
+            // The server's single step-usage lens for this method (issue #552) — same
+            // position-window match GetLabelAsync uses above, filtered to step-usage lenses by
+            // command name so a hook-match-count lens in the same window is never clicked instead.
+            var methodLens = lenses
+                .Where(l => l.RangeLine >= currentStartLine && l.RangeLine < upperBound2 &&
+                            l.CommandName is "reqnroll.findStepUsages" or "reqnroll.noStepUsages")
                 .OrderBy(l => l.RangeLine)
                 .FirstOrDefault();
 
-            if (firstAttr is null) return;
+            if (methodLens is null) return;
 
             _logger.LogInformation(
                 "StepCodeLens.ExecuteAsync: invoking find usages at {FileUri}:{ArgLine}:{ArgChar}",
-                _fileUri, firstAttr.ArgLine, firstAttr.ArgChar);
+                _fileUri, methodLens.ArgLine, methodLens.ArgChar);
 
             var result = await findService
-                .FindUsagesAsync(_fileUri.ToString(), firstAttr.ArgLine, firstAttr.ArgChar, cancellationToken)
+                .FindUsagesAsync(_fileUri.ToString(), methodLens.ArgLine, methodLens.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
             if (!result.IsBinding) return;
@@ -258,15 +256,4 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
     /// fresh call to <see cref="GetLabelAsync"/> on VS's next paint cycle.
     /// </summary>
     public void InvalidateLabel() => Invalidate();
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static int ParseCount(string title)
-    {
-        // Title formats: "1 step usage" or "N step usages" or "0 step usages"
-        var space = title.IndexOf(' ');
-        if (space > 0 && int.TryParse(title.Substring(0, space), out var n))
-            return n;
-        return 0;
-    }
 }
