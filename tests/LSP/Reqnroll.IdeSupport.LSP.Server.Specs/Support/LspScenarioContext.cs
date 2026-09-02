@@ -102,9 +102,20 @@ public sealed class LspScenarioContext
         string? projectFolder = null,
         string? targetFrameworkMoniker = null)
     {
+        var folder = string.IsNullOrEmpty(projectFolder) ? WorkspaceFolder : PathFor(projectFolder);
+
+        // A bare file name is rooted *inside* the project's own folder, the way a real .csproj
+        // sits in its own directory. Leaving it at the workspace root would make
+        // Path.GetDirectoryName(ProjectFile) — which is how consumers such as
+        // FindUnusedStepDefinitionsHandler derive "this project's own folder" — resolve to the
+        // solution root for every project, so every project would appear to contain every file.
+        var file = Path.GetDirectoryName(projectFileName) is { Length: > 0 }
+            ? PathFor(projectFileName)
+            : Path.Combine(folder, projectFileName);
+
         var project = new SpecProject(
-            ProjectFile: PathFor(projectFileName),
-            ProjectFolder: string.IsNullOrEmpty(projectFolder) ? WorkspaceFolder : PathFor(projectFolder),
+            ProjectFile: file,
+            ProjectFolder: folder,
             TargetFrameworkMoniker: targetFrameworkMoniker ?? DefaultTargetFrameworkMoniker);
 
         // Keyed on the full project-file path, not the bare file name: two projects in different
