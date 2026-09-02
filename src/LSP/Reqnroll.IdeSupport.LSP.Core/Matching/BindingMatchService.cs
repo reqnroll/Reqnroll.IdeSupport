@@ -177,6 +177,57 @@ public sealed class BindingMatchService : IBindingMatchService
         return (snapshot.Length, snapshot.Sum(s => s.Steps.Count));
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<string> AuditIndexConsistency()
+    {
+        var anomalies = new List<string>();
+
+        // Snapshot the cache once: what the reverse index is allowed to contain.
+        var cached = _cache.ToArray();
+        var live = new HashSet<(MatchSetKey Key, StepBindingMatch Step)>();
+        foreach (var pair in cached)
+            foreach (var step in pair.Value.Steps)
+                live.Add((pair.Key, step));
+
+        // 1. Orphans: reverse-index entries whose (key, step) pair is no longer in the cache --
+        //    the signature of a Store call whose index writes survived its own cache entry being
+        //    replaced by a concurrent Store for the same key (the read-then-write race).
+        foreach (var indexPair in _reverseIndex)
+        {
+            foreach (var indexed in indexPair.Value)
+            {
+                if (live.Contains((indexed.Key, indexed.Step)))
+                    continue;
+
+                var reason = _cache.ContainsKey(indexed.Key)
+                    ? "step is not in the cached match set for that key (superseded set still indexed)"
+                    : "no cached match set for that key at all";
+                anomalies.Add(
+                    $"orphaned reverse-index entry: binding={indexPair.Key} doc={indexed.Step.FeatureDocumentId} " +
+                    $"line={indexed.Step.Range.StartLinePosition.Line} key.owner=" +
+                    $"'{(indexed.Key.Owner.IsKnown ? indexed.Key.Owner.ProjectFile : "<Unknown>")}|{indexed.Key.Owner.Tfm}' — {reason}");
+            }
+        }
+
+        // 2. Duplicate live entries for one document: a surviving Unknown placeholder alongside a
+        //    project-keyed entry, or two owner keys for the same document (e.g. the same project
+        //    seen with a different TFM). Both double every usage count for that document.
+        foreach (var group in cached.GroupBy(p => p.Key.DocumentId, StringComparer.OrdinalIgnoreCase))
+        {
+            if (group.Count() < 2)
+                continue;
+
+            var owners = string.Join(", ", group.Select(p =>
+                $"'{(p.Key.Owner.IsKnown ? p.Key.Owner.ProjectFile : "<Unknown>")}|{p.Key.Owner.Tfm}' ({p.Value.Steps.Count} step(s))"));
+            anomalies.Add(
+                $"document cached under {group.Count()} keys: doc={group.Key} owners=[{owners}] " +
+                "(expected for a feature linked into several projects; a bug when the same project " +
+                "appears twice, differs only by TFM, or an <Unknown> placeholder survived)");
+        }
+
+        return anomalies;
+    }
+
     private void CollectUsages(
         BindingId id, IReadOnlyCollection<ProjectOwner>? projectFilter, List<StepBindingMatch> usages)
     {

@@ -74,4 +74,13 @@ public interface IBindingMatchService
     /// sweep it's meant to be logged alongside. Not on any hot per-binding path.
     /// </summary>
     (int DocumentCount, int TotalStepCount) GetCacheStats();
+
+    /// <summary>
+    /// Issue #554 diagnostic: audits the invariant that the reverse index contains exactly the
+    /// steps of the match sets currently held in the cache, and that a document has at most one
+    /// live entry per owning project. Returns one human-readable line per anomaly (empty when the
+    /// index is consistent). O(cached steps) — call it only when a caller has already observed a
+    /// suspicious result (e.g. a duplicated usage), never on a hot path.
+    /// </summary>
+    IReadOnlyList<string> AuditIndexConsistency();
 }

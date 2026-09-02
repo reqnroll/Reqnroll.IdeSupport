@@ -171,6 +171,7 @@ public sealed class StepCodeLensHandler
             // same aggregate query Find Step Usages (FAR) already uses for this location.
             var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
             var usages = _matchService.FindUsages(bindingLocation, projectFilter);
+            LogDuplicateUsageDiagnostics(bindingLocation, usages);
             lenses.Add(BuildResolvedLens(range, uri, line, col, usages.Count));
         }
 
@@ -230,6 +231,54 @@ public sealed class StepCodeLensHandler
         }
 
         return Task.FromResult(BuildResolvedLens(lens.Range, uri, lens.Range.Start.Line, lens.Range.Start.Character, usages.Count));
+    }
+
+    /// <summary>
+    /// Issue #554 diagnostic: a step-usage count is inflated when the same feature step (same
+    /// document URI + same line) comes back more than once from the reverse index. That can only
+    /// happen when one feature document's match set is indexed twice — either an orphaned set
+    /// left behind by a concurrent <c>Store</c> for the same key, or two live cache entries for
+    /// the same document. Both are invisible in the count alone, so when a duplicate is seen this
+    /// logs the offending step plus <see cref="IBindingMatchService.AuditIndexConsistency"/>'s
+    /// verdict, which says which of the two it is. Silent (and O(usages)) in the normal case.
+    /// </summary>
+    private void LogDuplicateUsageDiagnostics(
+        SourceLocation bindingLocation, IReadOnlyList<StepBindingMatch> usages)
+    {
+        if (usages.Count < 2)
+            return;
+
+        var duplicates = usages
+            .GroupBy(u => (u.FeatureDocumentId, u.Range.StartLinePosition.Line),
+                     TupleComparer.OrdinalIgnoreCaseOnUri)
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        if (duplicates.Count == 0)
+            return;
+
+        foreach (var duplicate in duplicates)
+            _logger.LogWarning(
+                $"[DIAG-554] binding at {bindingLocation.SourceFile}:{bindingLocation.SourceFileLine} counts " +
+                $"the same feature step {duplicate.Count()} times: {duplicate.Key.FeatureDocumentId} " +
+                $"line {duplicate.Key.Line} (projects: " +
+                $"{string.Join(", ", duplicate.Select(d => d.ProjectName ?? "<Unknown>"))}).");
+
+        foreach (var anomaly in _matchService.AuditIndexConsistency())
+            _logger.LogWarning($"[DIAG-554] match-cache audit: {anomaly}");
+    }
+
+    /// <summary>Comparer for the (uri, line) duplicate grouping above: URIs compare case-insensitively, matching the rest of the document-keyed services.</summary>
+    private sealed class TupleComparer : IEqualityComparer<(string FeatureDocumentId, int Line)>
+    {
+        public static readonly TupleComparer OrdinalIgnoreCaseOnUri = new();
+
+        public bool Equals((string FeatureDocumentId, int Line) x, (string FeatureDocumentId, int Line) y) =>
+            x.Line == y.Line &&
+            string.Equals(x.FeatureDocumentId, y.FeatureDocumentId, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string FeatureDocumentId, int Line) obj) =>
+            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(obj.FeatureDocumentId ?? string.Empty), obj.Line);
     }
 
     private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens BuildResolvedLens(
