@@ -121,4 +121,24 @@ public class DocumentActivationStateTests
         // A second, unrelated file that was never opened must not be affected.
         sut.OnWindowActivated(other).Should().Be(DocumentActivationAction.None);
     }
+
+    [Fact]
+    public void Reset_forgets_activations_so_a_replacement_server_is_notified_again()
+    {
+        // Issue #555: this state records what a *particular* server has already been told. When VS
+        // ends the session and a replacement server is launched, a file left in the Activated phase
+        // would never produce another notification, so the new server would never learn the document
+        // is active.
+        var sut = new DocumentActivationState();
+
+        sut.OnDidOpen(Path);
+        sut.OnWindowActivated(Path).Should().Be(DocumentActivationAction.SendNow);
+        sut.OnWindowActivated(Path).Should().Be(DocumentActivationAction.None, "already activated for this server");
+
+        sut.Reset();
+
+        // The new server sees the document opened again, and activation is owed once more.
+        sut.OnDidOpen(Path);
+        sut.OnWindowActivated(Path).Should().Be(DocumentActivationAction.SendNow);
+    }
 }

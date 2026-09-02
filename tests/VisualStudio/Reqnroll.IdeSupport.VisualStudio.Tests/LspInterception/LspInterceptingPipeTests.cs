@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.IO.Pipelines;
@@ -199,6 +199,151 @@ public class LspInterceptingPipeTests : IAsyncLifetime
             m.Direction == LspMessageDirection.Send && m.Method == "reqnroll/resolveTestTargets");
         receiveInterceptor.Seen.Should().ContainSingle(m =>
             m.Direction == LspMessageDirection.Receive && m.Id!.Value<string>() == id);
+    }
+
+    // ── Session termination (issue #555) ─────────────────────────────────────────────────────
+    //
+    // VS ends an LSP session with `shutdown` then `exit`, and it does that on a solution close, not
+    // only at IDE shutdown. `exit` reaches the real server, which terminates — so everything after
+    // it on this connection is talking to a corpse. Captured live: VS's `exit` went out at +102ms,
+    // our own StepCodeLens/navigation-bar requests kept being injected at +142ms and +224ms and were
+    // never answered, and VS's `initialize` for the new session at +419ms hung forever.
+
+    [Fact]
+    public async Task Exit_forwarded_to_the_server_marks_the_connection_terminated()
+    {
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+        _pipe.ServerTerminated.Should().BeFalse();
+
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+
+        // `exit` is still honoured — the server is meant to receive it and terminate.
+        var forwarded = await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        forwarded.Should().Contain("exit");
+
+        await WaitForAsync(() => _pipe.ServerTerminated, ShortTimeout);
+    }
+
+    [Fact]
+    public async Task Shutdown_alone_does_not_terminate_the_connection()
+    {
+        // Only `exit` ends the process. A `shutdown` with no `exit` after it leaves a server that is
+        // still there to answer — treating it as gone would throw away a usable connection.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"shutdown\"}");
+        await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+
+        _pipe.ServerTerminated.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task An_injected_request_after_exit_returns_promptly_instead_of_awaiting_a_dead_server()
+    {
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+        await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        await WaitForAsync(() => _pipe.ServerTerminated, ShortTimeout);
+
+        // Uncancelled token on purpose: before this fix the only thing that ended such a request was
+        // the caller's own token, which is why the log filled with OperationCanceledException.
+        var result = await WithTimeoutAsync(
+            _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None), ShortTimeout);
+
+        result.Should().BeNull();
+        (await TryReadFrameAsync(serverSide.ServerSideStdin, TimeSpan.FromMilliseconds(300)))
+            .Should().BeNull("nothing should be written to a server that has been told to exit");
+    }
+
+    [Fact]
+    public async Task An_injected_notification_after_exit_is_not_written_to_the_server()
+    {
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}");
+        await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        await WaitForAsync(() => _pipe.ServerTerminated, ShortTimeout);
+
+        await _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", "{}", CancellationToken.None);
+
+        (await TryReadFrameAsync(serverSide.ServerSideStdin, TimeSpan.FromMilliseconds(300)))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_request_already_in_flight_is_released_when_the_server_terminates()
+    {
+        // The captured repro's requests were sent *before* the server finished exiting, so they were
+        // already waiting on a response that would never come. Marking the connection terminated has
+        // to release those too, not just refuse new ones.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var requestTask = _pipe.SendRequestToServerAsync("reqnroll/documentSymbolHierarchical", null, CancellationToken.None);
+        var forwarded = await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        forwarded.Should().Contain("reqnroll/documentSymbolHierarchical");
+
+        _pipe.MarkServerTerminated("test");
+
+        (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().BeNull();
+    }
+
+    /// <summary>Awaits <paramref name="task"/>, failing the test if it does not finish in time.</summary>
+    /// <remarks>
+    /// VSTHRD003 is suppressed deliberately: the deadlock it guards against needs a JoinableTaskFactory
+    /// context, and there is none in these tests — the task is started by the same test method a line
+    /// or two earlier and is awaited here only so a hang fails as an assertion instead of stalling the
+    /// run, which is precisely the regression under test.
+    /// </remarks>
+#pragma warning disable VSTHRD003
+    private static async Task<T> WithTimeoutAsync<T>(Task<T> task, TimeSpan timeout)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(timeout));
+        completed.Should().BeSameAs(task, "the call should return without waiting on a dead server");
+        return await task;
+    }
+#pragma warning restore VSTHRD003
+
+    /// <summary>Polls <paramref name="condition"/> until it holds or <paramref name="timeout"/> elapses.</summary>
+    /// <remarks>
+    /// The flag is set by the send pump on its own thread just after the frame is forwarded, so the
+    /// test cannot assert it synchronously off the back of the read that observed the frame.
+    /// </remarks>
+    private static async Task WaitForAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition()) return;
+            await Task.Delay(10);
+        }
+
+        condition().Should().BeTrue("the condition should hold within the timeout");
     }
 
     // ── Minimal LSP frame read/write helpers (Content-Length: N\r\n\r\nBODY) ──────────────────
