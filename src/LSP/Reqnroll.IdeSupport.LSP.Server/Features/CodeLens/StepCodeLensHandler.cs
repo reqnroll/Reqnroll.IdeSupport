@@ -17,8 +17,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
 /// <summary>
 /// Handles the standard <c>textDocument/codeLens</c> request for C# files (step usage count code lens).
-/// Returns one lens per step-binding attribute found in the file, annotated
-/// with the number of matching feature steps.
+/// Returns one lens per step-definition method found in the file, annotated with the number of
+/// matching feature steps aggregated across every binding attribute on that method.
 /// </summary>
 /// <remarks>
 /// Registered manually (same pattern as semantic tokens / find step usages) to avoid dynamic
@@ -54,7 +54,8 @@ public sealed class StepCodeLensHandler
 
     /// <summary>
     /// Handles a <c>textDocument/codeLens</c> request.
-    /// Returns one lens per step-binding attribute in the requested .cs file.
+    /// Returns one lens per step-definition method in the requested .cs file, its count
+    /// aggregated across every binding attribute on that method.
     /// Returns <see langword="null"/> for non-.cs files (falls through to the built-in C# server).
     /// Returns an empty array when the file has no discovered step definitions yet.
     /// </summary>
@@ -97,10 +98,18 @@ public sealed class StepCodeLensHandler
         // project's registry, undercounting to zero for an otherwise genuinely-used step.
         var owners = _scopeManager.ResolveOwners(uri);
         var fileBindingIds = CollectFileBindingIds(registry, filePath);
-        var projectFilter = ExpandProjectFilter(owners, fileBindingIds);
+        var projectFilter = ExpandProjectFilter(owners, fileBindingIds, filePath);
 
         var lenses = new List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
-        // Deduplicate: the same attribute location may appear in multiple registries (linked files).
+        // Deduplicate by anchor location: every attribute on a method shares the identical
+        // (SourceFileLine, SourceFileColumn) -- the method identifier's own position, per the
+        // anchor fix below -- so this also catches the case the dedup originally targeted (the
+        // same physical attribute reported redundantly by multiple registries for linked files;
+        // same file+line+col there too). One lens per location, not per attribute (issue #552):
+        // its usage count must come from the location-based FindUsages overload below, which
+        // aggregates every binding anchored at that location, the same aggregate Find Step Usages
+        // (FAR) already returns -- looking usages up per-attribute BindingId instead (the #552
+        // bug) undercounted a multi-attribute method to just one attribute's own usages.
         var seen = new HashSet<(int line, int col)>();
 
         // Defer the per-binding FindUsages scan to codeLens/resolve ONLY for clients on the
@@ -138,8 +147,6 @@ public sealed class StepCodeLensHandler
             var col  = src.SourceFileColumn - 1;
             var range = new LspRange(new Position(line, col), new Position(line, col));
 
-            var bindingId = BindingId.For(binding);
-
             if (deferToResolve)
             {
                 lenses.Add(new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
@@ -149,7 +156,7 @@ public sealed class StepCodeLensHandler
                     {
                         ["kind"]         = "stepUsage",
                         ["uri"]          = uri.ToString(),
-                        ["bindingId"]    = bindingId.ToString(),
+                        ["bindingId"]    = BindingId.For(binding).ToString(),
                         ["sourceFile"]   = src.SourceFile,
                         ["sourceLine"]   = src.SourceFileLine,
                         ["sourceColumn"] = src.SourceFileColumn,
@@ -158,7 +165,12 @@ public sealed class StepCodeLensHandler
                 continue;
             }
 
-            var usages = _matchService.FindUsages(bindingId, projectFilter);
+            // Location-based lookup, not the surviving binding's own BindingId: this location may
+            // anchor several attributes (issue #552), and FindUsages(SourceLocation, ...) resolves
+            // every BindingId whose range covers it, aggregating their usages into one count -- the
+            // same aggregate query Find Step Usages (FAR) already uses for this location.
+            var bindingLocation = new SourceLocation(src.SourceFile, src.SourceFileLine, src.SourceFileColumn);
+            var usages = _matchService.FindUsages(bindingLocation, projectFilter);
             lenses.Add(BuildResolvedLens(range, uri, line, col, usages.Count));
         }
 
@@ -201,7 +213,7 @@ public sealed class StepCodeLensHandler
         {
             // See HandleAsync's remarks (issue #548): expand the direct owner(s) with any other
             // project whose own registry independently reports this exact binding.
-            var projectFilter = ExpandProjectFilter(owners, new[] { bindingId });
+            var projectFilter = ExpandProjectFilter(owners, new[] { bindingId }, uri.GetFileSystemPath() ?? string.Empty);
             usages = _matchService.FindUsages(bindingId, projectFilter);
         }
         else if (sourceFile is not null && sourceLine is not null && sourceCol is not null)
@@ -271,7 +283,8 @@ public sealed class StepCodeLensHandler
     /// <summary>
     /// Expands <paramref name="directOwners"/> (the projects that own the queried .cs file) with
     /// any other project whose own binding registry independently reports one of
-    /// <paramref name="bindingIds"/> (issue #548).
+    /// <paramref name="bindingIds"/> <em>for this exact physical file</em> (issue #548, narrowed by
+    /// issue #552).
     /// </summary>
     /// <remarks>
     /// A project that references another Reqnroll-bearing project (a class library, say) has
@@ -280,12 +293,25 @@ public sealed class StepCodeLensHandler
     /// (issue #547) before <see cref="BindingId"/> normalization. That project's feature files are
     /// legitimate usage sites for the library's steps even though it doesn't "own" the .cs file
     /// that declares them, so restricting the usage search to the .cs file's direct owner(s) alone
-    /// undercounts to zero for an otherwise genuinely-used step. Returns <see langword="null"/>
-    /// (unrestricted search) when there are no direct owners at all, preserving prior behaviour for
-    /// an unowned file.
+    /// undercounts to zero for an otherwise genuinely-used step.
+    /// <para>
+    /// <see cref="BindingId"/> is purely content-based (normalized method/parameter-types/
+    /// expression), so matching on it alone also widens to a project that independently declares
+    /// an unrelated, identical-looking method — e.g. a parallel multi-targeted sibling project
+    /// (a net481 copy of the same test suite, say) with its own physical copy of the same source,
+    /// no reference to the file's owner at all (issue #552: this doubled the step-usage CodeLens
+    /// count for exactly that shape of solution). A binding discovered transitively through a real
+    /// reference resolves to the referenced project's own <c>SourceLocation.SourceFile</c> (the
+    /// original library source, not a copy), so requiring that match before trusting the
+    /// <see cref="BindingId"/> match keeps the legitimate case while excluding the coincidental
+    /// one.
+    /// </para>
+    /// Returns <see langword="null"/> (unrestricted search) when there are no direct owners at
+    /// all, preserving prior behaviour for an unowned file.
     /// </remarks>
     private IReadOnlyCollection<ProjectOwner>? ExpandProjectFilter(
-        IReadOnlyCollection<LspReqnrollProject> directOwners, IReadOnlyCollection<BindingId> bindingIds)
+        IReadOnlyCollection<LspReqnrollProject> directOwners, IReadOnlyCollection<BindingId> bindingIds,
+        string filePath)
     {
         if (directOwners.Count == 0)
             return null;
@@ -305,6 +331,8 @@ public sealed class StepCodeLensHandler
             foreach (var sd in registry.StepDefinitions)
             {
                 if (!sd.IsValid) continue;
+                var sdSrc = sd.Implementation?.SourceLocation;
+                if (sdSrc is null || !IsSameFile(sdSrc.SourceFile, filePath)) continue;
                 if (bindingIds.Contains(BindingId.For(sd)))
                 {
                     reportsAny = true;

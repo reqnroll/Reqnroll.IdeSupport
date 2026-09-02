@@ -111,7 +111,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(otherPath).AtLine(5).AtColumn(1)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -129,7 +129,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(csPath).AtLine(5).AtColumn(1)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -146,7 +146,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(csPath).AtLine(5).AtColumn(1)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -162,7 +162,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(csPath).AtLine(5).AtColumn(1)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(new[]
                      {
                          StepBindingMatchBuilder.Create(FeatureUri),
@@ -185,7 +185,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(csPath).AtLine(10).AtColumn(5)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -208,7 +208,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(csPath).AtLine(5).AtColumn(1)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -224,7 +224,7 @@ public class StepCodeLensHandlerTests
                                         .AtSourceFile(csPath).AtLine(5).AtColumn(1)
                                         .Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -241,7 +241,7 @@ public class StepCodeLensHandlerTests
         var b1 = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         var b2 = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(9).AtColumn(1).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(b1, b2));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
@@ -253,16 +253,60 @@ public class StepCodeLensHandlerTests
     public async Task Handle_duplicate_attribute_location_emits_only_one_lens()
     {
         var csPath = CsUri.GetFileSystemPath()!;
-        // Same location as different bindings (e.g. registry seen twice for linked files)
+        // Same location -- e.g. the same physical attribute reported twice because the registry
+        // saw it twice for linked files -- must collapse to one lens regardless of content.
         var b1 = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         var b2 = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(b1, b2));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         result!.Should().ContainSingle("duplicate locations should be deduplicated");
+    }
+
+    /// <summary>
+    /// Regression test for issue #552: a method carrying multiple binding attributes (e.g.
+    /// <c>[When("...")]</c> + <c>[When("...")]</c> + <c>[Then("...")]</c> on one method) reports
+    /// the identical (SourceFileLine, SourceFileColumn) for every attribute -- the shared method
+    /// identifier position (see the anchor-fix remarks in StepCodeLensHandler, issue #484). That
+    /// must still collapse to a SINGLE lens (matching the conventional "N references"-per-method
+    /// CodeLens every client renders one of per line) whose count is the aggregate of every
+    /// attribute's usages, looked up via the same location-based <c>FindUsages</c> overload Find
+    /// Step Usages (FAR) already uses -- not one lens per attribute (an earlier version of this
+    /// fix tried that; VS Code rendered three separate lenses side by side instead of one, and
+    /// Rider's CodeVision engine silently dropped every lens but the first at that position) and
+    /// not a per-attribute BindingId lookup (the original #552 bug, which undercounted to a single
+    /// attribute's own usages instead of the method's total).
+    /// </summary>
+    [Fact]
+    public async Task Handle_multiple_attributes_on_the_same_method_produce_one_lens_with_the_aggregated_count()
+    {
+        var csPath = CsUri.GetFileSystemPath()!;
+        var whenA = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1)
+            .WithStepType(ScenarioBlock.When).WithExpression("the two nums are confirmed {int}").Build();
+        var whenB = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1)
+            .WithStepType(ScenarioBlock.When).WithExpression("the result should be {int}").Build();
+        var then = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1)
+            .WithStepType(ScenarioBlock.Then).WithExpression("the result should be {int}").Build();
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(whenA, whenB, then));
+
+        // BindingMatchService.FindUsages(SourceLocation, ...) is what actually aggregates every
+        // attribute anchored at this location; the substitute here just proves the handler trusts
+        // that single aggregate call instead of querying per-attribute.
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[]
+                     {
+                         StepBindingMatchBuilder.Create(FeatureUri),
+                         StepBindingMatchBuilder.Create(FeatureUri),
+                         StepBindingMatchBuilder.Create(FeatureUri),
+                     });
+
+        var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        result!.Should().ContainSingle("one lens per method, not per attribute");
+        result![0].Command!.Title.Should().Be("3 step usages");
     }
 
     // ── Project-owner filter ──────────────────────────────────────────────────
@@ -274,13 +318,13 @@ public class StepCodeLensHandlerTests
         var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
         _scopeManager.ResolveOwners(CsUri).Returns(Array.Empty<LspReqnrollProject>());
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         _matchService.Received(1).FindUsages(
-            Arg.Any<BindingId>(),
+            Arg.Any<SourceLocation>(),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
     }
 
@@ -301,7 +345,6 @@ public class StepCodeLensHandlerTests
     {
         var csPath = CsUri.GetFileSystemPath()!;
         var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
-        var bindingId = BindingId.For(binding);
 
         var libraryProject = MakeProject("/workspace/MyLibrary/MyLibrary.csproj");
         var referencingProject = MakeProject("/workspace/ReferencingProject/ReferencingProject.csproj");
@@ -310,7 +353,9 @@ public class StepCodeLensHandlerTests
         _scopeManager.ResolveOwners(CsUri).Returns(new[] { libraryProject });
 
         // The referencing project's own registry independently reports the very same binding
-        // (same method/parameter-types/expression/type — the transitively-discovered copy).
+        // object -- same content AND same physical SourceLocation.SourceFile (csPath) -- the
+        // transitively-discovered copy of the library's own file, not an unrelated project's own
+        // copy of similar-looking source (see the negative case below, issue #552).
         var referencingProjectRegistry = MakeRegistry(binding);
         _registryLookup.GetAllRegistries().Returns(new[]
         {
@@ -318,13 +363,13 @@ public class StepCodeLensHandlerTests
             ("ReferencingProject", new ProjectOwner(referencingProject.ProjectFullName, referencingProject.TargetFrameworkMoniker), referencingProjectRegistry),
         });
 
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         _matchService.Received(1).FindUsages(
-            bindingId,
+            Arg.Any<SourceLocation>(),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
                 f != null
                 && f.Any(o => o.ProjectFile == libraryProject.ProjectFullName)
@@ -352,13 +397,13 @@ public class StepCodeLensHandlerTests
             ("MyLibrary", new ProjectOwner(libraryProject.ProjectFullName, libraryProject.TargetFrameworkMoniker), MakeRegistry(binding)),
             ("Unrelated", new ProjectOwner(unrelatedProject.ProjectFullName, unrelatedProject.TargetFrameworkMoniker), MakeRegistry(unrelatedBinding)),
         });
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         _matchService.Received(1).FindUsages(
-            Arg.Any<BindingId>(),
+            Arg.Any<SourceLocation>(),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
                 f != null
                 && f.Any(o => o.ProjectFile == libraryProject.ProjectFullName)
@@ -368,23 +413,76 @@ public class StepCodeLensHandlerTests
         unrelatedProject.Dispose();
     }
 
-    // ── BindingId passed to FindUsages ────────────────────────────────────────
+    /// <summary>
+    /// Regression test for the project-scoping half of issue #552: an unrelated project with no
+    /// reference relationship at all to the .cs file's owner -- e.g. a parallel multi-targeted
+    /// sibling project (a net481 copy of the same test suite) with its own independent physical
+    /// copy of the same source -- must NOT widen the usage search, even though its copy of the
+    /// method normalizes to the identical <see cref="BindingId"/>. Doing so doubled the VS
+    /// step-usage CodeLens count for exactly this solution shape (Minimal + Minimalnet481, no
+    /// project reference between them, both with their own copy of the same step definitions and
+    /// feature files) live-tested against the fix. Only a project whose reported binding resolves
+    /// to this EXACT .cs file -- the signature of a genuine transitive-reference discovery, issue
+    /// #548 -- may be added; see the positive case above.
+    /// </summary>
+    [Fact]
+    public async Task Handle_does_not_expand_project_filter_to_a_project_with_its_own_copy_of_the_same_source()
+    {
+        var csPath = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+
+        // Same content as `binding` (same synthesized method name/type/expression, so the same
+        // BindingId) but a genuinely different physical file -- not a copy discovered through a
+        // reference to `directOwner`, just a coincidentally identical sibling project.
+        var siblingCopy = StepBindingBuilder.Create()
+            .AtSourceFile("/workspace/Siblingnet481/Steps.cs").AtLine(5).AtColumn(1).Build();
+
+        var directOwner  = MakeProject("/workspace/Direct/Direct.csproj");
+        var siblingOwner = MakeProject("/workspace/Siblingnet481/Siblingnet481.csproj");
+
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _scopeManager.ResolveOwners(CsUri).Returns(new[] { directOwner });
+        _registryLookup.GetAllRegistries().Returns(new[]
+        {
+            ("Direct",  new ProjectOwner(directOwner.ProjectFullName, directOwner.TargetFrameworkMoniker),   MakeRegistry(binding)),
+            ("Sibling", new ProjectOwner(siblingOwner.ProjectFullName, siblingOwner.TargetFrameworkMoniker), MakeRegistry(siblingCopy)),
+        });
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+
+        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        _matchService.Received(1).FindUsages(
+            Arg.Any<SourceLocation>(),
+            Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
+                f != null
+                && f.Any(o => o.ProjectFile == directOwner.ProjectFullName)
+                && !f.Any(o => o.ProjectFile == siblingOwner.ProjectFullName)));
+
+        directOwner.Dispose();
+        siblingOwner.Dispose();
+    }
+
+    // ── Usage lookup is by location, not per-attribute BindingId (issue #552) ────
 
     [Fact]
-    public async Task Handle_passes_the_bindings_identity_to_FindUsages()
+    public async Task Handle_passes_the_bindings_location_to_FindUsages()
     {
         var csPath  = CsUri.GetFileSystemPath()!;
         var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(7).AtColumn(3).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
 
-        BindingId? captured = null;
-        _matchService.FindUsages(Arg.Do<BindingId>(id => captured = id),
+        SourceLocation? captured = null;
+        _matchService.FindUsages(Arg.Do<SourceLocation>(loc => captured = loc),
                                  Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
-        captured.Should().Be(BindingId.For(binding), "the eager path looks up usages by the binding's identity, not its location (issue #471)");
+        captured.Should().NotBeNull();
+        captured!.SourceFile.Should().Be(csPath);
+        captured.SourceFileLine.Should().Be(7);
+        captured.SourceFileColumn.Should().Be(3);
     }
 
     // ── Deferred resolve (allowlisted resolve-capable clients only) ───────────
@@ -409,7 +507,7 @@ public class StepCodeLensHandlerTests
         var csPath  = CsUri.GetFileSystemPath()!;
         var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _matchService.FindUsages(Arg.Any<BindingId>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
 
         var sut = new StepCodeLensHandler(
@@ -531,13 +629,17 @@ file static class StepBindingBuilder
 
     public sealed class Builder
     {
-        private string _file   = "/workspace/Steps.cs";
-        private int    _line   = 5;
-        private int    _col    = 1;
+        private string        _file       = "/workspace/Steps.cs";
+        private int            _line       = 5;
+        private int            _col        = 1;
+        private ScenarioBlock  _stepType   = ScenarioBlock.Given;
+        private string?        _expression;
 
-        public Builder AtSourceFile(string file)  { _file = file; return this; }
-        public Builder AtLine(int line)            { _line = line; return this; }
-        public Builder AtColumn(int col)           { _col  = col;  return this; }
+        public Builder AtSourceFile(string file)         { _file       = file;       return this; }
+        public Builder AtLine(int line)                  { _line       = line;       return this; }
+        public Builder AtColumn(int col)                 { _col        = col;        return this; }
+        public Builder WithStepType(ScenarioBlock type)  { _stepType   = type;       return this; }
+        public Builder WithExpression(string expression) { _expression = expression; return this; }
 
         public ProjectStepDefinitionBinding Build()
         {
@@ -546,10 +648,11 @@ file static class StepBindingBuilder
                 parameterTypes: null,
                 new SourceLocation(_file, _line, _col));
             return new ProjectStepDefinitionBinding(
-                ScenarioBlock.Given,
+                _stepType,
                 new System.Text.RegularExpressions.Regex("^.*$"),
                 scope: null,
-                implementation: impl);
+                implementation: impl,
+                specifiedExpression: _expression);
         }
     }
 }
