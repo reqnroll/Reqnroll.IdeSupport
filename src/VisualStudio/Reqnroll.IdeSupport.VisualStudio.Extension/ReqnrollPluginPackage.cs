@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TextManager.Interop;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Diagnostics;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 using IServiceProvider = System.IServiceProvider;
@@ -50,6 +51,8 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
     private DocumentInitializationMonitor? _documentInitializationMonitor;
+    private SolutionLifecycleMonitor? _solutionLifecycleMonitor;
+    private ServiceBrokerAvailabilityMonitor? _serviceBrokerAvailabilityMonitor;
 
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
@@ -77,6 +80,11 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         // very transitions this is here to time (issue #533, phase 2). Diagnostic only — it never
         // forces a document to initialize.
         await AdviseDocumentInitializationMonitorAsync(cancellationToken);
+
+        // Issue #555: advised alongside the RDT monitor and for the same reason — a solution swap
+        // is exactly the transition under investigation, so a subscription taken after the wait
+        // below would miss the first one of the session.
+        await AdviseSolutionLifecycleMonitorAsync(cancellationToken);
 
         _logger.LogInfo("Waiting for solution load...");
 
@@ -306,6 +314,33 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         }
     }
 
+    /// <summary>
+    /// Subscribes <see cref="SolutionLifecycleMonitor"/> to solution events and
+    /// <see cref="ServiceBrokerAvailabilityMonitor"/> to brokered-service availability changes,
+    /// so a shutdown-token firing can be placed relative to a solution swap and to any part churn
+    /// VS initiates (issue #555; issue #156's unidentified trigger).
+    /// Best-effort: a failure here must not abort package initialization.
+    /// </summary>
+    private async Task AdviseSolutionLifecycleMonitorAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
+            _solutionLifecycleMonitor = SolutionLifecycleMonitor.TryAdvise(solution, _logger);
+            _serviceBrokerAvailabilityMonitor = ServiceBrokerAvailabilityMonitor.TrySubscribe(_logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: could not advise the solution lifecycle monitor.");
+        }
+    }
+
     private async Task WaitForSolutionLoadAsync(CancellationToken cancellationToken)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
@@ -338,6 +373,12 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         {
             _documentInitializationMonitor?.Dispose();
             _documentInitializationMonitor = null;
+
+            _solutionLifecycleMonitor?.Dispose();
+            _solutionLifecycleMonitor = null;
+
+            _serviceBrokerAvailabilityMonitor?.Dispose();
+            _serviceBrokerAvailabilityMonitor = null;
 
             if (_telemetryTransmitter is IAsyncDisposable d)
             {

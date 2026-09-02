@@ -132,7 +132,12 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     /// <inheritdoc />
     public override async Task<IDuplexPipe?> CreateServerConnectionAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("ReqnrollLanguageClient: CreateServerConnectionAsync called — awaiting eager connection.");
+        // The connection-service instance id (issue #555) says whether a repeat call is VS
+        // reconnecting to the same, still-live service or to a rebuilt one — the difference
+        // between the hot-reload path issue #156 documented and a genuine restart.
+        _logger.LogInformation(
+            "ReqnrollLanguageClient: CreateServerConnectionAsync called — awaiting eager connection from " +
+            "LspServerConnectionService instance #{InstanceId}.", _connectionService.InstanceId);
 
         // Startup (process launch + pipe construction) was kicked off eagerly when
         // LspServerConnectionService was constructed — see its remarks. This just awaits

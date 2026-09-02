@@ -58,6 +58,14 @@ internal sealed class LspServerConnectionService : IDisposable
     // longer produced once and cached here -- see GetConnectionAsync/CreateFreshVsFacingPipe.
     private readonly Microsoft.VisualStudio.Threading.JoinableTask<bool> _startTask;
 
+    // Issue #555: distinguishes "the one and only instance in this process" from a hypothetical
+    // rebuilt one. The first pass at that issue read four sequential single-instance logs as one
+    // session rebuilding its connection four times; a number in the log makes the difference
+    // self-evident instead of inferred, and shows in CreateServerConnectionAsync whether VS is
+    // reconnecting to the same instance or a new one.
+    private static int _instanceCounter;
+    private readonly int _instanceId = Interlocked.Increment(ref _instanceCounter);
+
     private Process? _serverProcess;
     private LspInspectorLogger? _inspectorLogger;
     private LspInterceptingPipe? _interceptingPipe;
@@ -89,12 +97,20 @@ internal sealed class LspServerConnectionService : IDisposable
         _loggerFactory     = loggerFactory     ?? throw new ArgumentNullException(nameof(loggerFactory));
         _stepCodeLensState = stepCodeLensState ?? throw new ArgumentNullException(nameof(stepCodeLensState));
 
-        _logger.LogInformation("LspServerConnectionService: instance created — starting server eagerly.");
+        _logger.LogInformation(
+            "LspServerConnectionService: instance #{InstanceId} created — starting server eagerly.", _instanceId);
 
         // Fire off immediately; not awaited here. Consumers (ReqnrollLanguageClient) await
         // GetConnectionAsync() whenever they're ready, which may be well after this completes.
         _startTask = ThreadHelper.JoinableTaskFactory.RunAsync(StartAsync);
     }
+
+    /// <summary>
+    /// This instance's ordinal within the current IDE process, starting at 1 (issue #555). A value
+    /// above 1 means the singleton really was rebuilt within one process — which the logs have
+    /// never actually shown, and which the current disposal path provides no way to reach.
+    /// </summary>
+    public int InstanceId => _instanceId;
 
     /// <summary>
     /// The intercepting pipe once started; <c>null</c> until the server process and pipe have
@@ -135,6 +151,20 @@ internal sealed class LspServerConnectionService : IDisposable
     /// </returns>
     public async Task<IDuplexPipe?> GetConnectionAsync()
     {
+        // Issue #555: the predicted signature of a spurious ShutdownToken firing is VS asking for
+        // a connection after this singleton has already been disposed — nothing re-resolves it, so
+        // every such request returns null and the session stays dark. Logged as a warning because
+        // the alternative reading of that issue (the IDE really was exiting) produces no such
+        // request at all: a dead process does not reconnect.
+        if (_disposed)
+        {
+            _logger.LogWarning(
+                "LspServerConnectionService: instance #{InstanceId} was asked for a connection after disposal — " +
+                "returning null. VS is still running and wants LSP service, but this singleton's server is gone and " +
+                "nothing recreates it (issue #555).", _instanceId);
+            return null;
+        }
+
         var started = await _startTask.JoinAsync().ConfigureAwait(false);
         if (!started || _interceptingPipe is null)
             return null;
@@ -311,7 +341,10 @@ internal sealed class LspServerConnectionService : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        _logger.LogInformation("LspServerConnectionService: disposing — shutting down server connection.");
+        _logger.LogInformation(
+            "LspServerConnectionService: instance #{InstanceId} disposing — shutting down server connection. " +
+            "This is one-way: OnInitializedAsync resolves this singleton once per extension instance, so nothing " +
+            "recreates it if the process keeps running (issue #555).", _instanceId);
 
         // ProjectMonitor is disposed by ReqnrollLanguageClient.Dispose (UI-thread-bound, COM event
         // unsubscription) whenever the provider deactivates — not here, since this service's Dispose
