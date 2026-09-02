@@ -64,6 +64,10 @@ Scenario: A range inside one Examples row resolves to just that row's target
 	Then 1 test target is returned
 	And a test target has method "AddManyNumbers"
 
-# Not specified here: what a range *outside* any scenario (the Feature: line, say) resolves to.
-# Observed behaviour is that it still returns the first scenario's target; whether that is
-# intended or incidental is unresolved, so no scenario asserts it either way.
+# A range outside any scenario resolves to the first scenario's target, so a Run action invoked
+# from the Feature: line still has something to run rather than silently doing nothing.
+
+Scenario: A range outside any scenario resolves to the first scenario's target
+	When test targets are resolved for "Calculator.feature" from line 1 to line 2
+	Then 1 test target is returned
+	And a test target has method "AddTwoNumbers" on type "Sample.CalculatorFeature"
