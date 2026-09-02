@@ -234,6 +234,49 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task ReparseOpenFiles_skips_a_linked_file_whose_primary_owner_is_another_project()
+    {
+        // Issue #554: a feature file linked into a second project is owned by both, but an open
+        // document's match set is computed against — and stored under — its PRIMARY owner only, so
+        // the linking project's registry change must not drive a second, identical reparse.
+        var linkedUri = DocumentUri.FromFileSystemPath(Path.Combine(_projectFolder, "Linked.feature"));
+        var linkingProject = DiscoveryTestSupport.MakeProject(_ideScope, _externalFolder);
+
+        _bufferService.All.Returns(new[] { new DocumentBuffer(linkedUri, 1, "Feature: Linked\n") });
+
+        _scopeManager.HasBaselineForProject(linkingProject).Returns(true);
+        _scopeManager.GetProjectsForUri(linkedUri).Returns(new[] { _project, linkingProject });
+        _scopeManager.ResolvePrimaryOwner(linkedUri).Returns(_project);
+
+        await CreateSut().Handle(
+            new BindingRegistryChangedNotification(linkingProject, IsFullReplacement: false),
+            CancellationToken.None);
+
+        await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
+        await _taggerService.DidNotReceive().ParseAsync(linkedUri, Arg.Any<int?>());
+    }
+
+    [Fact]
+    public async Task ReparseOpenFiles_still_reparses_a_linked_file_for_its_primary_owner()
+    {
+        var linkedUri = DocumentUri.FromFileSystemPath(Path.Combine(_projectFolder, "Linked.feature"));
+        var linkingProject = DiscoveryTestSupport.MakeProject(_ideScope, _externalFolder);
+
+        _bufferService.All.Returns(new[] { new DocumentBuffer(linkedUri, 1, "Feature: Linked\n") });
+
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetProjectsForUri(linkedUri).Returns(new[] { _project, linkingProject });
+        _scopeManager.ResolvePrimaryOwner(linkedUri).Returns(_project);
+
+        await CreateSut().Handle(
+            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            CancellationToken.None);
+
+        await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
+        await _taggerService.Received(1).ParseAsync(linkedUri, Arg.Any<int?>());
+    }
+
+    [Fact]
     public async Task ReparseOpenFiles_uses_folder_prefix_when_no_baseline()
     {
         var inFolderUri  = DocumentUri.FromFileSystemPath(Path.Combine(_projectFolder,  "Inside.feature"));

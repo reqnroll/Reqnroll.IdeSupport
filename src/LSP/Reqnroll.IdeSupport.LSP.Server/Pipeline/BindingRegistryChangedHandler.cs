@@ -284,7 +284,7 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         // Use the membership index when a baseline has been received (I1); fall back to
         // folder-prefix for projects that haven't sent reqnroll/projectFiles.
         var affectedBuffers = _documentBufferService.All
-            .Where(b => IsOwnedByProject(b.Uri, project))
+            .Where(b => IsOwnedByProject(b.Uri, project) && IsPrimaryOwner(b.Uri, project))
             .ToList();
 
         if (affectedBuffers.Count == 0)
@@ -307,6 +307,39 @@ public class BindingRegistryChangedHandler : INotificationHandler<BindingRegistr
         }
 
         return Task.FromResult(affectedBuffers.Count);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="project"/> is the <em>primary</em> owner of <paramref name="uri"/> —
+    /// the only owner whose registry change can affect this open document (issue #554).
+    /// </summary>
+    /// <remarks>
+    /// A feature file linked into several projects has one owner per project, but an <em>open</em>
+    /// document's match set is computed against its primary owner's registry and stored under the
+    /// primary owner's key (see <c>GherkinDocumentTaggerService.ParseAsync</c>) — so a reparse
+    /// driven by a non-primary owner's registry change recomputes a byte-identical match set into
+    /// the identical cache key. That is pure waste, and until <c>ParseCoordinator</c> was fixed it
+    /// was also the pair of same-URI parses that raced each other during startup. Nothing is lost
+    /// by skipping it: the non-primary owner's own <c>(uri, project)</c> entry is not refreshed
+    /// while the file is open either way, because <see cref="ScanAllFeatureFilesAsync"/> skips open
+    /// files by design (the open buffer's pipeline owns that URI).
+    /// Falls back to "yes" when no primary owner resolves at all, so a project whose baseline has
+    /// not arrived still reparses its files rather than silently skipping them.
+    /// </remarks>
+    private bool IsPrimaryOwner(DocumentUri uri, LspReqnrollProject project)
+    {
+        var primary = _scopeManager.ResolvePrimaryOwner(uri);
+        if (primary is null)
+            return true;
+
+        if (string.Equals(primary.ProjectFullName, project.ProjectFullName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(primary.TargetFrameworkMoniker, project.TargetFrameworkMoniker, StringComparison.Ordinal))
+            return true;
+
+        _logger.LogVerbose(
+            $"BindingRegistryChanged — skipping reparse of '{uri}' for '{project.ProjectName}': " +
+            $"'{primary.ProjectName}' is its primary owner and owns its match set.");
+        return false;
     }
 
     private bool IsOwnedByProject(DocumentUri uri, LspReqnrollProject project)

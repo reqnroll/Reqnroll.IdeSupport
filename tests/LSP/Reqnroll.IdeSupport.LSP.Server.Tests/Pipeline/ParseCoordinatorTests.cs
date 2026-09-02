@@ -110,6 +110,55 @@ public class ParseCoordinatorTests
     }
 
     [Fact]
+    public async Task Two_concurrent_schedules_for_the_same_uri_never_run_concurrently()
+    {
+        // The sequential case above takes the "chain onto the pending entry" path. This one covers
+        // the case that actually bit in issue #554: two threads scheduling the same, not-yet-pending
+        // URI at the same instant -- a didChange on the Serial dispatch lane while a
+        // BindingRegistryChanged reparse for that file runs on a pool thread. The previous
+        // ConcurrentDictionary.AddOrUpdate implementation ran its add factory (which started the
+        // work) on both threads and failed this on the very first round.
+        var sut = CreateSut();
+        var overlapAt = -1;
+
+        for (var round = 0; round < 200 && overlapAt < 0; round++)
+        {
+            var inFlight = 0;
+            var maxInFlight = 0;
+
+            async Task Work(CancellationToken _)
+            {
+                InterlockedMax(ref maxInFlight, Interlocked.Increment(ref inFlight));
+                await Task.Delay(10);
+                Interlocked.Decrement(ref inFlight);
+            }
+
+            var uri = DocumentUri.FromFileSystemPath($"/workspace/concurrent-{round}.feature");
+            using var gate = new Barrier(2);
+            var t1 = Task.Run(() => { gate.SignalAndWait(); sut.Schedule(uri, Work); });
+            var t2 = Task.Run(() => { gate.SignalAndWait(); sut.Schedule(uri, Work); });
+            await Task.WhenAll(t1, t2);
+
+            await sut.WaitForReadyAsync(uri, CancellationToken.None);
+            if (Volatile.Read(ref maxInFlight) > 1)
+                overlapAt = round;
+        }
+
+        overlapAt.Should().Be(-1,
+            "two Schedule calls racing for one URI must still chain, not run the work simultaneously (round {0})",
+            overlapAt);
+    }
+
+    /// <summary>Raises <paramref name="target"/> to <paramref name="value"/> if it is currently lower, without locking.</summary>
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int seen;
+        while ((seen = Volatile.Read(ref target)) < value)
+            if (Interlocked.CompareExchange(ref target, value, seen) == seen)
+                return;
+    }
+
+    [Fact]
     public async Task Two_schedules_for_different_uris_do_not_block_each_other()
     {
         var sut = CreateSut();
