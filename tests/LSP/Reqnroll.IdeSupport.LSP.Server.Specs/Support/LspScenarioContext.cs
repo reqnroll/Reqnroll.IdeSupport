@@ -63,6 +63,18 @@ public sealed class LspScenarioContext
     public RenameTargetsResponse? LastRenameTargets { get; set; }
     public OmniSharp.Extensions.LanguageServer.Protocol.Models.RangeOrPlaceholderRange? LastPrepareRenameRange { get; set; }
 
+    // F5 — Go To Step Definition
+    public LocationOrLocationLinks? LastDefinitions { get; set; }
+
+    // F23 — Inlay Hints
+    public InlayHintContainer? LastInlayHints { get; set; }
+
+    // F26 — Test Runner Integration
+    public Reqnroll.IdeSupport.LSP.Server.Features.TestTargets.ResolveTestTargetsResponse? LastTestTargets { get; set; }
+
+    // F24 — Hook Match CodeLens navigation
+    public GoToMatchingScenariosResponse? LastMatchingScenarios { get; set; }
+
     // F6 — Define Steps (code actions)
     public CommandOrCodeActionContainer? LastCodeActions { get; set; }
 
@@ -100,7 +112,8 @@ public sealed class LspScenarioContext
     public SpecProject RegisterProject(
         string projectFileName,
         string? projectFolder = null,
-        string? targetFrameworkMoniker = null)
+        string? targetFrameworkMoniker = null,
+        IReadOnlyList<string>? packageIds = null)
     {
         var folder = string.IsNullOrEmpty(projectFolder) ? WorkspaceFolder : PathFor(projectFolder);
 
@@ -116,7 +129,8 @@ public sealed class LspScenarioContext
         var project = new SpecProject(
             ProjectFile: file,
             ProjectFolder: folder,
-            TargetFrameworkMoniker: targetFrameworkMoniker ?? DefaultTargetFrameworkMoniker);
+            TargetFrameworkMoniker: targetFrameworkMoniker ?? DefaultTargetFrameworkMoniker,
+            PackageIds: packageIds ?? Array.Empty<string>());
 
         // Keyed on the full project-file path, not the bare file name: two projects in different
         // folders may legitimately share a file name, and a name-keyed registry would silently
@@ -156,11 +170,21 @@ public sealed class LspScenarioContext
 
         return byName.Count == 1
             ? byName[0]
-            : new SpecProject(PathFor(projectFileName), WorkspaceFolder, DefaultTargetFrameworkMoniker);
+            : new SpecProject(PathFor(projectFileName), WorkspaceFolder, DefaultTargetFrameworkMoniker,
+                              Array.Empty<string>());
     }
 
     /// <summary>A project as the spec harness announces it over <c>reqnroll/projectLoaded</c>.</summary>
-    public sealed record SpecProject(string ProjectFile, string ProjectFolder, string TargetFrameworkMoniker);
+    /// <param name="PackageIds">
+    /// NuGet package ids announced with the project. Only the ids matter to the server —
+    /// TestFrameworkDetection reads them to decide which row-test attribute F26's resolver should
+    /// count on a generated Scenario Outline method — so versions are left empty.
+    /// </param>
+    public sealed record SpecProject(
+        string ProjectFile,
+        string ProjectFolder,
+        string TargetFrameworkMoniker,
+        IReadOnlyList<string> PackageIds);
 
     public async Task EnsureStartedAsync(string? ideId = null, bool supportsChangeAnnotations = false)
     {

@@ -79,10 +79,22 @@ public sealed class ProtocolSteps
     /// Scenarios that need more than one project use "the project ... is announced in folder ..."
     /// instead.
     /// </summary>
-    [When(@"the project is announced with output assembly ""(.*)"" for ""(.*)""")]
+    [When(@"the project is announced with output assembly ""([^""]*)"" for ""([^""]*)""")]
     public void WhenTheProjectIsAnnounced(string outputAssembly, string fileName)
         => AnnounceProject(
             _ctx.RegisterProject(LspScenarioContext.DefaultProjectFileName),
+            outputAssembly);
+
+    /// <summary>
+    /// Announces the default project with a NuGet package reference. The only consumer that cares
+    /// is F26's test-target resolver, which detects the test framework from package ids to know
+    /// which row-test attribute to count on a generated Scenario Outline method.
+    /// </summary>
+    [When(@"the project is announced with output assembly ""([^""]*)"" for ""([^""]*)"" referencing package ""([^""]*)""")]
+    public void WhenTheProjectIsAnnouncedReferencingPackage(
+        string outputAssembly, string fileName, string packageId)
+        => AnnounceProject(
+            _ctx.RegisterProject(LspScenarioContext.DefaultProjectFileName, packageIds: new[] { packageId }),
             outputAssembly);
 
     /// <summary>
@@ -90,16 +102,16 @@ public sealed class ProtocolSteps
     /// membership scenario needs, where two projects can each claim the same physical file and a
     /// file at the workspace root sits outside both.
     /// </summary>
-    [When(@"the project ""(.*)"" is announced in folder ""(.*)""")]
+    [When(@"the project ""([^""]*)"" is announced in folder ""([^""]*)""")]
     public void WhenTheNamedProjectIsAnnouncedInFolder(string projectFileName, string projectFolder)
         => AnnounceProject(_ctx.RegisterProject(projectFileName, projectFolder), outputAssembly: null);
 
-    [When(@"the project ""(.*)"" is announced in folder ""(.*)"" with output assembly ""(.*)""")]
+    [When(@"the project ""([^""]*)"" is announced in folder ""([^""]*)"" with output assembly ""([^""]*)""")]
     public void WhenTheNamedProjectIsAnnouncedInFolderWithOutputAssembly(
         string projectFileName, string projectFolder, string outputAssembly)
         => AnnounceProject(_ctx.RegisterProject(projectFileName, projectFolder), outputAssembly);
 
-    [When(@"the project ""(.*)"" is announced in folder ""(.*)"" targeting ""(.*)""")]
+    [When(@"the project ""([^""]*)"" is announced in folder ""([^""]*)"" targeting ""([^""]*)""")]
     public void WhenTheNamedProjectIsAnnouncedInFolderTargeting(
         string projectFileName, string projectFolder, string targetFrameworkMoniker)
         => AnnounceProject(
@@ -110,7 +122,7 @@ public sealed class ProtocolSteps
     public void WhenTheProjectIsUnloaded()
         => WhenTheNamedProjectIsUnloaded(LspScenarioContext.DefaultProjectFileName);
 
-    [When(@"the project ""(.*)"" is unloaded")]
+    [When(@"the project ""([^""]*)"" is unloaded")]
     public void WhenTheNamedProjectIsUnloaded(string projectFileName)
         => _ctx.Harness.Client.SendProjectUnloaded(new
         {
@@ -137,7 +149,9 @@ public sealed class ProtocolSteps
                 ? outputAssembly
                 : Path.Combine(project.ProjectFolder, outputAssembly),
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            packageReferences = Array.Empty<object>()
+            packageReferences = project.PackageIds
+                .Select(id => new { packageId = id, version = "", installPath = "" })
+                .ToArray()
         });
     }
 
@@ -146,7 +160,7 @@ public sealed class ProtocolSteps
     /// listed in the Reqnroll table.  The table must have columns <c>path</c> and <c>role</c>
     /// (Feature | Binding).  Paths are relative to <see cref="LspScenarioContext.WorkspaceFolder"/>.
     /// </summary>
-    [When(@"the project files baseline is announced for ""(.*)"" with")]
+    [When(@"the project files baseline is announced for ""([^""]*)"" with")]
     public void WhenTheProjectFilesBaselineIsAnnounced(string projectFileName, Table table)
     {
         var project = _ctx.GetProject(projectFileName);
@@ -168,7 +182,7 @@ public sealed class ProtocolSteps
     /// <c>path</c> and <c>role</c> (Feature | Binding). Paths are relative to
     /// <see cref="LspScenarioContext.WorkspaceFolder"/>.
     /// </summary>
-    [When(@"the project files delta removes files for ""(.*)"" with")]
+    [When(@"the project files delta removes files for ""([^""]*)"" with")]
     public async Task WhenTheProjectFilesDeltaRemoves(string projectFileName, Table table)
     {
         var project = _ctx.GetProject(projectFileName);
@@ -192,7 +206,7 @@ public sealed class ProtocolSteps
     /// project without a full re-send, which the design requires to restore that file's ownership
     /// (and with it its binding-dependent features).
     /// </summary>
-    [When(@"the project files delta adds files for ""(.*)"" with")]
+    [When(@"the project files delta adds files for ""([^""]*)"" with")]
     public async Task WhenTheProjectFilesDeltaAdds(string projectFileName, Table table)
     {
         var project = _ctx.GetProject(projectFileName);
@@ -206,6 +220,21 @@ public sealed class ProtocolSteps
         });
 
         await Task.Delay(300).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes a file into the workspace without opening it over LSP. Needed by features that read
+    /// from disk rather than from the document buffer — F26's resolver parses the generated
+    /// <c>&lt;feature&gt;.feature.cs</c> code-behind, which in a real project is a build output no
+    /// editor has open.
+    /// </summary>
+    [StepDefinition(@"the file ""([^""]*)"" exists on disk with")]
+    public async Task GivenTheFileExistsOnDiskWith(string fileName, string content)
+    {
+        await _ctx.EnsureStartedAsync().ConfigureAwait(false);
+        var path = _ctx.PathFor(fileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, content).ConfigureAwait(false);
     }
 
     // ── Then: handshake / capabilities ──────────────────────────────────────────

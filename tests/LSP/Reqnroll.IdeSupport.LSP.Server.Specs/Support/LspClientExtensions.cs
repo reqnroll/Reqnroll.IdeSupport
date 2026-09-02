@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -91,6 +92,50 @@ public static class LspClientExtensions
                     Context      = new ReferenceContext { IncludeDeclaration = false }
                 })
             .Returning<LocationOrLocationLinks?>(ct);
+
+    /// <summary>Sends <c>textDocument/definition</c> (F5 — Go To Step Definition).</summary>
+    public static Task<LocationOrLocationLinks?> RequestDefinitionAsync(
+        this ILanguageClient client, DocumentUri uri, int line, int character)
+        => client.SendRequest("textDocument/definition",
+                new DefinitionParams
+                {
+                    TextDocument = new TextDocumentIdentifier { Uri = uri },
+                    Position     = new Position(line, character)
+                })
+            .Returning<LocationOrLocationLinks?>(CancellationToken.None);
+
+    /// <summary>Sends <c>textDocument/inlayHint</c> for a line range (F23 — Inlay Hints).</summary>
+    public static Task<InlayHintContainer?> RequestInlayHintsAsync(
+        this ILanguageClient client, DocumentUri uri, int startLine, int endLine)
+        => client.SendRequest("textDocument/inlayHint",
+                new InlayHintParams
+                {
+                    TextDocument = new TextDocumentIdentifier { Uri = uri },
+                    Range        = new LspRange(startLine, 0, endLine, 0)
+                })
+            .Returning<InlayHintContainer?>(CancellationToken.None);
+
+    /// <summary>Sends <c>reqnroll/resolveTestTargets</c> for a range (F26 — Test Runner Integration).</summary>
+    public static Task<ResolveTestTargetsResponse?> RequestResolveTestTargetsAsync(
+        this ILanguageClient client, DocumentUri uri, int startLine, int endLine)
+        => client.SendRequest("reqnroll/resolveTestTargets",
+                new ResolveTestTargetsParams
+                {
+                    TextDocument = new TextDocumentIdentifier { Uri = uri },
+                    Range        = new LspRange(startLine, 0, endLine, 0)
+                })
+            .Returning<ResolveTestTargetsResponse?>(CancellationToken.None);
+
+    /// <summary>Sends <c>reqnroll/goToMatchingScenarios</c> (F24 — Hook Match CodeLens navigation).</summary>
+    public static Task<GoToMatchingScenariosResponse?> RequestGoToMatchingScenariosAsync(
+        this ILanguageClient client, DocumentUri uri, int line, int character)
+        => client.SendRequest("reqnroll/goToMatchingScenarios",
+                new TextDocumentPositionParams
+                {
+                    TextDocument = new TextDocumentIdentifier { Uri = uri },
+                    Position     = new Position(line, character)
+                })
+            .Returning<GoToMatchingScenariosResponse?>(CancellationToken.None);
 
     /// <summary>
     /// Sends a <c>reqnroll/findStepUsages</c> request.
