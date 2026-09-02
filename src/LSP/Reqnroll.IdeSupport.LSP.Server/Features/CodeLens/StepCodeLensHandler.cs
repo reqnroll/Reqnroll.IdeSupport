@@ -234,13 +234,16 @@ public sealed class StepCodeLensHandler
     }
 
     /// <summary>
-    /// Issue #554 diagnostic: a step-usage count is inflated when the same feature step (same
-    /// document URI + same line) comes back more than once from the reverse index. That can only
-    /// happen when one feature document's match set is indexed twice — either an orphaned set
-    /// left behind by a concurrent <c>Store</c> for the same key, or two live cache entries for
-    /// the same document. Both are invisible in the count alone, so when a duplicate is seen this
-    /// logs the offending step plus <see cref="IBindingMatchService.AuditIndexConsistency"/>'s
-    /// verdict, which says which of the two it is. Silent (and O(usages)) in the normal case.
+    /// Issue #554 guard: a step-usage count is inflated when the same feature step (same document
+    /// URI + same line) comes back more than once from the reverse index. That can only happen
+    /// when one feature document's match set is indexed twice — an orphaned set left behind by a
+    /// concurrent <c>Store</c>, or two live cache entries for the same document — neither of
+    /// which is visible in the count alone. <c>BindingMatchService</c> now serialises its writes
+    /// so this should never fire; if it ever does, the log says which of the two it is, via
+    /// <see cref="IBindingMatchService.AuditIndexConsistency"/>.
+    /// Detection is one pass with an early exit and no allocation beyond the seen-set (issue #491:
+    /// this runs per binding on the <c>textDocument/codeLens</c> sweep); the expensive grouping and
+    /// the audit only run once a duplicate is actually present.
     /// </summary>
     private void LogDuplicateUsageDiagnostics(
         SourceLocation bindingLocation, IReadOnlyList<StepBindingMatch> usages)
@@ -248,19 +251,29 @@ public sealed class StepCodeLensHandler
         if (usages.Count < 2)
             return;
 
-        var duplicates = usages
-            .GroupBy(u => (u.FeatureDocumentId, u.Range.StartLinePosition.Line),
-                     TupleComparer.OrdinalIgnoreCaseOnUri)
-            .Where(g => g.Count() > 1)
-            .ToList();
+        var seen = new HashSet<(string Uri, int Line)>(usages.Count, StepLocationComparer.Instance);
+        var hasDuplicate = false;
+        foreach (var usage in usages)
+        {
+            if (seen.Add((usage.FeatureDocumentId, usage.Range.StartLinePosition.Line)))
+                continue;
 
-        if (duplicates.Count == 0)
+            hasDuplicate = true;
+            break;
+        }
+
+        if (!hasDuplicate)
             return;
+
+        var duplicates = usages
+            .GroupBy(u => (Uri: u.FeatureDocumentId, Line: u.Range.StartLinePosition.Line),
+                     StepLocationComparer.Instance)
+            .Where(g => g.Count() > 1);
 
         foreach (var duplicate in duplicates)
             _logger.LogWarning(
                 $"[DIAG-554] binding at {bindingLocation.SourceFile}:{bindingLocation.SourceFileLine} counts " +
-                $"the same feature step {duplicate.Count()} times: {duplicate.Key.FeatureDocumentId} " +
+                $"the same feature step {duplicate.Count()} times: {duplicate.Key.Uri} " +
                 $"line {duplicate.Key.Line} (projects: " +
                 $"{string.Join(", ", duplicate.Select(d => d.ProjectName ?? "<Unknown>"))}).");
 
@@ -268,17 +281,16 @@ public sealed class StepCodeLensHandler
             _logger.LogWarning($"[DIAG-554] match-cache audit: {anomaly}");
     }
 
-    /// <summary>Comparer for the (uri, line) duplicate grouping above: URIs compare case-insensitively, matching the rest of the document-keyed services.</summary>
-    private sealed class TupleComparer : IEqualityComparer<(string FeatureDocumentId, int Line)>
+    /// <summary>Compares a step's (document URI, line) coordinate for the duplicate check above; URIs compare case-insensitively, matching the rest of the document-keyed services.</summary>
+    private sealed class StepLocationComparer : IEqualityComparer<(string Uri, int Line)>
     {
-        public static readonly TupleComparer OrdinalIgnoreCaseOnUri = new();
+        public static readonly StepLocationComparer Instance = new();
 
-        public bool Equals((string FeatureDocumentId, int Line) x, (string FeatureDocumentId, int Line) y) =>
-            x.Line == y.Line &&
-            string.Equals(x.FeatureDocumentId, y.FeatureDocumentId, StringComparison.OrdinalIgnoreCase);
+        public bool Equals((string Uri, int Line) x, (string Uri, int Line) y) =>
+            x.Line == y.Line && string.Equals(x.Uri, y.Uri, StringComparison.OrdinalIgnoreCase);
 
-        public int GetHashCode((string FeatureDocumentId, int Line) obj) =>
-            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(obj.FeatureDocumentId ?? string.Empty), obj.Line);
+        public int GetHashCode((string Uri, int Line) obj) =>
+            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Uri ?? string.Empty), obj.Line);
     }
 
     private static global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens BuildResolvedLens(

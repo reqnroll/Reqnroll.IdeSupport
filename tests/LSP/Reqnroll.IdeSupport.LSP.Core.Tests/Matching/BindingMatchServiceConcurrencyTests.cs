@@ -3,18 +3,20 @@ using Reqnroll.IdeSupport.LSP.TestStubs;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Matching;
 
 /// <summary>
-/// Issue #554 probe: <see cref="BindingMatchService.Store"/> updates <c>_cache</c> and the reverse
-/// index as three separate operations (read previous → remove previous's index entries → write
-/// cache → add new index entries) with no mutual exclusion, while the server calls it for the same
+/// Issue #554 regression guard: <see cref="BindingMatchService.Store"/> updates <c>_cache</c> and
+/// the reverse index as three separate operations (read previous → remove previous's index entries
+/// → write cache → add new index entries), which must stay atomic because the server calls it for the same
 /// (document, owner) key from several unsynchronised pipeline entry points
 /// (<c>TextDocumentSyncHandler</c>, <c>DocumentActivatedHandler</c>,
 /// <c>BindingRegistryChangedHandler</c>, <c>ReqnrollConfigChangedHandler</c> all reach
 /// <c>GherkinDocumentTaggerService.ParseAsync</c>, and only one of them goes through
 /// <c>ParseCoordinator</c>'s per-URI serialisation).
 ///
-/// These tests demonstrate that two concurrent stores for the same key can leave the losing set's
-/// entries orphaned in the reverse index — a permanent +1 on every usage count for that document,
-/// for the rest of the process's lifetime, which is exactly the shape reported in #554.
+/// Before the fix, two concurrent stores for the same key could leave the losing set's entries
+/// orphaned in the reverse index — a permanent +1 on every usage count for that document, for the
+/// rest of the process's lifetime, which is exactly the shape reported in #554. The first test
+/// below reproduced that on its very first round; it passes now that <c>Store</c> and the
+/// invalidations hold the service's write lock.
 /// </summary>
 public class BindingMatchServiceConcurrencyTests
 {
