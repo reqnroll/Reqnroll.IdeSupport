@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Client;                      // Langua
 using OmniSharp.Extensions.LanguageServer.Protocol;                    // WorkspaceNames, DocumentUri
 using OmniSharp.Extensions.LanguageServer.Protocol.Client;             // ILanguageClient
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;// SemanticTokensWorkspaceCapability
+using OmniSharp.Extensions.LanguageServer.Protocol.Document;           // OnPublishDiagnostics
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;             // InitializeResult
 using OmniSharp.Extensions.LanguageServer.Server;                      // LanguageServer factory
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
@@ -57,6 +58,23 @@ public sealed class LspServerHarness : IAsyncDisposable
         get { lock (_applyEditLock) return _lastApplyEdit; }
     }
 
+    private readonly object _diagnosticsLock = new();
+    private readonly Dictionary<string, PublishDiagnosticsParams> _diagnostics =
+        new(StringComparer.OrdinalIgnoreCase);
+    private TaskCompletionSource<int> _diagnosticsSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// The most recent <c>textDocument/publishDiagnostics</c> notification for a URI, or null if
+    /// the server has not published for it at all. LSP defines each push as the <em>complete</em>
+    /// set for that URI, so only the latest is kept — and "published an empty set" (diagnostics
+    /// cleared) is deliberately distinguishable from "never published".
+    /// </summary>
+    public PublishDiagnosticsParams? PublishedDiagnosticsFor(DocumentUri uri)
+    {
+        lock (_diagnosticsLock)
+            return _diagnostics.TryGetValue(uri.ToString(), out var p) ? p : null;
+    }
+
     public async Task StartAsync(string workspaceFolder, string? ideId = null, bool supportsChangeAnnotations = false)
     {
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
@@ -108,6 +126,10 @@ public sealed class LspServerHarness : IAsyncDisposable
                 return Task.CompletedTask;
             });
 
+            // Sink for textDocument/publishDiagnostics (F3 parse errors, F4 undefined/ambiguous
+            // steps). Server-initiated notification; nothing is sent back.
+            options.OnPublishDiagnostics(RecordDiagnostics);
+
             // Sink for workspace/applyEdit (F13 — Comment/Uncomment).
             // LSP defines this as a server-initiated request (not notification) — client must respond.
             options.OnRequest<ApplyWorkspaceEditParams, ApplyWorkspaceEditResponse>(
@@ -152,6 +174,59 @@ public sealed class LspServerHarness : IAsyncDisposable
             var prev = _applyEditSignal;
             _applyEditSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
             prev.TrySetResult(1);
+        }
+    }
+
+    private void RecordDiagnostics(PublishDiagnosticsParams p)
+    {
+        lock (_diagnosticsLock)
+        {
+            _diagnostics[p.Uri.ToString()] = p;
+            var prev = _diagnosticsSignal;
+            _diagnosticsSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            prev.TrySetResult(_diagnostics.Count);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the latest published diagnostics for <paramref name="uri"/> satisfy
+    /// <paramref name="predicate"/>, or the timeout elapses. The predicate is given null while
+    /// nothing has been published for the URI yet, so a caller can wait for the first push
+    /// (<c>p =&gt; p is not null</c>) or for a particular diagnostic within it.
+    /// <para>
+    /// Polling is required rather than a single await: diagnostics reach the client through the
+    /// asynchronous match-cache pipeline (tagger → MatchCacheChangedNotification →
+    /// DiagnosticsPublishHandler), and the set for a URI is republished whenever bindings change,
+    /// so the first push is not necessarily the settled one.
+    /// </para>
+    /// </summary>
+    public async Task<bool> WaitForDiagnosticsAsync(
+        DocumentUri uri,
+        Func<PublishDiagnosticsParams?, bool> predicate,
+        int timeoutMs = 5000)
+    {
+        var key = uri.ToString();
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            Task<int> wait;
+            lock (_diagnosticsLock)
+            {
+                _diagnostics.TryGetValue(key, out var current);
+                if (predicate(current)) return true;
+                wait = _diagnosticsSignal.Task;
+            }
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            if (remaining <= 0) return false;
+            var completed = await Task.WhenAny(wait, Task.Delay(remaining)).ConfigureAwait(false);
+            if (completed != wait)
+            {
+                lock (_diagnosticsLock)
+                {
+                    _diagnostics.TryGetValue(key, out var current);
+                    return predicate(current);
+                }
+            }
         }
     }
 
