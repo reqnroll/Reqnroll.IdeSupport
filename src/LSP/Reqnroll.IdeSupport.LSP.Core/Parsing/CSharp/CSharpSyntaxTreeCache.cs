@@ -98,14 +98,21 @@ public sealed class CSharpSyntaxTreeCache : ICSharpSyntaxTreeCache
 
     private void EvictIfNeeded()
     {
-        if (_entries.Count <= MaxEntries)
+        // ConcurrentDictionary.ToArray() takes a moment-in-time snapshot; ordering/taking directly
+        // over _entries (an IEnumerable<KeyValuePair<,>>) instead would let LINQ's internal buffering
+        // fall onto the ICollection<T> CopyTo fast path, which pre-sizes its destination array from
+        // a Count taken slightly before the copy — a concurrent Store growing the dictionary in that
+        // window throws ArgumentException ("index is equal to or greater than the length of the
+        // array"). Sorting/removing from this snapshot instead keeps the whole pass safe under
+        // concurrent Store calls, matching the non-atomic-cache shape that caused issue #554.
+        var snapshot = _entries.ToArray();
+        if (snapshot.Length <= MaxEntries)
             return;
 
-        foreach (var key in _entries
+        foreach (var key in snapshot
                      .OrderBy(kvp => kvp.Value.LastAccess)
-                     .Take(_entries.Count - MaxEntries)
-                     .Select(kvp => kvp.Key)
-                     .ToList())
+                     .Take(snapshot.Length - MaxEntries)
+                     .Select(kvp => kvp.Key))
         {
             _entries.TryRemove(key, out _);
         }
