@@ -313,27 +313,47 @@ is wired into `build.gradle.kts`, `./gradlew test` runs them:
   formatting (`renderLabel`) for both custom-command result lists, including the
   null-optional-field omission behavior. Pulled out to `internal` for the same reason.
 
-**Still TODO — needs a platform fixture** (`intellijPlatform { testFramework(TestFrameworkType.Platform) }`,
-not wired in yet):
-- `ReqnrollLspServerSupportProvider.fileOpened` — `BasePlatformTestCase` with a
-  fake/spy `LspServerStarter`, asserting `ensureServerStarted` is (or isn't) called for
-  `.feature`/`.cs` vs. other extensions, and that `ReqnrollProjectBaseline.pushForAllRunnableProjects`
-  fires afterward.
-- `ReqnrollLspServerDescriptor` — `isSupportedFile` gating, and `createCommandLine()`
-  producing the right exe path (the `--log-level` value itself is covered by
-  `ReqnrollLspServerDescriptorTest` above).
-- File type/language registration — `BasePlatformTestCase` confirming a `.feature` file
-  resolves to `ReqnrollFeatureFileType`/`ReqnrollFeatureLanguage` at runtime (catches
-  `plugin.xml` wiring typos that `verifyPlugin` doesn't, since that only checks API
-  compatibility).
+`intellijPlatform { testFramework(TestFrameworkType.Platform) }` is wired in (issue #566),
+unlocking IntelliJ Platform fixture-based tests — but **only application-level ones**:
+- `ReqnrollFeatureFileTypeRegistrationTest` — confirms `.feature` resolves to
+  `ReqnrollFeatureFileType`/`ReqnrollFeatureLanguage` through plugin.xml's `fileType` extension
+  at runtime (catches wiring typos `verifyPlugin`'s bytecode-level checks don't, since they never
+  actually load the extension point), via `FileTypeManager.getInstance()` — an *application*-level
+  service — under a plain `ApplicationRule` (`org.junit.ClassRule`; JUnit3/4-style tests run via
+  the `org.junit.vintage:junit-vintage-engine` also added for this, alongside the pre-existing
+  `kotlin("test-junit5")` engine).
+
+**Found empirically, corrects this section's previous assumption:** `BasePlatformTestCase`
+(the IntelliJ Platform's standard *project*-level fixture) does not work against this plugin's
+`intellijPlatform { rider(...) }` target at all — confirmed live, issue #566: every
+`BasePlatformTestCase` test failed identically, regardless of what it exercised, with
+`PluginException: solution can't be null` thrown from
+`RiderProtocolProjectSessionsManager.registerLocalSession` while the fixture's `Project` is being
+initialized. That's Rider's own `ClientProjectSessionsManager` project service (registered
+unconditionally for every `Project` under a Rider-type sandbox, nothing to do with this plugin's
+code) requiring a real backend `solution`, which a lightweight test-fixture project never has.
+This matches JetBrains' own guidance that Rider plugins need their TestNG-based
+`com.jetbrains.intellij.resharper:resharper-test-framework` (`BaseTestWithSolution` and similar —
+a real backend spun up against real `.sln`-shaped test data) for anything that needs a live
+`Project`, not the generic `BasePlatformTestCase`/JUnit setup `testFramework(TestFrameworkType.Platform)`
+alone provides. That's a materially bigger, separate lift (different test runner alongside the
+JUnit5 one already in use here, real backend startup, test-data solutions) — out of scope for
+issue #566; still TODO:
+- `ReqnrollLspServerSupportProvider.fileOpened` — needs a real `Project` to construct/pass to a
+  fake/spy `LspServerStarter`.
+- `ReqnrollLspServerDescriptor.isSupportedFile`/`createCommandLine()` — `isSupportedFile` needs a
+  real `Project`-scoped `VirtualFile` (the `--log-level` value itself is covered by
+  `ReqnrollLspServerDescriptorTest` above); `createCommandLine()` also needs a real bundled server
+  binary on disk.
 - `ReqnrollRunnableProjectsListener`/`ReqnrollProjectFilesSync`/`ReqnrollDocumentActivationSync`/
   `ReqnrollProjectBaseline.buildProjectLoadedParams` — each needs a real
   `Project`/`RunnableProjectsModel`/`FileEditorManager` fixture to test the event-wiring itself
   (the pure logic each delegates to — `ProjectFileRole.classify`, `DocumentActivationState` — is
   already covered above).
 - `StepUsagesCodeVisionProvider`/`ReqnrollFeatureInlayHintsController` — need a real
-  `Editor`/`PsiFile` fixture; the request/response plumbing they call (`ReqnrollRequestSender`)
-  is thin glue over `LspServer.sendRequestSync` with no independent logic to unit-test.
+  `Editor`/`PsiFile` fixture (itself `Project`-scoped); the request/response plumbing they call
+  (`ReqnrollRequestSender`) is thin glue over `LspServer.sendRequestSync` with no independent
+  logic to unit-test.
 - Deferred: a full end-to-end functional test (real Rider sandbox, open a `.feature`
   file, confirm the LSP connection comes up and `reqnroll/*` notifications actually arrive)
   — expensive; revisit once there's been at least one live `runIde` verification pass to
