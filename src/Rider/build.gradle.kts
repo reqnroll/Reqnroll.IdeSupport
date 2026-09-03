@@ -2,6 +2,7 @@ import org.gradle.internal.os.OperatingSystem
 import org.gradle.kotlin.dsl.support.serviceOf
 import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
@@ -30,13 +31,32 @@ dependencies {
         }
         // instrumentationTools() was a compatibility helper for the 1.x plugin, removed in 2.12.0 --
         // build/test/verify now pull the required instrumentation dependencies automatically.
+
+        // Unlocks com.intellij.testFramework.fixtures.BasePlatformTestCase (issue #566) for tests
+        // that need a real Project/PsiFile/VirtualFile/Editor fixture — e.g. confirming .feature
+        // actually resolves to ReqnrollFeatureFileType through plugin.xml, not just via direct
+        // class references, which is the class of bug (a plugin.xml wiring typo) verifyPlugin
+        // doesn't catch. Adds com.jetbrains.intellij.platform:test-framework.
+        testFramework(TestFrameworkType.Platform)
     }
 
     // Plain JUnit5 (kotlin.test assertions on the JUnit5 engine) for pure-logic unit tests that
-    // don't need an IntelliJ Platform fixture — see src/test/kotlin. Platform-fixture tests
-    // (BasePlatformTestCase) would need intellijPlatform { testFramework(TestFrameworkType.Platform) }
-    // instead/additionally; not needed yet since nothing under test touches the platform directly.
+    // don't need an IntelliJ Platform fixture — see src/test/kotlin.
     testImplementation(kotlin("test-junit5"))
+
+    // BasePlatformTestCase extends the JUnit3-style junit.framework.TestCase. test-framework
+    // (added via testFramework(TestFrameworkType.Platform) above) doesn't put junit:junit on the
+    // compile classpath transitively -- compileTestKotlin fails with "Cannot access
+    // 'junit.framework.TestCase' which is a supertype" without this explicit dependency.
+    testImplementation("junit:junit:4.13.2")
+
+    // BasePlatformTestCase (brought in by testFramework(TestFrameworkType.Platform) above) is a
+    // JUnit3-style TestCase, which JUnit5's Jupiter engine (useJUnitPlatform(), configured below)
+    // can't run on its own — the vintage engine bridges JUnit3/4-style tests onto the JUnit
+    // Platform runner so both styles run side by side via a single `./gradlew test`. Pinned to the
+    // same 5.10.1 line as the already-resolved junit-jupiter-api/junit-platform-launcher so all
+    // JUnit Platform components agree on one release.
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.1")
 }
 
 kotlin {
