@@ -9,6 +9,14 @@ import './lsp/watcherExclude.test';
 import './lsp/defineStepRecovery.test';
 import './lsp/lspInspectorLogger.test';
 import './lsp/msbuildEvaluator.test';
+import './lsp/executeCommandDedupe.test';
+import './lsp/manualDocumentSync.test';
+// Must precede `commands/stepCodeLens.test` and `commands/hookCodeLens.test` below (and, for the
+// same reason, everything else that could reach a real `activate()`): `getCodeLensRefreshEvent`
+// guards a module-level singleton that only its first caller in the whole process actually wires
+// up -- see the doc comment atop `lsp/codeLensRefresh.test.ts`.
+import './lsp/codeLensRefresh.test';
+import './telemetry.test';
 import './resolveServerPath.test';
 import './commands/renameStep.test';
 import './tableHighlightService.test';
@@ -19,8 +27,10 @@ import './commands/findUnusedStepDefinitions.test';
 import './commands/goToHooks.test';
 import './commands/goToMatchingScenarios.test';
 import './commands/stepCodeLens.test';
+import './commands/hookCodeLens.test';
 import './commands/commentToggle.test';
 import './util/selectionUtils.test';
+import './util/navigationUtils.test';
 import './grammar.test';
 
 /**
