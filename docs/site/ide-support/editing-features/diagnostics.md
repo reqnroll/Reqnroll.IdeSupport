@@ -71,11 +71,6 @@ If a binding has more than one problem at once (e.g. a malformed scope expressio
 also isn't a valid binding class), every applicable message is shown together rather than only the
 first one found.
 
-This squiggle appears via your IDE's own C# editor surface, alongside whatever the native C#
-language server already reports for the same file — the two sources merge with no conflict, so a
-binding-validation warning shows up next to ordinary C# errors/warnings in the same Error List /
-Problems panel.
-
 ```{admonition} A step's "no matching step definition" warning gets more specific too
 :class: note
 
