@@ -90,7 +90,10 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
 
     private IOleCommandTarget? _nextCommandTarget;
 
-    private CommentToggleCommandFilter(IVsTextView vsTextView, IVsEditorAdaptersFactoryService editorAdapter, IIdeSupportLogger logger)
+    // internal rather than private so Reqnroll.IdeSupport.VisualStudio.Tests (an InternalsVisibleTo
+    // friend assembly — see the VSSDKIntegration csproj) can construct this filter directly to unit
+    // test GetTextBufferFileUri below, which needs no real VS host.
+    internal CommentToggleCommandFilter(IVsTextView vsTextView, IVsEditorAdaptersFactoryService editorAdapter, IIdeSupportLogger logger)
     {
         _vsTextView    = vsTextView;
         _editorAdapter = editorAdapter;
@@ -186,7 +189,9 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private string GetTextBufferFileUri(IWpfTextView wpfTextView)
+    // internal rather than private so it can be unit tested directly (see the constructor's note above) —
+    // unlike Exec/QueryStatus it never touches ThreadHelper, so it doesn't need a real VS UI thread.
+    internal string GetTextBufferFileUri(IWpfTextView wpfTextView)
     {
         try
         {

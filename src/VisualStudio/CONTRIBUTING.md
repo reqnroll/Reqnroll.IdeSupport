@@ -87,10 +87,10 @@ change `ServerArguments` and rebuild, or use the DEBUG configuration directly.
 ## Testing
 
 ```sh
-dotnet test tests/VisualStudio/Reqnroll.VisualStudio.Tests/Reqnroll.VisualStudio.Tests.csproj
+dotnet test tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Tests/Reqnroll.IdeSupport.VisualStudio.Tests.csproj
 ```
 
-`Reqnroll.VisualStudio.Tests` (net481, xUnit + NSubstitute + AwesomeAssertions — note: `Should()`
+`Reqnroll.IdeSupport.VisualStudio.Tests` (net481, xUnit + NSubstitute + AwesomeAssertions — note: `Should()`
 is AwesomeAssertions, not FluentAssertions; signed with `reqnroll.snk`) is the home for VS-client
 unit tests. It reaches `internal` types via `InternalsVisibleTo` (see the
 `AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo"` entries in the
@@ -104,7 +104,7 @@ to the server — the actual behavior lives server-side.
 - **Behavior** (toggle/format/rename/find-usages logic) belongs in the LSP server's specs
   (`tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs`), not here.
 - **Client parse/transform logic** — mapping a raw JSON-RPC response into a view model, building a
-  request payload — belongs here, in `Reqnroll.VisualStudio.Tests`.
+  request payload — belongs here, in `Reqnroll.IdeSupport.VisualStudio.Tests`.
 - **VS-COM glue** (Running Document Table / `IVsTextLines` buffer writes, `IVsFindAllReferences`
   table controls, DTE navigation, package autoload) generally isn't unit-testable — it needs a real
   VS host. Don't force a mock-heavy test around COM/`ThreadHelper.JoinableTaskFactory` code just to
