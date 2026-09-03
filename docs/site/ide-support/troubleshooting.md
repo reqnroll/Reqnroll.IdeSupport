@@ -46,15 +46,12 @@ file is viewed "from" the other project.
 
 Visual Studio does not offer a per-file-type or per-content-type way to turn off GitHub Copilot
 (inline "ghost text" suggestions, or the lightbulb's Copilot-provided "Fix" action) for `.feature`
-files specifically. This was confirmed by inspecting Copilot's own extension DLLs
-(`Microsoft.VisualStudio.Completions.dll`): its inline-suggestion source, margin, and command
-handler are all registered against `[ContentType("any")]`, meaning once Copilot is enabled in the
+files specifically. Once Copilot is enabled in the
 IDE at all, it applies uniformly to every open document — there's no content-type or file-extension
 scoping to opt out of, and no supported extensibility point Reqnroll IDE Support could hook to
-suppress it automatically for Gherkin buffers. The empty "Fix" lightbulb that spins forever on a
+suppress it automatically for Gherkin. The empty "Fix" lightbulb that spins forever on a
 `reqnroll.parser`/`reqnroll.binding` diagnostic is this same Copilot quick-fix provider finding
-nothing to offer — not a Reqnroll IDE Support action; see
-[issue #563](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/563) for the investigation.
+nothing to offer — not a Reqnroll IDE Support action.
 IntelliCode's separate whole-line completions don't apply here — that feature is C#-only and never
 activates on `.feature` files.
 
