@@ -263,6 +263,7 @@ published here once finalized.
 * [Feature Overview](feature-overview.md) — every feature, with a per-IDE support matrix
 * [Editing Features](editing-features/index.md) — syntax highlighting, diagnostics, completion, formatting
 * [Navigation Features](navigation-features/index.md) — jump between steps, bindings, and hooks
+* [Running Scenarios](running-scenarios.md) — run/debug a scenario's generated test from the `.feature` file
 * [New Project / Item Templates](new-project-templates.md) — Visual Studio project/item wizards
 * [Extension Settings](settings.md) — configure the extension per IDE
 * [Gherkin Formatting with EditorConfig](editorconfig.md) — consistent formatting via `.editorconfig`
@@ -288,6 +289,7 @@ upgrading
 feature-overview
 editing-features/index
 navigation-features/index
+running-scenarios
 new-project-templates
 settings
 editorconfig
