@@ -169,3 +169,98 @@ Scenario: Deleting a C# source file removes its step definitions from Find Unuse
     When the C# step definition file "StepsToDelete.cs" is deleted
     And unused step definitions are requested
     Then 0 unused step definitions are returned
+
+# ── Ownership: a binding file linked into two projects ──────────────────────────
+#
+# Find Unused is the mirror of Find Usages and must intersect where that unions: a binding is
+# unused only if unused in *every* including project. The design calls a false "unused" here
+# actively harmful, since it invites deletion of live code. The behaviour currently falls out of
+# FindUnusedStepDefinitionsService querying the match cache with no project filter; these
+# scenarios pin it so a later change that adds one has to stay correct.
+
+Scenario: A binding used only through the second owning project is not reported unused
+    Given the LSP server is started
+    When the project "Home.csproj" is announced in folder "Home"
+    And the project "Linking.csproj" is announced in folder "Linking"
+    And the project files baseline is announced for "Home.csproj" with
+        | path                    | role    |
+        | Home/SharedSteps.cs     | Binding |
+        | Home/Unrelated.feature  | Feature |
+    And the project files baseline is announced for "Linking.csproj" with
+        | path                          | role    |
+        | Home/SharedSteps.cs           | Binding |
+        | Linking/UsedInLinking.feature | Feature |
+    And the C# step definition file "Home/SharedSteps.cs" is opened with
+        """
+        using Reqnroll;
+        namespace Shared
+        {
+            [Binding]
+            public class SharedSteps
+            {
+                [When("I press shared")]
+                public void WhenIPressShared() { }
+            }
+        }
+        """
+    And the feature file "Home/Unrelated.feature" is opened with
+        """
+        Feature: Unrelated
+        Scenario: S
+            When I press something else entirely
+        """
+    And the feature file "Linking/UsedInLinking.feature" is opened with
+        """
+        Feature: UsedInLinking
+        Scenario: S
+            When I press shared
+        """
+    Then the feature step "I press shared" is reported as bound
+    When unused step definitions are requested
+    Then the unused step definitions do not include expression "I press shared"
+
+# The source deliberately lives under Linking, the project announced *second*: both registries
+# report the binding and the rows are deduplicated to one, so attributing by first-seen order
+# would answer "Home" here. Only the folder-ownership rule gives "Linking".
+
+Scenario: An unused linked binding is attributed to the project whose folder holds its source
+    Given the LSP server is started
+    When the project "Home.csproj" is announced in folder "Home"
+    And the project "Linking.csproj" is announced in folder "Linking"
+    And the project files baseline is announced for "Home.csproj" with
+        | path                    | role    |
+        | Linking/SharedSteps.cs     | Binding |
+        | Home/Unrelated.feature  | Feature |
+    And the project files baseline is announced for "Linking.csproj" with
+        | path                          | role    |
+        | Linking/SharedSteps.cs           | Binding |
+        | Linking/AlsoUnrelated.feature | Feature |
+    And the C# step definition file "Linking/SharedSteps.cs" is opened with
+        """
+        using Reqnroll;
+        namespace Shared
+        {
+            [Binding]
+            public class SharedSteps
+            {
+                [When("I press shared")]
+                public void WhenIPressShared() { }
+            }
+        }
+        """
+    And the feature file "Home/Unrelated.feature" is opened with
+        """
+        Feature: Unrelated
+        Scenario: S
+            When I press something else entirely
+        """
+    And the feature file "Linking/AlsoUnrelated.feature" is opened with
+        """
+        Feature: AlsoUnrelated
+        Scenario: S
+            When I press yet another thing
+        """
+    Then the feature step "I press yet another thing" is reported as unbound
+    When unused step definitions are requested
+    Then the unused step definitions include expression "I press shared"
+    And the unused step definition "I press shared" is attributed to project "Linking"

@@ -175,3 +175,54 @@ Scenario: reqnroll/findStepUsages returns isBinding true and matching locations 
 	And 1 step usage is returned
 	And the step usages include a location in "Calculator.feature"
 	And the step usages include a non-empty step text
+
+# ── Ownership: a binding file linked into two projects ──────────────────────────
+#
+# Home/SharedSteps.cs is physically under Home but is claimed by both projects' baselines.
+# The design requires Find All Usages to union across every project that includes the binding:
+# "a binding linked into N projects is used if a feature in any of the N references it."
+# FindStepUsagesHandler and ReferencesHandler pass ResolveOwners as a project filter, so a
+# regression that narrowed that filter to one owner would hide half the results.
+
+Scenario: Usages of a binding linked into two projects union across both owners
+	Given the LSP server is started
+	When the project "Home.csproj" is announced in folder "Home"
+	And the project "Linking.csproj" is announced in folder "Linking"
+	And the project files baseline is announced for "Home.csproj" with
+		| path                     | role    |
+		| Home/SharedSteps.cs      | Binding |
+		| Home/UsedInHome.feature  | Feature |
+	And the project files baseline is announced for "Linking.csproj" with
+		| path                           | role    |
+		| Home/SharedSteps.cs            | Binding |
+		| Linking/UsedInLinking.feature  | Feature |
+	And the C# step definition file "Home/SharedSteps.cs" is opened with
+		"""
+		using Reqnroll;
+		namespace Shared
+		{
+		    [Binding]
+		    public class SharedSteps
+		    {
+		        [When("I press shared")]
+		        public void WhenIPressShared() { }
+		    }
+		}
+		"""
+	And the feature file "Home/UsedInHome.feature" is opened with
+		"""
+		Feature: UsedInHome
+		Scenario: S
+		    When I press shared
+		"""
+	And the feature file "Linking/UsedInLinking.feature" is opened with
+		"""
+		Feature: UsedInLinking
+		Scenario: S
+		    When I press shared
+		"""
+	Then the feature step "I press shared" is reported as bound
+	When references are requested at line 7 column 0 in "Home/SharedSteps.cs"
+	Then 2 references are returned
+	And the references include a location in "Home/UsedInHome.feature"
+	And the references include a location in "Linking/UsedInLinking.feature"

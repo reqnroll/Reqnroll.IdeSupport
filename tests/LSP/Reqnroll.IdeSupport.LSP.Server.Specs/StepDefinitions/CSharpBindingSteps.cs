@@ -44,7 +44,8 @@ public sealed class CSharpBindingSteps
     public async Task WhenTheCsharpFileIsOpenedAndSavedToDiskWith(string fileName, string content)
     {
         await WhenTheCsharpFileIsOpenedWith(fileName, content);
-        var path = Path.Combine(_ctx.WorkspaceFolder, fileName);
+        var path = _ctx.PathFor(fileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, content);
     }
 
@@ -78,6 +79,23 @@ public sealed class CSharpBindingSteps
         ok.Should().BeTrue(
             $"the step '{stepText}' should surface as an unbound (undefined) step after the " +
             $"binding registry change");
+    }
+
+    /// <summary>
+    /// Same assertion with an explicit budget, for scenarios whose bindings come from the
+    /// out-of-process connector rather than the Roslyn live path: launching the connector process
+    /// and reflecting over a real assembly takes far longer than an in-process source parse, and
+    /// the first run in a test session pays the process's own cold start.
+    /// </summary>
+    [Then(@"the feature step ""([^""]*)"" is reported as bound within (\d+) seconds")]
+    public async Task ThenTheFeatureStepIsReportedAsBoundWithin(string stepText, int seconds)
+    {
+        var ok = await PollFeatureTokensAsync(
+            tokens => tokens.Count > 0 && !tokens.Any(t => IsUndefinedStepFor(t, stepText)),
+            timeoutMs: seconds * 1000);
+
+        ok.Should().BeTrue(
+            $"the step '{stepText}' should be matched within {seconds}s of discovery starting");
     }
 
     [Then(@"the feature step ""(.*)"" is reported as bound")]

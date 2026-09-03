@@ -72,52 +72,105 @@ public sealed class ProtocolSteps
         _ctx.LastTokens = await _ctx.Harness.Client.RequestSemanticTokensRangeAsync(_ctx.LastUri!, range);
     }
 
-    [When(@"the project is announced with output assembly ""(.*)"" for ""(.*)""")]
+    /// <summary>
+    /// Announces the scenario's single default project, rooted at the workspace folder. The
+    /// trailing file name is the feature file the scenario goes on to open; it plays no part in
+    /// the notification and is kept because it reads well in the scenarios that use this step.
+    /// Scenarios that need more than one project use "the project ... is announced in folder ..."
+    /// instead.
+    /// </summary>
+    [When(@"the project is announced with output assembly ""([^""]*)"" for ""([^""]*)""")]
     public void WhenTheProjectIsAnnounced(string outputAssembly, string fileName)
-    {
-        var projectFolder = _ctx.WorkspaceFolder;
-        _ctx.Harness.Client.SendProjectLoaded(new
-        {
-            workspaceFolder = _ctx.WorkspaceFolder,
-            projectFile = Path.Combine(projectFolder, "Sample.csproj"),
-            projectFolder,
-            outputAssemblyPath = Path.IsPathRooted(outputAssembly)
-                ? outputAssembly
-                : Path.Combine(projectFolder, outputAssembly),
-            targetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
-            packageReferences = Array.Empty<object>()
-        });
-    }
+        => AnnounceProject(
+            _ctx.RegisterProject(LspScenarioContext.DefaultProjectFileName),
+            outputAssembly);
+
+    /// <summary>
+    /// Announces the default project with a NuGet package reference. The only consumer that cares
+    /// is F26's test-target resolver, which detects the test framework from package ids to know
+    /// which row-test attribute to count on a generated Scenario Outline method.
+    /// </summary>
+    [When(@"the project is announced with output assembly ""([^""]*)"" for ""([^""]*)"" referencing package ""([^""]*)""")]
+    public void WhenTheProjectIsAnnouncedReferencingPackage(
+        string outputAssembly, string fileName, string packageId)
+        => AnnounceProject(
+            _ctx.RegisterProject(LspScenarioContext.DefaultProjectFileName, packageIds: new[] { packageId }),
+            outputAssembly);
+
+    /// <summary>
+    /// Announces a named project rooted at its own workspace-relative sub-folder — the shape a
+    /// membership scenario needs, where two projects can each claim the same physical file and a
+    /// file at the workspace root sits outside both.
+    /// </summary>
+    [When(@"the project ""([^""]*)"" is announced in folder ""([^""]*)""")]
+    public void WhenTheNamedProjectIsAnnouncedInFolder(string projectFileName, string projectFolder)
+        => AnnounceProject(_ctx.RegisterProject(projectFileName, projectFolder), outputAssembly: null);
+
+    [When(@"the project ""([^""]*)"" is announced in folder ""([^""]*)"" with output assembly ""([^""]*)""")]
+    public void WhenTheNamedProjectIsAnnouncedInFolderWithOutputAssembly(
+        string projectFileName, string projectFolder, string outputAssembly)
+        => AnnounceProject(_ctx.RegisterProject(projectFileName, projectFolder), outputAssembly);
+
+    [When(@"the project ""([^""]*)"" is announced in folder ""([^""]*)"" targeting ""([^""]*)""")]
+    public void WhenTheNamedProjectIsAnnouncedInFolderTargeting(
+        string projectFileName, string projectFolder, string targetFrameworkMoniker)
+        => AnnounceProject(
+            _ctx.RegisterProject(projectFileName, projectFolder, targetFrameworkMoniker),
+            outputAssembly: null);
 
     [When(@"the project is unloaded")]
     public void WhenTheProjectIsUnloaded()
+        => WhenTheNamedProjectIsUnloaded(LspScenarioContext.DefaultProjectFileName);
+
+    [When(@"the project ""([^""]*)"" is unloaded")]
+    public void WhenTheNamedProjectIsUnloaded(string projectFileName)
         => _ctx.Harness.Client.SendProjectUnloaded(new
         {
-            projectFile = Path.Combine(_ctx.WorkspaceFolder, "Sample.csproj")
+            projectFile = _ctx.GetProject(projectFileName).ProjectFile
         });
+
+    /// <summary>
+    /// Sends <c>reqnroll/projectLoaded</c> for an already-registered project. An unspecified
+    /// output assembly defaults to <c>bin/Debug/&lt;project&gt;.dll</c> under the project folder;
+    /// it need not exist on disk, because the specs that use it get their bindings from the
+    /// Roslyn live path rather than from connector discovery.
+    /// </summary>
+    private void AnnounceProject(LspScenarioContext.SpecProject project, string? outputAssembly)
+    {
+        outputAssembly ??= Path.Combine(
+            "bin", "Debug", Path.GetFileNameWithoutExtension(project.ProjectFile) + ".dll");
+
+        _ctx.Harness.Client.SendProjectLoaded(new
+        {
+            workspaceFolder = _ctx.WorkspaceFolder,
+            projectFile = project.ProjectFile,
+            projectFolder = project.ProjectFolder,
+            outputAssemblyPath = Path.IsPathRooted(outputAssembly)
+                ? outputAssembly
+                : Path.Combine(project.ProjectFolder, outputAssembly),
+            targetFrameworkMoniker = project.TargetFrameworkMoniker,
+            packageReferences = project.PackageIds
+                .Select(id => new { packageId = id, version = "", installPath = "" })
+                .ToArray()
+        });
+    }
 
     /// <summary>
     /// Sends a <c>reqnroll/projectFiles</c> baseline notification that includes every file
     /// listed in the Reqnroll table.  The table must have columns <c>path</c> and <c>role</c>
     /// (Feature | Binding).  Paths are relative to <see cref="LspScenarioContext.WorkspaceFolder"/>.
     /// </summary>
-    [When(@"the project files baseline is announced for ""(.*)"" with")]
+    [When(@"the project files baseline is announced for ""([^""]*)"" with")]
     public void WhenTheProjectFilesBaselineIsAnnounced(string projectFileName, Table table)
     {
-        var projectFile = Path.Combine(_ctx.WorkspaceFolder, projectFileName);
-        var files = table.Rows.Select(r => new
-        {
-            path  = Path.Combine(_ctx.WorkspaceFolder, r["path"]),
-            role  = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
-            added = true
-        }).ToArray();
+        var project = _ctx.GetProject(projectFileName);
 
         _ctx.Harness.Client.SendProjectFiles(new
         {
-            projectFile,
-            targetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
+            projectFile = project.ProjectFile,
+            targetFrameworkMoniker = project.TargetFrameworkMoniker,
             kind  = 0,    // Baseline
-            files
+            files = ToFileEntries(table, added: true)
         });
     }
 
@@ -129,28 +182,59 @@ public sealed class ProtocolSteps
     /// <c>path</c> and <c>role</c> (Feature | Binding). Paths are relative to
     /// <see cref="LspScenarioContext.WorkspaceFolder"/>.
     /// </summary>
-    [When(@"the project files delta removes files for ""(.*)"" with")]
+    [When(@"the project files delta removes files for ""([^""]*)"" with")]
     public async Task WhenTheProjectFilesDeltaRemoves(string projectFileName, Table table)
     {
-        var projectFile = Path.Combine(_ctx.WorkspaceFolder, projectFileName);
-        var files = table.Rows.Select(r => new
-        {
-            path  = Path.Combine(_ctx.WorkspaceFolder, r["path"]),
-            role  = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
-            added = false
-        }).ToArray();
+        var project = _ctx.GetProject(projectFileName);
 
         _ctx.Harness.Client.SendProjectFiles(new
         {
-            projectFile,
-            targetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
+            projectFile = project.ProjectFile,
+            targetFrameworkMoniker = project.TargetFrameworkMoniker,
             kind  = 1,    // Delta
-            files
+            files = ToFileEntries(table, added: false)
         });
 
         // Allow the server to process the notification, purge the removed binding file's
         // entries from the registry, and re-parse open feature files before the next request.
         await Task.Delay(300).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends a <c>reqnroll/projectFiles</c> delta notification adding files to the project's
+    /// membership index — the path an IDE glue layer takes when a file is re-included in the
+    /// project without a full re-send, which the design requires to restore that file's ownership
+    /// (and with it its binding-dependent features).
+    /// </summary>
+    [When(@"the project files delta adds files for ""([^""]*)"" with")]
+    public async Task WhenTheProjectFilesDeltaAdds(string projectFileName, Table table)
+    {
+        var project = _ctx.GetProject(projectFileName);
+
+        _ctx.Harness.Client.SendProjectFiles(new
+        {
+            projectFile = project.ProjectFile,
+            targetFrameworkMoniker = project.TargetFrameworkMoniker,
+            kind  = 1,    // Delta
+            files = ToFileEntries(table, added: true)
+        });
+
+        await Task.Delay(300).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes a file into the workspace without opening it over LSP. Needed by features that read
+    /// from disk rather than from the document buffer — F26's resolver parses the generated
+    /// <c>&lt;feature&gt;.feature.cs</c> code-behind, which in a real project is a build output no
+    /// editor has open.
+    /// </summary>
+    [StepDefinition(@"the file ""([^""]*)"" exists on disk with")]
+    public async Task GivenTheFileExistsOnDiskWith(string fileName, string content)
+    {
+        await _ctx.EnsureStartedAsync().ConfigureAwait(false);
+        var path = _ctx.PathFor(fileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, content).ConfigureAwait(false);
     }
 
     // ── Then: handshake / capabilities ──────────────────────────────────────────
@@ -326,6 +410,20 @@ public sealed class ProtocolSteps
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Maps a <c>| path | role |</c> table to <c>reqnroll/projectFiles</c> file entries. Paths
+    /// are workspace-relative, so a multi-project scenario writes them with the project's own
+    /// folder as a prefix ("Linking/Steps.cs") and a single-project scenario keeps writing them
+    /// bare ("Steps.cs").
+    /// </summary>
+    private object[] ToFileEntries(Table table, bool added)
+        => table.Rows.Select(r => (object)new
+        {
+            path  = _ctx.PathFor(r["path"]),
+            role  = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
+            added
+        }).ToArray();
 
     private SemanticTokensLegend GetLegend()
     {

@@ -11,9 +11,25 @@ namespace Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 /// <summary>
 /// Per-scenario state shared between step classes via Reqnroll's container.
 /// Owns the <see cref="LspServerHarness"/> and a temporary workspace folder.
+/// <para>
+/// The workspace folder is the <em>solution</em> root, not a project folder. A scenario that
+/// only ever needs one project lets it default to <see cref="DefaultProjectFileName"/> rooted at
+/// the workspace folder itself; a scenario exercising project membership registers two or more
+/// projects in sub-folders (see <see cref="RegisterProject"/>), which additionally makes the
+/// workspace root a location that lies outside every project folder — the "owned by no project"
+/// case the membership index has to handle.
+/// </para>
 /// </summary>
 public sealed class LspScenarioContext
 {
+    /// <summary>The project every scenario gets when it never names one explicitly.</summary>
+    public const string DefaultProjectFileName = "Sample.csproj";
+
+    /// <summary>The TFM announced for a project whose steps do not specify one.</summary>
+    public const string DefaultTargetFrameworkMoniker = ".NETCoreApp,Version=v8.0";
+
+    private readonly Dictionary<string, SpecProject> _projects = new(StringComparer.OrdinalIgnoreCase);
+
     public LspScenarioContext()
     {
         WorkspaceFolder = Path.Combine(Path.GetTempPath(), "ReqnrollLspSpecs", Guid.NewGuid().ToString("N"));
@@ -47,11 +63,128 @@ public sealed class LspScenarioContext
     public RenameTargetsResponse? LastRenameTargets { get; set; }
     public OmniSharp.Extensions.LanguageServer.Protocol.Models.RangeOrPlaceholderRange? LastPrepareRenameRange { get; set; }
 
+    // F5 — Go To Step Definition
+    public LocationOrLocationLinks? LastDefinitions { get; set; }
+
+    // F23 — Inlay Hints
+    public InlayHintContainer? LastInlayHints { get; set; }
+
+    // F26 — Test Runner Integration
+    public Reqnroll.IdeSupport.LSP.Server.Features.TestTargets.ResolveTestTargetsResponse? LastTestTargets { get; set; }
+
+    // F24 — Hook Match CodeLens navigation
+    public GoToMatchingScenariosResponse? LastMatchingScenarios { get; set; }
+
     // F6 — Define Steps (code actions)
     public CommandOrCodeActionContainer? LastCodeActions { get; set; }
 
+    /// <summary>
+    /// Resolves a workspace-relative path to a full path. Forward slashes are accepted (and
+    /// preferred) in feature files so a scenario reads the same on every platform; they are
+    /// normalised to the platform separator here, because the server compares membership-index
+    /// paths against the paths carried on <c>textDocument/*</c> URIs.
+    /// </summary>
+    public string PathFor(string relativePath)
+        => Path.GetFullPath(Path.Combine(
+            WorkspaceFolder,
+            relativePath.Replace('/', Path.DirectorySeparatorChar)
+                        .Replace('\\', Path.DirectorySeparatorChar)));
+
     public DocumentUri UriFor(string relativeName)
-        => DocumentUri.FromFileSystemPath(Path.Combine(WorkspaceFolder, relativeName));
+        => DocumentUri.FromFileSystemPath(PathFor(relativeName));
+
+    // ── Projects ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Registers a project so later steps can announce files for it, resolve its folder, and
+    /// unload it by name. Registering the same project file twice updates it rather than adding
+    /// a second entry, so a scenario may re-announce a project without duplicating it.
+    /// </summary>
+    /// <param name="projectFileName">
+    /// The project file, workspace-relative (e.g. <c>"Linking/Linking.csproj"</c>) or a bare file
+    /// name (e.g. <c>"Sample.csproj"</c>). The bare file name is also the key later steps use.
+    /// </param>
+    /// <param name="projectFolder">
+    /// The project's own folder, workspace-relative. Null or empty means the workspace root —
+    /// the single-project layout every pre-existing scenario uses.
+    /// </param>
+    /// <param name="targetFrameworkMoniker">Defaults to <see cref="DefaultTargetFrameworkMoniker"/>.</param>
+    public SpecProject RegisterProject(
+        string projectFileName,
+        string? projectFolder = null,
+        string? targetFrameworkMoniker = null,
+        IReadOnlyList<string>? packageIds = null)
+    {
+        var folder = string.IsNullOrEmpty(projectFolder) ? WorkspaceFolder : PathFor(projectFolder);
+
+        // A bare file name is rooted *inside* the project's own folder, the way a real .csproj
+        // sits in its own directory. Leaving it at the workspace root would make
+        // Path.GetDirectoryName(ProjectFile) — which is how consumers such as
+        // FindUnusedStepDefinitionsHandler derive "this project's own folder" — resolve to the
+        // solution root for every project, so every project would appear to contain every file.
+        var file = Path.GetDirectoryName(projectFileName) is { Length: > 0 }
+            ? PathFor(projectFileName)
+            : Path.Combine(folder, projectFileName);
+
+        var project = new SpecProject(
+            ProjectFile: file,
+            ProjectFolder: folder,
+            TargetFrameworkMoniker: targetFrameworkMoniker ?? DefaultTargetFrameworkMoniker,
+            PackageIds: packageIds ?? Array.Empty<string>());
+
+        // Keyed on the full project-file path, not the bare file name: two projects in different
+        // folders may legitimately share a file name, and a name-keyed registry would silently
+        // point the second one's steps at the first one's folder.
+        _projects[project.ProjectFile] = project;
+        return project;
+    }
+
+    /// <summary>
+    /// Looks up a project by the same string a step used to name it — either the workspace-relative
+    /// path it was registered with, or a bare file name when that name identifies exactly one
+    /// registered project. A project a scenario never registered resolves to one rooted at the
+    /// workspace folder, which is what keeps single-project scenarios — where
+    /// <c>reqnroll/projectFiles</c> names a project no explicit step ever created — working
+    /// unchanged.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// A bare file name matches more than one registered project. Silently picking one would
+    /// attribute files to the wrong project, so the scenario is told to name the project by its
+    /// workspace-relative path instead.
+    /// </exception>
+    public SpecProject GetProject(string projectFileName)
+    {
+        if (_projects.TryGetValue(PathFor(projectFileName), out var exact))
+            return exact;
+
+        var fileName = Path.GetFileName(projectFileName);
+        var byName = _projects.Values
+            .Where(p => string.Equals(Path.GetFileName(p.ProjectFile), fileName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (byName.Count > 1)
+            throw new InvalidOperationException(
+                $"'{projectFileName}' matches {byName.Count} registered projects " +
+                $"({string.Join(", ", byName.Select(p => p.ProjectFile))}). " +
+                "Name the project by its workspace-relative path so the step is unambiguous.");
+
+        return byName.Count == 1
+            ? byName[0]
+            : new SpecProject(PathFor(projectFileName), WorkspaceFolder, DefaultTargetFrameworkMoniker,
+                              Array.Empty<string>());
+    }
+
+    /// <summary>A project as the spec harness announces it over <c>reqnroll/projectLoaded</c>.</summary>
+    /// <param name="PackageIds">
+    /// NuGet package ids announced with the project. Only the ids matter to the server —
+    /// TestFrameworkDetection reads them to decide which row-test attribute F26's resolver should
+    /// count on a generated Scenario Outline method — so versions are left empty.
+    /// </param>
+    public sealed record SpecProject(
+        string ProjectFile,
+        string ProjectFolder,
+        string TargetFrameworkMoniker,
+        IReadOnlyList<string> PackageIds);
 
     public async Task EnsureStartedAsync(string? ideId = null, bool supportsChangeAnnotations = false)
     {

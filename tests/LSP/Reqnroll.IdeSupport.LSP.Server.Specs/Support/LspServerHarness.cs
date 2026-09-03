@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Client;                      // Langua
 using OmniSharp.Extensions.LanguageServer.Protocol;                    // WorkspaceNames, DocumentUri
 using OmniSharp.Extensions.LanguageServer.Protocol.Client;             // ILanguageClient
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;// SemanticTokensWorkspaceCapability
+using OmniSharp.Extensions.LanguageServer.Protocol.Document;           // OnPublishDiagnostics
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;             // InitializeResult
 using OmniSharp.Extensions.LanguageServer.Server;                      // LanguageServer factory
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
@@ -57,6 +58,23 @@ public sealed class LspServerHarness : IAsyncDisposable
         get { lock (_applyEditLock) return _lastApplyEdit; }
     }
 
+    private readonly object _diagnosticsLock = new();
+    private readonly Dictionary<string, PublishDiagnosticsParams> _diagnostics =
+        new(StringComparer.OrdinalIgnoreCase);
+    private TaskCompletionSource<int> _diagnosticsSignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// The most recent <c>textDocument/publishDiagnostics</c> notification for a URI, or null if
+    /// the server has not published for it at all. LSP defines each push as the <em>complete</em>
+    /// set for that URI, so only the latest is kept — and "published an empty set" (diagnostics
+    /// cleared) is deliberately distinguishable from "never published".
+    /// </summary>
+    public PublishDiagnosticsParams? PublishedDiagnosticsFor(DocumentUri uri)
+    {
+        lock (_diagnosticsLock)
+            return _diagnostics.TryGetValue(uri.ToString(), out var p) ? p : null;
+    }
+
     public async Task StartAsync(string workspaceFolder, string? ideId = null, bool supportsChangeAnnotations = false)
     {
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
@@ -108,6 +126,10 @@ public sealed class LspServerHarness : IAsyncDisposable
                 return Task.CompletedTask;
             });
 
+            // Sink for textDocument/publishDiagnostics (F3 parse errors, F4 undefined/ambiguous
+            // steps). Server-initiated notification; nothing is sent back.
+            options.OnPublishDiagnostics(RecordDiagnostics);
+
             // Sink for workspace/applyEdit (F13 — Comment/Uncomment).
             // LSP defines this as a server-initiated request (not notification) — client must respond.
             options.OnRequest<ApplyWorkspaceEditParams, ApplyWorkspaceEditResponse>(
@@ -155,6 +177,90 @@ public sealed class LspServerHarness : IAsyncDisposable
         }
     }
 
+    private void RecordDiagnostics(PublishDiagnosticsParams p)
+    {
+        lock (_diagnosticsLock)
+        {
+            _diagnostics[p.Uri.ToString()] = p;
+            var prev = _diagnosticsSignal;
+            _diagnosticsSignal = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+            prev.TrySetResult(_diagnostics.Count);
+        }
+    }
+
+    /// <summary>
+    /// Waits until the latest published diagnostics for <paramref name="uri"/> satisfy
+    /// <paramref name="predicate"/>, or the timeout elapses. The predicate is given null while
+    /// nothing has been published for the URI yet, so a caller can wait for the first push
+    /// (<c>p =&gt; p is not null</c>) or for a particular diagnostic within it.
+    /// <para>
+    /// Polling is required rather than a single await: diagnostics reach the client through the
+    /// asynchronous match-cache pipeline (tagger → MatchCacheChangedNotification →
+    /// DiagnosticsPublishHandler), and the set for a URI is republished whenever bindings change,
+    /// so the first push is not necessarily the settled one.
+    /// </para>
+    /// </summary>
+    public async Task<bool> WaitForDiagnosticsAsync(
+        DocumentUri uri,
+        Func<PublishDiagnosticsParams?, bool> predicate,
+        int timeoutMs = 5000)
+    {
+        var key = uri.ToString();
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            Task<int> wait;
+            lock (_diagnosticsLock)
+            {
+                _diagnostics.TryGetValue(key, out var current);
+                if (predicate(current)) return true;
+                wait = _diagnosticsSignal.Task;
+            }
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            if (remaining <= 0) return false;
+            var completed = await Task.WhenAny(wait, Task.Delay(remaining)).ConfigureAwait(false);
+            if (completed != wait)
+            {
+                lock (_diagnosticsLock)
+                {
+                    _diagnostics.TryGetValue(key, out var current);
+                    return predicate(current);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Waits until no further <c>publishDiagnostics</c> notification has arrived for any URI for
+    /// <paramref name="quietMs"/>, or the timeout elapses; returns true if it went quiet.
+    /// <para>
+    /// Needed for any assertion about the <em>absence</em> of a diagnostic. The pipeline
+    /// republishes as bindings change, and intermediate states are genuinely observable on the
+    /// wire — a step can be briefly reported undefined while a registry update is still
+    /// propagating. Asserting on the first set that arrives would turn that flicker into a
+    /// failure and read as a lost binding, so absence is only ever asserted once the stream has
+    /// settled.
+    /// </para>
+    /// </summary>
+    public async Task<bool> WaitForDiagnosticsQuiescenceAsync(int quietMs = 750, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            Task<int> wait;
+            lock (_diagnosticsLock) wait = _diagnosticsSignal.Task;
+
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            var quiet = Math.Min(quietMs, Math.Max(0, remaining));
+            var completed = await Task.WhenAny(wait, Task.Delay(quiet)).ConfigureAwait(false);
+
+            // The quiet window elapsed with no new publish — the stream has settled.
+            if (completed != wait)
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// Waits until a <c>reqnroll/semanticTokens</c> push whose URI satisfies <paramref name="uriMatch"/>
     /// has been received, or the timeout elapses. Returns true if one arrived.
@@ -200,6 +306,31 @@ public sealed class LspServerHarness : IAsyncDisposable
             var completed = await Task.WhenAny(wait, Task.Delay(remaining)).ConfigureAwait(false);
             if (completed != wait) return RefreshCount >= minCount;
         }
+    }
+
+    /// <summary>
+    /// Waits until no further <c>workspace/semanticTokens/refresh</c> request has arrived for
+    /// <paramref name="quietMs"/>, or the timeout elapses; returns true if it went quiet. Use
+    /// before asserting on <see cref="RefreshCount"/>: the refresh is debounced, so a count read
+    /// while the window is still open measures how fast the assertion ran, not how well the
+    /// server coalesced.
+    /// </summary>
+    public async Task<bool> WaitForRefreshQuiescenceAsync(int quietMs = 1500, int timeoutMs = 10000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            Task<int> wait;
+            lock (_refreshLock) wait = _refreshSignal.Task;
+
+            var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+            var quiet = Math.Min(quietMs, Math.Max(0, remaining));
+            var completed = await Task.WhenAny(wait, Task.Delay(quiet)).ConfigureAwait(false);
+
+            if (completed != wait)
+                return true;
+        }
+        return false;
     }
 
     public ValueTask DisposeAsync()

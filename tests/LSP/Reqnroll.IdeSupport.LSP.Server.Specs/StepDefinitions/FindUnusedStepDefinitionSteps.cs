@@ -40,6 +40,25 @@ public sealed class FindUnusedStepDefinitionSteps
             $"an unused step definition with expression '{expression}' should be present");
     }
 
+    /// <summary>
+    /// Asserts which project an unused row is credited to. The same binding legitimately appears
+    /// in more than one registry — a linked <c>.cs</c>, or a referenced assembly's bindings picked
+    /// up by the referencing project's own discovery — and the rows are deduplicated to one, so
+    /// which project survives is a deliberate rule (issue #547) rather than enumeration order.
+    /// </summary>
+    [Then(@"the unused step definition ""([^""]*)"" is attributed to project ""([^""]*)""")]
+    public void ThenTheUnusedStepDefinitionIsAttributedToProject(string expression, string projectName)
+    {
+        _ctx.LastFindUnused.Should().NotBeNull();
+        var item = _ctx.LastFindUnused!.Items
+            .SingleOrDefault(i => i.BindingExpression == expression);
+
+        item.Should().NotBeNull(
+            $"exactly one unused row for '{expression}' should be returned, but the rows were " +
+            string.Join("; ", _ctx.LastFindUnused.Items.Select(i => $"{i.ProjectName}:{i.BindingExpression}")));
+        item!.ProjectName.Should().Be(projectName);
+    }
+
     [Then(@"the unused step definitions do not include expression ""(.*)""")]
     public void ThenUnusedStepDefinitionsDoNotIncludeExpression(string expression)
     {
