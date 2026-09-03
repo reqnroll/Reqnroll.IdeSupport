@@ -146,19 +146,25 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     public void TriggerRefresh()
     {
         CancellationTokenSource? oldCts;
-        CancellationTokenSource  newCts;
+        var newCts = new CancellationTokenSource();
+        // Captured immediately after construction, before newCts is published to _cts below --
+        // a concurrent Dispose() races this method solely through _cts_lock, and Dispose() calls
+        // Cancel()/Dispose() on the CTS it reads *outside* that lock. Reading newCts.Token itself
+        // after publishing (the previous shape) could therefore observe an already-disposed CTS
+        // and throw ObjectDisposedException; the token value obtained here stays valid to pass to
+        // Task.Run regardless of what happens to newCts afterward.
+        var token = newCts.Token;
 
         lock (_cts_lock)
         {
             oldCts = _cts;
-            newCts = new CancellationTokenSource();
             _cts   = newCts;
         }
 
         oldCts?.Cancel();
         oldCts?.Dispose();
 
-        _ = Task.Run(() => RunDiscoveryAsync(newCts.Token), newCts.Token);
+        _ = Task.Run(() => RunDiscoveryAsync(token), token);
     }
 
     /// <summary>
