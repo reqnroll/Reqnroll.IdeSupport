@@ -52,6 +52,12 @@ the faster path since you don't have to invoke anything.
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | ✅ | ✅ | ✅ |
 | [Hook Navigation ("Go to Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
 
+## Running Scenarios
+
+| Feature | VS Code | Visual Studio | Rider |
+|---|:---:|:---:|:---:|
+| [Running Scenarios](running-scenarios.md) | ❌⁶ | ✅ | ⚠️⁷ |
+
 ## Project Setup
 
 | Feature | VS Code | Visual Studio | Rider |
@@ -82,6 +88,15 @@ for exactly where to find it.
 ⁵ VS Code and Rider don't have an equivalent project wizard; use snippets
 (VS Code) or live templates (Rider) instead — see
 [New Project / Item Templates](new-project-templates.md).
+
+⁶ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
+extension and use its own Test Explorer/CodeLens instead — see
+[Running Scenarios](running-scenarios.md).
+
+⁷ Rider's lens can only run a scenario, not debug it, and doesn't appear in
+Rider's native Unit Tests tool window. See
+[Running Scenarios](running-scenarios.md) for the details and the
+workaround for debugging.
 
 ```{admonition} Preview status
 :class: note
