@@ -42,6 +42,36 @@ If bindings differ between the two projects, expect Code Lens, [Hook Navigation]
 and diagnostics on the shared file to reflect the home project's bindings only, even when the
 file is viewed "from" the other project.
 
+## Visual Studio: GitHub Copilot suggestions compete with `.feature` file editing
+
+Visual Studio does not offer a per-file-type or per-content-type way to turn off GitHub Copilot
+(inline "ghost text" suggestions, or the lightbulb's Copilot-provided "Fix" action) for `.feature`
+files specifically. Once Copilot is enabled in the
+IDE at all, it applies uniformly to every open document — there's no content-type or file-extension
+scoping to opt out of, and no supported extensibility point Reqnroll IDE Support could hook to
+suppress it automatically for Gherkin. The empty "Fix" lightbulb that spins forever on a
+`reqnroll.parser`/`reqnroll.binding` diagnostic is this same Copilot quick-fix provider finding
+nothing to offer — not a Reqnroll IDE Support action.
+IntelliCode's separate whole-line completions don't apply here — that feature is C#-only and never
+activates on `.feature` files.
+
+If Copilot's suggestions are getting in the way while editing Gherkin, the available controls are
+all IDE-wide (Visual Studio has no per-language settings page for the `.feature` content type to
+scope any of these narrower):
+
+* **Turn off Copilot completions entirely** — click the **Copilot** badge (top-right of the editor)
+  → uncheck **Completions**, or **Tools → Options → GitHub → Copilot → Completions**.
+* **Make suggestions manual instead of automatic** (a lighter touch — keeps Copilot available on
+  demand everywhere, including `.feature` files) — **Tools → Options → Text Editor → Inline
+  Suggestions → General**, set **Inline Suggestions Invocation** to **Manual**. Trigger a suggestion
+  only when wanted with **Alt+.** / **Alt+,**.
+* **Org-managed exclusion by path** — if your organization has GitHub Copilot Business or
+  Enterprise, an admin can configure
+  [Content Exclusion](https://learn.microsoft.com/visualstudio/ide/visual-studio-github-copilot-admin#configure-content-exclusion)
+  for a path pattern like `**/*.feature`, which blocks both completions and Chat context for
+  matching files repo- or org-wide. This is configured server-side by an admin, not from within
+  Visual Studio, and isn't available on individual/free Copilot plans.
+
 ## Where are the logs, and how do I change the log level?
 
 :::{tab-set}
