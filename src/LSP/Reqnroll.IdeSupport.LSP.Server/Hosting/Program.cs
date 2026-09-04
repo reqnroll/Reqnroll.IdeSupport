@@ -7,7 +7,6 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;

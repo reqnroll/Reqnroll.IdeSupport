@@ -1,4 +1,4 @@
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
 

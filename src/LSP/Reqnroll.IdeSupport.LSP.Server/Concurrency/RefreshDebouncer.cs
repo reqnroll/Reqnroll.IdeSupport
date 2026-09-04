@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Reqnroll.IdeSupport.Common.Logging;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Concurrency;
 
 /// <inheritdoc cref="IRefreshDebouncer"/>
 public sealed class RefreshDebouncer : IRefreshDebouncer, IDisposable

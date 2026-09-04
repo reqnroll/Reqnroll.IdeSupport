@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using MediatR;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 
 /// <summary>
 /// Covers <see cref="ResilientMediator"/>'s fan-out fault isolation (issue #575). Stock MediatR

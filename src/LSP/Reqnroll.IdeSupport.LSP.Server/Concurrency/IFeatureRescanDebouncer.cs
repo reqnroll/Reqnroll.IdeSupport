@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Concurrency;
 
 /// <summary>
 /// Debounces a per-project rescan action so a burst of rapid <c>.cs</c> edits (one per keystroke)

@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Concurrency;
 
 /// <summary>
 /// Debounces a named action so a burst of rapid triggers collapses into a single run after they

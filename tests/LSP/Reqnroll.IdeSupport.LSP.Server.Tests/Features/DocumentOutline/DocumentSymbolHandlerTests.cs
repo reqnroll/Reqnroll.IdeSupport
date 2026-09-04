@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.DocumentOutline;
 

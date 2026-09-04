@@ -1,8 +1,8 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Parsing;
 
 /// <summary>
 /// Tests for <see cref="ParseCoordinator"/>: <see cref="IParseCoordinator.Schedule"/>

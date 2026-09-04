@@ -2,6 +2,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;

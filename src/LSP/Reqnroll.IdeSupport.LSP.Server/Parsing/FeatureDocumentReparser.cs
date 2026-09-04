@@ -2,9 +2,10 @@ using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 /// <inheritdoc cref="IFeatureDocumentReparser"/>
 public sealed class FeatureDocumentReparser : IFeatureDocumentReparser

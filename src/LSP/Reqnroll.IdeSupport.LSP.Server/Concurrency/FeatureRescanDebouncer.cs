@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Concurrency;
 
 /// <inheritdoc cref="IFeatureRescanDebouncer"/>
 public sealed class FeatureRescanDebouncer : IFeatureRescanDebouncer, IDisposable
