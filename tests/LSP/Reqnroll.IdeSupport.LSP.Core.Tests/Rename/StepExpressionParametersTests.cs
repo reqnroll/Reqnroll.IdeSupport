@@ -143,4 +143,81 @@ public class StepExpressionParametersTests
 
         segments.Should().HaveCount(slots.Count + 1);
     }
+
+    // ── IsEscaped / SlotLengthAt: backslash parity (issue #591) ────────────────────
+
+    [Fact]
+    public void IsEscaped_is_false_for_a_character_with_no_preceding_backslash()
+    {
+        StepExpressionParameters.IsEscaped("abc", 1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsEscaped_is_true_for_a_single_preceding_backslash()
+    {
+        StepExpressionParameters.IsEscaped(@"a\b", 2).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsEscaped_is_false_for_two_preceding_backslashes()
+    {
+        // \\ is an escaped backslash; the character after it is NOT itself escaped.
+        StepExpressionParameters.IsEscaped(@"a\\b", 3).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsEscaped_is_true_for_three_preceding_backslashes()
+    {
+        StepExpressionParameters.IsEscaped(@"a\\\b", 4).Should().BeTrue();
+    }
+
+    [Fact]
+    public void SlotLengthAt_recognizes_a_capturing_group_after_an_escaped_backslash()
+    {
+        // \\( is an escaped backslash followed by a genuine, unescaped capturing group -- a
+        // naive single-character lookback would misclassify the '(' as escaped and return 0.
+        const string s = @"a\\(\d+) cukes";
+        StepExpressionParameters.SlotLengthAt(s, 3).Should().Be(@"(\d+)".Length);
+    }
+
+    // ── ReplaceSlotsWithValues (issue #591) ─────────────────────────────────────────
+
+    [Fact]
+    public void ReplaceSlotsWithValues_returns_the_expression_unchanged_when_it_has_no_slots()
+    {
+        StepExpressionParameters.ReplaceSlotsWithValues("no slots here", new List<string> { "unused" })
+            .Should().Be("no slots here");
+    }
+
+    [Fact]
+    public void ReplaceSlotsWithValues_substitutes_a_single_cucumber_placeholder()
+    {
+        StepExpressionParameters.ReplaceSlotsWithValues("I have {int} cukes", new List<string> { "5" })
+            .Should().Be("I have 5 cukes");
+    }
+
+    [Fact]
+    public void ReplaceSlotsWithValues_substitutes_multiple_slots_in_order()
+    {
+        StepExpressionParameters.ReplaceSlotsWithValues(
+                @"I have (\d+) cukes and {int} apples", new List<string> { "5", "3" })
+            .Should().Be("I have 5 cukes and 3 apples");
+    }
+
+    [Fact]
+    public void ReplaceSlotsWithValues_drops_extra_slots_when_there_are_fewer_values_than_slots()
+    {
+        // Mirrors TryBuildViaRegex's original tolerance: a slot beyond the last available value
+        // is dropped (its surrounding static text survives) rather than the call failing.
+        StepExpressionParameters.ReplaceSlotsWithValues(
+                @"I have (\d+) cukes and {int} apples", new List<string> { "5" })
+            .Should().Be("I have 5 cukes and  apples");
+    }
+
+    [Fact]
+    public void ReplaceSlotsWithValues_handles_adjacent_slots_with_no_static_text_between_them()
+    {
+        StepExpressionParameters.ReplaceSlotsWithValues("{int}{string}", new List<string> { "5", "\"x\"" })
+            .Should().Be("5\"x\"");
+    }
 }
