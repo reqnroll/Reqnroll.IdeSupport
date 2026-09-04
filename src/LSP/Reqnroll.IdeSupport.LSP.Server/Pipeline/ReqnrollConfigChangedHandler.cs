@@ -14,11 +14,26 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// <see cref="MatchCacheChangedNotification"/> for each so that semantic tokens
 /// (and any other consumers) are refreshed.
 /// </summary>
+/// <remarks>
+/// Routes each buffer's reparse through <see cref="IParseCoordinator"/> (issue #576) rather than
+/// awaiting it inline, matching every other open-document reparse path
+/// (<see cref="Features.TextSync.TextDocumentSyncHandler"/>,
+/// <see cref="BindingRegistryChangedHandler.ReparseOpenFilesAsync"/>). Without this, a
+/// <c>reqnroll.json</c>/<c>.editorconfig</c> save landing while a <c>didChange</c> reparse is
+/// already in flight for the same URI could run two concurrent <c>ParseAsync</c> calls against
+/// the same document — the shape issue #554 fixed for the didChange/registry-cascade paths, but
+/// which this handler had never been routed through. It also means
+/// <see cref="Features.Folding.FoldingRangeHandler"/>/<see cref="Features.DocumentOutline.DocumentSymbolHandler"/>'s
+/// <c>WaitForReadyAsync</c> calls — the only guard those two refresh-incapable pull handlers have
+/// against reading a stale buffer — now see a pending entry for a config-driven reparse, not just
+/// a direct-edit one.
+/// </remarks>
 public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigChangedNotification>
 {
     private readonly IDocumentBufferService _documentBufferService;
     private readonly IGherkinDocumentTaggerService _taggerService;
     private readonly IMediator _mediator;
+    private readonly IParseCoordinator _parseCoordinator;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
 
@@ -27,20 +42,25 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         IDocumentBufferService documentBufferService,
         IGherkinDocumentTaggerService taggerService,
         IMediator mediator,
+        IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)
     {
         _documentBufferService = documentBufferService;
         _taggerService = taggerService;
         _mediator = mediator;
+        _parseCoordinator = parseCoordinator;
         _logger = logger;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
-    /// <summary>Handles an internal <see cref="ReqnrollConfigChangedNotification"/> (a <c>reqnroll.json</c> edit) by re-parsing every open feature-file buffer under the affected workspace root.</summary>
-    public async Task Handle(ReqnrollConfigChangedNotification notification, CancellationToken cancellationToken)
+    /// <summary>Handles an internal <see cref="ReqnrollConfigChangedNotification"/> (a <c>reqnroll.json</c> edit) by scheduling a reparse of every open feature-file buffer under the affected workspace root.</summary>
+    public Task Handle(ReqnrollConfigChangedNotification notification, CancellationToken cancellationToken)
     {
-        // Performance Verification (Layer 4): time the reqnroll.json-change reconciliation.
+        // Performance Verification (Layer 4): time the reqnroll.json-change reconciliation. Now
+        // measures only the (near-instant) scheduling of each reparse, not the reparses
+        // themselves -- mirrors BindingRegistryChangedHandler.ReparseOpenFilesAsync's equivalent
+        // note, since the actual parse work now runs after this method returns.
         using var _perf = _recorder.Measure(LspMethodNames.InternalReqnrollConfigReconcile);
 
         var affectedBuffers = _documentBufferService.All
@@ -50,16 +70,20 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         if (affectedBuffers.Count == 0)
         {
             _logger.LogVerbose($"ReqnrollConfigChanged for '{notification.WorkspaceRootPath}' — no open feature files to reparse.");
-            return;
+            return Task.CompletedTask;
         }
 
-        _logger.LogInfo($"ReqnrollConfigChanged for '{notification.WorkspaceRootPath}' — reparsing {affectedBuffers.Count} feature file(s).");
+        _logger.LogInfo($"ReqnrollConfigChanged for '{notification.WorkspaceRootPath}' — scheduling reparse of {affectedBuffers.Count} feature file(s).");
 
         foreach (var buffer in affectedBuffers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await ParseAndNotifyAsync(buffer.Uri, buffer.Version, cancellationToken).ConfigureAwait(false);
+            var uri = buffer.Uri;
+            var version = buffer.Version;
+            _parseCoordinator.Schedule(uri, ct => ParseAndNotifyAsync(uri, version, ct));
         }
+
+        return Task.CompletedTask;
     }
 
     private async Task ParseAndNotifyAsync(DocumentUri uri, int? version, CancellationToken cancellationToken)
