@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -249,7 +249,27 @@ public class BindingRegistryChangedHandler :
         CodeLensRefreshRequester.RequestRefreshAsync(
             _languageServer, _clientIde, _logger, project.ProjectName, isFullReplacement, cancellationToken);
 
-    /// <summary>Returns the number of closed feature files scanned, for the caller's PERF-line size tag (issue #471 investigation).</summary>
+    /// <summary>
+    /// Hard cap on how many closed feature files one full-replacement scan will process (issue
+    /// #580). On a workspace with more closed feature files than this, the excess files simply
+    /// keep whatever match-cache state they already had (stale cached usage counts until the
+    /// next full rebuild) rather than the scan growing unbounded with workspace size — this was
+    /// previously the only unbounded loop in the reconciliation pipeline, confirmed live to peg
+    /// a CPU core on a stress corpus with ~1,300 scenario nodes in a single file (a different
+    /// axis of size than this cap addresses, but the same class of problem: nothing bounded the
+    /// worst case).
+    /// </summary>
+    internal const int MaxClosedFeatureFilesPerScan = 2000;
+
+    /// <summary>
+    /// Wall-clock budget for one full-replacement scan (issue #580), independent of file count —
+    /// bounds the cost even when file count is modest but reads are slow (e.g. a network drive).
+    /// Backstop, not a substitute for <see cref="MaxClosedFeatureFilesPerScan"/>: the two bound
+    /// different failure shapes (too many files vs. slow individual reads).
+    /// </summary>
+    internal static readonly TimeSpan MaxScanDuration = TimeSpan.FromSeconds(30);
+
+    /// <summary>Returns the number of closed feature files actually attempted, for the caller's PERF-line size tag (issue #471 investigation) — may be less than the full closed-file set if the #580 cap or timeout below cut the scan short.</summary>
     private async Task<int> ScanAllFeatureFilesAsync(
         LspReqnrollProject project,
         CancellationToken cancellationToken)
@@ -284,18 +304,57 @@ public class BindingRegistryChangedHandler :
             .Where(f => !openUris.Contains(f))
             .ToList();
 
+        if (closedFiles.Count > MaxClosedFeatureFilesPerScan)
+        {
+            _logger.LogWarning(
+                $"ScanAllFeatureFiles: project '{project.ProjectName}' has {closedFiles.Count} " +
+                $"closed feature file(s), exceeding the {MaxClosedFeatureFilesPerScan}-file scan " +
+                "bound (issue #580) — scanning the first " +
+                $"{MaxClosedFeatureFilesPerScan}; the remainder keep their existing cached usage " +
+                "counts until the next full rebuild.");
+            closedFiles = closedFiles.Take(MaxClosedFeatureFilesPerScan).ToList();
+        }
+
         _logger.LogInfo(
             $"Full registry replacement — scanning {closedFiles.Count} closed feature file(s) " +
             $"for project '{project.ProjectName}'.");
 
+        // Linked to the caller's own token so genuine external cancellation still propagates;
+        // CancelAfter is this method's own backstop against a slow scan, not a replacement for
+        // that (issue #580 — this loop previously had no way to bound its own wall-clock cost).
+        // A cancellation here breaks the loop rather than throwing: the caller (Handle) still
+        // needs to reparse open files and request a code-lens refresh afterward regardless of
+        // whether the closed-file scan finished, timed out, or was externally cancelled.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(MaxScanDuration);
+        var scanToken = timeoutCts.Token;
+
+        var attempted = 0;
         foreach (var filePath in closedFiles)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (scanToken.IsCancellationRequested)
+            {
+                var reason = cancellationToken.IsCancellationRequested ? "was cancelled" : "timed out";
+                _logger.LogWarning(
+                    $"ScanAllFeatureFiles: project '{project.ProjectName}' scan {reason} after " +
+                    $"{attempted} of {closedFiles.Count} file(s) (issue #580).");
+                break;
+            }
+
+            attempted++;
             try
             {
-                var text = await _fileSystem.File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false);
+                var text = await _fileSystem.File.ReadAllTextAsync(filePath, scanToken).ConfigureAwait(false);
                 var uri  = DocumentUri.FromFileSystemPath(filePath);
                 await _taggerService.ScanClosedFileAsync(uri, text, project).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (scanToken.IsCancellationRequested)
+            {
+                var reason = cancellationToken.IsCancellationRequested ? "was cancelled" : "timed out";
+                _logger.LogWarning(
+                    $"ScanAllFeatureFiles: project '{project.ProjectName}' scan {reason} mid-read " +
+                    $"after {attempted} of {closedFiles.Count} file(s) (issue #580).");
+                break;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -303,7 +362,7 @@ public class BindingRegistryChangedHandler :
             }
         }
 
-        return closedFiles.Count;
+        return attempted;
     }
 
     /// <summary>Returns the number of open feature files scheduled for reparse, for the caller's PERF-line size tag (issue #471 investigation).</summary>
