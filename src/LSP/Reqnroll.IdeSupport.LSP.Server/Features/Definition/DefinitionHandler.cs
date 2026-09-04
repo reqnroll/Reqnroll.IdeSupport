@@ -11,6 +11,7 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
@@ -30,6 +31,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
     private readonly IDocumentBufferService    _bufferService;
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly IIdeSupportLogger           _logger;
+    private readonly ILspTelemetryService?      _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IFileSystemForIDE         _fileSystem;
 
@@ -40,6 +42,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         ILspWorkspaceScopeManager scopeManager,
         IIdeSupportLogger           logger,
         IFileSystemForIDE         fileSystem,
+        ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
         _matchService  = matchService;
@@ -47,6 +50,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         _scopeManager  = scopeManager;
         _logger        = logger;
         _fileSystem    = fileSystem;
+        _telemetryService = telemetryService;
         _recorder      = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -124,6 +128,15 @@ public sealed class DefinitionHandler : IDefinitionHandler
             .Select(impl => impl!.SourceLocation!.WithIdentifierLocation(impl.Method, _fileSystem))
             .Select(loc => new LocationOrLocationLink(loc.ToLspLocation()))
             .ToArray();
+
+        // Telemetry: fired once a step has actually been resolved at the cursor (the equivalent
+        // of FindStepUsagesHandler's "is a binding" gate) -- LocationCount is 0 for the
+        // undefined/ambiguous/unresolved cases below, matching the Erroneous-style signal other
+        // handlers use, rather than a separate boolean.
+        _telemetryService?.SendEvent("GoToStepDefinition command executed", new()
+        {
+            ["LocationCount"] = locations.Length,
+        });
 
         if (locations.Length == 0)
         {

@@ -280,7 +280,10 @@ public sealed class RenameHandler
         using var _perf = _recorder.Measure(LspMethodNames.TextDocumentRename, uri);
 
         if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(newName))
+        {
+            SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
             return null;
+        }
 
         _logger.LogVerbose($"RenameHandler: rename at {path}, newName='{newName}'");
 
@@ -293,6 +296,7 @@ public sealed class RenameHandler
         if (registry == ProjectBindingRegistry.Invalid)
         {
             _logger.LogVerbose("RenameHandler: registry is invalid");
+            SendRenameTelemetry(erroneous: true, reason: "RegistryInvalid");
             return null;
         }
 
@@ -301,7 +305,10 @@ public sealed class RenameHandler
         // RenameBindingResolver.ResolveBindingForRename for the full precedence order.
         var binding = _bindingResolver.ResolveBindingForRename(uri, path, request.Position, registry);
         if (binding == null)
+        {
+            SendRenameTelemetry(erroneous: true, reason: "BindingNotResolved");
             return null;
+        }
 
         var bindingLocation = ResolveBindingLocation(path, binding, line, column);
         var expression = binding.Expression ?? string.Empty;
@@ -328,13 +335,17 @@ public sealed class RenameHandler
         var effectiveNewName = _nameReconciler.Reconcile(
             path, uri, request.Position, usages, sourceExpression, newName, ReadStepText);
         if (effectiveNewName == null)
+        {
+            SendRenameTelemetry(erroneous: true, reason: "NewNameNotReconciled");
             return null;
+        }
 
         // ── 3. Validate new name ───────────────────────────────────────────────
         var nameError = StepRenameValidator.ValidateNewName(expression, effectiveNewName);
         if (nameError != null)
         {
             _logger.LogVerbose($"RenameHandler: validation failed — {nameError.Message}");
+            SendRenameTelemetry(erroneous: true, reason: "InvalidNewName");
             return null;
         }
 
@@ -355,7 +366,10 @@ public sealed class RenameHandler
             builder, uri, path, binding, sourceLiteral, effectiveNewName, cancellationToken);
 
         if (builder.IsEmpty)
+        {
+            SendRenameTelemetry(erroneous: true, reason: "NoEditsProduced");
             return null;
+        }
 
         var workspaceEdit = builder.Build();
 
@@ -367,20 +381,45 @@ public sealed class RenameHandler
         // rename succeeded while the source still has the old text. See
         // RenamePostApplyCoordinator.PushEditIfVisualStudioAsync for why VS needs this push at all.
         if (!await _postApplyCoordinator.PushEditIfVisualStudioAsync(builder, cancellationToken))
+        {
+            SendRenameTelemetry(erroneous: true, reason: "ClientRejectedEdit");
             return null;
+        }
 
         _postApplyCoordinator.InvalidateClosedFeatureCaches(builder);
         await _postApplyCoordinator.RefreshCSharpRegistryAsync(csFileUri, newCsText, cancellationToken);
 
-        // Telemetry
-        _telemetryService?.SendEvent("Rename step command executed", new()
-        {
-            ["Erroneous"] = false,
-            ["ChangeAnnotationsUsed"] = supportsChangeAnnotations,
-            ["EditedFileCount"] = builder.TouchedUris.Count,
-        });
+        SendRenameTelemetry(
+            erroneous: false,
+            reason: null,
+            changeAnnotationsUsed: supportsChangeAnnotations,
+            editedFileCount: builder.TouchedUris.Count);
 
         return workspaceEdit;
+    }
+
+    /// <summary>
+    /// Sends the <c>"Rename step command executed"</c> telemetry event for every terminal path of
+    /// <see cref="HandleRenameAsync"/> (issue #581 finding 4): <paramref name="erroneous"/> used to
+    /// be a literal <c>false</c> reachable only from the success path, since every failure path
+    /// returned <see langword="null"/> before the one existing <c>SendEvent</c> call. Now every
+    /// early return sends its own event with a <paramref name="reason"/> distinguishing which
+    /// validation/resolution step rejected the request, so <c>Erroneous</c> finally carries the
+    /// signal its name promises. <paramref name="changeAnnotationsUsed"/> and
+    /// <paramref name="editedFileCount"/> are only meaningful on the success path.
+    /// </summary>
+    private void SendRenameTelemetry(
+        bool erroneous, string? reason, bool? changeAnnotationsUsed = null, int? editedFileCount = null)
+    {
+        var properties = new Dictionary<string, object?> { ["Erroneous"] = erroneous };
+        if (reason != null)
+            properties["Reason"] = reason;
+        if (changeAnnotationsUsed != null)
+            properties["ChangeAnnotationsUsed"] = changeAnnotationsUsed;
+        if (editedFileCount != null)
+            properties["EditedFileCount"] = editedFileCount;
+
+        _telemetryService?.SendEvent("Rename step command executed", properties);
     }
 
     /// <summary>

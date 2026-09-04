@@ -2180,4 +2180,71 @@ public class StepRenameHandlerTests
             "Rename step command executed",
             Arg.Is<Dictionary<string, object?>>(d => false.Equals(d["Erroneous"])));
     }
+
+    [Fact]
+    public async Task HandleRenameAsync_emits_erroneous_telemetry_with_a_reason_for_an_empty_new_name()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var result = await CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+            new RenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = CsUri },
+                Position = new Position(4, 0),
+                NewName = ""
+            },
+            CancellationToken.None);
+
+        result.Should().BeNull();
+        telemetry.Received(1).SendEvent(
+            "Rename step command executed",
+            Arg.Is<Dictionary<string, object?>>(d =>
+                true.Equals(d["Erroneous"]) && "InvalidRequest".Equals(d["Reason"])));
+    }
+
+    [Fact]
+    public async Task HandleRenameAsync_emits_erroneous_telemetry_with_a_reason_when_the_registry_is_invalid()
+    {
+        _registryLookup.GetRegistryForUri(CsUri).Returns(ProjectBindingRegistry.Invalid);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var result = await CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+            new RenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = CsUri },
+                Position = new Position(4, 0),
+                NewName = "something changed"
+            },
+            CancellationToken.None);
+
+        result.Should().BeNull();
+        telemetry.Received(1).SendEvent(
+            "Rename step command executed",
+            Arg.Is<Dictionary<string, object?>>(d =>
+                true.Equals(d["Erroneous"]) && "RegistryInvalid".Equals(d["Reason"])));
+    }
+
+    [Fact]
+    public async Task HandleRenameAsync_emits_erroneous_telemetry_with_a_reason_when_no_binding_resolves()
+    {
+        // A valid but empty registry: no binding at the cursor position.
+        _registryLookup.GetRegistryForUri(CsUri)
+            .Returns(ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>()));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var result = await CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+            new RenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = CsUri },
+                Position = new Position(4, 0),
+                NewName = "something changed"
+            },
+            CancellationToken.None);
+
+        result.Should().BeNull();
+        telemetry.Received(1).SendEvent(
+            "Rename step command executed",
+            Arg.Is<Dictionary<string, object?>>(d =>
+                true.Equals(d["Erroneous"]) && "BindingNotResolved".Equals(d["Reason"])));
+    }
 }

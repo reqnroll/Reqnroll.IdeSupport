@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Rename;
@@ -31,6 +32,13 @@ public class RenameTargetsHandlerTests
             _registryLookup,
             new RenameBindingResolver(_matchService, _scopeManager, new RenameSessionManager(), _logger),
             new CSharpAttributeLiteralResolver(_csharpFileTextCache, _documentBuffer, _logger, _fileSystem));
+
+    private RenameTargetsHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
+        new(
+            _registryLookup,
+            new RenameBindingResolver(_matchService, _scopeManager, new RenameSessionManager(), _logger),
+            new CSharpAttributeLiteralResolver(_csharpFileTextCache, _documentBuffer, _logger, _fileSystem),
+            telemetry);
 
     [Fact]
     public async Task Returns_null_for_a_uri_with_neither_a_cs_nor_feature_extension_Async()
@@ -81,5 +89,36 @@ public class RenameTargetsHandlerTests
 
         result.Should().NotBeNull();
         result!.Targets.Should().BeEmpty();
+    }
+
+    // ── Telemetry (issue #581 finding 5) ──────────────────────────────────────
+
+    [Fact]
+    public async Task Emits_telemetry_with_zero_target_count_when_no_binding_is_at_the_cursor()
+    {
+        var registry = new ProjectBindingRegistry(
+            Array.Empty<ProjectStepDefinitionBinding>(), Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleRenameTargetsAsync(
+            new RenameTargetsParams { TextDocument = CsUri, Position = new Position(0, 0) },
+            CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "RenameTargets resolved",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["TargetCount"]! == 0));
+    }
+
+    [Fact]
+    public async Task Emits_no_telemetry_for_a_uri_with_neither_a_cs_nor_feature_extension()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleRenameTargetsAsync(
+            new RenameTargetsParams { TextDocument = TxtUri, Position = new Position(0, 0) },
+            CancellationToken.None);
+
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
 }
