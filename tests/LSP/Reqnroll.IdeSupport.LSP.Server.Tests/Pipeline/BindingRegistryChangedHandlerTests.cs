@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common;
@@ -96,7 +96,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f1, f2 });
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -116,7 +116,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { linked });
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -136,7 +136,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f1 }); // f2 absent
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -156,7 +156,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(_project).Returns(false);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -172,7 +172,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(project).Returns(false);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
@@ -196,7 +196,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { featureFile });
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         // Already open → ScanClosedFileAsync must NOT be called.
@@ -223,7 +223,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetProjectsForUri(foreignUri).Returns(Array.Empty<LspReqnrollProject>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         // ReparseOpenFilesAsync now schedules each buffer's reparse through
@@ -249,7 +249,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.ResolvePrimaryOwner(linkedUri).Returns(_project);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(linkingProject, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(linkingProject),
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
@@ -269,7 +269,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.ResolvePrimaryOwner(linkedUri).Returns(_project);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
@@ -291,7 +291,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(_project).Returns(false);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(inFolderUri, CancellationToken.None);
@@ -309,7 +309,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
@@ -330,7 +330,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await sut.Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Client.Received(1).SendRequest("workspace/codeLens/refresh");
@@ -344,7 +344,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Client.DidNotReceive().SendRequest("workspace/codeLens/refresh");
@@ -361,7 +361,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await sut.Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Client.DidNotReceive().SendRequest("workspace/codeLens/refresh");
@@ -379,7 +379,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     public async Task Handle_incremental_schedules_a_debounced_rescan()
     {
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         _rescanDebouncer.Received(1).ScheduleRescan(
@@ -395,7 +395,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _rescanDebouncer.DidNotReceiveWithAnyArgs().ScheduleRescan(default!, default!);
@@ -419,7 +419,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             .Do(ci => capturedRescan = ci.Arg<Func<CancellationToken, Task>>());
 
         await sut.Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         capturedRescan.Should().NotBeNull();
@@ -445,7 +445,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(project, stepsPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         // notify: false -- Handle's own ReparseOpenFilesAsync already reparses and notifies
@@ -472,7 +472,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(project, stepsPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -498,7 +498,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(project, openPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         // Reconciled exactly once, with the BUFFER text — not the on-disk text. notify: false --
@@ -539,7 +539,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -559,7 +559,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(_project, stepsPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -576,7 +576,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         // IsFullReplacement = false → no stale-DLL reconciliation (it's a live Roslyn patch path).
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -595,8 +595,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(
-                _project, IsFullReplacement: false, RemovedBindingFilePaths: new[] { deletedPath }),
+            new ProjectBindingFilesRemovedNotification(_project, new[] { deletedPath }),
             CancellationToken.None);
 
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
@@ -607,15 +606,16 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_without_removed_paths_does_not_call_removal()
+    public async Task Handle_with_empty_removed_paths_is_a_safe_no_op()
     {
-        _scopeManager.HasBaselineForProject(_project).Returns(true);
-        _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
-
-        await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+        // Issue #577: removal now lives entirely behind ProjectBindingFilesRemovedNotification's
+        // own handler, so an empty Paths collection (rather than the type simply not being
+        // published at all) must still be a safe no-op, not a throw.
+        var act = async () => await CreateSut().Handle(
+            new ProjectBindingFilesRemovedNotification(_project, Array.Empty<string>()),
             CancellationToken.None);
 
+        await act.Should().NotThrowAsync();
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
             Arg.Any<LspReqnrollProject>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -633,8 +633,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             .Returns<Task>(_ => throw new InvalidOperationException("boom"));
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(
-                _project, IsFullReplacement: false, RemovedBindingFilePaths: new[] { badPath, goodPath }),
+            new ProjectBindingFilesRemovedNotification(_project, new[] { badPath, goodPath }),
             CancellationToken.None);
 
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
@@ -650,7 +649,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Received(1).SendNotification(
@@ -672,7 +671,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             .Do(ci => capturedRescan = ci.Arg<Func<CancellationToken, Task>>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         capturedRescan.Should().NotBeNull();
@@ -689,7 +688,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(_project).Returns(true);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         _languageServer.DidNotReceive().SendNotification(
@@ -704,7 +703,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         // VS Code / Rider use the standard workspace/codeLens/refresh request instead.
         await CreateSut(new ClientIdeContext("vscode")).Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.DidNotReceive().SendNotification(

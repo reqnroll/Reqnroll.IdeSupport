@@ -38,9 +38,11 @@ namespace Reqnroll.IdeSupport.LSP.Server.Registry;
 /// baseline-arrival order).
 /// </para>
 /// <para>
-/// When any project's registry is replaced the router publishes a
-/// <see cref="BindingRegistryChangedNotification"/> via MediatR so that open feature files
-/// belonging to that project are re-parsed and semantic tokens refreshed.
+/// When any project's registry changes the router publishes a
+/// <see cref="BindingRegistryReplacedNotification"/> (full connector run) or
+/// <see cref="BindingRegistryPatchedNotification"/> (incremental Roslyn patch) via MediatR
+/// (issue #577) so that open feature files belonging to that project are re-parsed and semantic
+/// tokens refreshed.
 /// </para>
 /// </remarks>
 public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLookup, IDisposable
@@ -198,8 +200,14 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         // default publisher awaits each handler in turn with no Task.Run in between, so the
         // entire reparse-every-open-feature-file cascade would run inline on that caller's
         // thread. FireAndForget genuinely backgrounds it instead.
+        //
+        // isFullReplacement selects which of the two registry-change events this run actually
+        // was (issue #577): a connector run publishes Replaced, a Roslyn per-file patch
+        // publishes Patched.
         FireAndForgetExtensions.FireAndForget(
-            () => _mediator.Publish(new BindingRegistryChangedNotification(project, isFullReplacement)),
+            () => isFullReplacement
+                ? _mediator.Publish(new BindingRegistryReplacedNotification(project))
+                : _mediator.Publish(new BindingRegistryPatchedNotification(project)),
             _logger, nameof(OnProviderChanged));
     }
 }
