@@ -20,6 +20,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// stay correct without waiting for a rebuild. This notification is only published for an
 /// incremental patch when it actually changed a binding's matched expression -- a patch that
 /// didn't (e.g. a method-body edit) never reaches here, since there is nothing to re-parse.
+/// <para>
+/// <b>Consumers must be idempotent (issue #578):</b> handling the same notification twice —
+/// same <see cref="Project"/>, same <see cref="IsFullReplacement"/>, same
+/// <see cref="RemovedBindingFilePaths"/> — must leave the same observable end state as handling
+/// it once. Every current handler re-derives its result from current state (a full rescan, or an
+/// unconditional re-push of every open file's diagnostics) rather than applying an incremental
+/// delta, so a duplicate publish is naturally a no-op beyond redoing the same work.
+/// </para>
 /// </remarks>
 public record BindingRegistryChangedNotification(
     LspReqnrollProject Project,

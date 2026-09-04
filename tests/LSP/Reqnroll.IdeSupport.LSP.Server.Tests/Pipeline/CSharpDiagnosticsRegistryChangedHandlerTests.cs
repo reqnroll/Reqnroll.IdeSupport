@@ -86,4 +86,26 @@ public class CSharpDiagnosticsRegistryChangedHandlerTests : IDisposable
 
         _publisher.Received(1).Publish(uri, null);
     }
+
+    [Fact]
+    public async Task Handling_the_same_notification_twice_republishes_each_file_unchanged()
+    {
+        // BindingRegistryChangedNotification consumers must be idempotent (issue #578). This
+        // handler's own remarks describe it as re-pushing "every open .cs file owned by the
+        // project unconditionally on any change (not diffed first)" — so a duplicate publish
+        // (the connector's startup reconciliation racing this file's own didOpen, per the
+        // handler's documented rationale) must republish the same files the same way each time,
+        // not skip the second call or diverge from the first.
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_projectFolder, "A.cs"));
+        _csharpFileTextCache.Update(uri, "// a");
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetProjectsForUri(uri).Returns([_project]);
+
+        var sut = CreateSut();
+        var notification = new BindingRegistryChangedNotification(_project);
+        await sut.Handle(notification, CancellationToken.None);
+        await sut.Handle(notification, CancellationToken.None);
+
+        _publisher.Received(2).Publish(uri, null);
+    }
 }
