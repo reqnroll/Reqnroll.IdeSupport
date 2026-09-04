@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Threading;
@@ -59,31 +58,13 @@ internal sealed class LspInterceptingPipe : IDisposable
     private Pipe _fromVsPipe = new Pipe();   // VS → server direction
     private readonly object _vsPipeSwapLock = new object();
 
-    // Serialises injected writes against the send pump so frames are not interleaved.
-    private readonly SemaphoreSlim _injectLock = new SemaphoreSlim(1, 1);
-
-    // ── Owned request/response correlation ─────────────────────────────────
-    // Requests injected by us use a string id with this prefix so they never collide
-    // with VS's own numeric JSON-RPC ids.  The receive pump recognises the prefix and
-    // consumes the response before it can be forwarded to VS (which never sent the request).
-    private const string RequestIdPrefix = "reqnroll-rpc-";
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<JToken?>> _pendingRequests
-        = new ConcurrentDictionary<string, TaskCompletionSource<JToken?>>();
-
-    // ── Peer-session response routing (issue #395) ──────────────────────────
-    // Tracks which VS-facing session sent each of VS's own outstanding requests (e.g. `shutdown`,
-    // sent by the old session as its last act before CreateFreshVsFacingPipe abandons it). Without
-    // this, a response that lands after the swap gets forwarded — via GetCurrentToVsWriter's
-    // "whichever pipe is current" policy, correct for server-pushed notifications/requests but
-    // wrong here — to the *new* session's JsonRpc, which never sent the matching request. VS's
-    // JsonRpc treats an unmatched response as a fatal protocol violation and closes the brand-new
-    // connection outright: confirmed via a captured repro, `id=143`'s "shutdown" response from the
-    // abandoned session arrived 71ms after the swap and was misdelivered to the new session, whose
-    // trace shows "RemoteProtocolViolation: A response was received without a request having been
-    // sent" followed immediately by "Connection closing". A response whose request belongs to an
-    // older, already-abandoned session is simply dropped here — nothing is listening on that old
-    // session's pipe anymore either, so there is no correct destination to route it to.
-    private readonly ConcurrentDictionary<string, int> _requestSessionsById = new(StringComparer.Ordinal);
+    // ── Extracted collaborators (issue #587, step 2) ─────────────────────────
+    // The write side of the server connection (its stdin writer, the lock serialising every write to
+    // it, and the #555 termination flag), the owned-RPC correlation, and the #395 peer-session
+    // routing each now live in their own type. What stays here is the orchestration between them.
+    private readonly ServerChannel        _serverChannel;
+    private readonly LspRequestCorrelator _correlator;
+    private readonly VsSessionRouter      _router;
 
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private CancellationTokenSource? _linkedCts;
@@ -98,12 +79,6 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     private bool _disposed;
 
-    // ── Session termination (issue #555) ────────────────────────────────────
-    // Set once this connection's server has been told to terminate (VS's own `exit`) or is known to
-    // have gone. Everything downstream is then pointless: the process is on its way out, so injected
-    // traffic can only hang until its caller's token trips.
-    private volatile bool _serverTerminated;
-
     /// <summary>
     /// <see langword="true"/> once the server behind this pipe has been asked to <c>exit</c> (or is
     /// otherwise known to be gone), meaning this connection can never serve another request.
@@ -112,9 +87,10 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// Issue #555: VS ends an LSP session by sending <c>shutdown</c> then <c>exit</c> — which it does
     /// on a solution close, not only at IDE shutdown. Those go through to the real server, which
     /// obeys and terminates. <see cref="LspServerConnectionService"/> reads this to know the
-    /// connection is spent and a fresh server must be launched for the next session.
+    /// connection is spent and a fresh server must be launched for the next session. The flag itself
+    /// lives on <see cref="ServerChannel"/>, which is what acts on it.
     /// </remarks>
-    public bool ServerTerminated => _serverTerminated;
+    public bool ServerTerminated => _serverChannel.IsTerminated;
 
     /// <summary>
     /// Initialises the intercepting pipe but does not start pumping yet.
@@ -140,6 +116,10 @@ internal sealed class LspInterceptingPipe : IDisposable
         _sendInterceptors    = sendInterceptors    ?? throw new ArgumentNullException(nameof(sendInterceptors));
         _receiveInterceptors = receiveInterceptors ?? throw new ArgumentNullException(nameof(receiveInterceptors));
         _logger              = logger              ?? throw new ArgumentNullException(nameof(logger));
+
+        _serverChannel = new ServerChannel(_serverPipe.Output, logger);
+        _correlator    = new LspRequestCorrelator(logger);
+        _router        = new VsSessionRouter();
     }
 
     /// <summary>
@@ -235,7 +215,7 @@ internal sealed class LspInterceptingPipe : IDisposable
         // the straggler this dictionary exists to catch — a response landing shortly after its own
         // session was abandoned (like the shutdown response that motivated this fix) — without
         // holding entries from sessions abandoned long ago.
-        PurgeStaleRequestSessions(minimumLiveSessionId: sessionId - 1);
+        _router.PurgeOlderThan(minimumLiveSessionId: sessionId - 1);
 
         // VS → server direction for this session only. lockDestination: true -- this pump's
         // destination (_serverPipe.Output) is the same stream SendNotificationToServerAsync/
@@ -261,42 +241,8 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// </remarks>
     public void MarkServerTerminated(string reason)
     {
-        if (_serverTerminated) return;
-        _serverTerminated = true;
-
-        _logger.LogInformation(
-            "LspInterceptingPipe: server considered terminated — {Reason}. This connection is spent; " +
-            "further injected traffic is refused and a new server must be launched for the next " +
-            "session (issue #555).", reason);
-
-        foreach (var kv in _pendingRequests)
-            kv.Value.TrySetResult(null);
-        _pendingRequests.Clear();
-    }
-
-    /// <summary>
-    /// True if <paramref name="body"/> is the LSP <c>exit</c> notification — a notification (no
-    /// <c>id</c>) whose method is <c>exit</c>. Per the spec this asks the server to terminate its
-    /// process, so it is the definitive end-of-session marker on the VS → server direction.
-    /// </summary>
-    /// <remarks>
-    /// An <c>id</c> present but JSON-null counts as absent: <c>JObject["id"]</c> returns a
-    /// <see cref="JTokenType.Null"/> token for <c>"id":null</c>, not a C# <see langword="null"/>, so
-    /// testing for the latter alone would miss such a frame and leave the connection looking alive
-    /// after its server had been told to leave — the whole failure this detection exists to prevent.
-    /// </remarks>
-    private static bool IsExitNotification(JObject body) =>
-        (body["id"] is null || body["id"]!.Type == JTokenType.Null) &&
-        string.Equals(body["method"]?.Value<string>(), "exit", StringComparison.Ordinal);
-
-    /// <summary>Removes tracked request→session entries older than <paramref name="minimumLiveSessionId"/> (issue #395).</summary>
-    private void PurgeStaleRequestSessions(int minimumLiveSessionId)
-    {
-        foreach (var kvp in _requestSessionsById)
-        {
-            if (kvp.Value < minimumLiveSessionId)
-                _requestSessionsById.TryRemove(kvp.Key, out _);
-        }
+        _serverChannel.MarkTerminated(reason);
+        _correlator.ReleaseAll();
     }
 
     private PipeWriter GetCurrentToVsWriter()
@@ -387,12 +333,12 @@ internal sealed class LspInterceptingPipe : IDisposable
                 // (e.g. reqnroll/resolveTestTargets) is invisible to the inspector log even though
                 // it genuinely crossed the wire, which made a real N+1 request-storm bug look like
                 // near-total silence when first diagnosed.
-                if (TryGetCorrelatedResponseId(body, out var correlatedId))
+                if (LspRequestCorrelator.IsOwnedResponse(body, out var correlatedId))
                 {
                     var correlatedMessage = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.Now);
                     await RunInterceptorsAsync(correlatedMessage, _receiveInterceptors, ct).ConfigureAwait(false);
 
-                    CompleteCorrelatedResponse(correlatedId, body);
+                    _correlator.Consume(correlatedId, body);
                     continue;
                 }
 
@@ -402,14 +348,13 @@ internal sealed class LspInterceptingPipe : IDisposable
                 // VS treats as a fatal protocol violation and closes the brand-new connection over.
                 // Nothing is listening on the abandoned session's own pipe either, so there is no
                 // destination to correctly deliver this to; dropping it is the safe outcome.
-                if (TryGetResponseId(body, out var responseId)
-                    && _requestSessionsById.TryRemove(responseId, out var owningSessionId)
-                    && owningSessionId != GetCurrentSessionId())
+                var currentSessionId = GetCurrentSessionId();
+                if (_router.Route(body, currentSessionId, out var owningSessionId) == ResponseRouting.DropAbandoned)
                 {
                     _logger.LogInformation(
-                        "LspInterceptingPipe [Receive]: dropped response id={ResponseId} — belongs to " +
-                        "abandoned session #{OwningSessionId}, current session is #{CurrentSessionId}.",
-                        responseId, owningSessionId, GetCurrentSessionId());
+                        "LspInterceptingPipe [Receive]: dropped response — belongs to abandoned session " +
+                        "#{OwningSessionId}, current session is #{CurrentSessionId}.",
+                        owningSessionId, currentSessionId);
                     continue;
                 }
 
@@ -486,28 +431,26 @@ internal sealed class LspInterceptingPipe : IDisposable
                 if (body is null)
                 {
                     // Malformed JSON — forward raw bytes verbatim so the connection stays alive.
-                    await WriteFrameGuardedAsync(_serverPipe.Output, frame.RawBytes, lockDestination: true, ct)
-                        .ConfigureAwait(false);
+                    await _serverChannel.ForwardAsync(frame.RawBytes, ct).ConfigureAwait(false);
                     continue;
                 }
 
                 // Record which session sent this request (issue #395), before forwarding, so a
                 // late response arriving after this session has been abandoned can be recognised
                 // and dropped instead of misdelivered to whatever session is current by then.
-                if (TryGetRequestId(body, out var requestId))
-                    _requestSessionsById[requestId] = sessionId;
+                if (LspJsonRpc.TryGetRequestId(body, out var requestId))
+                    _router.RecordOutboundRequest(requestId, sessionId);
 
                 var message = new LspMessage(LspMessageDirection.Send, body, DateTimeOffset.Now);
                 var result  = await RunInterceptorsAsync(message, _sendInterceptors, ct).ConfigureAwait(false);
 
                 if (result == LspInterceptorResult.PassThrough)
                 {
-                    await WriteFrameGuardedAsync(_serverPipe.Output, frame.RawBytes, lockDestination: true, ct)
-                        .ConfigureAwait(false);
+                    await _serverChannel.ForwardAsync(frame.RawBytes, ct).ConfigureAwait(false);
 
                     // Only after the frame has actually gone out, and only if it did (an interceptor
                     // that consumed `exit` means the server was never told to leave). Issue #555.
-                    if (IsExitNotification(body))
+                    if (LspJsonRpc.IsExitNotification(body))
                         MarkServerTerminated("VS sent `exit` on this connection");
                 }
             }
@@ -515,14 +458,14 @@ internal sealed class LspInterceptingPipe : IDisposable
         catch (OperationCanceledException) { /* normal shutdown, or superseded by a fresh session */ }
         catch (ObjectDisposedException) when (_disposed)
         {
-            // Expected shutdown race (issue #165): Dispose() cancels the pumps and disposes
-            // _injectLock without first awaiting an in-flight WriteFrameGuardedAsync call, so
-            // this pump can still be inside _injectLock.WaitAsync when the semaphore gets
-            // disposed out from under it. Benign — this pump loop was already exiting from the
-            // same Dispose() call, and the server reports a graceful exit immediately after.
-            // Logged at Debug rather than Error so shutdown doesn't produce misleading noise.
+            // Expected shutdown race (issue #165). Its original cause — Dispose() disposing the
+            // inject semaphore out from under an in-flight write — is gone: ServerChannel owns that
+            // semaphore now and never disposes it (see its remarks). The catch stays because
+            // Dispose() also disposes the cancellation token sources the pumps are registered on,
+            // which can surface the same exception on its own; without it a benign shutdown race
+            // would be logged as an Error. Logged at Debug so shutdown produces no misleading noise.
             _logger.LogDebug(
-                "LspInterceptingPipe [Send] pump (session #{SessionId}) observed a disposed semaphore " +
+                "LspInterceptingPipe [Send] pump (session #{SessionId}) observed a disposed object " +
                 "during shutdown (benign).", sessionId);
         }
         catch (Exception ex)
@@ -533,38 +476,8 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     // ── Frame reader/writer ───────────────────────────────────────────────────
     //
-    // The actual wire codec is LspFrameCodec (issue #587, step 1) — pure serialization with no
-    // session state, extracted so it is independently testable against captured frames. What
-    // stays here is orchestration that genuinely needs this instance's state: guarding a write
-    // against the send pump's own concurrent writes to the same destination.
-
-    /// <summary>
-    /// Forwards a frame to <paramref name="writer"/>, taking <see cref="_injectLock"/> first when
-    /// <paramref name="lockDestination"/> is set. The send pump's destination
-    /// (<c>_serverPipe.Output</c>) is also written to directly by
-    /// <see cref="SendNotificationToServerAsync"/>/<see cref="SendRequestToServerAsync"/> from
-    /// other threads; without this, the pump's own passthrough write here could interleave with
-    /// an injected write on the same unsynchronised <see cref="PipeWriter"/>, corrupting the
-    /// framing.
-    /// </summary>
-    private async Task WriteFrameGuardedAsync(PipeWriter writer, byte[] rawFrame, bool lockDestination, CancellationToken ct)
-    {
-        if (!lockDestination)
-        {
-            await LspFrameCodec.WriteFrameAsync(writer, rawFrame, ct).ConfigureAwait(false);
-            return;
-        }
-
-        await _injectLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            await LspFrameCodec.WriteFrameAsync(writer, rawFrame, ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            _injectLock.Release();
-        }
-    }
+    // The wire codec is LspFrameCodec (issue #587, step 1) and the guarded write to the server is
+    // ServerChannel (step 2) — nothing framing-related is left in this type.
 
     // ── Interceptor pipeline ────────────────────────────────────────────────
 
@@ -611,45 +524,15 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         if (_disposed) return;
 
-        // Issue #555: after `exit` the server is on its way out, so this would write into a stream
-        // nothing is reading. Observed in the wild: our own StepCodeLens/navigation-bar traffic kept
-        // being injected for ~200ms after VS's `exit` and on through the following session.
-        if (_serverTerminated)
-        {
-            _logger.LogInformation(
-                "LspInterceptingPipe: refusing to inject notification {Method} — the server on this " +
-                "connection has terminated.", method);
+        var body = LspJsonRpc.BuildNotification(method, paramsJson);
+
+        // Refused outright once the server has terminated (issue #555) — see ServerChannel.
+        if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, cancellationToken)
+                                 .ConfigureAwait(false))
             return;
-        }
-
-        // Build the JSON-RPC notification frame.
-        var body = string.IsNullOrEmpty(paramsJson)
-            ? $"{{\"jsonrpc\":\"2.0\",\"method\":{JsonEscape(method)}}}"
-            : $"{{\"jsonrpc\":\"2.0\",\"method\":{JsonEscape(method)},\"params\":{paramsJson}}}";
-
-        var bodyBytes  = LspFrameCodec.Utf8NoBom.GetBytes(body);
-        var headerText = $"Content-Length: {bodyBytes.Length}\r\n\r\n";
-        var headerBytes = LspFrameCodec.Utf8NoBom.GetBytes(headerText);
-
-        await _injectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            var memory = _serverPipe.Output.GetMemory(headerBytes.Length + bodyBytes.Length);
-            headerBytes.CopyTo(memory);
-            bodyBytes.CopyTo(memory.Slice(headerBytes.Length));
-            _serverPipe.Output.Advance(headerBytes.Length + bodyBytes.Length);
-            await _serverPipe.Output.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-            _logger.LogInformation(
-                "LspInterceptingPipe: injected notification {Method} ({ByteCount} bytes)", method, bodyBytes.Length);
-        }
-        finally
-        {
-            _injectLock.Release();
-        }
 
         // Notify interceptors about the injected notification so it appears in the inspector log.
-        // This runs outside the inject lock to avoid holding it during potentially-slow I/O.
+        // This runs outside the channel's write lock to avoid holding it during potentially-slow I/O.
         JObject? bodyObj = null;
         try { bodyObj = JObject.Parse(body); } catch { /* malformed — skip */ }
         if (bodyObj is not null)
@@ -679,182 +562,37 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         if (_disposed) return null;
 
-        // Issue #555: see SendNotificationToServerAsync. A request is the worse case of the two —
-        // it would await a response that can never arrive, so the caller blocks until its own token
-        // trips rather than finding out immediately that there is no server.
-        if (_serverTerminated)
-        {
-            _logger.LogInformation(
-                "LspInterceptingPipe: refusing to inject request {Method} — the server on this " +
-                "connection has terminated.", method);
-            return null;
-        }
-
-        var id  = RequestIdPrefix + Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingRequests[id] = tcs;
-
-        // Register cancellation before sending to avoid the race where the token is already
-        // cancelled at the point we would have registered.
-        var reg = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
+        using var pending = _correlator.Begin(cancellationToken);
         try
         {
-            var body = string.IsNullOrEmpty(paramsJson)
-                ? $"{{\"jsonrpc\":\"2.0\",\"id\":{JsonEscape(id)},\"method\":{JsonEscape(method)}}}"
-                : $"{{\"jsonrpc\":\"2.0\",\"id\":{JsonEscape(id)},\"method\":{JsonEscape(method)},\"params\":{paramsJson}}}";
+            var body = LspJsonRpc.BuildRequest(pending.Id, method, paramsJson);
 
-            var bodyBytes   = LspFrameCodec.Utf8NoBom.GetBytes(body);
-            var headerText  = $"Content-Length: {bodyBytes.Length}\r\n\r\n";
-            var headerBytes = LspFrameCodec.Utf8NoBom.GetBytes(headerText);
-
-            await _injectLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                var memory = _serverPipe.Output.GetMemory(headerBytes.Length + bodyBytes.Length);
-                headerBytes.CopyTo(memory);
-                bodyBytes.CopyTo(memory.Slice(headerBytes.Length));
-                _serverPipe.Output.Advance(headerBytes.Length + bodyBytes.Length);
-                await _serverPipe.Output.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-                _logger.LogInformation(
-                    "LspInterceptingPipe: injected request {Method} id={Id} ({ByteCount} bytes)", method, id, bodyBytes.Length);
-            }
-            finally
-            {
-                _injectLock.Release();
-            }
+            // Issue #555: a request is the worse of the two injection cases — it would await a
+            // response that can never arrive, so the caller blocks until its own token trips rather
+            // than finding out immediately that there is no server.
+            if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, cancellationToken)
+                                     .ConfigureAwait(false))
+                return null;
 
             // Notify interceptors about the injected request (issue #491), the same way
             // SendNotificationToServerAsync already does, so it appears in the inspector log —
             // otherwise every owned-RPC request (e.g. reqnroll/resolveTestTargets) is invisible to
-            // LspInspectorLogger even though it genuinely crossed the wire. Runs outside the inject
-            // lock to avoid holding it during potentially-slow interceptor work; parsing the body we
-            // just built cannot fail, so no try/catch is needed around it the way the receive-side
-            // equivalent needs one around externally-sourced bytes.
+            // LspInspectorLogger even though it genuinely crossed the wire. Runs outside the
+            // channel's write lock to avoid holding it during potentially-slow interceptor work;
+            // parsing the body we just built cannot fail, so no try/catch is needed around it the
+            // way the receive-side equivalent needs one around externally-sourced bytes.
             var injectedMessage = new LspMessage(LspMessageDirection.Send, JObject.Parse(body), DateTimeOffset.Now);
             await RunInterceptorsAsync(injectedMessage, _sendInterceptors, cancellationToken).ConfigureAwait(false);
 
-            return await tcs.Task.ConfigureAwait(false);
+            return await pending.Response.ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             _logger.LogInformation(
-                "LspInterceptingPipe: request {Method} id={Id} cancelled", method, id);
+                "LspInterceptingPipe: request {Method} id={Id} cancelled", method, pending.Id);
             return null;
         }
-        finally
-        {
-            reg.Dispose();
-            _pendingRequests.TryRemove(id, out _);
-        }
     }
-
-    /// <summary>
-    /// Checks whether <paramref name="body"/> is a JSON-RPC response to one of our injected
-    /// requests (identified purely by the <see cref="RequestIdPrefix"/> id, which only
-    /// <see cref="SendRequestToServerAsync"/> ever generates — VS's own request ids are always
-    /// plain integers). Pure check, no side effects — see <see cref="CompleteCorrelatedResponse"/>
-    /// for actually consuming it. Split out (issue #491) so the caller can run the response
-    /// through <c>_receiveInterceptors</c> for logging in between recognising and consuming it.
-    /// </summary>
-    private static bool TryGetCorrelatedResponseId(JObject body, out string id)
-    {
-        id = string.Empty;
-
-        // A JSON-RPC response has an "id" and either "result" or "error", but no "method".
-        if (body.ContainsKey("method")) return false;
-
-        var idToken = body["id"];
-        var idValue = idToken?.Value<string>();
-        if (idValue is null || !idValue.StartsWith(RequestIdPrefix, StringComparison.Ordinal)) return false;
-
-        id = idValue;
-        return true;
-    }
-
-    /// <summary>
-    /// Completes the awaiting <see cref="TaskCompletionSource{T}"/> for the injected request
-    /// <paramref name="id"/> (when one is still registered) with <paramref name="body"/>'s result.
-    /// Always called once <see cref="TryGetCorrelatedResponseId"/> recognises the response as ours
-    /// — the frame is never forwarded to VS regardless of whether a pending TCS is still around to
-    /// receive it.
-    /// </summary>
-    /// <remarks>
-    /// Issue #401: a response must never be forwarded to VS just because
-    /// <see cref="SendRequestToServerAsync"/>'s caller already gave up on it. That method's
-    /// <c>finally</c> block removes the id from <see cref="_pendingRequests"/> as soon as its
-    /// caller's <see cref="CancellationToken"/> fires — e.g. a <see cref="StepCodeLensService"/>
-    /// request cancelled mid-reconnect — which can race the server's real response arriving a few
-    /// milliseconds later. Previously that race made the caller treat this as "nothing left to
-    /// complete," letting the response fall through to <see cref="ForwardToCurrentVsWriterAsync"/>
-    /// and hand VS's JsonRpc a response to a request it never sent: the same
-    /// <c>RemoteProtocolViolation: A response was received without a request having been sent</c>
-    /// fatal error #395 fixed for VS's own peer-session responses, just triggered via this side
-    /// channel instead. Since the id prefix alone proves the response is ours, it is always safe
-    /// (and correct) to consume it here regardless of whether a pending TCS is still around to
-    /// receive it.
-    /// </remarks>
-    private void CompleteCorrelatedResponse(string id, JObject body)
-    {
-        if (_pendingRequests.TryRemove(id, out var tcs))
-        {
-            if (body.ContainsKey("error"))
-                tcs.TrySetResult(null);
-            else
-                tcs.TrySetResult(body["result"]);
-
-            _logger.LogInformation(
-                "LspInterceptingPipe: consumed correlated response id={Id}", id);
-        }
-        else
-        {
-            _logger.LogInformation(
-                "LspInterceptingPipe: dropped response id={Id} — no pending request (already " +
-                "cancelled/removed), but the {Prefix} id proves it's ours; forwarding it to VS " +
-                "would be an unmatched response and fatally close the connection (issue #401).",
-                id, RequestIdPrefix);
-        }
-    }
-
-    /// <summary>
-    /// True if <paramref name="body"/> is a JSON-RPC <b>request</b> (has both <c>id</c> and
-    /// <c>method</c> — as opposed to a notification, which has no <c>id</c>, or a response, which
-    /// has no <c>method</c>). Used by <see cref="SendPumpAsync"/> to record which VS-facing session
-    /// sent each request (issue #395).
-    /// </summary>
-    private static bool TryGetRequestId(JObject body, out string id)
-    {
-        id = string.Empty;
-        if (!body.ContainsKey("method")) return false;
-
-        var idToken = body["id"];
-        var idValue = idToken?.Value<string>();
-        if (idValue is null) return false;
-
-        id = idValue;
-        return true;
-    }
-
-    /// <summary>
-    /// True if <paramref name="body"/> is a JSON-RPC <b>response</b> (has <c>id</c>, no
-    /// <c>method</c>). Mirrors <see cref="TryGetCorrelatedResponseId"/>'s own shape check, for
-    /// VS's own (non-<see cref="RequestIdPrefix"/>) request ids.
-    /// </summary>
-    private static bool TryGetResponseId(JObject body, out string id)
-    {
-        id = string.Empty;
-        if (body.ContainsKey("method")) return false;
-
-        var idToken = body["id"];
-        var idValue = idToken?.Value<string>();
-        if (idValue is null) return false;
-
-        id = idValue;
-        return true;
-    }
-
-    private static string JsonEscape(string value)
-        => Newtonsoft.Json.JsonConvert.ToString(value); // produces "\"value\""
 
     // ── IDisposable ─────────────────────────────────────────────────────────
 
@@ -868,7 +606,6 @@ internal sealed class LspInterceptingPipe : IDisposable
         _linkedCts?.Cancel();
         _linkedCts?.Dispose();
         _cts.Dispose();
-        _injectLock.Dispose();
 
         lock (_vsPipeSwapLock)
         {
@@ -877,9 +614,7 @@ internal sealed class LspInterceptingPipe : IDisposable
         }
 
         // Fault any in-flight injected requests so callers don't hang.
-        foreach (var kv in _pendingRequests)
-            kv.Value.TrySetCanceled();
-        _pendingRequests.Clear();
+        _correlator.CancelAll();
 
         try { GetCurrentToVsWriter().Complete(); } catch { /* best-effort */ }
     }

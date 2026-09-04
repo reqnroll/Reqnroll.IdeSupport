@@ -164,6 +164,25 @@ internal static class LspFrameCodec
         return new LspFrame(body, rawBytes);
     }
 
+    /// <summary>Frames an already-serialized JSON body into a raw LSP frame.</summary>
+    /// <remarks>
+    /// Used for messages this extension builds itself, which are assembled as strings and must reach
+    /// the wire byte-for-byte as built. Routing them through <see cref="EncodeFrame(JObject)"/>
+    /// instead would round-trip them through Newtonsoft and change the payload (that overload's
+    /// <c>ToString()</c> defaults to indented), which is a difference in bytes and size even though
+    /// it is not one in meaning.
+    /// </remarks>
+    public static byte[] Encode(string bodyJson)
+    {
+        var bodyBytes   = Utf8NoBom.GetBytes(bodyJson);
+        var headerBytes = Utf8NoBom.GetBytes($"Content-Length: {bodyBytes.Length}\r\n\r\n");
+
+        var rawBytes = new byte[headerBytes.Length + bodyBytes.Length];
+        Array.Copy(headerBytes, 0, rawBytes, 0, headerBytes.Length);
+        Array.Copy(bodyBytes, 0, rawBytes, headerBytes.Length, bodyBytes.Length);
+        return rawBytes;
+    }
+
     /// <summary>Re-encodes a (possibly mutated) parsed body back into a raw LSP frame.</summary>
     public static byte[] EncodeFrame(JObject body)
     {
