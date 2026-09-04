@@ -142,108 +142,123 @@ public sealed class RenameHandler
             return null;
         }
 
-        // For .cs files: check if the cursor resolves to a single binding
         if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-        {
-            var line   = request.Position.Line + 1;
-            var column = request.Position.Character + 1;
-            var bindingLocation = new SourceLocation(path, line, column);
+            return await PrepareRenameFromCSharpAsync(uri, path, request.Position, registry);
 
-            if (registry == ProjectBindingRegistry.Invalid)
-                return null;
-
-            var binding = registry.FindBindingAtLocation(bindingLocation);
-            if (binding == null)
-                return null;
-
-            // Rule 2: validate expression is a string literal
-            var exprError = StepRenameValidator.ValidateExpressionIsStringLiteral(binding.Expression);
-            if (exprError != null)
-            {
-                _logger.LogVerbose($"RenameHandler: prepareRename — {exprError.Message}");
-                return null;
-            }
-
-            // Return the range of the string literal's INNER text only, excluding the
-            // surrounding quote characters. Returning the whole line/token (quotes included)
-            // seeds the client's rename box with the quotes; if the user leaves them untouched
-            // (a natural interaction — they look like part of the placeholder), `newName`
-            // arrives already quoted, and BuildCSharpEdit's unconditional `"` + text + `"`
-            // wrapping then doubles them, producing a stray trailing quote (issue #55).
-            var literal = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
-            if (literal == null)
-            {
-                _logger.LogVerbose("RenameHandler: prepareRename — could not resolve attribute literal for binding");
-                return null;
-            }
-
-            return CSharpAttributeLiteralResolver.GetLiteralInnerRange(literal);
-        }
-
-        // For .feature files: only offer rename when the cursor is on a step that is
-        // actually defined in the match cache.  Returning null here tells VS Code
-        // "rename not available at this position" — same as prepareRename for a C# cursor
-        // not on a binding attribute — which suppresses the rename dialog cleanly.
-        // Without this check, prepareRename would succeed for undefined steps, and the
-        // subsequent textDocument/rename would fail with "Internal Error".
         if (path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase))
-        {
-            var featureBindings = _bindingResolver.FindBindingsAtFeatureStep(uri, path, request.Position, out var stepRange);
-            if (featureBindings.Count == 0)
-            {
-                _logger.LogVerbose("RenameHandler: prepareRename — no defined binding at feature step position");
-                return null;
-            }
-
-            if (stepRange == null)
-            {
-                // Should not happen alongside a non-empty featureBindings, but refuse rather
-                // than fall back to a whole-line range: that used to seed the dialog with the
-                // keyword/indentation, which then got duplicated when the resulting edit was
-                // applied at the step-text-only range HandleRenameAsync actually replaces.
-                _logger.LogVerbose("RenameHandler: prepareRename — matched a binding but could not resolve the step's text range");
-                return null;
-            }
-
-            // When ambiguous (2+ candidate bindings), a plain F2 rename would fall back to the
-            // first candidate anyway (see HandleRenameAsync's position-based fallback) — pick
-            // the same one here so the placeholder shown matches what would actually be renamed.
-            var matchedBinding = featureBindings[0];
-            var sourceLiteral  = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, matchedBinding);
-            // Falls back to DisplayExpression, not matchedBinding.Expression's raw auto-generated
-            // regex, when no literal can be found (issue #344). DisplayExpression is itself null
-            // for a method-name-style binding — there is no attribute text to rename at all — so
-            // refuse rename entirely rather than seed the dialog with a null/empty placeholder,
-            // mirroring the .cs-cursor branch's "no literal found" bail-out above.
-            var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.DisplayExpression;
-            if (sourceExpression == null)
-            {
-                _logger.LogVerbose("RenameHandler: prepareRename — matched binding has no renameable expression (method-name-style)");
-                return null;
-            }
-
-            // Known cosmetic quirk (confirmed live in VS and VS Code, issue #33 follow-up): when
-            // a user pre-selects a sub-span of the concrete step text before invoking F2 (e.g.
-            // "added" in "the two numbers are added"), the client computes that selection's
-            // offset relative to Range.Start and reapplies the same numeric offset into
-            // Placeholder to decide what to pre-highlight in the rename box. Placeholder is a
-            // different string than the concrete text whenever a parameter's rendered width
-            // differs from its abstract token (here "are" → "{Verb}", +3 chars), so everything
-            // after the parameter shifts and the pre-highlighted substring lands a few characters
-            // off from what the user actually selected (e.g. "b} summed" instead of "summed").
-            // This is inherent to the offset math being reused across two different-length
-            // strings — the LSP PrepareRenameResult protocol has no field to specify which
-            // sub-span of Placeholder to highlight independently of Range — and is harmless: the
-            // box's full content is still correct, and whatever the user submits becomes newName
-            // in full regardless of what was pre-highlighted.
-            return new PlaceholderRange
-            {
-                Range       = stepRange,
-                Placeholder = sourceExpression
-            };
-        }
+            return await PrepareRenameFromFeatureAsync(uri, path, request.Position);
 
         return null;
+    }
+
+    /// <summary>
+    /// The <c>.cs</c> branch of <see cref="HandlePrepareRenameAsync"/>: checks whether the cursor
+    /// resolves to a single binding whose expression is a renameable string literal, and returns
+    /// the range of that literal's inner text (quotes excluded).
+    /// </summary>
+    private async Task<RangeOrPlaceholderRange?> PrepareRenameFromCSharpAsync(
+        DocumentUri uri, string path, Position position, ProjectBindingRegistry registry)
+    {
+        var line   = position.Line + 1;
+        var column = position.Character + 1;
+        var bindingLocation = new SourceLocation(path, line, column);
+
+        if (registry == ProjectBindingRegistry.Invalid)
+            return null;
+
+        var binding = registry.FindBindingAtLocation(bindingLocation);
+        if (binding == null)
+            return null;
+
+        // Rule 2: validate expression is a string literal
+        var exprError = StepRenameValidator.ValidateExpressionIsStringLiteral(binding.Expression);
+        if (exprError != null)
+        {
+            _logger.LogVerbose($"RenameHandler: prepareRename — {exprError.Message}");
+            return null;
+        }
+
+        // Return the range of the string literal's INNER text only, excluding the
+        // surrounding quote characters. Returning the whole line/token (quotes included)
+        // seeds the client's rename box with the quotes; if the user leaves them untouched
+        // (a natural interaction — they look like part of the placeholder), `newName`
+        // arrives already quoted, and BuildCSharpEdit's unconditional `"` + text + `"`
+        // wrapping then doubles them, producing a stray trailing quote (issue #55).
+        var literal = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
+        if (literal == null)
+        {
+            _logger.LogVerbose("RenameHandler: prepareRename — could not resolve attribute literal for binding");
+            return null;
+        }
+
+        return CSharpAttributeLiteralResolver.GetLiteralInnerRange(literal);
+    }
+
+    /// <summary>
+    /// The <c>.feature</c> branch of <see cref="HandlePrepareRenameAsync"/>: only offers rename
+    /// when the cursor is on a step that is actually defined in the match cache. Returning
+    /// <see langword="null"/> tells VS Code "rename not available at this position" — same as
+    /// <see cref="PrepareRenameFromCSharpAsync"/> for a C# cursor not on a binding attribute —
+    /// which suppresses the rename dialog cleanly. Without this check, prepareRename would
+    /// succeed for undefined steps, and the subsequent textDocument/rename would fail with
+    /// "Internal Error".
+    /// </summary>
+    private async Task<RangeOrPlaceholderRange?> PrepareRenameFromFeatureAsync(
+        DocumentUri uri, string path, Position position)
+    {
+        var featureBindings = _bindingResolver.FindBindingsAtFeatureStep(uri, path, position, out var stepRange);
+        if (featureBindings.Count == 0)
+        {
+            _logger.LogVerbose("RenameHandler: prepareRename — no defined binding at feature step position");
+            return null;
+        }
+
+        if (stepRange == null)
+        {
+            // Should not happen alongside a non-empty featureBindings, but refuse rather
+            // than fall back to a whole-line range: that used to seed the dialog with the
+            // keyword/indentation, which then got duplicated when the resulting edit was
+            // applied at the step-text-only range HandleRenameAsync actually replaces.
+            _logger.LogVerbose("RenameHandler: prepareRename — matched a binding but could not resolve the step's text range");
+            return null;
+        }
+
+        // When ambiguous (2+ candidate bindings), a plain F2 rename would fall back to the
+        // first candidate anyway (see HandleRenameAsync's position-based fallback) — pick
+        // the same one here so the placeholder shown matches what would actually be renamed.
+        var matchedBinding = featureBindings[0];
+        var sourceLiteral  = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, matchedBinding);
+        // Falls back to DisplayExpression, not matchedBinding.Expression's raw auto-generated
+        // regex, when no literal can be found (issue #344). DisplayExpression is itself null
+        // for a method-name-style binding — there is no attribute text to rename at all — so
+        // refuse rename entirely rather than seed the dialog with a null/empty placeholder,
+        // mirroring the .cs-cursor branch's "no literal found" bail-out above.
+        var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.DisplayExpression;
+        if (sourceExpression == null)
+        {
+            _logger.LogVerbose("RenameHandler: prepareRename — matched binding has no renameable expression (method-name-style)");
+            return null;
+        }
+
+        // Known cosmetic quirk (confirmed live in VS and VS Code, issue #33 follow-up): when
+        // a user pre-selects a sub-span of the concrete step text before invoking F2 (e.g.
+        // "added" in "the two numbers are added"), the client computes that selection's
+        // offset relative to Range.Start and reapplies the same numeric offset into
+        // Placeholder to decide what to pre-highlight in the rename box. Placeholder is a
+        // different string than the concrete text whenever a parameter's rendered width
+        // differs from its abstract token (here "are" → "{Verb}", +3 chars), so everything
+        // after the parameter shifts and the pre-highlighted substring lands a few characters
+        // off from what the user actually selected (e.g. "b} summed" instead of "summed").
+        // This is inherent to the offset math being reused across two different-length
+        // strings — the LSP PrepareRenameResult protocol has no field to specify which
+        // sub-span of Placeholder to highlight independently of Range — and is harmless: the
+        // box's full content is still correct, and whatever the user submits becomes newName
+        // in full regardless of what was pre-highlighted.
+        return new PlaceholderRange
+        {
+            Range       = stepRange,
+            Placeholder = sourceExpression
+        };
     }
 
     // ── textDocument/rename ────────────────────────────────────────────────────
