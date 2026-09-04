@@ -1,7 +1,11 @@
-#nullable enable
+﻿#nullable enable
 
 using System.IO;
+using System.Linq;
 using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 
@@ -75,13 +79,26 @@ public static class StepDefinitionFileBuilder
     /// in <paramref name="existingContent"/>, immediately before its closing brace.
     /// </summary>
     /// <remarks>
-    /// Uses a lightweight heuristic scan (not a full C# parser): string/char literals and comments
-    /// are masked out before locating the class's braces, so brace characters inside them don't
-    /// confuse the scan. Returns <see langword="null"/> when the scan can't confidently locate a
-    /// class body (no <c>class</c> keyword, unterminated literal/comment, or unbalanced braces) —
-    /// callers should fall back to creating a new file rather than risk corrupting a hand-written
-    /// one. Member indentation is detected from the first existing member line inside the class
-    /// body; <paramref name="indent"/> is used only as a fallback for an empty class body.
+    /// The class body is located with Roslyn (issue #586). This previously used a hand-rolled
+    /// character scan that masked out literals and comments before brace-matching. That scan was
+    /// the single most complex method in the repository (CX=32) and got most cases right, but its
+    /// naive quote pairing mis-tracked raw string literals whose body contains a quote run — a
+    /// four-quote-delimited literal containing a three-quote sequence, say — so a brace inside
+    /// such a literal was treated as real code, the class braces failed to balance, and the
+    /// append was abandoned. <c>LSP.Core</c> already references <c>Microsoft.CodeAnalysis.CSharp</c>
+    /// for the binding parser, so the parser that answers this question exactly was already loaded.
+    /// <para>
+    /// Returns <see langword="null"/> when the class body can't be confidently located — no class
+    /// declaration, a missing closing brace, or source whose lexical structure is unterminated
+    /// (see <see cref="UnterminatedLexicalStructureIds"/>). Callers should fall back to creating a
+    /// new file rather than risk corrupting a hand-written one. Ordinary syntax errors elsewhere
+    /// in the file (a missing semicolon, say) do <em>not</em> block the append, matching the
+    /// previous scan's tolerance — Roslyn's error recovery still locates the braces correctly.
+    /// </para>
+    /// <para>
+    /// Member indentation is detected from the first existing member line inside the class body;
+    /// <paramref name="indent"/> is used only as a fallback for an empty class body.
+    /// </para>
     /// </remarks>
     public static string? AppendToFile(
         string                 existingContent,
@@ -91,17 +108,8 @@ public static class StepDefinitionFileBuilder
     {
         if (snippets.Count == 0) return existingContent;
 
-        var masked = MaskLiteralsAndComments(existingContent);
-        if (masked is null) return null;
-
-        var classMatch = System.Text.RegularExpressions.Regex.Match(masked, @"\bclass\b");
-        if (!classMatch.Success) return null;
-
-        var openBraceIndex = masked.IndexOf('{', classMatch.Index);
-        if (openBraceIndex < 0) return null;
-
-        var closeBraceIndex = FindMatchingCloseBrace(masked, openBraceIndex);
-        if (closeBraceIndex < 0) return null;
+        if (!TryLocateClassBody(existingContent, out var openBraceIndex, out var closeBraceIndex))
+            return null;
 
         var classIndent = DetectMemberIndent(existingContent, openBraceIndex, closeBraceIndex, indent);
 
@@ -131,109 +139,60 @@ public static class StepDefinitionFileBuilder
     }
 
     /// <summary>
-    /// Returns a same-length copy of <paramref name="content"/> with every string/char literal and
-    /// comment replaced by spaces (newlines preserved), so brace-matching on the result ignores
-    /// braces that appear inside literals or comments. Returns <see langword="null"/> if a literal
-    /// or comment is left unterminated (malformed/unparseable source — bail rather than guess).
+    /// Syntax-diagnostic IDs meaning "a literal or comment is never terminated". These are the
+    /// conditions under which the class body cannot be trusted, because everything after the
+    /// unterminated construct is lexed as part of it.
     /// </summary>
-    private static string? MaskLiteralsAndComments(string content)
+    /// <remarks>
+    /// Deliberately a narrow list rather than "any error diagnostic": the previous hand-rolled
+    /// scan bailed only on an unterminated literal/comment and tolerated every other kind of
+    /// malformed source, and widening that here would turn appends into new-file fallbacks for
+    /// files that are merely mid-edit. Note that an unterminated <em>string</em> does not
+    /// necessarily leave the closing brace missing — Roslyn recovers and still reports a
+    /// close-brace token — so the brace check alone is not sufficient and this list is load-bearing.
+    /// </remarks>
+    private static readonly string[] UnterminatedLexicalStructureIds =
+    [
+        "CS1010", // Newline in constant (unterminated string or char literal)
+        "CS1035", // End-of-file found, '*/' expected (unterminated block comment)
+        "CS1039", // Unterminated string literal
+        "CS8997", // Unterminated raw string literal
+    ];
+
+    /// <summary>
+    /// Locates the body braces of the first class declaration in <paramref name="content"/> using
+    /// Roslyn. Returns <see langword="false"/> when there is no class declaration, its closing
+    /// brace is missing, or the source contains an unterminated literal/comment.
+    /// </summary>
+    private static bool TryLocateClassBody(string content, out int openBraceIndex, out int closeBraceIndex)
     {
-        var mask = content.ToCharArray();
-        int i = 0;
-        while (i < content.Length)
+        openBraceIndex  = -1;
+        closeBraceIndex = -1;
+
+        var tree = CSharpSyntaxTree.ParseText(content);
+
+        foreach (var diagnostic in tree.GetDiagnostics())
         {
-            char c = content[i];
-
-            if (c == '/' && i + 1 < content.Length && content[i + 1] == '/')
+            if (diagnostic.Severity == DiagnosticSeverity.Error &&
+                UnterminatedLexicalStructureIds.Contains(diagnostic.Id))
             {
-                int start = i;
-                while (i < content.Length && content[i] != '\n') i++;
-                Clear(mask, start, i);
-                continue;
+                return false;
             }
-
-            if (c == '/' && i + 1 < content.Length && content[i + 1] == '*')
-            {
-                int start = i;
-                int end = content.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                if (end < 0) return null;
-                i = end + 2;
-                Clear(mask, start, i);
-                continue;
-            }
-
-            if (c == '@' && i + 1 < content.Length && content[i + 1] == '"')
-            {
-                int start = i;
-                i += 2;
-                while (true)
-                {
-                    int q = content.IndexOf('"', i);
-                    if (q < 0) return null;
-                    if (q + 1 < content.Length && content[q + 1] == '"') { i = q + 2; continue; }
-                    i = q + 1;
-                    break;
-                }
-                Clear(mask, start, i);
-                continue;
-            }
-
-            if (c == '"')
-            {
-                int start = i;
-                i++;
-                while (i < content.Length && content[i] != '"')
-                {
-                    if (content[i] == '\\' && i + 1 < content.Length) i++;
-                    i++;
-                }
-                if (i >= content.Length) return null;
-                i++;
-                Clear(mask, start, i);
-                continue;
-            }
-
-            if (c == '\'')
-            {
-                int start = i;
-                i++;
-                while (i < content.Length && content[i] != '\'')
-                {
-                    if (content[i] == '\\' && i + 1 < content.Length) i++;
-                    i++;
-                }
-                if (i >= content.Length) return null;
-                i++;
-                Clear(mask, start, i);
-                continue;
-            }
-
-            i++;
         }
 
-        return new string(mask);
+        // Document order, matching the previous scan's "first `class` keyword" behaviour.
+        var classDeclaration = tree.GetRoot()
+            .DescendantNodes()
+            .OfType<ClassDeclarationSyntax>()
+            .FirstOrDefault();
 
-        static void Clear(char[] buffer, int start, int end)
-        {
-            for (int j = start; j < end; j++)
-                if (buffer[j] != '\n') buffer[j] = ' ';
-        }
-    }
+        if (classDeclaration is null) return false;
+        if (classDeclaration.OpenBraceToken.IsMissing || classDeclaration.CloseBraceToken.IsMissing)
+            return false;
 
-    /// <summary>Finds the index of the <c>}</c> that closes the <c>{</c> at <paramref name="openBraceIndex"/> by depth counting.</summary>
-    private static int FindMatchingCloseBrace(string maskedContent, int openBraceIndex)
-    {
-        int depth = 0;
-        for (int i = openBraceIndex; i < maskedContent.Length; i++)
-        {
-            if (maskedContent[i] == '{') depth++;
-            else if (maskedContent[i] == '}')
-            {
-                depth--;
-                if (depth == 0) return i;
-            }
-        }
-        return -1;
+        openBraceIndex  = classDeclaration.OpenBraceToken.SpanStart;
+        closeBraceIndex = classDeclaration.CloseBraceToken.SpanStart;
+        return true;
     }
 
     /// <summary>Returns the leading whitespace of the first non-blank line strictly between the two brace indices, or <paramref name="fallback"/> if the body is empty.</summary>
