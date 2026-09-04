@@ -67,7 +67,7 @@ recommendations below are targeted, and deliberately short.
 These three are structural. Decomposition alone would move the complexity around rather than
 remove it.
 
-### 3.1 `StepDefinitionFileBuilder` hand-rolls a C# lexer that Roslyn already provides
+### 3.1 `StepDefinitionFileBuilder` hand-rolls a C# lexer that Roslyn already provides ([#586](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/586))
 
 **`src/LSP/Reqnroll.IdeSupport.LSP.Core/Scaffolding/StepDefinitionFileBuilder.cs:139`**
 `MaskLiteralsAndComments` — **CX=32, the highest genuine complexity in the repository.**
@@ -102,7 +102,7 @@ removes both the complexity and the failure mode it forced on its caller.
 
 **Highest value-to-effort ratio in this document.**
 
-### 3.2 `LspInterceptingPipe` is a god class assembled by incident
+### 3.2 `LspInterceptingPipe` is a god class assembled by incident ([#587](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/587))
 
 **`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/LspInterception/LspInterceptingPipe.cs`**
 — **1042 lines, 35 methods, 9 fields.** The largest artifact in the repository.
@@ -143,7 +143,7 @@ data path, and its accumulated behaviour encodes at least two production inciden
 own design pass and should not be attempted opportunistically. It is also **VS-only**, so it does
 not block any LSP server work.
 
-### 3.3 `CodeActionHandler.Handle` does six jobs in one method
+### 3.3 `CodeActionHandler.Handle` does six jobs in one method ([#588](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/588))
 
 **`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/CodeActionHandler.cs:85`**
 — **LOC=179, CX=20, 8 constructor dependencies.**
@@ -177,11 +177,11 @@ Long and/or branchy, but structurally sound. These want splitting, not redesign.
 
 | Method | LOC | CX | Notes |
 |---|---|---|---|
-| `RenameHandler.HandlePrepareRenameAsync` (`Features/Rename/RenameHandler.cs:104`) | 143 | 17 | Two entirely separate flows — `.cs` cursor path and `.feature` cursor path — in one method, with ~12 early returns. Already refactored once (issue #139 / PR #140, 1063 → 477 lines) and still the second-worst method in the server. The two branches share nothing after the common validation prologue, so this is an unusually clean split. |
-| `RunTestOutcomeBridge.TryGetOutcomeAsync` (VSSDK, `RunTestCodeLens/RunTestOutcomeBridge.cs:74`) | 132 | 30 | Second-highest CX in the repo. **Much of this is essential** — it is reflection-based interop against `internal` VS test-window APIs with no compatibility guarantee, and its documented contract is "never throws," so a defensive check at every reflection step is the point, not an accident. Recommend splitting into acquire-proxy / invoke / map-result stages for testability rather than trying to reduce the branch count. |
-| `FeatureStepTextBuilder.TryBuildViaRegex` (`Rename/FeatureStepTextBuilder.cs:66`) | 70 | 27 | One of three fallback strategies for reconstructing feature step text after a rename (the caller chains `?? TryBuildViaOutlinePlaceholders ?? newExpression`). Dense capture-group/slot-injection logic. The sibling `DeriveExpressionFromEditedText` (`:264`, LOC=64, CX=12) is the same shape. |
-| `BindingRegistryChangedHandler.RediscoverCsFilesAsync` (`Pipeline/BindingRegistryChangedHandler.cs:390`) | 103 | 16 | Post-connector-run reconciliation: collects open buffers plus closed files newer than the output assembly, then Roslyn-parses each. Already within the blast radius of #577. |
-| `SemanticTokensService.Encode` (`Features/SemanticTokens/SemanticTokensService.cs:132`) | 134 | 13 | Long but mechanical — flattens a tag tree into the LSP 5-int delta encoding. Lowest priority in this tier. |
+| [#589](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/589) `RenameHandler.HandlePrepareRenameAsync` (`Features/Rename/RenameHandler.cs:104`) | 143 | 17 | Two entirely separate flows — `.cs` cursor path and `.feature` cursor path — in one method, with ~12 early returns. Already refactored once (issue #139 / PR #140, 1063 → 477 lines) and still the second-worst method in the server. The two branches share nothing after the common validation prologue, so this is an unusually clean split. |
+| [#590](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/590) `RunTestOutcomeBridge.TryGetOutcomeAsync` (VSSDK, `RunTestCodeLens/RunTestOutcomeBridge.cs:74`) | 132 | 30 | Second-highest CX in the repo. **Much of this is essential** — it is reflection-based interop against `internal` VS test-window APIs with no compatibility guarantee, and its documented contract is "never throws," so a defensive check at every reflection step is the point, not an accident. Recommend splitting into acquire-proxy / invoke / map-result stages for testability rather than trying to reduce the branch count. |
+| [#591](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/591) `FeatureStepTextBuilder.TryBuildViaRegex` (`Rename/FeatureStepTextBuilder.cs:66`) | 70 | 27 | One of three fallback strategies for reconstructing feature step text after a rename (the caller chains `?? TryBuildViaOutlinePlaceholders ?? newExpression`). Dense capture-group/slot-injection logic. The sibling `DeriveExpressionFromEditedText` (`:264`, LOC=64, CX=12) is the same shape. |
+| [#592](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/592) `BindingRegistryChangedHandler.RediscoverCsFilesAsync` (`Pipeline/BindingRegistryChangedHandler.cs:390`) | 103 | 16 | Post-connector-run reconciliation: collects open buffers plus closed files newer than the output assembly, then Roslyn-parses each. Already within the blast radius of #577. |
+| [#593](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/593) `SemanticTokensService.Encode` (`Features/SemanticTokens/SemanticTokensService.cs:132`) | 134 | 13 | Long but mechanical — flattens a tag tree into the LSP 5-int delta encoding. Lowest priority in this tier. |
 
 ---
 
@@ -236,5 +236,17 @@ Recommended order:
 4. **§3.2 last**, or on its own schedule. Biggest payoff, highest risk, needs a design pass, and is
    VS-only so it blocks nothing.
 
-Tier 1 and Tier 2 action items are tracked as individual issues, linked from this document's
-follow-ups. Tier 3 is intentionally untracked — see §5.
+Tier 1 and Tier 2 action items are tracked as individual issues:
+
+| Issue | Tier | Item |
+|---|---|---|
+| [#586](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/586) | 1 | Replace the hand-rolled C# lexer with Roslyn — **do first** |
+| [#588](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/588) | 1 | Decompose `CodeActionHandler.Handle` — after #586 |
+| [#587](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/587) | 1 | Decompose `LspInterceptingPipe` — own schedule, VS-only |
+| [#589](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/589) | 2 | Split `HandlePrepareRenameAsync` |
+| [#590](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/590) | 2 | Stage `RunTestOutcomeBridge.TryGetOutcomeAsync` |
+| [#591](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/591) | 2 | Simplify rename step-text reconstruction |
+| [#592](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/592) | 2 | Decompose `RediscoverCsFilesAsync` — coupled to #577 |
+| [#593](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/593) | 2 | Split `SemanticTokensService.Encode` — lowest priority |
+
+Tier 3 is intentionally untracked — see §5.
