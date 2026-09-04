@@ -53,7 +53,7 @@ public class BindingRegistryChangedHandler :
     private readonly ILspWorkspaceScopeManager       _scopeManager;
     private readonly ILanguageServerFacade            _languageServer;
     private readonly ClientIdeContext                 _clientIde;
-    private readonly IMediator                        _mediator;
+    private readonly IFeatureDocumentReparser         _reparser;
     private readonly ICSharpBindingDiscoveryService   _csharpDiscoveryService;
     private readonly IFeatureRescanDebouncer          _rescanDebouncer;
     private readonly IParseCoordinator         _parseCoordinator;
@@ -69,7 +69,7 @@ public class BindingRegistryChangedHandler :
         ILspWorkspaceScopeManager scopeManager,
         ILanguageServerFacade languageServer,
         ClientIdeContext clientIde,
-        IMediator mediator,
+        IFeatureDocumentReparser reparser,
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         IFeatureRescanDebouncer rescanDebouncer,
         IParseCoordinator parseCoordinator,
@@ -83,7 +83,7 @@ public class BindingRegistryChangedHandler :
         _scopeManager           = scopeManager;
         _languageServer         = languageServer;
         _clientIde              = clientIde;
-        _mediator               = mediator;
+        _reparser               = reparser;
         _csharpDiscoveryService = csharpDiscoveryService;
         _rescanDebouncer        = rescanDebouncer;
         _parseCoordinator       = parseCoordinator;
@@ -348,7 +348,7 @@ public class BindingRegistryChangedHandler :
             cancellationToken.ThrowIfCancellationRequested();
             var uri = buffer.Uri;
             var version = buffer.Version;
-            _parseCoordinator.Schedule(uri, ct => ParseAndNotifyAsync(uri, version, ct));
+            _parseCoordinator.Schedule(uri, ct => _reparser.ReparseOpenDocumentAsync(uri, version, ct));
         }
 
         return Task.FromResult(affectedBuffers.Count);
@@ -398,17 +398,6 @@ public class BindingRegistryChangedHandler :
 
         // Fallback: folder-prefix for projects without a baseline.
         return IsUnderProjectFolder(uri, project.ProjectFolder);
-    }
-
-    private async Task ParseAndNotifyAsync(
-        DocumentUri uri,
-        int? version,
-        CancellationToken cancellationToken)
-    {
-        await _taggerService.ParseAsync(uri, version).ConfigureAwait(false);
-        await _mediator.Publish(
-            new MatchCacheChangedNotification(uri, version ?? 0),
-            cancellationToken).ConfigureAwait(false);
     }
 
     private static bool IsUnderProjectFolder(DocumentUri uri, string projectFolder)

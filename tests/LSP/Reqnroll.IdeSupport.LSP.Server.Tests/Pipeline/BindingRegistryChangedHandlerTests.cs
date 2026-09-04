@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -29,7 +28,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly ILspWorkspaceScopeManager    _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly ILanguageServerFacade        _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly ClientIdeContext             _clientIde     = new("visualstudio");
-    private readonly IMediator                    _mediator      = Substitute.For<IMediator>();
+    private readonly IFeatureDocumentReparser     _reparser      = Substitute.For<IFeatureDocumentReparser>();
     private readonly ICSharpBindingDiscoveryService _csharpDiscovery = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly IFeatureRescanDebouncer      _rescanDebouncer = Substitute.For<IFeatureRescanDebouncer>();
     // Real implementation, not a mock: ReparseOpenFilesAsync now schedules each buffer's reparse
@@ -80,7 +79,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         => CreateSut(_clientIde);
 
     private BindingRegistryChangedHandler CreateSut(ClientIdeContext clientIde)
-        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
     // ── Closed-file scanning — index-driven (baseline received) ───────────────
 
@@ -229,8 +228,8 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         // ReparseOpenFilesAsync now schedules each buffer's reparse through
         // IParseCoordinator instead of awaiting it inline (issue #471).
         await _parseCoordinator.WaitForReadyAsync(ownedUri, CancellationToken.None);
-        await _taggerService.Received(1).ParseAsync(ownedUri,   Arg.Any<int?>());
-        await _taggerService.DidNotReceive().ParseAsync(foreignUri, Arg.Any<int?>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(ownedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(foreignUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -273,7 +272,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
-        await _taggerService.Received(1).ParseAsync(linkedUri, Arg.Any<int?>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(linkedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -295,8 +294,8 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(inFolderUri, CancellationToken.None);
-        await _taggerService.Received(1).ParseAsync(inFolderUri, Arg.Any<int?>());
-        await _taggerService.DidNotReceive().ParseAsync(outsideUri, Arg.Any<int?>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(inFolderUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(outsideUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── IsFullReplacement = false does not trigger closed-file scan ───────────
@@ -324,7 +323,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -355,7 +354,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
@@ -406,7 +405,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         var featureFile = Path.Combine(_projectFolder, "A.feature");
         File.WriteAllText(featureFile, "Feature: A\n");

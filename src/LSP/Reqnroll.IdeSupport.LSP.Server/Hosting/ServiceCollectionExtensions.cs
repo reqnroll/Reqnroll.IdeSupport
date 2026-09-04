@@ -173,6 +173,7 @@ public static class ServiceCollectionExtensions
             // the Go to Definition / diagnostics consumers (readers).
             .AddSingleton<IBindingMatchService, BindingMatchService>()
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
+            .AddSingleton<IFeatureDocumentReparser, FeatureDocumentReparser>()
             .AddSingleton<ISemanticTokensService, SemanticTokensService>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()

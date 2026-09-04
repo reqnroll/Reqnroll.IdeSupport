@@ -7,6 +7,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -190,6 +191,12 @@ public class Program
             // notification to two handler instances (the transient from the scan and 
             // the singleton from the explicit call).
             .AddMediatR(typeof(Program).Assembly)
+            // Replaces the IMediator registration AddMediatR just made (last registration wins)
+            // with one whose notification fan-out isolates handler faults -- stock MediatR awaits
+            // each handler in a bare foreach, so the first to throw suppresses every handler after
+            // it, with the casualties decided by assembly-scan order (issue #575). Must stay
+            // AFTER AddMediatR; registered before it, AddMediatR's own registration would win.
+            .AddTransient<IMediator, ResilientMediator>()
             .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace)
             .AddReqnrollProjectSystem()
             .AddReqnrollEditorServices()

@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -19,7 +19,7 @@ public class TextDocumentSyncHandlerTests
     private readonly IBindingMatchService _bindingMatchService = Substitute.For<IBindingMatchService>();
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly ICSharpFileTextCache _csharpFileTextCache = new CSharpFileTextCache();
-    private readonly IMediator _mediator = Substitute.For<IMediator>();
+    private readonly IFeatureDocumentReparser _reparser = Substitute.For<IFeatureDocumentReparser>();
     private readonly ILanguageServerFacade _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
@@ -32,7 +32,7 @@ public class TextDocumentSyncHandlerTests
 
     private TextDocumentSyncHandler CreateSut() =>
         new(_bufferService, _taggerService, _bindingMatchService, _csharpDiscoveryService,
-            _csharpFileTextCache, _mediator, _languageServer, _logger, _parseCoordinator);
+            _csharpFileTextCache, _reparser, _languageServer, _logger, _parseCoordinator);
 
     /// <summary>Awaits the coordinator's pending entry for <paramref name="uri"/> so a test can observe the effects of Handle's scheduled (not awaited) parse/discovery work.</summary>
     private Task WaitForScheduledWorkAsync(DocumentUri uri) =>
@@ -41,8 +41,7 @@ public class TextDocumentSyncHandlerTests
     [Fact]
     public async Task Handle_DidOpen_stores_document_and_publishes_match_cache_changed_notification()
     {
-        var tags = Array.Empty<IdeSupportTag>();
-        _taggerService.ParseAsync(FeatureUri, 3).Returns(tags);
+        _reparser.ReparseOpenDocumentAsync(FeatureUri, 3, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         var sut = CreateSut();
         var request = new DidOpenTextDocumentParams
@@ -64,15 +63,14 @@ public class TextDocumentSyncHandlerTests
         buffer.Should().NotBeNull();
         buffer!.Text.Should().Be(request.TextDocument.Text);
         buffer.Version.Should().Be(3);
-        // Tag storage and match-set computation are delegated to IGherkinDocumentTaggerService.ParseAsync
-        // (mocked here); the handler only publishes the match-cache-changed notification afterwards.
+        // Reparsing and match-cache-changed publication are delegated to
+        // IFeatureDocumentReparser.ReparseOpenDocumentAsync (mocked here, covered directly by
+        // FeatureDocumentReparserTests); the handler only needs to schedule the call correctly.
 
         // Handle schedules the parse/publish through IParseCoordinator instead of awaiting
         // it inline (issue #471) — wait for that scheduled work before asserting its effects.
         await WaitForScheduledWorkAsync(FeatureUri);
-        await _mediator.Received(1).Publish(
-            Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 3),
-            Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(FeatureUri, 3, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -80,8 +78,7 @@ public class TextDocumentSyncHandlerTests
     {
         _bufferService.Update(FeatureUri, 1, "Feature: Old\n");
 
-        var tags = Array.Empty<IdeSupportTag>();
-        _taggerService.ParseAsync(FeatureUri, 2).Returns(tags);
+        _reparser.ReparseOpenDocumentAsync(FeatureUri, 2, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         var sut = CreateSut();
         var request = new DidChangeTextDocumentParams
@@ -103,20 +100,15 @@ public class TextDocumentSyncHandlerTests
         buffer.Should().NotBeNull();
         buffer!.Text.Should().Be("Feature: New\nScenario: S\n  Given changed\n");
         buffer.Version.Should().Be(2);
-        // Tag storage and match-set computation are delegated to IGherkinDocumentTaggerService.ParseAsync
-        // (mocked here); the handler only publishes the match-cache-changed notification afterwards.
 
         await WaitForScheduledWorkAsync(FeatureUri);
-        await _mediator.Received(1).Publish(
-            Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 2),
-            Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(FeatureUri, 2, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_DidChange_with_empty_changes_uses_empty_string_and_publishes()
     {
-        var tags = Array.Empty<IdeSupportTag>();
-        _taggerService.ParseAsync(FeatureUri, 4).Returns(tags);
+        _reparser.ReparseOpenDocumentAsync(FeatureUri, 4, Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
 
         var sut = CreateSut();
         var request = new DidChangeTextDocumentParams
@@ -136,9 +128,7 @@ public class TextDocumentSyncHandlerTests
         buffer.Version.Should().Be(4);
 
         await WaitForScheduledWorkAsync(FeatureUri);
-        await _mediator.Received(1).Publish(
-            Arg.Is<MatchCacheChangedNotification>(n => n.Uri == FeatureUri && n.Version == 4),
-            Arg.Any<CancellationToken>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(FeatureUri, 4, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -159,7 +149,7 @@ public class TextDocumentSyncHandlerTests
         _bindingMatchService.Received(1).InvalidateAllForDocument(FeatureUri.ToString());
 
         // No parse/match notification — the close path does not publish MatchCacheChangedNotification.
-        await _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
+        await _reparser.DidNotReceiveWithAnyArgs().ReparseOpenDocumentAsync(default!, default, default);
     }
 
     [Fact]
@@ -227,7 +217,7 @@ public class TextDocumentSyncHandlerTests
         await WaitForScheduledWorkAsync(CsUri);
         await _csharpDiscoveryService.Received(1)
             .UpdateFromSourceAsync(CsUri, source, true, Arg.Any<CancellationToken>());
-        await _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
+        await _reparser.DidNotReceiveWithAnyArgs().ReparseOpenDocumentAsync(default!, default, default);
     }
 
     [Fact]
@@ -299,6 +289,6 @@ public class TextDocumentSyncHandlerTests
         buffer!.Version.Should().Be(7);
         buffer.Text.Should().Be("Feature: BeforeSave\n");
 
-        await _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
+        await _reparser.DidNotReceiveWithAnyArgs().ReparseOpenDocumentAsync(default!, default, default);
     }
 }
