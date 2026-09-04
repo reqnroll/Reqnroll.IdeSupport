@@ -165,7 +165,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(paths);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(cap).ScanClosedFileAsync(
@@ -192,7 +192,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f });
 
         var act = async () => await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             new CancellationToken(canceled: true));
 
         await act.Should().NotThrowAsync();
