@@ -389,15 +389,14 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_response_for_a_session_abandoned_two_generations_ago_is_still_forwarded_to_vs()
+    public async Task A_response_for_a_session_abandoned_two_generations_ago_is_dropped()
     {
-        // LATENT DEFECT, recorded deliberately (design §3.5). CreateFreshVsFacingPipe purges
-        // request->session entries older than two generations, and the #395 guard only fires when the
-        // entry is *found*. A response whose entry has been purged therefore falls through and is
-        // forwarded to the current session -- the same unmatched response that #395 exists to
-        // prevent, just delayed by one more generation. This test pins today's behaviour so the
-        // proposed policy inversion shows up as a deliberate flip rather than a silent change; the
-        // assertion below is expected to be inverted by that commit.
+        // This assertion was inverted deliberately (design §3.5). It previously recorded a latent
+        // recurrence of #395: CreateFreshVsFacingPipe purges request->session entries older than two
+        // generations, and the old guard only fired when the entry was *found*, so a response whose
+        // entry had been purged fell through and was forwarded to the current session -- the same
+        // unmatched response #395 exists to prevent, delayed by one more generation. The router now
+        // delivers a response only when its id is tracked against the current session.
         var serverSide = new FakeServerPipe();
         _pipe = new LspInterceptingPipe(
             serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
@@ -413,11 +412,10 @@ public class LspInterceptingPipeTests : IAsyncLifetime
 
         await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"id\":143,\"result\":null}");
 
-        var deliveredToSession3 = await TryReadFrameAsync(session3.Input, ShortTimeout);
-        deliveredToSession3.Should().NotBeNull(
-            "today the purged entry means the #395 guard never fires -- this is the latent recurrence, " +
-            "not the desired behaviour");
-        deliveredToSession3.Should().Contain("\"id\":143");
+        var deliveredToSession3 = await TryReadFrameAsync(session3.Input, TimeSpan.FromMilliseconds(500));
+        deliveredToSession3.Should().BeNull(
+            "session #3 never sent id=143, and forwarding it there is the RemoteProtocolViolation " +
+            "that fatally closes the connection -- purged or not, the response has no correct destination");
     }
 
     [Fact]
