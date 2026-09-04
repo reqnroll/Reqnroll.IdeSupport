@@ -38,6 +38,18 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         }
     }
 
+    /// <summary>Throws on every message, to characterize that an interceptor fault never ends a pump.</summary>
+    private sealed class ThrowingInterceptor : ILspMessageInterceptor
+    {
+        public int Calls { get; private set; }
+
+        public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken)
+        {
+            Calls++;
+            throw new InvalidOperationException("interceptor blew up");
+        }
+    }
+
     private sealed class FakeServerPipe : IDuplexPipe
     {
         // From LspInterceptingPipe's point of view: Input = server's stdout, Output = server's stdin.
@@ -330,6 +342,230 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         _pipe.MarkServerTerminated("test");
 
         (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().BeNull();
+    }
+
+    // ── Characterization coverage taken before the #587 phase-2/3 extractions ─────────────────
+    //
+    // These pin behaviour that the decomposition must preserve but that nothing asserted before.
+    // Two of the invariants in the design's table (I7: the receive pump must never exit; I8: injected
+    // writes must not interleave with the send pump's) had no coverage at all, and the #395 shape was
+    // only tested one generation deep. They are written against the *current* implementation and are
+    // expected to pass unchanged through every pure-move commit; one of them (the purge-boundary test
+    // below) deliberately records a latent defect rather than the desired behaviour.
+
+    [Fact]
+    public async Task Owned_and_vs_responses_arriving_together_each_reach_only_their_own_requester()
+    {
+        // #395 and #401 in one shape: an owned RPC and one of VS's own requests in flight at the same
+        // time, answered out of order. The owned response must be consumed (never forwarded), and
+        // VS's must be forwarded (never swallowed) -- the two policies meeting on one connection.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        var ownedTask = _pipe.SendRequestToServerAsync("reqnroll/resolveTestTargets", "{}", CancellationToken.None);
+        var ownedId   = ExtractId(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"textDocument/codeLens\"}");
+        (await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout)).Should().Contain("\"id\":77");
+
+        // Answered in the reverse order they were sent, which is what the server is free to do.
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"id\":77,\"result\":[]}");
+        await WriteFrameAsync(serverSide.ServerSideStdout, $"{{\"jsonrpc\":\"2.0\",\"id\":\"{ownedId}\",\"result\":{{\"targets\":[1]}}}}");
+
+        var ownedResult = await WithTimeoutAsync(ownedTask, ShortTimeout);
+        ownedResult.Should().NotBeNull("the owned response must complete its own waiter");
+        ownedResult!["targets"].Should().NotBeNull();
+
+        // VS gets its own response and only its own: the owned one must never reach VS's JsonRpc.
+        var toVs = await ReadFrameAsync(session.Input, ShortTimeout);
+        toVs.Should().Contain("\"id\":77");
+        (await TryReadFrameAsync(session.Input, TimeSpan.FromMilliseconds(300)))
+            .Should().BeNull("the owned response was consumed, so nothing else should reach VS");
+    }
+
+    [Fact]
+    public async Task A_response_for_a_session_abandoned_two_generations_ago_is_still_forwarded_to_vs()
+    {
+        // LATENT DEFECT, recorded deliberately (design §3.5). CreateFreshVsFacingPipe purges
+        // request->session entries older than two generations, and the #395 guard only fires when the
+        // entry is *found*. A response whose entry has been purged therefore falls through and is
+        // forwarded to the current session -- the same unmatched response that #395 exists to
+        // prevent, just delayed by one more generation. This test pins today's behaviour so the
+        // proposed policy inversion shows up as a deliberate flip rather than a silent change; the
+        // assertion below is expected to be inverted by that commit.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session1 = _pipe.CreateFreshVsFacingPipe();
+        await WriteFrameAsync(session1.Output, "{\"jsonrpc\":\"2.0\",\"id\":143,\"method\":\"shutdown\"}");
+        (await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout)).Should().Contain("\"id\":143");
+
+        _pipe.CreateFreshVsFacingPipe();                       // session #2
+        var session3 = _pipe.CreateFreshVsFacingPipe();        // session #3 -- purges session #1's entry
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"id\":143,\"result\":null}");
+
+        var deliveredToSession3 = await TryReadFrameAsync(session3.Input, ShortTimeout);
+        deliveredToSession3.Should().NotBeNull(
+            "today the purged entry means the #395 guard never fires -- this is the latent recurrence, " +
+            "not the desired behaviour");
+        deliveredToSession3.Should().Contain("\"id\":143");
+    }
+
+    [Fact]
+    public async Task The_receive_pump_survives_an_interceptor_that_throws_and_keeps_delivering()
+    {
+        // I7: the receive pump is persistent and shared by every future VS session, so nothing short
+        // of the server's stdout ending may stop it.
+        var throwing = new ThrowingInterceptor();
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), new ILspMessageInterceptor[] { throwing },
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"method\":\"window/logMessage\"}");
+        (await ReadFrameAsync(session.Input, ShortTimeout)).Should().Contain("window/logMessage");
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\"}");
+        (await ReadFrameAsync(session.Input, ShortTimeout)).Should().Contain("publishDiagnostics");
+
+        throwing.Calls.Should().Be(2, "both frames still ran through the interceptor list");
+    }
+
+    [Fact]
+    public async Task The_receive_pump_survives_a_malformed_header_from_the_server_and_keeps_delivering()
+    {
+        // I7 again, via the case step 2.0 made survivable: a header block with no usable
+        // Content-Length used to escape the codec as an exception and end this pump for good.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        await serverSide.ServerSideStdout.WriteAsync(Encoding.UTF8.GetBytes("Content-Length: -1\r\n\r\n"));
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"method\":\"window/logMessage\"}");
+
+        var delivered = await ReadFrameAsync(session.Input, ShortTimeout);
+        delivered.Should().Contain("window/logMessage", "one corrupt header must cost one frame, not the pump");
+    }
+
+    [Fact]
+    public async Task The_receive_pump_keeps_delivering_after_a_session_is_abandoned()
+    {
+        // I7 + I1: the pump looks up the *current* VS-facing writer per frame rather than capturing
+        // one, so abandoning a session (whose VS-side reader is gone) must not disturb it.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session1 = _pipe.CreateFreshVsFacingPipe();
+        await session1.Input.CompleteAsync();   // VS-side reader goes away, as at the end of a session
+
+        var session2 = _pipe.CreateFreshVsFacingPipe();
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"method\":\"window/logMessage\"}");
+
+        (await ReadFrameAsync(session2.Input, ShortTimeout)).Should().Contain("window/logMessage");
+    }
+
+    [Fact]
+    public async Task Injected_traffic_and_send_pump_traffic_never_interleave_on_the_server_stream()
+    {
+        // I8: SendNotificationToServerAsync/SendRequestToServerAsync write straight to the server's
+        // stdin from arbitrary threads, on the same unsynchronised PipeWriter the send pump forwards
+        // VS's own frames to. Without the inject lock the two can interleave mid-frame and corrupt
+        // the framing -- which would show up here as a frame that does not parse, or a lost one.
+        const int injectedCount = 40;
+        const int vsCount       = 40;
+
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        var injecting = Task.Run(async () =>
+        {
+            for (var i = 0; i < injectedCount; i++)
+                await _pipe.SendNotificationToServerAsync("reqnroll/injected", $"{{\"n\":{i}}}", CancellationToken.None);
+        });
+
+        var vsWriting = Task.Run(async () =>
+        {
+            for (var i = 0; i < vsCount; i++)
+                await WriteFrameAsync(session.Output, $"{{\"jsonrpc\":\"2.0\",\"method\":\"vs/notification\",\"params\":{{\"n\":{i}}}}}");
+        });
+
+        await Task.WhenAll(injecting, vsWriting);
+
+        var injectedSeen = 0;
+        var vsSeen       = 0;
+        for (var i = 0; i < injectedCount + vsCount; i++)
+        {
+            var frame = await TryReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+            frame.Should().NotBeNull($"every one of the {injectedCount + vsCount} frames should arrive intact");
+
+            // Parsing is the real assertion: an interleaved write produces a body that is not valid
+            // JSON (or a Content-Length that no longer matches its payload).
+            var body = JObject.Parse(frame!);
+            var method = body["method"]!.Value<string>();
+            if (method == "reqnroll/injected") injectedSeen++;
+            else if (method == "vs/notification") vsSeen++;
+        }
+
+        injectedSeen.Should().Be(injectedCount);
+        vsSeen.Should().Be(vsCount);
+    }
+
+    [Fact]
+    public async Task Late_responses_arriving_after_termination_are_handled_without_reaching_vs_wrongly()
+    {
+        // I5/I6 interaction: MarkServerTerminated releases the in-flight owned request, and a
+        // response that still turns up afterwards must not be forwarded to VS -- the "reqnroll-rpc-"
+        // prefix proves it is ours whether or not a waiter survives (#401). VS's own outstanding
+        // response is a different matter: VS asked for it and is still listening, so it is delivered.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        var ownedTask = _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None);
+        var ownedId   = ExtractId(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+
+        await WriteFrameAsync(session.Output, "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"shutdown\"}");
+        await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+
+        _pipe.MarkServerTerminated("test");
+        (await WithTimeoutAsync(ownedTask, ShortTimeout)).Should().BeNull();
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, $"{{\"jsonrpc\":\"2.0\",\"id\":\"{ownedId}\",\"result\":[]}}");
+        await WriteFrameAsync(serverSide.ServerSideStdout, "{\"jsonrpc\":\"2.0\",\"id\":12,\"result\":null}");
+
+        // The owned one is dropped; VS's shutdown response still gets through, and is the only frame.
+        var delivered = await ReadFrameAsync(session.Input, ShortTimeout);
+        delivered.Should().Contain("\"id\":12");
+        (await TryReadFrameAsync(session.Input, TimeSpan.FromMilliseconds(300)))
+            .Should().BeNull("the owned response must never reach VS's JsonRpc");
     }
 
     /// <summary>Awaits <paramref name="task"/>, failing the test if it does not finish in time.</summary>
