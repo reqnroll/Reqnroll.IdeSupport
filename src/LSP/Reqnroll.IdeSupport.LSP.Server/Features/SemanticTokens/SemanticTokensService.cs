@@ -129,10 +129,25 @@ public sealed class SemanticTokensService : ISemanticTokensService
     /// block tags (FeatureBlock, etc.) are not emitted themselves but their
     /// children are processed recursively.
     /// </summary>
+    /// <remarks>
+    /// Separated into two phases (issue #593): <see cref="CollectOrderedEntries"/> resolves and
+    /// orders the leaf tokens, and <see cref="DeltaEncode"/> walks that ordered list to produce
+    /// the flat integer tuples. The arithmetic in the latter is otherwise only reachable through a
+    /// full parse.
+    /// </remarks>
     private static List<int> Encode(
         IReadOnlyCollection<IdeSupportTag> tags, int? startLine = null, int? endLine = null)
+        => DeltaEncode(CollectOrderedEntries(tags, startLine, endLine));
+
+    /// <summary>
+    /// Collects the leaf tokens for <paramref name="tags"/> (optionally scoped to
+    /// [<paramref name="startLine"/>, <paramref name="endLine"/>]), sorted in document order
+    /// (line asc, char asc) with overlaps already resolved (<see cref="ResolveOverlaps"/>) — the
+    /// ordered token list <see cref="DeltaEncode"/> walks to produce the LSP integer encoding.
+    /// </summary>
+    private static List<(int Line, int Char, int Length, int TypeIdx, int ModBits)> CollectOrderedEntries(
+        IReadOnlyCollection<IdeSupportTag> tags, int? startLine, int? endLine)
     {
-        // Collect all leaf tokens in document order (line asc, char asc).
         var entries = new List<(int Line, int Char, int Length, int TypeIdx, int ModBits)>();
         var scopedTags = startLine.HasValue && endLine.HasValue
             ? FilterToLineRange(tags, startLine.Value, endLine.Value)
@@ -155,12 +170,23 @@ public sealed class SemanticTokensService : ISemanticTokensService
             return b.Length.CompareTo(a.Length); // longer first
         });
 
-        entries = ResolveOverlaps(entries);
+        return ResolveOverlaps(entries);
+    }
 
-        var result = new List<int>(entries.Count * 5);
+    /// <summary>
+    /// Walks <paramref name="orderedEntries"/> (already sorted in document order with overlaps
+    /// resolved — see <see cref="CollectOrderedEntries"/>) and produces the flat LSP semantic
+    /// token integer encoding: 5 ints per token (deltaLine, deltaStartChar, length,
+    /// tokenTypeIndex, tokenModifierBitset), each position delta-encoded relative to the previous
+    /// token per the LSP specification.
+    /// </summary>
+    internal static List<int> DeltaEncode(
+        IReadOnlyList<(int Line, int Char, int Length, int TypeIdx, int ModBits)> orderedEntries)
+    {
+        var result = new List<int>(orderedEntries.Count * 5);
         int prevLine = 0, prevChar = 0;
 
-        foreach (var (line, ch, length, type, modifiers) in entries)
+        foreach (var (line, ch, length, type, modifiers) in orderedEntries)
         {
             int deltaLine = line - prevLine;
             int deltaChar = deltaLine == 0 ? ch - prevChar : ch;
