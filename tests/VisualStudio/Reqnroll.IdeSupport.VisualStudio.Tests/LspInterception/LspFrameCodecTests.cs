@@ -236,8 +236,8 @@ public class LspFrameCodecTests
     [InlineData("-1")]                    // ArgumentOutOfRangeException out of ReadExactAsync's List(count)
     [InlineData("abc")]                   // not a number -- used to look "incomplete" and hang
     [InlineData("")]                      // present but empty
-    [InlineData("9223372036854775808")]   // long.MaxValue + 1: does not parse as a long at all
-    [InlineData("99999999999")]           // a valid long, but no byte[] can be that long
+    [InlineData("9223372036854775808")]   // past long.MaxValue, never mind int
+    [InlineData("99999999999")]           // ~93 GiB: no byte[] can be that long
     public void TryParseHeader_reports_Malformed_for_an_unusable_content_length(string value)
     {
         var bytes = Encoding.UTF8.GetBytes($"Content-Length: {value}\r\n\r\n");
@@ -254,7 +254,8 @@ public class LspFrameCodecTests
         // No cap: neither peer of this pipe imposes one (StreamJsonRpc and OmniSharp.Extensions.JsonRpc
         // both bound only the header value's textual length) and the LSP base protocol specifies none.
         // The only ceiling is the platform's -- a body is handed back as a byte[], which cannot be
-        // longer than int.MaxValue -- so the largest representable length is accepted.
+        // longer than int.MaxValue -- so the largest representable length is accepted. VS's own
+        // client parses this header as an int too, so nothing VS could send is refused here.
         var bytes = Encoding.UTF8.GetBytes($"Content-Length: {int.MaxValue}\r\n\r\n");
         var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
 

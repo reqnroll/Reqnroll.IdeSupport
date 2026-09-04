@@ -100,7 +100,7 @@ internal static class LspFrameCodec
         // Phase 1 – read until we see \r\n\r\n and can extract Content-Length.
         // We use AdvanceTo(consumed, examined) correctly: we only mark bytes as consumed
         // once we know exactly which bytes belong to the header vs. the body.
-        long contentLength;   // parsed at the server peer's width; TryParseHeader guarantees it fits an int when Parsed.
+        int contentLength;
         int headerLength; // total byte length of "Content-Length: N\r\n\r\n"
 
         while (true)
@@ -140,7 +140,7 @@ internal static class LspFrameCodec
         }
 
         // Phase 2 – read exactly contentLength body bytes.
-        var bodyBytes = await ReadExactAsync(reader, (int)contentLength, ct).ConfigureAwait(false);
+        var bodyBytes = await ReadExactAsync(reader, contentLength, ct).ConfigureAwait(false);
         if (bodyBytes is null)
             return null;
 
@@ -212,14 +212,19 @@ internal static class LspFrameCodec
     /// something a later terminator might rescue.
     /// </para>
     /// <para>
-    /// "Usable" means: parses as a <see cref="long"/> (matching
-    /// <c>OmniSharp.Extensions.JsonRpc</c>, the reader on the server end of this pipe, which also
-    /// parses the value as a <see cref="long"/>), is not negative, and is small enough for a body to
-    /// be represented at all. That last bound is the platform's, not a policy: the body is handed
-    /// back as a <see cref="byte"/> array, which cannot be longer than <see cref="int.MaxValue"/>.
-    /// <b>No size limit of our own is imposed</b> — neither peer of this pipe imposes one either
-    /// (<c>StreamJsonRpc</c>, VS's client, and <c>OmniSharp.Extensions.JsonRpc</c> both bound only
-    /// the header value's textual length), and the LSP base protocol specifies none.
+    /// "Usable" means non-negative and representable: the body is returned as a <see cref="byte"/>
+    /// array, so <see cref="int.MaxValue"/> is the largest length that could ever be delivered, and
+    /// a value past it is rejected for the same reason a non-numeric one is — the body it promises
+    /// can never arrive, so waiting for it would stall the reader indefinitely. That ceiling is the
+    /// platform's, not a policy. It also happens to match VS's own client (<c>StreamJsonRpc</c>
+    /// parses this header as an <see cref="int"/> too), so nothing VS could accept is rejected here.
+    /// <c>OmniSharp.Extensions.JsonRpc</c> on the server end parses it as a <see cref="long"/>, but
+    /// nothing downstream of this codec could carry such a frame anyway.
+    /// </para>
+    /// <para>
+    /// <b>No size limit of our own is imposed.</b> Neither peer of this pipe imposes one
+    /// (<c>StreamJsonRpc</c> and <c>OmniSharp.Extensions.JsonRpc</c> both bound only the header
+    /// value's textual length), and the LSP base protocol specifies none.
     /// </para>
     /// <para>
     /// Each rejected case was a live failure. A negative value reached
@@ -231,7 +236,7 @@ internal static class LspFrameCodec
     /// body it promises can never be delivered.
     /// </para>
     /// </remarks>
-    public static HeaderParseResult TryParseHeader(ReadOnlySequence<byte> buffer, out long contentLength, out int headerLength)
+    public static HeaderParseResult TryParseHeader(ReadOnlySequence<byte> buffer, out int contentLength, out int headerLength)
     {
         contentLength = 0;
         headerLength  = 0;
@@ -255,11 +260,14 @@ internal static class LspFrameCodec
                     if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
                     {
                         var valueStr = line.Substring("Content-Length:".Length).Trim();
-                        if (long.TryParse(valueStr, out contentLength) &&
-                            contentLength >= 0 && contentLength <= int.MaxValue)
-                        {
+
+                        // int, not long: the body is returned as a byte[], so int.MaxValue is the
+                        // largest length that could ever be delivered. Parsing wider and then
+                        // rejecting anything above int.MaxValue would produce the same outcome for
+                        // every possible input — a value past int.MaxValue is unusable either way —
+                        // so the narrower parse says it once instead of twice.
+                        if (int.TryParse(valueStr, out contentLength) && contentLength >= 0)
                             return HeaderParseResult.Parsed;
-                        }
 
                         contentLength = 0;
                         return HeaderParseResult.Malformed;
