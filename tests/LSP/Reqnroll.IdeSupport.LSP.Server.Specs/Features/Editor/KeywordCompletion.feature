@@ -139,3 +139,15 @@ Scenario: Completion request on a non-feature file returns no items
         """
     When completions are requested at line 0 column 0 in "Notes.txt"
     Then no completions are returned
+
+# ── Replacement range never extends past the caret (issue #561) ─────────────
+
+Scenario: Keyword completion range does not extend past the caret when text follows it on the line
+    When the feature file "German.feature" is opened with
+        """
+        # language: de
+        Szenario:[scenario name]
+        """
+    And completions are requested at line 1 column 1 in "German.feature"
+    Then completions are returned
+    And every completion's textEdit range does not extend past column 1
