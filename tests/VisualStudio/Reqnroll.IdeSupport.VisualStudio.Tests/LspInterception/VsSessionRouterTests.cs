@@ -66,8 +66,22 @@ public class VsSessionRouterTests
         router.Route(Response(7), currentSessionId: 1, out _).Should().Be(ResponseRouting.DeliverToCurrentSession);
 
         router.Route(Response(7), currentSessionId: 1, out var owner)
-              .Should().Be(ResponseRouting.DeliverToCurrentSession, "the entry is gone, so nothing identifies it as abandoned");
+              .Should().Be(ResponseRouting.DropAbandoned, "the entry is gone, so nothing proves VS is waiting on it");
         owner.Should().Be(0);
+    }
+
+    [Fact]
+    public void An_untracked_response_id_is_dropped_rather_than_forwarded()
+    {
+        // The policy inversion (design §3.5). Every VS request passes through the send pump, which
+        // records it before forwarding — so an untracked response id is either a straggler whose
+        // session is gone or an id VS never sent. Both are unmatched responses as far as VS's
+        // JsonRpc is concerned, and it closes the connection over one of those.
+        var router = new VsSessionRouter();
+
+        router.Route(Response(99), currentSessionId: 1, out var owner)
+              .Should().Be(ResponseRouting.DropAbandoned);
+        owner.Should().Be(0, "nothing is tracked for this id");
     }
 
     [Fact]
@@ -79,11 +93,14 @@ public class VsSessionRouterTests
 
         router.PurgeOlderThan(minimumLiveSessionId: 2);
 
-        router.Route(Response("recent"), currentSessionId: 3, out _)
-              .Should().Be(ResponseRouting.DropAbandoned, "session #2's entry survives the purge");
-        router.Route(Response("old"), currentSessionId: 3, out _)
-              .Should().Be(ResponseRouting.DeliverToCurrentSession,
-                  "session #1's entry was purged — this is the latent #395 recurrence recorded in the " +
-                  "design's §3.5, pinned here as well as through the pipe");
+        router.Route(Response("recent"), currentSessionId: 3, out var recentOwner)
+              .Should().Be(ResponseRouting.DropAbandoned, "session #2's entry survives the purge and names an abandoned session");
+        recentOwner.Should().Be(2);
+
+        router.Route(Response("old"), currentSessionId: 3, out var oldOwner)
+              .Should().Be(ResponseRouting.DropAbandoned,
+                  "session #1's entry was purged — before the policy inversion this fell through and was " +
+                  "forwarded to session #3, the latent #395 recurrence");
+        oldOwner.Should().Be(0, "the purged entry can no longer name its session, which is why the default has to be to drop");
     }
 }

@@ -352,8 +352,8 @@ internal sealed class LspInterceptingPipe : IDisposable
                 if (_router.Route(body, currentSessionId, out var owningSessionId) == ResponseRouting.DropAbandoned)
                 {
                     _logger.LogInformation(
-                        "LspInterceptingPipe [Receive]: dropped response — belongs to abandoned session " +
-                        "#{OwningSessionId}, current session is #{CurrentSessionId}.",
+                        "LspInterceptingPipe [Receive]: dropped response — owning session #{OwningSessionId} " +
+                        "(0 = no longer tracked) is not the current session #{CurrentSessionId}.",
                         owningSessionId, currentSessionId);
                     continue;
                 }

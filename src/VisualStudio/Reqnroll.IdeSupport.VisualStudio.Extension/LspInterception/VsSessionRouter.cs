@@ -57,6 +57,23 @@ internal sealed class VsSessionRouter
     /// <param name="body">The parsed server → VS message.</param>
     /// <param name="currentSessionId">The VS-facing session in effect right now.</param>
     /// <param name="owningSessionId">The session that sent the matching request, when one is tracked; otherwise 0.</param>
+    /// <remarks>
+    /// A response is delivered <b>only</b> when its id is tracked against the current session.
+    /// An untracked id is dropped rather than forwarded, which is the opposite of what this code did
+    /// when it lived in the pump, and is the fix for a latent recurrence of #395: entries are purged
+    /// two generations back, and the old guard only fired when the entry was <em>found</em>, so a
+    /// response whose entry had been purged fell through and was forwarded to the current session —
+    /// the same unmatched response #395 exists to prevent, delayed by one more generation.
+    /// <para>
+    /// Dropping is the safe default because every VS → server request passes through the send pump,
+    /// which records it <em>before</em> forwarding: every legitimate in-flight response therefore has
+    /// an entry against a live session. An untracked response id is either a straggler from a purged
+    /// generation — whose session is gone, so there is no correct destination — or an id VS never
+    /// sent, which VS's JsonRpc would treat as a fatal protocol violation. Server → VS
+    /// <em>requests</em> carry a <c>method</c> and classify as <see cref="ResponseRouting.NotAResponse"/>,
+    /// so they are unaffected.
+    /// </para>
+    /// </remarks>
     public ResponseRouting Route(JObject body, int currentSessionId, out int owningSessionId)
     {
         owningSessionId = 0;
@@ -65,7 +82,7 @@ internal sealed class VsSessionRouter
             return ResponseRouting.NotAResponse;
 
         if (!_requestSessionsById.TryRemove(responseId, out owningSessionId))
-            return ResponseRouting.DeliverToCurrentSession;
+            return ResponseRouting.DropAbandoned;
 
         return owningSessionId == currentSessionId
             ? ResponseRouting.DeliverToCurrentSession
