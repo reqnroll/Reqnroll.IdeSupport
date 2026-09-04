@@ -145,6 +145,64 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
     }
 
+    // ── Closed-file scan bound (issue #580) ───────────────────────────────────
+
+    [Fact]
+    public async Task ScanAllFeatureFiles_caps_at_the_configured_file_limit_and_logs_a_warning()
+    {
+        // One more file than the cap allows -- confirms the cap is exclusive (exactly N
+        // scanned, not N-1 or unbounded) without needing a workspace anywhere near real
+        // stress-corpus size to prove it.
+        var cap = BindingRegistryChangedHandler.MaxClosedFeatureFilesPerScan;
+        var paths = new List<string>(cap + 1);
+        for (var i = 0; i < cap + 1; i++)
+        {
+            var path = Path.Combine(_projectFolder, $"F{i}.feature");
+            File.WriteAllText(path, $"Feature: F{i}\n");
+            paths.Add(path);
+        }
+
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(_project).Returns(paths);
+
+        await CreateSut().Handle(
+            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            CancellationToken.None);
+
+        await _taggerService.Received(cap).ScanClosedFileAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+        // LogWarning is an extension method over ILogger.Log(LogMessage) -- not itself
+        // substitutable -- so the assertion goes through the underlying interface member.
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Level == TraceLevel.Warning &&
+            m.Message.Contains("exceeding") &&
+            m.Message.Contains(cap.ToString())));
+    }
+
+    [Fact]
+    public async Task ScanAllFeatureFiles_stops_gracefully_when_the_token_is_already_cancelled()
+    {
+        // Issue #580: this loop previously called ThrowIfCancellationRequested(), which would
+        // unwind the whole Handle call and skip the open-file reparse and code-lens refresh
+        // below it. It now breaks out of just the closed-file scan instead, so the rest of
+        // Handle still runs regardless of whether the scan finished, was capped, or was
+        // cancelled -- open files matter more to the user than a closed-file usage-count refresh.
+        var f = Path.Combine(_projectFolder, "A.feature");
+        File.WriteAllText(f, "Feature: A\n");
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f });
+
+        var act = async () => await CreateSut().Handle(
+            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new CancellationToken(canceled: true));
+
+        await act.Should().NotThrowAsync();
+        await _taggerService.DidNotReceive().ScanClosedFileAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+        _languageServer.Received(1).SendNotification(
+            "reqnroll/refreshCodeLens", Arg.Any<RefreshCodeLensParams>());
+    }
+
     // ── Closed-file scanning — folder-glob fallback (no baseline) ────────────
 
     [Fact]
