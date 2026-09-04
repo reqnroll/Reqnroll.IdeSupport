@@ -233,11 +233,11 @@ public class LspFrameCodecTests
     }
 
     [Theory]
-    [InlineData("-1")]                 // ArgumentOutOfRangeException out of ReadExactAsync's List(count)
-    [InlineData("abc")]                // int.TryParse fails -- used to look "incomplete" and hang
-    [InlineData("")]                   // present but empty
-    [InlineData("2147483648")]         // int.MaxValue + 1: does not parse as int at all
-    [InlineData("134217728")]          // parses, but past MaxFrameBytes (64 MiB) -- OOM risk
+    [InlineData("-1")]                    // ArgumentOutOfRangeException out of ReadExactAsync's List(count)
+    [InlineData("abc")]                   // not a number -- used to look "incomplete" and hang
+    [InlineData("")]                      // present but empty
+    [InlineData("9223372036854775808")]   // long.MaxValue + 1: does not parse as a long at all
+    [InlineData("99999999999")]           // a valid long, but no byte[] can be that long
     public void TryParseHeader_reports_Malformed_for_an_unusable_content_length(string value)
     {
         var bytes = Encoding.UTF8.GetBytes($"Content-Length: {value}\r\n\r\n");
@@ -249,13 +249,27 @@ public class LspFrameCodecTests
     }
 
     [Fact]
-    public void TryParseHeader_accepts_a_content_length_exactly_at_the_maximum()
+    public void TryParseHeader_imposes_no_size_limit_of_its_own()
     {
-        var bytes = Encoding.UTF8.GetBytes($"Content-Length: {LspFrameCodec.MaxFrameBytes}\r\n\r\n");
+        // No cap: neither peer of this pipe imposes one (StreamJsonRpc and OmniSharp.Extensions.JsonRpc
+        // both bound only the header value's textual length) and the LSP base protocol specifies none.
+        // The only ceiling is the platform's -- a body is handed back as a byte[], which cannot be
+        // longer than int.MaxValue -- so the largest representable length is accepted.
+        var bytes = Encoding.UTF8.GetBytes($"Content-Length: {int.MaxValue}\r\n\r\n");
         var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
 
         parse.Should().Be(LspFrameCodec.HeaderParseResult.Parsed);
-        contentLength.Should().Be(LspFrameCodec.MaxFrameBytes);
+        contentLength.Should().Be(int.MaxValue);
+    }
+
+    [Fact]
+    public void TryParseHeader_rejects_one_byte_past_the_representable_maximum()
+    {
+        var bytes = Encoding.UTF8.GetBytes($"Content-Length: {(long)int.MaxValue + 1}\r\n\r\n");
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out _, out _);
+
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Malformed,
+            "the body it promises could never be delivered, so waiting for it would stall the reader");
     }
 
     // ── ReadNextFrameAsync: malformed header (must not throw, must not hang) ─
@@ -263,15 +277,15 @@ public class LspFrameCodecTests
     [Theory]
     [InlineData("Content-Length: -1\r\n\r\n")]
     [InlineData("Content-Length: abc\r\n\r\n")]
-    [InlineData("Content-Length: 999999999\r\n\r\n")]
+    [InlineData("Content-Length: 99999999999\r\n\r\n")]
     [InlineData("Garbage-Header: 1\r\n\r\n")]
     public async Task ReadNextFrameAsync_returns_a_malformed_header_frame_instead_of_throwing_or_hanging(string header)
     {
-        // Each of these used to be fatal in a different way: -1 threw ArgumentOutOfRangeException and
-        // 999999999 risked OutOfMemoryException out of ReadExactAsync's allocation -- both of which
-        // escaped the codec into ReceivePumpAsync's catch-all, ending the pump (and therefore all
-        // server->VS traffic) for the life of the process. "abc" and a missing Content-Length instead
-        // looked like an incomplete header, so the read waited for bytes that could never help.
+        // Each of these used to be fatal in a different way. -1 threw ArgumentOutOfRangeException out
+        // of ReadExactAsync's allocation, which escaped the codec into ReceivePumpAsync's catch-all
+        // and ended the pump -- and therefore all server->VS traffic -- for the life of the process.
+        // "abc", a length no byte[] could hold, and a missing Content-Length all looked like an
+        // incomplete header instead, so the read waited for bytes that could never help.
         var pipe = new Pipe();
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(header));
 
@@ -309,11 +323,12 @@ public class LspFrameCodecTests
     [Fact]
     public async Task ReadNextFrameAsync_does_not_allocate_the_declared_length_up_front()
     {
-        // A 60 MiB Content-Length is within MaxFrameBytes, so it is honoured -- but the body
-        // accumulator must not reserve 60 MiB before a single body byte has arrived. Completing the
+        // A ~2 GiB Content-Length is accepted -- there is no cap -- but the body accumulator must not
+        // reserve 2 GiB before a single body byte has arrived. This, not any limit on the declared
+        // length, is what keeps a bogus header from becoming an OutOfMemoryException. Completing the
         // pipe with no body proves the read returns rather than allocating on the promise.
         var pipe = new Pipe();
-        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("Content-Length: 62914560\r\n\r\n"));
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("Content-Length: 2000000000\r\n\r\n"));
         await pipe.Writer.CompleteAsync();
 
         var frame = await WithTimeoutAsync(
