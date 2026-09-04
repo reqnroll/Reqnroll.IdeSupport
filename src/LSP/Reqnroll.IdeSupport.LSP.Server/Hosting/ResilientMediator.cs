@@ -1,7 +1,8 @@
 using MediatR;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
 /// <summary>
 /// <see cref="Mediator"/> whose notification fan-out isolates handler faults: every
