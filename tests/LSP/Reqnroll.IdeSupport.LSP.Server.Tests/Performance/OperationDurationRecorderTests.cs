@@ -197,4 +197,56 @@ public class OperationDurationRecorderTests
     [InlineData(9000, ">5000")]
     public void Bucket_maps_durations_to_coarse_bands(double ms, string expected)
         => OperationDurationRecorder.Bucket(ms).Should().Be(expected);
+
+    // ── Feature usage counting (issue #582) ───────────────────────────────────
+
+    [Fact]
+    public void Record_increments_the_feature_usage_counter_for_an_allowlisted_operation()
+    {
+        var counters = new FeatureUsageCounters();
+        var sut = new OperationDurationRecorder(
+            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false), counters: counters);
+
+        sut.Record("textDocument/definition", 10);
+
+        counters.Drain()["textDocument/definition"].Should().Be(1);
+    }
+
+    [Fact]
+    public void Record_does_not_increment_the_counter_for_a_non_allowlisted_operation()
+    {
+        var counters = new FeatureUsageCounters();
+        var sut = new OperationDurationRecorder(
+            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false), counters: counters);
+
+        sut.Record("textDocument/completion#step", 10);
+
+        counters.Drain().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Record_increments_the_counter_even_when_the_sampler_says_no()
+    {
+        // Usage counting is deliberately NOT gated by the perf sampler -- it needs exact counts,
+        // not a rate.
+        var counters = new FeatureUsageCounters();
+        var sut = new OperationDurationRecorder(
+            new CapturingLogger(), Ide(), telemetry: Substitute.For<ILspTelemetryService>(),
+            sampler: new FixedSampler(false), counters: counters);
+
+        sut.Record("textDocument/rename", 10);
+
+        counters.Drain()["textDocument/rename"].Should().Be(1);
+    }
+
+    [Fact]
+    public void Record_works_without_a_feature_usage_counters_service()
+    {
+        var sut = new OperationDurationRecorder(
+            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false));
+
+        var act = () => sut.Record("textDocument/definition", 10);
+
+        act.Should().NotThrow();
+    }
 }
