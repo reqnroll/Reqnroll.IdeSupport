@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
@@ -33,6 +34,7 @@ public sealed class ReferencesHandler
     private readonly ILspWorkspaceScopeManager    _scopeManager;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
+    private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
 
     /// <summary>Initializes a new instance of the <see cref="ReferencesHandler"/> class.</summary>
@@ -41,12 +43,14 @@ public sealed class ReferencesHandler
         ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
         IIdeSupportLogger               logger,
+        ILspTelemetryService?         telemetryService = null,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
         _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
         _logger         = logger;
+        _telemetryService = telemetryService;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -98,11 +102,15 @@ public sealed class ReferencesHandler
             // request that can carry the full three-state result.
             var hasBinding = _registryLookup.HasBindingAtLocation(uri, bindingLocation);
             if (!hasBinding)
+            {
                 _logger.LogVerbose(
                     $"ReferencesHandler: no binding at {filePath}:{line}");
-            else
-                _logger.LogVerbose(
-                    $"ReferencesHandler: binding at {filePath}:{line} has 0 usages");
+                return Task.FromResult<LocationOrLocationLinks>(new LocationOrLocationLinks());
+            }
+
+            _logger.LogVerbose(
+                $"ReferencesHandler: binding at {filePath}:{line} has 0 usages");
+            SendUsagesTelemetry(0, cancellationToken);
             return Task.FromResult<LocationOrLocationLinks>(new LocationOrLocationLinks());
         }
 
@@ -117,9 +125,27 @@ public sealed class ReferencesHandler
             }))
             .ToArray();
 
+        SendUsagesTelemetry(usages.Count, cancellationToken);
+
         return Task.FromResult<LocationOrLocationLinks>(
             new LocationOrLocationLinks(locations));
     }
+
+    /// <summary>
+    /// Sends the same <c>"FindStepDefinitionUsages command executed"</c> event
+    /// <see cref="Features.References.FindStepUsagesHandler"/> sends for its own
+    /// <c>reqnroll/findStepUsages</c> path (issue #581 finding 3), with a <c>Protocol</c> field
+    /// so the two paths — VS Code/Rider's native Find All References via this handler, versus
+    /// Visual Studio's custom request — produce one comparable usage-count metric instead of an
+    /// undercount that silently excludes two of the three IDE clients.
+    /// </summary>
+    private void SendUsagesTelemetry(int usagesCount, CancellationToken cancellationToken) =>
+        _telemetryService?.SendEvent("FindStepDefinitionUsages command executed", new()
+        {
+            ["UsagesCount"] = usagesCount,
+            ["IsCancelled"] = cancellationToken.IsCancellationRequested,
+            ["Protocol"] = "textDocument/references",
+        });
 
     private static bool IsCSharp(DocumentUri uri) =>
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);

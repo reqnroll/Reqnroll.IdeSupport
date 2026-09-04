@@ -7,6 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.References;
@@ -32,6 +33,9 @@ public class StepReferencesHandlerTests
     }
 
     private ReferencesHandler CreateSut() => new(_matchService, _scopeManager, _registryLookup, _logger);
+
+    private ReferencesHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
+        new(_matchService, _scopeManager, _registryLookup, _logger, telemetry);
 
     private static ReferenceParams RequestAt(DocumentUri uri, int line, int character) =>
         new()
@@ -223,5 +227,59 @@ public class StepReferencesHandlerTests
         _matchService.Received(1).FindUsages(
             Arg.Any<SourceLocation>(),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
+    }
+
+    // ── Telemetry (issue #581 finding 3) ──────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_no_binding_at_position_emits_no_telemetry()
+    {
+        // HasBindingAtLocation defaults to false (NSubstitute) -- "not a binding at all" is a
+        // guard rejection, mirroring FindStepUsagesHandler's own "isBinding=false" case.
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleAsync(
+            RequestAt(CsUri, 9, 0), CancellationToken.None);
+
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+    }
+
+    [Fact]
+    public async Task Handle_binding_with_zero_usages_emits_telemetry()
+    {
+        _registryLookup.HasBindingAtLocation(Arg.Any<DocumentUri>(), Arg.Any<SourceLocation>()).Returns(true);
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleAsync(
+            RequestAt(CsUri, 9, 0), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "FindStepDefinitionUsages command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["UsagesCount"]! == 0 && (string)p["Protocol"]! == "textDocument/references"));
+    }
+
+    [Fact]
+    public async Task Handle_single_usage_emits_telemetry_with_usages_count_and_protocol()
+    {
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { MakeMatch(FeatureUri, 33, 6) });
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleAsync(
+            RequestAt(CsUri, 9, 0), CancellationToken.None);
+
+        // Same event name/field shape as FindStepUsagesHandler's reqnroll/findStepUsages path,
+        // distinguished by Protocol rather than by which event fired -- the two counts are now
+        // directly comparable instead of the custom-request path silently being the only one
+        // with a usage-count signal (issue #581 finding 3).
+        telemetry.Received(1).SendEvent(
+            "FindStepDefinitionUsages command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["UsagesCount"]! == 1 && (string)p["Protocol"]! == "textDocument/references"));
     }
 }

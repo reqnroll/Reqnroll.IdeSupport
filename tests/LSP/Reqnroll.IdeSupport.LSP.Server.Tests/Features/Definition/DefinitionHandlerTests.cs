@@ -16,6 +16,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
@@ -55,6 +56,9 @@ public class DefinitionHandlerTests
 
     private DefinitionHandler CreateSut() =>
         new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem);
+
+    private DefinitionHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
+        new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem, telemetry);
 
     private static DefinitionParams RequestAt(DocumentUri uri, int line, int character) =>
         new()
@@ -525,5 +529,57 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         result.Should().NotBeNull();
+    }
+
+    // ── Telemetry (issue #581 finding 1) ──────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_defined_step_emits_telemetry_with_the_location_count()
+    {
+        var step = MakeDefinedMatch("Steps.cs", csLine: 10, csColumn: 5);
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "GoToStepDefinition command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["LocationCount"]! == 1));
+    }
+
+    [Fact]
+    public async Task Handle_unresolved_binding_still_emits_telemetry_with_zero_location_count()
+    {
+        // A step WAS found at the cursor -- it just has no navigable location -- so this is not
+        // a "not applicable" guard rejection; it deserves the same LocationCount=0 signal other
+        // handlers give their Erroneous-style field.
+        var step = MakeUnresolvedMatch("/workspaces/host-solution/Specs/Steps.cs");
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "GoToStepDefinition command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["LocationCount"]! == 0));
+    }
+
+    [Fact]
+    public async Task Handle_cursor_not_on_step_emits_no_telemetry()
+    {
+        // A guard rejection (no step resolved at all) is not a "command executed" -- mirrors
+        // ReferencesHandler/FindStepUsagesHandler not telemetering their "not a binding" case.
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, Array.Empty<StepBindingMatch>()));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).Handle(
+            RequestAt(FeatureUri, 0, 0), CancellationToken.None);
+
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
 }
