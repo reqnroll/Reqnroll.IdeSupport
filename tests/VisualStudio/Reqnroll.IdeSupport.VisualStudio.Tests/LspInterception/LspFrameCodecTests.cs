@@ -183,9 +183,9 @@ public class LspFrameCodecTests
     public void TryParseHeader_extracts_content_length_and_header_length()
     {
         var bytes = Encoding.UTF8.GetBytes("Content-Length: 42\r\n\r\n");
-        var found = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out var headerLength);
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out var headerLength);
 
-        found.Should().BeTrue();
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Parsed);
         contentLength.Should().Be(42);
         headerLength.Should().Be(bytes.Length);
     }
@@ -194,38 +194,148 @@ public class LspFrameCodecTests
     public void TryParseHeader_is_case_insensitive_for_the_header_name()
     {
         var bytes = Encoding.UTF8.GetBytes("content-length: 7\r\n\r\n");
-        var found = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
 
-        found.Should().BeTrue();
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Parsed);
         contentLength.Should().Be(7);
     }
 
     [Fact]
-    public void TryParseHeader_returns_false_when_no_blank_line_terminator_is_present()
+    public void TryParseHeader_reports_Incomplete_when_no_blank_line_terminator_is_present()
     {
+        // More bytes could still complete this header, so it must not be treated as malformed.
         var bytes = Encoding.UTF8.GetBytes("Content-Length: 42\r\n");
-        var found = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out _, out _);
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out _, out _);
 
-        found.Should().BeFalse();
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Incomplete);
     }
 
     [Fact]
-    public void TryParseHeader_returns_false_when_the_Content_Length_header_is_missing()
+    public void TryParseHeader_reports_Malformed_when_the_Content_Length_header_is_missing()
     {
+        // The first \r\n\r\n ends the header block by definition — no later terminator can rescue
+        // a block that already ended without a Content-Length.
         var bytes = Encoding.UTF8.GetBytes("Some-Other-Header: value\r\n\r\n");
-        var found = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out _, out _);
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out _, out var headerLength);
 
-        found.Should().BeFalse();
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Malformed);
+        headerLength.Should().Be(bytes.Length, "the caller has to know how much to skip");
     }
 
     [Fact]
     public void TryParseHeader_skips_a_leading_unrelated_header_line_to_find_Content_Length()
     {
         var bytes = Encoding.UTF8.GetBytes("Content-Type: application/vscode-jsonrpc\r\nContent-Length: 15\r\n\r\n");
-        var found = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
 
-        found.Should().BeTrue();
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Parsed);
         contentLength.Should().Be(15);
+    }
+
+    [Theory]
+    [InlineData("-1")]                    // ArgumentOutOfRangeException out of ReadExactAsync's List(count)
+    [InlineData("abc")]                   // not a number -- used to look "incomplete" and hang
+    [InlineData("")]                      // present but empty
+    [InlineData("9223372036854775808")]   // past long.MaxValue, never mind int
+    [InlineData("99999999999")]           // ~93 GiB: no byte[] can be that long
+    public void TryParseHeader_reports_Malformed_for_an_unusable_content_length(string value)
+    {
+        var bytes = Encoding.UTF8.GetBytes($"Content-Length: {value}\r\n\r\n");
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out var headerLength);
+
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Malformed);
+        contentLength.Should().Be(0, "no length was usable, and a stale one must not leak to the caller");
+        headerLength.Should().Be(bytes.Length);
+    }
+
+    [Fact]
+    public void TryParseHeader_imposes_no_size_limit_of_its_own()
+    {
+        // No cap: neither peer of this pipe imposes one (StreamJsonRpc and OmniSharp.Extensions.JsonRpc
+        // both bound only the header value's textual length) and the LSP base protocol specifies none.
+        // The only ceiling is the platform's -- a body is handed back as a byte[], which cannot be
+        // longer than int.MaxValue -- so the largest representable length is accepted. VS's own
+        // client parses this header as an int too, so nothing VS could send is refused here.
+        var bytes = Encoding.UTF8.GetBytes($"Content-Length: {int.MaxValue}\r\n\r\n");
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out var contentLength, out _);
+
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Parsed);
+        contentLength.Should().Be(int.MaxValue);
+    }
+
+    [Fact]
+    public void TryParseHeader_rejects_one_byte_past_the_representable_maximum()
+    {
+        var bytes = Encoding.UTF8.GetBytes($"Content-Length: {(long)int.MaxValue + 1}\r\n\r\n");
+        var parse = LspFrameCodec.TryParseHeader(new ReadOnlySequence<byte>(bytes), out _, out _);
+
+        parse.Should().Be(LspFrameCodec.HeaderParseResult.Malformed,
+            "the body it promises could never be delivered, so waiting for it would stall the reader");
+    }
+
+    // ── ReadNextFrameAsync: malformed header (must not throw, must not hang) ─
+
+    [Theory]
+    [InlineData("Content-Length: -1\r\n\r\n")]
+    [InlineData("Content-Length: abc\r\n\r\n")]
+    [InlineData("Content-Length: 99999999999\r\n\r\n")]
+    [InlineData("Garbage-Header: 1\r\n\r\n")]
+    public async Task ReadNextFrameAsync_returns_a_malformed_header_frame_instead_of_throwing_or_hanging(string header)
+    {
+        // Each of these used to be fatal in a different way. -1 threw ArgumentOutOfRangeException out
+        // of ReadExactAsync's allocation, which escaped the codec into ReceivePumpAsync's catch-all
+        // and ended the pump -- and therefore all server->VS traffic -- for the life of the process.
+        // "abc", a length no byte[] could hold, and a missing Content-Length all looked like an
+        // incomplete header instead, so the read waited for bytes that could never help.
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes(header));
+
+        var frame = await WithTimeoutAsync(
+            LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None), ShortTimeout);
+
+        frame.Should().NotBeNull();
+        frame!.HasMalformedHeader.Should().BeTrue();
+        frame.Body.Should().BeNull();
+        frame.RawBytes.Should().BeEmpty("the body's extent is unknowable, so there is nothing to forward");
+        frame.MalformedHeaderText.Should().NotBeNullOrEmpty("the caller logs what it skipped");
+    }
+
+    [Fact]
+    public async Task ReadNextFrameAsync_resynchronises_on_the_next_valid_frame_after_a_malformed_header()
+    {
+        // The whole point of consuming the malformed block rather than stalling on it: one corrupt
+        // header must cost one frame, not the connection.
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("Content-Length: nonsense\r\n\r\n"));
+        await pipe.Writer.WriteAsync(RawFrame("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"initialized\"}"));
+
+        var malformed = await WithTimeoutAsync(
+            LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None), ShortTimeout);
+        malformed!.HasMalformedHeader.Should().BeTrue();
+
+        var recovered = await WithTimeoutAsync(
+            LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None), ShortTimeout);
+
+        recovered.Should().NotBeNull();
+        recovered!.HasMalformedHeader.Should().BeFalse();
+        recovered.Body!["method"]!.Value<string>().Should().Be("initialized");
+    }
+
+    [Fact]
+    public async Task ReadNextFrameAsync_does_not_allocate_the_declared_length_up_front()
+    {
+        // A ~2 GiB Content-Length is accepted -- there is no cap -- but the body accumulator must not
+        // reserve 2 GiB before a single body byte has arrived. This, not any limit on the declared
+        // length, is what keeps a bogus header from becoming an OutOfMemoryException. Completing the
+        // pipe with no body proves the read returns rather than allocating on the promise.
+        var pipe = new Pipe();
+        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("Content-Length: 2000000000\r\n\r\n"));
+        await pipe.Writer.CompleteAsync();
+
+        var frame = await WithTimeoutAsync(
+            LspFrameCodec.ReadNextFrameAsync(pipe.Reader, CancellationToken.None), ShortTimeout);
+
+        frame.Should().BeNull("the pipe completed before the declared body arrived");
     }
 
 #pragma warning disable VSTHRD003
