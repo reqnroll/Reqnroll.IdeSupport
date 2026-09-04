@@ -134,7 +134,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // own request lifetime, which the background continuation deliberately outlives --
             // forwarding it would let the publish get silently cancelled before it even runs.
             FireAndForgetExtensions.FireAndForget(
-                () => _mediator.Publish(new BindingRegistryChangedNotification(project, true), CancellationToken.None),
+                () => _mediator.Publish(new BindingRegistryReplacedNotification(project), CancellationToken.None),
                 _logger, nameof(HandleProjectLoadedAsync));
         }
 

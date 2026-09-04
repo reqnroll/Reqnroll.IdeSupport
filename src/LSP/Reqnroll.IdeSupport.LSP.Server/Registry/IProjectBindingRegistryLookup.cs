@@ -18,7 +18,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Registry;
 /// <see cref="Workspace.ILspWorkspaceScopeManager.GetProjectForUri"/>.
 /// <para>
 /// Registry-change notifications flow through MediatR as
-/// <see cref="Notifications.BindingRegistryChangedNotification"/> rather than through a
+/// <see cref="Pipeline.BindingRegistryReplacedNotification"/> /
+/// <see cref="Pipeline.BindingRegistryPatchedNotification"/> (issue #577) rather than through a
 /// C# event on this interface, so that all cross-cutting LSP concerns follow the same
 /// established notification pattern.
 /// </para>
