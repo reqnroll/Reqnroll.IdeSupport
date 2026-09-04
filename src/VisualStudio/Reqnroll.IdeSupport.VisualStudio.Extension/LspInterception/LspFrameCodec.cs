@@ -28,13 +28,11 @@ internal static class LspFrameCodec
     internal static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
-    /// Largest frame this codec will attempt to buffer. Frames on this connection carry documents and
-    /// symbol lists, not media; a <c>Content-Length</c> beyond this is corruption, not a big payload,
-    /// and treating it as a length would mean allocating on a number the server never meant to send.
+    /// Initial capacity used while accumulating a body, so a large declared length cannot force a
+    /// large allocation up front. This — not any cap on the declared length — is what keeps a bogus
+    /// <c>Content-Length</c> from turning into an <see cref="OutOfMemoryException"/>: nothing is
+    /// allocated on the strength of the number, only on bytes that actually arrive.
     /// </summary>
-    public const int MaxFrameBytes = 64 * 1024 * 1024;
-
-    /// <summary>Initial capacity used while accumulating a body, so a large declared length cannot force a large allocation up front.</summary>
     private const int BodyAccumulatorInitialCapacity = 64 * 1024;
 
     /// <summary>Longest malformed header echoed into a log message.</summary>
@@ -51,7 +49,8 @@ internal static class LspFrameCodec
 
         /// <summary>
         /// The header block is complete but carries no usable <c>Content-Length</c> — missing,
-        /// non-numeric, negative, or beyond <see cref="MaxFrameBytes"/>. More bytes cannot fix it.
+        /// non-numeric, negative, or larger than a body can be represented as. More bytes cannot
+        /// fix it.
         /// </summary>
         Malformed
     }
@@ -101,7 +100,7 @@ internal static class LspFrameCodec
         // Phase 1 – read until we see \r\n\r\n and can extract Content-Length.
         // We use AdvanceTo(consumed, examined) correctly: we only mark bytes as consumed
         // once we know exactly which bytes belong to the header vs. the body.
-        int contentLength;
+        long contentLength;   // parsed at the server peer's width; TryParseHeader guarantees it fits an int when Parsed.
         int headerLength; // total byte length of "Content-Length: N\r\n\r\n"
 
         while (true)
@@ -141,7 +140,7 @@ internal static class LspFrameCodec
         }
 
         // Phase 2 – read exactly contentLength body bytes.
-        var bodyBytes = await ReadExactAsync(reader, contentLength, ct).ConfigureAwait(false);
+        var bodyBytes = await ReadExactAsync(reader, (int)contentLength, ct).ConfigureAwait(false);
         if (bodyBytes is null)
             return null;
 
@@ -188,17 +187,32 @@ internal static class LspFrameCodec
     /// <paramref name="buffer"/> and extract the <c>Content-Length</c> value.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The first <c>\r\n\r\n</c> ends the header block by definition, so a block that carries no
     /// usable <c>Content-Length</c> is <see cref="HeaderParseResult.Malformed"/> rather than
-    /// something a later terminator might rescue. "Usable" excludes negative values and values
-    /// beyond <see cref="MaxFrameBytes"/>: both used to reach <see cref="ReadExactAsync"/>'s
-    /// allocation, which threw <see cref="ArgumentOutOfRangeException"/> or
-    /// <see cref="OutOfMemoryException"/> out of the codec and — via the receive pump's catch-all —
-    /// stopped relaying server output for the rest of the process's life, from a single corrupt
-    /// frame. A non-numeric value used to look <see cref="HeaderParseResult.Incomplete"/>, so the
-    /// reader waited for bytes that could never fix an already-complete header.
+    /// something a later terminator might rescue.
+    /// </para>
+    /// <para>
+    /// "Usable" means: parses as a <see cref="long"/> (matching
+    /// <c>OmniSharp.Extensions.JsonRpc</c>, the reader on the server end of this pipe, which also
+    /// parses the value as a <see cref="long"/>), is not negative, and is small enough for a body to
+    /// be represented at all. That last bound is the platform's, not a policy: the body is handed
+    /// back as a <see cref="byte"/> array, which cannot be longer than <see cref="int.MaxValue"/>.
+    /// <b>No size limit of our own is imposed</b> — neither peer of this pipe imposes one either
+    /// (<c>StreamJsonRpc</c>, VS's client, and <c>OmniSharp.Extensions.JsonRpc</c> both bound only
+    /// the header value's textual length), and the LSP base protocol specifies none.
+    /// </para>
+    /// <para>
+    /// Each rejected case was a live failure. A negative value reached
+    /// <see cref="ReadExactAsync"/>'s allocation and threw <see cref="ArgumentOutOfRangeException"/>
+    /// out of the codec and — via the receive pump's catch-all — stopped relaying server output for
+    /// the rest of the process's life, from a single corrupt frame. A non-numeric value looked
+    /// <see cref="HeaderParseResult.Incomplete"/>, so the reader waited for bytes that could never
+    /// fix an already-complete header. An unrepresentable one would stall the same way, since the
+    /// body it promises can never be delivered.
+    /// </para>
     /// </remarks>
-    public static HeaderParseResult TryParseHeader(ReadOnlySequence<byte> buffer, out int contentLength, out int headerLength)
+    public static HeaderParseResult TryParseHeader(ReadOnlySequence<byte> buffer, out long contentLength, out int headerLength)
     {
         contentLength = 0;
         headerLength  = 0;
@@ -222,8 +236,8 @@ internal static class LspFrameCodec
                     if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
                     {
                         var valueStr = line.Substring("Content-Length:".Length).Trim();
-                        if (int.TryParse(valueStr, out contentLength) &&
-                            contentLength >= 0 && contentLength <= MaxFrameBytes)
+                        if (long.TryParse(valueStr, out contentLength) &&
+                            contentLength >= 0 && contentLength <= int.MaxValue)
                         {
                             return HeaderParseResult.Parsed;
                         }
