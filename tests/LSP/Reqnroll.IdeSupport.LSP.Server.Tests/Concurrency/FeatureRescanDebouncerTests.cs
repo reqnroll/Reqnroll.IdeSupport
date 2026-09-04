@@ -1,10 +1,10 @@
 ﻿using System.Diagnostics;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Concurrency;
 
 /// <summary>
 /// Tests for <see cref="FeatureRescanDebouncer"/>: a burst of rapid
