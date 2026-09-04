@@ -44,10 +44,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// </remarks>
 internal sealed class LspInterceptingPipe : IDisposable
 {
-    private readonly IDuplexPipe                       _serverPipe;
-    private readonly IReadOnlyList<ILspMessageInterceptor> _sendInterceptors;
-    private readonly IReadOnlyList<ILspMessageInterceptor> _receiveInterceptors;
-    private readonly ILogger<LspInterceptingPipe>       _logger;
+    private readonly IDuplexPipe                  _serverPipe;
+    private readonly InterceptorPipeline          _sendInterceptors;
+    private readonly InterceptorPipeline          _receiveInterceptors;
+    private readonly ILogger<LspInterceptingPipe> _logger;
 
     // The two Pipe objects whose Reader/Writer ends form the *current* VS-facing IDuplexPipe.
     // VS reads from _toVsPipe.Reader; VS writes to _fromVsPipe.Writer. Replaced wholesale by
@@ -113,9 +113,11 @@ internal sealed class LspInterceptingPipe : IDisposable
         ILogger<LspInterceptingPipe> logger)
     {
         _serverPipe          = serverPipe          ?? throw new ArgumentNullException(nameof(serverPipe));
-        _sendInterceptors    = sendInterceptors    ?? throw new ArgumentNullException(nameof(sendInterceptors));
-        _receiveInterceptors = receiveInterceptors ?? throw new ArgumentNullException(nameof(receiveInterceptors));
         _logger              = logger              ?? throw new ArgumentNullException(nameof(logger));
+        _sendInterceptors    = new InterceptorPipeline(
+            sendInterceptors    ?? throw new ArgumentNullException(nameof(sendInterceptors)), logger);
+        _receiveInterceptors = new InterceptorPipeline(
+            receiveInterceptors ?? throw new ArgumentNullException(nameof(receiveInterceptors)), logger);
 
         _serverChannel = new ServerChannel(_serverPipe.Output, logger);
         _correlator    = new LspRequestCorrelator(logger);
@@ -309,7 +311,7 @@ internal sealed class LspInterceptingPipe : IDisposable
                 // Normalize here — before correlation and before any interceptor sees the
                 // message — so every server→VS path (owned-RPC responses consumed below,
                 // and messages forwarded on to VS's own LSP client) gets a VS-matching URI.
-                // Guarded like an interceptor (see RunInterceptorsAsync): a bug here must
+                // Guarded like an interceptor (see InterceptorPipeline.RunAsync): a bug here must
                 // degrade to "URI casing unfixed for this message", never sever the pipe —
                 // and unlike an interceptor fault, this runs before LspInspectorLogger sees
                 // the message, so a silent failure here would leave no trace in the wire log.
@@ -336,7 +338,7 @@ internal sealed class LspInterceptingPipe : IDisposable
                 if (LspRequestCorrelator.IsOwnedResponse(body, out var correlatedId))
                 {
                     var correlatedMessage = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.Now);
-                    await RunInterceptorsAsync(correlatedMessage, _receiveInterceptors, ct).ConfigureAwait(false);
+                    await _receiveInterceptors.RunAsync(correlatedMessage, ct).ConfigureAwait(false);
 
                     _correlator.Consume(correlatedId, body);
                     continue;
@@ -359,7 +361,7 @@ internal sealed class LspInterceptingPipe : IDisposable
                 }
 
                 var message = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.Now);
-                var result  = await RunInterceptorsAsync(message, _receiveInterceptors, ct).ConfigureAwait(false);
+                var result  = await _receiveInterceptors.RunAsync(message, ct).ConfigureAwait(false);
 
                 if (result == LspInterceptorResult.PassThrough)
                     await ForwardToCurrentVsWriterAsync(rawBytes, ct).ConfigureAwait(false);
@@ -442,7 +444,7 @@ internal sealed class LspInterceptingPipe : IDisposable
                     _router.RecordOutboundRequest(requestId, sessionId);
 
                 var message = new LspMessage(LspMessageDirection.Send, body, DateTimeOffset.Now);
-                var result  = await RunInterceptorsAsync(message, _sendInterceptors, ct).ConfigureAwait(false);
+                var result  = await _sendInterceptors.RunAsync(message, ct).ConfigureAwait(false);
 
                 if (result == LspInterceptorResult.PassThrough)
                 {
@@ -479,32 +481,6 @@ internal sealed class LspInterceptingPipe : IDisposable
     // The wire codec is LspFrameCodec (issue #587, step 1) and the guarded write to the server is
     // ServerChannel (step 2) — nothing framing-related is left in this type.
 
-    // ── Interceptor pipeline ────────────────────────────────────────────────
-
-    private async Task<LspInterceptorResult> RunInterceptorsAsync(
-        LspMessage                            message,
-        IReadOnlyList<ILspMessageInterceptor> interceptors,
-        CancellationToken                     ct)
-    {
-        foreach (var interceptor in interceptors)
-        {
-            try
-            {
-                var result = await interceptor.InterceptAsync(message, ct).ConfigureAwait(false);
-                if (result == LspInterceptorResult.Consume)
-                    return LspInterceptorResult.Consume;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "LspInterceptingPipe: interceptor {InterceptorType} threw.",
-                    interceptor.GetType().Name);
-            }
-        }
-
-        return LspInterceptorResult.PassThrough;
-    }
-
     // ── Notification injection (VS → Server) ───────────────────────────────
 
     /// <summary>
@@ -538,7 +514,7 @@ internal sealed class LspInterceptingPipe : IDisposable
         if (bodyObj is not null)
         {
             var synthetic = new LspMessage(LspMessageDirection.Send, bodyObj, DateTimeOffset.Now);
-            await RunInterceptorsAsync(synthetic, _sendInterceptors, cancellationToken).ConfigureAwait(false);
+            await _sendInterceptors.RunAsync(synthetic, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -582,7 +558,7 @@ internal sealed class LspInterceptingPipe : IDisposable
             // parsing the body we just built cannot fail, so no try/catch is needed around it the
             // way the receive-side equivalent needs one around externally-sourced bytes.
             var injectedMessage = new LspMessage(LspMessageDirection.Send, JObject.Parse(body), DateTimeOffset.Now);
-            await RunInterceptorsAsync(injectedMessage, _sendInterceptors, cancellationToken).ConfigureAwait(false);
+            await _sendInterceptors.RunAsync(injectedMessage, cancellationToken).ConfigureAwait(false);
 
             return await pending.Response.ConfigureAwait(false);
         }
