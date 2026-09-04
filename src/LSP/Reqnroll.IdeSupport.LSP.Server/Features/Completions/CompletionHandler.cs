@@ -188,12 +188,19 @@ public sealed class CompletionHandler : ICompletionHandler
         var kwStart  = 0;
         while (kwStart < lineText.Length && char.IsWhiteSpace(lineText[kwStart]))
             kwStart++;
-        var kwEnd = lineText.Length;
-        while (kwEnd > kwStart && char.IsWhiteSpace(lineText[kwEnd - 1]))
-            kwEnd--;
+
+        // Issue #561: the range used to extend to the end of the trimmed line (including
+        // trailing whitespace), so accepting a keyword deleted everything else on the line --
+        // e.g. a scenario title already typed after the keyword. Clamping the end to the cursor
+        // position means the replacement can only ever touch text the user has already typed to
+        // the LEFT of the caret, never anything to the right of it. Clamping the start down to
+        // the (possibly earlier) cursor position too guards against a reversed range in case
+        // cursorChar ever lands before the first non-whitespace column.
+        var kwRangeEnd   = cursorChar;
+        var kwRangeStart = Math.Min(kwStart, kwRangeEnd);
         var kwRange = new LspRange(
-            new Position(cursorLine, kwStart),
-            new Position(cursorLine, kwEnd));
+            new Position(cursorLine, kwRangeStart),
+            new Position(cursorLine, kwRangeEnd));
 
         _logger.LogVerbose(
             $"CompletionHandler: {kwResult.Entries.Count} keyword completion(s)");
