@@ -1,6 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 /// <summary>
 /// Formalizes the "re-parse an open <c>.feature</c> document, then publish

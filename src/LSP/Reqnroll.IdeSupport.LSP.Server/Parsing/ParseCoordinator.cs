@@ -1,7 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 /// <inheritdoc cref="IParseCoordinator"/>
 public sealed class ParseCoordinator : IParseCoordinator

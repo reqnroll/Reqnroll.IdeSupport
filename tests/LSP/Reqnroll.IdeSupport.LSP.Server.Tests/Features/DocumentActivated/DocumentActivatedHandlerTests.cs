@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.DocumentActivated;
 

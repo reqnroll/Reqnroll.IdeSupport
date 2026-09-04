@@ -1,6 +1,6 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
+namespace Reqnroll.IdeSupport.LSP.Server.Parsing;
 
 /// <summary>
 /// Lets a <c>[Serial]</c>-tagged LSP notification handler (<c>didOpen</c>/<c>didChange</c>) hand
