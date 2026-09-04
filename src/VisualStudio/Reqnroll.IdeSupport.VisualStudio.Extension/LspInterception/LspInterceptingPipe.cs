@@ -49,33 +49,19 @@ internal sealed class LspInterceptingPipe : IDisposable
     private readonly InterceptorPipeline          _receiveInterceptors;
     private readonly ILogger<LspInterceptingPipe> _logger;
 
-    // The two Pipe objects whose Reader/Writer ends form the *current* VS-facing IDuplexPipe.
-    // VS reads from _toVsPipe.Reader; VS writes to _fromVsPipe.Writer. Replaced wholesale by
-    // CreateFreshVsFacingPipe on every CreateServerConnectionAsync call (issue #156) -- guarded by
-    // _vsPipeSwapLock since the persistent receive pump reads the current _toVsPipe reference
-    // concurrently with swaps happening on VS's calling thread.
-    private Pipe _toVsPipe   = new Pipe();   // server → VS direction
-    private Pipe _fromVsPipe = new Pipe();   // VS → server direction
-    private readonly object _vsPipeSwapLock = new object();
-
     // ── Extracted collaborators (issue #587, step 2) ─────────────────────────
     // The write side of the server connection (its stdin writer, the lock serialising every write to
     // it, and the #555 termination flag), the owned-RPC correlation, and the #395 peer-session
     // routing each now live in their own type. What stays here is the orchestration between them.
-    private readonly ServerChannel        _serverChannel;
-    private readonly LspRequestCorrelator _correlator;
-    private readonly VsSessionRouter      _router;
+    private readonly ServerChannel          _serverChannel;
+    private readonly LspRequestCorrelator   _correlator;
+    private readonly VsSessionRouter        _router;
+    private readonly VsFacingSessionManager _sessions;
 
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
     private CancellationTokenSource? _linkedCts;
     private CancellationToken        _lifetimeToken;
     private Task?                    _receivePump;
-
-    // The current VS-facing session's send pump + its own cancellation, replaced on every
-    // CreateFreshVsFacingPipe call. Guarded by _vsPipeSwapLock alongside the Pipe fields above.
-    private CancellationTokenSource? _currentSendPumpCts;
-    private Task?                    _currentSendPump;
-    private int                      _sessionCounter;
 
     private bool _disposed;
 
@@ -122,6 +108,7 @@ internal sealed class LspInterceptingPipe : IDisposable
         _serverChannel = new ServerChannel(_serverPipe.Output, logger);
         _correlator    = new LspRequestCorrelator(logger);
         _router        = new VsSessionRouter();
+        _sessions      = new VsFacingSessionManager(logger);
     }
 
     /// <summary>
@@ -136,10 +123,10 @@ internal sealed class LspInterceptingPipe : IDisposable
         _linkedCts     = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, externalCancellation);
         _lifetimeToken = _linkedCts.Token;
 
-        // Server stdout → ReceivePump reads _serverPipe.Input → current _toVsPipe.Writer → VS
-        // reads that pipe's Reader. The destination is looked up per frame (GetCurrentToVsWriter)
-        // rather than captured once, since CreateFreshVsFacingPipe can swap it out from under this
-        // long-running pump at any time.
+        // Server stdout → ReceivePump reads _serverPipe.Input → the current VS-facing writer → VS
+        // reads that pipe's Reader. The destination is looked up per frame
+        // (VsFacingSessionManager.CurrentToVsWriter) rather than captured once, since a new session
+        // can swap it out from under this long-running pump at any time.
         _receivePump = ReceivePumpAsync(_lifetimeToken);
 
         return Task.CompletedTask;
@@ -150,81 +137,27 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// <see cref="IDuplexPipe"/> to hand to VS as the <c>CreateServerConnectionAsync</c> result.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Issue #156: VS can call <c>CreateServerConnectionAsync</c> more than once per session. The
-    /// previous implementation cached and returned the exact same <c>IDuplexPipe</c> every time,
-    /// which is fine if VS never calls twice but corrupts the connection the moment it does — a
-    /// second consumer writing to a <see cref="PipeWriter"/> the first consumer's disposal already
-    /// completed throws <c>InvalidOperationException: Writing is not allowed after writer was
-    /// completed</c>, exactly what was observed. This method instead gives every call a fresh,
-    /// never-before-used pipe pair, matching every Microsoft sample's
-    /// <c>CreateServerConnectionAsync</c> implementation (each builds a fresh
-    /// <c>FullDuplexStream.CreatePair()</c> inline, never caches).
-    /// </para>
-    /// <para>
-    /// The real server process connection (<see cref="_serverPipe"/>) is untouched by this — only
-    /// the local, in-memory relay pipes change. The previous session's send pump (VS → server) is
-    /// cancelled; its abandoned <c>_toVsPipe.Writer</c> (server → VS; ours to complete) is completed
-    /// so a lingering VS-side reader gets a clean EOF instead of an error. We don't touch the
-    /// abandoned <c>_fromVsPipe.Writer</c> (VS → server) since VS owns that end, not us.
-    /// </para>
+    /// The pipes themselves, the generation counter, and abandoning the previous session belong to
+    /// <see cref="VsFacingSessionManager"/> (issue #156 — see its remarks). What is left here is the
+    /// wiring that needs the rest of this connection: bounding the router's tracking, and starting a
+    /// send pump for the new session. The connection to the real server process is untouched.
     /// </remarks>
     public IDuplexPipe CreateFreshVsFacingPipe()
     {
-        var newToVsPipe   = new Pipe();
-        var newFromVsPipe = new Pipe();
-        var newSendPumpCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeToken);
+        var session = _sessions.StartNewSession(_lifetimeToken);
 
-        Pipe?                     oldToVsPipe;
-        CancellationTokenSource?  oldSendPumpCts;
-        int                       sessionId;
+        // Bound the router's growth (issue #395): a request that's still in flight when its session
+        // gets abandoned and never receives a response (e.g. genuinely dropped, not just delayed)
+        // would otherwise leak its entry forever. Two generations is enough slack for the straggler
+        // this tracking exists to catch — a response landing shortly after its own session was
+        // abandoned (like the shutdown response that motivated the fix) — without holding entries
+        // from sessions abandoned long ago.
+        _router.PurgeOlderThan(minimumLiveSessionId: session.SessionId - 1);
 
-        lock (_vsPipeSwapLock)
-        {
-            oldToVsPipe    = _toVsPipe;
-            oldSendPumpCts = _currentSendPumpCts;
+        // VS → server direction for this session only.
+        _sessions.AttachSendPump(SendPumpAsync(session.FromVsReader, session.SessionId, session.SessionToken));
 
-            _toVsPipe            = newToVsPipe;
-            _fromVsPipe          = newFromVsPipe;
-            _currentSendPumpCts  = newSendPumpCts;
-            sessionId            = ++_sessionCounter;
-        }
-
-        // Abandon the previous session: stop its send pump and let any lingering VS-side reader
-        // of the old server→VS pipe see a clean end-of-stream rather than an error.
-        oldSendPumpCts?.Cancel();
-        oldSendPumpCts?.Dispose();
-        try
-        {
-            oldToVsPipe?.Writer.Complete();
-        }
-        catch (Exception ex)
-        {
-            // Benign: e.g. already completed by a prior call, or a race with an in-flight
-            // ReceivePumpAsync write to the pipe we're abandoning right now (see that method's
-            // remarks on tolerating a stale-destination write failure).
-            _logger.LogDebug(ex, "LspInterceptingPipe: completing the abandoned server→VS pipe threw (benign).");
-        }
-
-        _logger.LogInformation(
-            "LspInterceptingPipe: CreateFreshVsFacingPipe — session #{SessionId} (issue #156: no longer " +
-            "handing back a cached, possibly-dead pipe on repeat CreateServerConnectionAsync calls).",
-            sessionId);
-
-        // Bound _requestSessionsById's growth (issue #395): a request that's still in flight when
-        // its session gets abandoned and never receives a response (e.g. genuinely dropped, not
-        // just delayed) would otherwise leak its entry forever. Two generations is enough slack for
-        // the straggler this dictionary exists to catch — a response landing shortly after its own
-        // session was abandoned (like the shutdown response that motivated this fix) — without
-        // holding entries from sessions abandoned long ago.
-        _router.PurgeOlderThan(minimumLiveSessionId: sessionId - 1);
-
-        // VS → server direction for this session only. lockDestination: true -- this pump's
-        // destination (_serverPipe.Output) is the same stream SendNotificationToServerAsync/
-        // SendRequestToServerAsync inject into from other threads.
-        _currentSendPump = SendPumpAsync(newFromVsPipe.Reader, sessionId, newSendPumpCts.Token);
-
-        return new DuplexPipeAdapter(newToVsPipe.Reader, newFromVsPipe.Writer);
+        return session.VsFacing;
     }
 
     /// <summary>
@@ -245,23 +178,6 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         _serverChannel.MarkTerminated(reason);
         _correlator.ReleaseAll();
-    }
-
-    private PipeWriter GetCurrentToVsWriter()
-    {
-        lock (_vsPipeSwapLock)
-        {
-            return _toVsPipe.Writer;
-        }
-    }
-
-    /// <summary>The session id of the VS-facing session currently in effect (see <see cref="_sessionCounter"/>).</summary>
-    private int GetCurrentSessionId()
-    {
-        lock (_vsPipeSwapLock)
-        {
-            return _sessionCounter;
-        }
     }
 
     // ── Pump loops ───────────────────────────────────────────────────────────
@@ -350,7 +266,7 @@ internal sealed class LspInterceptingPipe : IDisposable
                 // VS treats as a fatal protocol violation and closes the brand-new connection over.
                 // Nothing is listening on the abandoned session's own pipe either, so there is no
                 // destination to correctly deliver this to; dropping it is the safe outcome.
-                var currentSessionId = GetCurrentSessionId();
+                var currentSessionId = _sessions.CurrentSessionId;
                 if (_router.Route(body, currentSessionId, out var owningSessionId) == ResponseRouting.DropAbandoned)
                 {
                     _logger.LogInformation(
@@ -376,7 +292,7 @@ internal sealed class LspInterceptingPipe : IDisposable
         {
             // Complete whichever VS-facing pipe is current at shutdown time; abandoned earlier
             // sessions were already completed individually by CreateFreshVsFacingPipe.
-            try { await GetCurrentToVsWriter().CompleteAsync().ConfigureAwait(false); }
+            try { await _sessions.CurrentToVsWriter.CompleteAsync().ConfigureAwait(false); }
             catch { /* best-effort at shutdown */ }
         }
     }
@@ -390,7 +306,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         try
         {
-            await LspFrameCodec.WriteFrameAsync(GetCurrentToVsWriter(), rawFrame, ct).ConfigureAwait(false);
+            await LspFrameCodec.WriteFrameAsync(_sessions.CurrentToVsWriter, rawFrame, ct).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { throw; }
         catch (ObjectDisposedException) when (_disposed) { throw; }
@@ -405,7 +321,7 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Session-scoped pump for the VS → server direction: reads one VS-facing session's
-    /// <c>_fromVsPipe.Reader</c> and forwards to the real, persistent <see cref="_serverPipe"/>
+    /// VS → server reader and forwards to the real, persistent <see cref="_serverPipe"/>
     /// stdin. Unlike <see cref="ReceivePumpAsync"/>, ending this pump (for any reason, including an
     /// unhandled exception) is <b>not</b> fatal to anything beyond this one session — a fresh one
     /// replaces it on the next <see cref="CreateFreshVsFacingPipe"/> call.
@@ -583,30 +499,10 @@ internal sealed class LspInterceptingPipe : IDisposable
         _linkedCts?.Dispose();
         _cts.Dispose();
 
-        lock (_vsPipeSwapLock)
-        {
-            _currentSendPumpCts?.Cancel();
-            _currentSendPumpCts?.Dispose();
-        }
+        // Cancels the current session's send pump and completes the current server → VS writer.
+        _sessions.Dispose();
 
         // Fault any in-flight injected requests so callers don't hang.
         _correlator.CancelAll();
-
-        try { GetCurrentToVsWriter().Complete(); } catch { /* best-effort */ }
-    }
-
-    // ── Inner helper ────────────────────────────────────────────────────────
-
-    /// <summary>Adapts a <see cref="PipeReader"/> / <see cref="PipeWriter"/> pair into an <see cref="IDuplexPipe"/>.</summary>
-    private sealed class DuplexPipeAdapter : IDuplexPipe
-    {
-        public DuplexPipeAdapter(PipeReader input, PipeWriter output)
-        {
-            Input  = input;
-            Output = output;
-        }
-
-        public PipeReader Input  { get; }
-        public PipeWriter Output { get; }
     }
 }
