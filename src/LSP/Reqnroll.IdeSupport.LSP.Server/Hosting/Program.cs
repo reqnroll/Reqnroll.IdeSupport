@@ -8,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -94,6 +95,14 @@ public class Program
             var logger       = server.Services.GetRequiredService<IIdeSupportLogger>();
             var preloadTask  = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
 
+            // Issue #582: periodic feature-usage flush, running for the whole server lifetime
+            // alongside the request-handling pipeline (a no-op loop when its env var is unset —
+            // see FeatureUsageFlushService.RunAsync). Started here, not lazily on first use, so a
+            // session with a long-idle start still gets a correctly-timed first window.
+            using var usageFlushCts = new CancellationTokenSource();
+            var usageFlushService = server.Services.GetRequiredService<IFeatureUsageFlushService>();
+            var usageFlushTask = usageFlushService.RunAsync(usageFlushCts.Token);
+
             await server.Initialize(CancellationToken.None).ConfigureAwait(false);
 
             // The real IDE connection is live; the side channel has no further purpose.
@@ -101,6 +110,20 @@ public class Program
             await preloadTask.ConfigureAwait(false);
 
             await server.WaitForExit.ConfigureAwait(false);
+
+            // Best-effort final drain-and-emit on a graceful shutdown (e.g. the VS client teardown
+            // in issue #555 sends shutdown+exit) -- not reached on a force-quit, IDE crash, or OS
+            // shutdown; see FeatureUsageFlushService's remarks on the accepted loss profile.
+            await usageFlushCts.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                await usageFlushTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected: RunAsync's own Task.Delay observes the cancellation above.
+            }
+            await usageFlushService.FlushFinalAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
