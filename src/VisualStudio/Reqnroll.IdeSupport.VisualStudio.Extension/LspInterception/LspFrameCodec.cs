@@ -27,12 +27,63 @@ internal static class LspFrameCodec
     /// <summary>Shared UTF-8 encoding without a byte-order-mark preamble, matching the LSP wire format.</summary>
     internal static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+    /// <summary>
+    /// Largest frame this codec will attempt to buffer. Frames on this connection carry documents and
+    /// symbol lists, not media; a <c>Content-Length</c> beyond this is corruption, not a big payload,
+    /// and treating it as a length would mean allocating on a number the server never meant to send.
+    /// </summary>
+    public const int MaxFrameBytes = 64 * 1024 * 1024;
+
+    /// <summary>Initial capacity used while accumulating a body, so a large declared length cannot force a large allocation up front.</summary>
+    private const int BodyAccumulatorInitialCapacity = 64 * 1024;
+
+    /// <summary>Longest malformed header echoed into a log message.</summary>
+    private const int MalformedHeaderLogLimit = 200;
+
+    /// <summary>Outcome of inspecting a buffer for a complete, usable LSP header block.</summary>
+    public enum HeaderParseResult
+    {
+        /// <summary>No <c>\r\n\r\n</c> terminator yet — more bytes may complete the header.</summary>
+        Incomplete,
+
+        /// <summary>A usable <c>Content-Length</c> was found.</summary>
+        Parsed,
+
+        /// <summary>
+        /// The header block is complete but carries no usable <c>Content-Length</c> — missing,
+        /// non-numeric, negative, or beyond <see cref="MaxFrameBytes"/>. More bytes cannot fix it.
+        /// </summary>
+        Malformed
+    }
+
     /// <summary>One decoded LSP frame: the parsed JSON body (when parseable) plus its original raw bytes for verbatim forwarding.</summary>
     internal sealed class LspFrame
     {
         public LspFrame(JObject? body, byte[] rawBytes) { Body = body; RawBytes = rawBytes; }
+
+        private LspFrame(string malformedHeaderText)
+        {
+            Body                = null;
+            RawBytes            = Array.Empty<byte>();
+            MalformedHeaderText = malformedHeaderText;
+        }
+
         public JObject? Body     { get; }
         public byte[]   RawBytes { get; }
+
+        /// <summary>
+        /// True when the frame's header block was complete but unusable (see
+        /// <see cref="HeaderParseResult.Malformed"/>). Distinct from a malformed <em>body</em>: there
+        /// the body's extent is known, so <see cref="RawBytes"/> can still be forwarded verbatim;
+        /// here it is not, so there is nothing to forward and the caller must log and carry on.
+        /// </summary>
+        public bool HasMalformedHeader => MalformedHeaderText is not null;
+
+        /// <summary>The offending header block (truncated), for logging; <c>null</c> unless <see cref="HasMalformedHeader"/>.</summary>
+        public string? MalformedHeaderText { get; }
+
+        /// <summary>Creates the malformed-header sentinel for <paramref name="headerText"/>.</summary>
+        public static LspFrame ForMalformedHeader(string headerText) => new LspFrame(headerText);
     }
 
     /// <summary>
@@ -41,6 +92,9 @@ internal static class LspFrameCodec
     /// arrives — whether that happens before any bytes, mid-header, or mid-body.
     /// Returns an <see cref="LspFrame"/> with a <c>null</c> <see cref="LspFrame.Body"/> when
     /// JSON parsing fails; raw bytes are still present so the caller can forward verbatim.
+    /// Returns <see cref="LspFrame.HasMalformedHeader"/> when the header block is complete but
+    /// unusable — the header bytes are consumed so the reader can resynchronise on whatever
+    /// follows, and the caller is expected to log and keep pumping.
     /// </summary>
     public static async Task<LspFrame?> ReadNextFrameAsync(PipeReader reader, CancellationToken ct)
     {
@@ -58,11 +112,24 @@ internal static class LspFrameCodec
             if (result.IsCompleted && buffer.IsEmpty)
                 return null;
 
-            if (TryParseHeader(buffer, out contentLength, out headerLength))
+            var headerParse = TryParseHeader(buffer, out contentLength, out headerLength);
+
+            if (headerParse == HeaderParseResult.Parsed)
             {
                 // Mark exactly the header bytes as consumed; leave body bytes in the pipe.
                 reader.AdvanceTo(buffer.GetPosition(headerLength));
                 break;
+            }
+
+            if (headerParse == HeaderParseResult.Malformed)
+            {
+                // Waiting for more bytes cannot fix an already-complete header, and the body's
+                // extent is unknowable without a length — so consume just the header block and let
+                // the caller decide. Anything that follows is re-examined as a fresh header, which
+                // resynchronises on the next well-formed frame.
+                var malformedHeaderText = DescribeHeader(buffer, headerLength);
+                reader.AdvanceTo(buffer.GetPosition(headerLength));
+                return LspFrame.ForMalformedHeader(malformedHeaderText);
             }
 
             // Haven't seen the full header yet – tell the pipe we've examined everything
@@ -120,7 +187,18 @@ internal static class LspFrameCodec
     /// Tries to find the LSP header block (terminated by <c>\r\n\r\n</c>) in
     /// <paramref name="buffer"/> and extract the <c>Content-Length</c> value.
     /// </summary>
-    public static bool TryParseHeader(ReadOnlySequence<byte> buffer, out int contentLength, out int headerLength)
+    /// <remarks>
+    /// The first <c>\r\n\r\n</c> ends the header block by definition, so a block that carries no
+    /// usable <c>Content-Length</c> is <see cref="HeaderParseResult.Malformed"/> rather than
+    /// something a later terminator might rescue. "Usable" excludes negative values and values
+    /// beyond <see cref="MaxFrameBytes"/>: both used to reach <see cref="ReadExactAsync"/>'s
+    /// allocation, which threw <see cref="ArgumentOutOfRangeException"/> or
+    /// <see cref="OutOfMemoryException"/> out of the codec and — via the receive pump's catch-all —
+    /// stopped relaying server output for the rest of the process's life, from a single corrupt
+    /// frame. A non-numeric value used to look <see cref="HeaderParseResult.Incomplete"/>, so the
+    /// reader waited for bytes that could never fix an already-complete header.
+    /// </remarks>
+    public static HeaderParseResult TryParseHeader(ReadOnlySequence<byte> buffer, out int contentLength, out int headerLength)
     {
         contentLength = 0;
         headerLength  = 0;
@@ -135,29 +213,52 @@ internal static class LspFrameCodec
             if (bytes[i] == '\r' && bytes[i + 1] == '\n' &&
                 bytes[i + 2] == '\r' && bytes[i + 3] == '\n')
             {
+                headerLength = i + 4; // header bytes + \r\n\r\n — reported for both outcomes below,
+                                      // so a malformed block can be skipped rather than re-read.
+
                 var headerText = Utf8NoBom.GetString(bytes, 0, i);
                 foreach (var line in headerText.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
                     {
                         var valueStr = line.Substring("Content-Length:".Length).Trim();
-                        if (int.TryParse(valueStr, out contentLength))
+                        if (int.TryParse(valueStr, out contentLength) &&
+                            contentLength >= 0 && contentLength <= MaxFrameBytes)
                         {
-                            headerLength = i + 4; // header bytes + \r\n\r\n
-                            return true;
+                            return HeaderParseResult.Parsed;
                         }
+
+                        contentLength = 0;
+                        return HeaderParseResult.Malformed;
                     }
                 }
+
+                return HeaderParseResult.Malformed; // complete block, no Content-Length at all
             }
         }
 
-        return false;
+        headerLength = 0;
+        return HeaderParseResult.Incomplete;
+    }
+
+    /// <summary>Decodes the first <paramref name="headerLength"/> bytes of <paramref name="buffer"/> for a log message, truncated.</summary>
+    private static string DescribeHeader(ReadOnlySequence<byte> buffer, int headerLength)
+    {
+        var take  = Math.Min(headerLength, MalformedHeaderLogLimit);
+        var bytes = buffer.Slice(0, take).ToArray();
+        return Utf8NoBom.GetString(bytes).Replace("\r", "\\r").Replace("\n", "\\n");
     }
 
     /// <summary>Reads exactly <paramref name="count"/> bytes from <paramref name="reader"/>, or <c>null</c> if the pipe completes first.</summary>
+    /// <remarks>
+    /// <paramref name="count"/> is expected to have been validated by <see cref="TryParseHeader"/>.
+    /// The accumulator is deliberately not pre-sized to <paramref name="count"/>: a legitimate but
+    /// large declared length would otherwise force the whole allocation before a single body byte
+    /// has arrived.
+    /// </remarks>
     public static async Task<byte[]?> ReadExactAsync(PipeReader reader, int count, CancellationToken ct)
     {
-        var accumulator = new List<byte>(count);
+        var accumulator = new List<byte>(Math.Min(count, BodyAccumulatorInitialCapacity));
 
         while (accumulator.Count < count)
         {

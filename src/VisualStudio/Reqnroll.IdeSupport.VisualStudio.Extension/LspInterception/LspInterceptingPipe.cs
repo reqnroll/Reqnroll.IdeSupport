@@ -339,6 +339,17 @@ internal sealed class LspInterceptingPipe : IDisposable
                 if (frame is null)
                     break; // server process ended its stdout -- genuinely fatal, nothing more to relay.
 
+                if (frame.HasMalformedHeader)
+                {
+                    // A header block with no usable Content-Length: nothing can be forwarded (the
+                    // body's extent is unknowable), but this pump must survive it -- see the remarks
+                    // above on why exiting here would silently end LSP for every future session.
+                    _logger.LogWarning(
+                        "LspInterceptingPipe [Receive]: skipped a malformed header block from the server " +
+                        "({Header}); resynchronising on the next frame.", frame.MalformedHeaderText);
+                    continue;
+                }
+
                 var body = frame.Body;
                 if (body is null)
                 {
@@ -461,6 +472,15 @@ internal sealed class LspInterceptingPipe : IDisposable
                 var frame = await LspFrameCodec.ReadNextFrameAsync(source, ct).ConfigureAwait(false);
                 if (frame is null)
                     break;
+
+                if (frame.HasMalformedHeader)
+                {
+                    _logger.LogWarning(
+                        "LspInterceptingPipe [Send] (session #{SessionId}): skipped a malformed header block " +
+                        "from VS ({Header}); resynchronising on the next frame.",
+                        sessionId, frame.MalformedHeaderText);
+                    continue;
+                }
 
                 var body = frame.Body;
                 if (body is null)
