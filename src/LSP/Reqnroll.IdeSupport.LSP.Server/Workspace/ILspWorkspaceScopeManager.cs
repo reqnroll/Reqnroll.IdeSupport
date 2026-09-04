@@ -21,12 +21,6 @@ public interface ILspWorkspaceScopeManager
 {
     // ── Folder lifecycle ──────────────────────────────────────────────────────
 
-    /// <summary>Raised after a new <see cref="LspProjectScope"/> is registered.</summary>
-    event Action<LspProjectScope> ScopeOpened;
-
-    /// <summary>Raised just before a <see cref="LspProjectScope"/> is disposed.</summary>
-    event Action<LspProjectScope> ScopeClosed;
-
     /// <summary>Registers a new workspace-folder root.</summary>
     void OpenWorkspace(string rootPath);
 

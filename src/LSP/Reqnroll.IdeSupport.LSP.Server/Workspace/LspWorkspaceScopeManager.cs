@@ -39,27 +39,18 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
 
     // ── Folder lifecycle ──────────────────────────────────────────────────────
 
-    /// <summary>Raised when a new workspace folder scope is opened.</summary>
-    public event Action<LspProjectScope>? ScopeOpened;
-    /// <summary>Raised when a workspace folder scope is closed.</summary>
-    public event Action<LspProjectScope>? ScopeClosed;
-
-    /// <summary>Creates the workspace scope for <paramref name="rootPath"/> if it does not already exist, raising <see cref="ScopeOpened"/>.</summary>
+    /// <summary>Creates the workspace scope for <paramref name="rootPath"/> if it does not already exist.</summary>
     public void OpenWorkspace(string rootPath)
     {
         var key = Normalise(rootPath);
-        LspProjectScope? added = null;
         _scopes.GetOrAdd(key, k =>
         {
             _logger.LogInfo($"Opening workspace scope: {k}");
-            added = new LspProjectScope(k, _ideScope);
-            return added;
+            return new LspProjectScope(k, _ideScope);
         });
-        if (added is not null)
-            ScopeOpened?.Invoke(added);
     }
 
-    /// <summary>Removes the workspace scope for <paramref name="rootPath"/>, raising <see cref="ProjectRemoved"/> for each of its projects and then <see cref="ScopeClosed"/>, and disposes the scope.</summary>
+    /// <summary>Removes the workspace scope for <paramref name="rootPath"/>, raising <see cref="ProjectRemoved"/> for each of its projects, and disposes the scope.</summary>
     public void CloseWorkspace(string rootPath)
     {
         var key = Normalise(rootPath);
@@ -74,7 +65,6 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             ProjectRemoved?.Invoke(project);
         }
 
-        ScopeClosed?.Invoke(scope);
         scope.Dispose();
     }
 
@@ -96,9 +86,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         var scope = _scopes.GetOrAdd(folderKey, k =>
         {
             _logger.LogInfo($"Auto-creating workspace scope for project notification: {k}");
-            var newScope = new LspProjectScope(k, _ideScope);
-            ScopeOpened?.Invoke(newScope);
-            return newScope;
+            return new LspProjectScope(k, _ideScope);
         });
 
         var (project, isNew, _) = scope.AddOrUpdateProject(parameters);
@@ -384,7 +372,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
 
     // ── IDisposable ───────────────────────────────────────────────────────────
 
-    /// <summary>Closes every open workspace scope, disposing each one and raising <see cref="ProjectRemoved"/>/<see cref="ScopeClosed"/> as needed.</summary>
+    /// <summary>Closes every open workspace scope, disposing each one and raising <see cref="ProjectRemoved"/> for its projects as needed.</summary>
     public void Dispose()
     {
         foreach (var key in _scopes.Keys.ToArray())
