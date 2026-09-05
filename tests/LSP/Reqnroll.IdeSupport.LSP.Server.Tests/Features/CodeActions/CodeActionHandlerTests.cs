@@ -556,6 +556,59 @@ public class CodeActionHandlerTests
         result.Should().BeEmpty();
     }
 
+    // Mirrors the live-tested VS repro: a truncated "Th" (typing "Then") after a valid step.
+    private const string TruncatedKeywordFeatureText =
+        "Feature: F\nScenario: S\n    Given a step\n    When I press add\n    Th\n";
+
+    [Fact]
+    public async Task Marks_the_closest_matching_keyword_as_preferred()
+    {
+        var uri = DocumentUri.FromFileSystemPath("/workspace/truncated.feature");
+        var tags = ParseTags(TruncatedKeywordFeatureText);
+        var errorTag = tags.First(t => t.Type == IdeSupportTagTypes.ParserError);
+        var (errorLine, errorChar) = errorTag.Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, TruncatedKeywordFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        var actions = result!.Select(a => a.CodeAction!).ToList();
+        actions.Should().ContainSingle(a => a.IsPreferred == true)
+            .Which.Title.Should().Be("Insert 'Then'");
+        actions.Where(a => a.Title != "Insert 'Then'").Should().AllSatisfy(a => a.IsPreferred.Should().NotBe(true));
+    }
+
+    [Fact]
+    public async Task Marks_no_action_preferred_when_nothing_was_typed_yet()
+    {
+        // BrokenFeatureText's error is on a line with no plausible keyword-typo text at all
+        // ("not a feature file"), so no entry should win the closest-match heuristic.
+        var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
+        var tags = ParseTags(BrokenFeatureText);
+        var errorTag = tags.First(t => t.Type == IdeSupportTagTypes.ParserError);
+        var (errorLine, errorChar) = errorTag.Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, BrokenFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        result!.Select(a => a.CodeAction!).Should().AllSatisfy(a => a.IsPreferred.Should().NotBe(true));
+    }
+
     // ── Honouring context.only / context.diagnostics (issue #563) ───────────────
 
     [Fact]
