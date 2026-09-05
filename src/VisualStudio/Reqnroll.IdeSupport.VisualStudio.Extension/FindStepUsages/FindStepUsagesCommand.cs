@@ -106,6 +106,7 @@ internal sealed class FindStepUsagesCommand : Command
             {
                 _logger.LogInformation(
                     "FindStepUsagesCommand: caret is not on a binding at {FileUri}:{LineNum} — nothing to show.", fileUri, lineNum);
+                VsUtils.ShowStatusBarMessage("Reqnroll: The caret is not on a step definition binding.");
                 return;
             }
 

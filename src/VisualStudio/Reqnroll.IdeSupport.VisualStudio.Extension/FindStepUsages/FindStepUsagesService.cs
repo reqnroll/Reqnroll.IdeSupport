@@ -18,7 +18,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 /// Uses the custom <c>reqnroll/findStepUsages</c> request (design doc section P2b) rather than
 /// <c>textDocument/references</c> to obtain the full three-state contract:
 /// <list type="bullet">
-///   <item>Server returns JSON <c>null</c> → <see cref="StepUsagesResult.NotABinding"/> (Surface 3 falls through).</item>
+///   <item>Server returns JSON <c>null</c> → <see cref="StepUsagesResult.NotABinding"/> (caller shows an
+///         informational message; there is no Surface-3 takeover of the built-in command — see remarks below).</item>
 ///   <item>Server returns <c>{"isBinding":true,"locations":[]}</c> → binding present, 0 usages.</item>
 ///   <item>Server returns <c>{"isBinding":true,"locations":[...]}</c> → matching feature-file steps.</item>
 /// </list>
@@ -74,7 +75,7 @@ internal sealed class FindStepUsagesService
         var mapped = MapResult(result);
         _logger.LogInformation(
             "FindStepUsagesService: {ResultSummary}",
-            mapped.IsBinding ? $"{mapped.Locations.Count} location(s) returned" : "NotABinding (fall through)");
+            mapped.IsBinding ? $"{mapped.Locations.Count} location(s) returned" : "NotABinding");
         return mapped;
     }
 

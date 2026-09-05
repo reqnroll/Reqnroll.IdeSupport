@@ -62,3 +62,24 @@ You don't always need to invoke this explicitly — [Code Lens](../editing-featu
 shows the same usage count inline above every step binding method while
 you're reading the code, and clicking it opens these same results.
 ```
+
+## Caret position
+
+**Find Step Usages** only recognizes the caret when it's on the binding's
+attribute line or the method signature line — not anywhere in the method
+body. This applies uniformly across Visual Studio, VS Code, and Rider, and
+regardless of whether the binding is discovered from a Reqnroll project in
+the solution or from a referenced external assembly.
+
+If the caret is inside the method body (or anywhere else not on a step
+binding), the command does **not** fall back to the IDE's native Find All
+References — it reports that the caret isn't on a binding:
+
+- Visual Studio and Rider show a status/info message.
+- VS Code shows an information popup.
+
+There is no interception of the native Find All References command (a
+"Shift+F12 takeover" was considered during design but was never
+implemented), so invoking that native command from inside a method body
+searches C# symbol references only, the same as it would for any other
+C# method.
