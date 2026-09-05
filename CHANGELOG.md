@@ -9,6 +9,8 @@
 * Go to Step Definition's ambiguous-match picker now shows the target method's source line instead of a method name/step-type label, built from the standard `textDocument/definition` response instead of a Reqnroll-specific message (VS Code) - see #126
 * Post-build binding rediscovery now relies solely on the server's standard LSP dynamic file-watch registration instead of a redundant client-side watcher, after confirming the canonical path reliably detects real `dotnet build`s on its own (VS Code) - see #31
 * `.cs` binding methods that fail Reqnroll's structural validation (non-static where required, async void, a malformed step expression or `[Scope(Tag=...)]` tag expression, etc.) now get a live diagnostic squiggle on the offending attribute, merging alongside the IDE's own C# diagnostics for the same file; `.feature` "step not found" diagnostics also now name the specific reason when the step structurally matches an invalid binding instead of a generic message (LSP server) - see #514
+* The lightbulb on a `.feature` file now offers quick fixes for a Gherkin syntax error ("Insert '<keyword>'", built from the same expected-token/dialect resolution keyword completion uses) instead of an empty menu; every offered action is now also associated with the diagnostic it fixes, so clients can present it as the fix for that specific squiggle (LSP server) - see #563
+* The lightbulb on an ambiguous step now offers a "Go to '<method>'" quick fix for each competing binding (VS Code only - it carries only a navigation command, which only VS Code's LSP client recognizes without a server round trip; Go to Step Definition's existing ambiguous-match picker remains the cross-IDE way to disambiguate) (LSP server, VS Code) - see #563
 
 ## Bug fixes:
 

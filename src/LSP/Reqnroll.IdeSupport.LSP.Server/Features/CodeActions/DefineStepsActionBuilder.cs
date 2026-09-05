@@ -3,7 +3,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
+using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
@@ -42,6 +44,16 @@ internal sealed class DefineStepsActionBuilder
         var snippets = RenderSnippets(steps, target.Style, target.Indent, target.NewLine);
         if (snippets is null) return new List<CommandOrCodeAction>();
 
+        // Associates each action with the diagnostic(s) it fixes (issue #563), so a client can
+        // present "Define missing step" as the fix *for* the squiggle it was invoked on rather
+        // than an unattributed suggestion.
+        var diagnostics = new Container<Diagnostic>(steps.Select(s => DiagnosticsPublishHandler.ToLspDiagnostic(
+            new GherkinDiagnostic(
+                s.Result.GetErrorMessage() ?? DiagnosticsAggregator.UndefinedStepMessage,
+                s.Range,
+                GherkinDiagnosticSeverity.Warning,
+                DiagnosticsAggregator.BindingSource))));
+
         // Resolve which append candidates actually succeed *before* deciding titles, so a
         // candidate declined by AppendToFile (ambiguous brace structure) doesn't still cause
         // the surviving actions to get a "→ <target>" suffix implying a choice that isn't real.
@@ -71,12 +83,12 @@ internal sealed class DefineStepsActionBuilder
         foreach (var (path, existingContent, appendedContent) in successfulAppends)
         {
             var title = multiTarget ? $"{baseTitle} → {Path.GetFileName(path)}" : baseTitle;
-            actionsForTitle.Add(BuildAppendCodeAction(title, path, existingContent, appendedContent, isPreferred: isFirst));
+            actionsForTitle.Add(BuildAppendCodeAction(title, path, existingContent, appendedContent, diagnostics, isPreferred: isFirst));
             isFirst = false;
         }
 
         var newFileTitle = multiTarget ? $"{baseTitle} → new file" : baseTitle;
-        actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, target.TargetPath, isPreferred: isFirst));
+        actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, target.TargetPath, diagnostics, isPreferred: isFirst));
 
         return actionsForTitle.Select(a => new CommandOrCodeAction(a)).ToList();
     }
@@ -96,7 +108,7 @@ internal sealed class DefineStepsActionBuilder
     }
 
     /// <summary>Builds a "Define step(s)" action that creates a brand-new step-definition file with the given content.</summary>
-    private static CodeAction BuildCreateCodeAction(string title, string fileContent, string targetPath, bool isPreferred)
+    private static CodeAction BuildCreateCodeAction(string title, string fileContent, string targetPath, Container<Diagnostic> diagnostics, bool isPreferred)
     {
         var targetUri = DocumentUri.FromFileSystemPath(targetPath);
 
@@ -123,7 +135,7 @@ internal sealed class DefineStepsActionBuilder
                 }))
         };
 
-        return BuildCodeAction(title, edit, targetUri, isPreferred);
+        return BuildCodeAction(title, edit, targetUri, diagnostics, isPreferred);
     }
 
     /// <summary>
@@ -134,7 +146,7 @@ internal sealed class DefineStepsActionBuilder
     /// surfaces files that already contain a step definition matched to this feature — so, unlike
     /// a newly created file, no <c>[Binding]</c>-attribute check is needed before offering it.
     /// </summary>
-    private static CodeAction BuildAppendCodeAction(string title, string targetPath, string existingContent, string appendedContent, bool isPreferred)
+    private static CodeAction BuildAppendCodeAction(string title, string targetPath, string existingContent, string appendedContent, Container<Diagnostic> diagnostics, bool isPreferred)
     {
         var targetUri = DocumentUri.FromFileSystemPath(targetPath);
 
@@ -156,7 +168,7 @@ internal sealed class DefineStepsActionBuilder
                 }))
         };
 
-        return BuildCodeAction(title, edit, targetUri, isPreferred);
+        return BuildCodeAction(title, edit, targetUri, diagnostics, isPreferred);
     }
 
     /// <summary>
@@ -165,12 +177,13 @@ internal sealed class DefineStepsActionBuilder
     /// for "this is the one to pick" (e.g. VS/VS Code bubble the preferred action to the top of
     /// the lightbulb menu instead of relying on array order, which some clients don't preserve).
     /// </summary>
-    private static CodeAction BuildCodeAction(string title, WorkspaceEdit edit, DocumentUri targetUri, bool isPreferred) =>
+    private static CodeAction BuildCodeAction(string title, WorkspaceEdit edit, DocumentUri targetUri, Container<Diagnostic> diagnostics, bool isPreferred) =>
         new()
         {
             Title       = title,
             Kind        = CodeActionKind.QuickFix,
             Edit        = edit,
+            Diagnostics = diagnostics,
             // VS Code executes this command after applying the edit, opening the target file.
             // Other clients receive an unknown command they can safely ignore.
             Command     = new Command
