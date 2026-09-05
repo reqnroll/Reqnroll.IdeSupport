@@ -117,6 +117,21 @@ public class CodeActionHandlerTests
         action.Kind.Should().Be(CodeActionKind.QuickFix);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Does_not_offer_Define_action_for_a_step_with_blank_text(string blankText)
+    {
+        // A bare keyword with no following step text (e.g. just "Given") has nothing to build a
+        // skeleton from -- offering to "define" it would generate a meaningless empty-expression
+        // binding (issue #622).
+        SeedMatchService(UndefinedMatch(blankText, ScenarioBlock.When));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task Does_not_offer_Define_action_when_cursor_is_on_an_ambiguous_step()
     {

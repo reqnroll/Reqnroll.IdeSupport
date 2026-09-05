@@ -137,11 +137,14 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var isDefineAction = new HashSet<CommandOrCodeAction>();
 
         // ── "Define missing step" actions ───────────────────────────────────────
-        // Only offered when the request's cursor position actually falls on an undefined step.
-        // Without this, a lightbulb invoked over an ambiguous (or otherwise bound) step would
-        // still offer to "define" some unrelated undefined step elsewhere in the file, which is
-        // misleading — that step has nothing to do with what's under the cursor.
-        if (stepAtCursor is { IsUndefined: true })
+        // Only offered when the request's cursor position actually falls on an undefined step
+        // that has step text to build a skeleton from. Without the first check, a lightbulb
+        // invoked over an ambiguous (or otherwise bound) step would still offer to "define" some
+        // unrelated undefined step elsewhere in the file, which is misleading — that step has
+        // nothing to do with what's under the cursor. Without the second, a bare keyword with no
+        // step text (e.g. a lone "Given") would offer to generate a meaningless empty-expression
+        // binding, since there is no text to build one from (issue #622).
+        if (stepAtCursor is { IsUndefined: true } && !string.IsNullOrWhiteSpace(GetStepText(stepAtCursor)))
         {
             var defineActions = BuildDefineStepActions(uri, primaryOwner, matchSet, stepAtCursor);
             isDefineAction.UnionWith(defineActions);
