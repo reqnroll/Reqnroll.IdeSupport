@@ -58,10 +58,13 @@ internal sealed class ParserErrorActionBuilder
             DiagnosticsAggregator.ParserSource));
         var diagnostics = new Container<Diagnostic>(diagnostic);
 
-        // Insert (never replace) at the exact position the parser stopped — the diagnostic's own
-        // start point — rather than presuming how to rewrite whatever the user already typed.
-        var insertPosition = errorTag.Range.ToLspRange().Start;
-        var insertRange     = new LspRange(insertPosition, insertPosition);
+        // Replace the diagnostic's whole flagged span (the same range the squiggle covers) rather
+        // than inserting at its start — matching how keyword *completion* already replaces the
+        // partial word being typed (CompletionHandler.HandleKeyword's kwRange). Splicing the fix
+        // in before the bad text instead — the original behaviour — left the bad text in place:
+        // e.g. a "Th" typo squiggle offering "Insert '\"\"\"'" produced the malformed `"""Th`
+        // rather than replacing "Th" outright (confirmed live in VS, issue #563 follow-up).
+        var replaceRange = errorTag.Range.ToLspRange();
 
         return entries.Select(entry => new CommandOrCodeAction(new CodeAction
         {
@@ -76,7 +79,7 @@ internal sealed class ParserErrorActionBuilder
                         TextDocument = new OptionalVersionedTextDocumentIdentifier { Uri = uri, Version = null },
                         Edits = new TextEditContainer(new TextEdit
                         {
-                            Range   = insertRange,
+                            Range   = replaceRange,
                             NewText = entry.InsertText ?? entry.Label
                         })
                     }))

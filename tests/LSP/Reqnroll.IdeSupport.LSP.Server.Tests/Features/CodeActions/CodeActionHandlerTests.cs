@@ -23,6 +23,7 @@ using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -521,6 +522,13 @@ public class CodeActionHandlerTests
             a.Edit.Should().NotBeNull();
             a.Diagnostics.Should().NotBeNullOrEmpty();
             a.Diagnostics!.Single().Source.Should().Be(DiagnosticsAggregator.ParserSource);
+
+            // The edit must replace the whole flagged token, not splice text in before it — an
+            // insert-only edit at the error's start position left the mistyped text in place
+            // (e.g. a "Th" typo plus "Insert '\"\"\"'" produced the malformed `"""Th` rather than
+            // replacing "Th" outright; confirmed live in VS, issue #563 follow-up).
+            var edit = a.Edit!.DocumentChanges!.Single().TextDocumentEdit!.Edits.Single();
+            edit.Range.Should().Be(errorTag.Range.ToLspRange());
         });
     }
 
