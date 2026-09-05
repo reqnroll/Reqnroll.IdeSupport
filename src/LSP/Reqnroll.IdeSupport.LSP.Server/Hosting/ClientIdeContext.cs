@@ -79,6 +79,20 @@ public sealed class ClientIdeContext
     public bool IsVisualStudio => string.Equals(Ide, "visualstudio", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// True when the connecting client is VS Code, whose LSP client recognizes the built-in
+    /// <c>vscode.open</c> command and executes it locally without a <c>workspace/executeCommand</c>
+    /// round trip to the server. Visual Studio and Rider have no such special-casing — Visual
+    /// Studio's <c>workspace.executeCommand</c> capability only ever lists its own two internal
+    /// commands (<c>_ms_setClipboard</c>, <c>_ms_openUrl</c>) and forwards anything else to the
+    /// server via <c>workspace/executeCommand</c>, which has no handler registered for
+    /// <c>vscode.open</c> and replies "Method not found" (confirmed live, issue #563 follow-up) — so
+    /// a <see cref="OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeAction"/> whose only
+    /// payload is a <c>vscode.open</c> <see cref="OmniSharp.Extensions.LanguageServer.Protocol.Models.Command"/>
+    /// silently does nothing when clicked there. See <see cref="Features.CodeActions.AmbiguousStepActionBuilder"/>.
+    /// </summary>
+    public bool IsVSCode => string.Equals(Ide, "vscode", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// True only when the connecting client is on the <see cref="CodeLensResolveCapableIdes"/>
     /// allowlist — i.e. its LSP client is known to actually issue <c>codeLens/resolve</c> for a
     /// lens returned without a <c>Command</c>. The allowlist is empty today, so this is

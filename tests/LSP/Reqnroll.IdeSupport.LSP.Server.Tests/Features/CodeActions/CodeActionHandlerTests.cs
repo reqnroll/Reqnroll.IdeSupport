@@ -22,6 +22,7 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -58,9 +59,12 @@ public class CodeActionHandlerTests
                        .Returns(new IdeSupportConfiguration());
     }
 
-    private CodeActionHandler CreateSut() =>
+    // Defaults to VS Code so existing tests (written before the #563 follow-up VS-Code-only gate)
+    // keep exercising the ambiguous-step "Go to" actions without each having to opt in.
+    private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null) =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem,
-            _completionService, _errorTelemetryService, _telemetryService);
+            _completionService, _errorTelemetryService, clientIde ?? new ClientIdeContext("vscode"),
+            _telemetryService);
 
     private static CodeActionParams RequestAt(
         DocumentUri uri, int line = 0, int character = 0, CodeActionContext? context = null) =>
@@ -149,6 +153,24 @@ public class CodeActionHandlerTests
             a.Diagnostics.Should().NotBeNullOrEmpty();
             a.Diagnostics!.Single().Source.Should().Be(DiagnosticsAggregator.BindingSource);
         });
+    }
+
+    [Theory]
+    [InlineData("visualstudio")]
+    [InlineData("rider")]
+    public async Task Does_not_offer_go_to_actions_for_non_VSCode_clients(string ide)
+    {
+        // A "Go to" action carries only a vscode.open Command, no Edit (issue #563 follow-up).
+        // VS Code's LSP client recognizes that command name and runs it locally; Visual Studio's
+        // and Rider's do not, and forwarding it to the server via workspace/executeCommand fails
+        // ("Method not found" — confirmed live in VS, since neither client special-cases it the
+        // way VS Code does), so the action would silently do nothing there.
+        SeedMatchService(AmbiguousMatch("a step", lineOffset: 23, length: 6));
+
+        var result = await CreateSut(new ClientIdeContext(ide))
+            .Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
+
+        result.Should().BeEmpty();
     }
 
     [Fact]

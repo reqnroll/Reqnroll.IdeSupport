@@ -16,6 +16,17 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// (issue #563) — one per competing step definition, so the lightbulb offers a direct jump to
 /// each candidate instead of the empty menu <see cref="CodeActionHandler"/> used to return.
 /// </summary>
+/// <remarks>
+/// VS Code-only: each action carries only a <c>vscode.open</c> <see cref="Command"/>, no
+/// <see cref="WorkspaceEdit"/>. VS Code's LSP client recognizes that command name and runs it
+/// locally without contacting the server. Visual Studio and Rider have no equivalent
+/// special-casing — confirmed live, Visual Studio forwards it to the server via
+/// <c>workspace/executeCommand</c> instead (its own <c>workspace.executeCommand</c> capability
+/// only ever lists its two internal commands, <c>_ms_setClipboard</c>/<c>_ms_openUrl</c>), which
+/// has no handler registered for <c>vscode.open</c> and replies "Method not found" — so the
+/// action would silently do nothing if offered there. <see cref="CodeActionHandler"/> only calls
+/// <see cref="Build"/> when <see cref="Hosting.ClientIdeContext.IsVSCode"/> is true.
+/// </remarks>
 internal sealed class AmbiguousStepActionBuilder
 {
     private readonly IFileSystemForIDE _fileSystem;
@@ -57,9 +68,8 @@ internal sealed class AmbiguousStepActionBuilder
                 Title       = $"Go to '{impl.Method}' ({fileName})",
                 Kind        = CodeActionKind.QuickFix,
                 Diagnostics = diagnostics,
-                // No Edit: this action is pure navigation. VS Code executes this command to open
-                // the file at the identifier; other clients receive an unknown command they can
-                // safely ignore, the same graceful-degrade pattern DefineStepsActionBuilder uses.
+                // No Edit: this action is pure navigation, which only VS Code can carry out — see
+                // the class remarks. CodeActionHandler gates this builder to VS Code only.
                 Command = new Command
                 {
                     Title     = "Go to step definition",

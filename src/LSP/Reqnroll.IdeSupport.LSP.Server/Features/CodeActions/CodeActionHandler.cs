@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
@@ -22,7 +23,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// Handles <c>textDocument/codeAction</c> requests for <c>*.feature</c> files: generates C#
 /// step-definition stubs for undefined steps (Define Steps), offers "Insert '&lt;keyword&gt;'"
 /// fixes for Gherkin syntax errors, and offers "Go to '&lt;method&gt;'" navigation for ambiguous
-/// steps.
+/// steps — the last of these only for VS Code (see <see cref="ClientIdeContext.IsVSCode"/>).
 /// Registered via OmniSharp dynamic registration (<see cref="ICodeActionHandler"/>), scoped to
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
@@ -48,6 +49,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     private readonly ILspWorkspaceScopeManager     _scopeManager;
     private readonly IDocumentBufferService        _bufferService;
     private readonly IIdeSupportLogger               _logger;
+    private readonly ClientIdeContext              _clientIde;
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
     private readonly StepDefinitionTargetResolver  _targetResolver;
@@ -65,6 +67,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         IFileSystemForIDE         fileSystem,
         ICompletionService        completionService,
         IErrorTelemetryService    errorTelemetryService,
+        ClientIdeContext          clientIde,
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
@@ -72,6 +75,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _scopeManager    = scopeManager;
         _bufferService   = bufferService;
         _logger          = logger;
+        _clientIde       = clientIde;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
@@ -145,7 +149,12 @@ public sealed class CodeActionHandler : ICodeActionHandler
         }
 
         // ── "Go to '<method>'" actions for an ambiguous step under the cursor ───
-        if (stepAtCursor is { IsAmbiguous: true })
+        // VS Code-only (issue #563 follow-up): these actions carry only a `vscode.open` Command,
+        // no Edit. VS Code's LSP client recognizes that command name and runs it locally; Visual
+        // Studio and Rider have no such special-casing, forward it to the server via
+        // workspace/executeCommand instead, and get back "Method not found" (confirmed live in
+        // VS) — so the action would silently do nothing there. See ClientIdeContext.IsVSCode.
+        if (stepAtCursor is { IsAmbiguous: true } && _clientIde.IsVSCode)
         {
             actions.AddRange(_ambiguousActionBuilder.Build(stepAtCursor));
         }
