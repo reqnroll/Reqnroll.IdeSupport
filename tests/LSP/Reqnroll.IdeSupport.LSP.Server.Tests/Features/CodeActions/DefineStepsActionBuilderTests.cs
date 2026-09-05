@@ -90,6 +90,20 @@ public class DefineStepsActionBuilderTests : IDisposable
         actions.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Build_returns_no_actions_when_the_only_undefined_step_has_blank_text(string blankText)
+    {
+        // A bare keyword with no step text (issue #622) has nothing to build a skeleton from --
+        // BuildDescriptors filters it out, so this must behave the same as no steps at all.
+        var target = MakeTarget(Path.Combine(_projectFolder, "MySteps.cs"));
+
+        var actions = CreateSut().Build(target, "Define missing step", new[] { UndefinedMatch(blankText) });
+
+        actions.Should().BeEmpty();
+    }
+
     [Fact]
     public void Build_suffixes_titles_and_marks_only_the_append_action_preferred_when_a_candidate_succeeds()
     {

@@ -28,6 +28,11 @@ public sealed class StepScaffoldService : IStepScaffoldService
                 if (item.Type != MatchResultType.Undefined) continue;
                 if (item.UndefinedStep is not { } step) continue;
 
+                // A step consisting of only a keyword (e.g. "Given" with no following text) has
+                // no step text to build a skeleton from — offering a code action here would
+                // generate a meaningless `[Given(@"")]`-style binding (issue #622).
+                if (string.IsNullOrWhiteSpace(step.StepText)) continue;
+
                 var descriptor = StepSkeletonRenderer.BuildDescriptor(step, style);
 
                 // Dedup by (Block, expression).

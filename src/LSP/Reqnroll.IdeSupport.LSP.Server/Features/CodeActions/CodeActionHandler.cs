@@ -110,12 +110,15 @@ public sealed class CodeActionHandler : ICodeActionHandler
         }
 
         // Only offer "Define missing step" actions when the request's cursor position actually
-        // falls on an undefined step. Without this, a lightbulb invoked over an ambiguous (or
-        // otherwise bound) step would still offer to "define" some unrelated undefined step
-        // elsewhere in the file, which is misleading — that step has nothing to do with what's
-        // under the cursor.
+        // falls on an undefined step that has step text to build a skeleton from. Without the
+        // first check, a lightbulb invoked over an ambiguous (or otherwise bound) step would
+        // still offer to "define" some unrelated undefined step elsewhere in the file, which is
+        // misleading — that step has nothing to do with what's under the cursor. Without the
+        // second, a bare keyword with no step text (e.g. a lone "Given") would offer to generate
+        // a meaningless empty-expression binding, since there is no text to build one from
+        // (issue #622).
         var stepAtCursor = ResolveStepAtCursor(uri, request.Range.Start, matchSet);
-        if (stepAtCursor is null || !stepAtCursor.IsUndefined)
+        if (stepAtCursor is not { IsUndefined: true } || string.IsNullOrWhiteSpace(GetStepText(stepAtCursor)))
         {
             _logger.LogVerbose($"CodeActionHandler: no undefined step at the request position in {uri}");
             return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
