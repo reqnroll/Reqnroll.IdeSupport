@@ -1,11 +1,15 @@
 ﻿using Gherkin;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
+using Reqnroll.IdeSupport.Common.Telemetry;
 
 
+using Reqnroll.IdeSupport.LSP.Core.Completions;
+using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -18,6 +22,8 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -33,6 +39,8 @@ public class CodeActionHandlerTests
     private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
     private readonly ILspTelemetryService        _telemetryService = Substitute.For<ILspTelemetryService>();
     private readonly IFileSystemForIDE           _fileSystem = new FileSystemForIDE();
+    private readonly ICompletionService          _completionService = new CompletionService();
+    private readonly IErrorTelemetryService      _errorTelemetryService = Substitute.For<IErrorTelemetryService>();
 
     private const string FeatureText =
         "Feature: F\nScenario: S\n    Given a step\n    When I press add\n";
@@ -52,15 +60,20 @@ public class CodeActionHandlerTests
                        .Returns(new IdeSupportConfiguration());
     }
 
-    private CodeActionHandler CreateSut() =>
-        new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem, _telemetryService);
+    // Defaults to VS Code so existing tests (written before the #563 follow-up VS-Code-only gate)
+    // keep exercising the ambiguous-step "Go to" actions without each having to opt in.
+    private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null) =>
+        new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem,
+            _completionService, _errorTelemetryService, clientIde ?? new ClientIdeContext("vscode"),
+            _telemetryService);
 
-    private static CodeActionParams RequestAt(DocumentUri uri, int line = 0) =>
+    private static CodeActionParams RequestAt(
+        DocumentUri uri, int line = 0, int character = 0, CodeActionContext? context = null) =>
         new()
         {
             TextDocument = new TextDocumentIdentifier { Uri = uri },
-            Range = new LspRange(new Position(line, 0), new Position(line, 0)),
-            Context = new CodeActionContext { Diagnostics = new Container<Diagnostic>() }
+            Range = new LspRange(new Position(line, character), new Position(line, character)),
+            Context = context ?? new CodeActionContext { Diagnostics = new Container<Diagnostic>() }
         };
 
     // ── Guard rails ───────────────────────────────────────────────────────────
@@ -120,7 +133,7 @@ public class CodeActionHandlerTests
     }
 
     [Fact]
-    public async Task Returns_no_actions_when_cursor_is_on_an_ambiguous_step()
+    public async Task Does_not_offer_Define_action_when_cursor_is_on_an_ambiguous_step()
     {
         // Line 2 ("    Given a step") is ambiguous; line 3 ("    When I press add") is a
         // genuinely undefined step elsewhere in the same file. Invoking the lightbulb on the
@@ -131,6 +144,47 @@ public class CodeActionHandlerTests
             UndefinedMatch("I press add", ScenarioBlock.When, lineOffset: 41));
 
         var result = await CreateSut().Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
+
+        result!.Select(a => a.CodeAction!.Title).Should().NotContain(t => t.StartsWith("Define"));
+    }
+
+    // ── With an ambiguous step under the cursor (issue #563) ────────────────────
+
+    [Fact]
+    public async Task Offers_go_to_actions_for_each_competing_binding_of_an_ambiguous_step()
+    {
+        SeedMatchService(AmbiguousMatch("a step", lineOffset: 23, length: 6));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
+
+        var actions = result!.Select(a => a.CodeAction!).ToList();
+        actions.Should().HaveCount(2);
+        actions.Should().Contain(a => a.Title.Contains("StepsA.Handle"));
+        actions.Should().Contain(a => a.Title.Contains("StepsB.Handle"));
+        actions.Should().AllSatisfy(a =>
+        {
+            a.Kind.Should().Be(CodeActionKind.QuickFix);
+            a.Edit.Should().BeNull("navigation actions carry no edit, only a Command");
+            a.Command.Should().NotBeNull();
+            a.Diagnostics.Should().NotBeNullOrEmpty();
+            a.Diagnostics!.Single().Source.Should().Be(DiagnosticsAggregator.BindingSource);
+        });
+    }
+
+    [Theory]
+    [InlineData("visualstudio")]
+    [InlineData("rider")]
+    public async Task Does_not_offer_go_to_actions_for_non_VSCode_clients(string ide)
+    {
+        // A "Go to" action carries only a vscode.open Command, no Edit (issue #563 follow-up).
+        // VS Code's LSP client recognizes that command name and runs it locally; Visual Studio's
+        // and Rider's do not, and forwarding it to the server via workspace/executeCommand fails
+        // ("Method not found" — confirmed live in VS, since neither client special-cases it the
+        // way VS Code does), so the action would silently do nothing there.
+        SeedMatchService(AmbiguousMatch("a step", lineOffset: 23, length: 6));
+
+        var result = await CreateSut(new ClientIdeContext(ide))
+            .Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
 
         result.Should().BeEmpty();
     }
@@ -398,6 +452,12 @@ public class CodeActionHandlerTests
             var result = await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
 
             result!.Should().HaveCount(6); // 5 append candidates (MaxAppendCandidates) + 1 new-file fallback
+
+            // Telemetry must reflect what was actually returned (post-cap), not the uncapped
+            // count the builder produced internally.
+            _telemetryService.Received(1).SendEvent(
+                "DefineSteps command offered",
+                Arg.Is<Dictionary<string, object?>>(p => (int)p["ActionsOffered"]! == 6));
         }
         finally
         {
@@ -428,7 +488,195 @@ public class CodeActionHandlerTests
         _telemetryService.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
 
+    // ── CodeAction.Diagnostics association (issue #563) ─────────────────────────
+
+    [Fact]
+    public async Task Define_missing_step_action_is_associated_with_the_undefined_step_diagnostic()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        var action = result!.First().CodeAction!;
+        action.Diagnostics.Should().NotBeNullOrEmpty();
+        var diagnostic = action.Diagnostics!.Single();
+        diagnostic.Source.Should().Be(DiagnosticsAggregator.BindingSource);
+        diagnostic.Message.Should().Be(DiagnosticsAggregator.UndefinedStepMessage);
+    }
+
+    // ── Parser-error "Insert keyword" quick fixes (issue #563) ──────────────────
+
+    // Known to produce a ParserError tag (mirrors IdeSupportTagParserTests.Malformed_feature_produces_ParserError_tag).
+    private const string BrokenFeatureText = "not a feature file\nsome garbage\n";
+
+    [Fact]
+    public async Task Offers_insert_keyword_actions_for_a_parser_error_at_the_cursor()
+    {
+        var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
+        var tags = ParseTags(BrokenFeatureText);
+        var errorTag = tags.First(t => t.Type == IdeSupportTagTypes.ParserError);
+        var (errorLine, errorChar) = errorTag.Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, BrokenFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        var actions = result!.Select(a => a.CodeAction!).ToList();
+        actions.Should().NotBeEmpty();
+        actions.Should().AllSatisfy(a =>
+        {
+            a.Title.Should().StartWith("Insert '");
+            a.Kind.Should().Be(CodeActionKind.QuickFix);
+            a.Edit.Should().NotBeNull();
+            a.Diagnostics.Should().NotBeNullOrEmpty();
+            a.Diagnostics!.Single().Source.Should().Be(DiagnosticsAggregator.ParserSource);
+
+            // The edit must replace the whole flagged token, not splice text in before it — an
+            // insert-only edit at the error's start position left the mistyped text in place
+            // (e.g. a "Th" typo plus "Insert '\"\"\"'" produced the malformed `"""Th` rather than
+            // replacing "Th" outright; confirmed live in VS, issue #563 follow-up).
+            var edit = a.Edit!.DocumentChanges!.Single().TextDocumentEdit!.Edits.Single();
+            edit.Range.Should().Be(errorTag.Range.ToLspRange());
+        });
+    }
+
+    [Fact]
+    public async Task Does_not_offer_insert_keyword_actions_away_from_the_parser_error()
+    {
+        var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
+        var tags = ParseTags(BrokenFeatureText);
+        var snapshot = new LspTextSnapshot(uri.ToString(), 1, BrokenFeatureText);
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, BrokenFeatureText, tags);
+                return true;
+            });
+
+        // The blank line after the final newline is always legal (Empty/EOF), so it can never be
+        // inside a ParserError tag's span — a safe "away from any error" cursor position.
+        var farLine = snapshot.LineCount - 1;
+        var result = await CreateSut().Handle(RequestAt(uri, line: farLine), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    // Mirrors the live-tested VS repro: a truncated "Th" (typing "Then") after a valid step.
+    private const string TruncatedKeywordFeatureText =
+        "Feature: F\nScenario: S\n    Given a step\n    When I press add\n    Th\n";
+
+    [Fact]
+    public async Task Marks_the_closest_matching_keyword_as_preferred()
+    {
+        var uri = DocumentUri.FromFileSystemPath("/workspace/truncated.feature");
+        var tags = ParseTags(TruncatedKeywordFeatureText);
+        var errorTag = tags.First(t => t.Type == IdeSupportTagTypes.ParserError);
+        var (errorLine, errorChar) = errorTag.Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, TruncatedKeywordFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        var actions = result!.Select(a => a.CodeAction!).ToList();
+        actions.Should().ContainSingle(a => a.IsPreferred == true)
+            .Which.Title.Should().Be("Insert 'Then'");
+        actions.Where(a => a.Title != "Insert 'Then'").Should().AllSatisfy(a => a.IsPreferred.Should().NotBe(true));
+    }
+
+    [Fact]
+    public async Task Marks_no_action_preferred_when_nothing_was_typed_yet()
+    {
+        // BrokenFeatureText's error is on a line with no plausible keyword-typo text at all
+        // ("not a feature file"), so no entry should win the closest-match heuristic.
+        var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
+        var tags = ParseTags(BrokenFeatureText);
+        var errorTag = tags.First(t => t.Type == IdeSupportTagTypes.ParserError);
+        var (errorLine, errorChar) = errorTag.Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, BrokenFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        result!.Select(a => a.CodeAction!).Should().AllSatisfy(a => a.IsPreferred.Should().NotBe(true));
+    }
+
+    // ── Honouring context.only / context.diagnostics (issue #563) ───────────────
+
+    [Fact]
+    public async Task Returns_empty_when_context_only_excludes_QuickFix()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        var context = new CodeActionContext
+        {
+            Diagnostics = new Container<Diagnostic>(),
+            Only        = new Container<CodeActionKind>(CodeActionKind.Refactor)
+        };
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri, context: context), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Ignores_context_diagnostics_scoping_unrelated_to_any_offered_action()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        var context = new CodeActionContext
+        {
+            Diagnostics = new Container<Diagnostic>(new Diagnostic
+            {
+                Range   = new LspRange(new Position(0, 0), new Position(0, 1)),
+                Source  = "some.other.source",
+                Message = "unrelated"
+            })
+        };
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri, context: context), CancellationToken.None);
+
+        // The request named a diagnostic that has nothing to do with the offered "Define missing
+        // step" action, so it must be filtered out.
+        result.Should().BeEmpty();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static IReadOnlyCollection<IdeSupportTag> ParseTags(string text)
+    {
+        var logger = Substitute.For<IIdeSupportLogger>();
+        var telemetryService = Substitute.For<IErrorTelemetryService>();
+        var configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
+        configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
+
+        var parser = new IdeSupportTagParser(logger, telemetryService, configProvider);
+        var snapshot = new LspTextSnapshot("file:///workspace/broken.feature", 1, text);
+        return parser.Parse(snapshot, ProjectBindingRegistry.Invalid);
+    }
 
     private void SeedMatchService(params StepBindingMatch[] matches) =>
         SeedMatchServiceFor(FeatureUri, matches);
