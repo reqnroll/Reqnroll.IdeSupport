@@ -33,7 +33,7 @@ public class VsIdeScope : IVsIdeScope
     public VsIdeScope([Import(typeof(SVsServiceProvider))] IServiceProvider serviceProvider,
         ITelemetryService telemetryService,
         IFileSystemForIDE fileSystem,
-        Reqnroll.IdeSupport.VisualStudio.Logging.IdeSupportCompositeLogger compositeLogger)
+        IIdeSupportLogger compositeLogger)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         Logger = compositeLogger;

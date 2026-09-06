@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { createTraceChannel, traceServerToLogLevel } from './lsp/lspInspectorLogger';
+import { createGeneralLogChannel } from './logging/generalFileLog';
 import { ProjectManager } from './lsp/projectManager';
 import { StatusBarManager } from './statusBar';
 import { doToggleComment } from './commands/commentToggle';
@@ -124,7 +125,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     );
   };
 
-  const outputChannel = vscode.window.createOutputChannel('Reqnroll LSP', { log: true });
+  const outputChannel = createGeneralLogChannel('Reqnroll LSP');
   const traceChannel = createTraceChannel();
 
   context.subscriptions.push(

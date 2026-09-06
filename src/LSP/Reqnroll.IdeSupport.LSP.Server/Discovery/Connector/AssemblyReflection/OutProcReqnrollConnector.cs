@@ -83,7 +83,8 @@ public abstract class OutProcReqnrollConnector
                 ConnectorType = GetConnectorType()
             };
 
-        var result = ProcessHelper.RunProcess(workingDirectory, connectorPath, arguments, encoding: Encoding.UTF8);
+        var result = ProcessHelper.RunProcess(workingDirectory, connectorPath, arguments, encoding: Encoding.UTF8,
+            logger: _logger);
 
         _logger.LogVerbose($"{workingDirectory}>{connectorPath} {string.Join(" ", arguments)}");
         _logger.LogVerbose($"Exit code: {result.ExitCode}");
