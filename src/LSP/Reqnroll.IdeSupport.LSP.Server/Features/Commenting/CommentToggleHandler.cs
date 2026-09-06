@@ -104,7 +104,7 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         _logger.LogInfo($"Comment/Uncomment toggle reqnroll.toggleComment: {uri} lines [{startLine}..{endLine}] → {result.Edits.Count} change(s)");
 
         // Telemetry
-        _telemetryService?.SendEvent("CommentUncomment command executed", new());
+        _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new());
 
         await _languageServer.SendRequest(LspMethodNames.WorkspaceApplyEdit, edit)
             .Returning<ApplyWorkspaceEditResponse>(cancellationToken);

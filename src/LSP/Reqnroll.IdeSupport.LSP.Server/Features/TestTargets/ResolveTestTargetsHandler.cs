@@ -101,7 +101,7 @@ public sealed class ResolveTestTargetsHandler
 
         _logger.LogVerbose($"ResolveTestTargetsHandler: {targets.Count} target(s) at range {request.Range} in {uri}");
 
-        _telemetryService?.SendEvent("ResolveTestTargets command executed", new());
+        _telemetryService?.SendEvent(TelemetryEvents.ResolveTestTargetsCommandExecuted, new());
 
         return Task.FromResult(new ResolveTestTargetsResponse { Targets = targets.Select(ToDto).ToList() });
     }
