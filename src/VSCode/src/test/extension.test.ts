@@ -8,6 +8,7 @@ import './lsp/projectManager.test';
 import './lsp/watcherExclude.test';
 import './lsp/defineStepRecovery.test';
 import './lsp/lspInspectorLogger.test';
+import './lsp/lspInspectorFormatConformance.test';
 import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
 import './lsp/manualDocumentSync.test';
