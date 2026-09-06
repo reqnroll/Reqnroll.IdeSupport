@@ -192,7 +192,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var defineActionsOffered = actions.Count(isDefineAction.Contains);
         if (defineActionsOffered > 0)
         {
-            _telemetryService?.SendEvent("DefineSteps command offered", new()
+            _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandOffered, new()
             {
                 ["UndefinedStepCount"] = matchSet.Undefined.Count(),
                 ["ActionsOffered"] = defineActionsOffered,

@@ -373,7 +373,7 @@ public sealed class RenameHandler
         await _postApplyCoordinator.RefreshCSharpRegistryAsync(csFileUri, newCsText, cancellationToken);
 
         // Telemetry
-        _telemetryService?.SendEvent("Rename step command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, new()
         {
             ["Erroneous"] = false,
             ["ChangeAnnotationsUsed"] = supportsChangeAnnotations,

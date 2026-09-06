@@ -115,7 +115,7 @@ public sealed class GoToMatchingScenariosHandler
 
         var locations = scenarios.Select(ToLocation).ToList();
 
-        _telemetryService?.SendEvent("GoToMatchingScenarios command executed", new());
+        _telemetryService?.SendEvent(TelemetryEvents.GoToMatchingScenariosCommandExecuted, new());
 
         return Task.FromResult(new GoToMatchingScenariosResponse { Scenarios = locations });
     }

@@ -123,7 +123,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
         // Telemetry: Roslyn discovery event (membership index / telemetry design §2.3).
         var fileName = Path.GetFileName(filePath);
         var triggerContext = isOpen ? "csOpen" : "csEdit";
-        _telemetryService?.SendEvent("Reqnroll Discovery executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
         {
             ["DiscoverySource"] = "Roslyn",
             ["TriggerContext"] = triggerContext,
