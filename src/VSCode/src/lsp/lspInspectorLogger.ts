@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { resolveLogDirectory } from '../logging/logPaths';
 
 /**
  * A VS Code LogOutputChannel that simultaneously writes LSP trace messages to
@@ -296,15 +296,4 @@ export function createTraceChannel(): vscode.LogOutputChannel {
   }
 
   return new TeeLogOutputChannel('Reqnroll LSP Trace', stream);
-}
-
-function resolveLogDirectory(): string {
-  switch (process.platform) {
-    case 'win32':
-      return path.join(process.env['LOCALAPPDATA'] ?? os.homedir(), 'Reqnroll');
-    case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Logs', 'Reqnroll');
-    default:
-      return path.join(os.homedir(), '.local', 'share', 'Reqnroll');
-  }
 }

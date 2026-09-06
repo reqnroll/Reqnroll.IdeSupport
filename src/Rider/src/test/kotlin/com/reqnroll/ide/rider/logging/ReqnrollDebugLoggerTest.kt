@@ -19,6 +19,29 @@ class ReqnrollDebugLoggerTest {
     }
 
     @Test
+    fun `formatLine pads the level to a fixed width and matches the dotnet side's shape`() {
+        // Portable subset of Reqnroll.IdeSupport.Common.Logging.LogLineFormatter.FormatPreamble
+        // (issue #626): "<UTC timestamp> [<level padded to 7>] <message>" - no thread id, no
+        // source/caller segment (see the class doc comment for why those don't port here).
+        assertEquals(
+            "2026-09-06T14:02:11.123Z [Info   ] hello",
+            ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Info", "hello"),
+        )
+    }
+
+    @Test
+    fun `formatLine pads every real level to the same width`() {
+        assertEquals(
+            "2026-09-06T14:02:11.123Z [Error  ] x",
+            ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Error", "x"),
+        )
+        assertEquals(
+            "2026-09-06T14:02:11.123Z [Warning] x",
+            ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Warning", "x"),
+        )
+    }
+
+    @Test
     fun `logDirectory uses LOCALAPPDATA on Windows`() {
         assertEquals(
             File("C:\\Users\\me\\AppData\\Local", "Reqnroll"),
