@@ -18,8 +18,11 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 /// avoiding the need for manual OnRequest delegate registration and IServiceProvider capture.
 /// Implements the full three-state contract that <c>textDocument/references</c> cannot carry:
 /// <list type="bullet">
-///   <item>Returns <see langword="null"/> when the caret is not on any step-definition binding
-///         (client falls through to the built-in C# Find All References).</item>
+///   <item>Returns <c>isBinding=false</c> when the caret is not on any step-definition binding —
+///         including a caret inside a binding method's body, which is treated the same as being
+///         off the binding entirely. Clients show an informational "not on a step definition
+///         binding" message; there is no takeover of the IDE's built-in Find All References
+///         command (see docs/site/ide-support/navigation-features/find-usages.md).</item>
 ///   <item>Returns a response with <c>isBinding=true</c> and an empty location list when the
 ///         binding has no matching feature steps ("0 usages" window).</item>
 ///   <item>Returns a response with <c>isBinding=true</c> and populated locations otherwise.</item>
@@ -104,7 +107,7 @@ public sealed class FindStepUsagesHandler
             if (!hasBinding)
             {
                 _logger.LogVerbose(
-                    $"FindStepUsagesHandler: no binding at {filePath}:{line} — returning isBinding=false (fall through)");
+                    $"FindStepUsagesHandler: no binding at {filePath}:{line} — returning isBinding=false");
                 // Return isBinding=false rather than null: OmniSharp's OnRequest framework does not
                 // serialise null gracefully for custom response types (sends an error response instead).
                 // The VS client checks IsBinding and treats false as "not a binding".
