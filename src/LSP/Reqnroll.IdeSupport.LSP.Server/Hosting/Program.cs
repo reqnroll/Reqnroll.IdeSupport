@@ -106,17 +106,19 @@ public class Program
         {
             try
             {
-                var logDir = ReqnrollLogPaths.ResolveLogDirectory();
-                Directory.CreateDirectory(logDir);
+                // Reuses SynchronousFileLogger itself (role "crash") rather than one-off
+                // directory/filename/formatting code (issue #628): same
+                // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
+                // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
+                // with no PID and a raw ex.ToString() dump.
                 var idePrefix = ideId switch
                 {
                     "visualstudio" => "vs",
                     "vscode"       => "vscode",
                     _              => "lsp",
                 };
-                var logPath = Path.Combine(logDir,
-                    $"reqnroll-{idePrefix}-crash-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
-                File.WriteAllText(logPath, ex.ToString());
+                new SynchronousFileLogger(idePrefix, "crash", TraceLevel.Error)
+                    .LogException(ex, "Unhandled exception - LSP server terminating");
             }
             catch { /* best-effort; never mask the original exception */ }
             throw;
