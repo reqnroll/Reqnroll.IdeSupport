@@ -16,8 +16,8 @@ public record LogMessage(
     string CallerMethod,
     Exception? Exception = default!)
 {
-    /// <summary>Gets the timestamp when the log entry was created.</summary>
-    public DateTimeOffset TimeStamp { get; } = DateTimeOffset.Now;
+    /// <summary>Gets the UTC timestamp when the log entry was created.</summary>
+    public DateTimeOffset TimeStamp { get; } = DateTimeOffset.UtcNow;
     /// <summary>Gets the managed thread ID that created the log entry.</summary>
     public int ManagedThreadId { get; } = Thread.CurrentThread.ManagedThreadId;
 }

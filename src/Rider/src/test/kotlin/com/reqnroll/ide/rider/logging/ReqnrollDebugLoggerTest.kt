@@ -1,10 +1,23 @@
 package com.reqnroll.ide.rider.logging
 
 import java.io.File
+import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ReqnrollDebugLoggerTest {
+    @Test
+    fun `formatTimestamp renders UTC with a Z suffix regardless of the JVM default timezone`() {
+        // Instant has no timezone of its own; formatTimestamp must render it in UTC even if the
+        // JVM's default timezone (java.util.TimeZone.getDefault) is something else entirely —
+        // otherwise a log collected from a machine in an unknown timezone couldn't be correlated
+        // with the UTC timestamps the LSP server and VS extension write (issue #625).
+        assertEquals(
+            "2026-09-06T14:02:11.123Z",
+            ReqnrollDebugLogger.formatTimestamp(Instant.parse("2026-09-06T14:02:11.123Z")),
+        )
+    }
+
     @Test
     fun `logDirectory uses LOCALAPPDATA on Windows`() {
         assertEquals(
