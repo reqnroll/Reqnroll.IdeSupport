@@ -10,7 +10,7 @@ panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 `````{tab-item} Visual Studio
 :sync: vs
 
-Place the cursor in (or right-click) the binding method in a `.cs` file,
+Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
 then either:
 
 - Right-click → **Find Step Usages** (in the code editor context menu,
@@ -33,7 +33,8 @@ to Reqnroll bindings — it only searches C# symbol references. Use
 ```{tab-item} VS Code
 :sync: vscode
 
-Place the cursor in the binding method in a `.cs` file, then either:
+Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
+then either:
 
 - Right-click → **Reqnroll: Find Step Usages**, or
 - Command Palette → **Reqnroll: Find Step Usages**.
@@ -47,7 +48,8 @@ step in its `.feature` file.
 ```{tab-item} Rider
 :sync: rider
 
-Place the cursor in the binding method in a `.cs` file, then either:
+Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
+then either:
 
 - Right-click → **Find Step Usages**, or
 - **Tools → Reqnroll → Find Step Usages**.
