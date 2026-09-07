@@ -147,9 +147,16 @@ interface LspEntry {
   type: LspMessageType;
   message: Record<string, unknown>;
   timestamp: number;
+  // Extended field (ignored by the tool, useful for grep) — round-trip ms on response entries,
+  // mirroring the VS extension's LspInspectorLogger.cs. There is no VS Code equivalent of that
+  // file's "traceId" field: it reads a top-level "traceparent" property that only Visual Studio's
+  // own Language Server Client platform ever stamps onto outgoing requests — nothing in
+  // vscode-languageclient or this extension's own code ever writes one, so there is nothing for
+  // this side to extract (issue #633).
+  latencyMs?: number;
 }
 
-type ParsedHead = { type: LspMessageType; method?: string; id?: string };
+type ParsedHead = { type: LspMessageType; method?: string; id?: string; latencyMs?: number };
 
 /**
  * Patterns for the summary line vscode-jsonrpc produces under TraceFormat.Text, tried in order
@@ -170,8 +177,8 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
     parse: (m) => ({ type: 'send-response', method: m[1], id: m[2] }),
   },
   {
-    regex: /^Received response '(.+?) - \((.+?)\)' in \d+ms\./,
-    parse: (m) => ({ type: 'receive-response', method: m[1], id: m[2] }),
+    regex: /^Received response '(.+?) - \((.+?)\)' in (\d+)ms\./,
+    parse: (m) => ({ type: 'receive-response', method: m[1], id: m[2], latencyMs: Number(m[3]) }),
   },
   {
     // "without active response promise" variant — no method available
@@ -251,7 +258,14 @@ export function parseLspTraceMessage(text: string): LspEntry | undefined {
   // where the raw JSON-RPC response always carries an explicit "result" field.
   if (isResponse && !hasResultOrError) rpcMsg['result'] = null;
 
-  return { isLSPMessage: true, type: head.type, message: rpcMsg, timestamp: Date.now() };
+  const entry: LspEntry = {
+    isLSPMessage: true,
+    type: head.type,
+    message: rpcMsg,
+    timestamp: Date.now(),
+  };
+  if (head.latencyMs !== undefined) entry.latencyMs = head.latencyMs;
+  return entry;
 }
 
 /**

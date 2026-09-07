@@ -18,11 +18,10 @@ import { parseLspTraceMessage } from '../../lsp/lspInspectorLogger';
  * shape changes.
  *
  * Deliberately excluded from the comparison: `timestamp` (wall-clock, inherently different per
- * run) and the "extended, ignored by the tool" `latencyMs`/`traceId` fields - which writing this
- * test incidentally confirmed this side never emits at all (no such fields in `LspEntry`), an
- * asymmetry between the two implementations' own bonus diagnostic value that doesn't violate the
- * external lsp-viewer contract (which ignores both fields) and is intentionally left alone here
- * rather than expanded into a feature addition.
+ * run) and `traceId` (issue #633 found this can't be ported here - see `LspEntry`'s doc comment
+ * in `lspInspectorLogger.ts`). `latencyMs` **is** compared below (added in #633): unlike `traceId`,
+ * the round-trip time is already present in vscode-languageclient's own response trace text, so
+ * this side only needed to start capturing it, not invent new tracking state.
  */
 suite('parseLspTraceMessage format conformance', () => {
   test('send-request matches the shared fixture', () => {
@@ -52,6 +51,17 @@ suite('parseLspTraceMessage format conformance', () => {
       id: 5,
       result: { items: [] },
     });
+    assert.strictEqual(entry.latencyMs, 12);
+  });
+
+  test('receive-response without an active response promise has no latencyMs', () => {
+    // No timing information is available in this vscode-jsonrpc trace variant (no matching
+    // request was tracked), so latencyMs must stay unset rather than default to 0 or NaN.
+    const entry = parseLspTraceMessage('Received response 7 without active response promise.');
+
+    assert.ok(entry);
+    assert.strictEqual(entry.type, 'receive-response');
+    assert.strictEqual(entry.latencyMs, undefined);
   });
 
   test('send-notification matches the shared fixture', () => {

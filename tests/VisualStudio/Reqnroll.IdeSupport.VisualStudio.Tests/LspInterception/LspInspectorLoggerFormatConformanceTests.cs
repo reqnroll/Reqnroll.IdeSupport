@@ -24,11 +24,13 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// </para>
 /// <para>
 /// Deliberately excluded from the comparison: <c>timestamp</c> (wall-clock, inherently different
-/// per run) and the "extended, ignored by the tool" <c>latencyMs</c>/<c>traceId</c> fields — which
-/// this test run incidentally discovered the VS Code side never emits at all (no <c>latencyMs</c>/
-/// <c>traceId</c> in its <c>LspEntry</c> interface), an asymmetry between the two implementations'
-/// own bonus diagnostic value that doesn't violate the external lsp-viewer contract (which ignores
-/// both fields) and is intentionally left alone here rather than expanded into a feature addition.
+/// per run) and <c>traceId</c> (issue #633 found this can't be ported to VS Code — it reads a
+/// <c>traceparent</c> property that nothing on the VS Code side ever writes). <c>latencyMs</c>
+/// <b>is</b> compared below (added to the VS Code side in #633): both implementations compute it
+/// from different sources — this class from actual wall-clock deltas between a tracked request and
+/// its matching response, the VS Code side by parsing the round-trip time vscode-languageclient's
+/// own trace text already reports — so the conformance test constructs a request/response pair
+/// with a controlled, known delta rather than comparing arbitrary real elapsed time.
 /// </para>
 /// </remarks>
 public class LspInspectorLoggerFormatConformanceTests : IDisposable
@@ -88,11 +90,51 @@ public class LspInspectorLoggerFormatConformanceTests : IDisposable
             .Should().BeTrue($"message was: {message}");
     }
 
+    [Fact]
+    public void Receive_response_latencyMs_matches_the_shared_fixture()
+    {
+        // Mirrors the VS Code fixture's "Received response '... - (5)' in 12ms." trace text:
+        // a controlled 12ms delta between the tracked request and this response, rather than
+        // real elapsed time, so both implementations' independently-computed latencyMs values
+        // can be compared against the same known number.
+        var sut = CreateSut();
+        var requestBody = JObject.Parse("""{"jsonrpc":"2.0","id":5,"method":"textDocument/completion"}""");
+        var startTime = DateTimeOffset.UtcNow;
+        sut.FormatEntry(new LspMessage(LspMessageDirection.Send, requestBody, startTime));
+
+        var responseBody = JObject.Parse("""{"jsonrpc":"2.0","id":5,"result":{"items":[]}}""");
+        var responseMsg = new LspMessage(LspMessageDirection.Receive, responseBody, startTime.AddMilliseconds(12));
+
+        var json = ParseFullEntry(sut.FormatEntry(responseMsg));
+
+        json["latencyMs"]!.Value<long>().Should().Be(12);
+    }
+
+    [Fact]
+    public void Receive_response_with_no_tracked_request_has_no_latencyMs()
+    {
+        // Mirrors the VS Code fixture's "without active response promise" case: no matching
+        // request was ever tracked, so latencyMs must be entirely absent rather than default to 0.
+        var sut = CreateSut();
+        var body = JObject.Parse("""{"jsonrpc":"2.0","id":7,"result":null}""");
+        var msg = new LspMessage(LspMessageDirection.Receive, body, DateTimeOffset.UtcNow);
+
+        var json = ParseFullEntry(sut.FormatEntry(msg));
+
+        json.ContainsKey("latencyMs").Should().BeFalse();
+    }
+
     /// <summary>Strips the <c>[LSP   - HH:mm:ss] </c> prefix and parses the remaining JSON, returning its <c>type</c> and <c>message</c> fields.</summary>
     private static (string type, JObject message) ParseEntry(string formattedEntry)
     {
-        var jsonStart = formattedEntry.IndexOf('{');
-        var json = JObject.Parse(formattedEntry.Substring(jsonStart).TrimEnd());
+        var json = ParseFullEntry(formattedEntry);
         return (json["type"]!.Value<string>()!, (JObject)json["message"]!);
+    }
+
+    /// <summary>Strips the <c>[LSP   - HH:mm:ss] </c> prefix and parses the remaining JSON into its full <see cref="JObject"/>.</summary>
+    private static JObject ParseFullEntry(string formattedEntry)
+    {
+        var jsonStart = formattedEntry.IndexOf('{');
+        return JObject.Parse(formattedEntry.Substring(jsonStart).TrimEnd());
     }
 }
