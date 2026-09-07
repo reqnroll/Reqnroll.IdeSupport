@@ -288,6 +288,19 @@ This is a separate log from the *server's* own `reqnroll-<ide>-*.log` (governed 
 `--log-level`, which `runIde` sets to `Verbose` automatically — see "Bundling the LSP
 server" above) — `ReqnrollDebugLogger` only covers the plugin's own client-side glue.
 
+**A third log, `reqnroll-lsp-connector-<yyyyMMdd>-<pid>.log`, comes from the out-of-process
+Connector** (the child process the server spawns per binding-discovery run) — and because
+`runIde`'s sandbox forces `--log-level Verbose`, **every discovery run in a dev sandbox writes one
+of these**, unlike a real installed plugin (`Warning` by default), which writes one only when a
+discovery run actually fails. This isn't a Rider-specific mechanism — it's the same
+buffer-until-`--log-level Info`-or-error behavior described in
+[../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch);
+listed here because `resolveLogLevel(isDevSandbox)`'s `Verbose` default (see "Known follow-ups"
+below) means Rider contributors see it far more often than VS/VS Code contributors at their own
+defaults. Don't confuse it with `ReqnrollDebugLogger`'s own `reqnroll-rider-ext-*.log` above — the
+`-lsp-connector-` file has nothing plugin-specific in it at all, and its filename doesn't carry an
+`ide` segment naming Rider, since the Connector doesn't know which IDE launched its parent server.
+
 ## Testing
 
 Pure-logic tests (no IntelliJ Platform fixture needed) are written — `kotlin("test-junit5")`
