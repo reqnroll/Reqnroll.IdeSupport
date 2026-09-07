@@ -73,7 +73,7 @@ public sealed class FormattingHandler
             startLine: null, endLine: null).ConfigureAwait(false);
 
         // Telemetry
-        _telemetryService?.SendEvent("AutoFormatDocument command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
         {
             ["IsSelectionFormatting"] = false,
         });
@@ -101,7 +101,7 @@ public sealed class FormattingHandler
             ?? new TextEditContainer();
 
         // Telemetry
-        _telemetryService?.SendEvent("AutoFormatDocument command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
         {
             ["IsSelectionFormatting"] = true,
         });

@@ -243,7 +243,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
             && RdtDocumentInitialization.IsActivationRelevant(moniker))
         {
             _logger.LogInfo(
-                $"DocumentInitializationMonitor: {moniker} — initialized at +{_sinceAdvise.ElapsedMilliseconds}ms.");
+                $"DocumentInitializationMonitor: {moniker} — initialized at +{DurationFormatter.FormatMilliseconds(_sinceAdvise.Elapsed)}.");
         }
 
         return VSConstants.S_OK;
@@ -320,7 +320,7 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
             _logger.LogVerbose(
                 $"DocumentInitializationMonitor: {moniker} — {what}" +
                 $"{(detail is null ? string.Empty : $" ({detail})")} " +
-                $"at +{_sinceAdvise.ElapsedMilliseconds}ms.");
+                $"at +{DurationFormatter.FormatMilliseconds(_sinceAdvise.Elapsed)}.");
         }
         catch (Exception ex)
         {

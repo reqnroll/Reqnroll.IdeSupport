@@ -62,7 +62,7 @@ public sealed class FindUnusedStepDefinitionsHandler
             RecordedSourceFile = u.RecordedSourceFile,
         }).ToList();
 
-        _telemetryService?.SendEvent("FindUnusedStepDefinitions command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.FindUnusedStepDefinitionsCommandExecuted, new()
         {
             ["UnusedStepDefinitions"] = items.Count,
             ["ScannedFeatureFiles"] = allRegistries.Count,

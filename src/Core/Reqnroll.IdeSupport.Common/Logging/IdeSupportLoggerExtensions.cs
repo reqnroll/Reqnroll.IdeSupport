@@ -76,7 +76,7 @@ public static class IdeSupportLoggerExtensions
         [CallerMemberName] string callerName = "???")
     {
         if (sw.ElapsedMilliseconds > 10)
-            Trace(logger, $"{sw.Elapsed} {message}", callerFilePath, callerLineNumber, callerName);
+            Trace(logger, $"{DurationFormatter.FormatMilliseconds(sw.Elapsed)} {message}", callerFilePath, callerLineNumber, callerName);
     }
 
     /// <summary>Logs a verbose trace message annotated with the caller's file path and line number.</summary>

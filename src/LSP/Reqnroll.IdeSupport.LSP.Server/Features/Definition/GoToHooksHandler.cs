@@ -118,7 +118,7 @@ public sealed class GoToHooksHandler
         }
 
         // Telemetry
-        _telemetryService?.SendEvent("GoToHook command executed", new());
+        _telemetryService?.SendEvent(TelemetryEvents.GoToHookCommandExecuted, new());
 
         return Task.FromResult(new GoToHooksResponse { Hooks = locations });
     }

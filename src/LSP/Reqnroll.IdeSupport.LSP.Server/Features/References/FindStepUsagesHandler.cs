@@ -116,7 +116,7 @@ public sealed class FindStepUsagesHandler
 
             _logger.LogVerbose(
                 $"FindStepUsagesHandler: binding at {filePath}:{line} has 0 usages");
-            _telemetryService?.SendEvent("FindStepDefinitionUsages command executed", new()
+            _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionUsagesCommandExecuted, new()
             {
                 ["UsagesCount"] = 0,
                 ["IsCancelled"] = cancellationToken.IsCancellationRequested,
@@ -133,7 +133,7 @@ public sealed class FindStepUsagesHandler
             .ToList();
 
         // Telemetry
-        _telemetryService?.SendEvent("FindStepDefinitionUsages command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionUsagesCommandExecuted, new()
         {
             ["UsagesCount"] = usages.Count,
             ["IsCancelled"] = cancellationToken.IsCancellationRequested,

@@ -55,7 +55,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
         {
             stopwatch.Stop();
             _logger.LogVerbose(
-                $"Parsed buffer v{fileSnapshot.Version} in {stopwatch.ElapsedMilliseconds}ms on thread {Thread.CurrentThread.ManagedThreadId}");
+                $"Parsed buffer v{fileSnapshot.Version} in {DurationFormatter.FormatMilliseconds(stopwatch.Elapsed)} on thread {Thread.CurrentThread.ManagedThreadId}");
         }
     }
 

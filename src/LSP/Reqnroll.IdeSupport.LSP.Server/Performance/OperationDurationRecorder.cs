@@ -56,7 +56,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         // ConcurrencyProbeTests for the empirical finding this was added to help confirm/quantify).
         _logger.LogVerbose(() =>
         {
-            var line = $"PERF op={operation} ms={elapsedMs:F1} thread={Environment.CurrentManagedThreadId}";
+            var line = $"PERF op={operation} ms={DurationFormatter.RoundMilliseconds(elapsedMs)} thread={Environment.CurrentManagedThreadId}";
             if (uri is not null) line += $" uri={uri}";
             if (!string.IsNullOrEmpty(detail)) line += $" {detail}";
             return line;
@@ -66,7 +66,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         // client opted into tracing via InitializeParams.Trace or $/setTrace). The URI only goes
         // into the verbose detail, matching the log line's own privacy posture.
         _trace?.Trace(
-            $"{operation}: {elapsedMs:F1}ms",
+            $"{operation}: {DurationFormatter.FormatMilliseconds(elapsedMs)}",
             uri is null ? null : () => uri.ToString());
 
         // Secondary sink: sampled telemetry metric — no URI/path (privacy).

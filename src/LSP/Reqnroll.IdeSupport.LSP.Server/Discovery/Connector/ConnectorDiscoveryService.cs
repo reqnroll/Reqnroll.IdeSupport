@@ -88,7 +88,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+            _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {ex.Message}");
             return (lastGood, lastHash);
         }
         sw.Stop();
@@ -99,13 +99,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
         if (result.IsFailed)
         {
-            _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {sw.ElapsedMilliseconds}ms: {result.ErrorMessage}");
+            _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {result.ErrorMessage}");
             return (lastGood, lastHash);
         }
 
         var registry = BuildRegistry(scope, result);
         _logger.LogInfo(
-            $"[{scope.ProjectName}] Discovery complete in {sw.ElapsedMilliseconds}ms: " +
+            $"[{scope.ProjectName}] Discovery complete in {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: " +
             $"{registry.StepDefinitions.Length} step definition(s), {registry.Hooks.Length} hook(s).");
         return (registry, currentHash);
     }
