@@ -151,6 +151,16 @@ Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--tra
 Changing `reqnroll.trace.server` requires a window reload to take effect on the already-running
 server (the `--log-level` it maps to is fixed at process launch).
 
+Since `reqnroll.trace.server` is the one setting driving the server's `--log-level`, it also
+decides whether the out-of-process **Connector** (the child process that runs reflection-based
+binding discovery) persists its own log file for a routine, successful run — there's no separate
+VS Code setting for it. At `messages` or `verbose` (→ `--log-level Info`/`Verbose`) every discovery
+run writes its own `reqnroll-lsp-connector-<date>-<pid>.log` alongside the server's file; at the
+default `off` (→ `Warning`) no Connector log is written at all unless a discovery run actually
+fails. See
+[../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
+for the full mechanism.
+
 **The Output panel can appear empty even with tracing on.** `reqnroll.trace.server: verbose`
 correctly drives `vscode-languageclient` to trace (`InitializeParams.Trace`/`$/setTrace` as
 above), but the **Reqnroll LSP Trace** channel is a `vscode.LogOutputChannel`, which has its own

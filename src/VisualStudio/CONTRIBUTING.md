@@ -52,21 +52,39 @@ The extension deploys into VS's **experimental instance** (a separate hive, e.g.
 Launch it via **Debug → Start New Instance** (or F5) from the Extension project — this starts a
 second `devenv.exe` with the extension loaded, isolated from your main VS install/extensions.
 
-Runtime logs land in `%LocalAppData%\Reqnroll\`:
+Runtime logs land in `%LocalAppData%\Reqnroll\`, one file per process (the PID in the filename is
+the writing process's own — see [../LSP/CONTRIBUTING.md#debugging](../LSP/CONTRIBUTING.md#debugging)
+for the full naming/format convention shared across every log in this family):
 
-- `reqnroll-vs-ext-debug-<date>.log` — the **extension's own** (client-side) log output.
-- `reqnroll-vs-server-debug-<date>.log` — the **LSP server's own** log output (parses, discovery,
-  handler activity). Appended across server process launches sharing a day, so multiple sessions'
-  entries can interleave in one file — check PIDs (`=== Reqnroll LSP Server started — …, PID N ===`)
-  when correlating.
+- `reqnroll-vs-ext-debug-<date>-<pid>.log` — the **extension's own** (client-side) log output.
+  **You will often see more than one of these for a single session with the same date** — this is
+  expected, not a bug. `Run CodeLens` (and the sibling Hook CodeLens) run out-of-process in VS's own
+  CodeLens ServiceHub host (`RunTestCodeLensDataPointProvider` and friends, issue #372), a different
+  PID than `devenv.exe`, and deliberately log to their own standalone file rather than the shared
+  `IIdeSupportLogger` sink, since they can't reach it across the process boundary. Match the PID in
+  the filename against `tasklist`/Task Manager (`ServiceHub.Host.*.exe` vs. `devenv.exe`) if you need
+  to tell them apart.
+- `reqnroll-vs-server-debug-<date>-<pid>.log` — the **LSP server's own** log output (parses,
+  discovery, handler activity), at the level set by `--log-level` (see below). Appended across
+  server process launches sharing a day and PID is generally stable per VS session, but check the
+  `=== Reqnroll LSP Server started — …, PID N ===` banner line when correlating multiple restarts.
 - `reqnroll-vs-inspector-<datetime>.log` — client-side JSON-RPC trace from `LspInspectorLogger` on
   the `LspInterceptingPipe`, one line per message. This is the source of truth for what actually
   crossed the wire (legend negotiation, semanticTokens requests/responses, custom `reqnroll/*`
   traffic) — [lsp-inspector-tool](https://github.com/microsoft/lsp-inspector) compatible format.
+- `reqnroll-lsp-connector-<date>-<pid>.log` — the **out-of-process Connector's** own log, one file
+  per discovery-run child process. Unlike the logs above, this one usually doesn't exist: it's
+  buffered in memory and only written when a discovery run actually fails, or when `--log-level` is
+  raised to `Info`+ (see [../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
+  for the full mechanism). At the DEBUG-configuration/`--log-level Verbose` default below, it *will*
+  be written for every discovery run — don't be surprised to see one per project per session while
+  F5-debugging the extension.
 
 When debugging coloring/binding/CodeLens behavior, the ext-debug and server-debug logs together
 usually tell the whole story; the inspector log is what to reach for when you suspect a protocol
-mismatch specifically.
+mismatch specifically, and the connector log (when present) is the first place to look for a
+discovery-specific failure — its "Discovery complete"/"Discovery failed" line in the server log
+carries a `(connector pid=N)` suffix matching that file's own PID.
 
 ### Server log-level and trace defaults
 
