@@ -64,7 +64,7 @@ public class SynchronousFileLoggerTests : IDisposable
                 nameof(Logged_line_timestamp_is_UTC_ISO8601_with_a_Z_suffix)));
 
             var line = File.ReadAllText(logger.LogFilePath);
-            Regex.Match(line, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z,").Success.Should().BeTrue(
+            Regex.Match(line, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \[").Success.Should().BeTrue(
                 $"line should start with a UTC ISO-8601 timestamp ending in 'Z' but was: {line}");
         }
         finally
@@ -240,7 +240,7 @@ public class SynchronousFileLoggerTests : IDisposable
 
             var seenTags = new HashSet<(int threadIndex, int index)>();
             var lineFormat = new Regex(
-                @"^\S+, Verbose@\d+, Concurrent_writers_never_interleave_or_tear_lines: thread=(\d+) index=(\d+) x+$");
+                @"^\S+ \[Verbose\] Concurrent_writers_never_interleave_or_tear_lines \(tid=\d+\): thread=(\d+) index=(\d+) x+$");
             foreach (var line in lines)
             {
                 var match = lineFormat.Match(line);

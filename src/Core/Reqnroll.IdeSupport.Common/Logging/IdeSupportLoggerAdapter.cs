@@ -38,13 +38,16 @@ public static class IdeSupportLogLevelConverter
 /// <summary>Adapts a single <see cref="Microsoft.Extensions.Logging"/> category onto an <see cref="IIdeSupportLogger"/> sink.</summary>
 public sealed class IdeSupportLoggerAdapter : ILogger
 {
-    private readonly string _categoryName;
+    private readonly string _shortCategoryName;
     private readonly IIdeSupportLogger _logger;
 
     /// <summary>Initializes a new instance of the <see cref="IdeSupportLoggerAdapter"/> class.</summary>
     public IdeSupportLoggerAdapter(string categoryName, IIdeSupportLogger logger)
     {
-        _categoryName = categoryName;
+        // Shortened to the simple type name (issue #626): categoryName is usually a
+        // fully-qualified name (e.g. from ILogger<T>), and the direct IIdeSupportLogger call
+        // sites already render just a short source name, not a namespace-qualified one.
+        _shortCategoryName = ShortenCategoryName(categoryName);
         _logger = logger;
     }
 
@@ -55,8 +58,16 @@ public sealed class IdeSupportLoggerAdapter : ILogger
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
+        // No method-name equivalent is available through ILogger - CallerMethod is left empty so
+        // LogLineFormatter renders the category alone rather than "Category." with nothing after it.
         _logger.Log(new LogMessage(IdeSupportLogLevelConverter.ToTraceLevel(logLevel), formatter(state, exception),
-            _categoryName, exception));
+            CallerMethod: string.Empty, exception, Source: _shortCategoryName));
+    }
+
+    private static string ShortenCategoryName(string categoryName)
+    {
+        var lastDot = categoryName.LastIndexOf('.');
+        return lastDot >= 0 && lastDot < categoryName.Length - 1 ? categoryName.Substring(lastDot + 1) : categoryName;
     }
 
     /// <summary>Begins a logical operation scope.</summary>

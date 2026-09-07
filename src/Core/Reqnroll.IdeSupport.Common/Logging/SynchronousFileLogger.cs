@@ -88,8 +88,7 @@ public class SynchronousFileLogger : IIdeSupportLogger
         // Indent continuation lines so multi-line messages (e.g. connector JSON, stack traces)
         // remain visually grouped without losing the structured prefix on the first line.
         var body = message.Message.Replace("\r\n", "\n").Replace("\n", "\n    ");
-        var content =
-            $"{message.TimeStamp:yyyy-MM-dd'T'HH:mm:ss.fff'Z'}, {message.Level}@{message.ManagedThreadId}, {message.CallerMethod}: {body}";
+        var content = $"{LogLineFormatter.FormatPreamble(message)}: {body}";
         if (message.Exception != null) content += $"\n    : {message.Exception}".Replace("\n", "\n    ");
         content += Environment.NewLine;
 

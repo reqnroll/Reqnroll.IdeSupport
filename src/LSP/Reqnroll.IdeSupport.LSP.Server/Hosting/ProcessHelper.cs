@@ -1,6 +1,7 @@
 #nullable disable
 
 using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Logging;
 using System.Text.RegularExpressions;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
@@ -12,14 +13,20 @@ public static class ProcessHelper
 
     /// <summary>Starts the given executable with the supplied arguments and waits for it to exit, capturing its output.</summary>
     /// <param name="throwException">When true, exceptions from starting or running the process are rethrown instead of being captured in the result.</param>
+    /// <param name="logger">
+    /// Optional sink for best-effort failures that don't affect the returned result (e.g. a failed
+    /// attempt to kill an already-timed-out process) — falls back to <see cref="Debug.WriteLine(object)"/>
+    /// when omitted, which is invisible outside a debugger and left no trace at all before (issue #626).
+    /// </param>
     /// <returns>The captured exit code, standard output, and standard error, or a failure result if <paramref name="throwException"/> is false and an error occurred.</returns>
     public static RunProcessResult RunProcess(string workingDirectory, string executablePath,
-        IEnumerable<string> arguments, TimeSpan? timeout = null, bool throwException = false, Encoding encoding = null)
+        IEnumerable<string> arguments, TimeSpan? timeout = null, bool throwException = false, Encoding encoding = null,
+        IIdeSupportLogger logger = null)
     {
         var parameters = string.Join(" ", arguments.Select(GetSafeArgument));
         try
         {
-            return RunProcessInternal(workingDirectory, executablePath, parameters, timeout, encoding);
+            return RunProcessInternal(workingDirectory, executablePath, parameters, timeout, encoding, logger);
         }
         catch (Exception ex)
         {
@@ -31,7 +38,7 @@ public static class ProcessHelper
     }
 
     private static RunProcessResult RunProcessInternal(string workingDirectory, string executablePath,
-        string parameters, TimeSpan? timeout = null, Encoding encoding = null)
+        string parameters, TimeSpan? timeout, Encoding encoding, IIdeSupportLogger logger)
     {
         timeout = timeout ?? DefaultTimeout;
 
@@ -71,7 +78,7 @@ public static class ProcessHelper
         var consoleOutBuilder = new StringBuilder();
         var consoleErrorBuilder = new StringBuilder();
 
-        using (var outputCollector = new ProcessOutputCollector(process, consoleOutBuilder, consoleErrorBuilder))
+        using (var outputCollector = new ProcessOutputCollector(process, consoleOutBuilder, consoleErrorBuilder, logger))
         {
             if (!process.Start())
                 throw new InvalidOperationException("Could not start process");
@@ -144,11 +151,13 @@ public static class ProcessHelper
     private class ProcessOutputCollector : IDisposable
     {
         private readonly Process _process;
+        private readonly IIdeSupportLogger _logger;
 
         public ProcessOutputCollector(Process process, StringBuilder consoleOutBuilder,
-            StringBuilder consoleErrorBuilder)
+            StringBuilder consoleErrorBuilder, IIdeSupportLogger logger)
         {
             _process = process;
+            _logger = logger;
             ConsoleOutBuilder = consoleOutBuilder;
             ConsoleErrorBuilder = consoleErrorBuilder;
             OutputWaitHandle = new AutoResetEvent(false);
@@ -200,7 +209,10 @@ public static class ProcessHelper
             }
             catch (Exception ex)
             {
-                Debug.WriteLine(ex);
+                if (_logger != null)
+                    _logger.LogWarning($"Failed to kill timed-out process: {ex.Message}");
+                else
+                    Debug.WriteLine(ex);
             }
         }
     }

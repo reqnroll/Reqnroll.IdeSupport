@@ -32,6 +32,8 @@ import './commands/commentToggle.test';
 import './util/selectionUtils.test';
 import './util/navigationUtils.test';
 import './grammar.test';
+import './logging/logPaths.test';
+import './logging/generalFileLog.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.
