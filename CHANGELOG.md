@@ -16,6 +16,7 @@
 * Telemetry event names sent by the LSP server are now defined in one catalog instead of as literals scattered across each call site; the `"Reqnroll Discovery executed"` and bare `"Error"` events are renamed to `"ReqnrollDiscoveryExecuted"` and `"UnhandledException"` respectively to match the naming convention every other event already followed (**note for anyone with saved Application Insights queries/dashboards**: update references to those two event names) - see #627
 * Logged operation durations are now consistently whole milliseconds, rounded rather than truncated, across the LSP server's discovery/parse/perf logging and the VS extension's document-initialization logging - previously these varied between tenths-of-a-millisecond, truncated whole milliseconds, and a full `TimeSpan` string depending on which code logged them (LSP server, VS) - see #627
 * The Connector (the out-of-process worker the LSP server launches to run binding discovery) now writes its own log file alongside the console output the server captures, so a Connector crash leaves a durable artifact even if the server's own capture missed it; the LSP server's unhandled-exception crash dump now reuses the same file-naming/format conventions as every other log in the family instead of its own one-off filename and a raw, unformatted exception dump (LSP server) - see #628
+* The VS Code LSP Inspector log now records each response's round-trip latency (`latencyMs`), matching the VS extension's equivalent log - previously only VS recorded it (VS Code) - see #633
 
 ## Bug fixes:
 
