@@ -175,13 +175,22 @@ see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md) and
 ## Debugging
 
 Runtime logs land in `%LocalAppData%\Reqnroll\` (Windows) / `~/.local/share/Reqnroll/`
-(macOS/Linux), pruned after 10 days (`ReqnrollLogPaths`/`ConnectorLogPaths`). Every log line
-across every one of these files shares one canonical preamble — UTC timestamp, level, origin,
-thread id (`LogLineFormatter.FormatPreamble`) — so entries from different files/processes can be
-correlated by timestamp alone:
+(macOS/Linux), pruned after 10 days (`ReqnrollLogPaths`/`ConnectorLogPaths`). Every .NET-side log
+file (server, Connector, VS/VS Code file sinks) shares one canonical preamble — UTC timestamp,
+level, origin, thread id (`LogLineFormatter.FormatPreamble`) — so entries from different
+files/processes can be correlated by timestamp alone:
 
 ```
 2026-09-07T14:13:02.891Z [Info   ] ConnectorDiscoveryService.RunDiscovery (tid=17): [DemoProjectWithExternalAssembly] Discovery complete in 566ms (connector pid=36644): 7 step definition(s), 0 hook(s).
+```
+
+Rider's `reqnroll-rider-ext-*.log` is the one exception: `ReqnrollDebugLogger.kt` deliberately omits
+the origin/tid segment (Kotlin has no `[CallerFilePath]` equivalent, and tid isn't meaningful for a
+mostly-single-threaded plugin glue log — see that file's own doc comment) — timestamp and level
+still match, just without the trailing `origin (tid=n):` part:
+
+```
+2026-09-07T14:45:48.580Z [Warning] ReqnrollRequestSender: no Reqnroll LSP server running
 ```
 
 File names follow `reqnroll-{ide}-{role}[-debug]-{yyyyMMdd}-{pid}.log` — the PID (of the process
