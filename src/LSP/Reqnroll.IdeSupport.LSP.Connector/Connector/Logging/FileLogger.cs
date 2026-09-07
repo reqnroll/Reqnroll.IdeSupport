@@ -23,8 +23,9 @@ namespace ReqnrollConnector.Logging;
 /// <para>
 /// So: every line is always buffered in memory (cheap — a discovery run's own trace is at most a
 /// few hundred short lines), but nothing touches disk until either <paramref name="alwaysWrite"/>
-/// was requested at construction (the Connector's existing <c>--debug</c> flag, already the
-/// established "give me more diagnostics" lever in this codebase — see <c>Program.cs</c>), or a
+/// was requested at construction (<c>--file-log</c>, which <c>OutProcReqnrollConnector</c> adds
+/// whenever the server's own <c>--log-level</c> is Info or more verbose — see <c>Program.cs</c> for
+/// why that's a separate flag from the pre-existing <c>--debug</c>, not the same one), or a
 /// <see cref="LogLevel.Error"/> entry is logged, at which point the whole buffer (everything logged
 /// so far, giving the context leading up to the error, not just the error line itself) is flushed
 /// and every subsequent line is written live. A run that never logs an error and wasn't asked to
@@ -65,11 +66,11 @@ public sealed class FileLogger : ILogger
     public string? LogFilePath { get; private set; }
 
     /// <param name="alwaysWrite">
-    /// When <see langword="true"/> (the Connector's <c>--debug</c> flag), every line is written to
-    /// the file immediately as it's logged, matching this class's original always-on behavior.
-    /// When <see langword="false"/> (the default), lines are buffered in memory and the file is
-    /// only created — and the buffer flushed to it — once a <see cref="LogLevel.Error"/> entry
-    /// occurs.
+    /// When <see langword="true"/> (<c>--file-log</c>, or <c>--debug</c> — see <c>Program.cs</c>),
+    /// every line is written to the file immediately as it's logged, matching this class's original
+    /// always-on behavior. When <see langword="false"/> (the default), lines are buffered in memory
+    /// and the file is only created — and the buffer flushed to it — once a
+    /// <see cref="LogLevel.Error"/> entry occurs.
     /// </param>
     public FileLogger(bool alwaysWrite, string ide = "lsp", string role = "connector")
     {
