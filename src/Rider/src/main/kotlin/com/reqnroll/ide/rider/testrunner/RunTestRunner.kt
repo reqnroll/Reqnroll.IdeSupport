@@ -6,11 +6,11 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.jetbrains.rider.model.RunnableProject
 import com.jetbrains.rider.model.runnableProjectsModel
 import com.jetbrains.rider.projectView.solution
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
 import java.io.File
 import java.nio.file.Files
@@ -31,7 +31,7 @@ object RunTestRunner {
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Reqnroll: Running Test", true) {
             override fun run(indicator: ProgressIndicator) {
-                val filePath = VirtualFileManager.getInstance().findFileByUrl(uri)?.path
+                val filePath = lspUriToLocalPath(uri)
                 if (filePath == null) {
                     notifyError(project, "Could not resolve a local path for $uri.")
                     return

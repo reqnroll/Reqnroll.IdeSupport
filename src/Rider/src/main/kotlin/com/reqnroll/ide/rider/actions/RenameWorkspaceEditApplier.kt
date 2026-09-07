@@ -4,8 +4,9 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.WorkspaceEdit
 
@@ -36,7 +37,8 @@ object RenameWorkspaceEditApplier {
 
     /** `internal` so callers (e.g. [RenameStepRunner]) can capture/compare a document's [Document.modificationStamp] around a request, without duplicating this URI-to-Document lookup. */
     internal fun documentForUri(uri: String): Document? {
-        val file = VirtualFileManager.getInstance().findFileByUrl(uri) ?: return null
+        val path = lspUriToLocalPath(uri) ?: return null
+        val file = LocalFileSystem.getInstance().refreshAndFindFileByPath(path) ?: return null
         return FileDocumentManager.getInstance().getDocument(file)
     }
 
