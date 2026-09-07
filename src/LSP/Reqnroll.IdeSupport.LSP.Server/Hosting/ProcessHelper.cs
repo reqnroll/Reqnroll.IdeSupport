@@ -95,7 +95,7 @@ public static class ProcessHelper
         }
 
         return new RunProcessResult(process.ExitCode, consoleOutBuilder.ToString(), consoleErrorBuilder.ToString(),
-            psi.FileName, psi.Arguments, psi.WorkingDirectory);
+            psi.FileName, psi.Arguments, psi.WorkingDirectory, process.Id);
     }
 
     private static string GetSafeArgument(string arg)
@@ -117,7 +117,7 @@ public static class ProcessHelper
     {
         /// <summary>Creates a result describing how a process invocation completed.</summary>
         public RunProcessResult(int exitCode, string standardOut, string standardError, string executablePath,
-            string arguments, string workingDirectory)
+            string arguments, string workingDirectory, int? processId = null)
         {
             ExitCode = exitCode;
             StandardOut = standardOut ?? "";
@@ -125,10 +125,17 @@ public static class ProcessHelper
             ExecutablePath = executablePath;
             Arguments = arguments;
             WorkingDirectory = workingDirectory;
+            ProcessId = processId;
         }
 
         /// <summary>The process's exit code.</summary>
         public int ExitCode { get; }
+        /// <summary>
+        /// The OS process ID the executable ran under, or <see langword="null"/> if the process
+        /// never started (issue #637) — e.g. lets a caller point a reader at the matching
+        /// <c>reqnroll-*-connector-*-{pid}.log</c> file for a Connector invocation.
+        /// </summary>
+        public int? ProcessId { get; }
         /// <summary>Everything the process wrote to standard output.</summary>
         public string StandardOut { get; }
         /// <summary>Everything the process wrote to standard error.</summary>

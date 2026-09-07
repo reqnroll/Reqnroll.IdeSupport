@@ -115,6 +115,49 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         _factory.Received(1).Create(scope);
     }
 
+    // ── Connector PID correlation (issue #637) ─────────────────────────────────
+
+    [Fact]
+    public void RunDiscovery_includes_the_connector_pid_in_the_completion_log_line_when_known()
+    {
+        var result = SuccessfulResult();
+        result.ConnectorProcessId = 12345;
+        GivenConnectorReturns(result);
+        var scope = MakeScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Message.Contains("Discovery complete") && m.Message.Contains("connector pid=12345")));
+    }
+
+    [Fact]
+    public void RunDiscovery_omits_the_pid_suffix_when_connector_process_id_is_unknown()
+    {
+        var result = SuccessfulResult();
+        result.ConnectorProcessId = null;
+        GivenConnectorReturns(result);
+        var scope = MakeScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Message.Contains("Discovery complete") && !m.Message.Contains("connector pid=")));
+    }
+
+    [Fact]
+    public void RunDiscovery_includes_the_connector_pid_in_the_failure_log_line_when_known()
+    {
+        var result = new DiscoveryResult { ErrorMessage = "boom", ConnectorProcessId = 999 };
+        GivenConnectorReturns(result);
+        var scope = MakeScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Message.Contains("Discovery failed") && m.Message.Contains("connector pid=999")));
+    }
+
     // ── Hash guard ──────────────────────────────────────────────────────────────
 
     [Fact]

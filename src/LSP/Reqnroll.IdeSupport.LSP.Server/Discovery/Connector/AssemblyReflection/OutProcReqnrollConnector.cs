@@ -118,6 +118,7 @@ public abstract class OutProcReqnrollConnector
         }
 
         discoveryResult.ConnectorType = GetConnectorType();
+        discoveryResult.ConnectorProcessId = result.ProcessId;
         return discoveryResult;
     }
 
