@@ -32,7 +32,6 @@ public class SynchronousFileLogger : IIdeSupportLogger
         Level = ApplyDebugEnvironmentOverride(level);
         LogFilePath = GetLogFile(ide, role);
         EnsureLogFolder();
-        DeleteOldLogFiles();
     }
 
     /// <summary>Gets the log file path.</summary>
@@ -71,14 +70,15 @@ public class SynchronousFileLogger : IIdeSupportLogger
     internal static string GetLogFile(string ide, string role)
     {
         // PID is included so that concurrent instances (e.g. two VS windows, each with its own
-        // extension host and LSP server process) never append to the same log file.
+        // extension host and LSP server process) never append to the same log file. The date is
+        // always the UTC date (previously DEBUG builds used UtcNow but RELEASE builds used the
+        // local date, so the daily rollover boundary silently differed between configurations).
         var pid = Process.GetCurrentProcess().Id;
-        return Path.Combine(Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData), "Reqnroll",
+        return Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(),
 #if DEBUG
             $"reqnroll-{ide}-{role}-debug-{DateTime.UtcNow:yyyyMMdd}-{pid}.log");
 #else
-            $"reqnroll-{ide}-{role}-{DateTime.Now:yyyyMMdd}-{pid}.log");
+            $"reqnroll-{ide}-{role}-{DateTime.UtcNow:yyyyMMdd}-{pid}.log");
 #endif
     }
 
@@ -89,7 +89,7 @@ public class SynchronousFileLogger : IIdeSupportLogger
         // remain visually grouped without losing the structured prefix on the first line.
         var body = message.Message.Replace("\r\n", "\n").Replace("\n", "\n    ");
         var content =
-            $"{message.TimeStamp:yyyy-MM-ddTHH\\:mm\\:ss.fffzzz}, {message.Level}@{message.ManagedThreadId}, {message.CallerMethod}: {body}";
+            $"{message.TimeStamp:yyyy-MM-dd'T'HH:mm:ss.fff'Z'}, {message.Level}@{message.ManagedThreadId}, {message.CallerMethod}: {body}";
         if (message.Exception != null) content += $"\n    : {message.Exception}".Replace("\n", "\n    ");
         content += Environment.NewLine;
 
@@ -106,28 +106,5 @@ public class SynchronousFileLogger : IIdeSupportLogger
         var logFolder = Path.GetDirectoryName(LogFilePath);
         if (!_fileSystem.Directory.Exists(logFolder))
             _fileSystem.Directory.CreateDirectory(logFolder);
-    }
-
-    private void DeleteOldLogFiles()
-    {
-        try
-        {
-            var logFolder = Path.GetDirectoryName(LogFilePath);
-            if (!Directory.Exists(logFolder))
-                return;
-
-            var logFiles = Directory.GetFiles(logFolder, "reqnroll-*.log");
-
-            foreach (string logFile in logFiles)
-            {
-                FileInfo fi = new FileInfo(logFile);
-                if (fi.LastWriteTime < DateTime.UtcNow.AddDays(-10))
-                    fi.Delete();
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine(ex, "Error deleting log files");
-        }
     }
 }

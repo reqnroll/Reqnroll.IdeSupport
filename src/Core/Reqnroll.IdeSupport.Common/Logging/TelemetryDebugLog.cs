@@ -46,13 +46,13 @@ public static class TelemetryDebugLog
     }
 
     /// <summary>
-    /// <c>%LOCALAPPDATA%\Reqnroll\reqnroll-telemetry-{yyyyMMdd}.jsonl</c> — a sibling of the
-    /// existing diagnostic logs written by <see cref="SynchronousFileLogger"/>.
+    /// <c>&lt;Reqnroll log dir&gt;\reqnroll-telemetry-{yyyyMMdd}.jsonl</c> (UTC date) — a sibling
+    /// of the existing diagnostic logs written by <see cref="SynchronousFileLogger"/>, in the same
+    /// <see cref="ReqnrollLogPaths.ResolveLogDirectory"/> directory.
     /// </summary>
     public static string DefaultPath()
         => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Reqnroll",
+            ReqnrollLogPaths.ResolveLogDirectory(),
             $"reqnroll-telemetry-{DateTime.UtcNow:yyyyMMdd}.jsonl");
 }
 

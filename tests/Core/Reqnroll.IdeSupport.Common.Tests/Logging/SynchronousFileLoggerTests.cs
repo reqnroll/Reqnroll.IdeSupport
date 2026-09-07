@@ -37,6 +37,43 @@ public class SynchronousFileLoggerTests : IDisposable
     }
 
     [Fact]
+    public void LogFilePath_date_segment_is_todays_UTC_date()
+    {
+        // Regression test: the DEBUG build used to stamp the filename with DateTime.UtcNow while
+        // RELEASE used local DateTime.Now, so the two configurations rolled the file over at a
+        // different moment each day. Both must now agree on the UTC date (issue #625).
+        var logger = new SynchronousFileLogger("test", $"utcdate-{Guid.NewGuid():N}");
+        try
+        {
+            logger.LogFilePath.Should().Contain($"-{DateTime.UtcNow:yyyyMMdd}-",
+                "the log file name must roll over at UTC midnight regardless of build configuration");
+        }
+        finally
+        {
+            DeleteLogFile(logger);
+        }
+    }
+
+    [Fact]
+    public void Logged_line_timestamp_is_UTC_ISO8601_with_a_Z_suffix()
+    {
+        var logger = new SynchronousFileLogger("test", $"utcline-{Guid.NewGuid():N}", TraceLevel.Info);
+        try
+        {
+            logger.Log(new LogMessage(TraceLevel.Info, "hello",
+                nameof(Logged_line_timestamp_is_UTC_ISO8601_with_a_Z_suffix)));
+
+            var line = File.ReadAllText(logger.LogFilePath);
+            Regex.Match(line, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z,").Success.Should().BeTrue(
+                $"line should start with a UTC ISO-8601 timestamp ending in 'Z' but was: {line}");
+        }
+        finally
+        {
+            DeleteLogFile(logger);
+        }
+    }
+
+    [Fact]
     public void Default_level_is_Warning()
     {
         var logger = new SynchronousFileLogger("test", $"default-{Guid.NewGuid():N}");

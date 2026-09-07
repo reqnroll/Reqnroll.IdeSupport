@@ -106,9 +106,7 @@ public class Program
         {
             try
             {
-                var logDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Reqnroll");
+                var logDir = ReqnrollLogPaths.ResolveLogDirectory();
                 Directory.CreateDirectory(logDir);
                 var idePrefix = ideId switch
                 {
@@ -117,7 +115,7 @@ public class Program
                     _              => "lsp",
                 };
                 var logPath = Path.Combine(logDir,
-                    $"reqnroll-{idePrefix}-crash-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+                    $"reqnroll-{idePrefix}-crash-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
                 File.WriteAllText(logPath, ex.ToString());
             }
             catch { /* best-effort; never mask the original exception */ }
