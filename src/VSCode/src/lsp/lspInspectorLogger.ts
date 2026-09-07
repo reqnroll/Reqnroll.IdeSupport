@@ -196,7 +196,10 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
  * 'method - (id)'.") and optionally a body ("Params: {...}").  vscode-languageclient
  * joins them with \n before calling channel.trace(), so we receive the combined text.
  */
-function parseLspTraceMessage(text: string): LspEntry | undefined {
+// Exported for lspInspectorFormatConformance.test.ts (issue #628) - not used outside this module
+// in production, but the cross-language wire-format check needs direct access to the parsed
+// envelope rather than going through the full TeeLogOutputChannel/file-write path.
+export function parseLspTraceMessage(text: string): LspEntry | undefined {
   const nl = text.indexOf('\n');
   const firstLine = nl >= 0 ? text.slice(0, nl) : text;
   const bodyStr = nl >= 0 ? text.slice(nl + 1) : '';
