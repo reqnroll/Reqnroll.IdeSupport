@@ -37,6 +37,7 @@
 * Fixed the connector discovery scheduler occasionally throwing when a project was unloaded (or the server shut down) while a discovery run was still debouncing - it read the just-scheduled run's cancellation token after publishing it, which a concurrent teardown could dispose first (LSP server) - see #568
 * Fixed the lightbulb offering to "define" a step consisting of only a keyword with no step text (e.g. a lone `Given`) - there is no text to build a skeleton binding method from, so this quick fix is no longer offered for a step whose text is empty or all whitespace (LSP server) - see #622
 * Fixed Find Step Usages doing nothing at all, with no message, when invoked with the caret inside a binding method's body instead of on its attribute or signature line - it now shows the same "the caret is not on a step definition binding" status message VS Code and Rider already show for this case (VS) - see #424
+* Fixed Find Step Usages, the Run lens, and Rename Step edit application silently doing nothing for a feature file whose name needs percent-encoding in its LSP URI (e.g. contains a space) - the URI-to-`VirtualFile` lookup was passed the raw encoded URI instead of decoding it first, which only IntelliJ's VFS url format (unlike LSP's) expects (Rider) - see #640
 
 *Contributors of this release (in alphabetical order):*
 
