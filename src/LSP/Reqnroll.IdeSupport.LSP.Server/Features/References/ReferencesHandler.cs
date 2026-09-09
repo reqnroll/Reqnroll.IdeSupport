@@ -9,7 +9,6 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 
@@ -23,14 +22,15 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 /// </summary>
 /// <remarks>
 /// Primary-owner resolution / shared-feature scoping 2B: the scope is restricted to the
-/// projects that own the queried <c>.cs</c> file.
-/// This prevents cross-project bleed when two projects have step definitions at the same
-/// source location (same file name + line in a shared binding class).
+/// projects that own the queried <c>.cs</c> file, widened per
+/// <see cref="IProjectBindingRegistryLookup.ResolveUsageSearchScope"/> to any other project that
+/// independently reports one of this file's bindings via a real project reference (issue #548).
+/// This still prevents cross-project bleed when two unrelated projects have step definitions at
+/// the same source location (same file name + line in a shared binding class).
 /// </remarks>
 public sealed class ReferencesHandler
 {
     private readonly IBindingMatchService         _matchService;
-    private readonly ILspWorkspaceScopeManager    _scopeManager;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
@@ -38,13 +38,11 @@ public sealed class ReferencesHandler
     /// <summary>Initializes a new instance of the <see cref="ReferencesHandler"/> class.</summary>
     public ReferencesHandler(
         IBindingMatchService          matchService,
-        ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
         IIdeSupportLogger               logger,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
-        _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
         _logger         = logger;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
@@ -75,15 +73,10 @@ public sealed class ReferencesHandler
         var column = request.Position.Character + 1;
         var bindingLocation = new SourceLocation(filePath, line, column);
 
-        // Primary-owner resolution / shared-feature scoping 2B: restrict search to the projects
-        // that own this .cs file.
-        // ResolveOwners returns an empty list only when no project claims the file; in that
-        // case pass null to FindUsages so it searches all cached match sets (backward compat).
-        var owners = _scopeManager.ResolveOwners(uri);
-        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
-            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker))
-                    .ToArray()
-            : null;
+        // Primary-owner resolution / shared-feature scoping 2B, widened to any other project
+        // whose own registry independently reports one of this file's bindings (issue #548) --
+        // see IProjectBindingRegistryLookup.ResolveUsageSearchScope's remarks.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
         var usages = _matchService.FindUsages(bindingLocation, projectFilter);
 

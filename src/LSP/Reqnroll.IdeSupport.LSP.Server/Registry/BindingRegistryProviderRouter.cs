@@ -2,6 +2,7 @@ using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -128,6 +129,67 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
             }
         }
         return false;
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<ProjectOwner>? ResolveUsageSearchScope(DocumentUri csUri)
+    {
+        var directOwners = _scopeManager.ResolveOwners(csUri);
+        if (directOwners.Count == 0)
+            return null;
+
+        var expanded = new HashSet<ProjectOwner>(
+            directOwners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)));
+
+        var filePath = csUri.GetFileSystemPath();
+        if (string.IsNullOrEmpty(filePath))
+            return expanded;
+
+        var fileBindingIds = CollectFileBindingIds(GetRegistryForUri(csUri), filePath);
+        if (fileBindingIds.Count == 0)
+            return expanded;
+
+        foreach (var (_, owner, registry) in GetAllRegistries())
+        {
+            if (expanded.Contains(owner)) continue;
+            if (registry == ProjectBindingRegistry.Invalid) continue;
+
+            var reportsAny = false;
+            foreach (var sd in registry.StepDefinitions)
+            {
+                if (!sd.IsValid) continue;
+                var sdSrc = sd.Implementation?.SourceLocation;
+                if (sdSrc is null || !PathUtils.IsSamePath(sdSrc.SourceFile, filePath)) continue;
+                if (fileBindingIds.Contains(BindingId.For(sd)))
+                {
+                    reportsAny = true;
+                    break;
+                }
+            }
+            if (reportsAny)
+                expanded.Add(owner);
+        }
+
+        return expanded;
+    }
+
+    /// <summary>Collects the <see cref="BindingId"/> of every valid step definition <paramref name="registry"/> reports for <paramref name="filePath"/>.</summary>
+    private static HashSet<BindingId> CollectFileBindingIds(ProjectBindingRegistry registry, string filePath)
+    {
+        var ids = new HashSet<BindingId>();
+        if (registry == ProjectBindingRegistry.Invalid)
+            return ids;
+
+        foreach (var binding in registry.StepDefinitions)
+        {
+            if (!binding.IsValid) continue;
+            var src = binding.Implementation?.SourceLocation;
+            if (src is null || string.IsNullOrEmpty(src.SourceFile)) continue;
+            if (!PathUtils.IsSamePath(src.SourceFile, filePath)) continue;
+
+            ids.Add(BindingId.For(binding));
+        }
+        return ids;
     }
 
     // ── IDisposable ───────────────────────────────────────────────────────────
