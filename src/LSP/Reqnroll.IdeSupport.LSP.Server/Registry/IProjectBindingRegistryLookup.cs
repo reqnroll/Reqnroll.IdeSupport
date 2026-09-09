@@ -48,4 +48,34 @@ public interface IProjectBindingRegistryLookup
     /// definitions workspace-wide.
     /// </summary>
     IReadOnlyList<(string ProjectName, ProjectOwner Owner, ProjectBindingRegistry Registry)> GetAllRegistries();
+
+    /// <summary>
+    /// Resolves the full set of projects whose feature files are legitimate usage sites for the
+    /// step-definition bindings declared in <paramref name="csUri"/> — the project filter to pass
+    /// to <see cref="Matching.IBindingMatchService.FindUsages(Bindings.BindingId, IReadOnlyCollection{ProjectOwner}?)"/>
+    /// or its <c>SourceLocation</c> overload for a "how many/where is this binding used" query
+    /// (step-usage CodeLens, Find Step Usages navigation).
+    /// </summary>
+    /// <remarks>
+    /// Starts from the project(s) that directly own <paramref name="csUri"/> (folder-prefix
+    /// ownership, resolved internally) and widens that set to include any other project whose own
+    /// registry independently reports one of this file's bindings (issue #548): a project that
+    /// references another Reqnroll-bearing project (a class library, say) discovers that library's
+    /// bindings too via its own connector run, and its feature files are legitimate usage sites for
+    /// them even though it doesn't "own" the .cs file that declares them. Direct ownership alone
+    /// would undercount to zero for a step used only from the referencing project — the exact
+    /// symptom that motivated this method: the step-usage CodeLens (which already applied this
+    /// widening internally) reported "1 step usage" while the click-to-navigate command (which
+    /// used direct ownership alone) reported zero for the same binding.
+    /// <para>
+    /// The widening matches on <see cref="Bindings.BindingId"/> <em>and</em> requires the reporting
+    /// registry's entry to resolve to the exact same physical <c>SourceLocation.SourceFile</c> —
+    /// content-only matching would also widen to a project with its own unrelated but
+    /// identical-looking binding (e.g. a parallel multi-targeted sibling project with its own copy
+    /// of the same source), which doubled usage counts before this constraint (issue #552).
+    /// </para>
+    /// Returns <see langword="null"/> (unrestricted search) when <paramref name="csUri"/> has no
+    /// direct owner at all, preserving prior behaviour for an unowned file.
+    /// </remarks>
+    IReadOnlyCollection<ProjectOwner>? ResolveUsageSearchScope(DocumentUri csUri);
 }

@@ -7,7 +7,6 @@ using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 
@@ -40,7 +39,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 public sealed class FindStepUsagesHandler
 {
     private readonly IBindingMatchService         _matchService;
-    private readonly ILspWorkspaceScopeManager    _scopeManager;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly ILspTelemetryService?         _telemetryService;
@@ -49,14 +47,12 @@ public sealed class FindStepUsagesHandler
     /// <summary>Initializes a new instance of the <see cref="FindStepUsagesHandler"/> class.</summary>
     public FindStepUsagesHandler(
         IBindingMatchService          matchService,
-        ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
         IIdeSupportLogger               logger,
         ILspTelemetryService?         telemetryService = null,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
-        _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
         _logger         = logger;
         _telemetryService = telemetryService;
@@ -91,12 +87,11 @@ public sealed class FindStepUsagesHandler
         var column = request.Position.Character + 1;
         var bindingLocation = new SourceLocation(filePath, line, column);
 
-        // Restrict search to the projects that own this .cs file.
-        var owners = _scopeManager.ResolveOwners(uri);
-        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
-            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker))
-                    .ToArray()
-            : null;
+        // Restrict search to the projects that own this .cs file, widened to any other project
+        // whose own registry independently reports one of this file's bindings (issue #548) --
+        // the same scope the step-usage CodeLens count already used, so a lens that says "1 step
+        // usage" and a click on it that opens Find Step Usages agree on the answer.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
         var usages = _matchService.FindUsages(bindingLocation, projectFilter);
 

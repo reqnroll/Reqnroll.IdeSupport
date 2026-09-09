@@ -7,14 +7,12 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.References;
 
 public class StepReferencesHandlerTests
 {
     private readonly IBindingMatchService          _matchService    = Substitute.For<IBindingMatchService>();
-    private readonly ILspWorkspaceScopeManager     _scopeManager    = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IProjectBindingRegistryLookup _registryLookup  = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly IIdeSupportLogger               _logger          = Substitute.For<IIdeSupportLogger>();
 
@@ -24,14 +22,7 @@ public class StepReferencesHandlerTests
     private static readonly DocumentUri FeatureUri =
         DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    public StepReferencesHandlerTests()
-    {
-        // Default: no owners for the .cs URI → FindUsages called with null filter (no project scoping).
-        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>())
-                     .Returns(Array.Empty<LspReqnrollProject>());
-    }
-
-    private ReferencesHandler CreateSut() => new(_matchService, _scopeManager, _registryLookup, _logger);
+    private ReferencesHandler CreateSut() => new(_matchService, _registryLookup, _logger);
 
     private static ReferenceParams RequestAt(DocumentUri uri, int line, int character) =>
         new()
@@ -180,41 +171,30 @@ public class StepReferencesHandlerTests
         range.End.Character.Should().Be(16);
     }
 
-    // ── Project scoping (Q18 2B) ──────────────────────────────────────────────
+    // ── Project scoping (Q18 2B / issue #548) ─────────────────────────────────
+    //
+    // The scoping decision itself (direct owners + issue #548 widening) is now owned by
+    // IProjectBindingRegistryLookup.ResolveUsageSearchScope and unit-tested against the real
+    // implementation in BindingRegistryProviderRouterTests. These tests only need to prove the
+    // handler forwards whatever that method returns straight through to FindUsages.
 
     [Fact]
-    public async Task Handle_passes_owner_filter_to_FindUsages_when_owners_are_known()
+    public async Task Handle_passes_the_registry_lookups_resolved_scope_to_FindUsages()
     {
-        var ideScope = new LspIdeScope(Substitute.For<IIdeSupportLogger>());
-        var project  = new LspReqnrollProject(
-            new Reqnroll.IdeSupport.LSP.Server.Workspace.ReqnrollProjectLoadedParams
-            {
-                WorkspaceFolder        = "/workspace",
-                ProjectFile            = "/workspace/My.csproj",
-                ProjectFolder          = "/workspace",
-                OutputAssemblyPath     = "/workspace/bin/My.dll",
-                TargetFrameworkMoniker = "net8.0"
-            },
-            ideScope);
-
-        _scopeManager.ResolveOwners(CsUri).Returns(new[] { project });
+        var scope = new[] { new ProjectOwner("/workspace/My.csproj", "net8.0") };
+        _registryLookup.ResolveUsageSearchScope(CsUri).Returns(scope);
         _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
         await CreateSut().HandleAsync(RequestAt(CsUri, 0, 0), CancellationToken.None);
 
-        _matchService.Received(1).FindUsages(
-            Arg.Any<SourceLocation>(),
-            Arg.Is<IReadOnlyCollection<ProjectOwner>>(f =>
-                f != null && f.Any(o => o.ProjectFile == project.ProjectFullName)));
-
-        project.Dispose();
+        _matchService.Received(1).FindUsages(Arg.Any<SourceLocation>(), scope);
     }
 
     [Fact]
-    public async Task Handle_passes_null_filter_to_FindUsages_when_no_owners_found()
+    public async Task Handle_passes_null_filter_to_FindUsages_when_resolved_scope_is_null()
     {
-        _scopeManager.ResolveOwners(CsUri).Returns(Array.Empty<LspReqnrollProject>());
+        _registryLookup.ResolveUsageSearchScope(CsUri).Returns((IReadOnlyCollection<ProjectOwner>?)null);
         _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 

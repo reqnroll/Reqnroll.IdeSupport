@@ -11,7 +11,6 @@ using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
@@ -29,7 +28,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 public sealed class StepCodeLensHandler
 {
     private readonly IBindingMatchService          _matchService;
-    private readonly ILspWorkspaceScopeManager     _scopeManager;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
     private readonly IOperationDurationRecorder    _recorder;
@@ -38,14 +36,12 @@ public sealed class StepCodeLensHandler
     /// <summary>Initializes a new instance of the <see cref="StepCodeLensHandler"/> class.</summary>
     public StepCodeLensHandler(
         IBindingMatchService          matchService,
-        ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
         ClientIdeContext              clientIde,
         IIdeSupportLogger               logger,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
-        _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
         _clientIde      = clientIde;
         _logger         = logger;
@@ -88,17 +84,12 @@ public sealed class StepCodeLensHandler
             return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[]>(Array.Empty<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>());
         }
 
-        // Restrict usage search to the projects that own this .cs file (primary-owner resolution
-        // / shared-feature scoping 2B) -- expanded to also include any project whose own registry
-        // independently reports one of this file's bindings (issue #548): a project that
-        // references another Reqnroll-bearing project (a class library, say) discovers that
-        // library's bindings too via its own connector run, and its feature files are legitimate
-        // usage sites for them even though it doesn't "own" the .cs file that declares them. The
-        // .cs file's direct owner(s) alone would never see usages recorded under the referencing
-        // project's registry, undercounting to zero for an otherwise genuinely-used step.
-        var owners = _scopeManager.ResolveOwners(uri);
-        var fileBindingIds = CollectFileBindingIds(registry, filePath);
-        var projectFilter = ExpandProjectFilter(owners, fileBindingIds, filePath);
+        // Restrict usage search to the projects that own this .cs file, widened to any other
+        // project whose own registry independently reports one of this file's bindings (issue
+        // #548) -- see IProjectBindingRegistryLookup.ResolveUsageSearchScope's remarks. Shared
+        // with FindStepUsagesHandler so the click-to-navigate command sees the same scope this
+        // lens's count does.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
         var lenses = new List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>();
         // Deduplicate by anchor location: every attribute on a method shares the identical
@@ -204,7 +195,9 @@ public sealed class StepCodeLensHandler
         if (registry == ProjectBindingRegistry.Invalid)
             return Task.FromResult(WithZeroUsages(lens));
 
-        var owners = _scopeManager.ResolveOwners(uri);
+        // See HandleAsync's remarks (issue #548): the same widened scope applies here regardless
+        // of which branch below resolves the binding.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
         // Prefer the BindingId stashed at lens-creation time (issue #471): a direct O(1)
         // reverse-index lookup, no location math. Fall back to the SourceLocation-based path only
@@ -212,16 +205,10 @@ public sealed class StepCodeLensHandler
         IReadOnlyList<StepBindingMatch> usages;
         if (bindingIdStr is not null && BindingId.TryParse(bindingIdStr, out var bindingId))
         {
-            // See HandleAsync's remarks (issue #548): expand the direct owner(s) with any other
-            // project whose own registry independently reports this exact binding.
-            var projectFilter = ExpandProjectFilter(owners, new[] { bindingId }, uri.GetFileSystemPath() ?? string.Empty);
             usages = _matchService.FindUsages(bindingId, projectFilter);
         }
         else if (sourceFile is not null && sourceLine is not null && sourceCol is not null)
         {
-            IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
-                ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
-                : null;
             var bindingLocation = new SourceLocation(sourceFile, sourceLine.Value, sourceCol.Value);
             usages = _matchService.FindUsages(bindingLocation, projectFilter);
         }
@@ -324,86 +311,4 @@ public sealed class StepCodeLensHandler
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsSameFile(string a, string b) => PathUtils.IsSamePath(a, b);
-
-    /// <summary>Collects the <see cref="BindingId"/> of every valid step definition <paramref name="registry"/> reports for <paramref name="filePath"/>.</summary>
-    private static HashSet<BindingId> CollectFileBindingIds(ProjectBindingRegistry registry, string filePath)
-    {
-        var ids = new HashSet<BindingId>();
-        foreach (var binding in registry.StepDefinitions)
-        {
-            if (!binding.IsValid) continue;
-            var src = binding.Implementation?.SourceLocation;
-            if (src is null || string.IsNullOrEmpty(src.SourceFile)) continue;
-            if (!IsSameFile(src.SourceFile, filePath)) continue;
-
-            ids.Add(BindingId.For(binding));
-        }
-        return ids;
-    }
-
-    /// <summary>
-    /// Expands <paramref name="directOwners"/> (the projects that own the queried .cs file) with
-    /// any other project whose own binding registry independently reports one of
-    /// <paramref name="bindingIds"/> <em>for this exact physical file</em> (issue #548, narrowed by
-    /// issue #552).
-    /// </summary>
-    /// <remarks>
-    /// A project that references another Reqnroll-bearing project (a class library, say) has
-    /// that library's bindings show up in its own connector-run registry too — the same
-    /// transitive-discovery behaviour that produced duplicate Find Unused Step Definitions rows
-    /// (issue #547) before <see cref="BindingId"/> normalization. That project's feature files are
-    /// legitimate usage sites for the library's steps even though it doesn't "own" the .cs file
-    /// that declares them, so restricting the usage search to the .cs file's direct owner(s) alone
-    /// undercounts to zero for an otherwise genuinely-used step.
-    /// <para>
-    /// <see cref="BindingId"/> is purely content-based (normalized method/parameter-types/
-    /// expression), so matching on it alone also widens to a project that independently declares
-    /// an unrelated, identical-looking method — e.g. a parallel multi-targeted sibling project
-    /// (a net481 copy of the same test suite, say) with its own physical copy of the same source,
-    /// no reference to the file's owner at all (issue #552: this doubled the step-usage CodeLens
-    /// count for exactly that shape of solution). A binding discovered transitively through a real
-    /// reference resolves to the referenced project's own <c>SourceLocation.SourceFile</c> (the
-    /// original library source, not a copy), so requiring that match before trusting the
-    /// <see cref="BindingId"/> match keeps the legitimate case while excluding the coincidental
-    /// one.
-    /// </para>
-    /// Returns <see langword="null"/> (unrestricted search) when there are no direct owners at
-    /// all, preserving prior behaviour for an unowned file.
-    /// </remarks>
-    private IReadOnlyCollection<ProjectOwner>? ExpandProjectFilter(
-        IReadOnlyCollection<LspReqnrollProject> directOwners, IReadOnlyCollection<BindingId> bindingIds,
-        string filePath)
-    {
-        if (directOwners.Count == 0)
-            return null;
-
-        var expanded = new HashSet<ProjectOwner>(
-            directOwners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)));
-
-        if (bindingIds.Count == 0)
-            return expanded;
-
-        foreach (var (_, owner, registry) in _registryLookup.GetAllRegistries())
-        {
-            if (expanded.Contains(owner)) continue;
-            if (registry == ProjectBindingRegistry.Invalid) continue;
-
-            var reportsAny = false;
-            foreach (var sd in registry.StepDefinitions)
-            {
-                if (!sd.IsValid) continue;
-                var sdSrc = sd.Implementation?.SourceLocation;
-                if (sdSrc is null || !IsSameFile(sdSrc.SourceFile, filePath)) continue;
-                if (bindingIds.Contains(BindingId.For(sd)))
-                {
-                    reportsAny = true;
-                    break;
-                }
-            }
-            if (reportsAny)
-                expanded.Add(owner);
-        }
-
-        return expanded;
-    }
 }
