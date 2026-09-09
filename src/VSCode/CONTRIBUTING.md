@@ -124,6 +124,27 @@ npm run build:vsix
 
 This publishes the server for all four RIDs and packages the `.vsix` in one step. Requires Docker or cross-compilation support for non-host RIDs.
 
+The bundled LSP server is published `Release` by default (`publish-server.sh`'s configuration
+argument defaults to `Release`) — quiet logging unless `reqnroll.trace.server` is raised, as
+described below.
+
+## Local install of a dev build
+
+The `.vsix` from either packaging step above installs the same way a Marketplace release would,
+just without publishing it:
+
+```sh
+cd src/VSCode
+npm run build:vsix           # or: bash scripts/build-vsix.sh <rid>, for a non-host RID
+code --install-extension reqnroll-ide-support-<version>.vsix
+```
+
+(`<version>` comes from `package.json`.) Or, from VS Code's UI: Extensions view → **...** menu →
+**Install from VSIX...**, and pick the file from `src/VSCode/`.
+
+This installs into your regular VS Code, not an Extension Development Host — reload/restart VS
+Code to activate it, and uninstall from the Extensions view when you're done testing.
+
 ## LSP tracing
 
 To see raw JSON-RPC traffic, open VS Code Settings and set:

@@ -136,6 +136,25 @@ There are two ways to populate `server/<rid>/`, both wired up in `build.gradle.k
   mode — Gradle never needs `dotnet` on the CI runner — and `prepareSandbox` bundles
   every RID found under `<dir>` instead of just one.
 
+## Local install of a dev build
+
+`runIde` (above) launches a disposable sandboxed Rider instance — it doesn't touch your regular
+Rider install. To install a build into your **regular** Rider instead:
+
+```
+cd src/Rider
+./gradlew buildPlugin
+```
+
+This publishes the bundled LSP server `Release` (see "Bundling the LSP server" above — `buildPlugin`
+always uses `Release`, unlike `runIde`'s `Debug`/`Verbose` build) for the host RID only, and produces
+`build/distributions/reqnroll-ide-support-rider-<version>.zip` (`<version>` from `gradle.properties`).
+Cross-publish other RIDs with `-PserverRid=<rid>` (e.g. `linux-x64`, `osx-arm64`) first if you need
+the plugin to run on a different OS than the one you built it on.
+
+In Rider: **Settings → Plugins → ⚙ (gear icon) → Install Plugin from Disk...**, pick the `.zip`, and
+restart when prompted. Uninstall from the same Plugins page when you're done testing.
+
 ## Manual verification
 
 ### Native toolchain
