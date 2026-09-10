@@ -45,6 +45,34 @@ This **also republishes the LSP server** self-contained (win-x64, net10.0) into 
 project to pick it up before testing in VS — a stale bundled server is a common source of "my fix
 doesn't seem to be running" confusion.
 
+## Local install of a dev build
+
+The F5/experimental-instance workflow above is for day-to-day development. To try a build in
+your **regular** VS instance (e.g. to hand a build to someone else, or confirm something outside
+the experimental hive):
+
+```sh
+dotnet build src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/Reqnroll.IdeSupport.VisualStudio.Extension.csproj -c Release
+```
+
+No separate `dotnet publish` step is needed — see "Building" above: `LSP.Server.csproj` sets
+`RuntimeIdentifier`/`SelfContained` as project properties, so plain `dotnet build` already emits a
+self-contained win-x64 server (`coreclr.dll`/`hostfxr.dll` included, not just the managed DLL), and
+its `BuildConnector` target (`BeforeTargets="Build"`, not publish-only) stages every supported
+Connector TFM into that same build output's `Connectors\` folder. `IncludeLspServerInVsix` bundles
+that whole build-output tree — server and connectors together — into the VSIX.
+
+This produces
+`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/Release/net481/Reqnroll.IdeSupport.VisualStudio.Extension.vsix`,
+with the bundled LSP server built `Release` (quiet default logging — see "Server log-level and
+trace defaults" below) rather than the `Debug`/`Verbose` build `dotnet build` alone (no `-c`)
+produces.
+
+Double-click the `.vsix` (or run it via `VSIXInstaller.exe`) to install it into your main VS —
+**not** the experimental instance. If the Preview extension is already installed, VSIX Installer
+offers to update it in place. As with any manual VSIX install, uninstall via **Extensions → Manage
+Extensions** when you're done testing, and restart VS afterward.
+
 ## Running and debugging in VS
 
 The extension deploys into VS's **experimental instance** (a separate hive, e.g.
