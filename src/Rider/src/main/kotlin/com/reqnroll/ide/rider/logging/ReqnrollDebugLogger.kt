@@ -4,6 +4,18 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * Receives the subset of [ReqnrollDebugLogger] traffic logged with `curated = true` — implemented
+ * by the "Reqnroll" console tool window's panel (issue #662; see
+ * `com.reqnroll.ide.rider.console.ReqnrollConsolePanel`), which registers/unregisters itself via
+ * [ReqnrollDebugLogger.addConsoleSink]/[ReqnrollDebugLogger.removeConsoleSink] as it's created and
+ * disposed.
+ */
+fun interface ReqnrollConsoleSink {
+    fun accept(level: String, message: String, throwable: Throwable?)
+}
 
 /**
  * Client-side glue log, mirroring the VS extension's SynchronousFileLogger convention
@@ -34,10 +46,29 @@ object ReqnrollDebugLogger {
     private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
     private val fileDateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC)
     private val logFile: File by lazy { resolveLogFile() }
+    private val consoleSinks = CopyOnWriteArrayList<ReqnrollConsoleSink>()
 
-    fun info(message: String) = log("Info", message, null)
-    fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
-    fun error(message: String, throwable: Throwable? = null) = log("Error", message, throwable)
+    /**
+     * `curated` (issue #662, mirroring VS's #651/#658 "lifecycle + command outcome, not
+     * per-request chatter" bar and VS Code's `logging/appNotify.ts`, issue #661): when true, the
+     * entry is also mirrored to every registered [ReqnrollConsoleSink] — the "Reqnroll" tool
+     * window when one is open. Every entry is always written to the file log regardless of this
+     * flag; only console visibility is gated. Defaults to false so the ~30 existing per-request
+     * diagnostic call sites (folding, inlay hints, breadcrumbs, per-viewport CodeLens, etc.) keep
+     * their current file-only behavior unchanged.
+     */
+    fun info(message: String, curated: Boolean = false) = log("Info", message, null, curated)
+    fun warn(message: String, throwable: Throwable? = null, curated: Boolean = false) = log("Warning", message, throwable, curated)
+    fun error(message: String, throwable: Throwable? = null, curated: Boolean = false) = log("Error", message, throwable, curated)
+
+    /** Registers a sink to receive every future `curated = true` entry. Not retroactive. */
+    fun addConsoleSink(sink: ReqnrollConsoleSink) {
+        consoleSinks.add(sink)
+    }
+
+    fun removeConsoleSink(sink: ReqnrollConsoleSink) {
+        consoleSinks.remove(sink)
+    }
 
     /** Renders the UTC timestamp prefix for a log line. Exposed for testing without mocking the system clock. */
     internal fun formatTimestamp(instant: Instant): String = timestampFormatter.format(instant)
@@ -47,7 +78,7 @@ object ReqnrollDebugLogger {
         "${formatTimestamp(instant)} [${level.padEnd(LEVEL_FIELD_WIDTH)}] $message"
 
     @Synchronized
-    private fun log(level: String, message: String, throwable: Throwable?) {
+    private fun log(level: String, message: String, throwable: Throwable?, curated: Boolean) {
         try {
             logFile.parentFile?.mkdirs()
             val line = buildString {
@@ -60,6 +91,16 @@ object ReqnrollDebugLogger {
             logFile.appendText(line)
         } catch (_: Exception) {
             // Best-effort — a logging failure must never break plugin behavior.
+        }
+
+        if (curated) {
+            for (sink in consoleSinks) {
+                try {
+                    sink.accept(level, message, throwable)
+                } catch (_: Exception) {
+                    // A misbehaving/disposed sink must never break logging for the rest.
+                }
+            }
         }
     }
 

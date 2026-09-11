@@ -5,7 +5,6 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.GoToHookLocation
@@ -31,12 +30,13 @@ object GoToHooksRunner {
         project: Project, uri: String, line: Int, character: Int,
         ownLevelOnly: Boolean = false, alwaysShowPicker: Boolean = false,
     ) {
-        ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character")
+        ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character", curated = true)
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.goToHooks(project, uri, line, character, ownLevelOnly)
-                ReqnrollDebugLogger.info("GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned")
+                ReqnrollDebugLogger.info(
+                    "GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned", curated = true)
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
                     showResult(project, response, alwaysShowPicker)
@@ -47,13 +47,13 @@ object GoToHooksRunner {
 
     private fun showResult(project: Project, response: GoToHooksResponse?, alwaysShowPicker: Boolean) {
         if (response == null) {
-            Messages.showErrorDialog(
+            ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.", "Go to Hooks")
             return
         }
 
         if (response.hooks.isEmpty()) {
-            Messages.showInfoMessage(project, "No hooks found at this position.", "Go to Hooks")
+            ReqnrollNotify.info(project, "No hooks found at this position.", "Go to Hooks")
             return
         }
 

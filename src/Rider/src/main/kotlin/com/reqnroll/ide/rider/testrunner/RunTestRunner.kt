@@ -5,10 +5,10 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.jetbrains.rider.model.RunnableProject
 import com.jetbrains.rider.model.runnableProjectsModel
 import com.jetbrains.rider.projectView.solution
+import com.reqnroll.ide.rider.actions.ReqnrollNotify
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
@@ -27,7 +27,8 @@ object RunTestRunner {
 
     /** Runs the resolved [targets] on a background task and updates [RunTestResultStore]/the lens once it completes. */
     fun run(project: Project, uri: String, startLine: Int, targets: List<ScenarioTestTargetItem>) {
-        ReqnrollDebugLogger.info("RunTestRunner: invoked for $uri:$startLine (${targets.size} target(s))")
+        ReqnrollDebugLogger.info(
+            "RunTestRunner: invoked for $uri:$startLine (${targets.size} target(s))", curated = true)
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Reqnroll: Running Test", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -133,7 +134,8 @@ object RunTestRunner {
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
             } catch (ex: java.io.IOException) {
-                ReqnrollDebugLogger.warn("RunTestRunner: dotnet not found while starting dotnet test for $projectFile", ex)
+                ReqnrollDebugLogger.warn(
+                    "RunTestRunner: dotnet not found while starting dotnet test for $projectFile", ex, curated = true)
                 return DotnetTestOutcome.Failure(
                     "Could not launch 'dotnet' for $projectFile — the dotnet CLI was not found on PATH, " +
                         "DOTNET_ROOT, or common install locations. Ensure the .NET SDK is installed and " +
@@ -152,7 +154,7 @@ object RunTestRunner {
 
             DotnetTestOutcome.Success(TrxParser.parse(trxFile.readText()))
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("RunTestRunner: dotnet test failed to run for $projectFile", ex)
+            ReqnrollDebugLogger.warn("RunTestRunner: dotnet test failed to run for $projectFile", ex, curated = true)
             DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
         } finally {
             resultsDir.deleteRecursively()
@@ -160,9 +162,8 @@ object RunTestRunner {
     }
 
     private fun notifyError(project: Project, message: String) {
-        ReqnrollDebugLogger.warn("RunTestRunner: $message")
         ApplicationManager.getApplication().invokeLater {
-            if (!project.isDisposed) Messages.showErrorDialog(project, message, "Reqnroll: Run Test")
+            if (!project.isDisposed) ReqnrollNotify.error(project, message, "Reqnroll: Run Test")
         }
     }
 }

@@ -33,7 +33,7 @@ object ReqnrollResultPopup {
         if (filePath.isNullOrBlank()) return
         val file = LocalFileSystem.getInstance().refreshAndFindFileByPath(filePath)
         if (file == null) {
-            ReqnrollDebugLogger.warn("ReqnrollResultPopup: could not resolve file $filePath")
+            ReqnrollDebugLogger.warn("ReqnrollResultPopup: could not resolve file $filePath", curated = true)
             return
         }
         OpenFileDescriptor(project, file, line, column).navigate(true)
@@ -43,7 +43,7 @@ object ReqnrollResultPopup {
     fun navigateToUri(project: Project, uri: String, line: Int, column: Int) {
         val path = lspUriToLocalPath(uri)
         if (path == null) {
-            ReqnrollDebugLogger.warn("ReqnrollResultPopup: could not resolve uri $uri")
+            ReqnrollDebugLogger.warn("ReqnrollResultPopup: could not resolve uri $uri", curated = true)
             return
         }
         navigateToPath(project, path, line, column)

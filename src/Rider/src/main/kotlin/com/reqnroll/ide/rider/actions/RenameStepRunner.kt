@@ -28,7 +28,7 @@ import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
  */
 object RenameStepRunner {
     fun run(project: Project, uri: String, line: Int, character: Int) {
-        ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character")
+        ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character", curated = true)
         // Captured once, up front, so the edit-application step at the end of this flow can
         // detect whether the document changed at any point in between -- including across the
         // modal "Enter the new step expression" dialog, which gives the user arbitrary time to
@@ -41,7 +41,7 @@ object RenameStepRunner {
 
                 if (response == null) {
                     showOnEdt(project) {
-                        Messages.showErrorDialog(
+                        ReqnrollNotify.error(
                             project, "The Reqnroll LSP server is not running or did not respond.", "Rename Step")
                     }
                     return
@@ -49,7 +49,7 @@ object RenameStepRunner {
 
                 if (response.targets.isEmpty()) {
                     showOnEdt(project) {
-                        Messages.showInfoMessage(project, "No renameable step at this position.", "Rename Step")
+                        ReqnrollNotify.info(project, "No renameable step at this position.", "Rename Step")
                     }
                     return
                 }
@@ -105,7 +105,7 @@ object RenameStepRunner {
         val edit = when (outcome) {
             is RenameOutcome.Failed -> {
                 showOnEdt(project) {
-                    Messages.showErrorDialog(project, outcome.message, "Rename Step")
+                    ReqnrollNotify.error(project, outcome.message, "Rename Step")
                 }
                 return
             }
@@ -118,9 +118,10 @@ object RenameStepRunner {
                 ReqnrollDebugLogger.warn(
                     "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
                         "edit to avoid applying it at stale offsets.",
+                    curated = true,
                 )
                 showOnEdt(project) {
-                    Messages.showErrorDialog(
+                    ReqnrollNotify.error(
                         project,
                         "The file changed while the rename dialog was open. Please try again.",
                         "Rename Step",

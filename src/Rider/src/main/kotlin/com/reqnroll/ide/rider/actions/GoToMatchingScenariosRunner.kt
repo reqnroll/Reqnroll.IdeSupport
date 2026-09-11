@@ -5,7 +5,6 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
@@ -21,13 +20,14 @@ import com.reqnroll.ide.rider.lsp.protocol.MatchingScenarioLocation
 object GoToMatchingScenariosRunner {
     /** Runs the request on a background task and navigates (or shows a chooser) once it completes. */
     fun runAndShow(project: Project, uri: String, line: Int, character: Int) {
-        ReqnrollDebugLogger.info("GoToMatchingScenariosRunner: invoked for $uri at $line:$character")
+        ReqnrollDebugLogger.info("GoToMatchingScenariosRunner: invoked for $uri at $line:$character", curated = true)
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Matching Scenarios", true) {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.goToMatchingScenarios(project, uri, line, character)
                 ReqnrollDebugLogger.info(
-                    "GoToMatchingScenariosRunner: ${response?.scenarios?.size ?: "null"} scenario(s) returned")
+                    "GoToMatchingScenariosRunner: ${response?.scenarios?.size ?: "null"} scenario(s) returned",
+                    curated = true)
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
                     showResult(project, response)
@@ -38,13 +38,13 @@ object GoToMatchingScenariosRunner {
 
     private fun showResult(project: Project, response: GoToMatchingScenariosResponse?) {
         if (response == null) {
-            Messages.showErrorDialog(
+            ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.", "Go to Matching Scenarios")
             return
         }
 
         if (response.scenarios.isEmpty()) {
-            Messages.showInfoMessage(project, "This hook has no matching scenarios.", "Go to Matching Scenarios")
+            ReqnrollNotify.info(project, "This hook has no matching scenarios.", "Go to Matching Scenarios")
             return
         }
 

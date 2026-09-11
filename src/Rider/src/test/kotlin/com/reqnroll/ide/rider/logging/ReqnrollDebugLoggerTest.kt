@@ -80,4 +80,55 @@ class ReqnrollDebugLoggerTest {
             ReqnrollDebugLogger.logDirectory("WINDOWS 10", null, "C:\\Users\\me"),
         )
     }
+
+    // Console-sink dispatch (issue #662) — the "Reqnroll" tool window's own mirroring mechanism.
+    // These exercise the real info/warn/error entry points (unlike the pure-function tests above)
+    // since the sink dispatch happens inside `log()`; the file write itself stays best-effort/
+    // exception-swallowed either way, so this doesn't risk failing the test on a read-only CI
+    // filesystem.
+
+    private class RecordingSink : ReqnrollConsoleSink {
+        val entries = mutableListOf<Triple<String, String, Throwable?>>()
+        override fun accept(level: String, message: String, throwable: Throwable?) {
+            entries.add(Triple(level, message, throwable))
+        }
+    }
+
+    @Test
+    fun `curated = true entries are dispatched to every registered console sink`() {
+        val sink = RecordingSink()
+        ReqnrollDebugLogger.addConsoleSink(sink)
+        try {
+            ReqnrollDebugLogger.info("hello", curated = true)
+        } finally {
+            ReqnrollDebugLogger.removeConsoleSink(sink)
+        }
+
+        assertEquals(listOf(Triple("Info", "hello", null)), sink.entries)
+    }
+
+    @Test
+    fun `curated = false (the default) never reaches a registered console sink`() {
+        val sink = RecordingSink()
+        ReqnrollDebugLogger.addConsoleSink(sink)
+        try {
+            ReqnrollDebugLogger.info("chatter")
+            ReqnrollDebugLogger.warn("also chatter")
+        } finally {
+            ReqnrollDebugLogger.removeConsoleSink(sink)
+        }
+
+        assertEquals(emptyList(), sink.entries)
+    }
+
+    @Test
+    fun `removeConsoleSink stops further dispatch to that sink`() {
+        val sink = RecordingSink()
+        ReqnrollDebugLogger.addConsoleSink(sink)
+        ReqnrollDebugLogger.removeConsoleSink(sink)
+
+        ReqnrollDebugLogger.error("too late", curated = true)
+
+        assertEquals(emptyList(), sink.entries)
+    }
 }

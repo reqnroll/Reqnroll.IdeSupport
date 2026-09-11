@@ -70,7 +70,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("findUnusedStepDefinitions: request failed", ex)
+            ReqnrollDebugLogger.warn("findUnusedStepDefinitions: request failed", ex, curated = true)
             null
         }
     }
@@ -90,7 +90,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("findStepUsages: request failed", ex)
+            ReqnrollDebugLogger.warn("findStepUsages: request failed", ex, curated = true)
             null
         }
     }
@@ -201,7 +201,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("goToHooks: request failed", ex)
+            ReqnrollDebugLogger.warn("goToHooks: request failed", ex, curated = true)
             null
         }
     }
@@ -217,7 +217,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("goToMatchingScenarios: request failed", ex)
+            ReqnrollDebugLogger.warn("goToMatchingScenarios: request failed", ex, curated = true)
             null
         }
     }
@@ -243,7 +243,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("toggleComment: request failed", ex)
+            ReqnrollDebugLogger.warn("toggleComment: request failed", ex, curated = true)
             false
         }
     }
@@ -259,7 +259,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("renameTargets: request failed", ex)
+            ReqnrollDebugLogger.warn("renameTargets: request failed", ex, curated = true)
             null
         }
     }
@@ -294,7 +294,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("rename: request failed", ex)
+            ReqnrollDebugLogger.warn("rename: request failed", ex, curated = true)
             val message = extractResponseErrorMessage(ex)
                 ?: "Rename failed — the new expression may be invalid, or nothing to rename."
             RenameOutcome.Failed(message)
@@ -361,7 +361,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("resolveTestTargets: request failed", ex)
+            ReqnrollDebugLogger.warn("resolveTestTargets: request failed", ex, curated = true)
             null
         }
     }
