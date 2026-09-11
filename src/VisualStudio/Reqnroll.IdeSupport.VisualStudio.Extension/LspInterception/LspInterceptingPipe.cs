@@ -298,7 +298,7 @@ internal sealed class LspInterceptingPipe : IDisposable
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "LspInterceptingPipe: request {Method} id={Id} cancelled", method, pending.Id);
             return (null, null);
         }

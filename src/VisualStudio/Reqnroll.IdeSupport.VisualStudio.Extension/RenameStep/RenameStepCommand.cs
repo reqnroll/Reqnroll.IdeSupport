@@ -55,7 +55,7 @@ internal sealed class RenameStepCommand : Command
     {
         try
         {
-            _logger.LogInformation("RenameStepCommand: invoked.");
+            _logger.LogDebug("RenameStepCommand: invoked.");
 
             var service = _state.Service;
             if (service is null)
@@ -78,7 +78,7 @@ internal sealed class RenameStepCommand : Command
             var lineNum  = line.LineNumber;
             var charNum  = caretPos.Offset - line.Text.Start;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RenameStepCommand: active view uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             // Step 1: Get rename targets from the server
@@ -103,7 +103,7 @@ internal sealed class RenameStepCommand : Command
                 selectedAttributeIndex = item.AttributeIndex;
                 currentLabel           = item.Label;
                 currentExpression      = item.Expression;
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "RenameStepCommand: single target, attributeIndex={AttributeIndex}, label={Label}.",
                     selectedAttributeIndex, currentLabel);
             }
@@ -118,7 +118,7 @@ internal sealed class RenameStepCommand : Command
                 var dialog = new NavigationPickerDialog("Choose step definition to rename", pickerTargets);
                 if (dialog.ShowModal() != true || dialog.SelectedIndex < 0)
                 {
-                    _logger.LogInformation("RenameStepCommand: picker dismissed.");
+                    _logger.LogDebug("RenameStepCommand: picker dismissed.");
                     return;
                 }
 
@@ -126,7 +126,7 @@ internal sealed class RenameStepCommand : Command
                 selectedAttributeIndex = chosen.AttributeIndex;
                 currentLabel           = chosen.Label;
                 currentExpression      = chosen.Expression;
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "RenameStepCommand: user selected target index={SelectedIndex}, attributeIndex={AttributeIndex}.",
                     dialog.SelectedIndex, selectedAttributeIndex);
             }
@@ -146,11 +146,11 @@ internal sealed class RenameStepCommand : Command
                 "Enter the new step text:", "Rename Step", currentStepText);
             if (string.IsNullOrEmpty(newStepText))
             {
-                _logger.LogInformation("RenameStepCommand: user cancelled rename dialog.");
+                _logger.LogDebug("RenameStepCommand: user cancelled rename dialog.");
                 return;
             }
 
-            _logger.LogInformation("RenameStepCommand: user entered new text {NewStepText}.", newStepText);
+            _logger.LogDebug("RenameStepCommand: user entered new text {NewStepText}.", newStepText);
 
             // Step 5: Send textDocument/rename via the service
             RenameWorkspaceEdit? result;
@@ -180,7 +180,7 @@ internal sealed class RenameStepCommand : Command
 
             // The server already applied the edit natively via workspace/applyEdit before this
             // request's response reached us — nothing left to apply here.
-            _logger.LogInformation("RenameStepCommand: rename result = {Result}", result);
+            _logger.LogDebug("RenameStepCommand: rename result = {Result}", result);
             _logger.LogInformation("RenameStepCommand: rename completed successfully.");
             VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
         }

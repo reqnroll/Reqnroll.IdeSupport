@@ -137,7 +137,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             lock (_selfForwardedLock) { _selfForwardedPaths.Remove(path); }
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "DocumentActivationTrackingInterceptor: activation preceded didOpen for {FileName}; sending reqnroll/documentActivated now.",
             Path.GetFileName(path));
 

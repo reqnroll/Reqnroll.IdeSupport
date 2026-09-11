@@ -56,7 +56,7 @@ internal sealed class GherkinNavigationBarSymbolService
     {
         var paramsJson = BuildParams(fileUri);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", RequestMethod, fileUri);
 
         var result = await _pipe
@@ -65,7 +65,7 @@ internal sealed class GherkinNavigationBarSymbolService
 
         var mapped = MapResult(result as JArray);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "GherkinNavigationBarSymbolService: uri={FileUri} mapped {SymbolCount} top-level symbol(s).",
             fileUri, mapped.Count);
 
