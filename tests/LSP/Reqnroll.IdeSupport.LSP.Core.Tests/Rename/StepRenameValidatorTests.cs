@@ -140,6 +140,34 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("rename");
     }
 
+    [Fact]
+    public void ValidateNewName_cucumber_expression_literal_slash_fails()
+    {
+        // Unlike '$'/'^'/etc., '/' is genuinely significant in Cucumber Expression syntax
+        // everywhere it appears — confirmed against the real Cucumber.CucumberExpressions parser:
+        // "{int}/{int}/{int}" parses as two ALTERNATION_NODEs, not literal slashes, so even a
+        // date-like "01/02/2026" or a file path would silently mean something other than what it
+        // looks like. Must stay forbidden outside a parameter slot.
+        var result = StepRenameValidator.ValidateNewName("the date is {int}", "the date is {int}/{int}");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_expression_literal_backslash_fails()
+    {
+        // '\' is Cucumber Expression's escape character - confirmed against the real parser: an
+        // unescaped '\' followed by a non-escapable character (e.g. a Windows path like
+        // "C:\Users") throws a CucumberExpressionException at compile time, so it must stay
+        // forbidden here rather than let a rename produce an expression that fails to compile.
+        var result = StepRenameValidator.ValidateNewName(
+            "the path is {word}", @"the path is C:\Users\{word}");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
     // ── ValidateProjectState ────────────────────────────────────────────────────
 
     [Fact]
