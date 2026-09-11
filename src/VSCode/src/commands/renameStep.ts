@@ -8,6 +8,7 @@ import {
   WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
 
 /** One renameable binding attribute at the queried position (mirrors RenameTargetItem.cs). */
 export interface RenameTargetItem {
@@ -234,9 +235,7 @@ export async function renameStepFromCSharp(
       await vscode.commands.executeCommand('editor.action.rename');
       return;
     }
-    void vscode.window.showInformationMessage(
-      'Reqnroll: No step definition found to rename at this position.',
-    );
+    void showInfo('Reqnroll: No step definition found to rename at this position.');
     return;
   }
 
@@ -265,12 +264,12 @@ export async function renameStepFromCSharp(
     // directly — sendRequest rejects the promise with a ResponseError in that case (confirmed
     // in vscode-jsonrpc's connection.js) rather than resolving to null.
     const message = err instanceof ResponseError ? err.message : 'Rename failed.';
-    void vscode.window.showErrorMessage(`Reqnroll: ${message}`);
+    void showError(`Reqnroll: ${message}`);
     return;
   }
 
   if (!result) {
-    void vscode.window.showErrorMessage('Reqnroll: Rename failed.');
+    void showError('Reqnroll: Rename failed.');
     return;
   }
 

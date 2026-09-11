@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import { createTraceChannel, traceServerToLogLevel } from './lsp/lspInspectorLogger';
 import { createGeneralLogChannel } from './logging/generalFileLog';
+import { setAppLogChannel, showError, showInfo } from './logging/appNotify';
 import { ProjectManager } from './lsp/projectManager';
 import { StatusBarManager } from './statusBar';
 import { doToggleComment } from './commands/commentToggle';
@@ -120,19 +121,30 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
   const api: ReqnrollExtensionApi = { getClient: () => client };
 
   const notReady = (label: string) => () => {
-    void vscode.window.showInformationMessage(
-      `Reqnroll: ${label} will be available once the LSP server is ready.`,
-    );
+    void showInfo(`Reqnroll: ${label} will be available once the LSP server is ready.`);
   };
 
+  // "Reqnroll LSP" carries vscode-languageclient's own general client diagnostics (and, until
+  // #660 is fixed, OmniSharp's internal framework noise via window/logMessage). "Reqnroll" is the
+  // curated app-status channel (issue #661, mirroring the VS extension's #651/#656 pane): only
+  // extension/LSP-client lifecycle lines (below and in statusBar.ts) and one-line command outcomes
+  // (mirrored via logging/appNotify.ts) land here, so it's the one users should be pointed to for
+  // "is the extension doing something" — hence `reqnroll.showOutputChannel` now reveals this one.
   const outputChannel = createGeneralLogChannel('Reqnroll LSP');
+  const appLogChannel = createGeneralLogChannel('Reqnroll', {
+    filePrefix: 'app',
+    autoShowOnWarnOrError: true,
+  });
+  setAppLogChannel(appLogChannel);
+  appLogChannel.info('Reqnroll extension activated.');
   const traceChannel = createTraceChannel();
 
   context.subscriptions.push(
     outputChannel,
+    appLogChannel,
     traceChannel,
 
-    vscode.commands.registerCommand('reqnroll.showOutputChannel', () => outputChannel.show()),
+    vscode.commands.registerCommand('reqnroll.showOutputChannel', () => appLogChannel.show()),
 
     // Comment/Uncomment toggle (Ctrl+/ for gherkin files)
     vscode.commands.registerCommand('reqnroll.toggleComment', async () => {
@@ -174,9 +186,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     // (see StepCodeLensHandler.cs), never from the command palette, so it doesn't need a
     // manifest entry — VS Code only requires one for palette/keybinding/menu visibility.
     vscode.commands.registerCommand('reqnroll.noStepUsages', () => {
-      void vscode.window.showInformationMessage(
-        'Reqnroll: This step definition has no usages in any feature file.',
-      );
+      void showInfo('Reqnroll: This step definition has no usages in any feature file.');
     }),
 
     // Find Unused Step Definitions
@@ -292,17 +302,13 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     serverPath = resolveServerPath(context);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    void vscode.window
-      .showErrorMessage(`Reqnroll: ${message}`, 'Open Documentation')
-      .then((choice) => {
-        if (choice === 'Open Documentation') {
-          void vscode.env.openExternal(
-            vscode.Uri.parse(
-              'https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes',
-            ),
-          );
-        }
-      });
+    void showError(`Reqnroll: ${message}`, 'Open Documentation').then((choice) => {
+      if (choice === 'Open Documentation') {
+        void vscode.env.openExternal(
+          vscode.Uri.parse('https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes'),
+        );
+      }
+    });
     return api;
   }
 
@@ -359,7 +365,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
 
   client = new LanguageClient('reqnroll', 'Reqnroll Language Server', serverOptions, clientOptions);
 
-  statusBar = new StatusBarManager(client);
+  statusBar = new StatusBarManager(client, appLogChannel);
   context.subscriptions.push(statusBar);
 
   // Issue #8 — per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't
@@ -386,7 +392,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      void vscode.window.showErrorMessage(`Reqnroll LSP server failed to start: ${msg}`);
+      void showError(`Reqnroll LSP server failed to start: ${msg}`);
     });
 
   return api;
@@ -395,5 +401,6 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
 /** Extension teardown: disposes the project manager and stops the language client. */
 export function deactivate(): Thenable<void> | undefined {
   projectManager?.dispose();
+  setAppLogChannel(undefined);
   return client?.stop();
 }

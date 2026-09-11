@@ -62,6 +62,25 @@ suite('StatusBarManager', () => {
     assert.strictEqual(itemOf(manager).backgroundColor, undefined);
   });
 
+  test('mirrors state transitions to the curated app-log channel when one is supplied (issue #661)', () => {
+    const entries: { level: 'info' | 'warn'; message: string }[] = [];
+    const appLog = {
+      info: (message: string) => entries.push({ level: 'info', message }),
+      warn: (message: string) => entries.push({ level: 'warn', message }),
+    } as unknown as import('vscode').LogOutputChannel;
+
+    let listener: ((event: StateChangeEvent) => void) | undefined;
+    new StatusBarManager(fakeClient({ captureListener: (l) => (listener = l) }), appLog);
+    listener?.({ oldState: State.Starting, newState: State.Running });
+    listener?.({ oldState: State.Running, newState: State.Stopped });
+
+    assert.deepStrictEqual(entries, [
+      { level: 'info', message: 'Reqnroll LSP client starting…' },
+      { level: 'info', message: 'Reqnroll LSP client connected.' },
+      { level: 'warn', message: 'Reqnroll LSP client stopped.' },
+    ]);
+  });
+
   test('dispose() also disposes the onDidChangeState listener (issue #325)', () => {
     // Without disposing the listener, a StatusBarManager constructed again against a
     // longer-lived client (any future reconnect-without-restart path) would add another
