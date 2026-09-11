@@ -96,8 +96,14 @@ public sealed class IdeSupportLoggerFactory : ILoggerFactory
     /// <summary>Creates an <see cref="ILogger"/> for the given category, backed by the shared <see cref="IIdeSupportLogger"/> sink.</summary>
     public ILogger CreateLogger(string categoryName) => new IdeSupportLoggerAdapter(categoryName, _logger);
 
-    // Single sink by design - IIdeSupportLogger already fans out via IdeSupportCompositeLogger when needed.
-    /// <summary>No-op: additional providers are not supported since there is a single fixed sink.</summary>
+    // A single IIdeSupportLogger is wired into this factory - that logger is typically itself an
+    // IdeSupportCompositeLogger fanning out to several destinations (e.g. issue #651's debug +
+    // file + VS output pane sinks), so "single sink" here means "single ILoggerFactory backend",
+    // not "only one place messages end up". ILoggerProvider is Microsoft.Extensions.Logging's own
+    // extension point for adding backends; it's unsupported here because backends are composed on
+    // the IIdeSupportLogger side instead (IdeSupportCompositeLogger.Add), before this factory ever
+    // sees it.
+    /// <summary>No-op: additional providers are not supported here - compose sinks on the underlying <see cref="IIdeSupportLogger"/> instead.</summary>
     public void AddProvider(ILoggerProvider provider) { }
 
     /// <summary>No-op: this factory holds no disposable resources of its own.</summary>
