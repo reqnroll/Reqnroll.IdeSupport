@@ -42,7 +42,7 @@ internal sealed class RenameStepCommand : Command
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
-            ActivationConstraint.EditorContentType("CSharp"),
+            ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
             ActivationConstraint.EditorContentType("Gherkin")),
         Placements =
         [

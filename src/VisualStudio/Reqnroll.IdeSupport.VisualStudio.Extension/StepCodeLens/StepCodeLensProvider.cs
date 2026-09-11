@@ -48,7 +48,7 @@ internal sealed class StepCodeLensProvider : ExtensionPart, ICodeLensProvider
     /// <inheritdoc />
     public TextViewExtensionConfiguration TextViewExtensionConfiguration => new()
     {
-        AppliesTo = [DocumentFilter.FromDocumentType("CSharp")]
+        AppliesTo = [DocumentFilter.FromDocumentType(CSharpDocumentType.CSharp)]
     };
 
     // Provider display name shown in VS Tools > Options > Text Editor > Code Lens.
