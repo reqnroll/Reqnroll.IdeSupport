@@ -9,6 +9,7 @@ import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollNotificationSender
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
+import com.reqnroll.ide.rider.lsp.RenameOutcome
 import com.reqnroll.ide.rider.lsp.isDocumentStale
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetItem
 import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
@@ -100,13 +101,15 @@ object RenameStepRunner {
         val newExpression = if (isValidNewExpression(target.expression, input)) input else null
         if (newExpression == null) return
 
-        val edit = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
-        if (edit == null) {
-            showOnEdt(project) {
-                Messages.showErrorDialog(
-                    project, "Rename failed — the new expression may be invalid, or nothing to rename.", "Rename Step")
+        val outcome = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
+        val edit = when (outcome) {
+            is RenameOutcome.Failed -> {
+                showOnEdt(project) {
+                    Messages.showErrorDialog(project, outcome.message, "Rename Step")
+                }
+                return
             }
-            return
+            is RenameOutcome.Success -> outcome.edit
         }
 
         ApplicationManager.getApplication().invokeLater {

@@ -4,6 +4,7 @@ import {
   LanguageClient,
   Middleware,
   PrepareRenameSignature,
+  ResponseError,
   WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
@@ -251,11 +252,22 @@ export async function renameStepFromCSharp(
   });
   if (!newStepText) return;
 
-  const result = await client.sendRequest<LspWorkspaceEdit | null>('textDocument/rename', {
-    textDocument: { uri: uriStr },
-    position: { line: position.line, character: position.character },
-    newName: newStepText,
-  });
+  let result: LspWorkspaceEdit | null;
+  try {
+    result = await client.sendRequest<LspWorkspaceEdit | null>('textDocument/rename', {
+      textDocument: { uri: uriStr },
+      position: { line: position.line, character: position.character },
+      newName: newStepText,
+    });
+  } catch (err) {
+    // The server rejects an invalid/unmatchable rename with a real JSON-RPC error response
+    // (issue #650) instead of a null result, so its human-readable reason can be shown
+    // directly — sendRequest rejects the promise with a ResponseError in that case (confirmed
+    // in vscode-jsonrpc's connection.js) rather than resolving to null.
+    const message = err instanceof ResponseError ? err.message : 'Rename failed.';
+    void vscode.window.showErrorMessage(`Reqnroll: ${message}`);
+    return;
+  }
 
   if (!result) {
     void vscode.window.showErrorMessage('Reqnroll: Rename failed.');

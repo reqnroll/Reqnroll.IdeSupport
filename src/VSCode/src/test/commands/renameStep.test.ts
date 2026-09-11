@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { LanguageClient } from 'vscode-languageclient/node';
+import { LanguageClient, ResponseError } from 'vscode-languageclient/node';
 import {
   collapseActiveSelectionForFeatureStepRename,
   createRenameMiddleware,
@@ -701,6 +701,43 @@ suite('renameStep', () => {
 
       assert.ok(shownError?.includes('Rename failed'));
       assert.strictEqual(applyEditCalled, false);
+    });
+
+    test('shows the server-provided error message when textDocument/rename rejects (issue #650)', async () => {
+      // The server now rejects an invalid rename with a real JSON-RPC error response instead of a
+      // null result — sendRequest surfaces that as a rejected promise, not a resolved null.
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+            });
+          }
+          if (method === 'textDocument/rename') {
+            return Promise.reject(new ResponseError(-32803, 'Parameter count mismatch'));
+          }
+          return Promise.resolve(null);
+        },
+      });
+
+      let shownError: string | undefined;
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        () => Promise.resolve('a new name'),
+        () =>
+          withStub(
+            vscode.window,
+            'showErrorMessage',
+            (message: string) => {
+              shownError = message;
+              return Promise.resolve(undefined);
+            },
+            () => renameStepFromCSharp(client, fakeEditor()),
+          ),
+      );
+
+      assert.strictEqual(shownError, 'Reqnroll: Parameter count mismatch');
     });
   });
 });
