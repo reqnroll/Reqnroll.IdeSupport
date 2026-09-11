@@ -57,7 +57,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         => new()
         {
             DocumentSelector = new TextDocumentSelector(
-                new TextDocumentFilter { Pattern = "**/*.feature" })
+                new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern })
         };
 
     /// <summary>Handles a <c>textDocument/definition</c> request for step-definition navigation.</summary>

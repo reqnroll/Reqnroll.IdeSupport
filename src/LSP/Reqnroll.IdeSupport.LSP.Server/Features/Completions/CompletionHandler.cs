@@ -81,7 +81,7 @@ public sealed class CompletionHandler : ICompletionHandler
         => new()
         {
             DocumentSelector = new TextDocumentSelector(
-                new TextDocumentFilter { Pattern = "**/*.feature" }),
+                new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern }),
             ResolveProvider  = false
         };
 
