@@ -92,6 +92,54 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("rename");
     }
 
+    // ── Rule 3, Cucumber Expression vs regex operator sets (issue #649) ────────
+
+    [Fact]
+    public void ValidateNewName_cucumber_expression_literal_dollar_sign_passes()
+    {
+        // '$' is a plain literal in Cucumber Expression syntax (e.g. a currency amount) -
+        // it must not be treated as a forbidden "expression operator" the way it would be in a regex.
+        var result = StepRenameValidator.ValidateNewName(
+            "the basket price should be ${float}", "the basket price will be ${float}");
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData('$')]
+    [InlineData('^')]
+    [InlineData('*')]
+    [InlineData('+')]
+    [InlineData('[')]
+    [InlineData(']')]
+    [InlineData('|')]
+    public void ValidateNewName_cucumber_expression_other_regex_only_operators_pass(char literalChar)
+    {
+        var result = StepRenameValidator.ValidateNewName("I have {int} cukes", $"I own {{int}} cukes{literalChar}");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_expression_real_operator_still_fails()
+    {
+        // '(' is genuinely special in Cucumber Expressions (optional text) - still forbidden
+        // outside of a parameter slot even though it wasn't parsed as one here.
+        var result = StepRenameValidator.ValidateNewName("I have {int} cukes", "I own( {int} cukes");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_literal_dollar_sign_still_fails()
+    {
+        // Unlike the Cucumber Expression case above, '$' really is a regex anchor/operator when
+        // the original binding is a raw regex, so it must remain forbidden there.
+        var result = StepRenameValidator.ValidateNewName("I press (.*) add", "I press$ (.*) add");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
     // ── ValidateProjectState ────────────────────────────────────────────────────
 
     [Fact]

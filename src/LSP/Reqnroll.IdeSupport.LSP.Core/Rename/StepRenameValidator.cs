@@ -3,6 +3,7 @@
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Rename;
 
@@ -13,8 +14,17 @@ namespace Reqnroll.IdeSupport.LSP.Core.Rename;
 /// </summary>
 public static class StepRenameValidator
 {
-    /// <summary>Characters that are regex/Cucumber expression operators and must not appear in non-parameter text.</summary>
-    private static readonly char[] ExpressionOperators = { '?', '*', '+', '[', ']', '{', '}', '(', ')', '^', '$', '|' };
+    /// <summary>
+    /// Characters that are meaningful in Cucumber Expression syntax and must not appear in
+    /// non-parameter text: parameter delimiters (<c>{ }</c>), optional-text delimiters
+    /// (<c>( )</c>), the escape character (<c>\</c>), and the alternative-text separator
+    /// (<c>/</c>). Everything else — including <c>$ ^ ? * + [ ] |</c> — is a plain literal
+    /// character in a Cucumber Expression (issue #649), unlike in a regex.
+    /// </summary>
+    private static readonly char[] CucumberExpressionOperators = { '{', '}', '(', ')', '\\', '/' };
+
+    /// <summary>Characters that are regex operators and must not appear in non-parameter text of a regex-authored binding.</summary>
+    private static readonly char[] RegexOperators = { '?', '*', '+', '[', ']', '{', '}', '(', ')', '^', '$', '|' };
 
     private static readonly Regex ParameterSlotPattern = new(
         @"(\([^)]*\)|\{\w+\})",
@@ -59,15 +69,23 @@ public static class StepRenameValidator
         if (string.IsNullOrEmpty(newName))
             return new ValidationError("The new step text cannot be empty", "rename");
 
-        // Rule 3: non-parameter parts must not contain expression operators
+        // Rule 3: non-parameter parts must not contain expression operators. Which characters
+        // count as "operators" depends on the original binding's own syntax (issue #649): a
+        // literal '$' (e.g. a currency amount in "the price is ${float}") is meaningless
+        // punctuation in a Cucumber Expression but a real anchor in a regex, so the two syntaxes
+        // need different forbidden-character sets rather than one shared regex-operator list.
         var originalParamCount = CountParameterSlots(originalExpression);
         var newParamCount = CountParameterSlots(newName);
+
+        var forbiddenOperators = CucumberExpressionDetector.IsCucumberExpression(originalExpression)
+            ? CucumberExpressionOperators
+            : RegexOperators;
 
         // Scan non-parameter segments for operators
         var newNonParamSegments = SplitNonParameterSegments(newName);
         foreach (var segment in newNonParamSegments)
         {
-            if (segment.IndexOfAny(ExpressionOperators) >= 0)
+            if (segment.IndexOfAny(forbiddenOperators) >= 0)
                 return new ValidationError("The non-parameter parts cannot contain expression operators", "rename");
         }
 
