@@ -4,6 +4,7 @@ import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerManager
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import com.reqnroll.ide.rider.lsp.protocol.GoToHooksRequestParams
@@ -269,21 +270,50 @@ object ReqnrollRequestSender {
      * or cast to `ReqnrollLanguageServer` is needed. Rider has no native rename bridge (confirmed
      * by decompiling `LspServerDescriptor` — no `lspRenameSupport`-style customization exists),
      * so callers must apply the returned `WorkspaceEdit` themselves; see `RenameWorkspaceEditApplier`.
+     *
+     * Returns [RenameOutcome.Failed] with the server's own human-readable reason (issue #650) when
+     * the server rejects the rename — e.g. a step-rename validation failure — rather than the
+     * blanket "request failed" `null` every other method in this file returns on any exception.
+     * A rejected rename follows a modal "pick a target, type a new expression" flow the user just
+     * completed, so [RenameStepRunner] showing no explanation at all (like a routine navigation
+     * miss would) is worse here than for the rest of this file's silently-null methods.
      */
-    fun rename(project: Project, uri: String, line: Int, character: Int, newName: String): WorkspaceEdit? {
-        val server = firstRunningServer(project) ?: return null
+    fun rename(project: Project, uri: String, line: Int, character: Int, newName: String): RenameOutcome {
+        val server = firstRunningServer(project)
+            ?: return RenameOutcome.Failed("The Reqnroll LSP server is not running or did not respond.")
         val params = RenameParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), newName)
         return try {
-            server.sendRequestSync(RENAME_TIMEOUT_MS) { languageServer ->
+            val edit = server.sendRequestSync(RENAME_TIMEOUT_MS) { languageServer ->
                 languageServer.textDocumentService.rename(params)
+            }
+            if (edit != null) {
+                RenameOutcome.Success(edit)
+            } else {
+                RenameOutcome.Failed("Rename failed — the new expression may be invalid, or nothing to rename.")
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("rename: request failed", ex)
-            null
+            val message = extractResponseErrorMessage(ex)
+                ?: "Rename failed — the new expression may be invalid, or nothing to rename."
+            RenameOutcome.Failed(message)
         }
     }
+
+    /**
+     * Unwraps the server's human-readable reason (issue #650) from a failed `textDocument/rename`
+     * request, when the failure was a real JSON-RPC error response rather than some other
+     * exception (timeout, I/O error, cancellation). Checks the exception itself and one level of
+     * [Throwable.cause], since `LspServer.sendRequestSync` may surface a [ResponseErrorException]
+     * directly or wrapped (e.g. in an `ExecutionException` from the underlying
+     * `CompletableFuture.get`) — Rider's `LspServer` interface gives no documented guarantee
+     * either way. Returns null for any other kind of failure, so callers fall back to a generic
+     * message instead of showing something misleading.
+     */
+    internal fun extractResponseErrorMessage(ex: Throwable): String? =
+        ((ex as? ResponseErrorException) ?: (ex.cause as? ResponseErrorException))
+            ?.responseError?.message
 
     /**
      * Runs the *standard* `textDocument/documentSymbol` request (Feature/Rule/Scenario/Step)
@@ -344,4 +374,15 @@ object ReqnrollRequestSender {
                 if (it == null)
                     ReqnrollDebugLogger.warn("ReqnrollRequestSender: no Reqnroll LSP server running")
             }
+}
+
+/**
+ * Outcome of [ReqnrollRequestSender.rename]: either a [WorkspaceEdit] to apply, or a reason it
+ * couldn't be produced. Distinguishes "the server rejected this rename for an explainable reason"
+ * (issue #650) from every other request in this file's blanket "something went wrong" `null`, so
+ * [com.reqnroll.ide.rider.actions.RenameStepRunner] can show the server's actual message.
+ */
+sealed interface RenameOutcome {
+    data class Success(val edit: WorkspaceEdit) : RenameOutcome
+    data class Failed(val message: String) : RenameOutcome
 }

@@ -180,6 +180,36 @@ public class LspInterceptingPipeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SendRequestToServerWithErrorAsync_surfaces_the_servers_error_object_instead_of_collapsing_it_to_null()
+    {
+        // Issue #650: SendRequestToServerAsync intentionally collapses a JSON-RPC error response to
+        // a plain null result (see its own doc comment) — indistinguishable from "no result". The
+        // new WithError overload must preserve the error's message/code/data instead, so a caller
+        // that actually needs to explain a failure (e.g. Rename Step's status-bar message) can.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var requestTask = _pipe.SendRequestToServerWithErrorAsync("textDocument/rename", "{}", CancellationToken.None);
+
+        var forwarded = await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+        var id = ExtractId(forwarded);
+
+        await WriteFrameAsync(serverSide.ServerSideStdout,
+            $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"error\":{{\"code\":-32803,\"message\":\"Parameter count mismatch\",\"data\":\"rename\"}}}}");
+
+        var (result, error) = await requestTask;
+
+        result.Should().BeNull("the plain overload's null-on-error contract still applies to Result");
+        error.Should().NotBeNull();
+        error!["code"]!.Value<int>().Should().Be(-32803);
+        error["message"]!.Value<string>().Should().Be("Parameter count mismatch");
+        error["data"]!.Value<string>().Should().Be("rename");
+    }
+
+    [Fact]
     public async Task An_owned_rpc_request_and_its_response_are_both_run_through_the_interceptors()
     {
         // Regression coverage for issue #491: a request injected by SendRequestToServerAsync (e.g.

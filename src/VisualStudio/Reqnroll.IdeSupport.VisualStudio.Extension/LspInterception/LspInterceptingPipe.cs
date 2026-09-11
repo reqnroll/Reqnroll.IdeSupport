@@ -246,7 +246,29 @@ internal sealed class LspInterceptingPipe : IDisposable
         string? paramsJson,
         CancellationToken cancellationToken)
     {
-        if (_disposed) return null;
+        var (result, _) = await SendRequestToServerWithErrorAsync(method, paramsJson, cancellationToken)
+            .ConfigureAwait(false);
+        return result;
+    }
+
+    /// <summary>
+    /// Like <see cref="SendRequestToServerAsync"/>, but also surfaces the JSON-RPC <c>error</c>
+    /// object when the server rejected the request (issue #650), instead of collapsing it to
+    /// <c>null</c> indistinguishably from "no result". Use this over the plain overload only when
+    /// a caller actually needs to report the server's reason back to the user (e.g. Rename Step's
+    /// status-bar message) — every other caller's "null on error" contract is unchanged.
+    /// </summary>
+    /// <returns>
+    /// <c>Result</c>: the response's <c>result</c> field, or <c>null</c> on error/no-server/cancellation.
+    /// <c>Error</c>: the response's <c>error</c> object, or <c>null</c> when the request succeeded
+    /// (or no response was ever obtained at all).
+    /// </returns>
+    public async Task<(JToken? Result, JObject? Error)> SendRequestToServerWithErrorAsync(
+        string method,
+        string? paramsJson,
+        CancellationToken cancellationToken)
+    {
+        if (_disposed) return (null, null);
 
         using var pending = _correlator.Begin(cancellationToken);
         try
@@ -258,7 +280,7 @@ internal sealed class LspInterceptingPipe : IDisposable
             // than finding out immediately that there is no server.
             if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, cancellationToken)
                                      .ConfigureAwait(false))
-                return null;
+                return (null, null);
 
             // Notify interceptors about the injected request (issue #491), the same way
             // SendNotificationToServerAsync already does, so it appears in the inspector log —
@@ -270,13 +292,15 @@ internal sealed class LspInterceptingPipe : IDisposable
             var injectedMessage = new LspMessage(LspMessageDirection.Send, JObject.Parse(body), DateTimeOffset.Now);
             await _sendInterceptors.RunAsync(injectedMessage, cancellationToken).ConfigureAwait(false);
 
-            return await pending.Response.ConfigureAwait(false);
+            var result = await pending.Response.ConfigureAwait(false);
+            var error  = await pending.Error.ConfigureAwait(false);
+            return (result, error);
         }
         catch (OperationCanceledException)
         {
             _logger.LogInformation(
                 "LspInterceptingPipe: request {Method} id={Id} cancelled", method, pending.Id);
-            return null;
+            return (null, null);
         }
     }
 

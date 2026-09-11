@@ -62,6 +62,12 @@ public sealed class LspScenarioContext
     public WorkspaceEdit? LastRenameEdit { get; set; }
     public RenameTargetsResponse? LastRenameTargets { get; set; }
     public OmniSharp.Extensions.LanguageServer.Protocol.Models.RangeOrPlaceholderRange? LastPrepareRenameRange { get; set; }
+    /// <summary>
+    /// The exception a failed <c>textDocument/rename</c> request threw client-side (issue #650):
+    /// OmniSharp's client turns the server's <c>RpcErrorException</c>/<c>ResponseError</c> into a
+    /// <see cref="OmniSharp.Extensions.JsonRpc.Server.JsonRpcException"/>, not a null result.
+    /// </summary>
+    public Exception? LastRenameError { get; set; }
 
     // F5 — Go To Step Definition
     public LocationOrLocationLinks? LastDefinitions { get; set; }
