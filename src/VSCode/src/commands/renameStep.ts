@@ -8,6 +8,7 @@ import {
   WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { GHERKIN_LANGUAGE_ID } from '../languageIds';
 
 /** One renameable binding attribute at the queried position (mirrors RenameTargetItem.cs). */
 export interface RenameTargetItem {
@@ -134,7 +135,7 @@ export function selectRenameTarget(
  */
 export function collapseActiveSelectionForFeatureStepRename(): void {
   const editor = vscode.window.activeTextEditor;
-  if (editor?.document.languageId !== 'gherkin' || editor.selection.isEmpty) return;
+  if (editor?.document.languageId !== GHERKIN_LANGUAGE_ID || editor.selection.isEmpty) return;
 
   editor.selection = new vscode.Selection(editor.selection.active, editor.selection.active);
 }

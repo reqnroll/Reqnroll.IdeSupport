@@ -38,10 +38,10 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IParseCoordinator _parseCoordinator;
 
     private static readonly TextDocumentSelector _documentSelector = new(
-        new TextDocumentFilter { Pattern = "**/*.feature" },
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
         // The server registers interest in .cs files only to drive Roslyn binding re-discovery;
         // it does not provide general C# language features. See design doc §5 "Document Scope".
-        new TextDocumentFilter { Pattern = "**/*.cs" }
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.CSharpFilePattern }
     );
 
     /// <summary>Initializes a new instance of the <see cref="TextDocumentSyncHandler"/> class.</summary>
