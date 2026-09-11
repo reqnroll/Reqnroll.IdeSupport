@@ -52,7 +52,7 @@ internal sealed class FindStepUsagesCommand : Command
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
-        VisibleWhen = ActivationConstraint.EditorContentType("CSharp"),
+        VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
         Placements =
         [
