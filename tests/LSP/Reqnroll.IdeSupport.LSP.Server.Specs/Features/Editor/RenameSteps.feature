@@ -207,6 +207,36 @@ Scenario: Rename is not available for an undefined step in a .feature file
     When prepare rename is requested at line 2 column 9 in "UndefinedRename.feature"
     Then no prepare rename range is returned
 
+# ── Validation failure surfaces as a real LSP error, not a silent null (issue #650) ────
+
+Scenario: Renaming to a new name with a different parameter count fails with a real error, not a silent null
+    Given the LSP server is started
+    When the project is announced with output assembly "Sample.dll" for "ParamMismatch.feature"
+    And the C# step definition file "Steps.cs" is opened and saved to disk with
+        """
+        using Reqnroll;
+        namespace Sample
+        {
+            [Binding]
+            public class Steps
+            {
+                [Given("the first number is (.*)")]
+                public void GivenTheFirstNumberIs(int n) { }
+            }
+        }
+        """
+    And the feature file "ParamMismatch.feature" is opened with
+        """
+        Feature: ParamMismatch
+        Scenario: S
+            Given the first number is 42
+        """
+    Then the feature step "the first number is 42" is reported as bound
+    # Line 7 (0-based) is the method declaration "public void GivenTheFirstNumberIs(int n) { }".
+    # The new name drops the (.*) parameter entirely, tripping Rule 4 (parameter count mismatch).
+    When rename is requested at line 7 column 20 in "Steps.cs" with new name "the operand is" and an error is expected
+    Then the rename fails with error message "Parameter count mismatch"
+
 # ── Change-annotation negotiation (issue #70) ──────────────────────────────────
 # A client advertising LSP 3.16 documentChanges + changeAnnotationSupport (e.g. VS Code) gets
 # a grouped, labelled rename preview instead of the legacy Changes map. See

@@ -1,3 +1,5 @@
+using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.JsonRpc.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -267,6 +269,16 @@ public sealed class RenameHandler
     /// Executes the rename. Validates the new name, resolves all feature step locations,
     /// resolves the C# attribute string range, and returns a WorkspaceEdit covering all files.
     /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="HandlePrepareRenameAsync"/> — where a <see langword="null"/> result is
+    /// the LSP-spec-sanctioned way to say "not renameable here" and silently suppresses the
+    /// client's rename UI — every failure path here throws an <see cref="RpcErrorException"/>
+    /// (issue #650) instead of returning <see langword="null"/>. By the time this method runs,
+    /// the client has already shown the user a rename box (seeded by a successful
+    /// <c>prepareRename</c>) and collected a new name, so a failure at this point is a genuine
+    /// error the user should see explained, not a silent no-op — a bare <see langword="null"/>
+    /// here previously surfaced as an unqualified "Rename failed" with no reason given.
+    /// </remarks>
     public async Task<WorkspaceEdit?> HandleRenameAsync(
         RenameParams       request,
         CancellationToken   cancellationToken)
@@ -279,8 +291,10 @@ public sealed class RenameHandler
         // most complex operation in the server (workspace-wide applyEdit).
         using var _perf = _recorder.Measure(LspMethodNames.TextDocumentRename, uri);
 
-        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(newName))
-            return null;
+        if (string.IsNullOrEmpty(path))
+            throw RenameFailedError("No step definition found at this position", "position");
+        if (string.IsNullOrEmpty(newName))
+            throw RenameFailedError("The new step text cannot be empty", "rename");
 
         _logger.LogVerbose($"RenameHandler: rename at {path}, newName='{newName}'");
 
@@ -293,7 +307,7 @@ public sealed class RenameHandler
         if (registry == ProjectBindingRegistry.Invalid)
         {
             _logger.LogVerbose("RenameHandler: registry is invalid");
-            return null;
+            throw RenameFailedError("The project is not initialized yet", "project");
         }
 
         // Resolves a pending reqnroll/selectRenameTarget session first (multi-attribute picker
@@ -301,7 +315,7 @@ public sealed class RenameHandler
         // RenameBindingResolver.ResolveBindingForRename for the full precedence order.
         var binding = _bindingResolver.ResolveBindingForRename(uri, path, request.Position, registry);
         if (binding == null)
-            return null;
+            throw RenameFailedError("No step definition found at this position", "position");
 
         var bindingLocation = ResolveBindingLocation(path, binding, line, column);
         var expression = binding.Expression ?? string.Empty;
@@ -328,14 +342,18 @@ public sealed class RenameHandler
         var effectiveNewName = _nameReconciler.Reconcile(
             path, uri, request.Position, usages, sourceExpression, newName, ReadStepText);
         if (effectiveNewName == null)
-            return null;
+        {
+            throw RenameFailedError(
+                "Could not match the new step text to this step's parameters — only the wording can change, not the parameter values",
+                "rename");
+        }
 
         // ── 3. Validate new name ───────────────────────────────────────────────
         var nameError = StepRenameValidator.ValidateNewName(expression, effectiveNewName);
         if (nameError != null)
         {
             _logger.LogVerbose($"RenameHandler: validation failed — {nameError.Message}");
-            return null;
+            throw RenameFailedError(nameError.Message, nameError.Scope);
         }
 
         var supportsChangeAnnotations = ClientSupportsChangeAnnotations();
@@ -355,7 +373,11 @@ public sealed class RenameHandler
             builder, uri, path, binding, sourceLiteral, effectiveNewName, cancellationToken);
 
         if (builder.IsEmpty)
-            return null;
+        {
+            throw RenameFailedError(
+                "The rename produced no changes — the step definition could not be located in source",
+                "rename");
+        }
 
         var workspaceEdit = builder.Build();
 
@@ -367,7 +389,11 @@ public sealed class RenameHandler
         // rename succeeded while the source still has the old text. See
         // RenamePostApplyCoordinator.PushEditIfVisualStudioAsync for why VS needs this push at all.
         if (!await _postApplyCoordinator.PushEditIfVisualStudioAsync(builder, cancellationToken))
-            return null;
+        {
+            throw RenameFailedError(
+                "Visual Studio could not apply the rename edit — the file may be locked, read-only, or have unsaved conflicting changes",
+                "rename");
+        }
 
         _postApplyCoordinator.InvalidateClosedFeatureCaches(builder);
         await _postApplyCoordinator.RefreshCSharpRegistryAsync(csFileUri, newCsText, cancellationToken);
@@ -382,6 +408,20 @@ public sealed class RenameHandler
 
         return workspaceEdit;
     }
+
+    /// <summary>
+    /// Builds the <see cref="RpcErrorException"/> a <c>textDocument/rename</c> failure throws
+    /// (issue #650) so it reaches the client as a proper LSP <c>ResponseError</c> — code
+    /// <see cref="ErrorCodes.RequestFailed"/> ("the request was syntactically valid but could
+    /// not complete"), the human-readable reason as the error message, and
+    /// <paramref name="scope"/> (matching <see cref="ValidationError.Scope"/> where the failure
+    /// came from <see cref="StepRenameValidator"/>) as the error's <c>data</c> payload.
+    /// </summary>
+    private static RpcErrorException RenameFailedError(string message, string? scope = null) =>
+        // RpcErrorException's `error` parameter isn't nullable-annotated (it predates this
+        // codebase's NRT adoption), but a null `data` is handled fine at the wire level —
+        // ErrorMessage.Data is [JsonProperty(NullValueHandling = NullValueHandling.Ignore)].
+        new(ErrorCodes.RequestFailed, scope!, message);
 
     /// <summary>
     /// Resolves the source location to search for feature-step usages of <paramref name="binding"/>:

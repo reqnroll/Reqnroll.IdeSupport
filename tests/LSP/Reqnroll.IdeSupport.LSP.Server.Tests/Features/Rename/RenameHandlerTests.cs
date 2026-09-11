@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.JsonRpc.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -324,7 +325,7 @@ public class StepRenameHandlerTests
     }
 
     [Fact]
-    public async Task Rename_returns_null_and_does_not_refresh_caches_when_VS_rejects_the_edit()
+    public async Task Rename_throws_and_does_not_refresh_caches_when_VS_rejects_the_edit()
     {
         const string csText =
             "using Reqnroll;\n" +
@@ -354,14 +355,88 @@ public class StepRenameHandlerTests
         _languageServer.SendRequest(Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>())
             .Returns(rejectedReturns);
 
-        var result = await CreateSutForVisualStudio().HandleRenameAsync(
+        var sut = CreateSutForVisualStudio();
+        var act = () => sut.HandleRenameAsync(
             RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
             CancellationToken.None);
 
-        result.Should().BeNull("VS reported the edit was not applied, so the rename did not actually happen");
+        // VS reported the edit was not applied, so the rename did not actually happen — this must
+        // surface to the client as a real LSP error (issue #650), not a silent null result.
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("could not apply the rename edit");
+
         await _csharpDiscoveryService.DidNotReceive().UpdateFromSourceAsync(
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
         _matchService.DidNotReceive().InvalidateAllForDocument(Arg.Any<string>());
+    }
+
+    // ── Issue #650: every textDocument/rename failure path throws an RpcErrorException carrying
+    //    a human-readable message instead of returning null — unlike prepareRename, where null is
+    //    the LSP-spec-sanctioned "not renameable here" and stays a silent no-op. ────────────────
+
+    [Fact]
+    public async Task Rename_throws_when_the_project_registry_is_invalid()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
+
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Be("The project is not initialized yet");
+    }
+
+    [Fact]
+    public async Task Rename_throws_when_no_binding_resolves_at_the_cursor()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>()));
+
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Be("No step definition found at this position");
+    }
+
+    [Fact]
+    public async Task Rename_throws_with_the_validator_message_on_a_parameter_count_mismatch()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the first number is {int}\")]\n" +
+            "        public void GivenTheFirstNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the first number is (.*)$"),
+            specifiedExpression: "the first number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        // The new name drops the {int} parameter entirely — Rule 4 (parameter count mismatch).
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Be("Parameter count mismatch");
+        exception.Which.Error.Should().Be("rename", "the error data should carry the ValidationError.Scope");
     }
 
     [Fact]

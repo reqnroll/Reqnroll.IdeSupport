@@ -28,8 +28,8 @@ internal sealed class LspRequestCorrelator
     /// <summary>Prefix identifying an id this correlator issued. Only <see cref="Begin"/> ever produces one.</summary>
     public const string RequestIdPrefix = "reqnroll-rpc-";
 
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<JToken?>> _pendingRequests
-        = new ConcurrentDictionary<string, TaskCompletionSource<JToken?>>(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, (TaskCompletionSource<JToken?> Result, TaskCompletionSource<JObject?> Error)> _pendingRequests
+        = new ConcurrentDictionary<string, (TaskCompletionSource<JToken?>, TaskCompletionSource<JObject?>)>(StringComparer.Ordinal);
 
     private readonly ILogger _logger;
 
@@ -50,12 +50,17 @@ internal sealed class LspRequestCorrelator
     /// </remarks>
     public PendingRequest Begin(CancellationToken cancellationToken)
     {
-        var id  = RequestIdPrefix + Guid.NewGuid().ToString("N");
-        var tcs = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingRequests[id] = tcs;
+        var id        = RequestIdPrefix + Guid.NewGuid().ToString("N");
+        var resultTcs = new TaskCompletionSource<JToken?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var errorTcs  = new TaskCompletionSource<JObject?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingRequests[id] = (resultTcs, errorTcs);
 
-        var registration = cancellationToken.Register(() => tcs.TrySetCanceled(cancellationToken));
-        return new PendingRequest(this, id, tcs.Task, registration);
+        var registration = cancellationToken.Register(() =>
+        {
+            resultTcs.TrySetCanceled(cancellationToken);
+            errorTcs.TrySetCanceled(cancellationToken);
+        });
+        return new PendingRequest(this, id, resultTcs.Task, errorTcs.Task, registration);
     }
 
     /// <summary>
@@ -99,12 +104,18 @@ internal sealed class LspRequestCorrelator
     /// </remarks>
     public void Consume(string id, JObject body)
     {
-        if (_pendingRequests.TryRemove(id, out var tcs))
+        if (_pendingRequests.TryRemove(id, out var pending))
         {
             if (body.ContainsKey("error"))
-                tcs.TrySetResult(null);
+            {
+                pending.Result.TrySetResult(null);
+                pending.Error.TrySetResult(body["error"] as JObject);
+            }
             else
-                tcs.TrySetResult(body["result"]);
+            {
+                pending.Result.TrySetResult(body["result"]);
+                pending.Error.TrySetResult(null);
+            }
 
             _logger.LogInformation("LspRequestCorrelator: consumed correlated response id={Id}", id);
         }
@@ -131,7 +142,10 @@ internal sealed class LspRequestCorrelator
     public void ReleaseAll()
     {
         foreach (var kv in _pendingRequests)
-            kv.Value.TrySetResult(null);
+        {
+            kv.Value.Result.TrySetResult(null);
+            kv.Value.Error.TrySetResult(null);
+        }
         _pendingRequests.Clear();
     }
 
@@ -139,7 +153,10 @@ internal sealed class LspRequestCorrelator
     public void CancelAll()
     {
         foreach (var kv in _pendingRequests)
-            kv.Value.TrySetCanceled();
+        {
+            kv.Value.Result.TrySetCanceled();
+            kv.Value.Error.TrySetCanceled();
+        }
         _pendingRequests.Clear();
     }
 
@@ -150,12 +167,14 @@ internal sealed class LspRequestCorrelator
         private readonly CancellationTokenRegistration _registration;
 
         internal PendingRequest(
-            LspRequestCorrelator owner, string id, Task<JToken?> response, CancellationTokenRegistration registration)
+            LspRequestCorrelator owner, string id, Task<JToken?> response, Task<JObject?> error,
+            CancellationTokenRegistration registration)
         {
             _owner        = owner;
             _registration = registration;
             Id            = id;
             Response      = response;
+            Error         = error;
         }
 
         /// <summary>The generated <see cref="RequestIdPrefix"/> id to put on the wire.</summary>
@@ -163,6 +182,14 @@ internal sealed class LspRequestCorrelator
 
         /// <summary>Completes with the response's <c>result</c>, or null on error/release/cancellation.</summary>
         public Task<JToken?> Response { get; }
+
+        /// <summary>
+        /// Completes with the response's <c>error</c> object (issue #650) when the server rejected
+        /// the request, or null on success/release/cancellation. Kept separate from
+        /// <see cref="Response"/> rather than folded into one result, so every existing caller of
+        /// <see cref="Response"/> keeps its current "null on error" behavior unchanged.
+        /// </summary>
+        public Task<JObject?> Error { get; }
 
         /// <summary>Unregisters the waiter. A response arriving afterwards is still consumed, never forwarded (issue #401).</summary>
         public void Dispose()

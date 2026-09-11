@@ -153,9 +153,23 @@ internal sealed class RenameStepCommand : Command
             _logger.LogInformation("RenameStepCommand: user entered new text {NewStepText}.", newStepText);
 
             // Step 5: Send textDocument/rename via the service
-            var result = await service.SendRenameRequestAsync(
-                fileUri, lineNum, charNum, newStepText, cancellationToken)
-                .ConfigureAwait(false);
+            RenameWorkspaceEdit? result;
+            try
+            {
+                result = await service.SendRenameRequestAsync(
+                    fileUri, lineNum, charNum, newStepText, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (RenameFailedException ex)
+            {
+                // The server rejected the rename with a specific reason (issue #650) — e.g. a
+                // step-rename validation failure, or VS itself failing to apply the edit. Show
+                // that reason directly instead of the generic "Rename failed." this used to
+                // collapse every distinct failure into.
+                _logger.LogInformation("RenameStepCommand: rename rejected by server: {Message}", ex.Message);
+                VsUtils.ShowStatusBarMessage($"Reqnroll: {ex.Message}");
+                return;
+            }
 
             if (result is null)
             {

@@ -111,6 +111,12 @@ internal sealed class RenameStepService
     /// <see cref="RenameWorkspaceEdit"/> with pre-parsed file edits, or null if the
     /// server had no edit to return.
     /// </summary>
+    /// <exception cref="RenameFailedException">
+    /// The server rejected the rename (issue #650) — e.g. a step-rename validation rule failed,
+    /// or Visual Studio could not apply the resulting edit. Carries the server's human-readable
+    /// reason as <see cref="Exception.Message"/>, so callers can show it directly instead of a
+    /// generic "Rename failed."
+    /// </exception>
     public async Task<RenameWorkspaceEdit?> SendRenameRequestAsync(
         string fileUri, int line0, int char0, string newName,
         CancellationToken cancellationToken)
@@ -119,9 +125,17 @@ internal sealed class RenameStepService
         _logger.LogInformation(
             "RenameStepService: sending {RenameMethod} at {FileUri}:{Line0}:{Char0}", RenameMethod, fileUri, line0, char0);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(RenameMethod, paramsJson, cancellationToken)
+        var (result, error) = await _pipe
+            .SendRequestToServerWithErrorAsync(RenameMethod, paramsJson, cancellationToken)
             .ConfigureAwait(false);
+
+        if (error is not null)
+        {
+            var message = error["message"]?.Value<string>() ?? "Rename failed.";
+            _logger.LogInformation(
+                "RenameStepService: {RenameMethod} rejected by server: {Message}", RenameMethod, message);
+            throw new RenameFailedException(message);
+        }
 
         if (result is null)
             return null;
@@ -214,4 +228,16 @@ internal sealed class RenameStepService
 
     internal static string JsonEscape(string value) =>
         Newtonsoft.Json.JsonConvert.ToString(value);
+}
+
+/// <summary>
+/// Thrown by <see cref="RenameStepService.SendRenameRequestAsync"/> when the server rejects a
+/// <c>textDocument/rename</c> request (issue #650) — carries the server's human-readable reason
+/// (e.g. a step-rename validation message) as <see cref="Exception.Message"/>, so
+/// <see cref="RenameStepCommand"/> can show it on the status bar instead of a generic failure.
+/// </summary>
+internal sealed class RenameFailedException : Exception
+{
+    /// <summary>Creates the exception with the server's error message.</summary>
+    public RenameFailedException(string message) : base(message) { }
 }
