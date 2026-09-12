@@ -84,6 +84,17 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun selectRenameTarget(params: SelectRenameTargetParams)
 
     /**
+     * Reports whether this client applied the `WorkspaceEdit` returned from `textDocument/rename`,
+     * so the server can commit or drop the binding-registry/match-cache updates it staged for that
+     * rename (see RenamePostApplyCoordinator.CompletePendingCommitAsync — issue #671 R3). Unlike
+     * Visual Studio, which has the edit pushed to it via `workspace/applyEdit` and is confirmed
+     * from that request's own `Applied` flag, Rider applies the returned edit itself and so must
+     * report the outcome explicitly.
+     */
+    @JsonNotification("reqnroll/renameApplied")
+    fun renameApplied(params: RenameAppliedParams)
+
+    /**
      * Resolves the generated C# test method(s) that the scenario/Scenario Outline/example row at a
      * `.feature` file range corresponds to (design doc §3/§4, issue #262) — see
      * ResolveTestTargetsHandler.cs. Used by [com.reqnroll.ide.rider.testrunner.RunLensSupport] to

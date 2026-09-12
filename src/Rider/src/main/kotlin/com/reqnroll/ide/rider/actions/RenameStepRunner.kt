@@ -11,6 +11,7 @@ import com.reqnroll.ide.rider.lsp.ReqnrollNotificationSender
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.RenameOutcome
 import com.reqnroll.ide.rider.lsp.isDocumentStale
+import com.reqnroll.ide.rider.lsp.protocol.RenameAppliedParams
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetItem
 import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
 
@@ -119,6 +120,12 @@ object RenameStepRunner {
                     "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
                         "edit to avoid applying it at stale offsets.",
                 )
+                // The server has staged the binding-registry/match-cache updates this edit implies
+                // and is waiting to hear whether we applied it. Reporting the discard drops them;
+                // staying silent is what used to leave the registry describing a step expression
+                // present in no file — "0 step usages" plus unbound-step diagnostics surviving a
+                // rebuild and a close/reopen (issue #670).
+                reportRenameApplied(project, uri, applied = false)
                 showOnEdt(project) {
                     ReqnrollNotify.error(
                         project,
@@ -129,6 +136,24 @@ object RenameStepRunner {
                 return@invokeLater
             }
             RenameWorkspaceEditApplier.apply(project, edit)
+            reportRenameApplied(project, uri, applied = true)
+        }
+    }
+
+    /**
+     * Tells the server whether the returned edit was applied, so it can commit or drop the cache
+     * updates it staged (issue #671 R3).
+     *
+     * Dispatched off the EDT because both call sites sit inside the `invokeLater` block that owns
+     * the document write — matching every other notification in this flow, which is sent from a
+     * pooled thread. Nothing waits on the result, so there is no ordering requirement against the
+     * write command itself.
+     */
+    private fun reportRenameApplied(project: Project, uri: String, applied: Boolean) {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            if (project.isDisposed) return@executeOnPooledThread
+            ReqnrollDebugLogger.verbose("RenameStepRunner: reporting renameApplied=$applied for $uri")
+            ReqnrollNotificationSender.sendRenameApplied(project, RenameAppliedParams(uri, applied))
         }
     }
 

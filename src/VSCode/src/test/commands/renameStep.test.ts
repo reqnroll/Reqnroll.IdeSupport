@@ -474,11 +474,11 @@ suite('renameStep', () => {
     });
 
     test('single target: skips the picker, prompts with its expression, sends rename, applies the edit', async () => {
-      let selectTargetParams: unknown;
       let renameParams: unknown;
       let inputBoxOptions: vscode.InputBoxOptions | undefined;
       let asWorkspaceEditCalledWith: unknown;
       let appliedEdit: vscode.WorkspaceEdit | undefined;
+      const notifications: { method: string; params: unknown }[] = [];
 
       const client = fakeClient({
         sendRequest: (method: string, params: unknown) => {
@@ -495,8 +495,8 @@ suite('renameStep', () => {
           }
           return Promise.resolve(null);
         },
-        sendNotification: (_method, params) => {
-          selectTargetParams = params;
+        sendNotification: (method, params) => {
+          notifications.push({ method, params });
           return Promise.resolve();
         },
         asWorkspaceEdit: (edit: unknown) => {
@@ -526,7 +526,10 @@ suite('renameStep', () => {
           ),
       );
 
-      assert.deepStrictEqual(selectTargetParams, {
+      const selectTarget = notifications.find(
+        (n) => n.method === ReqnrollMethods.selectRenameTarget,
+      );
+      assert.deepStrictEqual(selectTarget?.params, {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 0,
@@ -539,6 +542,11 @@ suite('renameStep', () => {
       });
       assert.ok(asWorkspaceEditCalledWith, 'the raw rename result should be converted');
       assert.strictEqual(appliedByWorkspace, appliedEdit);
+
+      // issue #671 (R3): the server staged the registry/match-cache updates this edit implies and
+      // is waiting to hear whether the client actually applied it.
+      const renameApplied = notifications.find((n) => n.method === ReqnrollMethods.renameApplied);
+      assert.deepStrictEqual(renameApplied?.params, { uri: 'file:///Steps.cs', applied: true });
     });
 
     test('falls back to the label text when expression is empty (method-name-style binding)', async () => {
