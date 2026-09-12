@@ -30,11 +30,6 @@ import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
 object RenameStepRunner {
     fun run(project: Project, uri: String, line: Int, character: Int) {
         ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character")
-        // Captured once, up front, so the edit-application step at the end of this flow can
-        // detect whether the document changed at any point in between -- including across the
-        // modal "Enter the new step expression" dialog, which gives the user arbitrary time to
-        // edit the file before the rename request is even sent (issue #326).
-        val requestModificationStamp = RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Renaming Step", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -56,7 +51,7 @@ object RenameStepRunner {
                 }
 
                 if (response.targets.size == 1) {
-                    continueWithTarget(project, uri, line, character, response.targets[0], requestModificationStamp)
+                    continueWithTarget(project, uri, line, character, response.targets[0])
                     return
                 }
 
@@ -73,7 +68,7 @@ object RenameStepRunner {
                         render = { it.label },
                         onChosen = { target ->
                             ApplicationManager.getApplication().executeOnPooledThread {
-                                continueWithTarget(project, uri, line, character, target, requestModificationStamp)
+                                continueWithTarget(project, uri, line, character, target)
                             }
                         },
                     )
@@ -89,7 +84,6 @@ object RenameStepRunner {
         line: Int,
         character: Int,
         target: RenameTargetItem,
-        requestModificationStamp: Long?,
     ) {
         ReqnrollNotificationSender.sendSelectRenameTarget(
             project, SelectRenameTargetParams(uri, version = 0, attributeIndex = target.attributeIndex))
@@ -101,6 +95,23 @@ object RenameStepRunner {
         }
         val newExpression = if (isValidNewExpression(target.expression, input)) input else null
         if (newExpression == null) return
+
+        // Captured here, immediately before the request — NOT when the action was invoked
+        // (issue #671, R4; originally #326).
+        //
+        // The server computes the edit's offsets fresh inside `textDocument/rename`, from its own
+        // current view of the document, and that request is dispatched on its Serial lane, so any
+        // didChange the user made while the modal was open has already been applied to the state
+        // those offsets came from. The window where the document can still shift out from under
+        // them is therefore only the request's own round trip — not the arbitrarily long stretch
+        // the modal dialog was open for.
+        //
+        // Spanning the modal made this fire on changes that could not invalidate the edit, and
+        // (via a stamp bumped by a VFS reload rather than a real edit) on changes that had not
+        // happened at all — discarding the user's rename and leaving the server's registry
+        // describing a step present in no file, since the discard went unreported (issue #670).
+        val requestModificationStamp =
+            RenameWorkspaceEditApplier.documentForUriWithoutRefresh(uri)?.modificationStamp
 
         val outcome = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
         val edit = when (outcome) {
@@ -115,10 +126,14 @@ object RenameStepRunner {
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
-            if (isDocumentStale(RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp, requestModificationStamp)) {
+            if (isDocumentStale(
+                    RenameWorkspaceEditApplier.documentForUriWithoutRefresh(uri)?.modificationStamp,
+                    requestModificationStamp,
+                )
+            ) {
                 ReqnrollDebugLogger.warn(
-                    "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
-                        "edit to avoid applying it at stale offsets.",
+                    "RenameStepRunner: $uri changed while the rename request was in flight; " +
+                        "discarding the edit to avoid applying it at stale offsets.",
                 )
                 // The server has staged the binding-registry/match-cache updates this edit implies
                 // and is waiting to hear whether we applied it. Reporting the discard drops them;
@@ -129,7 +144,7 @@ object RenameStepRunner {
                 showOnEdt(project) {
                     ReqnrollNotify.error(
                         project,
-                        "The file changed while the rename dialog was open. Please try again.",
+                        "The file changed while the rename was being prepared. Please try again.",
                         "Rename Step",
                     )
                 }

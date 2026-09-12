@@ -247,6 +247,44 @@ public class RenamePostApplyCoordinatorTests
         _csharpFileTextCache.DidNotReceive().Update(Arg.Any<DocumentUri>(), Arg.Any<string>());
     }
 
+    // ── Issue #671 (R2): the VS push is the emission that actually applies the edit in Visual
+    //    Studio, so it is the one that has to carry a checkable document version. ──────────────
+
+    [Fact]
+    public async Task Push_stamps_the_open_documents_version_on_the_applyEdit_params_Async()
+    {
+        var buf = new DocumentBuffer(FeatureUri, 7, "Feature: F\n");
+        DocumentBuffer? outBuf;
+        _documentBuffer.TryGet(FeatureUri, out outBuf).Returns(x => { x[1] = buf; return true; });
+        SetupApplyEditRequest(applied: true);
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), null, null);
+
+        await sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        _languageServer.Received(1).SendRequest(
+            "workspace/applyEdit",
+            Arg.Is<ApplyWorkspaceEditParams>(p =>
+                p.Edit.DocumentChanges!.Single().TextDocumentEdit!.TextDocument.Version == 7));
+    }
+
+    [Fact]
+    public async Task Push_stamps_a_null_version_for_a_document_VS_has_not_opened_Async()
+    {
+        DocumentBuffer? ignored;
+        _documentBuffer.TryGet(Arg.Any<DocumentUri>(), out ignored).Returns(false);
+        SetupApplyEditRequest(applied: true);
+        var sut = CreateSut(isVisualStudio: true);
+        sut.StagePendingCommit(FeatureUri, BuilderWithOneEdit(FeatureUri), null, null);
+
+        await sut.PushAndCompleteAsync(FeatureUri, BuilderWithOneEdit(FeatureUri));
+
+        _languageServer.Received(1).SendRequest(
+            "workspace/applyEdit",
+            Arg.Is<ApplyWorkspaceEditParams>(p =>
+                p.Edit.DocumentChanges!.Single().TextDocumentEdit!.TextDocument.Version == null));
+    }
+
     [Fact]
     public async Task Push_drops_the_staged_updates_when_the_applyEdit_request_throws_Async()
     {

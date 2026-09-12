@@ -102,8 +102,8 @@ export function selectRenameTarget(
  *
  * The server used to commit those updates unconditionally for every non-Visual-Studio client, on
  * the assumption the client would apply what it was handed. Rider disproved that (issue #670), and
- * the same exposure exists here once edits are version-stamped (R2) and VS Code starts rejecting
- * ones computed against a superseded document version.
+ * the same exposure exists here now that edits are version-stamped (R2) and VS Code rejects ones
+ * computed against a superseded document version.
  *
  * Failures are swallowed deliberately: a dropped confirmation costs a stale registry entry that the
  * next `.cs` edit repairs, whereas letting it reject would surface an error for a rename the user
@@ -210,20 +210,29 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
 
     // Confirms the staged server-side cache updates for a `.feature` rename (issue #671, R3).
     // Unlike `renameStepFromCSharp`, this path hands the edit back to VS Code, which applies it
-    // itself — there is no `applyEdit` boolean to report, so reaching a non-null edit here is the
-    // only signal available.
+    // itself — there is no `applyEdit` boolean to report back.
     //
-    // That is accurate as of today only because every `TextDocumentEdit` still goes out with
-    // `version: null`, which tells VS Code not to version-check and apply unconditionally. Once
-    // edits carry real versions (R2), VS Code will start rejecting ones computed against a
-    // superseded document and this will become optimistic in exactly the way #670 was — revisit it
-    // in that PR rather than leaving this comment to rot.
+    // Now that edits carry real document versions (R2), VS Code rejects one computed against a
+    // superseded version, so "we produced an edit" is no longer the same as "it was applied".
+    // `TextDocument.version` is the very counter `vscode-languageclient` reports to the server as
+    // the LSP document version, so comparing it across the request reproduces the decision VS Code
+    // is about to make. Reporting `true` regardless would reintroduce #670 on this path.
+    //
+    // Covers the invoked document only — the one whose version the user can plausibly move during
+    // the round trip. That matches the guard Rider applies (R4) and the window it protects: the
+    // server computes the edit inside a Serial-dispatched request, so any edit made while the
+    // rename UI was open is already reflected in the offsets.
     provideRenameEdits: async (document, position, newName, token, next) => {
       const client = getClient();
+      const versionBeforeRequest = document.version;
       const edit = await next(document, position, newName, token);
 
       if (client && edit) {
-        reportRenameApplied(client, document.uri.toString(), true);
+        reportRenameApplied(
+          client,
+          document.uri.toString(),
+          document.version === versionBeforeRequest,
+        );
       }
 
       return edit;

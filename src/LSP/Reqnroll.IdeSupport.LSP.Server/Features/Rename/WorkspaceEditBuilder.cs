@@ -23,12 +23,23 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 internal sealed class WorkspaceEditBuilder
 {
     private readonly bool _supportsChangeAnnotations;
+    private readonly Func<DocumentUri, int?> _resolveVersion;
     private readonly Dictionary<ChangeAnnotationIdentifier, ChangeAnnotation> _annotationCatalogue = new();
     private readonly HashSet<ChangeAnnotationIdentifier> _usedAnnotationIds = new();
     private readonly List<(DocumentUri Uri, TextEdit Edit)> _edits = new();
 
-    public WorkspaceEditBuilder(bool supportsChangeAnnotations)
-        => _supportsChangeAnnotations = supportsChangeAnnotations;
+    /// <param name="supportsChangeAnnotations">Whether to emit the annotated <c>DocumentChanges</c> shape.</param>
+    /// <param name="resolveVersion">
+    /// Resolves the LSP document version each edit was computed against, or <see langword="null"/>
+    /// for a document the client has not opened. Only consulted for the <c>DocumentChanges</c>
+    /// shape — the legacy <c>Changes</c> map has no field to carry a version. Defaults to "always
+    /// null", i.e. the unversioned behaviour, for callers that have no buffer service to ask.
+    /// </param>
+    public WorkspaceEditBuilder(bool supportsChangeAnnotations, Func<DocumentUri, int?>? resolveVersion = null)
+    {
+        _supportsChangeAnnotations = supportsChangeAnnotations;
+        _resolveVersion = resolveVersion ?? (_ => null);
+    }
 
     /// <summary>Whether this builder is emitting the annotated <c>DocumentChanges</c> shape.</summary>
     public bool SupportsChangeAnnotations => _supportsChangeAnnotations;
@@ -85,6 +96,13 @@ internal sealed class WorkspaceEditBuilder
 
         if (!_supportsChangeAnnotations)
         {
+            // The legacy shape structurally cannot carry a version — there is nowhere to put one.
+            // Clients on this path (Visual Studio, which advertises documentChanges but not
+            // changeAnnotationSupport) get no protocol-level staleness check from the response;
+            // VS's actual edit arrives via the workspace/applyEdit push instead, which is
+            // versioned — see RenamePostApplyCoordinator. Switching this branch to DocumentChanges
+            // would give it one, but the VS extension's RenameStepService.ParseWorkspaceEdit reads
+            // only `changes`, so that has to be a coordinated client change, not a server-side flip.
             return new WorkspaceEdit
             {
                 Changes = editsByUri.ToDictionary(kvp => kvp.Key, kvp => (IEnumerable<TextEdit>)kvp.Value)
@@ -96,7 +114,11 @@ internal sealed class WorkspaceEditBuilder
             DocumentChanges = new Container<WorkspaceEditDocumentChange>(
                 editsByUri.Select(kvp => new WorkspaceEditDocumentChange(new TextDocumentEdit
                 {
-                    TextDocument = new OptionalVersionedTextDocumentIdentifier { Uri = kvp.Key, Version = null },
+                    TextDocument = new OptionalVersionedTextDocumentIdentifier
+                    {
+                        Uri = kvp.Key,
+                        Version = _resolveVersion(kvp.Key)
+                    },
                     Edits = new TextEditContainer(kvp.Value)
                 }))),
             ChangeAnnotations = _annotationCatalogue
