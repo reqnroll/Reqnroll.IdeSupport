@@ -20,7 +20,12 @@ export class StatusBarManager implements vscode.Disposable {
     this._appLog = appLog;
     this._item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this._item.command = 'reqnroll.showOutputChannel';
-    this._setStarting();
+    // Shows the spinner immediately, before the client's real state is known — logIt is false
+    // here because client.start() (called right after this constructor returns) drives the
+    // LanguageClient through its own Stopped -> Starting transition a moment later, firing
+    // onDidChangeState below and logging then. Without suppressing this first call, every launch
+    // logged "Reqnroll LSP client starting…" twice in a row.
+    this._setStarting(false);
     this._item.show();
 
     this._stateListener = client.onDidChangeState((event) => {
@@ -43,11 +48,11 @@ export class StatusBarManager implements vscode.Disposable {
     this._item.dispose();
   }
 
-  private _setStarting(): void {
+  private _setStarting(logIt = true): void {
     this._item.text = '$(loading~spin) Reqnroll';
     this._item.tooltip = 'Reqnroll LSP server starting…';
     this._item.backgroundColor = undefined;
-    this._appLog?.info('Reqnroll LSP client starting…');
+    if (logIt) this._appLog?.info('Reqnroll LSP client starting…');
   }
 
   private _setRunning(): void {

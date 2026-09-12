@@ -71,6 +71,7 @@ suite('StatusBarManager', () => {
 
     let listener: ((event: StateChangeEvent) => void) | undefined;
     new StatusBarManager(fakeClient({ captureListener: (l) => (listener = l) }), appLog);
+    listener?.({ oldState: State.Stopped, newState: State.Starting });
     listener?.({ oldState: State.Starting, newState: State.Running });
     listener?.({ oldState: State.Running, newState: State.Stopped });
 
@@ -79,6 +80,17 @@ suite('StatusBarManager', () => {
       { level: 'info', message: 'Reqnroll LSP client connected.' },
       { level: 'warn', message: 'Reqnroll LSP client stopped.' },
     ]);
+  });
+
+  test('construction alone does not log "starting" — only the real onDidChangeState transition does (avoids a duplicate line every launch)', () => {
+    const entries: string[] = [];
+    const appLog = {
+      info: (message: string) => entries.push(message),
+    } as unknown as import('vscode').LogOutputChannel;
+
+    new StatusBarManager(fakeClient({}), appLog);
+
+    assert.deepStrictEqual(entries, []);
   });
 
   test('dispose() also disposes the onDidChangeState listener (issue #325)', () => {
