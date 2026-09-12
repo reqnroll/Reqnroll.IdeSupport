@@ -94,10 +94,15 @@ internal sealed class RenameStepService
     /// Tells the server to remember the selected attribute index for the next rename.
     /// </summary>
     public async Task SelectRenameTargetAsync(
-        string fileUri, int version, int attributeIndex,
+        string fileUri, int version, int attributeIndex, int line, int character,
         CancellationToken cancellationToken)
     {
-        var paramsJson = $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}}}";
+        // `position` (issue #671, R5) lets the server resolve `attributeIndex` to the binding it
+        // denotes while that candidate list is still current, instead of carrying a bare index
+        // across the rename prompt and re-applying it to a list rebuilt later.
+        var paramsJson =
+            $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}," +
+            $"\"position\":{{\"line\":{line},\"character\":{character}}}}}";
         _logger.LogDebug(
             "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", SelectRenameTargetMethod, attributeIndex);
 

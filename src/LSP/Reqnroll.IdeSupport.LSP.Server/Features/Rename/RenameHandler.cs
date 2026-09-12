@@ -313,7 +313,19 @@ public sealed class RenameHandler
         // Resolves a pending reqnroll/selectRenameTarget session first (multi-attribute picker
         // flow), then falls back to feature-match-cache or registry position lookup — see
         // RenameBindingResolver.ResolveBindingForRename for the full precedence order.
-        var binding = _bindingResolver.ResolveBindingForRename(uri, path, request.Position, registry);
+        var binding = _bindingResolver.ResolveBindingForRename(
+            uri, path, request.Position, registry, out var pickedBindingIsGone);
+
+        // A disambiguation session that named a binding which has since disappeared must fail, not
+        // fall back (issue #671, R5): the fallback takes the first candidate at this position, so
+        // proceeding would rename an arbitrary binding rather than the one the user chose.
+        if (pickedBindingIsGone)
+        {
+            throw RenameFailedError(
+                "The step definition you chose changed while the rename was being prepared — please try again",
+                "rename");
+        }
+
         if (binding == null)
             throw RenameFailedError("No step definition found at this position", "position");
 
@@ -578,8 +590,48 @@ public sealed class RenameHandler
         CancellationToken        cancellationToken)
     {
         using var _perf = _recorder.Measure(LspMethodNames.ReqnrollSelectRenameTarget, request.Uri);
-        _sessionManager.SetSession(request.Uri.ToString(), request.Version, request.AttributeIndex);
+        _sessionManager.SetSession(
+            request.Uri.ToString(), request.Version, ResolveSessionTarget(request));
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Turns the picker's positional <c>attributeIndex</c> into a content-addressed identity for
+    /// the binding it denoted, by re-deriving the same candidate list <c>reqnroll/renameTargets</c>
+    /// produced (issue #671, R5).
+    /// </summary>
+    /// <remarks>
+    /// Resolving the index <i>here</i> — while the list it was chosen against is still current — is
+    /// the point: it is what stops a bare index from being carried across the modal dialog and
+    /// re-applied to a list that may by then denote something else. Falls back to the index alone
+    /// when the client sent no position, or when the candidate list cannot be re-derived.
+    /// </remarks>
+    private RenameSessionTarget ResolveSessionTarget(SelectRenameTargetParams request)
+    {
+        var indexOnly = new RenameSessionTarget(request.AttributeIndex, null);
+
+        if (request.Position is not { } position)
+            return indexOnly;
+
+        var path = request.Uri.GetFileSystemPath();
+        if (string.IsNullOrEmpty(path))
+            return indexOnly;
+
+        var registry = _registryLookup.GetRegistryForUri(request.Uri);
+        var candidates = path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase)
+            ? _bindingResolver.FindBindingsAtFeatureStep(request.Uri, path, position)
+            : RenameBindingResolver.FindBindingsAtCSharpMethod(registry, path, position.Line + 1);
+
+        if (request.AttributeIndex < 0 || request.AttributeIndex >= candidates.Count)
+        {
+            _logger.LogVerbose(
+                $"RenameHandler: selectRenameTarget index {request.AttributeIndex} is outside the {candidates.Count} candidate(s) at this position; storing the index alone");
+            return indexOnly;
+        }
+
+        var identity = RenameBindingIdentity.For(candidates[request.AttributeIndex]);
+        _logger.LogVerbose($"RenameHandler: selectRenameTarget index {request.AttributeIndex} resolved to identity '{identity}'");
+        return new RenameSessionTarget(request.AttributeIndex, identity);
     }
 
     /// <summary>

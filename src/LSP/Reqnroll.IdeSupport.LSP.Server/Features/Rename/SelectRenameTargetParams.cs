@@ -2,6 +2,7 @@
 
 using Newtonsoft.Json;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
@@ -27,4 +28,18 @@ public sealed class SelectRenameTargetParams
     /// <summary>Gets or sets the attribute index.</summary>
     [JsonProperty("attributeIndex")]
     public int AttributeIndex { get; set; }
+
+    /// <summary>
+    /// The position the disambiguation was invoked at — the same one passed to
+    /// <c>reqnroll/renameTargets</c> — so the server can re-derive that candidate list now and
+    /// record <i>which</i> binding <see cref="AttributeIndex"/> denoted, rather than storing a bare
+    /// index whose meaning depends on a list rebuilt later (issue #671, R5; see
+    /// <c>RenameBindingIdentity</c>).
+    /// </summary>
+    /// <remarks>
+    /// Optional: a client that omits it leaves the server with only the index, which is the
+    /// pre-R5 behaviour rather than a failure.
+    /// </remarks>
+    [JsonProperty("position")]
+    public Position? Position { get; set; }
 }

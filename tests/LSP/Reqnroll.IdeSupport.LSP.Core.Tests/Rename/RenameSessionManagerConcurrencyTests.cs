@@ -29,7 +29,7 @@ public class RenameSessionManagerConcurrencyTests
             var tasks = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
             {
                 gate.SignalAndWait();
-                return sut.TryConsume("test.cs", round, out var index) ? index : (int?)null;
+                return sut.TryConsume("test.cs", round, out var target) ? target.AttributeIndex : (int?)null;
             })).ToArray();
 
             var results = await Task.WhenAll(tasks);
@@ -60,9 +60,9 @@ public class RenameSessionManagerConcurrencyTests
 
         for (var i = 0; i < threadCount; i++)
         {
-            sut.TryConsume($"file-{i}.cs", 1, out var index).Should().BeTrue(
+            sut.TryConsume($"file-{i}.cs", 1, out var session).Should().BeTrue(
                 $"session for file-{i}.cs must survive concurrent SetSession calls (and the Cleanup sweep each one triggers) for unrelated keys");
-            index.Should().Be(i);
+            session.AttributeIndex.Should().Be(i);
         }
     }
 
