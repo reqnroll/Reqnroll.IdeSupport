@@ -91,7 +91,8 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
         factoryClass="com.reqnroll.ide.rider.structureview.ReqnrollStructureToolWindowFactory" />
 
     <!-- Curated, app-level-only console (issue #662) — plugin/LSP-client lifecycle and
-         user-invoked-command outcomes, fed by ReqnrollDebugLogger's `curated = true` entries (see
+         user-invoked-command outcomes, fed by ReqnrollDebugLogger's Info-and-above entries (its
+         `verbose()` level is where per-request diagnostic chatter goes instead — see
          ReqnrollConsolePanel's doc comment). Not the raw per-server LSP wire trace, which the
          platform's own "Language Servers" tool window already covers for every running server. -->
     <toolWindow id="Reqnroll" anchor="bottom"

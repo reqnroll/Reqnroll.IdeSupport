@@ -20,14 +20,13 @@ import com.reqnroll.ide.rider.lsp.protocol.MatchingScenarioLocation
 object GoToMatchingScenariosRunner {
     /** Runs the request on a background task and navigates (or shows a chooser) once it completes. */
     fun runAndShow(project: Project, uri: String, line: Int, character: Int) {
-        ReqnrollDebugLogger.info("GoToMatchingScenariosRunner: invoked for $uri at $line:$character", curated = true)
+        ReqnrollDebugLogger.info("GoToMatchingScenariosRunner: invoked for $uri at $line:$character")
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Matching Scenarios", true) {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.goToMatchingScenarios(project, uri, line, character)
                 ReqnrollDebugLogger.info(
-                    "GoToMatchingScenariosRunner: ${response?.scenarios?.size ?: "null"} scenario(s) returned",
-                    curated = true)
+                    "GoToMatchingScenariosRunner: ${response?.scenarios?.size ?: "null"} scenario(s) returned")
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
                     showResult(project, response)

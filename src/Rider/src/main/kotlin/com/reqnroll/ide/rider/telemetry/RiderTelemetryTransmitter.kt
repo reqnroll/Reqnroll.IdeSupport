@@ -47,7 +47,7 @@ object RiderTelemetryTransmitter {
     /** Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled. */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
         if (!isEnabled(System.getenv(TELEMETRY_ENV_VAR))) {
-            ReqnrollDebugLogger.info("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
+            ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
             return
         }
 
@@ -67,13 +67,13 @@ object RiderTelemetryTransmitter {
 
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
                 .exceptionally { ex ->
-                    ReqnrollDebugLogger.warn("RiderTelemetryTransmitter: failed to send $eventName", ex)
+                    ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: failed to send $eventName", ex)
                     null
                 }
         } catch (ex: Exception) {
             // A telemetry failure must never break the plugin — same posture as VS's
             // TelemetryTransmitter.TransmitEvent catch-all.
-            ReqnrollDebugLogger.warn("RiderTelemetryTransmitter: error preparing $eventName", ex)
+            ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
         }
     }
 

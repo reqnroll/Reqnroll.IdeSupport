@@ -25,7 +25,7 @@ class ReqnrollLspServerSupportProvider : LspServerSupportProvider {
             return
         }
 
-        ReqnrollDebugLogger.info("fileOpened: starting/reusing LSP server for ${file.path}")
+        ReqnrollDebugLogger.verbose("fileOpened: starting/reusing LSP server for ${file.path}")
         serverStarter.ensureServerStarted(ReqnrollLspServerDescriptor(project))
 
         // Closes a race the project/document-sync ProjectActivity listeners can't close on their

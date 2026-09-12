@@ -39,6 +39,10 @@ class ReqnrollDebugLoggerTest {
             "2026-09-06T14:02:11.123Z [Warning] x",
             ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Warning", "x"),
         )
+        assertEquals(
+            "2026-09-06T14:02:11.123Z [Verbose] x",
+            ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Verbose", "x"),
+        )
     }
 
     @Test
@@ -95,25 +99,37 @@ class ReqnrollDebugLoggerTest {
     }
 
     @Test
-    fun `curated = true entries are dispatched to every registered console sink`() {
+    fun `info, warn, and error all reach every registered console sink`() {
         val sink = RecordingSink()
         ReqnrollDebugLogger.addConsoleSink(sink)
         try {
-            ReqnrollDebugLogger.info("hello", curated = true)
+            ReqnrollDebugLogger.info("hello")
+            ReqnrollDebugLogger.warn("careful")
+            ReqnrollDebugLogger.error("broken")
         } finally {
             ReqnrollDebugLogger.removeConsoleSink(sink)
         }
 
-        assertEquals(listOf(Triple<String, String, Throwable?>("Info", "hello", null)), sink.entries)
+        assertEquals(
+            listOf(
+                Triple<String, String, Throwable?>("Info", "hello", null),
+                Triple<String, String, Throwable?>("Warning", "careful", null),
+                Triple<String, String, Throwable?>("Error", "broken", null),
+            ),
+            sink.entries,
+        )
     }
 
     @Test
-    fun `curated = false (the default) never reaches a registered console sink`() {
+    fun `verbose (the per-request-chatter level) never reaches a registered console sink`() {
+        // The threshold this asserts is fixed, not configurable — see verbose()'s doc comment
+        // for why (issue #662, matching VsOutputPaneLogger's hardcoded TraceLevel.Info on the VS
+        // side): Verbose is where folding/inlay-hints/breadcrumbs/per-viewport-CodeLens/etc. log,
+        // and none of that belongs in the curated console.
         val sink = RecordingSink()
         ReqnrollDebugLogger.addConsoleSink(sink)
         try {
-            ReqnrollDebugLogger.info("chatter")
-            ReqnrollDebugLogger.warn("also chatter")
+            ReqnrollDebugLogger.verbose("chatter")
         } finally {
             ReqnrollDebugLogger.removeConsoleSink(sink)
         }
@@ -127,7 +143,7 @@ class ReqnrollDebugLoggerTest {
         ReqnrollDebugLogger.addConsoleSink(sink)
         ReqnrollDebugLogger.removeConsoleSink(sink)
 
-        ReqnrollDebugLogger.error("too late", curated = true)
+        ReqnrollDebugLogger.error("too late")
 
         assertEquals(emptyList(), sink.entries)
     }

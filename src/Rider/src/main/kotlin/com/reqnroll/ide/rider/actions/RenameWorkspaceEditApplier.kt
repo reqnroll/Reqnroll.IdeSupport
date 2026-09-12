@@ -28,7 +28,7 @@ object RenameWorkspaceEditApplier {
                 val document = documentForUri(uri)
                 if (document == null) {
                     ReqnrollDebugLogger.warn(
-                        "RenameWorkspaceEditApplier: could not resolve document for $uri", curated = true)
+                        "RenameWorkspaceEditApplier: could not resolve document for $uri")
                     continue
                 }
                 applyEdits(document, edits)

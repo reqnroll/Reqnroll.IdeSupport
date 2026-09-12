@@ -13,17 +13,17 @@ import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
  */
 object ReqnrollNotify {
     fun info(project: Project, message: String, title: String) {
-        ReqnrollDebugLogger.info("$title: $message", curated = true)
+        ReqnrollDebugLogger.info("$title: $message")
         Messages.showInfoMessage(project, message, title)
     }
 
     fun warn(project: Project, message: String, title: String) {
-        ReqnrollDebugLogger.warn("$title: $message", curated = true)
+        ReqnrollDebugLogger.warn("$title: $message")
         Messages.showWarningDialog(project, message, title)
     }
 
     fun error(project: Project, message: String, title: String) {
-        ReqnrollDebugLogger.error("$title: $message", curated = true)
+        ReqnrollDebugLogger.error("$title: $message")
         Messages.showErrorDialog(project, message, title)
     }
 }

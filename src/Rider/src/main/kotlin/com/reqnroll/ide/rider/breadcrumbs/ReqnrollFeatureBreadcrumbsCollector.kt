@@ -127,7 +127,7 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
             if (project.isDisposed) return@executeOnPooledThread
 
             val result = ReqnrollRequestSender.documentSymbol(project, uri)
-            ReqnrollDebugLogger.info("ReqnrollFeatureBreadcrumbsCollector: ${result?.size ?: "null"} top-level symbol(s) for $uri")
+            ReqnrollDebugLogger.verbose("ReqnrollFeatureBreadcrumbsCollector: ${result?.size ?: "null"} top-level symbol(s) for $uri")
             if (result == null) return@executeOnPooledThread
 
             symbolsByUri[uri] = result

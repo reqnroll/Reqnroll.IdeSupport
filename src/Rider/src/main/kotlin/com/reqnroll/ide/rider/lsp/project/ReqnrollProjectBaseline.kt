@@ -49,7 +49,7 @@ object ReqnrollProjectBaseline {
     fun pushForAllRunnableProjects(project: Project) {
         val runnableProjects = project.solution.runnableProjectsModel.projects.valueOrNull.orEmpty()
         runnableProjects.forEach { runnableProject ->
-            ReqnrollDebugLogger.info("pushForAllRunnableProjects: projectLoaded ${runnableProject.projectFilePath}")
+            ReqnrollDebugLogger.verbose("pushForAllRunnableProjects: projectLoaded ${runnableProject.projectFilePath}")
             ReqnrollNotificationSender.sendProjectLoaded(project, buildProjectLoadedParams(project, runnableProject))
         }
         // sendProjectFilesBaseline does a synchronous walkTopDown — run on a background
@@ -95,7 +95,7 @@ object ReqnrollProjectBaseline {
             }
             .toList()
 
-        ReqnrollDebugLogger.info("projectFiles baseline: $projectFile (${files.size} file(s))")
+        ReqnrollDebugLogger.verbose("projectFiles baseline: $projectFile (${files.size} file(s))")
         ReqnrollNotificationSender.sendProjectFiles(
             project,
             ReqnrollProjectFilesParams(

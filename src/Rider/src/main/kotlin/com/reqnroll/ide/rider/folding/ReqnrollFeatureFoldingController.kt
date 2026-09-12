@@ -114,7 +114,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
 
                 val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
                 val ranges = ReqnrollRequestSender.foldingRange(project, uri)
-                ReqnrollDebugLogger.info("ReqnrollFeatureFoldingController: ${ranges?.size ?: "null"} range(s) for $uri")
+                ReqnrollDebugLogger.verbose("ReqnrollFeatureFoldingController: ${ranges?.size ?: "null"} range(s) for $uri")
 
                 ApplicationManager.getApplication().invokeLater(
                     {

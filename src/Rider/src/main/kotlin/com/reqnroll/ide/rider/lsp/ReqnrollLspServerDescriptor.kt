@@ -143,7 +143,7 @@ class ReqnrollLspServerDescriptor(project: Project) :
         val serverPath = try {
             ReqnrollServerPathResolver.resolve()
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.error("createCommandLine: failed to resolve LSP server path", ex, curated = true)
+            ReqnrollDebugLogger.error("createCommandLine: failed to resolve LSP server path", ex)
             throw ex
         }
 
@@ -153,7 +153,7 @@ class ReqnrollLspServerDescriptor(project: Project) :
         val logLevel = resolveLogLevel(System.getProperty("reqnroll.devSandbox") == "true")
 
         ReqnrollDebugLogger.info(
-            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel", curated = true)
+            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel")
         return GeneralCommandLine(serverPath.toString())
             .withParameters("--ide", "rider", "--log-level", logLevel)
     }

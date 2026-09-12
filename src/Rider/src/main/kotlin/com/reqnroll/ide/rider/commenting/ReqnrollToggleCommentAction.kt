@@ -53,7 +53,7 @@ class ReqnrollToggleCommentAction : AnAction() {
         val (startLine, endLine) = selectionLines(editor)
 
         ReqnrollDebugLogger.info(
-            "ReqnrollToggleCommentAction: invoked for $uri, lines [$startLine..$endLine]", curated = true)
+            "ReqnrollToggleCommentAction: invoked for $uri, lines [$startLine..$endLine]")
 
         // ReqnrollRequestSender.toggleComment uses sendRequestSync, which blocks the calling
         // thread — actionPerformed() runs on the EDT, so the request itself must run on a
@@ -64,7 +64,7 @@ class ReqnrollToggleCommentAction : AnAction() {
         ApplicationManager.getApplication().executeOnPooledThread {
             val dispatched = ReqnrollRequestSender.toggleComment(project, uri, startLine, endLine)
             ReqnrollDebugLogger.info(
-                "ReqnrollToggleCommentAction: toggleComment dispatched=$dispatched", curated = true)
+                "ReqnrollToggleCommentAction: toggleComment dispatched=$dispatched")
         }
     }
 

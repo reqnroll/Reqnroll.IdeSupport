@@ -30,13 +30,13 @@ object GoToHooksRunner {
         project: Project, uri: String, line: Int, character: Int,
         ownLevelOnly: Boolean = false, alwaysShowPicker: Boolean = false,
     ) {
-        ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character", curated = true)
+        ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character")
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
             override fun run(indicator: ProgressIndicator) {
                 val response = ReqnrollRequestSender.goToHooks(project, uri, line, character, ownLevelOnly)
                 ReqnrollDebugLogger.info(
-                    "GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned", curated = true)
+                    "GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned")
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
                     showResult(project, response, alwaysShowPicker)

@@ -28,7 +28,7 @@ import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
  */
 object RenameStepRunner {
     fun run(project: Project, uri: String, line: Int, character: Int) {
-        ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character", curated = true)
+        ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character")
         // Captured once, up front, so the edit-application step at the end of this flow can
         // detect whether the document changed at any point in between -- including across the
         // modal "Enter the new step expression" dialog, which gives the user arbitrary time to
@@ -118,7 +118,6 @@ object RenameStepRunner {
                 ReqnrollDebugLogger.warn(
                     "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
                         "edit to avoid applying it at stale offsets.",
-                    curated = true,
                 )
                 showOnEdt(project) {
                     ReqnrollNotify.error(

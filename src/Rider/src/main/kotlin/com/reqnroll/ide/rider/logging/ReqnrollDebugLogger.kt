@@ -7,11 +7,12 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Receives the subset of [ReqnrollDebugLogger] traffic logged with `curated = true` — implemented
- * by the "Reqnroll" console tool window's panel (issue #662; see
+ * Receives every [ReqnrollDebugLogger] entry at `Info` level or above — implemented by the
+ * "Reqnroll" console tool window's panel (issue #662; see
  * `com.reqnroll.ide.rider.console.ReqnrollConsolePanel`), which registers/unregisters itself via
  * [ReqnrollDebugLogger.addConsoleSink]/[ReqnrollDebugLogger.removeConsoleSink] as it's created and
- * disposed.
+ * disposed. `Verbose` entries (see [ReqnrollDebugLogger.verbose]) never reach a sink — see that
+ * method's doc comment for why the console threshold is fixed rather than configurable.
  */
 fun interface ReqnrollConsoleSink {
     fun accept(level: String, message: String, throwable: Throwable?)
@@ -48,20 +49,24 @@ object ReqnrollDebugLogger {
     private val logFile: File by lazy { resolveLogFile() }
     private val consoleSinks = CopyOnWriteArrayList<ReqnrollConsoleSink>()
 
-    /**
-     * `curated` (issue #662, mirroring VS's #651/#658 "lifecycle + command outcome, not
-     * per-request chatter" bar and VS Code's `logging/appNotify.ts`, issue #661): when true, the
-     * entry is also mirrored to every registered [ReqnrollConsoleSink] — the "Reqnroll" tool
-     * window when one is open. Every entry is always written to the file log regardless of this
-     * flag; only console visibility is gated. Defaults to false so the ~30 existing per-request
-     * diagnostic call sites (folding, inlay hints, breadcrumbs, per-viewport CodeLens, etc.) keep
-     * their current file-only behavior unchanged.
-     */
-    fun info(message: String, curated: Boolean = false) = log("Info", message, null, curated)
-    fun warn(message: String, throwable: Throwable? = null, curated: Boolean = false) = log("Warning", message, throwable, curated)
-    fun error(message: String, throwable: Throwable? = null, curated: Boolean = false) = log("Error", message, throwable, curated)
+    fun info(message: String) = log("Info", message, null)
+    fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
+    fun error(message: String, throwable: Throwable? = null) = log("Error", message, throwable)
 
-    /** Registers a sink to receive every future `curated = true` entry. Not retroactive. */
+    /**
+     * The fourth level in the project's shared Error/Warning/Info/Verbose vocabulary (already used
+     * by the LSP server's `--log-level` and VS Code's `reqnroll.trace.server`/`traceServerToLogLevel`
+     * mapping) — for the per-request diagnostic call sites (folding, inlay hints, breadcrumbs,
+     * per-viewport CodeLens/documentSymbol, project/document sync, telemetry) that fire far too
+     * often to belong in the curated console (issue #662): [log] never forwards `Verbose` entries
+     * to a [ReqnrollConsoleSink], only writes them to the file. This is a fixed threshold, not a
+     * configurable one — there's no UI surface in this plugin for a user to change it, matching
+     * `VsOutputPaneLogger`'s hardcoded default `TraceLevel.Info` on the VS side (issue #651/#656):
+     * `Info`/`Warning`/`Error` always reach the console, `Verbose` never does.
+     */
+    fun verbose(message: String, throwable: Throwable? = null) = log("Verbose", message, throwable)
+
+    /** Registers a sink to receive every future `Info`-or-above entry. Not retroactive. */
     fun addConsoleSink(sink: ReqnrollConsoleSink) {
         consoleSinks.add(sink)
     }
@@ -78,7 +83,7 @@ object ReqnrollDebugLogger {
         "${formatTimestamp(instant)} [${level.padEnd(LEVEL_FIELD_WIDTH)}] $message"
 
     @Synchronized
-    private fun log(level: String, message: String, throwable: Throwable?, curated: Boolean) {
+    private fun log(level: String, message: String, throwable: Throwable?) {
         try {
             logFile.parentFile?.mkdirs()
             val line = buildString {
@@ -93,7 +98,7 @@ object ReqnrollDebugLogger {
             // Best-effort — a logging failure must never break plugin behavior.
         }
 
-        if (curated) {
+        if (level != "Verbose") {
             for (sink in consoleSinks) {
                 try {
                     sink.accept(level, message, throwable)

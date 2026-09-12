@@ -28,7 +28,7 @@ object RunTestRunner {
     /** Runs the resolved [targets] on a background task and updates [RunTestResultStore]/the lens once it completes. */
     fun run(project: Project, uri: String, startLine: Int, targets: List<ScenarioTestTargetItem>) {
         ReqnrollDebugLogger.info(
-            "RunTestRunner: invoked for $uri:$startLine (${targets.size} target(s))", curated = true)
+            "RunTestRunner: invoked for $uri:$startLine (${targets.size} target(s))")
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Reqnroll: Running Test", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -135,7 +135,7 @@ object RunTestRunner {
                     .start()
             } catch (ex: java.io.IOException) {
                 ReqnrollDebugLogger.warn(
-                    "RunTestRunner: dotnet not found while starting dotnet test for $projectFile", ex, curated = true)
+                    "RunTestRunner: dotnet not found while starting dotnet test for $projectFile", ex)
                 return DotnetTestOutcome.Failure(
                     "Could not launch 'dotnet' for $projectFile — the dotnet CLI was not found on PATH, " +
                         "DOTNET_ROOT, or common install locations. Ensure the .NET SDK is installed and " +
@@ -154,7 +154,7 @@ object RunTestRunner {
 
             DotnetTestOutcome.Success(TrxParser.parse(trxFile.readText()))
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("RunTestRunner: dotnet test failed to run for $projectFile", ex, curated = true)
+            ReqnrollDebugLogger.warn("RunTestRunner: dotnet test failed to run for $projectFile", ex)
             DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
         } finally {
             resultsDir.deleteRecursively()
