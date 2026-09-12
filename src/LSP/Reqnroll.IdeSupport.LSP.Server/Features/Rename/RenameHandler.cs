@@ -82,7 +82,7 @@ public sealed class RenameHandler
         _nameReconciler  = new NewNameReconciler(logger);
         _postApplyCoordinator = new RenamePostApplyCoordinator(
             languageServer, clientIdeContext, matchService, documentBuffer,
-            csharpDiscoveryService, csharpFileTextCache, logger);
+            csharpDiscoveryService, csharpFileTextCache, logger, _recorder);
     }
 
     // ── textDocument/prepareRename ──────────────────────────────────────────────

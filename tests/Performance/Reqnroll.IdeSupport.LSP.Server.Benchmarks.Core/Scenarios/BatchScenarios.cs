@@ -115,10 +115,32 @@ public static class BatchScenarios
     /// pattern — bound once, referenced by every generated feature file (see
     /// <c>CorpusGenerator.BuildFeature</c>) — the highest-blast-radius rename case, where the
     /// resulting <c>WorkspaceEdit</c> touches every open feature file at once. Coarse wall-clock,
-    /// like the other workspace-wide batch scenarios; the harness never applies the returned edit
-    /// back via <c>workspace/applyEdit</c>, so the registry is unchanged and repetitions are
-    /// idempotent.
+    /// like the other workspace-wide batch scenarios.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Repetitions are idempotent</b> because the harness never applies the returned edit and
+    /// never sends <c>reqnroll/renameApplied</c>, so the server discards the registry/match-cache
+    /// updates it staged for each rename (issue #671, R3) and every repetition starts from the
+    /// same state.
+    /// </para>
+    /// <para>
+    /// That was <i>not</i> true before #671. The server committed those updates unconditionally
+    /// for any non-Visual-Studio client — the harness included — so each repetition patched the
+    /// registry with the new <c>.cs</c> text while the corpus files on disk still held the old
+    /// step, exactly the desync issue #670 reported. Repetitions after the first were therefore
+    /// measuring a rename against a registry that no longer matched the corpus, not the same
+    /// operation as the first. Expect this number to have risen when #671 landed: it is the
+    /// scenario starting to measure five real renames rather than one.
+    /// </para>
+    /// <para>
+    /// <b>Still narrower than a real client's rename.</b> The registry refresh the edit implies (a
+    /// full Roslyn parse plus registry patch) now runs on the confirmation path this scenario
+    /// deliberately does not exercise, so it falls outside this measurement — see
+    /// <c>RenamePostApplyCoordinator</c>. In the field that cost is recorded separately, as
+    /// <c>reqnroll/renameApplied</c> or <c>internal/renamePostResponseApply</c>.
+    /// </para>
+    /// </remarks>
     public static async Task<LatencySummary> StepRenameAsync(
         BenchmarkLspHarness harness, IReadOnlyList<OpenFeature> features, int repetitions = 5)
     {
