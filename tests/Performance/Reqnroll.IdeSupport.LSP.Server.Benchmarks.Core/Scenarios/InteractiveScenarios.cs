@@ -479,6 +479,25 @@ public sealed record OpenFeature(DocumentUri Uri, string Text)
         get { var (l, c) = FirstStep(); return (l, c + "Given prec".Length); }
     }
 
+    /// <summary>
+    /// The literal text after "Given " on the first step's line (e.g. <c>"precondition 0 is
+    /// met"</c>) — for a scenario that needs to build a rename <c>newName</c> which reconciles
+    /// cleanly against a parameterized binding. <see cref="NewNameReconciler"/> diffs the edited
+    /// text against this original to tell wording changes from parameter-value changes; inserting
+    /// new wording <i>before</i> the parameter (as in <c>"precondition renamed 0 is met"</c>)
+    /// confuses that diff into rejecting the edit as a parameter-value change. Appending after the
+    /// original text in full avoids the ambiguity entirely.
+    /// </summary>
+    public string FirstStepExpression
+    {
+        get
+        {
+            var (l, _) = FirstStep();
+            var line = Text.Replace("\r\n", "\n").Split('\n')[l].TrimStart();
+            return line.StartsWith("Given ", StringComparison.Ordinal) ? line["Given ".Length..] : line;
+        }
+    }
+
     /// <summary>A small range spanning the first scenario's step block (for range formatting / inlay hints).</summary>
     public Range FirstScenarioRange
     {

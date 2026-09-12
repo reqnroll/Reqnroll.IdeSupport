@@ -158,6 +158,157 @@ public static class BatchScenarios
     }
 
     /// <summary>
+    /// Rename's confirmed-apply commit (issue #671, R3): the registry/match-cache work a rename
+    /// implies moved off the measured <c>textDocument/rename</c> round trip onto the client's
+    /// <c>reqnroll/renameApplied</c> confirmation, so <see cref="StepRenameAsync"/> above no longer
+    /// measures it at all — its own remarks record why. This scenario measures that other half: a
+    /// full Roslyn parse of the renamed <c>.cs</c> text, the registry patch, and the reparse
+    /// cascade it triggers for every open <c>.feature</c> file (<c>BindingRegistryChangedHandler
+    /// .ReparseOpenFilesAsync</c>), timed end to end via the resulting <c>publishDiagnostics</c>
+    /// push — the same "trigger a notification with no response, wait for its observable side
+    /// effect" pattern <see cref="WatchedFilesReconfigAsync"/> uses for the same reason
+    /// (<c>renameApplied</c> is also a notification).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Appends to an already-open corpus feature rather than opening a brand-new one, and
+    /// updates the <c>.cs</c> binding via <c>ChangeCSharp</c>, never a repeated
+    /// <c>OpenCSharp</c>.</b> The second point matters on its own: reissuing <c>didOpen</c> for
+    /// the same path every repetition (each with a new class name, matching
+    /// <see cref="CSharpRapidEditBurstAsync"/>'s superficial shape but not its actual technique)
+    /// silently rediscovers nothing past the first repetition —
+    /// <c>CSharpBindingDiscoveryService.UpdateFromSourceAsync</c>'s didOpen skip-check treats a
+    /// path that already has any binding as already reconciled and never reparses it, so every
+    /// later repetition's edit is dropped and the registry keeps the first one's binding
+    /// indefinitely (confirmed live: <c>reqnroll/findUnusedStepDefinitions</c> showed the first
+    /// repetition's class registered and every later one absent, not merely stale). A
+    /// <c>didChange</c> carries no such check, which is exactly the "placeholder open, then real
+    /// edits via Change" shape <see cref="CSharpRapidEditBurstAsync"/> actually uses and this
+    /// scenario now mirrors precisely rather than approximately.
+    /// </para>
+    /// <para>
+    /// Reusing an already-open <paramref name="host"/> feature (rather than a brand-new one) is a
+    /// second, independent choice: this scenario needs to trigger a real reparse of an open
+    /// <c>.feature</c> file to measure, so it needs one already flowing through the same ordinary
+    /// edit pipeline every other scenario here also depends on, rather than establishing a new
+    /// file's scope/ownership from nothing.
+    /// </para>
+    /// <para>
+    /// <b>Still safe against corrupting the shared corpus.</b> Only the appended block uses this
+    /// repetition's fresh, uniquely-named binding; <paramref name="host"/>'s own pre-existing
+    /// scenarios/steps — including whatever binding <see cref="StepRenameAsync"/> or the
+    /// interactive scenarios exercise against it — are never touched. The host's exact original
+    /// text is restored once after the loop, so a scenario running later that reuses
+    /// <paramref name="host"/> (its own captured <c>.Text</c>, not the live server-side content)
+    /// finds the server back in the state it expects.
+    /// </para>
+    /// <para>
+    /// The confirmed rename is never written back into the appended block's own text — only the
+    /// registry is updated to match it (a real desync between live text and registry, the same
+    /// kind #670 reported for a genuine client). Harmless here: nothing reads this block again
+    /// after its repetition's diagnostics push lands, and the whole block is discarded by the
+    /// final restore regardless. The desync exists only to give
+    /// <c>BindingRegistryChangedHandler</c> real reparse work to do.
+    /// </para>
+    /// </remarks>
+    public static async Task<LatencySummary> RenameApplyCommitAsync(
+        BenchmarkLspHarness harness, string corpusRoot, OpenFeature host,
+        int repetitions = 5, int timeoutMs = 5000)
+    {
+        var recorder = new LatencyRecorder(PerfTargets.RenameApplyCommit.Operation);
+        var csUri = DocumentUri.FromFileSystemPath(
+            Path.Combine(corpusRoot, "Bindings", "BenchmarkRenameApplyCommit.cs"));
+
+        // Trimmed and re-joined with an explicit separator so the appended block's line numbers
+        // are exact regardless of whether the captured host.Text happened to end with its own
+        // trailing newline (Split('\n') on text that already ends in "\n" yields one extra empty
+        // trailing entry, which silently shifts every computed position below by one).
+        var normalizedHostText = host.Text.Replace("\r\n", "\n").TrimEnd('\n');
+        var hostLineCount = normalizedHostText.Split('\n').Length;
+        // hostLineCount content lines (0..hostLineCount-1), then one blank separator line, then
+        // "Scenario: ...", then the step itself — every repetition's block has this same shape.
+        var stepLine = hostLineCount + 2;
+        const int stepChar = 5; // "When " precedes the step text on its line -- must match
+                                 // BindingSource's hardcoded [When(...)] attribute below: Reqnroll
+                                 // matches step type strictly, so a "Given" step here would never
+                                 // bind to it (confirmed live: registered correctly, reported
+                                 // "unused" every repetition).
+        var featureVersion = 500;
+
+        // A neutral first didOpen, matching CSharpRapidEditBurstAsync's own placeholder-then-edit
+        // shape: CSharpBindingDiscoveryService.UpdateFromSourceAsync's didOpen skip-check treats a
+        // repeated didOpen for a path that already has bindings as redundant and does not
+        // reparse — confirmed live, every repetition past the first silently kept the prior one's
+        // binding once this scenario tried reusing OpenCSharp per repetition instead. Each
+        // repetition's real binding is therefore registered via ChangeCSharp (a didChange, which
+        // carries no such skip) rather than by reopening.
+        harness.OpenCSharp(csUri, 1, BindingSource("RenameApplyCommitPlaceholder", "no match at all"));
+        await Task.Delay(200).ConfigureAwait(false); // let the no-op open settle before the first real edit
+
+        for (var rep = 0; rep < repetitions; rep++)
+        {
+            var stepText = $"rename apply commit {rep} is met";
+            var className = "RenameApplyCommit" + rep;
+            harness.ChangeCSharp(csUri, 2 + rep, BindingSource(className, Regex.Escape(stepText)));
+
+            featureVersion++;
+            harness.ChangeFeature(host.Uri, featureVersion,
+                normalizedHostText + $"\n\nScenario: RenameApplyCommit{rep}\n    When {stepText}\n");
+
+            // Readiness: reqnroll/renameTargets reads the match cache directly, so a non-empty
+            // response is the most direct confirmation this repetition's fresh binding has both
+            // been syntax-discovered and reflected in a reparse of the host — matching
+            // PollDefinitionAsync's role for the sibling .cs scenarios above, just against the
+            // request this scenario actually needs to succeed.
+            var ready = await PollAsync(
+                () => harness.RequestRenameTargetsAsync(host.Uri, stepLine, stepChar),
+                r => r is { Targets.Count: > 0 }, timeoutMs).ConfigureAwait(false);
+            if (!ready) continue;
+
+            var start = Stopwatch.GetTimestamp();
+            WorkspaceEdit? edit;
+            try
+            {
+                edit = await harness.RequestRenameAsync(host.Uri, stepLine, stepChar, stepText + " RENAMED")
+                    .ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // A miss surfaces as a real JSON-RPC error ("No step definition found at this
+                // position" — RenameHandler.HandleRenameAsync's RenameFailedError), not a null
+                // result, unlike the readiness poll above. Same tolerance as every other batch
+                // scenario's occasional miss: skip this repetition rather than fail the run.
+                continue;
+            }
+            if (edit is null) continue;
+
+            harness.SendRenameApplied(host.Uri, applied: true);
+
+            var ms = await harness.WaitForDiagnosticsAsync(host.Uri, start, timeoutMs).ConfigureAwait(false);
+            if (ms is not null) recorder.Add(ms.Value);
+        }
+
+        // Restore the host exactly, so a scenario that runs later and reuses it (its own captured
+        // .Text, e.g. StepRenameAsync's rotation through `features`) finds the server matching
+        // what it expects rather than this scenario's leftover scratch content.
+        harness.ChangeFeature(host.Uri, featureVersion + 1, host.Text);
+
+        return recorder.Summarize();
+    }
+
+    private static async Task<bool> PollAsync<T>(
+        Func<Task<T>> poll, Func<T, bool> isReady, int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (isReady(await poll().ConfigureAwait(false))) return true;
+            await Task.Delay(20).ConfigureAwait(false);
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Find unused step definitions, workspace-wide (issue #119): a full scan comparing every
     /// step-definition binding against every step usage across the corpus. Coarse wall-clock, like
     /// the other workspace-wide batch scenarios.

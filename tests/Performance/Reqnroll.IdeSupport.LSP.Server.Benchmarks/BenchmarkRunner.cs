@@ -130,6 +130,16 @@ public static class BenchmarkRunner
         // is available (see Reqnroll.IdeSupport.LSP.Server.Benchmarks.Corpus). Otherwise reported as
         // skipped rather than measured against an empty registry.
         var skipped = BatchScenarios.UnavailableDiscoveryScenarios(corpusAssembly);
+
+        // Unlike the corpusAssembly-gated group above, this needs no compiled assembly — it opens
+        // its own throwaway, syntax-discovered .cs/.feature pair per repetition (issue #671, R3
+        // follow-up: measures the registry-commit cost StepRename above no longer includes).
+        if (includeBatch)
+        {
+            Console.WriteLine("Running rename apply-commit scenario (registry reparse on confirmed apply, issue #671)...");
+            summaries.Add((PerfTargets.RenameApplyCommit,
+                await BatchScenarios.RenameApplyCommitAsync(harness, corpusRoot, features[0]).ConfigureAwait(false)));
+        }
         if (includeBatch && corpusAssembly is not null)
         {
             Console.WriteLine("Running binding-discovery batch scenarios (Roslyn re-discovery, reflection discovery)...");
@@ -178,6 +188,12 @@ public static class BenchmarkRunner
                     harness, corpusRoot, corpusAssembly, probe, new RebuildRefreshContentionOptions())
                     .RunAsync().ConfigureAwait(false));
             }
+
+            Console.WriteLine("Running dispatch-fairness scenario (rename under a concurrent didChange " +
+                               "storm, issue #671 R8)...");
+            contentionChecks.Add(await new RenameSerialLaneContentionScenario(
+                harness, restoredFiles, probe, new RenameSerialLaneContentionOptions())
+                .RunAsync().ConfigureAwait(false));
         }
 
         var results = summaries.Select(s => new OperationResult(s.Target, s.Summary)).ToList();
