@@ -78,7 +78,7 @@ internal sealed class TelemetryEventInterceptor : ILspMessageInterceptor
 
             transmitter.TransmitEvent(new Reqnroll.IdeSupport.Common.Telemetry.GenericEvent(eventName!, properties));
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "TelemetryEventInterceptor: forwarded telemetry/event {EventName} ({PropertyCount} props)",
                 eventName, properties.Count);
         }

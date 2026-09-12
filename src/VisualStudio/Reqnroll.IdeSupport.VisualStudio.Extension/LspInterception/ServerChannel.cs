@@ -66,7 +66,7 @@ internal sealed class ServerChannel
         if (_terminated) return;
         _terminated = true;
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ServerChannel: server considered terminated — {Reason}. This connection is spent; " +
             "further injected traffic is refused and a new server must be launched for the next " +
             "session (issue #555).", reason);
@@ -109,7 +109,7 @@ internal sealed class ServerChannel
     {
         if (_terminated)
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "ServerChannel: refusing to inject {Method} — the server on this connection has terminated.",
                 method);
             return false;
@@ -120,7 +120,7 @@ internal sealed class ServerChannel
         {
             await LspFrameCodec.WriteFrameAsync(_output, rawFrame, cancellationToken).ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "ServerChannel: injected {Method} ({ByteCount} bytes)", method, rawFrame.Length);
         }
         finally

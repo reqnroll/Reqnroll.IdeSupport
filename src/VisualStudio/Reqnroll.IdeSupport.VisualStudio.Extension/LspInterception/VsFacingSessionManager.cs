@@ -112,7 +112,7 @@ internal sealed class VsFacingSessionManager : IDisposable
             _logger.LogDebug(ex, "VsFacingSessionManager: completing the abandoned server→VS pipe threw (benign).");
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsFacingSessionManager: started session #{SessionId} (issue #156: no longer handing back a " +
             "cached, possibly-dead pipe on repeat CreateServerConnectionAsync calls).", sessionId);
 

@@ -64,7 +64,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             // registered once and consumed everywhere via ILogger<T>, replaces both.
             var logger = new IdeSupportCompositeLogger()
                 .Add(new IdeSupportDebugLogger())
-                .Add(new SynchronousFileLogger("vs", "ext", TraceLevel.Info))
+                .Add(new SynchronousFileLogger("vs", "ext", TraceLevel.Warning))
                 .Add(new VsOutputPaneLogger());
             serviceCollection.AddSingleton<IIdeSupportLogger>(logger);
             serviceCollection.AddSingleton<ILoggerFactory>(sp =>

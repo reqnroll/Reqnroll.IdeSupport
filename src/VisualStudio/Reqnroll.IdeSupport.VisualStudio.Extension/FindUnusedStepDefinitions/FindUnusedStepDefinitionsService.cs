@@ -32,7 +32,7 @@ internal sealed class FindUnusedStepDefinitionsService
     /// <summary>Queries the LSP server for the workspace-wide set of unused step definitions.</summary>
     public async Task<UnusedStepDefinitionsResult> FindUnusedAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("FindUnusedStepDefinitionsService: sending {RequestMethod}", RequestMethod);
+        _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", RequestMethod);
 
         // Empty params object — the server ignores the body.
         const string emptyParams = "{}";
@@ -41,11 +41,11 @@ internal sealed class FindUnusedStepDefinitionsService
             .SendRequestToServerAsync(RequestMethod, emptyParams, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "FindUnusedStepDefinitionsService: raw result = {Result}", result is null ? "<null>" : result.ToString());
 
         var mapped = MapResult(result);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindUnusedStepDefinitionsService: {ItemCount} unused step definition(s)", mapped.Items.Count);
         return mapped;
     }

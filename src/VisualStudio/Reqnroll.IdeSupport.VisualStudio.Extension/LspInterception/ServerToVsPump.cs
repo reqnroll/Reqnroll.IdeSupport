@@ -117,7 +117,7 @@ internal sealed class ServerToVsPump
                 var currentSessionId = _sessions.CurrentSessionId;
                 if (_router.Route(body, currentSessionId, out var owningSessionId) == ResponseRouting.DropAbandoned)
                 {
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "ServerToVsPump: dropped response — owning session #{OwningSessionId} " +
                         "(0 = no longer tracked) is not the current session #{CurrentSessionId}.",
                         owningSessionId, currentSessionId);

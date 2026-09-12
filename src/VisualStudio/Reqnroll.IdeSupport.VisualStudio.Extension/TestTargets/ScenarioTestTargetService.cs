@@ -42,7 +42,7 @@ internal sealed class ScenarioTestTargetService
     {
         var paramsJson = BuildParams(fileUri, range);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}",
             RequestMethod, fileUri, range.Start.Line);
 
@@ -51,7 +51,7 @@ internal sealed class ScenarioTestTargetService
             .ConfigureAwait(false);
 
         var mapped = MapResult(result as JObject);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ScenarioTestTargetService: {TargetCount} target(s) returned for {FileUri}:{StartLine}",
             mapped.Count, fileUri, range.Start.Line);
         return mapped;
