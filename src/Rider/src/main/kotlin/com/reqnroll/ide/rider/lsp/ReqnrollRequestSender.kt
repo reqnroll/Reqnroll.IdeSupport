@@ -1,9 +1,12 @@
 package com.reqnroll.ide.rider.lsp
 
 import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerManager
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
@@ -44,6 +47,11 @@ import org.eclipse.lsp4j.Range as Lsp4jRange
  * response arrives or the timeout elapses — callers must invoke this from a background thread
  * (e.g. inside a `Task.Backgroundable`), never directly from `AnAction.actionPerformed`'s EDT
  * dispatch.
+ *
+ * [rename] is the one exception: it uses the suspend `sendRequest` instead, because
+ * `sendRequestSync` cannot surface the server's rejection reason (issue #655 — see that method's
+ * own documentation). It blocks its calling thread too, via [runBlockingCancellable], so the
+ * background-thread requirement above applies to it identically.
  */
 object ReqnrollRequestSender {
     private const val FIND_UNUSED_TIMEOUT_MS = 30_000
@@ -277,14 +285,51 @@ object ReqnrollRequestSender {
      * A rejected rename follows a modal "pick a target, type a new expression" flow the user just
      * completed, so [RenameStepRunner] showing no explanation at all (like a routine navigation
      * miss would) is worse here than for the rest of this file's silently-null methods.
+     *
+     * **The only method here that does not use `sendRequestSync` (issue #655).** That API cannot
+     * deliver the reason above: `LspRequestExecutorImpl`'s private await helper catches the
+     * `ExecutionException` carrying the server's `ResponseErrorException`, logs the cause at WARN
+     * to `idea.log`, and returns `null` — indistinguishable from a legitimately empty response, so
+     * [extractResponseErrorMessage] never had an exception to unwrap and the user always saw the
+     * generic fallback. Confirmed by decompiling Rider 2024.3.5's bytecode; the helper sorts four
+     * exception types and rethrows two, so the swallow is deliberate platform behaviour, not a bug
+     * to wait out.
+     *
+     * The suspend `sendRequest` takes the other path — it awaits the future through
+     * `kotlinx.coroutines.future.FutureKt.await`, whose `ContinuationHandler` unwraps
+     * `CompletionException` and resumes with the failure — so the real `ResponseErrorException`
+     * reaches the catch below. Both APIs are non-deprecated (unlike `getLsp4jServer`/
+     * `getRequestExecutor`, whose deprecation message points at `sendRequest` precisely), so this
+     * is the sanctioned route rather than a workaround.
+     *
+     * Two things `sendRequestSync` provided have to be rebuilt around it:
+     * [runBlockingCancellable] (not a plain `runBlocking`) restores the
+     * `ProgressManager.checkCanceled()` responsiveness its helper polled for, so cancelling the
+     * "Reqnroll: Renaming Step" background task still interrupts the wait; and `withTimeout`
+     * reinstates [RENAME_TIMEOUT_MS], since `sendRequest` takes no timeout at all.
+     *
+     * One accepted regression: the sync helper called `Future.cancel(...)` on timeout, which makes
+     * LSP4J send `$/cancelRequest`. Awaiting a `CompletionStage` does not cancel the underlying
+     * future, so a timed-out rename keeps computing server-side. Tolerable because the server-side
+     * handler returns in single-digit milliseconds once the edit is built (the applyEdit push moved
+     * out of the request in #671/R1) and this timeout is a backstop, not a routine path.
+     *
+     * Deliberately not applied to the rest of this file: every other method's "null on any failure"
+     * is the intended contract — a navigation miss or an empty folding response must not raise
+     * anything — so converting them would add coroutine plumbing and re-implemented timeouts for no
+     * user-visible gain.
      */
     fun rename(project: Project, uri: String, line: Int, character: Int, newName: String): RenameOutcome {
         val server = firstRunningServer(project)
             ?: return RenameOutcome.Failed("The Reqnroll LSP server is not running or did not respond.")
         val params = RenameParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), newName)
         return try {
-            val edit = server.sendRequestSync(RENAME_TIMEOUT_MS) { languageServer ->
-                languageServer.textDocumentService.rename(params)
+            val edit = runBlockingCancellable {
+                withTimeout(RENAME_TIMEOUT_MS.toLong()) {
+                    server.sendRequest { languageServer ->
+                        languageServer.textDocumentService.rename(params)
+                    }
+                }
             }
             if (edit != null) {
                 RenameOutcome.Success(edit)
@@ -293,6 +338,13 @@ object ReqnrollRequestSender {
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
+        } catch (ex: TimeoutCancellationException) {
+            // Caught ahead of the generic handler below: TimeoutCancellationException is a
+            // CancellationException, so it would otherwise fall through and be reported as though
+            // the server had rejected the rename — exactly the misleading message issue #650 set
+            // out to remove.
+            ReqnrollDebugLogger.warn("rename: request timed out after ${RENAME_TIMEOUT_MS}ms", ex)
+            RenameOutcome.Failed("The rename request timed out.")
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("rename: request failed", ex)
             val message = extractResponseErrorMessage(ex)
@@ -304,12 +356,16 @@ object ReqnrollRequestSender {
     /**
      * Unwraps the server's human-readable reason (issue #650) from a failed `textDocument/rename`
      * request, when the failure was a real JSON-RPC error response rather than some other
-     * exception (timeout, I/O error, cancellation). Checks the exception itself and one level of
-     * [Throwable.cause], since `LspServer.sendRequestSync` may surface a [ResponseErrorException]
-     * directly or wrapped (e.g. in an `ExecutionException` from the underlying
-     * `CompletableFuture.get`) — Rider's `LspServer` interface gives no documented guarantee
-     * either way. Returns null for any other kind of failure, so callers fall back to a generic
-     * message instead of showing something misleading.
+     * exception (timeout, I/O error, cancellation). Returns null for any other kind of failure, so
+     * callers fall back to a generic message instead of showing something misleading.
+     *
+     * Checks the exception itself and one level of [Throwable.cause]. Since [rename] moved to the
+     * suspend `sendRequest` (issue #655), the direct case is the one that actually occurs:
+     * `kotlinx.coroutines.future.FutureKt.await` resumes with the cause already unwrapped out of
+     * `CompletionException`, so a [ResponseErrorException] arrives bare. The `cause` check is kept
+     * as cheap insurance against a future call site routing through something that wraps again —
+     * it is no longer covering for an undocumented platform guarantee, which is what the previous
+     * version of this comment recorded as unknown.
      */
     internal fun extractResponseErrorMessage(ex: Throwable): String? =
         ((ex as? ResponseErrorException) ?: (ex.cause as? ResponseErrorException))
