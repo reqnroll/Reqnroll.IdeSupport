@@ -191,6 +191,12 @@ internal sealed class RenamePostApplyCoordinator
     {
         // VS never advertises changeAnnotationSupport (Phase 0), so builder's edits are
         // already plain TextEdit here — this push is unannotated DocumentChanges regardless.
+        //
+        // Version-stamped (issue #671, R2): this push is what actually applies the edit in VS, so
+        // it is the one emission where a stale-document check protects real content. `null` for a
+        // document VS has not opened is the spec's own meaning ("the content on disk is the
+        // master"), which is the common case here — a rename routinely touches closed .feature
+        // files and a .cs file VS never opened against this server.
         var pushParams = new ApplyWorkspaceEditParams
         {
             Edit = new WorkspaceEdit
@@ -198,7 +204,11 @@ internal sealed class RenamePostApplyCoordinator
                 DocumentChanges = new Container<WorkspaceEditDocumentChange>(
                     builder.GetEditsByUri().Select(kvp => new WorkspaceEditDocumentChange(new TextDocumentEdit
                     {
-                        TextDocument = new OptionalVersionedTextDocumentIdentifier { Uri = kvp.Key, Version = null },
+                        TextDocument = new OptionalVersionedTextDocumentIdentifier
+                        {
+                            Uri = kvp.Key,
+                            Version = ResolveDocumentVersion(kvp.Key)
+                        },
                         Edits = new TextEditContainer(kvp.Value)
                     })))
             }
@@ -216,6 +226,14 @@ internal sealed class RenamePostApplyCoordinator
         _logger.LogVerbose("RenamePostApplyCoordinator: VS applied workspace/applyEdit");
         return true;
     }
+
+    /// <summary>
+    /// The LSP document version an edit for <paramref name="uri"/> is computed against, or
+    /// <see langword="null"/> when the client has not opened it — see
+    /// <see cref="RenameHandler.ResolveDocumentVersion"/>, which this mirrors for the VS push.
+    /// </summary>
+    private int? ResolveDocumentVersion(DocumentUri uri)
+        => _documentBuffer.TryGet(uri, out var buffer) ? buffer?.Version : null;
 
     /// <summary>
     /// Invalidates the match cache for CLOSED feature files that were modified by the rename.
