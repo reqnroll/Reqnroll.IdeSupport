@@ -62,7 +62,7 @@ internal sealed class GoToHooksService
 
         _logger.LogDebug(
             "GoToHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
-        _logger.LogDebug(
+        _logger.LogTrace(
             "GoToHooksService: sending {RequestMethod} params={ParamsJson}", RequestMethod, paramsJson);
 
         var result = await _pipe
