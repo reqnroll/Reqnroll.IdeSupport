@@ -449,6 +449,33 @@ public sealed class RenameHandler
     /// capability survey — see docs/Rename-ChangeAnnotations-Implementation-Plan.md) gets the
     /// legacy <c>Changes</c> shape, byte-identical to before this feature existed.
     /// </summary>
+    /// <summary>
+    /// The LSP document version an edit for <paramref name="uri"/> is computed against, or
+    /// <see langword="null"/> when the client has not opened that document (issue #671, R2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what <c>OptionalVersionedTextDocumentIdentifier</c> exists for — per the spec, "to
+    /// allow clients to check the text document version before an edit is applied." Every edit
+    /// previously went out with <c>version: null</c>, which opted out of that check entirely and
+    /// left each client inventing its own ad-hoc staleness detection instead (issue #671).
+    /// </para>
+    /// <para>
+    /// <see langword="null"/> for a document with no buffer is the spec's own meaning, not a
+    /// fallback: "if the file is not open in the editor ... the server can send null to indicate
+    /// that the version is known and the content on disk is the master." A rename routinely edits
+    /// closed <c>.feature</c> files and a <c>.cs</c> file the client may never have opened against
+    /// this server at all.
+    /// </para>
+    /// <para>
+    /// The buffer's version is trustworthy here because <c>textDocument/rename</c> is dispatched on
+    /// the Serial lane (R8): any <c>didChange</c> the client has already sent is processed before
+    /// this runs, so the version recorded here is the one the edit's offsets were computed against.
+    /// </para>
+    /// </remarks>
+    private int? ResolveDocumentVersion(DocumentUri uri)
+        => _documentBuffer.TryGet(uri, out var buffer) ? buffer?.Version : null;
+
     private bool ClientSupportsChangeAnnotations()
     {
         var workspaceEditCapability = _languageServer.ClientSettings?.Capabilities?.Workspace?.WorkspaceEdit;
@@ -458,10 +485,10 @@ public sealed class RenameHandler
             workspaceEditCapability.Value.Value?.ChangeAnnotationSupport is not null;
     }
 
-    private static WorkspaceEditBuilder CreateEditBuilder(
+    private WorkspaceEditBuilder CreateEditBuilder(
         bool supportsChangeAnnotations, string effectiveNewName, int featureFileCount)
     {
-        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations);
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations, ResolveDocumentVersion);
         builder.DeclareAnnotation(RenameChangeAnnotations.Feature,
             new ChangeAnnotation
             {
