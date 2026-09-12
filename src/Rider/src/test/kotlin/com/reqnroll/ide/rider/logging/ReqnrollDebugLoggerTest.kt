@@ -104,7 +104,7 @@ class ReqnrollDebugLoggerTest {
             ReqnrollDebugLogger.removeConsoleSink(sink)
         }
 
-        assertEquals(listOf(Triple("Info", "hello", null)), sink.entries)
+        assertEquals(listOf(Triple<String, String, Throwable?>("Info", "hello", null)), sink.entries)
     }
 
     @Test
