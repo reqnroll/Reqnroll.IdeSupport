@@ -45,7 +45,7 @@ internal sealed class CommentToggleService
         _logger.LogDebug(
             "CommentToggleService: sending workspace/executeCommand reqnroll.toggleComment uri={FileUri} lines[{StartLine}..{EndLine}]",
             fileUri, startLine, endLine);
-        _logger.LogDebug(
+        _logger.LogTrace(
             "CommentToggleService: sending reqnroll.toggleComment params={ParamsJson}", paramsJson);
 
         var result = await _pipe

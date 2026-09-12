@@ -57,7 +57,7 @@ internal sealed class FindStepUsagesService
         _logger.LogDebug(
             "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
 
-        _logger.LogDebug(
+        _logger.LogTrace(
             "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", RequestMethod, paramsJson);
 
         var result = await _pipe
