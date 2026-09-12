@@ -381,22 +381,18 @@ public sealed class RenameHandler
 
         var workspaceEdit = builder.Build();
 
-        // The push is awaited and its Applied flag checked *before* touching any server-side
-        // cache below: if VS rejects or fails to apply the edit (e.g. a locked/read-only file, or
-        // the user having closed the document with unsaved conflicting changes), the actual
-        // buffer/file content never changed, so self-refreshing the registry or invalidating the
-        // match cache here would desync server state from reality — the registry would claim the
-        // rename succeeded while the source still has the old text. See
-        // RenamePostApplyCoordinator.PushEditIfVisualStudioAsync for why VS needs this push at all.
-        if (!await _postApplyCoordinator.PushEditIfVisualStudioAsync(builder, cancellationToken))
-        {
-            throw RenameFailedError(
-                "Visual Studio could not apply the rename edit — the file may be locked, read-only, or have unsaved conflicting changes",
-                "rename");
-        }
+        // Nothing touches a server-side cache here (issue #671, R3). The registry/match-cache
+        // updates this edit implies are staged, and committed only once the client confirms it
+        // actually applied the edit — via reqnroll/renameApplied, or for VS via the Applied flag
+        // on the post-response workspace/applyEdit push. Committing them inline would desync
+        // server state from reality whenever the client declines to apply: the registry would
+        // claim the rename succeeded while the source still has the old text (issue #670).
+        _postApplyCoordinator.StagePendingCommit(uri, builder, csFileUri, newCsText);
 
-        _postApplyCoordinator.InvalidateClosedFeatureCaches(builder);
-        await _postApplyCoordinator.RefreshCSharpRegistryAsync(csFileUri, newCsText, cancellationToken);
+        // Returns immediately for every client; for VS it queues the workspace/applyEdit push to
+        // run *after* this response is sent, which is what stops the edit's own didOpen from
+        // cancelling this very request with ContentModified (issue #654). See its remarks.
+        _postApplyCoordinator.SchedulePostResponseApply(uri, builder);
 
         // Telemetry
         _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, new()
@@ -557,6 +553,26 @@ public sealed class RenameHandler
         using var _perf = _recorder.Measure(LspMethodNames.ReqnrollSelectRenameTarget, request.Uri);
         _sessionManager.SetSession(request.Uri.ToString(), request.Version, request.AttributeIndex);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Handles <c>reqnroll/renameApplied</c> — the client reporting whether it applied the
+    /// <see cref="WorkspaceEdit"/> returned from the preceding <c>textDocument/rename</c>, which
+    /// commits or drops the cache updates staged for it (issue #671, R3).
+    /// </summary>
+    /// <remarks>
+    /// Sent by the clients that apply the edit themselves (Rider, VS Code). Visual Studio never
+    /// sends it: the server pushes the edit there via <c>workspace/applyEdit</c> and confirms from
+    /// that request's own <c>Applied</c> flag instead — see
+    /// <see cref="RenamePostApplyCoordinator.SchedulePostResponseApply"/>.
+    /// </remarks>
+    public Task HandleRenameAppliedAsync(
+        RenameAppliedParams request,
+        CancellationToken   cancellationToken)
+    {
+        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollRenameApplied, request.Uri);
+        _logger.LogVerbose($"RenameHandler: client reported renameApplied={request.Applied} for '{request.Uri}'");
+        return _postApplyCoordinator.CompletePendingCommitAsync(request.Uri, request.Applied, cancellationToken);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

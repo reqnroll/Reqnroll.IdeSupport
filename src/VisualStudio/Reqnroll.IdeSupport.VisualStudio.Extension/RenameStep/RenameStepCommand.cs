@@ -163,9 +163,13 @@ internal sealed class RenameStepCommand : Command
             catch (RenameFailedException ex)
             {
                 // The server rejected the rename with a specific reason (issue #650) — e.g. a
-                // step-rename validation failure, or VS itself failing to apply the edit. Show
-                // that reason directly instead of the generic "Rename failed." this used to
-                // collapse every distinct failure into.
+                // step-rename validation failure. Show that reason directly instead of the generic
+                // "Rename failed." this used to collapse every distinct failure into.
+                //
+                // No longer includes "VS failed to apply the edit": the server now returns the
+                // rename response before pushing workspace/applyEdit (issue #671, R1), so a
+                // rejected push has no in-flight request left to fail and is logged server-side
+                // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
                 _logger.LogInformation("RenameStepCommand: rename rejected by server: {Message}", ex.Message);
                 VsUtils.ShowStatusBarMessage($"Reqnroll: {ex.Message}");
                 return;
@@ -178,8 +182,11 @@ internal sealed class RenameStepCommand : Command
                 return;
             }
 
-            // The server already applied the edit natively via workspace/applyEdit before this
-            // request's response reached us — nothing left to apply here.
+            // Nothing to apply here: the server pushes the edit to VS itself via
+            // workspace/applyEdit. That push now follows this response rather than preceding it
+            // (issue #671, R1 — pushing from inside the request made the edit's own didOpen cancel
+            // that request with ContentModified, issue #654), so the edit lands a moment after this
+            // message is shown.
             _logger.LogDebug("RenameStepCommand: rename result = {Result}", result);
             _logger.LogInformation("RenameStepCommand: rename completed successfully.");
             VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
