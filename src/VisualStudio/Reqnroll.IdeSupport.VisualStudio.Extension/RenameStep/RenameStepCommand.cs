@@ -132,7 +132,7 @@ internal sealed class RenameStepCommand : Command
             }
 
             // Step 3: Tell the server which attribute was selected
-            await service.SelectRenameTargetAsync(fileUri, version: 0, selectedAttributeIndex, cancellationToken)
+            await service.SelectRenameTargetAsync(fileUri, version: 0, selectedAttributeIndex, lineNum, charNum, cancellationToken)
                 .ConfigureAwait(false);
 
             // Step 4: Prompt user for new step text

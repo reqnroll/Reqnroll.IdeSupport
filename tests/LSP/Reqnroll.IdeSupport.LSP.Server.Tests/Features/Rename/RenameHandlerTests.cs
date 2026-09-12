@@ -565,6 +565,115 @@ public class StepRenameHandlerTests
         edits[0].Range.Start.Line.Should().Be(7, "the selected (beta) attribute literal is on 0-based line 7");
     }
 
+    // ── Issue #671 (R5): a disambiguation session names WHICH binding was picked, so the rename
+    //    finds that same binding again even if the candidate list has since been rebuilt — and
+    //    refuses to guess when it is gone, rather than silently renaming a different step. ─────
+
+    private const string TwoAttributesCsText =
+        "using Reqnroll;\n" +
+        "namespace N\n" +
+        "{\n" +
+        "    [Binding]\n" +
+        "    public class Steps\n" +
+        "    {\n" +
+        "        [Given(\"alpha {int}\")]\n" +    // 0-based line 6
+        "        [Given(\"beta {int}\")]\n" +     // 0-based line 7
+        "        public void M(int x) { }\n" +    // 0-based line 8 → 1-based 9
+        "    }\n" +
+        "}\n";
+
+    private static (ProjectStepDefinitionBinding Alpha, ProjectStepDefinitionBinding Beta) TwoAttributeBindings()
+    {
+        var impl = new ProjectBindingImplementation("Steps.M()", null, new SourceLocation(CsPath, 9, 9));
+        return (
+            new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^alpha (.*)$"), null, impl, "alpha {int}"),
+            new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^beta (.*)$"), null, impl, "beta {int}"));
+    }
+
+    /// <summary>Selects the attribute at <paramref name="attributeIndex"/>, sending the position so the server can resolve it to an identity.</summary>
+    private static Task SelectAttributeAsync(RenameHandler sut, int attributeIndex, int line, int character) =>
+        sut.HandleSelectRenameTargetAsync(
+            new SelectRenameTargetParams
+            {
+                Uri = CsUri.ToString(),
+                Version = 0,
+                AttributeIndex = attributeIndex,
+                Position = new Position(line, character),
+            },
+            CancellationToken.None);
+
+    [Fact]
+    public async Task Rename_follows_the_picked_binding_when_the_candidate_order_changes()
+    {
+        SetupBuffer(TwoAttributesCsText);
+        var (alpha, beta) = TwoAttributeBindings();
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha, beta }));
+
+        var sut = CreateSut();
+        await SelectAttributeAsync(sut, attributeIndex: 1, line: 8, character: 8); // picks beta
+
+        // The registry is rebuilt with the two attributes in the opposite order — index 1 now
+        // means alpha. Only an identity-addressed session still renames what the user chose.
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { beta, alpha }));
+
+        var result = await sut.HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "gamma {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].Range.Start.Line.Should().Be(7, "beta's attribute literal is on 0-based line 7, whatever order the registry lists it in");
+    }
+
+    [Fact]
+    public async Task Rename_rejects_a_session_whose_picked_binding_no_longer_exists()
+    {
+        SetupBuffer(TwoAttributesCsText);
+        var (alpha, beta) = TwoAttributeBindings();
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha, beta }));
+
+        var sut = CreateSut();
+        await SelectAttributeAsync(sut, attributeIndex: 1, line: 8, character: 8); // picks beta
+
+        // beta is edited away while the rename prompt is open. Falling back to position-based
+        // resolution here would take alpha — renaming a step the user never chose.
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha }));
+
+        var act = () => sut.HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "gamma {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Message.Should().Contain("changed while the rename was being prepared");
+    }
+
+    [Fact]
+    public async Task Rename_without_a_position_on_the_selection_still_resolves_by_index()
+    {
+        // An older client that sends no position leaves the server with only the index — the
+        // pre-R5 behaviour, which must keep working rather than failing closed.
+        SetupBuffer(TwoAttributesCsText);
+        var (alpha, beta) = TwoAttributeBindings();
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha, beta }));
+
+        var sut = CreateSut();
+        await sut.HandleSelectRenameTargetAsync(
+            new SelectRenameTargetParams { Uri = CsUri.ToString(), Version = 0, AttributeIndex = 1 },
+            CancellationToken.None);
+
+        var result = await sut.HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "gamma {int}"),
+            CancellationToken.None);
+
+        result!.Changes![CsUri].Single().Range.Start.Line.Should().Be(7);
+    }
+
     // ── Cucumber parameter types must survive the write-back, even when the dialog seeded
     //    (and the user edited) the regex projection of the expression. ────────────────────
 
