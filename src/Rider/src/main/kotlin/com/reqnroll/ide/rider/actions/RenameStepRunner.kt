@@ -14,6 +14,7 @@ import com.reqnroll.ide.rider.lsp.isDocumentStale
 import com.reqnroll.ide.rider.lsp.protocol.RenameAppliedParams
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetItem
 import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
+import org.eclipse.lsp4j.Position
 
 /**
  * Shared "disambiguate, prompt, rename" logic for [RenameFeatureStepAction]/[RenameCSharpStepAction]
@@ -86,7 +87,14 @@ object RenameStepRunner {
         target: RenameTargetItem,
     ) {
         ReqnrollNotificationSender.sendSelectRenameTarget(
-            project, SelectRenameTargetParams(uri, version = 0, attributeIndex = target.attributeIndex))
+            project,
+            SelectRenameTargetParams(
+                uri,
+                version = 0,
+                attributeIndex = target.attributeIndex,
+                position = Position(line, character),
+            ),
+        )
 
         var input: String? = null
         showOnEdt(project) {

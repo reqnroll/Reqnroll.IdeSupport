@@ -87,11 +87,16 @@ export function selectRenameTarget(
   client: LanguageClient,
   uriStr: string,
   attributeIndex: number,
+  position: vscode.Position,
 ): Promise<void> {
   return client.sendNotification(ReqnrollMethods.selectRenameTarget, {
     uri: uriStr,
     version: 0,
     attributeIndex,
+    // The position the picker was invoked at, so the server can resolve `attributeIndex` to the
+    // binding it denotes while that candidate list is still current, rather than carrying a bare
+    // index across the rename prompt and re-applying it to a list rebuilt later (issue #671, R5).
+    position: { line: position.line, character: position.character },
   });
 }
 
@@ -202,7 +207,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
         const chosen = await pickRenameTarget(targets);
         if (!chosen) return undefined;
 
-        await selectRenameTarget(client, document.uri.toString(), chosen.attributeIndex);
+        await selectRenameTarget(client, document.uri.toString(), chosen.attributeIndex, position);
       }
 
       return next(document, position, token);
@@ -297,7 +302,7 @@ export async function renameStepFromCSharp(
   const chosen = targets.length === 1 ? targets[0] : await pickRenameTarget(targets);
   if (!chosen) return;
 
-  await selectRenameTarget(client, uriStr, chosen.attributeIndex);
+  await selectRenameTarget(client, uriStr, chosen.attributeIndex, position);
 
   const currentStepText = chosen.expression || extractStepTextFromLabel(chosen.label);
   const newStepText = await vscode.window.showInputBox({
