@@ -88,7 +88,7 @@ class ReqnrollFeatureStructureViewModel(
 
             val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
             val result = ReqnrollRequestSender.documentSymbol(project, uri)
-            ReqnrollDebugLogger.info("ReqnrollFeatureStructureViewModel: ${result?.size ?: "null"} top-level symbol(s) for $uri")
+            ReqnrollDebugLogger.verbose("ReqnrollFeatureStructureViewModel: ${result?.size ?: "null"} top-level symbol(s) for $uri")
             if (result == null) return@executeOnPooledThread
 
             symbols = result

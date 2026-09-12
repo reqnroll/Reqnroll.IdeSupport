@@ -63,7 +63,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
             val edits = ReqnrollRequestSender.onTypeFormatting(
                 project, uri, line, character, "|", tabSize, insertSpaces,
             )
-            ReqnrollDebugLogger.info(
+            ReqnrollDebugLogger.verbose(
                 "ReqnrollFeatureOnTypeFormattingHandler: ${edits?.size ?: "null"} edit(s) for $uri",
             )
             if (edits.isNullOrEmpty()) return@executeOnPooledThread
@@ -71,7 +71,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
             ApplicationManager.getApplication().invokeLater {
                 if (project.isDisposed || editor.isDisposed) return@invokeLater
                 if (isDocumentStale(editor.document.modificationStamp, requestModificationStamp)) {
-                    ReqnrollDebugLogger.info(
+                    ReqnrollDebugLogger.verbose(
                         "ReqnrollFeatureOnTypeFormattingHandler: document changed since the request " +
                             "was sent; discarding stale edits for $uri.",
                     )

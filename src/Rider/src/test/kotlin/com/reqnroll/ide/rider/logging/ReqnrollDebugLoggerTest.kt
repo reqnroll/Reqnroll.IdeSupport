@@ -39,6 +39,10 @@ class ReqnrollDebugLoggerTest {
             "2026-09-06T14:02:11.123Z [Warning] x",
             ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Warning", "x"),
         )
+        assertEquals(
+            "2026-09-06T14:02:11.123Z [Verbose] x",
+            ReqnrollDebugLogger.formatLine(Instant.parse("2026-09-06T14:02:11.123Z"), "Verbose", "x"),
+        )
     }
 
     @Test
@@ -79,5 +83,68 @@ class ReqnrollDebugLoggerTest {
             File("C:\\Users\\me", "Reqnroll"),
             ReqnrollDebugLogger.logDirectory("WINDOWS 10", null, "C:\\Users\\me"),
         )
+    }
+
+    // Console-sink dispatch (issue #662) — the "Reqnroll" tool window's own mirroring mechanism.
+    // These exercise the real info/warn/error entry points (unlike the pure-function tests above)
+    // since the sink dispatch happens inside `log()`; the file write itself stays best-effort/
+    // exception-swallowed either way, so this doesn't risk failing the test on a read-only CI
+    // filesystem.
+
+    private class RecordingSink : ReqnrollConsoleSink {
+        val entries = mutableListOf<Triple<String, String, Throwable?>>()
+        override fun accept(level: String, message: String, throwable: Throwable?) {
+            entries.add(Triple(level, message, throwable))
+        }
+    }
+
+    @Test
+    fun `info, warn, and error all reach every registered console sink`() {
+        val sink = RecordingSink()
+        ReqnrollDebugLogger.addConsoleSink(sink)
+        try {
+            ReqnrollDebugLogger.info("hello")
+            ReqnrollDebugLogger.warn("careful")
+            ReqnrollDebugLogger.error("broken")
+        } finally {
+            ReqnrollDebugLogger.removeConsoleSink(sink)
+        }
+
+        assertEquals(
+            listOf(
+                Triple<String, String, Throwable?>("Info", "hello", null),
+                Triple<String, String, Throwable?>("Warning", "careful", null),
+                Triple<String, String, Throwable?>("Error", "broken", null),
+            ),
+            sink.entries,
+        )
+    }
+
+    @Test
+    fun `verbose (the per-request-chatter level) never reaches a registered console sink`() {
+        // The threshold this asserts is fixed, not configurable — see verbose()'s doc comment
+        // for why (issue #662, matching VsOutputPaneLogger's hardcoded TraceLevel.Info on the VS
+        // side): Verbose is where folding/inlay-hints/breadcrumbs/per-viewport-CodeLens/etc. log,
+        // and none of that belongs in the curated console.
+        val sink = RecordingSink()
+        ReqnrollDebugLogger.addConsoleSink(sink)
+        try {
+            ReqnrollDebugLogger.verbose("chatter")
+        } finally {
+            ReqnrollDebugLogger.removeConsoleSink(sink)
+        }
+
+        assertEquals(emptyList(), sink.entries)
+    }
+
+    @Test
+    fun `removeConsoleSink stops further dispatch to that sink`() {
+        val sink = RecordingSink()
+        ReqnrollDebugLogger.addConsoleSink(sink)
+        ReqnrollDebugLogger.removeConsoleSink(sink)
+
+        ReqnrollDebugLogger.error("too late")
+
+        assertEquals(emptyList(), sink.entries)
     }
 }

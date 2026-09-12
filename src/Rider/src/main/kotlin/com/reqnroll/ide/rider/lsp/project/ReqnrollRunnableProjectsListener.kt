@@ -62,7 +62,7 @@ class ReqnrollRunnableProjectsListener : ProjectActivity {
                 // before the first's deferred action has run can't read half-updated tracking state.
                 ReqnrollLspServerReadiness.runWhenRunning(project) {
                     tracker.removedSince(currentFiles).forEach { removedFile ->
-                        ReqnrollDebugLogger.info("projectUnloaded: $removedFile")
+                        ReqnrollDebugLogger.verbose("projectUnloaded: $removedFile")
                         ReqnrollNotificationSender.sendProjectUnloaded(project, ReqnrollProjectUnloadedParams(removedFile))
                     }
 
@@ -70,7 +70,7 @@ class ReqnrollRunnableProjectsListener : ProjectActivity {
                         val params = ReqnrollProjectBaseline.buildProjectLoadedParams(project, runnableProject)
                         if (!tracker.shouldSend(runnableProject.projectFilePath, params)) return@forEach
 
-                        ReqnrollDebugLogger.info("projectLoaded: ${runnableProject.projectFilePath}")
+                        ReqnrollDebugLogger.verbose("projectLoaded: ${runnableProject.projectFilePath}")
                         ReqnrollNotificationSender.sendProjectLoaded(project, params)
                     }
                 }

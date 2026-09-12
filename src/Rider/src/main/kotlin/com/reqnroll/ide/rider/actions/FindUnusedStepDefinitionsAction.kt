@@ -8,7 +8,6 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import com.reqnroll.ide.rider.lsp.protocol.UnusedStepDefinitionItem
@@ -43,14 +42,14 @@ class FindUnusedStepDefinitionsAction : AnAction() {
 
     private fun showResult(project: Project, response: FindUnusedStepDefinitionsResponse?) {
         if (response == null) {
-            Messages.showErrorDialog(
+            ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.",
                 "Find Unused Step Definitions")
             return
         }
 
         if (response.items.isEmpty()) {
-            Messages.showInfoMessage(project, "No unused step definitions found.", "Find Unused Step Definitions")
+            ReqnrollNotify.info(project, "No unused step definitions found.", "Find Unused Step Definitions")
             return
         }
 
@@ -72,7 +71,7 @@ class FindUnusedStepDefinitionsAction : AnAction() {
         if (item.sourceFile.isNullOrBlank()) {
             val recorded = item.recordedSourceFile
             val where = if (recorded != null) " The compiled assembly records it at \"$recorded\"." else ""
-            Messages.showWarningDialog(
+            ReqnrollNotify.warn(
                 project,
                 "This step definition's source isn't on this machine.$where " +
                     "Rebuild the project locally to navigate to it.",

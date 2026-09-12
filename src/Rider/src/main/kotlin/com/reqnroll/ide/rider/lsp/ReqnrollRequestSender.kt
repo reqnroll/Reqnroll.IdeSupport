@@ -111,7 +111,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("codeLens: request failed", ex)
+            ReqnrollDebugLogger.verbose("codeLens: request failed", ex)
             null
         }
     }
@@ -128,7 +128,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("inlayHint: request failed", ex)
+            ReqnrollDebugLogger.verbose("inlayHint: request failed", ex)
             null
         }
     }
@@ -157,7 +157,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("onTypeFormatting: request failed", ex)
+            ReqnrollDebugLogger.verbose("onTypeFormatting: request failed", ex)
             null
         }
     }
@@ -177,7 +177,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("foldingRange: request failed", ex)
+            ReqnrollDebugLogger.verbose("foldingRange: request failed", ex)
             null
         }
     }
@@ -335,7 +335,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("documentSymbol: request failed", ex)
+            ReqnrollDebugLogger.verbose("documentSymbol: request failed", ex)
             null
         }
     }
@@ -372,7 +372,7 @@ object ReqnrollRequestSender {
             .firstOrNull()
             .also {
                 if (it == null)
-                    ReqnrollDebugLogger.warn("ReqnrollRequestSender: no Reqnroll LSP server running")
+                    ReqnrollDebugLogger.verbose("ReqnrollRequestSender: no Reqnroll LSP server running")
             }
 }
 

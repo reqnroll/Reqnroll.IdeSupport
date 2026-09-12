@@ -39,7 +39,7 @@ object ReqnrollNotificationSender {
             .getServersForProvider(ReqnrollLspServerSupportProvider::class.java)
 
         if (servers.isEmpty()) {
-            ReqnrollDebugLogger.warn("$methodName: no Reqnroll LSP server running, notification dropped")
+            ReqnrollDebugLogger.verbose("$methodName: no Reqnroll LSP server running, notification dropped")
             return
         }
 
@@ -47,7 +47,7 @@ object ReqnrollNotificationSender {
             try {
                 server.sendNotification { languageServer -> invoke(languageServer as ReqnrollLanguageServer) }
             } catch (ex: Exception) {
-                ReqnrollDebugLogger.warn("$methodName: failed to send notification", ex)
+                ReqnrollDebugLogger.verbose("$methodName: failed to send notification", ex)
             }
         }
     }

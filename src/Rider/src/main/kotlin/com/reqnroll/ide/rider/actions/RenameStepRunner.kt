@@ -41,7 +41,7 @@ object RenameStepRunner {
 
                 if (response == null) {
                     showOnEdt(project) {
-                        Messages.showErrorDialog(
+                        ReqnrollNotify.error(
                             project, "The Reqnroll LSP server is not running or did not respond.", "Rename Step")
                     }
                     return
@@ -49,7 +49,7 @@ object RenameStepRunner {
 
                 if (response.targets.isEmpty()) {
                     showOnEdt(project) {
-                        Messages.showInfoMessage(project, "No renameable step at this position.", "Rename Step")
+                        ReqnrollNotify.info(project, "No renameable step at this position.", "Rename Step")
                     }
                     return
                 }
@@ -105,7 +105,7 @@ object RenameStepRunner {
         val edit = when (outcome) {
             is RenameOutcome.Failed -> {
                 showOnEdt(project) {
-                    Messages.showErrorDialog(project, outcome.message, "Rename Step")
+                    ReqnrollNotify.error(project, outcome.message, "Rename Step")
                 }
                 return
             }
@@ -120,7 +120,7 @@ object RenameStepRunner {
                         "edit to avoid applying it at stale offsets.",
                 )
                 showOnEdt(project) {
-                    Messages.showErrorDialog(
+                    ReqnrollNotify.error(
                         project,
                         "The file changed while the rename dialog was open. Please try again.",
                         "Rename Step",

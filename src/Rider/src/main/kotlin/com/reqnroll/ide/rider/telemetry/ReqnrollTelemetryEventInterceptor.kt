@@ -56,12 +56,12 @@ class ReqnrollTelemetryEventInterceptor(
         try {
             val parsed = parseTelemetryEvent(`object`)
             if (parsed == null) {
-                ReqnrollDebugLogger.warn("ReqnrollTelemetryEventInterceptor: telemetry/event without eventName; dropping.")
+                ReqnrollDebugLogger.verbose("ReqnrollTelemetryEventInterceptor: telemetry/event without eventName; dropping.")
             } else {
                 RiderTelemetryTransmitter.transmit(parsed.eventName, parsed.properties)
             }
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("ReqnrollTelemetryEventInterceptor: error forwarding telemetry/event.", ex)
+            ReqnrollDebugLogger.verbose("ReqnrollTelemetryEventInterceptor: error forwarding telemetry/event.", ex)
         }
 
         handler.telemetryEvent(`object`)

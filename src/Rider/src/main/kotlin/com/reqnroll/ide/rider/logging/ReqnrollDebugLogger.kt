@@ -4,6 +4,19 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * Receives every [ReqnrollDebugLogger] entry at `Info` level or above — implemented by the
+ * "Reqnroll" console tool window's panel (issue #662; see
+ * `com.reqnroll.ide.rider.console.ReqnrollConsolePanel`), which registers/unregisters itself via
+ * [ReqnrollDebugLogger.addConsoleSink]/[ReqnrollDebugLogger.removeConsoleSink] as it's created and
+ * disposed. `Verbose` entries (see [ReqnrollDebugLogger.verbose]) never reach a sink — see that
+ * method's doc comment for why the console threshold is fixed rather than configurable.
+ */
+fun interface ReqnrollConsoleSink {
+    fun accept(level: String, message: String, throwable: Throwable?)
+}
 
 /**
  * Client-side glue log, mirroring the VS extension's SynchronousFileLogger convention
@@ -34,10 +47,33 @@ object ReqnrollDebugLogger {
     private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
     private val fileDateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC)
     private val logFile: File by lazy { resolveLogFile() }
+    private val consoleSinks = CopyOnWriteArrayList<ReqnrollConsoleSink>()
 
     fun info(message: String) = log("Info", message, null)
     fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
     fun error(message: String, throwable: Throwable? = null) = log("Error", message, throwable)
+
+    /**
+     * The fourth level in the project's shared Error/Warning/Info/Verbose vocabulary (already used
+     * by the LSP server's `--log-level` and VS Code's `reqnroll.trace.server`/`traceServerToLogLevel`
+     * mapping) — for the per-request diagnostic call sites (folding, inlay hints, breadcrumbs,
+     * per-viewport CodeLens/documentSymbol, project/document sync, telemetry) that fire far too
+     * often to belong in the curated console (issue #662): [log] never forwards `Verbose` entries
+     * to a [ReqnrollConsoleSink], only writes them to the file. This is a fixed threshold, not a
+     * configurable one — there's no UI surface in this plugin for a user to change it, matching
+     * `VsOutputPaneLogger`'s hardcoded default `TraceLevel.Info` on the VS side (issue #651/#656):
+     * `Info`/`Warning`/`Error` always reach the console, `Verbose` never does.
+     */
+    fun verbose(message: String, throwable: Throwable? = null) = log("Verbose", message, throwable)
+
+    /** Registers a sink to receive every future `Info`-or-above entry. Not retroactive. */
+    fun addConsoleSink(sink: ReqnrollConsoleSink) {
+        consoleSinks.add(sink)
+    }
+
+    fun removeConsoleSink(sink: ReqnrollConsoleSink) {
+        consoleSinks.remove(sink)
+    }
 
     /** Renders the UTC timestamp prefix for a log line. Exposed for testing without mocking the system clock. */
     internal fun formatTimestamp(instant: Instant): String = timestampFormatter.format(instant)
@@ -60,6 +96,16 @@ object ReqnrollDebugLogger {
             logFile.appendText(line)
         } catch (_: Exception) {
             // Best-effort — a logging failure must never break plugin behavior.
+        }
+
+        if (level != "Verbose") {
+            for (sink in consoleSinks) {
+                try {
+                    sink.accept(level, message, throwable)
+                } catch (_: Exception) {
+                    // A misbehaving/disposed sink must never break logging for the rest.
+                }
+            }
         }
     }
 
