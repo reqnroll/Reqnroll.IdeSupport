@@ -75,7 +75,7 @@ internal static class VsStubFrameInitializer
             // If document data is already initialized, skip.
             if (docData != IntPtr.Zero)
             {
-                logger.LogInformation(
+                logger.LogDebug(
                     "VsStubFrameInitializer: {Moniker} is already initialized — skipping.", moniker);
                 continue;
             }
@@ -87,7 +87,7 @@ internal static class VsStubFrameInitializer
             if (VsShellUtilities.IsDocumentOpen(serviceProvider, moniker, Guid.Empty,
                     out var hier, out _, out var frame))
             {
-                logger.LogInformation(
+                logger.LogDebug(
                     "VsStubFrameInitializer: forcing init of stub {Moniker} via window frame.", moniker);
                 _ = frame.GetProperty((int)__VSFPROPID.VSFPROPID_DocData, out var _);
 
@@ -101,7 +101,7 @@ internal static class VsStubFrameInitializer
                         var dte = serviceProvider.GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
                         if (dte != null)
                         {
-                            logger.LogInformation(
+                            logger.LogDebug(
                                 "VsStubFrameInitializer: reopening {Moniker} through DTE for project context.", moniker);
                             dte.ItemOperations.OpenFile(moniker);
                         }

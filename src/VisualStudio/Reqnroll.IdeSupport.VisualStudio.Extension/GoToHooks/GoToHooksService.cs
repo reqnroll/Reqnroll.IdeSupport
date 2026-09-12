@@ -60,20 +60,20 @@ internal sealed class GoToHooksService
     {
         var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "GoToHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
-        _logger.LogInformation(
+        _logger.LogTrace(
             "GoToHooksService: sending {RequestMethod} params={ParamsJson}", RequestMethod, paramsJson);
 
         var result = await _pipe
             .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "GoToHooksService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
 
         var mapped = MapResult(result);
-        _logger.LogInformation("GoToHooksService: {HookCount} hook(s) returned", mapped.Hooks.Count);
+        _logger.LogDebug("GoToHooksService: {HookCount} hook(s) returned", mapped.Hooks.Count);
         return mapped;
     }
 

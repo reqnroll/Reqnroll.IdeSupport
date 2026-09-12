@@ -6,6 +6,7 @@ import {
   Location,
   LocationLink,
 } from 'vscode-languageclient/node';
+import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface ResolvedLocation {
@@ -34,15 +35,13 @@ export async function doGoToStepDefinition(client: LanguageClient): Promise<void
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Go to Step Definition failed — ${msg}`);
+    void showError(`Reqnroll: Go to Step Definition failed — ${msg}`);
     return;
   }
 
   const locations = normalizeLocations(result);
   if (locations.length === 0) {
-    void vscode.window.showInformationMessage(
-      'Reqnroll: No step definition found at this position.',
-    );
+    void showInfo('Reqnroll: No step definition found at this position.');
     return;
   }
 

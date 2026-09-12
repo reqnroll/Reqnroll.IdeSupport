@@ -171,7 +171,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
             }
             var tooltip = "Reqnroll scenarios matched by this hook";
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "HookMatchCountCodeLens.GetLabelAsync: {Text} for method at line {CurrentStartLine} in {FileUri}",
                 text, currentStartLine, _fileUri);
             return new CodeLensLabel { Text = text, Tooltip = tooltip };
@@ -227,7 +227,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
 
             if (firstHook is null) return;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "HookMatchCountCodeLens.ExecuteAsync: invoking go-to-matching-scenarios at {FileUri}:{ArgLine}:{ArgChar}",
                 _fileUri, firstHook.ArgLine, firstHook.ArgChar);
 
@@ -237,7 +237,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
 
             if (result.Scenarios.Count == 0)
             {
-                _logger.LogInformation("HookMatchCountCodeLens.ExecuteAsync: no matching scenarios.");
+                _logger.LogDebug("HookMatchCountCodeLens.ExecuteAsync: no matching scenarios.");
                 return;
             }
 

@@ -43,7 +43,7 @@ internal sealed class HookFeatureCodeLensService
     {
         var paramsJson = BuildParams(fileUri);
 
-        _logger.LogInformation("HookFeatureCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
+        _logger.LogDebug("HookFeatureCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
 
         var result = await _pipe
             .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
@@ -55,11 +55,11 @@ internal sealed class HookFeatureCodeLensService
         if (result is JArray array)
         {
             var items = ParseItems(array);
-            _logger.LogInformation("HookFeatureCodeLensService: {LensCount} lens(es) returned for {FileUri}", items.Count, fileUri);
+            _logger.LogDebug("HookFeatureCodeLensService: {LensCount} lens(es) returned for {FileUri}", items.Count, fileUri);
             return items;
         }
 
-        _logger.LogInformation("HookFeatureCodeLensService: unexpected result token type {TokenType} for {FileUri}", result.Type, fileUri);
+        _logger.LogDebug("HookFeatureCodeLensService: unexpected result token type {TokenType} for {FileUri}", result.Type, fileUri);
         return System.Array.Empty<HookFeatureLensEntry>();
     }
 

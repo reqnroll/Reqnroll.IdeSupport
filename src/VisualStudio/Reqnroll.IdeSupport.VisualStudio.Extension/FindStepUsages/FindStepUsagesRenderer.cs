@@ -63,7 +63,7 @@ internal sealed class FindStepUsagesRenderer
             StandardTableKeyNames.ProjectName,
             "description");
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindStepUsagesRenderer: opened FAR window {Label} with {LocationCount} location(s)",
             label, result.Locations.Count);
     }

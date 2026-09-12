@@ -117,11 +117,11 @@ internal sealed class LspRequestCorrelator
                 pending.Error.TrySetResult(null);
             }
 
-            _logger.LogInformation("LspRequestCorrelator: consumed correlated response id={Id}", id);
+            _logger.LogDebug("LspRequestCorrelator: consumed correlated response id={Id}", id);
         }
         else
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "LspRequestCorrelator: dropped response id={Id} — no pending request (already " +
                 "cancelled/removed), but the {Prefix} id proves it's ours; forwarding it to VS " +
                 "would be an unmatched response and fatally close the connection (issue #401).",
