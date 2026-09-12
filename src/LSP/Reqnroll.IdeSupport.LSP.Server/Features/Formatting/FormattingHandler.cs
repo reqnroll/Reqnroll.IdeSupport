@@ -35,7 +35,7 @@ public sealed class FormattingHandler
     // scheme left unset is skipped entirely, silently making the dynamic registration invisible
     // to that specific check (other capabilities' selector matching isn't affected by this).
     private static readonly TextDocumentSelector FeatureSelector = new(
-        new TextDocumentFilter { Scheme = "file", Pattern = "**/*.feature" });
+        new TextDocumentFilter { Scheme = "file", Pattern = DocumentGlobPatterns.FeatureFilePattern });
 
     /// <summary>Initializes a new instance of the <see cref="FormattingHandler"/> class.</summary>
     public FormattingHandler(

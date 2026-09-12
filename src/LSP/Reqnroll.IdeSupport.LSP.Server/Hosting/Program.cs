@@ -173,6 +173,27 @@ public class Program
             logging.SetMinimumLevel(ToLogLevel(protocolLogLevel));
             logging.AddLanguageProtocolLogging();
             logging.AddProvider(new ProtocolLoggerProvider(clientIde, protocolLogLevel));
+
+            // Issue #660: OmniSharp's own LanguageServerLoggingManager (registered internally for
+            // every LanguageServer, regardless of anything configured here) is an
+            // IPostConfigureOptions<LoggerFilterOptions> that unconditionally overwrites
+            // LoggerFilterOptions.MinLevel from the current $/setTrace level (Off/Messages/Verbose).
+            // IPostConfigureOptions always runs after every IConfigureOptions regardless of
+            // registration order, so it silently discards whatever SetMinimumLevel just set above --
+            // no reordering of the calls in this method can fix that. PostConfigure only ever
+            // reassigns MinLevel, though; it never touches Rules, so an explicit provider-scoped
+            // LoggerFilterRule survives it and takes priority over MinLevel for that provider
+            // (confirmed against OmniSharp.Extensions.LanguageServer 0.19.9 by decompiling
+            // LanguageServerLoggingManager and LanguageServerLoggerExtensions.AddLanguageProtocolLogging).
+            // LanguageServerLoggerProvider (the window/logMessage sink) is internal to OmniSharp and
+            // so can't be named via the generic AddFilter<T>() overload -- the rule below is built
+            // from its known full type name instead, which LoggerRuleSelector matches the same way.
+            logging.Services.Configure<LoggerFilterOptions>(o => o.Rules.Add(new LoggerFilterRule(
+                "OmniSharp.Extensions.LanguageServer.Server.Logging.LanguageServerLoggerProvider",
+                categoryName: null,
+                logLevel: ToLogLevel(protocolLogLevel),
+                filter: null)));
+            logging.AddFilter<ProtocolLoggerProvider>(category: null, level: ToLogLevel(protocolLogLevel));
         });
 
         options.WithServerInfo(new ServerInfo

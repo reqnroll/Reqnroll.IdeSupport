@@ -91,7 +91,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         => new()
         {
             DocumentSelector = new TextDocumentSelector(
-                new TextDocumentFilter { Pattern = "**/*.feature" }),
+                new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern }),
             CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix),
             ResolveProvider = false
         };

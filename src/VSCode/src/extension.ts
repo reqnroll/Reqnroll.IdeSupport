@@ -15,6 +15,7 @@ import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
 import { registerHookCodeLens } from './commands/hookCodeLens';
+import { CSHARP_LANGUAGE_ID, GHERKIN_LANGUAGE_ID } from './languageIds';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
@@ -262,7 +263,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     // the rename outright for parameterized steps.
     vscode.commands.registerCommand('reqnroll.renameStep', async () => {
       const editor = vscode.window.activeTextEditor;
-      if (editor?.document.languageId === 'csharp') {
+      if (editor?.document.languageId === CSHARP_LANGUAGE_ID) {
         if (!client) {
           notReady('Rename Step')();
           return;
@@ -282,7 +283,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
     // F2 would stop renaming ordinary C# symbols everywhere in every .cs file.
     vscode.commands.registerCommand('reqnroll.renameStepOrSymbol', async () => {
       const editor = vscode.window.activeTextEditor;
-      if (editor?.document.languageId === 'csharp') {
+      if (editor?.document.languageId === CSHARP_LANGUAGE_ID) {
         if (!client) {
           await vscode.commands.executeCommand('editor.action.rename');
           return;
@@ -322,7 +323,7 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: 'gherkin', pattern: '**/*.feature' }],
+    documentSelector: [{ language: GHERKIN_LANGUAGE_ID, pattern: '**/*.feature' }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{feature,cs}'),
     },

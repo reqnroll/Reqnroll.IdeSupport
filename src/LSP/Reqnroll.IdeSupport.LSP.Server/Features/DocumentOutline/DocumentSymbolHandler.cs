@@ -41,7 +41,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     private readonly IOperationDurationRecorder    _recorder;
 
     private static readonly TextDocumentSelector FeatureSelector = new(
-        new TextDocumentFilter { Pattern = "**/*.feature" });
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern });
 
     // Set from the client's declared capability in GetRegistrationOptions, which the OmniSharp
     // framework always calls before any Handle call during real capability negotiation. Defaults

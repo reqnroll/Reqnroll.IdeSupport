@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CodeLensRequest, LanguageClient } from 'vscode-languageclient/node';
 import { getCodeLensRefreshEvent } from './codeLensRefresh';
+import { CSHARP_LANGUAGE_ID } from '../languageIds';
 
 /**
  * Registers the step-usage-count CodeLens provider for C# files, querying the server via
@@ -49,6 +50,6 @@ export function registerStepCodeLens(
   };
 
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider({ language: 'csharp' }, provider),
+    vscode.languages.registerCodeLensProvider({ language: CSHARP_LANGUAGE_ID }, provider),
   );
 }

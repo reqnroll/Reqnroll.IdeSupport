@@ -155,8 +155,7 @@ The extension writes to three Output panel channels, each with a distinct purpos
   auto-reveals itself on a warning or worse, and `Reqnroll: Show Output Channel` opens it
   directly. Also teed to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
 - **Reqnroll LSP** — `vscode-languageclient`'s own general client channel: connection-level
-  diagnostics and, until #660 is fixed, OmniSharp's internal framework noise leaking in via
-  `window/logMessage`. Also teed to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
+  diagnostics. Also teed to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
 - **Reqnroll LSP Trace** — the raw JSON-RPC wire trace, described below.
 
 ## LSP tracing
