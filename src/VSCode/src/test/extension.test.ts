@@ -35,6 +35,7 @@ import './util/navigationUtils.test';
 import './grammar.test';
 import './logging/logPaths.test';
 import './logging/generalFileLog.test';
+import './logging/appNotify.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

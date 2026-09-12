@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface GoToMatchingScenariosResponse {
@@ -43,12 +44,12 @@ export async function doGoToMatchingScenarios(
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Go to Matching Scenarios failed — ${msg}`);
+    void showError(`Reqnroll: Go to Matching Scenarios failed — ${msg}`);
     return;
   }
 
   if (!response.scenarios || response.scenarios.length === 0) {
-    void vscode.window.showInformationMessage('Reqnroll: This hook has no matching scenarios.');
+    void showInfo('Reqnroll: This hook has no matching scenarios.');
     return;
   }
 

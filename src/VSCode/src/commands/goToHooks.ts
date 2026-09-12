@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface GoToHooksResponse {
@@ -56,12 +57,12 @@ export async function doGoToHooks(
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Go to Hooks failed — ${msg}`);
+    void showError(`Reqnroll: Go to Hooks failed — ${msg}`);
     return;
   }
 
   if (!response.hooks || response.hooks.length === 0) {
-    void vscode.window.showInformationMessage('Reqnroll: No hooks found at this position.');
+    void showInfo('Reqnroll: No hooks found at this position.');
     return;
   }
 

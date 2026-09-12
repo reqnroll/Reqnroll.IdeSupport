@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ExecuteCommandRequest, LanguageClient } from 'vscode-languageclient/node';
+import { showError } from '../logging/appNotify';
 import { normalizeSelectionLines } from '../util/selectionUtils';
 
 /**
@@ -24,6 +25,6 @@ export async function doToggleComment(client: LanguageClient): Promise<void> {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Comment/Uncomment failed — ${msg}`);
+    void showError(`Reqnroll: Comment/Uncomment failed — ${msg}`);
   }
 }

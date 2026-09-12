@@ -33,11 +33,13 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
   readonly name: string;
   private readonly _inner: vscode.LogOutputChannel;
   private _stream: fs.WriteStream | undefined;
+  private readonly _autoShowOnWarnOrError: boolean;
 
-  constructor(name: string, stream: fs.WriteStream | undefined) {
+  constructor(name: string, stream: fs.WriteStream | undefined, autoShowOnWarnOrError = false) {
     this._inner = vscode.window.createOutputChannel(name, { log: true });
     this.name = this._inner.name;
     this._stream = stream;
+    this._autoShowOnWarnOrError = autoShowOnWarnOrError;
   }
 
   get logLevel(): vscode.LogLevel {
@@ -61,6 +63,7 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
   warn(message: string, ...args: unknown[]): void {
     this._inner.warn(message, ...args);
     this._write('Warning', message);
+    if (this._autoShowOnWarnOrError) this.show(true);
   }
   error(message: string | Error, ...args: unknown[]): void {
     this._inner.error(message, ...args);
@@ -68,6 +71,7 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
       'Error',
       message instanceof Error ? `${message.message}\n${message.stack ?? ''}` : message,
     );
+    if (this._autoShowOnWarnOrError) this.show(true);
   }
 
   append(value: string): void {
@@ -109,23 +113,39 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
   }
 }
 
+export interface GeneralLogChannelOptions {
+  /** Distinguishes this channel's log file from other `createGeneralLogChannel` channels — see the file-path doc below. Defaults to `'ext'`. */
+  filePrefix?: string;
+  /**
+   * Auto-reveals the Output panel on this channel's first warn()/error() call in a session
+   * (issue #661), mirroring `VsOutputPaneLogger.ShouldActivate` on the VS side (PR #656/#651).
+   */
+  autoShowOnWarnOrError?: boolean;
+}
+
 /**
- * Creates the general-purpose "Reqnroll LSP" output channel, teeing debug/info/warn/error to
- * `<Reqnroll log dir>/reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log` (pid distinguishes concurrent VS
- * Code windows, matching the VS/Rider file-naming convention) alongside the Output panel.
+ * Creates a general-purpose file-tee'd output channel, writing debug/info/warn/error to
+ * `<Reqnroll log dir>/reqnroll-vscode-<filePrefix>-<yyyyMMdd>-<pid>.log` (pid distinguishes
+ * concurrent VS Code windows, matching the VS/Rider file-naming convention) alongside the Output
+ * panel. Used both for the general "Reqnroll LSP" channel (`filePrefix: 'ext'`, the default) and
+ * the curated "Reqnroll" app-status channel (`filePrefix: 'app'`) — see `extension.ts`.
  */
-export function createGeneralLogChannel(name: string): vscode.LogOutputChannel {
+export function createGeneralLogChannel(
+  name: string,
+  options?: GeneralLogChannelOptions,
+): vscode.LogOutputChannel {
+  const filePrefix = options?.filePrefix ?? 'ext';
   let stream: fs.WriteStream | undefined;
   try {
     const logDir = resolveLogDirectory();
     fs.mkdirSync(logDir, { recursive: true });
     pruneOldLogs(logDir);
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const logPath = path.join(logDir, `reqnroll-vscode-ext-${date}-${process.pid}.log`);
+    const logPath = path.join(logDir, `reqnroll-vscode-${filePrefix}-${date}-${process.pid}.log`);
     stream = fs.createWriteStream(logPath, { flags: 'a' });
   } catch {
     // File logging unavailable; the Output panel is the fallback.
   }
 
-  return new GeneralFileLogChannel(name, stream);
+  return new GeneralFileLogChannel(name, stream, options?.autoShowOnWarnOrError ?? false);
 }

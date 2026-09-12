@@ -6,15 +6,26 @@ import { LanguageClient } from 'vscode-languageclient/node';
  * Manages the Reqnroll status bar item that reflects the LSP server lifecycle.
  *
  * Clicking the item runs `reqnroll.showOutputChannel` to reveal the server log.
+ *
+ * When `appLog` is supplied, each state transition is also mirrored there as a one-line entry
+ * (issue #661) — the same curated "Reqnroll" channel command outcomes are mirrored to via
+ * `logging/appNotify.ts` — so "is the extension doing something" has a single place to look.
  */
 export class StatusBarManager implements vscode.Disposable {
   private readonly _item: vscode.StatusBarItem;
   private readonly _stateListener: vscode.Disposable;
+  private readonly _appLog: vscode.LogOutputChannel | undefined;
 
-  constructor(client: LanguageClient) {
+  constructor(client: LanguageClient, appLog?: vscode.LogOutputChannel) {
+    this._appLog = appLog;
     this._item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this._item.command = 'reqnroll.showOutputChannel';
-    this._setStarting();
+    // Shows the spinner immediately, before the client's real state is known — logIt is false
+    // here because client.start() (called right after this constructor returns) drives the
+    // LanguageClient through its own Stopped -> Starting transition a moment later, firing
+    // onDidChangeState below and logging then. Without suppressing this first call, every launch
+    // logged "Reqnroll LSP client starting…" twice in a row.
+    this._setStarting(false);
     this._item.show();
 
     this._stateListener = client.onDidChangeState((event) => {
@@ -37,21 +48,24 @@ export class StatusBarManager implements vscode.Disposable {
     this._item.dispose();
   }
 
-  private _setStarting(): void {
+  private _setStarting(logIt = true): void {
     this._item.text = '$(loading~spin) Reqnroll';
     this._item.tooltip = 'Reqnroll LSP server starting…';
     this._item.backgroundColor = undefined;
+    if (logIt) this._appLog?.info('Reqnroll LSP client starting…');
   }
 
   private _setRunning(): void {
     this._item.text = '$(check) Reqnroll';
     this._item.tooltip = 'Reqnroll LSP server running';
     this._item.backgroundColor = undefined;
+    this._appLog?.info('Reqnroll LSP client connected.');
   }
 
   private _setStopped(): void {
     this._item.text = '$(error) Reqnroll';
     this._item.tooltip = 'Reqnroll LSP server stopped';
     this._item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+    this._appLog?.warn('Reqnroll LSP client stopped.');
   }
 }
