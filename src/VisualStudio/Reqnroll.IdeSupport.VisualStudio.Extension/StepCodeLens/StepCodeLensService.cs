@@ -61,30 +61,30 @@ internal sealed class StepCodeLensService
     {
         var paramsJson = BuildParams(fileUri);
 
-        _logger.LogInformation("StepCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
+        _logger.LogDebug("StepCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
 
         var result = await _pipe
             .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "StepCodeLensService: raw result = {Result}", result is null ? "<null>" : result.ToString());
 
         if (result is null || result.Type == JTokenType.Null)
         {
-            _logger.LogInformation("StepCodeLensService: server returned null — no lenses");
+            _logger.LogDebug("StepCodeLensService: server returned null — no lenses");
             return System.Array.Empty<StepLensItem>();
         }
 
         if (result is JArray array)
         {
             var items = ParseItems(array);
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "StepCodeLensService: {LensCount} lens(es) returned for {FileUri}", items.Count, fileUri);
             return items;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "StepCodeLensService: unexpected result token type {TokenType} for {FileUri}", result.Type, fileUri);
         return System.Array.Empty<StepLensItem>();
     }

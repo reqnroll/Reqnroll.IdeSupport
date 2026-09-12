@@ -87,7 +87,7 @@ internal sealed class ScaffoldTrackingInterceptor : ILspMessageInterceptor
                     continue;
 
                 _pendingFiles.TryAdd(path, 0);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "ScaffoldTrackingInterceptor: tracking scaffolded file {FileName}",
                     Path.GetFileName(path));
             }
@@ -120,7 +120,7 @@ internal sealed class ScaffoldTrackingInterceptor : ILspMessageInterceptor
             return;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ScaffoldTrackingInterceptor: injecting projectFiles delta before didOpen for {FileName}",
             Path.GetFileName(path));
 

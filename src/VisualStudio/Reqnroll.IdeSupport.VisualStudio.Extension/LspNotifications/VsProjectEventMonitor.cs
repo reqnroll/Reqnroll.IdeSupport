@@ -98,7 +98,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             ErrorHandler.Succeeded(_trackProjectDocuments.AdviseTrackProjectDocumentsEvents(
                 this, out _trackProjectDocumentsCookie)))
         {
-            _logger.LogInformation("VsProjectEventMonitor: subscribed to IVsTrackProjectDocumentsEvents2.");
+            _logger.LogDebug("VsProjectEventMonitor: subscribed to IVsTrackProjectDocumentsEvents2.");
         }
         else
         {
@@ -163,7 +163,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             await _pipe.SendNotificationToServerAsync("reqnroll/projectFiles", paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectFiles delta for scaffolded file {FileName} in {ProjectName}",
                 Path.GetFileName(filePath), project.Name);
         }
@@ -187,7 +187,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         var paramsObj = new { uri = featureUri };
         var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsProjectEventMonitor: sending documentActivated for {FileName}", Path.GetFileName(filePath));
 
         return _pipe.SendNotificationToServerAsync("reqnroll/documentActivated", paramsJson, ct);
@@ -250,7 +250,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         // debugging: a prior run showed zero reqnroll/documentActivated sends despite the tabs'
         // views clearly having been created, and there was no log evidence to say whether
         // WindowActivated simply never fired or fired and no-op'd).
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsProjectEventMonitor: WindowActivated fired, gotFocus.Caption={Caption}, document={DocumentPath}",
             TryGetCaption(gotFocus), TryGetDocumentPath(gotFocus));
 
@@ -267,7 +267,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             return;
 
         var action = _activationState.OnWindowActivated(filePath);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsProjectEventMonitor: WindowActivated for {FileName} — state action = {Action}",
             Path.GetFileName(filePath), action);
 
@@ -351,7 +351,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             await _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectLoaded for {ProjectName}", project.Name);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -375,7 +375,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             await _pipe.SendNotificationToServerAsync("reqnroll/projectUnloaded", paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectUnloaded for {ProjectName}", project.Name);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -397,7 +397,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             await _pipe.SendNotificationToServerAsync("reqnroll/projectFiles", paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectFiles baseline for {ProjectName}", project.Name);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -533,7 +533,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             await _pipe.SendNotificationToServerAsync("reqnroll/projectFiles", paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectFiles delta ({EntryCount} entrie(s)) for {ProjectName}",
                 entries.Count, project.Name);
         }

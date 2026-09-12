@@ -72,7 +72,7 @@ internal sealed class StepCodeLensProvider : ExtensionPart, ICodeLensProvider
 
         // Record this method's start line so GetLabelAsync can bound its attribute lookback.
         _state.RegisterMethodLine(fileUri.ToString(), startLine);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "StepCodeLensProvider.TryCreateCodeLensAsync: registered method at line {StartLine} (0-based) in {FileUri}",
             startLine, fileUri);
 
@@ -145,7 +145,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
             var nextMethod = _state.GetNextMethodLine(_fileUri.ToString(), currentStartLine);
             var upperBound = nextMethod >= 0 ? nextMethod : currentStartLine + AttributeLookahead;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "StepCodeLens.GetLabelAsync: method at line {CurrentStartLine} (0-based), " +
                 "nextMethod={NextMethod}, upperBound={UpperBound}, serverLensLines=[{ServerLensLines}]",
                 currentStartLine, nextMethod, upperBound, string.Join(",", lenses.Select(l => l.RangeLine)));
@@ -167,7 +167,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
             if (methodLens is null)
                 return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "StepCodeLens.GetLabelAsync: {Text} for method at line {CurrentStartLine} in {FileUri}",
                 methodLens.Title, currentStartLine, _fileUri);
             return new CodeLensLabel { Text = methodLens.Title, Tooltip = "Reqnroll step usages for this binding" };
@@ -221,7 +221,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
 
             if (methodLens is null) return;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "StepCodeLens.ExecuteAsync: invoking find usages at {FileUri}:{ArgLine}:{ArgChar}",
                 _fileUri, methodLens.ArgLine, methodLens.ArgChar);
 

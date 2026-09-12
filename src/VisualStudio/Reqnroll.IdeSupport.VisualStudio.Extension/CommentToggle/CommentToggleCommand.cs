@@ -63,7 +63,7 @@ internal sealed class CommentToggleCommand : Command
     {
         try
         {
-            _logger.LogInformation("CommentToggleCommand: invoked.");
+            _logger.LogDebug("CommentToggleCommand: invoked.");
 
             var service = _state.Service;
             if (service is null)
@@ -94,7 +94,7 @@ internal sealed class CommentToggleCommand : Command
                 var line = startPos.GetContainingLine();
                 startLine = line.LineNumber;
                 endLine   = line.LineNumber;
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "CommentToggleCommand: no selection — using current line {StartLine}.", startLine);
             }
             else
@@ -104,11 +104,11 @@ internal sealed class CommentToggleCommand : Command
                 endLine = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
                     startLine, endContainingLine.LineNumber,
                     endPos.Offset == endContainingLine.Text.Start.Offset);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "CommentToggleCommand: selection lines [{StartLine}..{EndLine}].", startLine, endLine);
             }
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "CommentToggleCommand: uri={FileUri}, lines [{StartLine}..{EndLine}]",
                 fileUri, startLine, endLine);
 

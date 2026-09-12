@@ -54,10 +54,10 @@ internal sealed class FindStepUsagesService
     {
         var paramsJson = BuildParams(fileUri, line0, char0);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", RequestMethod, paramsJson);
 
         var result = await _pipe
@@ -67,13 +67,13 @@ internal sealed class FindStepUsagesService
         // NOTE: use the parameterless JToken.ToString() — the overload that takes
         // Newtonsoft.Json.Formatting throws MissingMethodException against the Newtonsoft version
         // that VS loads at runtime.
-        _logger.LogInformation(
+        _logger.LogTrace(
             "FindStepUsagesService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
 
         // Map transport result → three-state StepUsagesResult. The mapping is a pure function
         // (MapResult) so it can be unit-tested without a live pipe.
         var mapped = MapResult(result);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindStepUsagesService: {ResultSummary}",
             mapped.IsBinding ? $"{mapped.Locations.Count} location(s) returned" : "NotABinding");
         return mapped;

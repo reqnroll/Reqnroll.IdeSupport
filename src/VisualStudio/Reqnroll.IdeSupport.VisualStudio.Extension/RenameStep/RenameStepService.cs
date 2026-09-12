@@ -40,7 +40,7 @@ internal sealed class RenameStepService
     {
         var paramsJson = BuildPositionParams(fileUri, line0, char0);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", RenameTargetsMethod, fileUri, line0, char0);
 
         var result = await _pipe
@@ -50,7 +50,7 @@ internal sealed class RenameStepService
         try
         {
             var mapped = MapTargets(result);
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RenameStepService: {TargetCount} target(s) returned", mapped?.Targets.Count ?? 0);
             return mapped;
         }
@@ -98,7 +98,7 @@ internal sealed class RenameStepService
         CancellationToken cancellationToken)
     {
         var paramsJson = $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}}}";
-        _logger.LogInformation(
+        _logger.LogDebug(
             "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", SelectRenameTargetMethod, attributeIndex);
 
         await _pipe
@@ -122,7 +122,7 @@ internal sealed class RenameStepService
         CancellationToken cancellationToken)
     {
         var paramsJson = BuildRenameParams(fileUri, line0, char0, newName);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "RenameStepService: sending {RenameMethod} at {FileUri}:{Line0}:{Char0}", RenameMethod, fileUri, line0, char0);
 
         var (result, error) = await _pipe
@@ -132,7 +132,7 @@ internal sealed class RenameStepService
         if (error is not null)
         {
             var message = error["message"]?.Value<string>() ?? "Rename failed.";
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RenameStepService: {RenameMethod} rejected by server: {Message}", RenameMethod, message);
             throw new RenameFailedException(message);
         }
@@ -140,7 +140,7 @@ internal sealed class RenameStepService
         if (result is null)
             return null;
 
-        _logger.LogInformation("RenameStepService: {RenameMethod} returned workspace edit", RenameMethod);
+        _logger.LogDebug("RenameStepService: {RenameMethod} returned workspace edit", RenameMethod);
 
         return ParseWorkspaceEdit(result);
     }

@@ -42,20 +42,20 @@ internal sealed class CommentToggleService
     {
         var paramsJson = BuildParams(fileUri, startLine, endLine);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "CommentToggleService: sending workspace/executeCommand reqnroll.toggleComment uri={FileUri} lines[{StartLine}..{EndLine}]",
             fileUri, startLine, endLine);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "CommentToggleService: sending reqnroll.toggleComment params={ParamsJson}", paramsJson);
 
         var result = await _pipe
             .SendRequestToServerAsync(ExecuteCommandMethod, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "CommentToggleService: server response = {Result}", result is null ? "<null>" : result.ToString());
 
-        _logger.LogInformation("CommentToggleService: server acknowledged reqnroll.toggleComment");
+        _logger.LogDebug("CommentToggleService: server acknowledged reqnroll.toggleComment");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

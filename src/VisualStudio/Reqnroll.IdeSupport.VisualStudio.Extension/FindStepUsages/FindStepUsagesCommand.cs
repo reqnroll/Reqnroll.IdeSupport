@@ -70,7 +70,7 @@ internal sealed class FindStepUsagesCommand : Command
     {
         try
         {
-            _logger.LogInformation("FindStepUsagesCommand: invoked.");
+            _logger.LogDebug("FindStepUsagesCommand: invoked.");
 
             var service  = _state.Service;
             var renderer = _state.Renderer;
@@ -96,7 +96,7 @@ internal sealed class FindStepUsagesCommand : Command
             var lineNum  = line.LineNumber;                 // 0-based, matches LSP convention
             var charNum  = caretPos.Offset - line.Text.Start; // 0-based column
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "FindStepUsagesCommand: active view uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             var result = await service.FindUsagesAsync(fileUri, lineNum, charNum, cancellationToken)
@@ -120,7 +120,7 @@ internal sealed class FindStepUsagesCommand : Command
 
             await renderer.RenderAsync(label, result, cancellationToken).ConfigureAwait(false);
 
-            _logger.LogInformation("FindStepUsagesCommand: render complete.");
+            _logger.LogDebug("FindStepUsagesCommand: render complete.");
         }
         catch (Exception ex)
         {
