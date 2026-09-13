@@ -369,6 +369,52 @@ public class StepRenameHandlerTests
     }
 
     [Fact]
+    public async Task Rename_from_visual_studio_returns_an_empty_edit_so_the_push_is_the_only_apply()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the first number is {int}\")]\n" +
+            "        public void GivenTheFirstNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the first number is (.*)$"),
+            specifiedExpression: "the first number is (.*)",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        ApplyWorkspaceEditParams? pushed = null;
+        _languageServer.SendRequest("workspace/applyEdit", Arg.Do<ApplyWorkspaceEditParams>(p => pushed = p));
+
+        var result = await CreateSutForVisualStudio().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
+            CancellationToken.None);
+
+        // VS's native rename client (F2) applies whatever the response carries, and the server
+        // pushes the same edit via workspace/applyEdit for the Rename Step command's benefit —
+        // returning the real edit here made VS apply it twice and corrupt every touched file.
+        // The response must therefore be empty for VS; the push carries the actual edit.
+        result.Should().NotBeNull();
+        result!.Changes.Should().BeNull();
+        result.DocumentChanges.Should().BeNull();
+
+        await EventuallyAsync(() => pushed.Should().NotBeNull());
+        var pushedEdits = pushed!.Edit.DocumentChanges is { } docChanges
+            ? docChanges.Where(c => c.IsTextDocumentEdit).SelectMany(c => c.TextDocumentEdit!.Edits)
+            : pushed.Edit.Changes!.Values.SelectMany(e => e);
+        pushedEdits.Should().ContainSingle(e => e.NewText.Contains("the renamed number is {int}"));
+    }
+
+    [Fact]
     public async Task Rename_does_not_refresh_caches_when_VS_rejects_the_edit()
     {
         const string csText =

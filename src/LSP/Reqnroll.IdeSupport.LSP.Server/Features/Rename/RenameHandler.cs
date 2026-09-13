@@ -402,7 +402,14 @@ public sealed class RenameHandler
             ["EditedFileCount"] = builder.TouchedUris.Count,
         });
 
-        return workspaceEdit;
+        // VS gets the edit through the workspace/applyEdit push above and nothing else. Its
+        // native rename client (F2 / Ctrl+R,R, which reaches this handler with the same params as
+        // the Rename Step command) applies whatever WorkspaceEdit this response carries, so
+        // returning the real edit would apply it twice — the second pass re-runs each TextEdit
+        // against the already-renamed text and corrupts every touched file. This was latent on
+        // master: the in-request push cancelled this very request (issue #654), so VS never got
+        // a response to apply. The Rename Step command ignores the result either way.
+        return _clientIdeContext.IsVisualStudio ? new WorkspaceEdit() : workspaceEdit;
     }
 
     /// <summary>
