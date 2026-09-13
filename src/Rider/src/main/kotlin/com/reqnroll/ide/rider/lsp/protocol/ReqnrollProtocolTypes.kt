@@ -199,6 +199,13 @@ data class SelectRenameTargetParams(
     val uri: String = "",
     val version: Int = 0,
     val attributeIndex: Int = 0,
+    /**
+     * The position the disambiguation was invoked at — the same one passed to
+     * `reqnroll/renameTargets`. Lets the server resolve [attributeIndex] to the binding it denotes
+     * while that candidate list is still current, instead of carrying a bare index across the
+     * modal dialog and re-applying it to a list rebuilt later (issue #671, R5).
+     */
+    val position: Position? = null,
 )
 
 /**

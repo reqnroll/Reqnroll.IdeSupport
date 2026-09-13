@@ -130,7 +130,7 @@ suite('renameStep', () => {
   });
 
   suite('selectRenameTarget', () => {
-    test('sends reqnroll/selectRenameTarget with the chosen attributeIndex', async () => {
+    test('sends reqnroll/selectRenameTarget with the chosen attributeIndex and the invoking position', async () => {
       let sentMethod: string | undefined;
       let sentParams: unknown;
       const client = fakeClient({
@@ -141,13 +141,16 @@ suite('renameStep', () => {
         },
       });
 
-      await selectRenameTarget(client, 'file:///Steps.cs', 1);
+      await selectRenameTarget(client, 'file:///Steps.cs', 1, new vscode.Position(12, 34));
 
       assert.strictEqual(sentMethod, ReqnrollMethods.selectRenameTarget);
+      // The position is what lets the server resolve attributeIndex to a specific binding while
+      // the candidate list it indexes into is still current (issue #671, R5).
       assert.deepStrictEqual(sentParams, {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 1,
+        position: { line: 12, character: 34 },
       });
     });
   });
@@ -310,6 +313,7 @@ suite('renameStep', () => {
             uri: 'file:///Steps.cs',
             version: 0,
             attributeIndex: 1,
+            position: { line: 0, character: 0 },
           });
           assert.ok(result);
         } finally {
@@ -533,6 +537,7 @@ suite('renameStep', () => {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 0,
+        position: { line: 4, character: 10 },
       });
       assert.strictEqual(inputBoxOptions?.value, 'a first number');
       assert.deepStrictEqual(renameParams, {
@@ -613,6 +618,7 @@ suite('renameStep', () => {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 1,
+        position: { line: 4, character: 10 },
       });
     });
 
