@@ -9,6 +9,7 @@ using EnvDTE80;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 
@@ -63,9 +64,9 @@ internal static class LspProjectPreloadPusher
                     project, GetSolutionFolder(solution), serviceProvider, logger);
                 var filesJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, logger);
 
-                await WriteEnvelopeAsync(pipe, "reqnroll/projectLoaded", loadedJson, cancellationToken)
+                await WriteEnvelopeAsync(pipe, ReqnrollMethodNames.ProjectLoaded, loadedJson, cancellationToken)
                     .ConfigureAwait(false);
-                await WriteEnvelopeAsync(pipe, "reqnroll/projectFiles", filesJson, cancellationToken)
+                await WriteEnvelopeAsync(pipe, ReqnrollMethodNames.ProjectFiles, filesJson, cancellationToken)
                     .ConfigureAwait(false);
             }
 

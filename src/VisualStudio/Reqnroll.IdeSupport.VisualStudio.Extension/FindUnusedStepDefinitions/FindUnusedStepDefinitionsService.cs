@@ -17,8 +17,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 /// </summary>
 internal sealed class FindUnusedStepDefinitionsService
 {
-    private const string RequestMethod = "reqnroll/findUnusedStepDefinitions";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<FindUnusedStepDefinitionsService> _logger;
 
@@ -32,13 +30,13 @@ internal sealed class FindUnusedStepDefinitionsService
     /// <summary>Queries the LSP server for the workspace-wide set of unused step definitions.</summary>
     public async Task<UnusedStepDefinitionsResult> FindUnusedAsync(CancellationToken cancellationToken)
     {
-        _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", RequestMethod);
+        _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", ReqnrollMethodNames.FindUnusedStepDefinitions);
 
         // Empty params object — the server ignores the body.
         const string emptyParams = "{}";
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, emptyParams, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.FindUnusedStepDefinitions, emptyParams, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

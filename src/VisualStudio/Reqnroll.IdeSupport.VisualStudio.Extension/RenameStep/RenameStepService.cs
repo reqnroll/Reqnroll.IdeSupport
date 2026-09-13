@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 
@@ -13,8 +14,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 /// </summary>
 internal sealed class RenameStepService
 {
-    private const string RenameTargetsMethod = "reqnroll/renameTargets";
-    private const string SelectRenameTargetMethod = "reqnroll/selectRenameTarget";
     private const string RenameMethod = "textDocument/rename";
 
     private readonly LspInterception.LspInterceptingPipe _pipe;
@@ -39,10 +38,10 @@ internal sealed class RenameStepService
         var paramsJson = BuildPositionParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", RenameTargetsMethod, fileUri, line0, char0);
+            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.RenameTargets, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RenameTargetsMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.RenameTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         try
@@ -102,10 +101,10 @@ internal sealed class RenameStepService
             $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}," +
             $"\"position\":{{\"line\":{line},\"character\":{character}}}}}";
         _logger.LogDebug(
-            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", SelectRenameTargetMethod, attributeIndex);
+            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", ReqnrollMethodNames.SelectRenameTarget, attributeIndex);
 
         await _pipe
-            .SendNotificationToServerAsync(SelectRenameTargetMethod, paramsJson, cancellationToken)
+            .SendNotificationToServerAsync(ReqnrollMethodNames.SelectRenameTarget, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 

@@ -28,10 +28,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 /// </remarks>
 internal sealed class FindStepUsagesService
 {
-    // Method name for the custom request — distinct from textDocument/references so the server
-    // can deliver null and per-location stepText that the standard LSP method cannot carry.
-    private const string RequestMethod = "reqnroll/findStepUsages";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<FindStepUsagesService> _logger;
 
@@ -55,13 +51,13 @@ internal sealed class FindStepUsagesService
         var paramsJson = BuildParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
+            "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.FindStepUsages, fileUri, line0, char0);
 
         _logger.LogTrace(
-            "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", RequestMethod, paramsJson);
+            "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", ReqnrollMethodNames.FindStepUsages, paramsJson);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.FindStepUsages, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         // NOTE: use the parameterless JToken.ToString() — the overload that takes
