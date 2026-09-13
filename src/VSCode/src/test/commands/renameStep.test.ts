@@ -313,6 +313,7 @@ suite('renameStep', () => {
             uri: 'file:///Steps.cs',
             version: 0,
             attributeIndex: 1,
+            position: { line: 0, character: 0 },
           });
           assert.ok(result);
         } finally {
@@ -536,6 +537,7 @@ suite('renameStep', () => {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 0,
+        position: { line: 4, character: 10 },
       });
       assert.strictEqual(inputBoxOptions?.value, 'a first number');
       assert.deepStrictEqual(renameParams, {
@@ -616,6 +618,7 @@ suite('renameStep', () => {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 1,
+        position: { line: 4, character: 10 },
       });
     });
 
