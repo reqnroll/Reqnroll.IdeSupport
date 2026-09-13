@@ -150,7 +150,11 @@ public static class BatchScenarios
             var f = features[rep % features.Count];
             var (line, character) = f.StepPosition;
             var start = Stopwatch.GetTimestamp();
-            await harness.RequestRenameAsync(f.Uri, line, character, $"precondition renamed {rep} is met")
+            // Rename by appending to the step's own expression rather than substituting fixed
+            // wording: NewNameReconciler only accepts a new name whose parameter placeholders
+            // line up with the binding's, so a hard-coded "precondition renamed {rep} is met"
+            // (a word inserted before the {int}) was rejected on every corpus step (issue #678).
+            await harness.RequestRenameAsync(f.Uri, line, character, $"{f.FirstStepExpression} (renamed {rep})")
                 .ConfigureAwait(false);
             recorder.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         }
