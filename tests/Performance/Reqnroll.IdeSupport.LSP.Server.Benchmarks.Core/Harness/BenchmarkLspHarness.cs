@@ -291,6 +291,19 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 NewName = newName,
             }, ct);
 
+    /// <summary>
+    /// Sends <c>reqnroll/renameApplied</c> — the confirmation that commits (or, with
+    /// <paramref name="applied"/> <see langword="false"/>, drops) the registry/match-cache updates
+    /// a prior <c>textDocument/rename</c> staged for <paramref name="uri"/> (issue #671, R3). A
+    /// notification, not a request: there is no response to await, so callers needing to know when
+    /// the resulting reparse cascade has landed should follow this with
+    /// <see cref="WaitForDiagnosticsAsync"/> against an open document the cascade will republish
+    /// diagnostics for.
+    /// </summary>
+    public void SendRenameApplied(DocumentUri uri, bool applied) =>
+        Client.SendNotification(LspMethodNames.ReqnrollRenameApplied,
+            new RenameAppliedParams { Uri = uri, Applied = applied });
+
     public Task<RenameTargetsResponse?> RequestRenameTargetsAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
         RequestAsync<RenameTargetsResponse?>(LspMethodNames.ReqnrollRenameTargets,

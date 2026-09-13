@@ -87,6 +87,14 @@ public static class PerfTargets
     public static readonly PerfTarget FindUnusedStepDefinitions =
         new("reqnroll/findUnusedStepDefinitions", 0, PerfTargetKind.Batch, "Find unused step definitions, workspace-wide scan (F15)");
 
+    // Issue #671 (R3): the registry/match-cache commit a rename implies moved off the measured
+    // textDocument/rename request onto the client's confirmation (reqnroll/renameApplied) --
+    // StepRename above no longer includes it. Batch-classified like its discovery-scenario
+    // siblings: this is the reparse-on-confirm cost, not a per-request percentile.
+    public static readonly PerfTarget RenameApplyCommit =
+        new("reqnroll/renameApplied", 0, PerfTargetKind.Batch,
+            "Registry/diagnostics reparse cascade triggered by a rename's confirmed apply (#671)");
+
     public static readonly PerfTarget SemanticTokensDelta =
         new("textDocument/semanticTokens/full/delta", 0, PerfTargetKind.InteractiveP95, "Semantic tokens delta pull");
 
