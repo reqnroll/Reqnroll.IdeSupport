@@ -172,6 +172,13 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
                 methodLens.Title, currentStartLine, _fileUri);
             return new CodeLensLabel { Text = methodLens.Title, Tooltip = "Reqnroll step usages for this binding" };
         }
+        catch (OperationCanceledException)
+        {
+            // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while the
+            // shared fetch was still in flight (issue #679) -- VS re-requests the label on its
+            // own, so this isn't a failure worth surfacing to the output pane.
+            return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
