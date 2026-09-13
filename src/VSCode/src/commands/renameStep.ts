@@ -96,6 +96,30 @@ export function selectRenameTarget(
 }
 
 /**
+ * Reports whether this client applied the `WorkspaceEdit` returned from `textDocument/rename`, so
+ * the server can commit — or drop — the binding-registry and match-cache updates it staged for that
+ * rename (issue #671, R3; see `RenamePostApplyCoordinator`).
+ *
+ * The server used to commit those updates unconditionally for every non-Visual-Studio client, on
+ * the assumption the client would apply what it was handed. Rider disproved that (issue #670), and
+ * the same exposure exists here once edits are version-stamped (R2) and VS Code starts rejecting
+ * ones computed against a superseded document version.
+ *
+ * Failures are swallowed deliberately: a dropped confirmation costs a stale registry entry that the
+ * next `.cs` edit repairs, whereas letting it reject would surface an error for a rename the user
+ * just watched succeed.
+ */
+export function reportRenameApplied(
+  client: LanguageClient,
+  uriStr: string,
+  applied: boolean,
+): void {
+  void client
+    .sendNotification(ReqnrollMethods.renameApplied, { uri: uriStr, applied })
+    .then(undefined, () => undefined);
+}
+
+/**
  * Collapses the active editor's text selection to a plain cursor before a `.feature` step rename
  * is invoked (issue #456). Must run BEFORE `editor.action.rename` starts — see the call site in
  * `extension.ts`'s `reqnroll.renameStep` command, not inside the `prepareRename` middleware below.
@@ -182,6 +206,27 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
       }
 
       return next(document, position, token);
+    },
+
+    // Confirms the staged server-side cache updates for a `.feature` rename (issue #671, R3).
+    // Unlike `renameStepFromCSharp`, this path hands the edit back to VS Code, which applies it
+    // itself — there is no `applyEdit` boolean to report, so reaching a non-null edit here is the
+    // only signal available.
+    //
+    // That is accurate as of today only because every `TextDocumentEdit` still goes out with
+    // `version: null`, which tells VS Code not to version-check and apply unconditionally. Once
+    // edits carry real versions (R2), VS Code will start rejecting ones computed against a
+    // superseded document and this will become optimistic in exactly the way #670 was — revisit it
+    // in that PR rather than leaving this comment to rot.
+    provideRenameEdits: async (document, position, newName, token, next) => {
+      const client = getClient();
+      const edit = await next(document, position, newName, token);
+
+      if (client && edit) {
+        reportRenameApplied(client, document.uri.toString(), true);
+      }
+
+      return edit;
     },
   };
 }
@@ -275,5 +320,10 @@ export async function renameStepFromCSharp(
   }
 
   const edit = await client.protocol2CodeConverter.asWorkspaceEdit(result);
-  await vscode.workspace.applyEdit(edit);
+  const applied = await vscode.workspace.applyEdit(edit);
+  reportRenameApplied(client, uriStr, applied);
+
+  if (!applied) {
+    void showError('Reqnroll: Rename failed — the edit could not be applied.');
+  }
 }

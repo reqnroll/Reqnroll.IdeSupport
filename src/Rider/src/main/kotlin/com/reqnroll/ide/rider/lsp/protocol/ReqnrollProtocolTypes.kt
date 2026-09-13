@@ -202,6 +202,21 @@ data class SelectRenameTargetParams(
 )
 
 /**
+ * Params for `reqnroll/renameApplied` — mirrors RenameAppliedParams.cs field-for-field.
+ *
+ * Reports whether this client actually applied the `WorkspaceEdit` returned from
+ * `textDocument/rename`. The server stages the binding-registry and match-cache updates the edit
+ * implies and commits them only on [applied] `true`, so a rename we decline to apply (see
+ * [com.reqnroll.ide.rider.actions.RenameStepRunner]'s staleness check) no longer leaves the
+ * registry describing a step expression present in no file — issue #670, fixed under #671 R3.
+ * Must be sent either way, so the server can drop staged updates promptly instead of holding them.
+ */
+data class RenameAppliedParams(
+    val uri: String = "",
+    val applied: Boolean = false,
+)
+
+/**
  * Params for `reqnroll/resolveTestTargets` — mirrors ResolveTestTargetsParams.cs field-for-field
  * (design doc §3/§4, issue #262). A range within a scenario/Outline's own header or steps resolves
  * to every target for that scenario; a range within one specific `Examples:` row resolves to just

@@ -28,6 +28,8 @@ public static class LspMethodNames
     public const string ReqnrollRenameTargets = "reqnroll/renameTargets";
     /// <summary>Method name for the <c>reqnroll/selectRenameTarget</c> notification.</summary>
     public const string ReqnrollSelectRenameTarget = "reqnroll/selectRenameTarget";
+    /// <summary>Method name for the <c>reqnroll/renameApplied</c> notification.</summary>
+    public const string ReqnrollRenameApplied = "reqnroll/renameApplied";
     /// <summary>Method name for the <c>reqnroll/refreshCodeLens</c> notification.</summary>
     public const string ReqnrollRefreshCodeLens = "reqnroll/refreshCodeLens";
     /// <summary>Method name for the <c>reqnroll/semanticTokens</c> push notification.</summary>
