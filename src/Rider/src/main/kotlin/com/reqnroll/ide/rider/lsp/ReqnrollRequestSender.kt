@@ -346,10 +346,18 @@ object ReqnrollRequestSender {
             ReqnrollDebugLogger.warn("rename: request timed out after ${RENAME_TIMEOUT_MS}ms", ex)
             RenameOutcome.Failed("The rename request timed out.")
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("rename: request failed", ex)
-            val message = extractResponseErrorMessage(ex)
-                ?: "Rename failed — the new expression may be invalid, or nothing to rename."
-            RenameOutcome.Failed(message)
+            val serverReason = extractResponseErrorMessage(ex)
+            if (serverReason != null) {
+                // An error *response* is the server doing its job — rejecting an invalid new
+                // expression, say — not a plugin failure, so no stack trace: the Reqnroll tool
+                // window prints throwables in full and auto-activates on Warning, which would put
+                // lsp4j internals in front of the user for an expected outcome (issue #655).
+                ReqnrollDebugLogger.info("rename: rejected by server: $serverReason")
+                RenameOutcome.Failed(serverReason)
+            } else {
+                ReqnrollDebugLogger.warn("rename: request failed", ex)
+                RenameOutcome.Failed("Rename failed — the new expression may be invalid, or nothing to rename.")
+            }
         }
     }
 
