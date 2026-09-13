@@ -153,10 +153,9 @@ internal sealed class RenameStepCommand : Command
             _logger.LogDebug("RenameStepCommand: user entered new text {NewStepText}.", newStepText);
 
             // Step 5: Send textDocument/rename via the service
-            RenameWorkspaceEdit? result;
             try
             {
-                result = await service.SendRenameRequestAsync(
+                await service.SendRenameRequestAsync(
                     fileUri, lineNum, charNum, newStepText, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -175,20 +174,12 @@ internal sealed class RenameStepCommand : Command
                 return;
             }
 
-            if (result is null)
-            {
-                _logger.LogInformation("RenameStepCommand: server returned null from rename.");
-                VsUtils.ShowStatusBarMessage("Reqnroll: Rename failed.");
-                return;
-            }
-
             // Nothing to apply here: the server pushes the edit to VS itself via
             // workspace/applyEdit. That push now follows this response rather than preceding it
             // (issue #671, R1 — pushing from inside the request made the edit's own didOpen cancel
             // that request with ContentModified, issue #654), so the edit lands a moment after this
             // message is shown.
-            _logger.LogDebug("RenameStepCommand: rename result = {Result}", result);
-            _logger.LogInformation("RenameStepCommand: rename completed successfully.");
+            _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
             VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
         }
         catch (Exception ex)
