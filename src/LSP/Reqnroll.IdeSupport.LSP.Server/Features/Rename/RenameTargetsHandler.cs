@@ -4,6 +4,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
@@ -19,17 +20,20 @@ public sealed class RenameTargetsHandler
     private readonly IProjectBindingRegistryLookup  _registryLookup;
     private readonly RenameBindingResolver          _bindingResolver;
     private readonly CSharpAttributeLiteralResolver  _attributeLiteralResolver;
+    private readonly ILspTelemetryService?          _telemetryService;
     private readonly IOperationDurationRecorder     _recorder;
 
     internal RenameTargetsHandler(
         IProjectBindingRegistryLookup registryLookup,
         RenameBindingResolver         bindingResolver,
         CSharpAttributeLiteralResolver attributeLiteralResolver,
+        ILspTelemetryService?        telemetryService = null,
         IOperationDurationRecorder?   recorder = null)
     {
         _registryLookup           = registryLookup;
         _bindingResolver          = bindingResolver;
         _attributeLiteralResolver = attributeLiteralResolver;
+        _telemetryService         = telemetryService;
         _recorder                 = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -46,18 +50,31 @@ public sealed class RenameTargetsHandler
         if (string.IsNullOrEmpty(path))
             return null;
 
+        RenameTargetsResponse? response;
         if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleRenameTargetsFromCSharpAsync(
+            response = await HandleRenameTargetsFromCSharpAsync(
                 uri, path, request.Position, request.RequireAttributeLine, cancellationToken);
         }
-
-        if (path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase))
+        else if (path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase))
         {
-            return await HandleRenameTargetsFromFeatureAsync(uri, path, request.Position, cancellationToken);
+            response = await HandleRenameTargetsFromFeatureAsync(uri, path, request.Position, cancellationToken);
+        }
+        else
+        {
+            return null;
         }
 
-        return null;
+        // Telemetry (issue #581 finding 5): the only signal into how often the multi-target
+        // picker UI is actually triggered (TargetCount > 1) versus a rename resolving
+        // unambiguously (TargetCount <= 1) -- independent of whether the eventual rename itself
+        // (see RenameHandler.SendRenameTelemetry) succeeds.
+        _telemetryService?.SendEvent("RenameTargets resolved", new()
+        {
+            ["TargetCount"] = response?.Targets.Count ?? 0,
+        });
+
+        return response;
     }
 
     private async Task<RenameTargetsResponse?> HandleRenameTargetsFromCSharpAsync(

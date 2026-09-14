@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
@@ -134,5 +135,65 @@ public class LspWorkspaceScopeManagerTests : IDisposable
 
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "a.feature"));
         _sut.GetScopeForUri(uri).Should().BeNull();
+    }
+
+    // ── OpenProject telemetry (issue #581 finding 2) ──────────────────────────
+
+    private ReqnrollProjectLoadedParams ProjectParams(string root, string projectFileName = "Proj.csproj")
+        => new()
+        {
+            WorkspaceFolder        = root,
+            ProjectFile            = Path.Combine(root, projectFileName),
+            ProjectFolder          = root,
+            OutputAssemblyPath     = Path.Combine(root, "bin", "Debug", "Proj.dll"),
+            TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0"
+        };
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_emits_OpenProject_telemetry_for_a_newly_discovered_project()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "OpenProject command executed", Arg.Any<Dictionary<string, object?>>());
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_does_not_re_emit_OpenProject_telemetry_for_a_re_sent_load()
+    {
+        // VS re-sends projectLoaded after every successful build (issue #542) -- that is a
+        // rebuild signal, not a second "project opened" event.
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+        telemetry.ClearReceivedCalls();
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        telemetry.DidNotReceive().SendEvent(
+            "OpenProject command executed", Arg.Any<Dictionary<string, object?>>());
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_reports_a_null_feature_file_count_before_the_membership_baseline_arrives()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "OpenProject command executed",
+            Arg.Is<Dictionary<string, object?>>(p => p["FeatureFileCount"] == null));
+
+        sut.Dispose();
     }
 }

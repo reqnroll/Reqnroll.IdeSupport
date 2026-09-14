@@ -292,9 +292,15 @@ public sealed class RenameHandler
         using var _perf = _recorder.Measure(LspMethodNames.TextDocumentRename, uri);
 
         if (string.IsNullOrEmpty(path))
+        {
+            SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
             throw RenameFailedError("No step definition found at this position", "position");
+        }
         if (string.IsNullOrEmpty(newName))
+        {
+            SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
             throw RenameFailedError("The new step text cannot be empty", "rename");
+        }
 
         _logger.LogVerbose($"RenameHandler: rename at {path}, newName='{newName}'");
 
@@ -307,6 +313,7 @@ public sealed class RenameHandler
         if (registry == ProjectBindingRegistry.Invalid)
         {
             _logger.LogVerbose("RenameHandler: registry is invalid");
+            SendRenameTelemetry(erroneous: true, reason: "RegistryInvalid");
             throw RenameFailedError("The project is not initialized yet", "project");
         }
 
@@ -327,7 +334,10 @@ public sealed class RenameHandler
         }
 
         if (binding == null)
+        {
+            SendRenameTelemetry(erroneous: true, reason: "BindingNotResolved");
             throw RenameFailedError("No step definition found at this position", "position");
+        }
 
         var bindingLocation = ResolveBindingLocation(path, binding, line, column);
         var expression = binding.Expression ?? string.Empty;
@@ -355,6 +365,7 @@ public sealed class RenameHandler
             path, uri, request.Position, usages, sourceExpression, newName, ReadStepText);
         if (effectiveNewName == null)
         {
+            SendRenameTelemetry(erroneous: true, reason: "NewNameNotReconciled");
             throw RenameFailedError(
                 "Could not match the new step text to this step's parameters — only the wording can change, not the parameter values",
                 "rename");
@@ -365,6 +376,7 @@ public sealed class RenameHandler
         if (nameError != null)
         {
             _logger.LogVerbose($"RenameHandler: validation failed — {nameError.Message}");
+            SendRenameTelemetry(erroneous: true, reason: "InvalidNewName");
             throw RenameFailedError(nameError.Message, nameError.Scope);
         }
 
@@ -386,6 +398,7 @@ public sealed class RenameHandler
 
         if (builder.IsEmpty)
         {
+            SendRenameTelemetry(erroneous: true, reason: "NoEditsProduced");
             throw RenameFailedError(
                 "The rename produced no changes — the step definition could not be located in source",
                 "rename");
@@ -399,6 +412,11 @@ public sealed class RenameHandler
         // on the post-response workspace/applyEdit push. Committing them inline would desync
         // server state from reality whenever the client declines to apply: the registry would
         // claim the rename succeeded while the source still has the old text (issue #670).
+        //
+        // A rejected/failed push can no longer be reported back to the caller as a failed rename
+        // (issue #671, R1 — the push happens fire-and-forget after this response is sent, so there
+        // is no request left to fail); it is logged and the staged commit is dropped instead. See
+        // RenamePostApplyCoordinator.SchedulePostResponseApply's remarks.
         _postApplyCoordinator.StagePendingCommit(uri, builder, csFileUri, newCsText);
 
         // Returns immediately for every client; for VS it queues the workspace/applyEdit push to
@@ -406,13 +424,11 @@ public sealed class RenameHandler
         // cancelling this very request with ContentModified (issue #654). See its remarks.
         _postApplyCoordinator.SchedulePostResponseApply(uri, builder);
 
-        // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, new()
-        {
-            ["Erroneous"] = false,
-            ["ChangeAnnotationsUsed"] = supportsChangeAnnotations,
-            ["EditedFileCount"] = builder.TouchedUris.Count,
-        });
+        SendRenameTelemetry(
+            erroneous: false,
+            reason: null,
+            changeAnnotationsUsed: supportsChangeAnnotations,
+            editedFileCount: builder.TouchedUris.Count);
 
         // VS gets the edit through the workspace/applyEdit push above and nothing else. Its
         // native rename client (F2 / Ctrl+R,R, which reaches this handler with the same params as
@@ -422,6 +438,30 @@ public sealed class RenameHandler
         // master: the in-request push cancelled this very request (issue #654), so VS never got
         // a response to apply. The Rename Step command ignores the result either way.
         return _clientIdeContext.IsVisualStudio ? new WorkspaceEdit() : workspaceEdit;
+    }
+
+    /// <summary>
+    /// Sends the <c>"Rename step command executed"</c> telemetry event for every terminal path of
+    /// <see cref="HandleRenameAsync"/> (issue #581 finding 4): <paramref name="erroneous"/> used to
+    /// be a literal <c>false</c> reachable only from the success path, since every failure path
+    /// returned <see langword="null"/> before the one existing <c>SendEvent</c> call. Now every
+    /// early return sends its own event with a <paramref name="reason"/> distinguishing which
+    /// validation/resolution step rejected the request, so <c>Erroneous</c> finally carries the
+    /// signal its name promises. <paramref name="changeAnnotationsUsed"/> and
+    /// <paramref name="editedFileCount"/> are only meaningful on the success path.
+    /// </summary>
+    private void SendRenameTelemetry(
+        bool erroneous, string? reason, bool? changeAnnotationsUsed = null, int? editedFileCount = null)
+    {
+        var properties = new Dictionary<string, object?> { ["Erroneous"] = erroneous };
+        if (reason != null)
+            properties["Reason"] = reason;
+        if (changeAnnotationsUsed != null)
+            properties["ChangeAnnotationsUsed"] = changeAnnotationsUsed;
+        if (editedFileCount != null)
+            properties["EditedFileCount"] = editedFileCount;
+
+        _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, properties);
     }
 
     /// <summary>

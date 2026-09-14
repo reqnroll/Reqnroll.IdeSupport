@@ -115,6 +115,7 @@ public sealed class FindStepUsagesHandler
             {
                 ["UsagesCount"] = 0,
                 ["IsCancelled"] = cancellationToken.IsCancellationRequested,
+                ["Protocol"] = "reqnroll/findStepUsages",
             });
             return Task.FromResult<FindStepUsagesResponse>(
                 new FindStepUsagesResponse { IsBinding = true });
@@ -132,6 +133,7 @@ public sealed class FindStepUsagesHandler
         {
             ["UsagesCount"] = usages.Count,
             ["IsCancelled"] = cancellationToken.IsCancellationRequested,
+            ["Protocol"] = "reqnroll/findStepUsages",
         });
 
         return Task.FromResult<FindStepUsagesResponse>(

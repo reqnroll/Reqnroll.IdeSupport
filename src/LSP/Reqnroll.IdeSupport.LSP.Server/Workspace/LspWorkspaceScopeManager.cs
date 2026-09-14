@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -19,6 +20,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     private readonly IIdeScope _ideScope;
     private readonly IIdeSupportLogger _logger;
     private readonly IMediator _mediator;
+    private readonly ILspTelemetryService? _telemetryService;
 
     private readonly ConcurrentDictionary<string, LspProjectScope> _scopes
         = new(StringComparer.OrdinalIgnoreCase);
@@ -29,11 +31,13 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     private readonly MembershipIndex _membershipIndex;
 
     /// <summary>Initializes a new instance of the <see cref="LspWorkspaceScopeManager"/> class.</summary>
-    public LspWorkspaceScopeManager(IIdeScope ideScope, IIdeSupportLogger logger, IMediator mediator)
+    public LspWorkspaceScopeManager(
+        IIdeScope ideScope, IIdeSupportLogger logger, IMediator mediator, ILspTelemetryService? telemetryService = null)
     {
         _ideScope  = ideScope;
         _logger    = logger;
         _mediator  = mediator;
+        _telemetryService = telemetryService;
         _membershipIndex = new MembershipIndex(logger, mediator, FindProjectByKey);
     }
 
@@ -100,6 +104,22 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // per-project provider and trigger the initial discovery, so no explicit
             // refresh is needed here for a brand-new project.
             ProjectDiscovered?.Invoke(project);
+
+            // Telemetry (issue #581 finding 2): the design doc's OpenProject event had no
+            // caller anywhere in the LSP-era architecture -- its only implementation,
+            // ProjectSettingsProvider, is legacy infrastructure never instantiated under
+            // src/LSP. Firing it here, server-side, covers VS/VS Code/Rider from one place
+            // (unlike OpenFeatureFile's per-client fix) and only on first discovery, not
+            // every projectLoaded re-send (e.g. VS's post-build resend, handled in the `else`
+            // branch below). FeatureFileCount is best-effort: the membership baseline
+            // (reqnroll/projectFiles) may not have arrived yet at this exact moment -- see the
+            // deferred-rescan handling below -- so null means "not yet known" rather than zero.
+            _telemetryService?.SendEvent("OpenProject command executed", new()
+            {
+                ["FeatureFileCount"] = HasBaselineForProject(project)
+                    ? GetIndexedFeatureFiles(project).Count
+                    : (int?)null,
+            });
         }
         else
         {
