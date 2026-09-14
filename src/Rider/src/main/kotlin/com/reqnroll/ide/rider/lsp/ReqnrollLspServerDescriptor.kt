@@ -93,12 +93,12 @@ class ReqnrollLspServerDescriptor(project: Project) :
      * [ReqnrollTelemetryEventInterceptor]) — nested so all three wrap the same underlying platform
      * handler via Kotlin interface delegation.
      */
-    override fun createLsp4jClient(serverNotificationsHandler: LspServerNotificationsHandler): Lsp4jClient =
+    override fun createLsp4jClient(handler: LspServerNotificationsHandler): Lsp4jClient =
         Lsp4jClient(
             ReqnrollTelemetryEventInterceptor(
                 ReqnrollCodeLensRefreshInterceptor(
                     project,
-                    ReqnrollInlayHintRefreshInterceptor(project, serverNotificationsHandler),
+                    ReqnrollInlayHintRefreshInterceptor(project, handler),
                 ),
             ),
         )
