@@ -4,9 +4,12 @@ import {
   LanguageClient,
   Middleware,
   PrepareRenameSignature,
+  ResponseError,
   WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
+import { GHERKIN_LANGUAGE_ID } from '../languageIds';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
 
 /** One renameable binding attribute at the queried position (mirrors RenameTargetItem.cs). */
 export interface RenameTargetItem {
@@ -84,12 +87,41 @@ export function selectRenameTarget(
   client: LanguageClient,
   uriStr: string,
   attributeIndex: number,
+  position: vscode.Position,
 ): Promise<void> {
   return client.sendNotification(ReqnrollMethods.selectRenameTarget, {
     uri: uriStr,
     version: 0,
     attributeIndex,
+    // The position the picker was invoked at, so the server can resolve `attributeIndex` to the
+    // binding it denotes while that candidate list is still current, rather than carrying a bare
+    // index across the rename prompt and re-applying it to a list rebuilt later (issue #671, R5).
+    position: { line: position.line, character: position.character },
   });
+}
+
+/**
+ * Reports whether this client applied the `WorkspaceEdit` returned from `textDocument/rename`, so
+ * the server can commit — or drop — the binding-registry and match-cache updates it staged for that
+ * rename (issue #671, R3; see `RenamePostApplyCoordinator`).
+ *
+ * The server used to commit those updates unconditionally for every non-Visual-Studio client, on
+ * the assumption the client would apply what it was handed. Rider disproved that (issue #670), and
+ * the same exposure exists here now that edits are version-stamped (R2) and VS Code rejects ones
+ * computed against a superseded document version.
+ *
+ * Failures are swallowed deliberately: a dropped confirmation costs a stale registry entry that the
+ * next `.cs` edit repairs, whereas letting it reject would surface an error for a rename the user
+ * just watched succeed.
+ */
+export function reportRenameApplied(
+  client: LanguageClient,
+  uriStr: string,
+  applied: boolean,
+): void {
+  void client
+    .sendNotification(ReqnrollMethods.renameApplied, { uri: uriStr, applied })
+    .then(undefined, () => undefined);
 }
 
 /**
@@ -133,7 +165,7 @@ export function selectRenameTarget(
  */
 export function collapseActiveSelectionForFeatureStepRename(): void {
   const editor = vscode.window.activeTextEditor;
-  if (editor?.document.languageId !== 'gherkin' || editor.selection.isEmpty) return;
+  if (editor?.document.languageId !== GHERKIN_LANGUAGE_ID || editor.selection.isEmpty) return;
 
   editor.selection = new vscode.Selection(editor.selection.active, editor.selection.active);
 }
@@ -175,10 +207,40 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
         const chosen = await pickRenameTarget(targets);
         if (!chosen) return undefined;
 
-        await selectRenameTarget(client, document.uri.toString(), chosen.attributeIndex);
+        await selectRenameTarget(client, document.uri.toString(), chosen.attributeIndex, position);
       }
 
       return next(document, position, token);
+    },
+
+    // Confirms the staged server-side cache updates for a `.feature` rename (issue #671, R3).
+    // Unlike `renameStepFromCSharp`, this path hands the edit back to VS Code, which applies it
+    // itself — there is no `applyEdit` boolean to report back.
+    //
+    // Now that edits carry real document versions (R2), VS Code rejects one computed against a
+    // superseded version, so "we produced an edit" is no longer the same as "it was applied".
+    // `TextDocument.version` is the very counter `vscode-languageclient` reports to the server as
+    // the LSP document version, so comparing it across the request reproduces the decision VS Code
+    // is about to make. Reporting `true` regardless would reintroduce #670 on this path.
+    //
+    // Covers the invoked document only — the one whose version the user can plausibly move during
+    // the round trip. That matches the guard Rider applies (R4) and the window it protects: the
+    // server computes the edit inside a Serial-dispatched request, so any edit made while the
+    // rename UI was open is already reflected in the offsets.
+    provideRenameEdits: async (document, position, newName, token, next) => {
+      const client = getClient();
+      const versionBeforeRequest = document.version;
+      const edit = await next(document, position, newName, token);
+
+      if (client && edit) {
+        reportRenameApplied(
+          client,
+          document.uri.toString(),
+          document.version === versionBeforeRequest,
+        );
+      }
+
+      return edit;
     },
   };
 }
@@ -233,16 +295,14 @@ export async function renameStepFromCSharp(
       await vscode.commands.executeCommand('editor.action.rename');
       return;
     }
-    void vscode.window.showInformationMessage(
-      'Reqnroll: No step definition found to rename at this position.',
-    );
+    void showInfo('Reqnroll: No step definition found to rename at this position.');
     return;
   }
 
   const chosen = targets.length === 1 ? targets[0] : await pickRenameTarget(targets);
   if (!chosen) return;
 
-  await selectRenameTarget(client, uriStr, chosen.attributeIndex);
+  await selectRenameTarget(client, uriStr, chosen.attributeIndex, position);
 
   const currentStepText = chosen.expression || extractStepTextFromLabel(chosen.label);
   const newStepText = await vscode.window.showInputBox({
@@ -251,17 +311,33 @@ export async function renameStepFromCSharp(
   });
   if (!newStepText) return;
 
-  const result = await client.sendRequest<LspWorkspaceEdit | null>('textDocument/rename', {
-    textDocument: { uri: uriStr },
-    position: { line: position.line, character: position.character },
-    newName: newStepText,
-  });
+  let result: LspWorkspaceEdit | null;
+  try {
+    result = await client.sendRequest<LspWorkspaceEdit | null>('textDocument/rename', {
+      textDocument: { uri: uriStr },
+      position: { line: position.line, character: position.character },
+      newName: newStepText,
+    });
+  } catch (err) {
+    // The server rejects an invalid/unmatchable rename with a real JSON-RPC error response
+    // (issue #650) instead of a null result, so its human-readable reason can be shown
+    // directly — sendRequest rejects the promise with a ResponseError in that case (confirmed
+    // in vscode-jsonrpc's connection.js) rather than resolving to null.
+    const message = err instanceof ResponseError ? err.message : 'Rename failed.';
+    void showError(`Reqnroll: ${message}`);
+    return;
+  }
 
   if (!result) {
-    void vscode.window.showErrorMessage('Reqnroll: Rename failed.');
+    void showError('Reqnroll: Rename failed.');
     return;
   }
 
   const edit = await client.protocol2CodeConverter.asWorkspaceEdit(result);
-  await vscode.workspace.applyEdit(edit);
+  const applied = await vscode.workspace.applyEdit(edit);
+  reportRenameApplied(client, uriStr, applied);
+
+  if (!applied) {
+    void showError('Reqnroll: Rename failed — the edit could not be applied.');
+  }
 }

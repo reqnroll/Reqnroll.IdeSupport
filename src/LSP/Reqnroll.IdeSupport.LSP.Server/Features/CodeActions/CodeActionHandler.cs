@@ -1,52 +1,61 @@
-﻿using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
-using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.LSP.Core.Completions;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
-using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 
 /// <summary>
-/// Handles <c>textDocument/codeAction</c> requests for <c>*.feature</c> files (Define Steps).
-/// Returns code actions that generate C# step-definition stubs for undefined steps.
+/// Handles <c>textDocument/codeAction</c> requests for <c>*.feature</c> files: generates C#
+/// step-definition stubs for undefined steps (Define Steps), offers "Insert '&lt;keyword&gt;'"
+/// fixes for Gherkin syntax errors, and offers "Go to '&lt;method&gt;'" navigation for ambiguous
+/// steps — the last of these only for VS Code (see <see cref="ClientIdeContext.IsVSCode"/>).
 /// Registered via OmniSharp dynamic registration (<see cref="ICodeActionHandler"/>), scoped to
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
+/// <remarks>
+/// Reduced to guards, orchestration, and telemetry (issue #588, extended for #563): resolving
+/// <em>where</em> generated code should go is <see cref="StepDefinitionTargetResolver"/>, and
+/// building the actions for a given target/step-subset is <see cref="DefineStepsActionBuilder"/>.
+/// The parser-error and ambiguous-step fixes added for issue #563 follow the same split:
+/// <see cref="ParserErrorActionBuilder"/> and <see cref="AmbiguousStepActionBuilder"/>. All four
+/// are plain internal collaborators constructed here, not DI-registered services — they have no
+/// other consumer and no reason to be swapped independently of this handler.
+/// </remarks>
 public sealed class CodeActionHandler : ICodeActionHandler
 {
     /// <summary>
-    /// Caps how many existing binding files are offered as append targets for one "Define
-    /// step(s)" title, so the lightbulb menu doesn't grow unbounded on a project with many
-    /// binding files matched to a feature.
-    /// </summary>
-    private const int MaxAppendCandidates = 5;
-
-    /// <summary>
     /// Caps the total number of code actions returned for one request (append candidates + the
-    /// new-file fallback, across both the per-step and "all"/"scenario" title groups).
+    /// new-file fallback, across both the per-step and "all"/"scenario" title groups, plus any
+    /// parser-error/ambiguous-step fixes).
     /// </summary>
     private const int MaxTargetedActions = 6;
 
     private readonly IBindingMatchService          _matchService;
-    private readonly IStepScaffoldService          _scaffoldService;
     private readonly ILspWorkspaceScopeManager     _scopeManager;
     private readonly IDocumentBufferService        _bufferService;
     private readonly IIdeSupportLogger               _logger;
+    private readonly ClientIdeContext              _clientIde;
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
-    private readonly IFileSystemForIDE             _fileSystem;
+    private readonly StepDefinitionTargetResolver  _targetResolver;
+    private readonly DefineStepsActionBuilder      _actionBuilder;
+    private readonly ParserErrorActionBuilder      _parserErrorActionBuilder;
+    private readonly AmbiguousStepActionBuilder    _ambiguousActionBuilder;
 
     /// <summary>Initializes a new instance of the <see cref="CodeActionHandler"/> class.</summary>
     public CodeActionHandler(
@@ -56,17 +65,23 @@ public sealed class CodeActionHandler : ICodeActionHandler
         IDocumentBufferService    bufferService,
         IIdeSupportLogger            logger,
         IFileSystemForIDE         fileSystem,
+        ICompletionService        completionService,
+        IErrorTelemetryService    errorTelemetryService,
+        ClientIdeContext          clientIde,
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
         _matchService    = matchService;
-        _scaffoldService = scaffoldService;
         _scopeManager    = scopeManager;
         _bufferService   = bufferService;
         _logger          = logger;
-        _fileSystem      = fileSystem;
+        _clientIde       = clientIde;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
+        _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
+        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem);
+        _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
+        _ambiguousActionBuilder   = new AmbiguousStepActionBuilder(fileSystem);
     }
 
     /// <summary>Builds the LSP registration options advertising code-action support (quick-fix kind) for <c>.feature</c> files.</summary>
@@ -76,7 +91,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         => new()
         {
             DocumentSelector = new TextDocumentSelector(
-                new TextDocumentFilter { Pattern = "**/*.feature" }),
+                new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern }),
             CodeActionKinds = new Container<CodeActionKind>(CodeActionKind.QuickFix),
             ResolveProvider = false
         };
@@ -96,6 +111,16 @@ public sealed class CodeActionHandler : ICodeActionHandler
             return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
         }
 
+        // Honour context.only (issue #563): every action this handler produces is a QuickFix, so
+        // a request scoped to some other kind (e.g. Refactor) gets nothing from us.
+        if (!QuickFixRequested(request.Context?.Only))
+        {
+            _logger.LogVerbose($"CodeActionHandler: requested kind(s) exclude QuickFix for {uri}");
+            return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
+        }
+
+        _bufferService.TryGet(uri, out var buffer);
+
         // Resolve the match set for the feature file's primary owner.
         var primaryOwner = _scopeManager.ResolvePrimaryOwner(uri);
         var matchKey = primaryOwner is not null
@@ -105,140 +130,53 @@ public sealed class CodeActionHandler : ICodeActionHandler
 
         _matchService.TryGet(matchKey, out var matchSet);
 
-        var allUndefined = matchSet?.Undefined.ToList() ?? new List<LSP.Core.Matching.StepBindingMatch>();
-        if (allUndefined.Count == 0)
-        {
-            _logger.LogVerbose($"CodeActionHandler: no undefined steps for {uri}");
-            return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
-        }
+        var offset       = ResolveCursorOffset(buffer, request.Range.Start);
+        var stepAtCursor = offset is int o ? matchSet.FindAt(o) : null;
 
-        // Only offer "Define missing step" actions when the request's cursor position actually
-        // falls on an undefined step. Without this, a lightbulb invoked over an ambiguous (or
-        // otherwise bound) step would still offer to "define" some unrelated undefined step
-        // elsewhere in the file, which is misleading — that step has nothing to do with what's
-        // under the cursor.
-        var stepAtCursor = ResolveStepAtCursor(uri, request.Range.Start, matchSet);
-        if (stepAtCursor is null || !stepAtCursor.IsUndefined)
-        {
-            _logger.LogVerbose($"CodeActionHandler: no undefined step at the request position in {uri}");
-            return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer());
-        }
-
-        // Read skeleton style from project config.
-        var configProvider = _scopeManager.GetConfigurationProviderForUri(uri);
-        var config = configProvider.GetConfiguration();
-        var style  = config?.SnippetExpressionStyle ?? SnippetExpressionStyle.CucumberExpression;
-        var csharpConfig = new CSharpCodeGenerationConfiguration();
-
-        // Determine target file metadata.
-        var featurePath   = uri.GetFileSystemPath();
-        var className     = StepDefinitionFileBuilder.ClassNameFromFeaturePath(featurePath);
-        var defaultNs     = primaryOwner?.DefaultNamespace ?? Path.GetFileNameWithoutExtension(featurePath);
-        var projectFolder = primaryOwner?.ProjectFolder ?? Path.GetDirectoryName(featurePath) ?? string.Empty;
-        var bindingPaths  = primaryOwner is not null
-            ? _scopeManager.GetBindingFilePathsForProject(primaryOwner)
-            : (IReadOnlyCollection<string>)Array.Empty<string>();
-
-        // Rank existing binding files by how many of *this feature's* steps are already matched
-        // there — a stronger placement signal than "which folder has the most binding files
-        // anywhere in the project" (used only as the fallback below). Capped so the lightbulb
-        // menu doesn't grow unbounded (see MaxTargetedActions).
-        var appendCandidates = (matchSet is not null
-                ? CandidateStepDefinitionFileRanker.RankCandidateFiles(matchSet)
-                : Array.Empty<string>())
-            .Where(f => _fileSystem.File.Exists(f))
-            .Take(MaxAppendCandidates)
-            .ToList();
-
-        // The new-file fallback's folder: alongside the top-ranked candidate (even when that
-        // specific file is later declined for append), or the project-wide folder-frequency
-        // heuristic only when the feature has no ranked candidates at all (e.g. a brand-new
-        // feature with no bindings anywhere yet).
-        var newFileFolder = appendCandidates.Count > 0
-            ? Path.GetDirectoryName(appendCandidates[0]) is { Length: > 0 } dir ? dir : projectFolder
-            : FindBestTargetFolder(_fileSystem, bindingPaths, featurePath);
-
-        var targetPath = Path.Combine(newFileFolder, className + ".cs");
-        if (_fileSystem.File.Exists(targetPath))
-        {
-            int suffix = 2;
-            while (_fileSystem.File.Exists(Path.Combine(newFileFolder, className + suffix + ".cs")))
-                suffix++;
-            targetPath = Path.Combine(newFileFolder, className + suffix + ".cs");
-        }
-        className = Path.GetFileNameWithoutExtension(targetPath);
-        var @namespace    = StepDefinitionFileBuilder.DeriveNamespace(projectFolder, defaultNs, targetPath);
-
-        const string indent  = "    ";
-        var          newLine = Environment.NewLine;
-
-        // Builds one CodeAction per plausible target (append to an existing candidate file, or
-        // create the new file) for a given title/step subset. Titles only gain a "→ <target>"
-        // suffix when more than one target actually resolved — the common case (no existing
-        // candidate) keeps the original unadorned title so most users never see a change.
-        List<CommandOrCodeAction> BuildTargetedActions(string baseTitle, IReadOnlyList<LSP.Core.Matching.StepBindingMatch> steps)
-        {
-            var snippets = RenderSnippets(steps, style, indent, newLine);
-            if (snippets is null) return new List<CommandOrCodeAction>();
-
-            // Resolve which append candidates actually succeed *before* deciding titles, so a
-            // candidate declined by AppendToFile (ambiguous brace structure) doesn't still cause
-            // the surviving actions to get a "→ <target>" suffix implying a choice that isn't real.
-            var successfulAppends = new List<(string TargetPath, string ExistingContent, string AppendedContent)>();
-            foreach (var candidate in appendCandidates)
-            {
-                var existingContent = _fileSystem.File.ReadAllText(candidate);
-                var appendedContent = StepDefinitionFileBuilder.AppendToFile(existingContent, snippets, indent, newLine);
-                if (appendedContent is not null)
-                    successfulAppends.Add((candidate, existingContent, appendedContent));
-            }
-
-            var newFileContent = StepDefinitionFileBuilder.BuildNewFile(
-                snippets, className, @namespace, csharpConfig, indent, newLine);
-
-            bool multiTarget = successfulAppends.Count > 0; // +1 for the always-present new-file target
-
-            // Exactly one action per group is marked IsPreferred — the top-ranked append candidate
-            // when one exists, otherwise the new-file fallback. Some clients (VS in particular)
-            // don't preserve the server's array order in the lightbulb menu and instead lean on
-            // this signal (or fall back to their own sort, e.g. alphabetical by title) to decide
-            // what to show first, so relying on ordering alone isn't enough to keep "append to the
-            // existing file" as the default choice.
-            var actionsForTitle = new List<CodeAction>(successfulAppends.Count + 1);
-            bool isFirst = true;
-            foreach (var (path, existingContent, appendedContent) in successfulAppends)
-            {
-                var title = multiTarget ? $"{baseTitle} → {Path.GetFileName(path)}" : baseTitle;
-                actionsForTitle.Add(BuildAppendCodeAction(title, path, existingContent, appendedContent, isPreferred: isFirst));
-                isFirst = false;
-            }
-
-            var newFileTitle = multiTarget ? $"{baseTitle} → new file" : baseTitle;
-            actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, targetPath, isPreferred: isFirst));
-
-            return actionsForTitle.Select(a => new CommandOrCodeAction(a)).ToList();
-        }
-
-        // Collect actions. Per-step ("cursor") actions are inserted first so they survive the
-        // MaxTargetedActions cap below when both this and the "all"/"scenario" group are present.
         var actions = new List<CommandOrCodeAction>();
+        var isDefineAction = new HashSet<CommandOrCodeAction>();
 
-        // ── "Define all missing steps in file" ─────────────────────────────────
-        if (allUndefined.Count >= 1)
+        // ── "Define missing step" actions ───────────────────────────────────────
+        // Only offered when the request's cursor position actually falls on an undefined step
+        // that has step text to build a skeleton from. Without the first check, a lightbulb
+        // invoked over an ambiguous (or otherwise bound) step would still offer to "define" some
+        // unrelated undefined step elsewhere in the file, which is misleading — that step has
+        // nothing to do with what's under the cursor. Without the second, a bare keyword with no
+        // step text (e.g. a lone "Given") would offer to generate a meaningless empty-expression
+        // binding, since there is no text to build one from (issue #622).
+        if (stepAtCursor is { IsUndefined: true } && !string.IsNullOrWhiteSpace(GetStepText(stepAtCursor)))
         {
-            actions.AddRange(BuildTargetedActions(
-                allUndefined.Count == 1 ? "Define missing step" : "Define all missing steps in file",
-                allUndefined));
+            var defineActions = BuildDefineStepActions(uri, primaryOwner, matchSet, stepAtCursor);
+            isDefineAction.UnionWith(defineActions);
+            actions.AddRange(defineActions);
         }
 
-        // ── Per-step action for the step actually under the cursor ─────────────
-        // Only add it as a distinct action when it differs from the "all" action above
-        // (i.e. there are other undefined steps in the file besides this one).
-        if (stepAtCursor != allUndefined[0])
+        // ── "Go to '<method>'" actions for an ambiguous step under the cursor ───
+        // VS Code-only (issue #563 follow-up): these actions carry only a `vscode.open` Command,
+        // no Edit. VS Code's LSP client recognizes that command name and runs it locally; Visual
+        // Studio and Rider have no such special-casing, forward it to the server via
+        // workspace/executeCommand instead, and get back "Method not found" (confirmed live in
+        // VS) — so the action would silently do nothing there. See ClientIdeContext.IsVSCode.
+        if (stepAtCursor is { IsAmbiguous: true } && _clientIde.IsVSCode)
         {
-            var stepText = GetStepText(stepAtCursor);
-            actions.InsertRange(0, BuildTargetedActions($"Define step: {stepText}", new[] { stepAtCursor }));
+            actions.AddRange(_ambiguousActionBuilder.Build(stepAtCursor));
         }
+
+        // ── "Insert '<keyword>'" actions for a parser error under the cursor ────
+        if (buffer?.Tags is not null)
+        {
+            var errorTag = FindParserErrorTagAt(buffer.Tags, offset);
+            if (errorTag is not null)
+            {
+                var gherkinDoc = buffer.Tags
+                    .FirstOrDefault(t => t.Type == IdeSupportTagTypes.Document)?.Data as IdeSupportGherkinDocument;
+                actions.AddRange(_parserErrorActionBuilder.Build(uri, errorTag, gherkinDoc));
+            }
+        }
+
+        // Honour context.diagnostics (issue #563): when the client scopes the request to specific
+        // diagnostics (e.g. "fix this squiggle"), only return actions attributed to one of them.
+        actions = FilterByContextDiagnostics(actions, request.Context?.Diagnostics);
 
         if (actions.Count > MaxTargetedActions)
             actions = actions.Take(MaxTargetedActions).ToList();
@@ -248,14 +186,16 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // Telemetry: records that a "Define step(s)" action was *offered*, not that the user
         // accepted it — the CodeAction's WorkspaceEdit is applied entirely client-side
         // (workspace/applyEdit), so unlike CommentToggleHandler's workspace/executeCommand round
-        // trip, the server has no signal for whether the lightbulb was actually clicked. Undefined
-        // step count is the closest available proxy for "how much work this would have saved."
-        if (actions.Count > 0)
+        // trip, the server has no signal for whether the lightbulb was actually clicked. Counted
+        // from the final, post-filter/post-cap list — not the raw count built above — so this
+        // never reports more than what the client actually received.
+        var defineActionsOffered = actions.Count(isDefineAction.Contains);
+        if (defineActionsOffered > 0)
         {
-            _telemetryService?.SendEvent("DefineSteps command offered", new()
+            _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandOffered, new()
             {
-                ["UndefinedStepCount"] = allUndefined.Count,
-                ["ActionsOffered"] = actions.Count,
+                ["UndefinedStepCount"] = matchSet.Undefined.Count(),
+                ["ActionsOffered"] = defineActionsOffered,
             });
         }
 
@@ -265,164 +205,97 @@ public sealed class CodeActionHandler : ICodeActionHandler
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /// <summary>Builds a "Define step(s)" action that creates a brand-new step-definition file with the given content.</summary>
-    private static CodeAction BuildCreateCodeAction(string title, string fileContent, string targetPath, bool isPreferred)
+    private List<CommandOrCodeAction> BuildDefineStepActions(
+        DocumentUri uri,
+        LspReqnrollProject? primaryOwner,
+        FeatureBindingMatchSet matchSet,
+        StepBindingMatch stepAtCursor)
     {
-        var targetUri = DocumentUri.FromFileSystemPath(targetPath);
+        var allUndefined = matchSet.Undefined.ToList();
+        var featurePath  = uri.GetFileSystemPath();
+        var target       = _targetResolver.Resolve(uri, featurePath, primaryOwner, matchSet);
 
-        var edit = new WorkspaceEdit
+        // Per-step ("cursor") actions are inserted first so they survive the MaxTargetedActions
+        // cap in Handle when both this and the "all"/"scenario" group are present.
+        var actions = new List<CommandOrCodeAction>();
+
+        // ── "Define all missing steps in file" ─────────────────────────────────
+        actions.AddRange(_actionBuilder.Build(target,
+            allUndefined.Count == 1 ? "Define missing step" : "Define all missing steps in file",
+            allUndefined));
+
+        // ── Per-step action for the step actually under the cursor ─────────────
+        // Only add it as a distinct action when it differs from the "all" action above
+        // (i.e. there are other undefined steps in the file besides this one).
+        if (stepAtCursor != allUndefined[0])
         {
-            DocumentChanges = new Container<WorkspaceEditDocumentChange>(
-                new WorkspaceEditDocumentChange(new CreateFile
-                {
-                    Uri     = targetUri,
-                    Options = new CreateFileOptions { IgnoreIfExists = true }
-                }),
-                new WorkspaceEditDocumentChange(new TextDocumentEdit
-                {
-                    TextDocument = new OptionalVersionedTextDocumentIdentifier
-                    {
-                        Uri     = targetUri,
-                        Version = null
-                    },
-                    Edits = new TextEditContainer(new TextEdit
-                    {
-                        Range   = new LspRange(new Position(0, 0), new Position(0, 0)),
-                        NewText = fileContent
-                    })
-                }))
-        };
+            var stepText = GetStepText(stepAtCursor);
+            actions.InsertRange(0, _actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor }));
+        }
 
-        return BuildCodeAction(title, edit, targetUri, isPreferred);
-    }
-
-    /// <summary>
-    /// Builds a "Define step(s)" action that replaces an existing step-definition file's content
-    /// with <paramref name="appendedContent"/> (the file plus the new method(s), already computed
-    /// by <see cref="StepDefinitionFileBuilder.AppendToFile"/>). Every candidate offered here comes
-    /// from <see cref="LSP.Core.Scaffolding.CandidateStepDefinitionFileRanker"/>, which only
-    /// surfaces files that already contain a step definition matched to this feature — so, unlike
-    /// a newly created file, no <c>[Binding]</c>-attribute check is needed before offering it.
-    /// </summary>
-    private static CodeAction BuildAppendCodeAction(string title, string targetPath, string existingContent, string appendedContent, bool isPreferred)
-    {
-        var targetUri = DocumentUri.FromFileSystemPath(targetPath);
-
-        var edit = new WorkspaceEdit
-        {
-            DocumentChanges = new Container<WorkspaceEditDocumentChange>(
-                new WorkspaceEditDocumentChange(new TextDocumentEdit
-                {
-                    TextDocument = new OptionalVersionedTextDocumentIdentifier
-                    {
-                        Uri     = targetUri,
-                        Version = null
-                    },
-                    Edits = new TextEditContainer(new TextEdit
-                    {
-                        Range   = new LspRange(new Position(0, 0), EndPositionOf(existingContent)),
-                        NewText = appendedContent
-                    })
-                }))
-        };
-
-        return BuildCodeAction(title, edit, targetUri, isPreferred);
-    }
-
-    /// <summary>
-    /// Builds the shared <see cref="CodeAction"/> shape. <paramref name="isPreferred"/> should be
-    /// <see langword="true"/> for exactly one action per title group — the client-facing signal
-    /// for "this is the one to pick" (e.g. VS/VS Code bubble the preferred action to the top of
-    /// the lightbulb menu instead of relying on array order, which some clients don't preserve).
-    /// </summary>
-    private static CodeAction BuildCodeAction(string title, WorkspaceEdit edit, DocumentUri targetUri, bool isPreferred) =>
-        new()
-        {
-            Title       = title,
-            Kind        = CodeActionKind.QuickFix,
-            Edit        = edit,
-            // VS Code executes this command after applying the edit, opening the target file.
-            // Other clients receive an unknown command they can safely ignore.
-            Command     = new Command
-            {
-                Title     = "Open step definition file",
-                Name      = "vscode.open",
-                Arguments = new JArray(targetUri.ToString())
-            },
-            IsPreferred = isPreferred
-        };
-
-    private List<string>? RenderSnippets(
-        IEnumerable<LSP.Core.Matching.StepBindingMatch> steps,
-        SnippetExpressionStyle style,
-        string indent,
-        string newLine)
-    {
-        var descriptors = _scaffoldService.BuildDescriptors(steps, style);
-        if (descriptors.Count == 0) return null;
-
-        return descriptors
-            .Select(d => StepSkeletonRenderer.Render(d, indent, newLine))
-            .ToList();
-    }
-
-    /// <summary>The end position (last line, last character) of <paramref name="content"/>, for a full-document replace range.</summary>
-    private static Position EndPositionOf(string content)
-    {
-        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-        var lastLineIndex = lines.Length - 1;
-        return new Position(lastLineIndex, lines[lastLineIndex].Length);
+        return actions;
     }
 
     private static bool IsFeatureFile(DocumentUri uri) =>
         uri.Path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Resolves the step (if any) that the request's cursor position falls on.</summary>
-    private LSP.Core.Matching.StepBindingMatch? ResolveStepAtCursor(
-        DocumentUri uri,
-        Position position,
-        LSP.Core.Matching.FeatureBindingMatchSet? matchSet)
+    private static bool QuickFixRequested(Container<CodeActionKind>? only)
     {
-        if (matchSet is null) return null;
-        if (!_bufferService.TryGet(uri, out var buffer) || buffer is null) return null;
-
-        var snapshot = buffer.ToGherkinTextSnapshot();
-        var offset   = snapshot.ToOffset(position.Line, position.Character);
-        return matchSet.FindAt(offset);
+        var kinds = only?.ToList();
+        return kinds is null || kinds.Count == 0 || kinds.Contains(CodeActionKind.QuickFix);
     }
 
-    private static string GetStepText(LSP.Core.Matching.StepBindingMatch step)
+    /// <summary>Resolves the request position to an absolute character offset in the document, or <see langword="null"/> when no buffer is available.</summary>
+    private static int? ResolveCursorOffset(DocumentBuffer? buffer, Position position)
     {
-        var item = step.Result.Items.FirstOrDefault(
-            i => i.Type == LSP.Core.Matching.MatchResultType.Undefined);
-        return item?.UndefinedStep?.StepText ?? string.Empty;
+        if (buffer is null) return null;
+        var snapshot = buffer.ToGherkinTextSnapshot();
+        return snapshot.ToOffset(position.Line, position.Character);
+    }
+
+    /// <summary>Finds the parser-error tag (if any) whose span contains <paramref name="offset"/>.</summary>
+    private static IdeSupportTag? FindParserErrorTagAt(IReadOnlyCollection<IdeSupportTag> tags, int? offset)
+    {
+        if (offset is not int o) return null;
+        return tags.FirstOrDefault(t =>
+            t.Type == IdeSupportTagTypes.ParserError && o >= t.Range.Start && o <= t.Range.End);
     }
 
     /// <summary>
-    /// Picks the best target directory for a new step-definition file.
-    /// Prefers the folder that already holds the most binding files (so the generated file
-    /// lands alongside the user's existing step definitions), then falls back to a sibling
-    /// StepDefinitions/ folder or the feature file's own directory.
+    /// Restricts <paramref name="actions"/> to those attributed to one of
+    /// <paramref name="contextDiagnostics"/> when the client named specific diagnostics; returns
+    /// <paramref name="actions"/> unchanged when the context carries none (the common case — most
+    /// <c>codeAction</c> requests are unscoped cursor-position polling, not "fix this squiggle").
     /// </summary>
-    private static string FindBestTargetFolder(
-        IFileSystemForIDE fileSystem,
-        IReadOnlyCollection<string> bindingFiles,
-        string featureFilePath)
+    private static List<CommandOrCodeAction> FilterByContextDiagnostics(
+        List<CommandOrCodeAction> actions,
+        Container<Diagnostic>?    contextDiagnostics)
     {
-        if (bindingFiles.Count > 0)
-        {
-            var best = bindingFiles
-                .Select(p => Path.GetDirectoryName(p) ?? string.Empty)
-                .Where(d => d.Length > 0)
-                .GroupBy(d => d, StringComparer.OrdinalIgnoreCase)
-                .OrderByDescending(g => g.Count())
-                .FirstOrDefault();
-            if (best is not null)
-                return best.Key;
-        }
+        var contextList = contextDiagnostics?.ToList();
+        if (contextList is null || contextList.Count == 0)
+            return actions;
 
-        var featureDir    = Path.GetDirectoryName(featureFilePath) ?? string.Empty;
-        var siblingStepDefs = Path.Combine(featureDir, "StepDefinitions");
-        return fileSystem.Directory.Exists(siblingStepDefs) ? siblingStepDefs : featureDir;
+        return actions.Where(a =>
+            a.CodeAction?.Diagnostics is not { } diagnostics ||
+            diagnostics.Any(d => contextList.Any(cd => Overlaps(cd, d))))
+            .ToList();
+    }
+
+    private static bool Overlaps(Diagnostic a, Diagnostic b) =>
+        a.Source == b.Source
+        && ComparePosition(a.Range.Start, b.Range.End) <= 0
+        && ComparePosition(b.Range.Start, a.Range.End) <= 0;
+
+    private static int ComparePosition(Position x, Position y)
+    {
+        var byLine = x.Line.CompareTo(y.Line);
+        return byLine != 0 ? byLine : x.Character.CompareTo(y.Character);
+    }
+
+    private static string GetStepText(StepBindingMatch step)
+    {
+        var item = step.Result.Items.FirstOrDefault(
+            i => i.Type == MatchResultType.Undefined);
+        return item?.UndefinedStep?.StepText ?? string.Empty;
     }
 }

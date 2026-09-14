@@ -1,4 +1,3 @@
-using MediatR;
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 /// <summary>
@@ -6,7 +5,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 /// Sent by each IDE glue component when a Reqnroll project is opened or its
 /// build properties change (e.g. after a rebuild).
 /// </summary>
-public sealed class ReqnrollProjectLoadedParams : INotification
+/// <remarks>
+/// Not a MediatR notification (issue #579) despite the name: this method is routed directly to
+/// <see cref="ILspWorkspaceScopeManager.HandleProjectLoadedAsync"/> via
+/// <c>OnNotification</c>/<c>LspHandlerResolver</c>, never through <c>IMediator.Publish</c>. A
+/// previous <c>: INotification</c> marker here advertised a pub/sub extension point that did not
+/// exist — a handler added for it would compile and register but never run.
+/// </remarks>
+public sealed class ReqnrollProjectLoadedParams
 {
     /// <summary>
     /// Absolute path of the LSP workspace folder this project belongs to.

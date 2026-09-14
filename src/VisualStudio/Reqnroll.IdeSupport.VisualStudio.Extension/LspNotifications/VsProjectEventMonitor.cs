@@ -11,6 +11,7 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Newtonsoft.Json;
+using NuGet.VisualStudio;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.VisualStudio;
@@ -62,6 +63,15 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
     // signal below — every other responsibility in this class talks to DTE/the LSP pipe directly.
     private IVsIdeScope? _ideScope;
 
+    // Issue #690: subscribed lazily, on first need (a projectLoaded baseline that went out with
+    // NuGet reporting ProjectNotReady), not in the constructor — most sessions never hit that path
+    // (NuGet is already ready by the time the solution finishes loading), so there is no reason to
+    // pay for MEF resolution and an event subscription that will never fire. Once subscribed, it
+    // stays subscribed for the object's lifetime; there is no unsubscribe-when-no-longer-needed,
+    // since a later project add/reload could hit ProjectNotReady again just as easily.
+    private IVsNuGetProjectUpdateEvents? _nugetProjectUpdateEvents;
+    private bool _nugetRestoreResendSubscriptionAttempted;
+
     /// <summary>
     /// Subscribes to DTE solution/build/window events and, if available,
     /// <see cref="IVsTrackProjectDocumentsEvents2"/>. Must be called on the UI thread.
@@ -98,7 +108,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             ErrorHandler.Succeeded(_trackProjectDocuments.AdviseTrackProjectDocumentsEvents(
                 this, out _trackProjectDocumentsCookie)))
         {
-            _logger.LogInformation("VsProjectEventMonitor: subscribed to IVsTrackProjectDocumentsEvents2.");
+            _logger.LogDebug("VsProjectEventMonitor: subscribed to IVsTrackProjectDocumentsEvents2.");
         }
         else
         {
@@ -160,10 +170,10 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
                 files                  = new[] { new { path = filePath, role = 1, added = true } }
             };
             var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
-            await _pipe.SendNotificationToServerAsync("reqnroll/projectFiles", paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectFiles, paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectFiles delta for scaffolded file {FileName} in {ProjectName}",
                 Path.GetFileName(filePath), project.Name);
         }
@@ -187,10 +197,10 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         var paramsObj = new { uri = featureUri };
         var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsProjectEventMonitor: sending documentActivated for {FileName}", Path.GetFileName(filePath));
 
-        return _pipe.SendNotificationToServerAsync("reqnroll/documentActivated", paramsJson, ct);
+        return _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.DocumentActivated, paramsJson, ct);
     }
 
     private Project? FindProjectContaining(string filePath)
@@ -250,7 +260,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         // debugging: a prior run showed zero reqnroll/documentActivated sends despite the tabs'
         // views clearly having been created, and there was no log evidence to say whether
         // WindowActivated simply never fired or fired and no-op'd).
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsProjectEventMonitor: WindowActivated fired, gotFocus.Caption={Caption}, document={DocumentPath}",
             TryGetCaption(gotFocus), TryGetDocumentPath(gotFocus));
 
@@ -267,7 +277,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             return;
 
         var action = _activationState.OnWindowActivated(filePath);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "VsProjectEventMonitor: WindowActivated for {FileName} — state action = {Action}",
             Path.GetFileName(filePath), action);
 
@@ -335,6 +345,46 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         }
     }
 
+    // ── NuGet restore-finished resend (issue #690) ──────────────────────────────
+
+    /// <summary>
+    /// Resolves <see cref="IVsNuGetProjectUpdateEvents"/> via MEF (once) and subscribes to its
+    /// <c>SolutionRestoreFinished</c> event so a project whose <c>projectLoaded</c> baseline went out
+    /// with an empty, not-yet-known package list (NuGet reported <c>ProjectNotReady</c>) gets a
+    /// corrected re-send once NuGet actually finishes restoring — rather than staying misclassified
+    /// (no Reqnroll package detected) until the next build or solution reload.
+    /// </summary>
+    private void EnsureNuGetRestoreResendSubscription()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (_nugetRestoreResendSubscriptionAttempted)
+            return;
+        _nugetRestoreResendSubscriptionAttempted = true;
+
+        _nugetProjectUpdateEvents = VsUtils.ResolveMefDependency<IVsNuGetProjectUpdateEvents>(_serviceProvider);
+        if (_nugetProjectUpdateEvents is null)
+        {
+            _logger.LogDebug(
+                "VsProjectEventMonitor: IVsNuGetProjectUpdateEvents not resolvable; a project reporting " +
+                "NuGet ProjectNotReady at startup will not be automatically re-sent until the next build.");
+            return;
+        }
+
+        _nugetProjectUpdateEvents.SolutionRestoreFinished += OnNuGetSolutionRestoreFinished;
+        _logger.LogDebug("VsProjectEventMonitor: subscribed to IVsNuGetProjectUpdateEvents.SolutionRestoreFinished.");
+    }
+
+    /// <summary>
+    /// Re-sends every project's baseline once NuGet's restore finishes — the same broad "just resend
+    /// everything" approach <see cref="OnBuildDone"/> already uses, rather than trying to match this
+    /// event's project list (an internal NuGet identifier of unspecified shape) back to DTE
+    /// <see cref="Project"/> instances. Raised on a threadpool thread per
+    /// <see cref="IVsNuGetProjectUpdateEvents"/>'s own docs, so this only ever hops to the UI thread
+    /// and defers; it does no COM work itself.
+    /// </summary>
+    private void OnNuGetSolutionRestoreFinished(IReadOnlyList<string> projects)
+        => FireAndForget(ct => SendInitialProjectsAsync(ct));
+
     // ── Notification builders ─────────────────────────────────────────────────
 
     private async Task TrySendProjectLoadedAsync(Project project, CancellationToken ct)
@@ -346,13 +396,20 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             if (!IsSolutionProject(project))
                 return;
 
-            var paramsJson = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
+            var payload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
                 project, GetSolutionFolder(), _serviceProvider, _logger);
-            await _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectLoaded, payload.Json, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectLoaded for {ProjectName}", project.Name);
+
+            // NuGet wasn't ready yet (issue #690) — this baseline's packageReferences is an empty
+            // placeholder, not a real "no Reqnroll package" answer. Subscribe (once) to NuGet's own
+            // restore-finished signal so the real package list gets sent once it's known, instead of
+            // leaving the project misclassified until the next build or solution reload.
+            if (!payload.PackageReferencesReady)
+                EnsureNuGetRestoreResendSubscription();
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -372,10 +429,10 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             var paramsObj = new { projectFile = project.FullName };
             var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
 
-            await _pipe.SendNotificationToServerAsync("reqnroll/projectUnloaded", paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectUnloaded, paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectUnloaded for {ProjectName}", project.Name);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -394,10 +451,10 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
                 return;
 
             var paramsJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, _logger);
-            await _pipe.SendNotificationToServerAsync("reqnroll/projectFiles", paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectFiles, paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectFiles baseline for {ProjectName}", project.Name);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -530,10 +587,10 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
                 files                  = entries,
             };
             var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
-            await _pipe.SendNotificationToServerAsync("reqnroll/projectFiles", paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectFiles, paramsJson, ct)
                        .ConfigureAwait(false);
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "VsProjectEventMonitor: sent projectFiles delta ({EntryCount} entrie(s)) for {ProjectName}",
                 entries.Count, project.Name);
         }
@@ -657,6 +714,9 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         _solutionEvents.AfterClosing   -= OnSolutionClosed;
         _buildEvents.OnBuildDone       -= OnBuildDone;
         _windowEvents.WindowActivated  -= OnWindowActivated;
+
+        if (_nugetProjectUpdateEvents is not null)
+            _nugetProjectUpdateEvents.SolutionRestoreFinished -= OnNuGetSolutionRestoreFinished;
 
         if (_trackProjectDocuments is not null && _trackProjectDocumentsCookie != 0)
             _trackProjectDocuments.UnadviseTrackProjectDocumentsEvents(_trackProjectDocumentsCookie);

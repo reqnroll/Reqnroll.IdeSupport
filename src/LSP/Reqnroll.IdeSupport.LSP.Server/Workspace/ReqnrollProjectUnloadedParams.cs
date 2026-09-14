@@ -1,4 +1,3 @@
-using MediatR;
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 /// <summary>
@@ -6,7 +5,11 @@ namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 /// Sent by each IDE glue component when a Reqnroll project is removed from the
 /// solution or the solution itself is closed.
 /// </summary>
-public sealed class ReqnrollProjectUnloadedParams : INotification
+/// <remarks>
+/// Not a MediatR notification (issue #579) despite the name — see
+/// <see cref="ReqnrollProjectLoadedParams"/>'s remarks for why.
+/// </remarks>
+public sealed class ReqnrollProjectUnloadedParams
 {
     /// <summary>
     /// Absolute path of the <c>.csproj</c> file that was unloaded.

@@ -56,7 +56,7 @@ dependencies {
     // Platform runner so both styles run side by side via a single `./gradlew test`. Pinned to the
     // same 5.10.1 line as the already-resolved junit-jupiter-api/junit-platform-launcher so all
     // JUnit Platform components agree on one release.
-    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.1")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:6.1.3")
 }
 
 kotlin {

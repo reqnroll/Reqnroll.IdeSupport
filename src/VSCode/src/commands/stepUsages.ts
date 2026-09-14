@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface FindStepUsagesResponse {
@@ -45,21 +46,17 @@ export async function doFindStepUsages(
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Find Step Usages failed — ${msg}`);
+    void showError(`Reqnroll: Find Step Usages failed — ${msg}`);
     return;
   }
 
   if (!response?.isBinding) {
-    void vscode.window.showInformationMessage(
-      'Reqnroll: The cursor is not on a step definition binding.',
-    );
+    void showInfo('Reqnroll: The cursor is not on a step definition binding.');
     return;
   }
 
   if (response.locations.length === 0) {
-    void vscode.window.showInformationMessage(
-      'Reqnroll: No usages found for this step definition.',
-    );
+    void showInfo('Reqnroll: No usages found for this step definition.');
     return;
   }
 

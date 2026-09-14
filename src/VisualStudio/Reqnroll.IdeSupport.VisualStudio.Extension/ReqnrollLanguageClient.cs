@@ -126,7 +126,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             new[]
             {
                 DocumentFilter.FromDocumentType(GherkinDocumentType.GherkinDocument),
-                DocumentFilter.FromDocumentType("CSharp"),
+                DocumentFilter.FromDocumentType(CSharpDocumentType.CSharp),
             });
 
     /// <inheritdoc />

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { GHERKIN_LANGUAGE_ID } from './languageIds';
 
 /**
  * Adds per-pipe-character and per-cell decorations to Gherkin data tables.
@@ -64,7 +65,7 @@ export class TableHighlightService implements vscode.Disposable {
   }
 
   private refreshEditor(editor: vscode.TextEditor): void {
-    if (editor.document.languageId !== 'gherkin') {
+    if (editor.document.languageId !== GHERKIN_LANGUAGE_ID) {
       return;
     }
 

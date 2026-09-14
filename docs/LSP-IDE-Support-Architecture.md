@@ -958,7 +958,14 @@ An `LspInterceptingPipe` intercepts all JSON-RPC messages at the client side and
 
 ### End-User Troubleshooting and Logging
 
-**Logging architecture**: The LSP server uses the standard .NET `ILogger` abstraction (registered in `Reqnroll.IdeSupport.Common`). At runtime, log entries flow from `ILogger` → `window/logMessage` notifications → each IDE client's `LanguageClient`, which routes them to the output channel. This design keeps logging infrastructure in one place (the server) and requires no logging code in the IDE client extensions. Whether to also support a file-sink option (writing to a local log file) for users without IDE access to the output channel is an open question — see [Q18](LSP-IDE-Support-Open-Questions.md).
+**Logging architecture**: The LSP server uses the standard .NET `ILogger` abstraction (registered in `Reqnroll.IdeSupport.Common`). At runtime, log entries flow from `ILogger` → `window/logMessage` notifications → each IDE client's `LanguageClient`, which routes them to the output channel. This design keeps logging infrastructure in one place (the server) and requires no logging code in the IDE client extensions.
+
+In addition to `window/logMessage`, the server and every client also write directly to a local
+file sink — resolved as **Q18**; see that entry for the as-built summary and
+[src/LSP/CONTRIBUTING.md#debugging](../src/LSP/CONTRIBUTING.md#debugging) for the full
+naming/format convention (one canonical UTC-timestamped preamble shared by every file, PID-suffixed
+filenames, 10-day pruning) and how the out-of-process Connector's own log is gated by `--log-level`
+rather than always written (issue #637).
 
 Each IDE client exposes a dedicated output surface for runtime diagnostics:
 
@@ -968,7 +975,12 @@ Each IDE client exposes a dedicated output surface for runtime diagnostics:
 | Visual Studio | Output Window pane | `Reqnroll` |
 | Rider | Event Log / Services tool window | `Reqnroll` |
 
-**Default log levels**: Release builds log `Warning` and above. Development builds log `Debug` and above (configurable via workspace settings or the server path override mechanism).
+**Default log levels**: `TraceLevel` is `Off`/`Error`/`Warning`/`Info`/`Verbose` (there is no
+`Debug` level). A real installed client defaults its `--log-level` to `Warning`; each IDE's own
+development/F5/dev-sandbox configuration raises it to `Verbose` instead (see the per-client
+CONTRIBUTING guides — VS's `LspServerConnectionService.ServerArguments`, Rider's
+`reqnroll.devSandbox`-gated `ReqnrollLspServerDescriptor.resolveLogLevel`), configurable further at
+runtime via each client's own trace-level setting (e.g. VS Code's `reqnroll.trace.server`).
 
 **`window/logMessage`**: The LSP server emits log messages for significant lifecycle events (server started, workspace loaded, discovery completed, errors). These are routed to the IDE output channel by each client's `LanguageClient` implementation.
 

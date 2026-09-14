@@ -67,6 +67,12 @@ public abstract class OutProcReqnrollConnector
         arguments.Add(configFilePath);
         if (DebugConnector)
             arguments.Add("--debug");
+        // Distinct from --debug (DebugConnector launches an attached debugger — a user who's just
+        // turned up --log-level wants more logging, not a hung connector waiting for one to attach).
+        // Tied to the server's own configured verbosity so "turn up logging" means the same thing
+        // everywhere, matching every other logger in this family (issue #637).
+        if (_logger.IsLogging(TraceLevel.Info))
+            arguments.Add("--file-log");
 
         // A bare command name (e.g. "dotnet", from GetDotNetCommand()'s non-Windows PATH-resolution
         // fallback) has no directory component and is meant to be resolved by the OS via PATH when
@@ -83,7 +89,8 @@ public abstract class OutProcReqnrollConnector
                 ConnectorType = GetConnectorType()
             };
 
-        var result = ProcessHelper.RunProcess(workingDirectory, connectorPath, arguments, encoding: Encoding.UTF8);
+        var result = ProcessHelper.RunProcess(workingDirectory, connectorPath, arguments, encoding: Encoding.UTF8,
+            logger: _logger);
 
         _logger.LogVerbose($"{workingDirectory}>{connectorPath} {string.Join(" ", arguments)}");
         _logger.LogVerbose($"Exit code: {result.ExitCode}");
@@ -117,6 +124,7 @@ public abstract class OutProcReqnrollConnector
         }
 
         discoveryResult.ConnectorType = GetConnectorType();
+        discoveryResult.ConnectorProcessId = result.ProcessId;
         return discoveryResult;
     }
 

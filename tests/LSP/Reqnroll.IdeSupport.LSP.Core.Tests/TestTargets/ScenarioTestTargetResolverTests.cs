@@ -8,7 +8,6 @@ public class ScenarioTestTargetResolverTests : IDisposable
 {
     private readonly List<string> _tempFeaturePaths = new();
     private readonly List<string> _tempProjectFolders = new();
-    private static readonly string[] XUnitPackageIds = { "Reqnroll.xUnit" };
 
     public void Dispose()
     {
@@ -145,8 +144,8 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var cache = new CountingSyntaxTreeCache();
         var sut = new ScenarioTestTargetResolver(cache);
 
-        sut.Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
-        sut.Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        sut.Resolve(uri, tags, RangeAtLine(tags, 1));
+        sut.Resolve(uri, tags, RangeAtLine(tags, 1));
 
         // The cache is consulted on every call (that's how it validates freshness), but the second
         // call must get back the exact same parsed root as the first — proof the resolver is
@@ -172,7 +171,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
             }
             """);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result.Should().HaveCount(1);
         result[0].DeclaringTypeFullName.Should().Be("Tests.CalculatorFeature");
@@ -222,7 +221,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(RowTestsFeatureText);
         var uri = WriteGeneratedFixture(RowTestsGeneratedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result.Should().HaveCount(3);
         result.Should().OnlyContain(t => t.MethodName == "AddNumbers" && t.IsParameterized);
@@ -235,7 +234,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(RowTestsFeatureText);
         var uri = WriteGeneratedFixture(RowTestsGeneratedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result[1].RowArguments.Should().BeEquivalentTo(new Dictionary<string, string> { ["a"] = "4", ["b"] = "5", ["c"] = "9" });
     }
@@ -246,11 +245,57 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(RowTestsFeatureText);
         var uri = WriteGeneratedFixture(RowTestsGeneratedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, RowTestsFeatureText, "| 4"), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, RowTestsFeatureText, "| 4"));
 
         result.Should().HaveCount(1);
         result[0].RowIndex.Should().Be(1);
         result[0].RowArguments.Should().BeEquivalentTo(new Dictionary<string, string> { ["a"] = "4", ["b"] = "5", ["c"] = "9" });
+    }
+
+    [Theory]
+    [InlineData("TestCase")]   // NUnit3
+    [InlineData("Arguments")]  // TUnit
+    [InlineData("DataRow")]    // MSTest v2 and v4 alike
+    [InlineData("Xunit.InlineData")]  // namespace-qualified form
+    public void RowTests_are_detected_from_the_generated_attributes_alone_regardless_of_provider(string attributeName)
+    {
+        // Issue #455: the resolver used to pick one row attribute to count based on the project's
+        // direct package references, so a row-tests Outline whose framework package arrived
+        // transitively (or wasn't announced at all) collapsed to a single unparameterized target.
+        // The generated code-behind is the ground truth — any known provider's row attribute counts.
+        var tags = ParseTags(RowTestsFeatureText);
+        var uri = WriteGeneratedFixture(RowTestsGeneratedCs.Replace("InlineData", attributeName));
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
+
+        result.Should().HaveCount(3);
+        result.Should().OnlyContain(t => t.MethodName == "AddNumbers" && t.IsParameterized);
+    }
+
+    [Fact]
+    public void RowTests_ignore_unrelated_attributes_on_the_generated_method()
+    {
+        var tags = ParseTags(RowTestsFeatureText);
+        var uri = WriteGeneratedFixture("""
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    [Theory]
+                    [Trait("Category", "Slow")]
+                    [InlineData("1", "2", "3")]
+                    [InlineData("4", "5", "9")]
+                    [InlineData("-1", "-2", "-3")]
+                    public void AddNumbers()
+                    {
+                    }
+                }
+            }
+            """);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
+
+        result.Should().HaveCount(3);
     }
 
     // ── Individual-methods Scenario Outline (allowRowTests = false) ────────────
@@ -289,7 +334,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(IndividualMethodsFeatureText);
         var uri = WriteGeneratedFixture(IndividualMethodsGeneratedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result.Should().HaveCount(3);
         result.Should().OnlyContain(t => !t.IsParameterized && t.RowIndex == null);
@@ -303,7 +348,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(IndividualMethodsFeatureText);
         var uri = WriteGeneratedFixture(IndividualMethodsGeneratedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, IndividualMethodsFeatureText, "| 3 |"), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, IndividualMethodsFeatureText, "| 3 |"));
 
         result.Should().HaveCount(1);
         result[0].MethodName.Should().Be("CheckValue_Extra__3");
@@ -336,7 +381,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(text);
         var uri = WriteGeneratedFixture(generatedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, text, "| x | 2 |"), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, text, "| x | 2 |"));
 
         result.Should().HaveCount(1);
         result[0].MethodName.Should().Be("CheckValue_Variant1");
@@ -366,7 +411,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags(text);
         var uri = WriteGeneratedFixture(generatedCs);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result.Should().HaveCount(2);
         result.Should().OnlyContain(t => t.MethodName == "RunPerRow" && t.IsParameterized && t.RowArguments == null);
@@ -380,7 +425,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var tags = ParseTags("Feature: F\nScenario: S\n    Given a step\n");
         var uri = new Uri(Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.feature"));
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result.Should().BeEmpty();
     }
@@ -394,7 +439,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         _tempProjectFolders.Add(projectFolder);
         Directory.CreateDirectory(projectFolder);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds, projectFolder);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), projectFolder);
 
         result.Should().BeEmpty();
     }
@@ -418,7 +463,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
             }
             """, out var projectFolder);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds, projectFolder);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), projectFolder);
 
         result.Should().HaveCount(1);
         result[0].DeclaringTypeFullName.Should().Be("Tests.CalculatorFeature");
@@ -444,7 +489,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
             }
             """, out _);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
 
         result.Should().BeEmpty();
     }
@@ -477,7 +522,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
             """);
         _tempFeaturePaths.Add(uri.LocalPath);
 
-        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), XUnitPackageIds, projectFolder);
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1), projectFolder);
 
         result.Should().HaveCount(1);
         result[0].MethodName.Should().Be("AddTwoNumbers");

@@ -14,7 +14,9 @@ public sealed class DiagnosticsAggregator : IDiagnosticsAggregator
 
     /// <summary>Hover message shown for every unmatched step.</summary>
     public const string UndefinedStepMessage = "Step definition not found.";
-    private const string AmbiguousStepMessage = "Ambiguous step definition.";
+
+    /// <summary>Fallback message for an ambiguous step when no combined error message was produced.</summary>
+    public const string AmbiguousStepMessage = "Ambiguous step definition.";
 
     /// <inheritdoc/>
     public IReadOnlyList<GherkinDiagnostic> Aggregate(

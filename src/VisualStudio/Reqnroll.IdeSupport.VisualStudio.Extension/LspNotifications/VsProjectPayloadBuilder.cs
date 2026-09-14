@@ -24,7 +24,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 internal static class VsProjectPayloadBuilder
 {
     /// <summary>Builds the <c>reqnroll/projectLoaded</c> params JSON for a project (paths, TFM, NuGet package references). Must run on the UI thread.</summary>
-    public static string BuildProjectLoadedParamsJson(
+    /// <returns>
+    /// The JSON payload, plus whether NuGet's package references were actually available (issue
+    /// #690). When <see langword="false"/>, the payload still carries an empty
+    /// <c>packageReferences</c> array (NuGet reported <c>ProjectNotReady</c>, not a real absence of
+    /// references) -- callers that care about correctness (e.g. <see cref="VsProjectEventMonitor"/>)
+    /// should re-send once NuGet's restore actually finishes rather than treating this baseline as final.
+    /// </returns>
+    public static ProjectLoadedPayload BuildProjectLoadedParamsJson(
         Project project,
         string workspaceFolder,
         IServiceProvider serviceProvider,
@@ -38,7 +45,7 @@ internal static class VsProjectPayloadBuilder
         var outputAssemblyPath = VsUtils.GetOutputAssemblyPath(project) ?? string.Empty;
         var tfm = VsUtils.GetTargetFrameworkMoniker(project) ?? string.Empty;
 
-        var packageRefs = GetPackageReferences(project, serviceProvider, logger);
+        var (packageRefs, packageReferencesReady) = GetPackageReferences(project, serviceProvider, logger);
 
         var paramsObj = new
         {
@@ -50,7 +57,8 @@ internal static class VsProjectPayloadBuilder
             packageReferences = packageRefs
         };
 
-        return JsonConvert.SerializeObject(paramsObj, Formatting.None);
+        var json = JsonConvert.SerializeObject(paramsObj, Formatting.None);
+        return new ProjectLoadedPayload(json, packageReferencesReady);
     }
 
     /// <summary>Builds the <c>reqnroll/projectFiles</c> baseline params JSON, listing every feature/binding file in the project. Must run on the UI thread.</summary>
@@ -113,12 +121,13 @@ internal static class VsProjectPayloadBuilder
         }
     }
 
-    private static object[] GetPackageReferences(Project project, IServiceProvider serviceProvider, ILogger logger)
+    private static (object[] References, bool Ready) GetPackageReferences(
+        Project project, IServiceProvider serviceProvider, ILogger logger)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            return VsUtils.GetInstalledNuGetPackages(serviceProvider, project.FullName)
+            var references = VsUtils.GetInstalledNuGetPackages(serviceProvider, project.FullName)
                 .Select(p => (object)new
                 {
                     packageId   = p.Id,
@@ -126,13 +135,30 @@ internal static class VsProjectPayloadBuilder
                     installPath = p.InstallPath ?? string.Empty
                 })
                 .ToArray();
+            return (references, true);
+        }
+        catch (NuGetProjectNotReadyException)
+        {
+            // Routine during solution load, not a failure -- logging it as a Warning is what made
+            // issue #679's output-pane auto-activation fire on ordinary startup for issue #690.
+            logger.LogDebug(
+                "VsProjectPayloadBuilder: NuGet reports {ProjectName} is not ready yet (not nominated/restored); " +
+                "sending an empty package list for now.",
+                project.Name);
+            return (Array.Empty<object>(), false);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex,
                 "VsProjectPayloadBuilder: could not read NuGet packages for {ProjectName}",
                 project.Name);
-            return Array.Empty<object>();
+            return (Array.Empty<object>(), true);
         }
     }
 }
+
+/// <summary>
+/// A built <c>reqnroll/projectLoaded</c> payload plus whether its NuGet package references were
+/// actually available (issue #690) -- see <see cref="VsProjectPayloadBuilder.BuildProjectLoadedParamsJson"/>.
+/// </summary>
+internal readonly record struct ProjectLoadedPayload(string Json, bool PackageReferencesReady);

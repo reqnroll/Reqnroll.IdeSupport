@@ -18,7 +18,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 /// Uses the custom <c>reqnroll/findStepUsages</c> request (design doc section P2b) rather than
 /// <c>textDocument/references</c> to obtain the full three-state contract:
 /// <list type="bullet">
-///   <item>Server returns JSON <c>null</c> → <see cref="StepUsagesResult.NotABinding"/> (Surface 3 falls through).</item>
+///   <item>Server returns JSON <c>null</c> → <see cref="StepUsagesResult.NotABinding"/> (caller shows an
+///         informational message; there is no Surface-3 takeover of the built-in command — see remarks below).</item>
 ///   <item>Server returns <c>{"isBinding":true,"locations":[]}</c> → binding present, 0 usages.</item>
 ///   <item>Server returns <c>{"isBinding":true,"locations":[...]}</c> → matching feature-file steps.</item>
 /// </list>
@@ -27,10 +28,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 /// </remarks>
 internal sealed class FindStepUsagesService
 {
-    // Method name for the custom request — distinct from textDocument/references so the server
-    // can deliver null and per-location stepText that the standard LSP method cannot carry.
-    private const string RequestMethod = "reqnroll/findStepUsages";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<FindStepUsagesService> _logger;
 
@@ -53,28 +50,28 @@ internal sealed class FindStepUsagesService
     {
         var paramsJson = BuildParams(fileUri, line0, char0);
 
-        _logger.LogInformation(
-            "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
+        _logger.LogDebug(
+            "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.FindStepUsages, fileUri, line0, char0);
 
-        _logger.LogInformation(
-            "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", RequestMethod, paramsJson);
+        _logger.LogTrace(
+            "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", ReqnrollMethodNames.FindStepUsages, paramsJson);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.FindStepUsages, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         // NOTE: use the parameterless JToken.ToString() — the overload that takes
         // Newtonsoft.Json.Formatting throws MissingMethodException against the Newtonsoft version
         // that VS loads at runtime.
-        _logger.LogInformation(
+        _logger.LogTrace(
             "FindStepUsagesService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
 
         // Map transport result → three-state StepUsagesResult. The mapping is a pure function
         // (MapResult) so it can be unit-tested without a live pipe.
         var mapped = MapResult(result);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindStepUsagesService: {ResultSummary}",
-            mapped.IsBinding ? $"{mapped.Locations.Count} location(s) returned" : "NotABinding (fall through)");
+            mapped.IsBinding ? $"{mapped.Locations.Count} location(s) returned" : "NotABinding");
         return mapped;
     }
 

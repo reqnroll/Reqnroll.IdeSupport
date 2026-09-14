@@ -31,7 +31,7 @@ public class IdeSupportDebugLogger : IIdeSupportLogger
     /// <summary>Writes the message to the debug output if its level is within the configured threshold.</summary>
     public void Log(LogMessage message)
     {
-        Debug.WriteLineIf(message.Level <= Level, $"{message.Level}: {message.CallerMethod}:{message.Message}",
+        Debug.WriteLineIf(message.Level <= Level, $"{LogLineFormatter.FormatPreamble(message)}: {message.Message}",
             "ReqnrollVs");
     }
 }

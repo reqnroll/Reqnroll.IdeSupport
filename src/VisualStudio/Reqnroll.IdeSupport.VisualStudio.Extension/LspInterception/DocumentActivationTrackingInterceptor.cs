@@ -137,12 +137,12 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             lock (_selfForwardedLock) { _selfForwardedPaths.Remove(path); }
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "DocumentActivationTrackingInterceptor: activation preceded didOpen for {FileName}; sending reqnroll/documentActivated now.",
             Path.GetFileName(path));
 
         var activatedParamsJson = $"{{\"uri\":{Newtonsoft.Json.JsonConvert.ToString(docUri)}}}";
-        await pipe.SendNotificationToServerAsync("reqnroll/documentActivated", activatedParamsJson, cancellationToken)
+        await pipe.SendNotificationToServerAsync(ReqnrollMethodNames.DocumentActivated, activatedParamsJson, cancellationToken)
                   .ConfigureAwait(false);
 
         return LspInterceptorResult.Consume;

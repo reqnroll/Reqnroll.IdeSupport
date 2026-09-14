@@ -28,6 +28,8 @@ public static class LspMethodNames
     public const string ReqnrollRenameTargets = "reqnroll/renameTargets";
     /// <summary>Method name for the <c>reqnroll/selectRenameTarget</c> notification.</summary>
     public const string ReqnrollSelectRenameTarget = "reqnroll/selectRenameTarget";
+    /// <summary>Method name for the <c>reqnroll/renameApplied</c> notification.</summary>
+    public const string ReqnrollRenameApplied = "reqnroll/renameApplied";
     /// <summary>Method name for the <c>reqnroll/refreshCodeLens</c> notification.</summary>
     public const string ReqnrollRefreshCodeLens = "reqnroll/refreshCodeLens";
     /// <summary>Method name for the <c>reqnroll/semanticTokens</c> push notification.</summary>
@@ -108,4 +110,11 @@ public static class LspMethodNames
     public const string InternalReqnrollConfigReconcile = "internal/reqnrollConfigReconcile";
     /// <summary>Internal perf-recorder label for a debounced feature-file rescan.</summary>
     public const string InternalFeatureRescan = "internal/featureRescan";
+    /// <summary>
+    /// Internal perf-recorder label for a rename's post-response apply: the Visual Studio
+    /// <c>workspace/applyEdit</c> round trip plus the cache commit it confirms. This work used to
+    /// sit inside the measured <c>textDocument/rename</c> request; since issue #671 (R1) it runs
+    /// after that response, so without its own label its cost would not appear anywhere.
+    /// </summary>
+    public const string InternalRenamePostResponseApply = "internal/renamePostResponseApply";
 }

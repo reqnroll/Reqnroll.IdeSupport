@@ -106,19 +106,19 @@ public class Program
         {
             try
             {
-                var logDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Reqnroll");
-                Directory.CreateDirectory(logDir);
+                // Reuses SynchronousFileLogger itself (role "crash") rather than one-off
+                // directory/filename/formatting code (issue #628): same
+                // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
+                // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
+                // with no PID and a raw ex.ToString() dump.
                 var idePrefix = ideId switch
                 {
                     "visualstudio" => "vs",
                     "vscode"       => "vscode",
                     _              => "lsp",
                 };
-                var logPath = Path.Combine(logDir,
-                    $"reqnroll-{idePrefix}-crash-{DateTime.Now:yyyyMMdd-HHmmss}.log");
-                File.WriteAllText(logPath, ex.ToString());
+                new SynchronousFileLogger(idePrefix, "crash", TraceLevel.Error)
+                    .LogException(ex, "Unhandled exception - LSP server terminating");
             }
             catch { /* best-effort; never mask the original exception */ }
             throw;
@@ -173,6 +173,27 @@ public class Program
             logging.SetMinimumLevel(ToLogLevel(protocolLogLevel));
             logging.AddLanguageProtocolLogging();
             logging.AddProvider(new ProtocolLoggerProvider(clientIde, protocolLogLevel));
+
+            // Issue #660: OmniSharp's own LanguageServerLoggingManager (registered internally for
+            // every LanguageServer, regardless of anything configured here) is an
+            // IPostConfigureOptions<LoggerFilterOptions> that unconditionally overwrites
+            // LoggerFilterOptions.MinLevel from the current $/setTrace level (Off/Messages/Verbose).
+            // IPostConfigureOptions always runs after every IConfigureOptions regardless of
+            // registration order, so it silently discards whatever SetMinimumLevel just set above --
+            // no reordering of the calls in this method can fix that. PostConfigure only ever
+            // reassigns MinLevel, though; it never touches Rules, so an explicit provider-scoped
+            // LoggerFilterRule survives it and takes priority over MinLevel for that provider
+            // (confirmed against OmniSharp.Extensions.LanguageServer 0.19.9 by decompiling
+            // LanguageServerLoggingManager and LanguageServerLoggerExtensions.AddLanguageProtocolLogging).
+            // LanguageServerLoggerProvider (the window/logMessage sink) is internal to OmniSharp and
+            // so can't be named via the generic AddFilter<T>() overload -- the rule below is built
+            // from its known full type name instead, which LoggerRuleSelector matches the same way.
+            logging.Services.Configure<LoggerFilterOptions>(o => o.Rules.Add(new LoggerFilterRule(
+                "OmniSharp.Extensions.LanguageServer.Server.Logging.LanguageServerLoggerProvider",
+                categoryName: null,
+                logLevel: ToLogLevel(protocolLogLevel),
+                filter: null)));
+            logging.AddFilter<ProtocolLoggerProvider>(category: null, level: ToLogLevel(protocolLogLevel));
         });
 
         options.WithServerInfo(new ServerInfo
@@ -190,6 +211,12 @@ public class Program
             // notification to two handler instances (the transient from the scan and 
             // the singleton from the explicit call).
             .AddMediatR(typeof(Program).Assembly)
+            // Replaces the IMediator registration AddMediatR just made (last registration wins)
+            // with one whose notification fan-out isolates handler faults -- stock MediatR awaits
+            // each handler in a bare foreach, so the first to throw suppresses every handler after
+            // it, with the casualties decided by assembly-scan order (issue #575). Must stay
+            // AFTER AddMediatR; registered before it, AddMediatR's own registration would win.
+            .AddTransient<IMediator, ResilientMediator>()
             .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace)
             .AddReqnrollProjectSystem()
             .AddReqnrollEditorServices()

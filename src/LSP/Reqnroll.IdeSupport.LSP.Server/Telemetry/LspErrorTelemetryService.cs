@@ -78,7 +78,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
         if (isFatal.HasValue)
             properties["IsFatal"] = isFatal.Value;
 
-        _lspTelemetryService.SendEvent("Error", properties);
+        _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
     }
 
     /// <summary>No-op: the LSP server does not track project-template-wizard-started telemetry.</summary>

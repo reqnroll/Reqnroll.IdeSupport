@@ -1,8 +1,22 @@
 package com.reqnroll.ide.rider.logging
 
 import java.io.File
-import java.time.LocalDateTime
+import java.time.Instant
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * Receives every [ReqnrollDebugLogger] entry at `Info` level or above — implemented by the
+ * "Reqnroll" console tool window's panel (issue #662; see
+ * `com.reqnroll.ide.rider.console.ReqnrollConsolePanel`), which registers/unregisters itself via
+ * [ReqnrollDebugLogger.addConsoleSink]/[ReqnrollDebugLogger.removeConsoleSink] as it's created and
+ * disposed. `Verbose` entries (see [ReqnrollDebugLogger.verbose]) never reach a sink — see that
+ * method's doc comment for why the console threshold is fixed rather than configurable.
+ */
+fun interface ReqnrollConsoleSink {
+    fun accept(level: String, message: String, throwable: Throwable?)
+}
 
 /**
  * Client-side glue log, mirroring the VS extension's SynchronousFileLogger convention
@@ -13,22 +27,67 @@ import java.time.format.DateTimeFormatter
  * Log directory follows the VS Code extension's per-OS convention (lspInspectorLogger.ts
  * resolveLogDirectory), since this plugin runs on the JVM across the same OSes VS Code
  * does, unlike the Windows-only VS extension.
+ *
+ * Timestamps are UTC (issue #625) — the previous `LocalDateTime.now()` carried no offset at
+ * all, so a log collected from a machine in an unknown timezone couldn't be correlated with
+ * the UTC timestamps the LSP server and VS extension write to their own log files.
+ *
+ * The line shape (issue #626) is the portable subset of the canonical format shared with the
+ * .NET side's `LogLineFormatter` — UTC timestamp, a level padded to a fixed width, then the
+ * message. The .NET format also carries a managed-thread-id segment; that's specific to the LSP
+ * server's multi-threaded handler model (added to help diagnose issue #554) and has no
+ * equivalent here. A per-call "source" segment is likewise not attempted: C# gets that for free
+ * from the compiler's `[CallerFilePath]`, which Kotlin has no equivalent of, and this file's ~30
+ * call sites already hand-write their originating class name into the message text itself (e.g.
+ * `"ReqnrollFeatureInlayHintsController: ..."`) — good enough that a structured field isn't worth
+ * a mechanical rewrite of every call site.
  */
 object ReqnrollDebugLogger {
-    private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS")
+    private const val LEVEL_FIELD_WIDTH = 7 // width of "Warning" - the longest level name used here
+    private val timestampFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+    private val fileDateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC)
     private val logFile: File by lazy { resolveLogFile() }
+    private val consoleSinks = CopyOnWriteArrayList<ReqnrollConsoleSink>()
 
-    fun info(message: String) = log("INFO", message, null)
-    fun warn(message: String, throwable: Throwable? = null) = log("WARN", message, throwable)
-    fun error(message: String, throwable: Throwable? = null) = log("ERROR", message, throwable)
+    fun info(message: String) = log("Info", message, null)
+    fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
+    fun error(message: String, throwable: Throwable? = null) = log("Error", message, throwable)
+
+    /**
+     * The fourth level in the project's shared Error/Warning/Info/Verbose vocabulary (already used
+     * by the LSP server's `--log-level` and VS Code's `reqnroll.trace.server`/`traceServerToLogLevel`
+     * mapping) — for the per-request diagnostic call sites (folding, inlay hints, breadcrumbs,
+     * per-viewport CodeLens/documentSymbol, project/document sync, telemetry) that fire far too
+     * often to belong in the curated console (issue #662): [log] never forwards `Verbose` entries
+     * to a [ReqnrollConsoleSink], only writes them to the file. This is a fixed threshold, not a
+     * configurable one — there's no UI surface in this plugin for a user to change it, matching
+     * `VsOutputPaneLogger`'s hardcoded default `TraceLevel.Info` on the VS side (issue #651/#656):
+     * `Info`/`Warning`/`Error` always reach the console, `Verbose` never does.
+     */
+    fun verbose(message: String, throwable: Throwable? = null) = log("Verbose", message, throwable)
+
+    /** Registers a sink to receive every future `Info`-or-above entry. Not retroactive. */
+    fun addConsoleSink(sink: ReqnrollConsoleSink) {
+        consoleSinks.add(sink)
+    }
+
+    fun removeConsoleSink(sink: ReqnrollConsoleSink) {
+        consoleSinks.remove(sink)
+    }
+
+    /** Renders the UTC timestamp prefix for a log line. Exposed for testing without mocking the system clock. */
+    internal fun formatTimestamp(instant: Instant): String = timestampFormatter.format(instant)
+
+    /** Renders one log line's full preamble + message, excluding the trailing newline. Exposed for testing. */
+    internal fun formatLine(instant: Instant, level: String, message: String): String =
+        "${formatTimestamp(instant)} [${level.padEnd(LEVEL_FIELD_WIDTH)}] $message"
 
     @Synchronized
     private fun log(level: String, message: String, throwable: Throwable?) {
         try {
             logFile.parentFile?.mkdirs()
-            val timestamp = LocalDateTime.now().format(timestampFormatter)
             val line = buildString {
-                append(timestamp).append(", ").append(level).append(": ").append(message)
+                append(formatLine(Instant.now(), level, message))
                 if (throwable != null) {
                     append("\n    : ").append(throwable.stackTraceToString().trimEnd().prependIndent("    "))
                 }
@@ -38,13 +97,23 @@ object ReqnrollDebugLogger {
         } catch (_: Exception) {
             // Best-effort — a logging failure must never break plugin behavior.
         }
+
+        if (level != "Verbose") {
+            for (sink in consoleSinks) {
+                try {
+                    sink.accept(level, message, throwable)
+                } catch (_: Exception) {
+                    // A misbehaving/disposed sink must never break logging for the rest.
+                }
+            }
+        }
     }
 
     private fun resolveLogFile(): File {
         val dir = resolveLogDirectory()
         pruneOldLogs(dir)
         val pid = ProcessHandle.current().pid()
-        val date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+        val date = fileDateFormatter.format(Instant.now())
         return File(dir, "reqnroll-rider-ext-$date-$pid.log")
     }
 

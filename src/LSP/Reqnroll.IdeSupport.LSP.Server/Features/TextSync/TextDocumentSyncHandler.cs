@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -10,8 +10,8 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 
@@ -31,17 +31,17 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly IBindingMatchService _bindingMatchService;
     private readonly ICSharpBindingDiscoveryService _csharpDiscoveryService;
     private readonly ICSharpFileTextCache _csharpFileTextCache;
-    private readonly IMediator _mediator;
+    private readonly IFeatureDocumentReparser _reparser;
     private readonly ILanguageServerFacade _languageServer;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IParseCoordinator _parseCoordinator;
 
     private static readonly TextDocumentSelector _documentSelector = new(
-        new TextDocumentFilter { Pattern = "**/*.feature" },
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern },
         // The server registers interest in .cs files only to drive Roslyn binding re-discovery;
         // it does not provide general C# language features. See design doc §5 "Document Scope".
-        new TextDocumentFilter { Pattern = "**/*.cs" }
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.CSharpFilePattern }
     );
 
     /// <summary>Initializes a new instance of the <see cref="TextDocumentSyncHandler"/> class.</summary>
@@ -51,7 +51,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         IBindingMatchService bindingMatchService,
         ICSharpBindingDiscoveryService csharpDiscoveryService,
         ICSharpFileTextCache csharpFileTextCache,
-        IMediator mediator,
+        IFeatureDocumentReparser reparser,
         ILanguageServerFacade languageServer,
         IIdeSupportLogger logger,
         IParseCoordinator parseCoordinator,
@@ -62,7 +62,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _bindingMatchService = bindingMatchService;
         _csharpDiscoveryService = csharpDiscoveryService;
         _csharpFileTextCache = csharpFileTextCache;
-        _mediator = mediator;
+        _reparser = reparser;
         _languageServer = languageServer;
         _logger = logger;
         _parseCoordinator = parseCoordinator;
@@ -123,7 +123,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _parseCoordinator.Schedule(uri, async ct =>
         {
             using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
-            await ParseAndNotifyAsync(uri, version, ct).ConfigureAwait(false);
+            await _reparser.ReparseOpenDocumentAsync(uri, version, ct).ConfigureAwait(false);
         });
         return Task.FromResult(Unit.Value);
     }
@@ -157,7 +157,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _parseCoordinator.Schedule(uri, async ct =>
         {
             using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
-            await ParseAndNotifyAsync(uri, version, ct).ConfigureAwait(false);
+            await _reparser.ReparseOpenDocumentAsync(uri, version, ct).ConfigureAwait(false);
         });
         return Task.FromResult(Unit.Value);
     }
@@ -227,16 +227,4 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     private static bool IsCSharp(DocumentUri uri) =>
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private async Task ParseAndNotifyAsync(DocumentUri uri, int? version, CancellationToken cancellationToken)
-    {
-        // ParseAsync stores updated tags, recomputes/stores the binding match set, and
-        // invalidates the semantic token cache internally before this notification fires.
-        await _taggerService.ParseAsync(uri, version).ConfigureAwait(false);
-        await _mediator.Publish(
-            new MatchCacheChangedNotification(uri, version ?? 0),
-            cancellationToken).ConfigureAwait(false);
-    }
 }

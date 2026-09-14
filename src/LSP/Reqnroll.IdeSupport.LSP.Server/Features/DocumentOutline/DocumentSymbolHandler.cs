@@ -4,8 +4,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -41,7 +41,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     private readonly IOperationDurationRecorder    _recorder;
 
     private static readonly TextDocumentSelector FeatureSelector = new(
-        new TextDocumentFilter { Pattern = "**/*.feature" });
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern });
 
     // Set from the client's declared capability in GetRegistrationOptions, which the OmniSharp
     // framework always calls before any Handle call during real capability negotiation. Defaults

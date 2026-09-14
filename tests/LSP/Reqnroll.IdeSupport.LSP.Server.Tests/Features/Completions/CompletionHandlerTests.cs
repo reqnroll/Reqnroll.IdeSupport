@@ -130,4 +130,58 @@ public class CompletionHandlerTests
 
         result.Items.Should().BeEmpty();
     }
+
+    // ── Keyword completion range (issue #561) ─────────────────────────────────
+
+    [Fact]
+    public async Task Keyword_completion_textEdit_range_stops_at_the_cursor_not_at_the_end_of_the_line_Async()
+    {
+        // "Szenario:[scenario name]" with the caret right after the "S" of "Szenario" (char 1) --
+        // the exact repro from issue #561. The line has real text well beyond the caret; the old
+        // whole-trimmed-line range would delete all of it when a keyword was accepted.
+        const string line = "Szenario:[scenario name]";
+        SetupBuffer(FeatureUri, line + "\n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, Array.Empty<TokenType>()));
+        _completionService.GetDefaultKeywordCompletions(dialect).Returns(new CompletionResult(new[]
+        {
+            new CompletionEntry("Grundlage: ", null, CompletionEntryKind.Keyword)
+        }));
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, 1) },
+            CancellationToken.None);
+
+        var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
+        range.Start.Should().Be(new Position(0, 0));
+        range.End.Should().Be(new Position(0, 1), "the replacement must stop at the caret, never touch text to its right");
+    }
+
+    [Fact]
+    public async Task Keyword_completion_textEdit_range_end_never_exceeds_the_request_position_Async()
+    {
+        // General assertion the issue itself asks for, independent of the specific repro above.
+        const string line = "  Given [context] and more text after the caret";
+        SetupBuffer(FeatureUri, line + "\n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        var cursorChar = 8; // just after "Given"
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, Array.Empty<TokenType>()));
+        _completionService.GetDefaultKeywordCompletions(dialect).Returns(new CompletionResult(new[]
+        {
+            new CompletionEntry("When ", null, CompletionEntryKind.Keyword)
+        }));
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, cursorChar) },
+            CancellationToken.None);
+
+        var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
+        range.End.Character.Should().BeLessThanOrEqualTo(cursorChar);
+    }
 }

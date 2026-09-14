@@ -81,7 +81,8 @@ internal sealed class LspInspectorLogger : ILspMessageInterceptor, IDisposable
 
     // ── Formatting ─────────────────────────────────────────────────────────
 
-    private string FormatEntry(LspMessage msg)
+    /// <summary>Internal for testing (issue #628's C#/TypeScript wire-format conformance test).</summary>
+    internal string FormatEntry(LspMessage msg)
     {
         // lsp-viewer format: [LSP   - HH:mm:ss] <JSON>\n
         // JSON: {"isLSPMessage":true,"type":"<type>","message":{...},"timestamp":<unix-ms>}

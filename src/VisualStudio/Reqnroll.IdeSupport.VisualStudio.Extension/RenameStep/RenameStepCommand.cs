@@ -42,7 +42,7 @@ internal sealed class RenameStepCommand : Command
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
-            ActivationConstraint.EditorContentType("CSharp"),
+            ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
             ActivationConstraint.EditorContentType("Gherkin")),
         Placements =
         [
@@ -55,7 +55,7 @@ internal sealed class RenameStepCommand : Command
     {
         try
         {
-            _logger.LogInformation("RenameStepCommand: invoked.");
+            _logger.LogDebug("RenameStepCommand: invoked.");
 
             var service = _state.Service;
             if (service is null)
@@ -78,7 +78,7 @@ internal sealed class RenameStepCommand : Command
             var lineNum  = line.LineNumber;
             var charNum  = caretPos.Offset - line.Text.Start;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RenameStepCommand: active view uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             // Step 1: Get rename targets from the server
@@ -103,7 +103,7 @@ internal sealed class RenameStepCommand : Command
                 selectedAttributeIndex = item.AttributeIndex;
                 currentLabel           = item.Label;
                 currentExpression      = item.Expression;
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "RenameStepCommand: single target, attributeIndex={AttributeIndex}, label={Label}.",
                     selectedAttributeIndex, currentLabel);
             }
@@ -118,7 +118,7 @@ internal sealed class RenameStepCommand : Command
                 var dialog = new NavigationPickerDialog("Choose step definition to rename", pickerTargets);
                 if (dialog.ShowModal() != true || dialog.SelectedIndex < 0)
                 {
-                    _logger.LogInformation("RenameStepCommand: picker dismissed.");
+                    _logger.LogDebug("RenameStepCommand: picker dismissed.");
                     return;
                 }
 
@@ -126,13 +126,13 @@ internal sealed class RenameStepCommand : Command
                 selectedAttributeIndex = chosen.AttributeIndex;
                 currentLabel           = chosen.Label;
                 currentExpression      = chosen.Expression;
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "RenameStepCommand: user selected target index={SelectedIndex}, attributeIndex={AttributeIndex}.",
                     dialog.SelectedIndex, selectedAttributeIndex);
             }
 
             // Step 3: Tell the server which attribute was selected
-            await service.SelectRenameTargetAsync(fileUri, version: 0, selectedAttributeIndex, cancellationToken)
+            await service.SelectRenameTargetAsync(fileUri, version: 0, selectedAttributeIndex, lineNum, charNum, cancellationToken)
                 .ConfigureAwait(false);
 
             // Step 4: Prompt user for new step text
@@ -146,28 +146,40 @@ internal sealed class RenameStepCommand : Command
                 "Enter the new step text:", "Rename Step", currentStepText);
             if (string.IsNullOrEmpty(newStepText))
             {
-                _logger.LogInformation("RenameStepCommand: user cancelled rename dialog.");
+                _logger.LogDebug("RenameStepCommand: user cancelled rename dialog.");
                 return;
             }
 
-            _logger.LogInformation("RenameStepCommand: user entered new text {NewStepText}.", newStepText);
+            _logger.LogDebug("RenameStepCommand: user entered new text {NewStepText}.", newStepText);
 
             // Step 5: Send textDocument/rename via the service
-            var result = await service.SendRenameRequestAsync(
-                fileUri, lineNum, charNum, newStepText, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (result is null)
+            try
             {
-                _logger.LogInformation("RenameStepCommand: server returned null from rename.");
-                VsUtils.ShowStatusBarMessage("Reqnroll: Rename failed.");
+                await service.SendRenameRequestAsync(
+                    fileUri, lineNum, charNum, newStepText, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (RenameFailedException ex)
+            {
+                // The server rejected the rename with a specific reason (issue #650) — e.g. a
+                // step-rename validation failure. Show that reason directly instead of the generic
+                // "Rename failed." this used to collapse every distinct failure into.
+                //
+                // No longer includes "VS failed to apply the edit": the server now returns the
+                // rename response before pushing workspace/applyEdit (issue #671, R1), so a
+                // rejected push has no in-flight request left to fail and is logged server-side
+                // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
+                _logger.LogInformation("RenameStepCommand: rename rejected by server: {Message}", ex.Message);
+                VsUtils.ShowStatusBarMessage($"Reqnroll: {ex.Message}");
                 return;
             }
 
-            // The server already applied the edit natively via workspace/applyEdit before this
-            // request's response reached us — nothing left to apply here.
-            _logger.LogInformation("RenameStepCommand: rename result = {Result}", result);
-            _logger.LogInformation("RenameStepCommand: rename completed successfully.");
+            // Nothing to apply here: the server pushes the edit to VS itself via
+            // workspace/applyEdit. That push now follows this response rather than preceding it
+            // (issue #671, R1 — pushing from inside the request made the edit's own didOpen cancel
+            // that request with ContentModified, issue #654), so the edit lands a moment after this
+            // message is shown.
+            _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
             VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
         }
         catch (Exception ex)

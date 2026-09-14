@@ -8,8 +8,8 @@ namespace Reqnroll.VisualStudio.Tests.FindStepUsages;
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/findStepUsages</c> result into the three-state
 /// <see cref="StepUsagesResult"/> (<see cref="FindStepUsagesService.MapResult"/>). The three
-/// states drive whether Surface 3 falls through to the built-in command, shows "0 usages",
-/// or shows a results window.
+/// states drive whether the command shows an informational "not a binding" message, shows
+/// "0 usages", or shows a results window.
 /// </summary>
 public class FindStepUsagesServiceMapResultTests
 {

@@ -9,6 +9,7 @@ using EnvDTE80;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 
@@ -59,13 +60,17 @@ internal static class LspProjectPreloadPusher
                 if (!VsUtils.IsSolutionProject(project))
                     continue;
 
-                var loadedJson = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
+                // A ProjectNotReady baseline here (issue #690) is fine to leave as-is: this preload
+                // push is a best-effort head start (see class remarks), always superseded by
+                // VsProjectEventMonitor.SendInitialProjectsAsync's own baseline once the real LSP
+                // connection exists — that path is what subscribes for a NuGet-restore-finished resend.
+                var loadedPayload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
                     project, GetSolutionFolder(solution), serviceProvider, logger);
                 var filesJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, logger);
 
-                await WriteEnvelopeAsync(pipe, "reqnroll/projectLoaded", loadedJson, cancellationToken)
+                await WriteEnvelopeAsync(pipe, ReqnrollMethodNames.ProjectLoaded, loadedPayload.Json, cancellationToken)
                     .ConfigureAwait(false);
-                await WriteEnvelopeAsync(pipe, "reqnroll/projectFiles", filesJson, cancellationToken)
+                await WriteEnvelopeAsync(pipe, ReqnrollMethodNames.ProjectFiles, filesJson, cancellationToken)
                     .ConfigureAwait(false);
             }
 

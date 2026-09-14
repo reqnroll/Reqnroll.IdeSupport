@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
@@ -17,7 +17,9 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
 /// manager wires the index in correctly (folder-prefix fallback, workspace-scope Pending/Unowned
 /// classification); these confirm the index's own bookkeeping (baseline/delta application,
 /// path-key normalisation, the deferred-rescan flag, and the exact shape of the published
-/// <see cref="BindingRegistryChangedNotification"/>) without those extra moving parts.
+/// notifications (<see cref="BindingRegistryReplacedNotification"/>,
+/// <see cref="BindingRegistryPatchedNotification"/>,
+/// <see cref="ProjectBindingFilesRemovedNotification"/>) without those extra moving parts.
 /// </para>
 /// </summary>
 public class MembershipIndexTests
@@ -63,12 +65,22 @@ public class MembershipIndexTests
     /// returns, so tests that assert on it (or need it flushed before <c>ClearReceivedCalls</c>)
     /// must wait for it explicitly instead of asserting immediately.
     /// </summary>
-    private async Task WaitForPublishAsync(TimeSpan? timeout = null)
+    private Task WaitForPublishAsync(TimeSpan? timeout = null) => WaitForPublishAsync(atLeast: 1, timeout);
+
+    /// <summary>
+    /// Overload for a delta that removes a binding-role file (issue #577): that path now
+    /// publishes <em>two</em> notifications in sequence within the same background continuation
+    /// (<see cref="ProjectBindingFilesRemovedNotification"/> then <see cref="BindingRegistryPatchedNotification"/>)
+    /// rather than the one combined notification it used to. Both land essentially back-to-back
+    /// since the substitute's <c>Publish</c> completes synchronously, but a poll landing in the
+    /// narrow window between them would otherwise see the first and return early.
+    /// </summary>
+    private async Task WaitForPublishAsync(int atLeast, TimeSpan? timeout = null)
     {
         var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(2));
         while (DateTime.UtcNow < deadline)
         {
-            if (_mediator.ReceivedCalls().Any(c => c.GetMethodInfo().Name == nameof(IMediator.Publish)))
+            if (_mediator.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMediator.Publish)) >= atLeast)
                 return;
             await Task.Delay(5);
         }
@@ -290,7 +302,7 @@ public class MembershipIndexTests
             CancellationToken.None);
 
         sut.IsPathOwned(path).Should().BeFalse();
-        _ = _mediator.DidNotReceive().Publish(Arg.Any<BindingRegistryChangedNotification>(), Arg.Any<CancellationToken>());
+        _ = _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
     }
 
     [Fact]
@@ -350,7 +362,7 @@ public class MembershipIndexTests
                 (@"C:\Proj\A.feature", ProjectFileRole.Feature)),
             CancellationToken.None);
 
-        _ = _mediator.DidNotReceive().Publish(Arg.Any<BindingRegistryChangedNotification>(), Arg.Any<CancellationToken>());
+        _ = _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
         sut.TryConsumePendingFullRescan(project).Should().BeTrue();
     }
 
@@ -409,7 +421,7 @@ public class MembershipIndexTests
         await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n => n.IsFullReplacement && n.Project == project),
+            Arg.Is<BindingRegistryReplacedNotification>(n => n.Project == project),
             Arg.Any<CancellationToken>());
     }
 
@@ -434,7 +446,7 @@ public class MembershipIndexTests
         await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n => !n.IsFullReplacement && n.Project == project),
+            Arg.Is<BindingRegistryPatchedNotification>(n => n.Project == project),
             Arg.Any<CancellationToken>());
     }
 
@@ -462,7 +474,7 @@ public class MembershipIndexTests
         // The delta itself still applies to the index...
         sut.IsPathOwned(@"C:\Proj\B.feature").Should().BeTrue();
         // ...but with no live project to attribute the notification to, nothing is published.
-        _ = _mediator.DidNotReceive().Publish(Arg.Any<BindingRegistryChangedNotification>(), Arg.Any<CancellationToken>());
+        _ = _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
     }
 
     [Fact]
@@ -484,11 +496,13 @@ public class MembershipIndexTests
             DeltaParams(project.ProjectFullName, project.TargetFrameworkMoniker,
                 (stepsFile, ProjectFileRole.Binding, false)),
             CancellationToken.None);
-        await WaitForPublishAsync();
+        // This delta publishes ProjectBindingFilesRemovedNotification then BindingRegistryPatchedNotification
+        // in sequence (issue #577) -- wait for both before asserting on the first.
+        await WaitForPublishAsync(atLeast: 2);
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n =>
-                n.RemovedBindingFilePaths != null && n.RemovedBindingFilePaths.Contains(stepsFile)),
+            Arg.Is<ProjectBindingFilesRemovedNotification>(n =>
+                n.Project == project && n.Paths.Contains(stepsFile)),
             Arg.Any<CancellationToken>());
     }
 
@@ -513,9 +527,13 @@ public class MembershipIndexTests
             CancellationToken.None);
         await WaitForPublishAsync();
 
+        // A feature-file (not binding-role) removal must not trigger the binding-files-removed
+        // signal at all (issue #577 -- that notification is only published when there ARE
+        // removed binding paths), though the delta's Patched notification still fires.
+        _ = _mediator.DidNotReceive().Publish(
+            Arg.Any<ProjectBindingFilesRemovedNotification>(), Arg.Any<CancellationToken>());
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n =>
-                n.RemovedBindingFilePaths == null || n.RemovedBindingFilePaths.Count == 0),
+            Arg.Is<BindingRegistryPatchedNotification>(n => n.Project == project),
             Arg.Any<CancellationToken>());
     }
 

@@ -185,9 +185,9 @@ internal sealed class RunTestCodeLensResultCache
 
     private async Task<IReadOnlyList<RunTestTargetEntry>> RunAsync(Key key, CancellationToken ct)
     {
-        _logger.LogInformation("RunTestCodeLensResultCache: starting shared computation for {FileUri}:{Line}", key.FileUri, key.Line);
+        _logger.LogDebug("RunTestCodeLensResultCache: starting shared computation for {FileUri}:{Line}", key.FileUri, key.Line);
         var result = await _inner(key.FileUri, key.Line, ct).ConfigureAwait(false);
-        _logger.LogInformation("RunTestCodeLensResultCache: shared computation for {FileUri}:{Line} completed with {Count} entr{Suffix}",
+        _logger.LogDebug("RunTestCodeLensResultCache: shared computation for {FileUri}:{Line} completed with {Count} entr{Suffix}",
             key.FileUri, key.Line, result.Count, result.Count == 1 ? "y" : "ies");
         return result;
     }

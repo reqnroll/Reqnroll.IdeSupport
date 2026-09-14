@@ -63,7 +63,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
     /// <inheritdoc />
     public TextViewExtensionConfiguration TextViewExtensionConfiguration => new()
     {
-        AppliesTo = [DocumentFilter.FromDocumentType("CSharp")]
+        AppliesTo = [DocumentFilter.FromDocumentType(CSharpDocumentType.CSharp)]
     };
 
     // Provider display name shown in VS Tools > Options > Text Editor > Code Lens.
@@ -171,10 +171,17 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
             }
             var tooltip = "Reqnroll scenarios matched by this hook";
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "HookMatchCountCodeLens.GetLabelAsync: {Text} for method at line {CurrentStartLine} in {FileUri}",
                 text, currentStartLine, _fileUri);
             return new CodeLensLabel { Text = text, Tooltip = tooltip };
+        }
+        catch (OperationCanceledException)
+        {
+            // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while the
+            // shared fetch was still in flight (issue #679) -- VS re-requests the label on its
+            // own, so this isn't a failure worth surfacing to the output pane.
+            return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
         }
         catch (Exception ex)
         {
@@ -227,7 +234,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
 
             if (firstHook is null) return;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "HookMatchCountCodeLens.ExecuteAsync: invoking go-to-matching-scenarios at {FileUri}:{ArgLine}:{ArgChar}",
                 _fileUri, firstHook.ArgLine, firstHook.ArgChar);
 
@@ -237,7 +244,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
 
             if (result.Scenarios.Count == 0)
             {
-                _logger.LogInformation("HookMatchCountCodeLens.ExecuteAsync: no matching scenarios.");
+                _logger.LogDebug("HookMatchCountCodeLens.ExecuteAsync: no matching scenarios.");
                 return;
             }
 

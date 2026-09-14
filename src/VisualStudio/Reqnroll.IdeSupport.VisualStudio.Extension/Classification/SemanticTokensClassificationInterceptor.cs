@@ -43,7 +43,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
     {
         try
         {
-            if (message.IsNotification && message.Method == "reqnroll/semanticTokens")
+            if (message.IsNotification && message.Method == ReqnrollMethodNames.SemanticTokens)
             {
                 // Primary path: the server proactively pushes tokens for the VS client (which does
                 // not reliably pull them). The notification is passed through; VS ignores it.
@@ -80,7 +80,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
 
         var tokens = Decode(data, _store.Legend);
         _store.SetTokens(fileKey, tokens);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "SemanticTokensClassificationInterceptor: stored {TokenCount} pushed tokens for {FileKey}.", tokens.Count, fileKey);
     }
 
@@ -94,7 +94,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
         if (tokenTypes is null) return;
 
         _store.SetLegend(tokenTypes.Select(t => t.Value<string>() ?? string.Empty).ToArray());
-        _logger.LogInformation(
+        _logger.LogDebug(
             "SemanticTokensClassificationInterceptor: captured legend ({TokenTypeCount} token types).", tokenTypes.Count);
     }
 
@@ -112,7 +112,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
 
         var tokens = Decode(data, _store.Legend);
         _store.SetTokens(fileKey, tokens);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "SemanticTokensClassificationInterceptor: stored {TokenCount} tokens for {FileKey}.", tokens.Count, fileKey);
     }
 

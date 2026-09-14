@@ -37,7 +37,7 @@ public class RuntimeCompositeCompilationAssemblyResolver : ICompilationAssemblyR
             }
             catch (Exception ex)
             {
-                _log.Error(ex.ToString());
+                _log.Error("Assembly resolution failed", ex);
             }
 
         return false;

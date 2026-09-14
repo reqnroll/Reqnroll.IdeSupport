@@ -60,7 +60,7 @@ class ReqnrollDocumentActivationSync : ProjectActivity {
         // this lines up with whatever URI format the same LSP framework already used for this
         // file's textDocument/didOpen.
         val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
-        ReqnrollDebugLogger.info("documentActivated: $uri")
+        ReqnrollDebugLogger.verbose("documentActivated: $uri")
         ReqnrollNotificationSender.sendDocumentActivated(project, DocumentActivatedParams(uri))
     }
 }

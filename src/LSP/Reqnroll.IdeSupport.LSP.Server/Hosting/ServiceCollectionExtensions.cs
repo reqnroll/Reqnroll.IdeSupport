@@ -39,9 +39,11 @@ using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -173,6 +175,7 @@ public static class ServiceCollectionExtensions
             // the Go to Definition / diagnostics consumers (readers).
             .AddSingleton<IBindingMatchService, BindingMatchService>()
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
+            .AddSingleton<IFeatureDocumentReparser, FeatureDocumentReparser>()
             .AddSingleton<ISemanticTokensService, SemanticTokensService>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()

@@ -4,8 +4,8 @@ import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
 import javax.swing.BorderFactory
 import javax.swing.JLabel
 
@@ -41,11 +41,11 @@ object ReqnrollResultPopup {
 
     /** Navigates to a location by LSP document URI (used for feature-file step-usage locations). */
     fun navigateToUri(project: Project, uri: String, line: Int, column: Int) {
-        val file = VirtualFileManager.getInstance().findFileByUrl(uri)
-        if (file == null) {
+        val path = lspUriToLocalPath(uri)
+        if (path == null) {
             ReqnrollDebugLogger.warn("ReqnrollResultPopup: could not resolve uri $uri")
             return
         }
-        OpenFileDescriptor(project, file, line, column).navigate(true)
+        navigateToPath(project, path, line, column)
     }
 }

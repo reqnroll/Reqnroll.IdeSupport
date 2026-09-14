@@ -43,7 +43,7 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
     {
         try
         {
-            _logger.LogInformation("FindUnusedStepDefinitionsCommand: invoked.");
+            _logger.LogDebug("FindUnusedStepDefinitionsCommand: invoked.");
 
             var service  = _state.Service;
             var renderer = _state.Renderer;
@@ -63,7 +63,7 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
 
             await renderer.RenderAsync(result, cancellationToken).ConfigureAwait(false);
 
-            _logger.LogInformation("FindUnusedStepDefinitionsCommand: render complete.");
+            _logger.LogDebug("FindUnusedStepDefinitionsCommand: render complete.");
         }
         catch (Exception ex)
         {

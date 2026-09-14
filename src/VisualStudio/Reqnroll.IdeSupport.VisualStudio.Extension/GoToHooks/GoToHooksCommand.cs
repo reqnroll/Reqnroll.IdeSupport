@@ -62,7 +62,7 @@ internal sealed class GoToHooksCommand : Command
     {
         try
         {
-            _logger.LogInformation("GoToHooksCommand: invoked.");
+            _logger.LogDebug("GoToHooksCommand: invoked.");
 
             var service = _state.Service;
             if (service is null)
@@ -84,7 +84,7 @@ internal sealed class GoToHooksCommand : Command
             var lineNum  = line.LineNumber;
             var charNum  = caretPos.Offset - line.Text.Start;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "GoToHooksCommand: uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             var result = await service

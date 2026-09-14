@@ -254,11 +254,28 @@ public static class LanguageServerOptionsExtensions
                 return result != null ? (JToken)JObject.FromObject(result, CamelCaseSerializer) : JValue.CreateNull();
             });
 
+        // Serial (issue #671, R8) — not the OmniSharp default of Parallel for a manually-routed
+        // OnRequest. A rename computes one edit spanning several documents at once: it reads the
+        // binding registry, the C# live-text cache, and the match caches of every feature file
+        // containing a usage. A didChange landing partway through that read yields an edit built
+        // from a mix of old and new state — fresh offsets in one file, stale offsets in another.
+        // Roslyn's LSP server avoids this with immutable per-request solution snapshots; lacking
+        // any snapshot mechanism, the Serial lane is how we get the same guarantee. Affordable for
+        // the same reason as the project-lifecycle notifications above: renames are user-driven and
+        // rare, unlike the per-keystroke handlers this codebase deliberately keeps off that lane.
+        //
+        // This also makes the request immune to OmniSharp's global Parallel→Serial ContentModified
+        // cancellation (issue #654) — but that is a secondary benefit, not the reason: R1 already
+        // removes the self-inflicted didOpen that triggered it, by moving the workspace/applyEdit
+        // push out of the request. Note R1 is a *prerequisite* for this line, not merely a
+        // companion: holding this shared lane across a client round-trip would block every other
+        // didOpen/didChange and the start of all newly-arriving Parallel requests for its duration.
         options.OnRequest<RenameParams, WorkspaceEdit>(
             LspMethodNames.TextDocumentRename,
             async (request, ct) =>
                 await resolver!.Get<RenameHandler>().HandleRenameAsync(request, ct)
-                ?? new WorkspaceEdit());
+                ?? new WorkspaceEdit(),
+            serialOptions);
 
         options.OnRequest<RenameTargetsParams, RenameTargetsResponse>(
             LspMethodNames.ReqnrollRenameTargets,
@@ -269,6 +286,10 @@ public static class LanguageServerOptionsExtensions
         options.OnNotification<SelectRenameTargetParams>(
             LspMethodNames.ReqnrollSelectRenameTarget,
             (request, ct) => resolver!.Get<RenameHandler>().HandleSelectRenameTargetAsync(request, ct));
+
+        options.OnNotification<RenameAppliedParams>(
+            LspMethodNames.ReqnrollRenameApplied,
+            (request, ct) => resolver!.Get<RenameHandler>().HandleRenameAppliedAsync(request, ct));
     }
 
     /// <summary>

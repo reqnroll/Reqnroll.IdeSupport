@@ -88,7 +88,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {sw.ElapsedMilliseconds}ms: {ex.Message}");
+            _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {ex.Message}");
             return (lastGood, lastHash);
         }
         sw.Stop();
@@ -99,14 +99,15 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
 
         if (result.IsFailed)
         {
-            _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {sw.ElapsedMilliseconds}ms: {result.ErrorMessage}");
+            _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
+                $"{ConnectorPidSuffix(result)}: {result.ErrorMessage}");
             return (lastGood, lastHash);
         }
 
         var registry = BuildRegistry(scope, result);
         _logger.LogInfo(
-            $"[{scope.ProjectName}] Discovery complete in {sw.ElapsedMilliseconds}ms: " +
-            $"{registry.StepDefinitions.Length} step definition(s), {registry.Hooks.Length} hook(s).");
+            $"[{scope.ProjectName}] Discovery complete in {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
+            $"{ConnectorPidSuffix(result)}: {registry.StepDefinitions.Length} step definition(s), {registry.Hooks.Length} hook(s).");
         return (registry, currentHash);
     }
 
@@ -284,6 +285,15 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         foreach (var path in unresolved)
             _logger.LogVerbose($"[{scope.ProjectName}] Unresolved binding source path: '{path}'");
     }
+
+    /// <summary>
+    /// Renders " (connector pid=&lt;n&gt;)" when the connector process's PID is known, so a reader of
+    /// this log can go straight to the matching <c>reqnroll-*-connector-*-{pid}.log</c> file if one
+    /// exists (issue #637) — the Connector only writes one when it hit an error or file logging was
+    /// explicitly requested (<c>--debug</c>), not for every routine successful run.
+    /// </summary>
+    private static string ConnectorPidSuffix(DiscoveryResult result) =>
+        result.ConnectorProcessId is { } pid ? $" (connector pid={pid})" : "";
 
     private static string FindConfigFilePath(IFileSystemForIDE fileSystem, IProjectScope scope)
     {

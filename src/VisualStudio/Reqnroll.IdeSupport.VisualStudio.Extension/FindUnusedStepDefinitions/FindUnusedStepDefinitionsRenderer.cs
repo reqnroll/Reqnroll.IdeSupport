@@ -64,7 +64,7 @@ internal sealed class FindUnusedStepDefinitionsRenderer
         // produce "[Definition:Unknown]".  "description" is also omitted — declaring it causes
         // VS to auto-generate a Description column that duplicates the Code column text.
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindUnusedStepDefinitionsRenderer: opened FAR window {Label} with {ItemCount} item(s)",
             label, count);
     }

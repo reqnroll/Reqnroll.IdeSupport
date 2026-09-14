@@ -6,8 +6,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// Publishes <c>textDocument/publishDiagnostics</c> for a single <c>.cs</c> file's binding
 /// validation errors (issue #514), reading the current binding registry via
 /// <see cref="Registry.IProjectBindingRegistryLookup"/>. The sole caller is
-/// <see cref="CSharpDiagnosticsRegistryChangedHandler"/>, on every
-/// <see cref="BindingRegistryChangedNotification"/> — which fires for both a live doc-sync edit
+/// <see cref="CSharpDiagnosticsRegistryChangedHandler"/>, on every registry-change event
+/// (issue #577: <see cref="BindingRegistryReplacedNotification"/>,
+/// <see cref="BindingRegistryPatchedNotification"/>, or
+/// <see cref="ProjectBindingFilesRemovedNotification"/>) — which fires for both a live doc-sync edit
 /// (<c>ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync</c>'s notify-gate,
 /// <see cref="Bindings.ProjectBindingRegistry.HasExpressionChanges"/>/<c>HasHookChanges</c>,
 /// includes <c>Error</c> so a validity-only edit like removing <c>static</c> is covered even

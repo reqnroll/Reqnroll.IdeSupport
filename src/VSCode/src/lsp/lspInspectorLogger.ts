@@ -1,7 +1,7 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { resolveLogDirectory } from '../logging/logPaths';
 
 /**
  * A VS Code LogOutputChannel that simultaneously writes LSP trace messages to
@@ -147,9 +147,16 @@ interface LspEntry {
   type: LspMessageType;
   message: Record<string, unknown>;
   timestamp: number;
+  // Extended field (ignored by the tool, useful for grep) — round-trip ms on response entries,
+  // mirroring the VS extension's LspInspectorLogger.cs. There is no VS Code equivalent of that
+  // file's "traceId" field: it reads a top-level "traceparent" property that only Visual Studio's
+  // own Language Server Client platform ever stamps onto outgoing requests — nothing in
+  // vscode-languageclient or this extension's own code ever writes one, so there is nothing for
+  // this side to extract (issue #633).
+  latencyMs?: number;
 }
 
-type ParsedHead = { type: LspMessageType; method?: string; id?: string };
+type ParsedHead = { type: LspMessageType; method?: string; id?: string; latencyMs?: number };
 
 /**
  * Patterns for the summary line vscode-jsonrpc produces under TraceFormat.Text, tried in order
@@ -170,8 +177,8 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
     parse: (m) => ({ type: 'send-response', method: m[1], id: m[2] }),
   },
   {
-    regex: /^Received response '(.+?) - \((.+?)\)' in \d+ms\./,
-    parse: (m) => ({ type: 'receive-response', method: m[1], id: m[2] }),
+    regex: /^Received response '(.+?) - \((.+?)\)' in (\d+)ms\./,
+    parse: (m) => ({ type: 'receive-response', method: m[1], id: m[2], latencyMs: Number(m[3]) }),
   },
   {
     // "without active response promise" variant — no method available
@@ -196,7 +203,10 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
  * 'method - (id)'.") and optionally a body ("Params: {...}").  vscode-languageclient
  * joins them with \n before calling channel.trace(), so we receive the combined text.
  */
-function parseLspTraceMessage(text: string): LspEntry | undefined {
+// Exported for lspInspectorFormatConformance.test.ts (issue #628) - not used outside this module
+// in production, but the cross-language wire-format check needs direct access to the parsed
+// envelope rather than going through the full TeeLogOutputChannel/file-write path.
+export function parseLspTraceMessage(text: string): LspEntry | undefined {
   const nl = text.indexOf('\n');
   const firstLine = nl >= 0 ? text.slice(0, nl) : text;
   const bodyStr = nl >= 0 ? text.slice(nl + 1) : '';
@@ -248,7 +258,14 @@ function parseLspTraceMessage(text: string): LspEntry | undefined {
   // where the raw JSON-RPC response always carries an explicit "result" field.
   if (isResponse && !hasResultOrError) rpcMsg['result'] = null;
 
-  return { isLSPMessage: true, type: head.type, message: rpcMsg, timestamp: Date.now() };
+  const entry: LspEntry = {
+    isLSPMessage: true,
+    type: head.type,
+    message: rpcMsg,
+    timestamp: Date.now(),
+  };
+  if (head.latencyMs !== undefined) entry.latencyMs = head.latencyMs;
+  return entry;
 }
 
 /**
@@ -296,15 +313,4 @@ export function createTraceChannel(): vscode.LogOutputChannel {
   }
 
   return new TeeLogOutputChannel('Reqnroll LSP Trace', stream);
-}
-
-function resolveLogDirectory(): string {
-  switch (process.platform) {
-    case 'win32':
-      return path.join(process.env['LOCALAPPDATA'] ?? os.homedir(), 'Reqnroll');
-    case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Logs', 'Reqnroll');
-    default:
-      return path.join(os.homedir(), '.local', 'share', 'Reqnroll');
-  }
 }

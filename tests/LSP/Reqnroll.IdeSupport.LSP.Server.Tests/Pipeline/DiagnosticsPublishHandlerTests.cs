@@ -355,4 +355,35 @@ public class DiagnosticsPublishHandlerTests
         _facade.Received(1).SendNotification("textDocument/publishDiagnostics",
             Arg.Is<PublishDiagnosticsParams>(p => p.Diagnostics.Any()));
     }
+
+    // ── Idempotency (issue #578) ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task Handling_the_same_notification_twice_pushes_the_same_diagnostics_both_times()
+    {
+        // MatchCacheChangedNotification consumers must be idempotent: handling the same
+        // notification twice must leave the same observable end state as handling it once.
+        // This handler always re-aggregates from current buffer/registry state and pushes the
+        // complete diagnostic set, so a duplicate publish (e.g. two debounced triggers landing
+        // for one edit) must produce two identical pushes, not an accumulating or diverging one.
+        const string featureText = "Feature: F\nScenario: S\n    Given step\n";
+        SetupBuffer(Array.Empty<IdeSupportTag>());
+        SetupAggregator(MakeDiagnostic(featureText, 0, 7, GherkinDiagnosticSeverity.Warning,
+            DiagnosticsAggregator.BindingSource, DiagnosticsAggregator.UndefinedStepMessage));
+
+        var captured = new List<PublishDiagnosticsParams>();
+        _facade.When(f => f.SendNotification("textDocument/publishDiagnostics", Arg.Any<PublishDiagnosticsParams>()))
+               .Do(ci => captured.Add(ci.Arg<PublishDiagnosticsParams>()));
+
+        var sut = CreateSut();
+        var notification = new MatchCacheChangedNotification(FeatureUri, 1);
+        await sut.Handle(notification, CancellationToken.None);
+        await sut.Handle(notification, CancellationToken.None);
+
+        captured.Should().HaveCount(2);
+        captured[1].Uri.Should().Be(captured[0].Uri);
+        captured[1].Version.Should().Be(captured[0].Version);
+        captured[1].Diagnostics.Select(d => (d.Range, d.Severity, d.Source, d.Message))
+            .Should().Equal(captured[0].Diagnostics.Select(d => (d.Range, d.Severity, d.Source, d.Message)));
+    }
 }

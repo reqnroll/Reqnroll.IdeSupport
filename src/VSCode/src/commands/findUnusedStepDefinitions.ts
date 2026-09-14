@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo, showWarn } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface FindUnusedStepDefinitionsResponse {
@@ -49,12 +50,12 @@ export async function doFindUnusedStepDefinitions(client: LanguageClient): Promi
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Find Unused Step Definitions failed — ${msg}`);
+    void showError(`Reqnroll: Find Unused Step Definitions failed — ${msg}`);
     return;
   }
 
   if (!response.items || response.items.length === 0) {
-    void vscode.window.showInformationMessage('Reqnroll: No unused step definitions found.');
+    void showInfo('Reqnroll: No unused step definitions found.');
     return;
   }
 
@@ -84,7 +85,7 @@ export async function doFindUnusedStepDefinitions(client: LanguageClient): Promi
   // instead of us handing vscode.Uri.file a path that cannot open.
   if (!picked.item.sourceFile) {
     const recorded = picked.item.recordedSourceFile;
-    void vscode.window.showWarningMessage(
+    void showWarn(
       recorded
         ? `Reqnroll: this step definition's source isn't on this machine. The compiled assembly records it at "${recorded}". Rebuild the project locally to navigate to it.`
         : "Reqnroll: this step definition's source isn't on this machine. Rebuild the project locally to navigate to it.",

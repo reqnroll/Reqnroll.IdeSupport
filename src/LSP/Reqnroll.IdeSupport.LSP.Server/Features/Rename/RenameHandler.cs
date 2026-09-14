@@ -1,3 +1,5 @@
+using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.JsonRpc.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -80,7 +82,7 @@ public sealed class RenameHandler
         _nameReconciler  = new NewNameReconciler(logger);
         _postApplyCoordinator = new RenamePostApplyCoordinator(
             languageServer, clientIdeContext, matchService, documentBuffer,
-            csharpDiscoveryService, csharpFileTextCache, logger);
+            csharpDiscoveryService, csharpFileTextCache, logger, _recorder);
     }
 
     // ── textDocument/prepareRename ──────────────────────────────────────────────
@@ -142,108 +144,123 @@ public sealed class RenameHandler
             return null;
         }
 
-        // For .cs files: check if the cursor resolves to a single binding
         if (path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
-        {
-            var line   = request.Position.Line + 1;
-            var column = request.Position.Character + 1;
-            var bindingLocation = new SourceLocation(path, line, column);
+            return await PrepareRenameFromCSharpAsync(uri, path, request.Position, registry);
 
-            if (registry == ProjectBindingRegistry.Invalid)
-                return null;
-
-            var binding = registry.FindBindingAtLocation(bindingLocation);
-            if (binding == null)
-                return null;
-
-            // Rule 2: validate expression is a string literal
-            var exprError = StepRenameValidator.ValidateExpressionIsStringLiteral(binding.Expression);
-            if (exprError != null)
-            {
-                _logger.LogVerbose($"RenameHandler: prepareRename — {exprError.Message}");
-                return null;
-            }
-
-            // Return the range of the string literal's INNER text only, excluding the
-            // surrounding quote characters. Returning the whole line/token (quotes included)
-            // seeds the client's rename box with the quotes; if the user leaves them untouched
-            // (a natural interaction — they look like part of the placeholder), `newName`
-            // arrives already quoted, and BuildCSharpEdit's unconditional `"` + text + `"`
-            // wrapping then doubles them, producing a stray trailing quote (issue #55).
-            var literal = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
-            if (literal == null)
-            {
-                _logger.LogVerbose("RenameHandler: prepareRename — could not resolve attribute literal for binding");
-                return null;
-            }
-
-            return CSharpAttributeLiteralResolver.GetLiteralInnerRange(literal);
-        }
-
-        // For .feature files: only offer rename when the cursor is on a step that is
-        // actually defined in the match cache.  Returning null here tells VS Code
-        // "rename not available at this position" — same as prepareRename for a C# cursor
-        // not on a binding attribute — which suppresses the rename dialog cleanly.
-        // Without this check, prepareRename would succeed for undefined steps, and the
-        // subsequent textDocument/rename would fail with "Internal Error".
         if (path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase))
-        {
-            var featureBindings = _bindingResolver.FindBindingsAtFeatureStep(uri, path, request.Position, out var stepRange);
-            if (featureBindings.Count == 0)
-            {
-                _logger.LogVerbose("RenameHandler: prepareRename — no defined binding at feature step position");
-                return null;
-            }
-
-            if (stepRange == null)
-            {
-                // Should not happen alongside a non-empty featureBindings, but refuse rather
-                // than fall back to a whole-line range: that used to seed the dialog with the
-                // keyword/indentation, which then got duplicated when the resulting edit was
-                // applied at the step-text-only range HandleRenameAsync actually replaces.
-                _logger.LogVerbose("RenameHandler: prepareRename — matched a binding but could not resolve the step's text range");
-                return null;
-            }
-
-            // When ambiguous (2+ candidate bindings), a plain F2 rename would fall back to the
-            // first candidate anyway (see HandleRenameAsync's position-based fallback) — pick
-            // the same one here so the placeholder shown matches what would actually be renamed.
-            var matchedBinding = featureBindings[0];
-            var sourceLiteral  = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, matchedBinding);
-            // Falls back to DisplayExpression, not matchedBinding.Expression's raw auto-generated
-            // regex, when no literal can be found (issue #344). DisplayExpression is itself null
-            // for a method-name-style binding — there is no attribute text to rename at all — so
-            // refuse rename entirely rather than seed the dialog with a null/empty placeholder,
-            // mirroring the .cs-cursor branch's "no literal found" bail-out above.
-            var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.DisplayExpression;
-            if (sourceExpression == null)
-            {
-                _logger.LogVerbose("RenameHandler: prepareRename — matched binding has no renameable expression (method-name-style)");
-                return null;
-            }
-
-            // Known cosmetic quirk (confirmed live in VS and VS Code, issue #33 follow-up): when
-            // a user pre-selects a sub-span of the concrete step text before invoking F2 (e.g.
-            // "added" in "the two numbers are added"), the client computes that selection's
-            // offset relative to Range.Start and reapplies the same numeric offset into
-            // Placeholder to decide what to pre-highlight in the rename box. Placeholder is a
-            // different string than the concrete text whenever a parameter's rendered width
-            // differs from its abstract token (here "are" → "{Verb}", +3 chars), so everything
-            // after the parameter shifts and the pre-highlighted substring lands a few characters
-            // off from what the user actually selected (e.g. "b} summed" instead of "summed").
-            // This is inherent to the offset math being reused across two different-length
-            // strings — the LSP PrepareRenameResult protocol has no field to specify which
-            // sub-span of Placeholder to highlight independently of Range — and is harmless: the
-            // box's full content is still correct, and whatever the user submits becomes newName
-            // in full regardless of what was pre-highlighted.
-            return new PlaceholderRange
-            {
-                Range       = stepRange,
-                Placeholder = sourceExpression
-            };
-        }
+            return await PrepareRenameFromFeatureAsync(uri, path, request.Position);
 
         return null;
+    }
+
+    /// <summary>
+    /// The <c>.cs</c> branch of <see cref="HandlePrepareRenameAsync"/>: checks whether the cursor
+    /// resolves to a single binding whose expression is a renameable string literal, and returns
+    /// the range of that literal's inner text (quotes excluded).
+    /// </summary>
+    private async Task<RangeOrPlaceholderRange?> PrepareRenameFromCSharpAsync(
+        DocumentUri uri, string path, Position position, ProjectBindingRegistry registry)
+    {
+        var line   = position.Line + 1;
+        var column = position.Character + 1;
+        var bindingLocation = new SourceLocation(path, line, column);
+
+        if (registry == ProjectBindingRegistry.Invalid)
+            return null;
+
+        var binding = registry.FindBindingAtLocation(bindingLocation);
+        if (binding == null)
+            return null;
+
+        // Rule 2: validate expression is a string literal
+        var exprError = StepRenameValidator.ValidateExpressionIsStringLiteral(binding.Expression);
+        if (exprError != null)
+        {
+            _logger.LogVerbose($"RenameHandler: prepareRename — {exprError.Message}");
+            return null;
+        }
+
+        // Return the range of the string literal's INNER text only, excluding the
+        // surrounding quote characters. Returning the whole line/token (quotes included)
+        // seeds the client's rename box with the quotes; if the user leaves them untouched
+        // (a natural interaction — they look like part of the placeholder), `newName`
+        // arrives already quoted, and BuildCSharpEdit's unconditional `"` + text + `"`
+        // wrapping then doubles them, producing a stray trailing quote (issue #55).
+        var literal = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
+        if (literal == null)
+        {
+            _logger.LogVerbose("RenameHandler: prepareRename — could not resolve attribute literal for binding");
+            return null;
+        }
+
+        return CSharpAttributeLiteralResolver.GetLiteralInnerRange(literal);
+    }
+
+    /// <summary>
+    /// The <c>.feature</c> branch of <see cref="HandlePrepareRenameAsync"/>: only offers rename
+    /// when the cursor is on a step that is actually defined in the match cache. Returning
+    /// <see langword="null"/> tells VS Code "rename not available at this position" — same as
+    /// <see cref="PrepareRenameFromCSharpAsync"/> for a C# cursor not on a binding attribute —
+    /// which suppresses the rename dialog cleanly. Without this check, prepareRename would
+    /// succeed for undefined steps, and the subsequent textDocument/rename would fail with
+    /// "Internal Error".
+    /// </summary>
+    private async Task<RangeOrPlaceholderRange?> PrepareRenameFromFeatureAsync(
+        DocumentUri uri, string path, Position position)
+    {
+        var featureBindings = _bindingResolver.FindBindingsAtFeatureStep(uri, path, position, out var stepRange);
+        if (featureBindings.Count == 0)
+        {
+            _logger.LogVerbose("RenameHandler: prepareRename — no defined binding at feature step position");
+            return null;
+        }
+
+        if (stepRange == null)
+        {
+            // Should not happen alongside a non-empty featureBindings, but refuse rather
+            // than fall back to a whole-line range: that used to seed the dialog with the
+            // keyword/indentation, which then got duplicated when the resulting edit was
+            // applied at the step-text-only range HandleRenameAsync actually replaces.
+            _logger.LogVerbose("RenameHandler: prepareRename — matched a binding but could not resolve the step's text range");
+            return null;
+        }
+
+        // When ambiguous (2+ candidate bindings), a plain F2 rename would fall back to the
+        // first candidate anyway (see HandleRenameAsync's position-based fallback) — pick
+        // the same one here so the placeholder shown matches what would actually be renamed.
+        var matchedBinding = featureBindings[0];
+        var sourceLiteral  = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, matchedBinding);
+        // Falls back to DisplayExpression, not matchedBinding.Expression's raw auto-generated
+        // regex, when no literal can be found (issue #344). DisplayExpression is itself null
+        // for a method-name-style binding — there is no attribute text to rename at all — so
+        // refuse rename entirely rather than seed the dialog with a null/empty placeholder,
+        // mirroring the .cs-cursor branch's "no literal found" bail-out above.
+        var sourceExpression = sourceLiteral?.Token.ValueText ?? matchedBinding.DisplayExpression;
+        if (sourceExpression == null)
+        {
+            _logger.LogVerbose("RenameHandler: prepareRename — matched binding has no renameable expression (method-name-style)");
+            return null;
+        }
+
+        // Known cosmetic quirk (confirmed live in VS and VS Code, issue #33 follow-up): when
+        // a user pre-selects a sub-span of the concrete step text before invoking F2 (e.g.
+        // "added" in "the two numbers are added"), the client computes that selection's
+        // offset relative to Range.Start and reapplies the same numeric offset into
+        // Placeholder to decide what to pre-highlight in the rename box. Placeholder is a
+        // different string than the concrete text whenever a parameter's rendered width
+        // differs from its abstract token (here "are" → "{Verb}", +3 chars), so everything
+        // after the parameter shifts and the pre-highlighted substring lands a few characters
+        // off from what the user actually selected (e.g. "b} summed" instead of "summed").
+        // This is inherent to the offset math being reused across two different-length
+        // strings — the LSP PrepareRenameResult protocol has no field to specify which
+        // sub-span of Placeholder to highlight independently of Range — and is harmless: the
+        // box's full content is still correct, and whatever the user submits becomes newName
+        // in full regardless of what was pre-highlighted.
+        return new PlaceholderRange
+        {
+            Range       = stepRange,
+            Placeholder = sourceExpression
+        };
     }
 
     // ── textDocument/rename ────────────────────────────────────────────────────
@@ -252,6 +269,16 @@ public sealed class RenameHandler
     /// Executes the rename. Validates the new name, resolves all feature step locations,
     /// resolves the C# attribute string range, and returns a WorkspaceEdit covering all files.
     /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="HandlePrepareRenameAsync"/> — where a <see langword="null"/> result is
+    /// the LSP-spec-sanctioned way to say "not renameable here" and silently suppresses the
+    /// client's rename UI — every failure path here throws an <see cref="RpcErrorException"/>
+    /// (issue #650) instead of returning <see langword="null"/>. By the time this method runs,
+    /// the client has already shown the user a rename box (seeded by a successful
+    /// <c>prepareRename</c>) and collected a new name, so a failure at this point is a genuine
+    /// error the user should see explained, not a silent no-op — a bare <see langword="null"/>
+    /// here previously surfaced as an unqualified "Rename failed" with no reason given.
+    /// </remarks>
     public async Task<WorkspaceEdit?> HandleRenameAsync(
         RenameParams       request,
         CancellationToken   cancellationToken)
@@ -264,10 +291,15 @@ public sealed class RenameHandler
         // most complex operation in the server (workspace-wide applyEdit).
         using var _perf = _recorder.Measure(LspMethodNames.TextDocumentRename, uri);
 
-        if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(newName))
+        if (string.IsNullOrEmpty(path))
         {
             SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
-            return null;
+            throw RenameFailedError("No step definition found at this position", "position");
+        }
+        if (string.IsNullOrEmpty(newName))
+        {
+            SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
+            throw RenameFailedError("The new step text cannot be empty", "rename");
         }
 
         _logger.LogVerbose($"RenameHandler: rename at {path}, newName='{newName}'");
@@ -282,17 +314,29 @@ public sealed class RenameHandler
         {
             _logger.LogVerbose("RenameHandler: registry is invalid");
             SendRenameTelemetry(erroneous: true, reason: "RegistryInvalid");
-            return null;
+            throw RenameFailedError("The project is not initialized yet", "project");
         }
 
         // Resolves a pending reqnroll/selectRenameTarget session first (multi-attribute picker
         // flow), then falls back to feature-match-cache or registry position lookup — see
         // RenameBindingResolver.ResolveBindingForRename for the full precedence order.
-        var binding = _bindingResolver.ResolveBindingForRename(uri, path, request.Position, registry);
+        var binding = _bindingResolver.ResolveBindingForRename(
+            uri, path, request.Position, registry, out var pickedBindingIsGone);
+
+        // A disambiguation session that named a binding which has since disappeared must fail, not
+        // fall back (issue #671, R5): the fallback takes the first candidate at this position, so
+        // proceeding would rename an arbitrary binding rather than the one the user chose.
+        if (pickedBindingIsGone)
+        {
+            throw RenameFailedError(
+                "The step definition you chose changed while the rename was being prepared — please try again",
+                "rename");
+        }
+
         if (binding == null)
         {
             SendRenameTelemetry(erroneous: true, reason: "BindingNotResolved");
-            return null;
+            throw RenameFailedError("No step definition found at this position", "position");
         }
 
         var bindingLocation = ResolveBindingLocation(path, binding, line, column);
@@ -322,7 +366,9 @@ public sealed class RenameHandler
         if (effectiveNewName == null)
         {
             SendRenameTelemetry(erroneous: true, reason: "NewNameNotReconciled");
-            return null;
+            throw RenameFailedError(
+                "Could not match the new step text to this step's parameters — only the wording can change, not the parameter values",
+                "rename");
         }
 
         // ── 3. Validate new name ───────────────────────────────────────────────
@@ -331,7 +377,7 @@ public sealed class RenameHandler
         {
             _logger.LogVerbose($"RenameHandler: validation failed — {nameError.Message}");
             SendRenameTelemetry(erroneous: true, reason: "InvalidNewName");
-            return null;
+            throw RenameFailedError(nameError.Message, nameError.Scope);
         }
 
         var supportsChangeAnnotations = ClientSupportsChangeAnnotations();
@@ -353,26 +399,30 @@ public sealed class RenameHandler
         if (builder.IsEmpty)
         {
             SendRenameTelemetry(erroneous: true, reason: "NoEditsProduced");
-            return null;
+            throw RenameFailedError(
+                "The rename produced no changes — the step definition could not be located in source",
+                "rename");
         }
 
         var workspaceEdit = builder.Build();
 
-        // The push is awaited and its Applied flag checked *before* touching any server-side
-        // cache below: if VS rejects or fails to apply the edit (e.g. a locked/read-only file, or
-        // the user having closed the document with unsaved conflicting changes), the actual
-        // buffer/file content never changed, so self-refreshing the registry or invalidating the
-        // match cache here would desync server state from reality — the registry would claim the
-        // rename succeeded while the source still has the old text. See
-        // RenamePostApplyCoordinator.PushEditIfVisualStudioAsync for why VS needs this push at all.
-        if (!await _postApplyCoordinator.PushEditIfVisualStudioAsync(builder, cancellationToken))
-        {
-            SendRenameTelemetry(erroneous: true, reason: "ClientRejectedEdit");
-            return null;
-        }
+        // Nothing touches a server-side cache here (issue #671, R3). The registry/match-cache
+        // updates this edit implies are staged, and committed only once the client confirms it
+        // actually applied the edit — via reqnroll/renameApplied, or for VS via the Applied flag
+        // on the post-response workspace/applyEdit push. Committing them inline would desync
+        // server state from reality whenever the client declines to apply: the registry would
+        // claim the rename succeeded while the source still has the old text (issue #670).
+        //
+        // A rejected/failed push can no longer be reported back to the caller as a failed rename
+        // (issue #671, R1 — the push happens fire-and-forget after this response is sent, so there
+        // is no request left to fail); it is logged and the staged commit is dropped instead. See
+        // RenamePostApplyCoordinator.SchedulePostResponseApply's remarks.
+        _postApplyCoordinator.StagePendingCommit(uri, builder, csFileUri, newCsText);
 
-        _postApplyCoordinator.InvalidateClosedFeatureCaches(builder);
-        await _postApplyCoordinator.RefreshCSharpRegistryAsync(csFileUri, newCsText, cancellationToken);
+        // Returns immediately for every client; for VS it queues the workspace/applyEdit push to
+        // run *after* this response is sent, which is what stops the edit's own didOpen from
+        // cancelling this very request with ContentModified (issue #654). See its remarks.
+        _postApplyCoordinator.SchedulePostResponseApply(uri, builder);
 
         SendRenameTelemetry(
             erroneous: false,
@@ -380,7 +430,14 @@ public sealed class RenameHandler
             changeAnnotationsUsed: supportsChangeAnnotations,
             editedFileCount: builder.TouchedUris.Count);
 
-        return workspaceEdit;
+        // VS gets the edit through the workspace/applyEdit push above and nothing else. Its
+        // native rename client (F2 / Ctrl+R,R, which reaches this handler with the same params as
+        // the Rename Step command) applies whatever WorkspaceEdit this response carries, so
+        // returning the real edit would apply it twice — the second pass re-runs each TextEdit
+        // against the already-renamed text and corrupts every touched file. This was latent on
+        // master: the in-request push cancelled this very request (issue #654), so VS never got
+        // a response to apply. The Rename Step command ignores the result either way.
+        return _clientIdeContext.IsVisualStudio ? new WorkspaceEdit() : workspaceEdit;
     }
 
     /// <summary>
@@ -404,8 +461,22 @@ public sealed class RenameHandler
         if (editedFileCount != null)
             properties["EditedFileCount"] = editedFileCount;
 
-        _telemetryService?.SendEvent("Rename step command executed", properties);
+        _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, properties);
     }
+
+    /// <summary>
+    /// Builds the <see cref="RpcErrorException"/> a <c>textDocument/rename</c> failure throws
+    /// (issue #650) so it reaches the client as a proper LSP <c>ResponseError</c> — code
+    /// <see cref="ErrorCodes.RequestFailed"/> ("the request was syntactically valid but could
+    /// not complete"), the human-readable reason as the error message, and
+    /// <paramref name="scope"/> (matching <see cref="ValidationError.Scope"/> where the failure
+    /// came from <see cref="StepRenameValidator"/>) as the error's <c>data</c> payload.
+    /// </summary>
+    private static RpcErrorException RenameFailedError(string message, string? scope = null) =>
+        // RpcErrorException's `error` parameter isn't nullable-annotated (it predates this
+        // codebase's NRT adoption), but a null `data` is handled fine at the wire level —
+        // ErrorMessage.Data is [JsonProperty(NullValueHandling = NullValueHandling.Ignore)].
+        new(ErrorCodes.RequestFailed, scope!, message);
 
     /// <summary>
     /// Resolves the source location to search for feature-step usages of <paramref name="binding"/>:
@@ -437,6 +508,33 @@ public sealed class RenameHandler
     /// capability survey — see docs/Rename-ChangeAnnotations-Implementation-Plan.md) gets the
     /// legacy <c>Changes</c> shape, byte-identical to before this feature existed.
     /// </summary>
+    /// <summary>
+    /// The LSP document version an edit for <paramref name="uri"/> is computed against, or
+    /// <see langword="null"/> when the client has not opened that document (issue #671, R2).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what <c>OptionalVersionedTextDocumentIdentifier</c> exists for — per the spec, "to
+    /// allow clients to check the text document version before an edit is applied." Every edit
+    /// previously went out with <c>version: null</c>, which opted out of that check entirely and
+    /// left each client inventing its own ad-hoc staleness detection instead (issue #671).
+    /// </para>
+    /// <para>
+    /// <see langword="null"/> for a document with no buffer is the spec's own meaning, not a
+    /// fallback: "if the file is not open in the editor ... the server can send null to indicate
+    /// that the version is known and the content on disk is the master." A rename routinely edits
+    /// closed <c>.feature</c> files and a <c>.cs</c> file the client may never have opened against
+    /// this server at all.
+    /// </para>
+    /// <para>
+    /// The buffer's version is trustworthy here because <c>textDocument/rename</c> is dispatched on
+    /// the Serial lane (R8): any <c>didChange</c> the client has already sent is processed before
+    /// this runs, so the version recorded here is the one the edit's offsets were computed against.
+    /// </para>
+    /// </remarks>
+    private int? ResolveDocumentVersion(DocumentUri uri)
+        => _documentBuffer.TryGet(uri, out var buffer) ? buffer?.Version : null;
+
     private bool ClientSupportsChangeAnnotations()
     {
         var workspaceEditCapability = _languageServer.ClientSettings?.Capabilities?.Workspace?.WorkspaceEdit;
@@ -446,10 +544,10 @@ public sealed class RenameHandler
             workspaceEditCapability.Value.Value?.ChangeAnnotationSupport is not null;
     }
 
-    private static WorkspaceEditBuilder CreateEditBuilder(
+    private WorkspaceEditBuilder CreateEditBuilder(
         bool supportsChangeAnnotations, string effectiveNewName, int featureFileCount)
     {
-        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations);
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations, ResolveDocumentVersion);
         builder.DeclareAnnotation(RenameChangeAnnotations.Feature,
             new ChangeAnnotation
             {
@@ -539,8 +637,68 @@ public sealed class RenameHandler
         CancellationToken        cancellationToken)
     {
         using var _perf = _recorder.Measure(LspMethodNames.ReqnrollSelectRenameTarget, request.Uri);
-        _sessionManager.SetSession(request.Uri.ToString(), request.Version, request.AttributeIndex);
+        _sessionManager.SetSession(
+            request.Uri.ToString(), request.Version, ResolveSessionTarget(request));
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Turns the picker's positional <c>attributeIndex</c> into a content-addressed identity for
+    /// the binding it denoted, by re-deriving the same candidate list <c>reqnroll/renameTargets</c>
+    /// produced (issue #671, R5).
+    /// </summary>
+    /// <remarks>
+    /// Resolving the index <i>here</i> — while the list it was chosen against is still current — is
+    /// the point: it is what stops a bare index from being carried across the modal dialog and
+    /// re-applied to a list that may by then denote something else. Falls back to the index alone
+    /// when the client sent no position, or when the candidate list cannot be re-derived.
+    /// </remarks>
+    private RenameSessionTarget ResolveSessionTarget(SelectRenameTargetParams request)
+    {
+        var indexOnly = new RenameSessionTarget(request.AttributeIndex, null);
+
+        if (request.Position is not { } position)
+            return indexOnly;
+
+        var path = request.Uri.GetFileSystemPath();
+        if (string.IsNullOrEmpty(path))
+            return indexOnly;
+
+        var registry = _registryLookup.GetRegistryForUri(request.Uri);
+        var candidates = path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase)
+            ? _bindingResolver.FindBindingsAtFeatureStep(request.Uri, path, position)
+            : RenameBindingResolver.FindBindingsAtCSharpMethod(registry, path, position.Line + 1);
+
+        if (request.AttributeIndex < 0 || request.AttributeIndex >= candidates.Count)
+        {
+            _logger.LogVerbose(
+                $"RenameHandler: selectRenameTarget index {request.AttributeIndex} is outside the {candidates.Count} candidate(s) at this position; storing the index alone");
+            return indexOnly;
+        }
+
+        var identity = RenameBindingIdentity.For(candidates[request.AttributeIndex]);
+        _logger.LogVerbose($"RenameHandler: selectRenameTarget index {request.AttributeIndex} resolved to identity '{identity}'");
+        return new RenameSessionTarget(request.AttributeIndex, identity);
+    }
+
+    /// <summary>
+    /// Handles <c>reqnroll/renameApplied</c> — the client reporting whether it applied the
+    /// <see cref="WorkspaceEdit"/> returned from the preceding <c>textDocument/rename</c>, which
+    /// commits or drops the cache updates staged for it (issue #671, R3).
+    /// </summary>
+    /// <remarks>
+    /// Sent by the clients that apply the edit themselves (Rider, VS Code). Visual Studio never
+    /// sends it: the server pushes the edit there via <c>workspace/applyEdit</c> and confirms from
+    /// that request's own <c>Applied</c> flag instead — see
+    /// <see cref="RenamePostApplyCoordinator.SchedulePostResponseApply"/>.
+    /// </remarks>
+    public Task HandleRenameAppliedAsync(
+        RenameAppliedParams request,
+        CancellationToken   cancellationToken)
+    {
+        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollRenameApplied, request.Uri);
+        _logger.LogVerbose($"RenameHandler: client reported renameApplied={request.Applied} for '{request.Uri}'");
+        return _postApplyCoordinator.CompletePendingCommitAsync(request.Uri, request.Applied, cancellationToken);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

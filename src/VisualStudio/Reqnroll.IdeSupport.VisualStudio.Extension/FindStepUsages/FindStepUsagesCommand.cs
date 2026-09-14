@@ -52,7 +52,7 @@ internal sealed class FindStepUsagesCommand : Command
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
-        VisibleWhen = ActivationConstraint.EditorContentType("CSharp"),
+        VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
         Placements =
         [
@@ -70,7 +70,7 @@ internal sealed class FindStepUsagesCommand : Command
     {
         try
         {
-            _logger.LogInformation("FindStepUsagesCommand: invoked.");
+            _logger.LogDebug("FindStepUsagesCommand: invoked.");
 
             var service  = _state.Service;
             var renderer = _state.Renderer;
@@ -96,7 +96,7 @@ internal sealed class FindStepUsagesCommand : Command
             var lineNum  = line.LineNumber;                 // 0-based, matches LSP convention
             var charNum  = caretPos.Offset - line.Text.Start; // 0-based column
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "FindStepUsagesCommand: active view uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             var result = await service.FindUsagesAsync(fileUri, lineNum, charNum, cancellationToken)
@@ -106,6 +106,7 @@ internal sealed class FindStepUsagesCommand : Command
             {
                 _logger.LogInformation(
                     "FindStepUsagesCommand: caret is not on a binding at {FileUri}:{LineNum} — nothing to show.", fileUri, lineNum);
+                VsUtils.ShowStatusBarMessage("Reqnroll: The caret is not on a step definition binding.");
                 return;
             }
 
@@ -119,7 +120,7 @@ internal sealed class FindStepUsagesCommand : Command
 
             await renderer.RenderAsync(label, result, cancellationToken).ConfigureAwait(false);
 
-            _logger.LogInformation("FindStepUsagesCommand: render complete.");
+            _logger.LogDebug("FindStepUsagesCommand: render complete.");
         }
         catch (Exception ex)
         {

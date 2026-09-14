@@ -1,13 +1,14 @@
-using System.Diagnostics;
-using MediatR;
+﻿using System.Diagnostics;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
@@ -29,7 +30,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     private readonly ILspWorkspaceScopeManager    _scopeManager  = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly ILanguageServerFacade        _languageServer = Substitute.For<ILanguageServerFacade>();
     private readonly ClientIdeContext             _clientIde     = new("visualstudio");
-    private readonly IMediator                    _mediator      = Substitute.For<IMediator>();
+    private readonly IFeatureDocumentReparser     _reparser      = Substitute.For<IFeatureDocumentReparser>();
     private readonly ICSharpBindingDiscoveryService _csharpDiscovery = Substitute.For<ICSharpBindingDiscoveryService>();
     private readonly IFeatureRescanDebouncer      _rescanDebouncer = Substitute.For<IFeatureRescanDebouncer>();
     // Real implementation, not a mock: ReparseOpenFilesAsync now schedules each buffer's reparse
@@ -80,7 +81,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         => CreateSut(_clientIde);
 
     private BindingRegistryChangedHandler CreateSut(ClientIdeContext clientIde)
-        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+        => new(_bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, clientIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
     // ── Closed-file scanning — index-driven (baseline received) ───────────────
 
@@ -96,7 +97,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f1, f2 });
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -116,7 +117,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { linked });
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -136,13 +137,71 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f1 }); // f2 absent
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
             Arg.Is<DocumentUri>(u => FilePathMatches(u, f1)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
             Arg.Is<DocumentUri>(u => FilePathMatches(u, f2)), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+    }
+
+    // ── Closed-file scan bound (issue #580) ───────────────────────────────────
+
+    [Fact]
+    public async Task ScanAllFeatureFiles_caps_at_the_configured_file_limit_and_logs_a_warning()
+    {
+        // One more file than the cap allows -- confirms the cap is exclusive (exactly N
+        // scanned, not N-1 or unbounded) without needing a workspace anywhere near real
+        // stress-corpus size to prove it.
+        var cap = BindingRegistryChangedHandler.MaxClosedFeatureFilesPerScan;
+        var paths = new List<string>(cap + 1);
+        for (var i = 0; i < cap + 1; i++)
+        {
+            var path = Path.Combine(_projectFolder, $"F{i}.feature");
+            File.WriteAllText(path, $"Feature: F{i}\n");
+            paths.Add(path);
+        }
+
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(_project).Returns(paths);
+
+        await CreateSut().Handle(
+            new BindingRegistryReplacedNotification(_project),
+            CancellationToken.None);
+
+        await _taggerService.Received(cap).ScanClosedFileAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+        // LogWarning is an extension method over ILogger.Log(LogMessage) -- not itself
+        // substitutable -- so the assertion goes through the underlying interface member.
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Level == TraceLevel.Warning &&
+            m.Message.Contains("exceeding") &&
+            m.Message.Contains(cap.ToString())));
+    }
+
+    [Fact]
+    public async Task ScanAllFeatureFiles_stops_gracefully_when_the_token_is_already_cancelled()
+    {
+        // Issue #580: this loop previously called ThrowIfCancellationRequested(), which would
+        // unwind the whole Handle call and skip the open-file reparse and code-lens refresh
+        // below it. It now breaks out of just the closed-file scan instead, so the rest of
+        // Handle still runs regardless of whether the scan finished, was capped, or was
+        // cancelled -- open files matter more to the user than a closed-file usage-count refresh.
+        var f = Path.Combine(_projectFolder, "A.feature");
+        File.WriteAllText(f, "Feature: A\n");
+        _scopeManager.HasBaselineForProject(_project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { f });
+
+        var act = async () => await CreateSut().Handle(
+            new BindingRegistryReplacedNotification(_project),
+            new CancellationToken(canceled: true));
+
+        await act.Should().NotThrowAsync();
+        await _taggerService.DidNotReceive().ScanClosedFileAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<LspReqnrollProject>());
+        _languageServer.Received(1).SendNotification(
+            "reqnroll/refreshCodeLens", Arg.Any<RefreshCodeLensParams>());
     }
 
     // ── Closed-file scanning — folder-glob fallback (no baseline) ────────────
@@ -156,7 +215,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(_project).Returns(false);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.Received(1).ScanClosedFileAsync(
@@ -172,7 +231,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(project).Returns(false);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
@@ -196,7 +255,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(new[] { featureFile });
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         // Already open → ScanClosedFileAsync must NOT be called.
@@ -223,14 +282,14 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetProjectsForUri(foreignUri).Returns(Array.Empty<LspReqnrollProject>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         // ReparseOpenFilesAsync now schedules each buffer's reparse through
         // IParseCoordinator instead of awaiting it inline (issue #471).
         await _parseCoordinator.WaitForReadyAsync(ownedUri, CancellationToken.None);
-        await _taggerService.Received(1).ParseAsync(ownedUri,   Arg.Any<int?>());
-        await _taggerService.DidNotReceive().ParseAsync(foreignUri, Arg.Any<int?>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(ownedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(foreignUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -249,7 +308,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.ResolvePrimaryOwner(linkedUri).Returns(_project);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(linkingProject, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(linkingProject),
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
@@ -269,11 +328,11 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.ResolvePrimaryOwner(linkedUri).Returns(_project);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(linkedUri, CancellationToken.None);
-        await _taggerService.Received(1).ParseAsync(linkedUri, Arg.Any<int?>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(linkedUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -291,12 +350,12 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(_project).Returns(false);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         await _parseCoordinator.WaitForReadyAsync(inFolderUri, CancellationToken.None);
-        await _taggerService.Received(1).ParseAsync(inFolderUri, Arg.Any<int?>());
-        await _taggerService.DidNotReceive().ParseAsync(outsideUri, Arg.Any<int?>());
+        await _reparser.Received(1).ReparseOpenDocumentAsync(inFolderUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
+        await _reparser.DidNotReceive().ReparseOpenDocumentAsync(outsideUri, Arg.Any<int?>(), Arg.Any<CancellationToken>());
     }
 
     // ── IsFullReplacement = false does not trigger closed-file scan ───────────
@@ -309,7 +368,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         await _taggerService.DidNotReceive().ScanClosedFileAsync(
@@ -324,13 +383,13 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await sut.Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Client.Received(1).SendRequest("workspace/codeLens/refresh");
@@ -344,7 +403,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Client.DidNotReceive().SendRequest("workspace/codeLens/refresh");
@@ -355,13 +414,13 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         _scopeManager.HasBaselineForProject(_project).Returns(true);
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await sut.Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Client.DidNotReceive().SendRequest("workspace/codeLens/refresh");
@@ -379,7 +438,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     public async Task Handle_incremental_schedules_a_debounced_rescan()
     {
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         _rescanDebouncer.Received(1).ScheduleRescan(
@@ -395,7 +454,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _rescanDebouncer.DidNotReceiveWithAnyArgs().ScheduleRescan(default!, default!);
@@ -406,7 +465,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     {
         var nonVsIde = new ClientIdeContext("vscode");
         var sut = new BindingRegistryChangedHandler(
-            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _mediator, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
+            _bufferService, _csharpFileTextCache, _taggerService, _scopeManager, _languageServer, nonVsIde, _reparser, _csharpDiscovery, _rescanDebouncer, _parseCoordinator, _logger, _fileSystem);
 
         var featureFile = Path.Combine(_projectFolder, "A.feature");
         File.WriteAllText(featureFile, "Feature: A\n");
@@ -419,7 +478,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             .Do(ci => capturedRescan = ci.Arg<Func<CancellationToken, Task>>());
 
         await sut.Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         capturedRescan.Should().NotBeNull();
@@ -445,7 +504,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(project, stepsPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         // notify: false -- Handle's own ReparseOpenFilesAsync already reparses and notifies
@@ -472,7 +531,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(project, stepsPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -498,7 +557,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(project, openPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         // Reconciled exactly once, with the BUFFER text — not the on-disk text. notify: false --
@@ -539,7 +598,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -559,7 +618,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         IndexBindingFiles(_project, stepsPath);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -576,7 +635,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         // IsFullReplacement = false → no stale-DLL reconciliation (it's a live Roslyn patch path).
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(project),
             CancellationToken.None);
 
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
@@ -595,8 +654,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(
-                _project, IsFullReplacement: false, RemovedBindingFilePaths: new[] { deletedPath }),
+            new ProjectBindingFilesRemovedNotification(_project, new[] { deletedPath }),
             CancellationToken.None);
 
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
@@ -607,15 +665,16 @@ public class BindingRegistryChangedHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_without_removed_paths_does_not_call_removal()
+    public async Task Handle_with_empty_removed_paths_is_a_safe_no_op()
     {
-        _scopeManager.HasBaselineForProject(_project).Returns(true);
-        _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
-
-        await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+        // Issue #577: removal now lives entirely behind ProjectBindingFilesRemovedNotification's
+        // own handler, so an empty Paths collection (rather than the type simply not being
+        // published at all) must still be a safe no-op, not a throw.
+        var act = async () => await CreateSut().Handle(
+            new ProjectBindingFilesRemovedNotification(_project, Array.Empty<string>()),
             CancellationToken.None);
 
+        await act.Should().NotThrowAsync();
         await _csharpDiscovery.DidNotReceive().UpdateFromSourceForProjectAsync(
             Arg.Any<LspReqnrollProject>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -633,8 +692,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             .Returns<Task>(_ => throw new InvalidOperationException("boom"));
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(
-                _project, IsFullReplacement: false, RemovedBindingFilePaths: new[] { badPath, goodPath }),
+            new ProjectBindingFilesRemovedNotification(_project, new[] { badPath, goodPath }),
             CancellationToken.None);
 
         await _csharpDiscovery.Received(1).UpdateFromSourceForProjectAsync(
@@ -650,7 +708,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.GetIndexedFeatureFiles(_project).Returns(Array.Empty<string>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.Received(1).SendNotification(
@@ -672,7 +730,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
             .Do(ci => capturedRescan = ci.Arg<Func<CancellationToken, Task>>());
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         capturedRescan.Should().NotBeNull();
@@ -689,7 +747,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
         _scopeManager.HasBaselineForProject(_project).Returns(true);
 
         await CreateSut().Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: false),
+            new BindingRegistryPatchedNotification(_project),
             CancellationToken.None);
 
         _languageServer.DidNotReceive().SendNotification(
@@ -704,7 +762,7 @@ public class BindingRegistryChangedHandlerTests : IDisposable
 
         // VS Code / Rider use the standard workspace/codeLens/refresh request instead.
         await CreateSut(new ClientIdeContext("vscode")).Handle(
-            new BindingRegistryChangedNotification(_project, IsFullReplacement: true),
+            new BindingRegistryReplacedNotification(_project),
             CancellationToken.None);
 
         _languageServer.DidNotReceive().SendNotification(

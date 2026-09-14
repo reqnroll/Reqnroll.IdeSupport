@@ -122,7 +122,14 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static Diagnostic ToLspDiagnostic(GherkinDiagnostic d)
+    /// <summary>
+    /// Converts a protocol-agnostic <see cref="GherkinDiagnostic"/> to its LSP wire form. Shared
+    /// (internal, not private) with <see cref="Features.CodeActions.CodeActionHandler"/> so a
+    /// <c>CodeAction</c> can reference the exact diagnostic shape this handler publishes — the two
+    /// must produce identical <c>Diagnostic</c> values for a client to associate the two by
+    /// range/source (issue #563).
+    /// </summary>
+    internal static Diagnostic ToLspDiagnostic(GherkinDiagnostic d)
         => new()
         {
             Range    = d.Range.ToLspRange(),

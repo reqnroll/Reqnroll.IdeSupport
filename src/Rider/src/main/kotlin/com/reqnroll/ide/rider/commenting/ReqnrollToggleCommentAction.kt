@@ -63,7 +63,8 @@ class ReqnrollToggleCommentAction : AnAction() {
         // action has nothing further to do once the command is dispatched.
         ApplicationManager.getApplication().executeOnPooledThread {
             val dispatched = ReqnrollRequestSender.toggleComment(project, uri, startLine, endLine)
-            ReqnrollDebugLogger.info("ReqnrollToggleCommentAction: toggleComment dispatched=$dispatched")
+            ReqnrollDebugLogger.info(
+                "ReqnrollToggleCommentAction: toggleComment dispatched=$dispatched")
         }
     }
 

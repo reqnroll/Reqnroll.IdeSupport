@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using OmniSharp.Extensions.JsonRpc;
+using OmniSharp.Extensions.JsonRpc.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
@@ -153,6 +154,37 @@ public class StepRenameHandlerTests
             NewName      = newName
         };
 
+    /// <summary>
+    /// Reports back that the client applied (or discarded) the edit — which is what commits or
+    /// drops the cache updates the rename staged (issue #671, R3). Nothing reaches the binding
+    /// registry or match cache until this arrives.
+    /// </summary>
+    private static Task ConfirmAppliedAsync(RenameHandler sut, DocumentUri uri, bool applied = true) =>
+        sut.HandleRenameAppliedAsync(
+            new RenameAppliedParams { Uri = uri, Applied = applied }, CancellationToken.None);
+
+    /// <summary>
+    /// Retries <paramref name="assertion"/> until it passes or <paramref name="timeoutMs"/> elapses.
+    /// Needed only for Visual Studio's <c>workspace/applyEdit</c> push, which is deliberately
+    /// fire-and-forget so the rename response is sent first (issue #671, R1).
+    /// </summary>
+    private static async Task EventuallyAsync(Action assertion, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (true)
+        {
+            try
+            {
+                assertion();
+                return;
+            }
+            catch when (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(10);
+            }
+        }
+    }
+
     // ── The F16 defect: registry expression is a discovery projection (regex), not the
     //    source literal (Cucumber expression). The attribute must still be located and
     //    edited even though `binding.Expression` does not equal the source string. ──────
@@ -278,11 +310,20 @@ public class StepRenameHandlerTests
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
                        .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
 
-        var result = await CreateSut().HandleRenameAsync(
+        var sut = CreateSut();
+        var result = await sut.HandleRenameAsync(
             RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
             CancellationToken.None);
 
         result.Should().NotBeNull();
+
+        // Staged, not committed: until the client says it applied the edit, the registry must
+        // still describe the pre-rename source (issue #671, R3 — the #670 corruption).
+        await _csharpDiscoveryService.DidNotReceive().UpdateFromSourceAsync(
+            Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+
+        await ConfirmAppliedAsync(sut, CsUri);
+
         await _csharpDiscoveryService.Received(1).UpdateFromSourceAsync(
             CsUri,
             Arg.Is<string>(t => t.Contains("\"the renamed number is {int}\"")),
@@ -319,12 +360,62 @@ public class StepRenameHandlerTests
             CancellationToken.None);
 
         result.Should().NotBeNull();
-        _languageServer.Received(1).SendRequest(
-            "workspace/applyEdit", Arg.Any<ApplyWorkspaceEditParams>());
+
+        // Pushed *after* the response, not during it (issue #671, R1) — so this is eventual, not
+        // synchronous. Pushing from inside the request is what let the edit's own didOpen cancel
+        // that request with ContentModified (issue #654).
+        await EventuallyAsync(() => _languageServer.Received(1).SendRequest(
+            "workspace/applyEdit", Arg.Any<ApplyWorkspaceEditParams>()));
     }
 
     [Fact]
-    public async Task Rename_returns_null_and_does_not_refresh_caches_when_VS_rejects_the_edit()
+    public async Task Rename_from_visual_studio_returns_an_empty_edit_so_the_push_is_the_only_apply()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the first number is {int}\")]\n" +
+            "        public void GivenTheFirstNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the first number is (.*)$"),
+            specifiedExpression: "the first number is (.*)",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        ApplyWorkspaceEditParams? pushed = null;
+        _languageServer.SendRequest("workspace/applyEdit", Arg.Do<ApplyWorkspaceEditParams>(p => pushed = p));
+
+        var result = await CreateSutForVisualStudio().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
+            CancellationToken.None);
+
+        // VS's native rename client (F2) applies whatever the response carries, and the server
+        // pushes the same edit via workspace/applyEdit for the Rename Step command's benefit —
+        // returning the real edit here made VS apply it twice and corrupt every touched file.
+        // The response must therefore be empty for VS; the push carries the actual edit.
+        result.Should().NotBeNull();
+        result!.Changes.Should().BeNull();
+        result.DocumentChanges.Should().BeNull();
+
+        await EventuallyAsync(() => pushed.Should().NotBeNull());
+        var pushedEdits = pushed!.Edit.DocumentChanges is { } docChanges
+            ? docChanges.Where(c => c.IsTextDocumentEdit).SelectMany(c => c.TextDocumentEdit!.Edits)
+            : pushed.Edit.Changes!.Values.SelectMany(e => e);
+        pushedEdits.Should().ContainSingle(e => e.NewText.Contains("the renamed number is {int}"));
+    }
+
+    [Fact]
+    public async Task Rename_does_not_refresh_caches_when_VS_rejects_the_edit()
     {
         const string csText =
             "using Reqnroll;\n" +
@@ -354,14 +445,91 @@ public class StepRenameHandlerTests
         _languageServer.SendRequest(Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>())
             .Returns(rejectedReturns);
 
-        var result = await CreateSutForVisualStudio().HandleRenameAsync(
+        var sut = CreateSutForVisualStudio();
+        var result = await sut.HandleRenameAsync(
             RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
             CancellationToken.None);
 
-        result.Should().BeNull("VS reported the edit was not applied, so the rename did not actually happen");
+        // The rename response is returned before the push is even sent (issue #671, R1), so a VS
+        // rejection can no longer be turned into an RpcErrorException the way issue #650 had it —
+        // there is no in-flight request left to fail. It is logged instead, and the staged cache
+        // updates are dropped, which is the part that keeps server state matching reality.
+        result.Should().NotBeNull();
+
+        await EventuallyAsync(() => _languageServer.Received(1).SendRequest(
+            "workspace/applyEdit", Arg.Any<ApplyWorkspaceEditParams>()));
+
         await _csharpDiscoveryService.DidNotReceive().UpdateFromSourceAsync(
             Arg.Any<DocumentUri>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
         _matchService.DidNotReceive().InvalidateAllForDocument(Arg.Any<string>());
+    }
+
+    // ── Issue #650: every textDocument/rename failure path throws an RpcErrorException carrying
+    //    a human-readable message instead of returning null — unlike prepareRename, where null is
+    //    the LSP-spec-sanctioned "not renameable here" and stays a silent no-op. ────────────────
+
+    [Fact]
+    public async Task Rename_throws_when_the_project_registry_is_invalid()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>()).Returns(ProjectBindingRegistry.Invalid);
+
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Be("The project is not initialized yet");
+    }
+
+    [Fact]
+    public async Task Rename_throws_when_no_binding_resolves_at_the_cursor()
+    {
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>()));
+
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number is {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Be("No step definition found at this position");
+    }
+
+    [Fact]
+    public async Task Rename_throws_with_the_validator_message_on_a_parameter_count_mismatch()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the first number is {int}\")]\n" +
+            "        public void GivenTheFirstNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the first number is (.*)$"),
+            specifiedExpression: "the first number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        // The new name drops the {int} parameter entirely — Rule 4 (parameter count mismatch).
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the renamed number"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Be("Parameter count mismatch");
+        exception.Which.Error.Should().Be("rename", "the error data should carry the ValidationError.Scope");
     }
 
     [Fact]
@@ -441,6 +609,115 @@ public class StepRenameHandlerTests
         edits.Should().ContainSingle();
         edits[0].NewText.Should().Be("\"gamma {int}\"");
         edits[0].Range.Start.Line.Should().Be(7, "the selected (beta) attribute literal is on 0-based line 7");
+    }
+
+    // ── Issue #671 (R5): a disambiguation session names WHICH binding was picked, so the rename
+    //    finds that same binding again even if the candidate list has since been rebuilt — and
+    //    refuses to guess when it is gone, rather than silently renaming a different step. ─────
+
+    private const string TwoAttributesCsText =
+        "using Reqnroll;\n" +
+        "namespace N\n" +
+        "{\n" +
+        "    [Binding]\n" +
+        "    public class Steps\n" +
+        "    {\n" +
+        "        [Given(\"alpha {int}\")]\n" +    // 0-based line 6
+        "        [Given(\"beta {int}\")]\n" +     // 0-based line 7
+        "        public void M(int x) { }\n" +    // 0-based line 8 → 1-based 9
+        "    }\n" +
+        "}\n";
+
+    private static (ProjectStepDefinitionBinding Alpha, ProjectStepDefinitionBinding Beta) TwoAttributeBindings()
+    {
+        var impl = new ProjectBindingImplementation("Steps.M()", null, new SourceLocation(CsPath, 9, 9));
+        return (
+            new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^alpha (.*)$"), null, impl, "alpha {int}"),
+            new ProjectStepDefinitionBinding(ScenarioBlock.Given, new Regex("^beta (.*)$"), null, impl, "beta {int}"));
+    }
+
+    /// <summary>Selects the attribute at <paramref name="attributeIndex"/>, sending the position so the server can resolve it to an identity.</summary>
+    private static Task SelectAttributeAsync(RenameHandler sut, int attributeIndex, int line, int character) =>
+        sut.HandleSelectRenameTargetAsync(
+            new SelectRenameTargetParams
+            {
+                Uri = CsUri.ToString(),
+                Version = 0,
+                AttributeIndex = attributeIndex,
+                Position = new Position(line, character),
+            },
+            CancellationToken.None);
+
+    [Fact]
+    public async Task Rename_follows_the_picked_binding_when_the_candidate_order_changes()
+    {
+        SetupBuffer(TwoAttributesCsText);
+        var (alpha, beta) = TwoAttributeBindings();
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha, beta }));
+
+        var sut = CreateSut();
+        await SelectAttributeAsync(sut, attributeIndex: 1, line: 8, character: 8); // picks beta
+
+        // The registry is rebuilt with the two attributes in the opposite order — index 1 now
+        // means alpha. Only an identity-addressed session still renames what the user chose.
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { beta, alpha }));
+
+        var result = await sut.HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "gamma {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].Range.Start.Line.Should().Be(7, "beta's attribute literal is on 0-based line 7, whatever order the registry lists it in");
+    }
+
+    [Fact]
+    public async Task Rename_rejects_a_session_whose_picked_binding_no_longer_exists()
+    {
+        SetupBuffer(TwoAttributesCsText);
+        var (alpha, beta) = TwoAttributeBindings();
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha, beta }));
+
+        var sut = CreateSut();
+        await SelectAttributeAsync(sut, attributeIndex: 1, line: 8, character: 8); // picks beta
+
+        // beta is edited away while the rename prompt is open. Falling back to position-based
+        // resolution here would take alpha — renaming a step the user never chose.
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha }));
+
+        var act = () => sut.HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "gamma {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Message.Should().Contain("changed while the rename was being prepared");
+    }
+
+    [Fact]
+    public async Task Rename_without_a_position_on_the_selection_still_resolves_by_index()
+    {
+        // An older client that sends no position leaves the server with only the index — the
+        // pre-R5 behaviour, which must keep working rather than failing closed.
+        SetupBuffer(TwoAttributesCsText);
+        var (alpha, beta) = TwoAttributeBindings();
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { alpha, beta }));
+
+        var sut = CreateSut();
+        await sut.HandleSelectRenameTargetAsync(
+            new SelectRenameTargetParams { Uri = CsUri.ToString(), Version = 0, AttributeIndex = 1 },
+            CancellationToken.None);
+
+        var result = await sut.HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "gamma {int}"),
+            CancellationToken.None);
+
+        result!.Changes![CsUri].Single().Range.Start.Line.Should().Be(7);
     }
 
     // ── Cucumber parameter types must survive the write-back, even when the dialog seeded
@@ -967,6 +1244,11 @@ public class StepRenameHandlerTests
             },
             CancellationToken.None);
         renameResult.Should().NotBeNull();
+
+        // The client applied it — which is what commits the handler's memory of its own .cs edit
+        // (issue #671, R3); without this the staged edit is dropped and prepareRename would
+        // correctly fall back to the stale buffer text.
+        await ConfirmAppliedAsync(sut, featureUri);
 
         // Second attempt, same step, before any save or reopen — this is what F2 does.
         var prepareResult = await sut.HandlePrepareRenameAsync(
@@ -1796,6 +2078,12 @@ public class StepRenameHandlerTests
             CancellationToken.None);
 
         result.Should().NotBeNull();
+
+        // Staged only until the client confirms (issue #671, R3).
+        _matchService.DidNotReceive().InvalidateAllForDocument(Arg.Any<string>());
+
+        await ConfirmAppliedAsync(sut, featureUri);
+
         _matchService.Received(1).InvalidateAllForDocument(featureUri.ToString());
     }
 
@@ -2186,7 +2474,7 @@ public class StepRenameHandlerTests
     {
         var telemetry = Substitute.For<ILspTelemetryService>();
 
-        var result = await CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+        var act = () => CreateSutWithTelemetry(telemetry).HandleRenameAsync(
             new RenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = CsUri },
@@ -2195,7 +2483,7 @@ public class StepRenameHandlerTests
             },
             CancellationToken.None);
 
-        result.Should().BeNull();
+        await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
             "Rename step command executed",
             Arg.Is<Dictionary<string, object?>>(d =>
@@ -2208,7 +2496,7 @@ public class StepRenameHandlerTests
         _registryLookup.GetRegistryForUri(CsUri).Returns(ProjectBindingRegistry.Invalid);
         var telemetry = Substitute.For<ILspTelemetryService>();
 
-        var result = await CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+        var act = () => CreateSutWithTelemetry(telemetry).HandleRenameAsync(
             new RenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = CsUri },
@@ -2217,7 +2505,7 @@ public class StepRenameHandlerTests
             },
             CancellationToken.None);
 
-        result.Should().BeNull();
+        await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
             "Rename step command executed",
             Arg.Is<Dictionary<string, object?>>(d =>
@@ -2232,7 +2520,7 @@ public class StepRenameHandlerTests
             .Returns(ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>()));
         var telemetry = Substitute.For<ILspTelemetryService>();
 
-        var result = await CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+        var act = () => CreateSutWithTelemetry(telemetry).HandleRenameAsync(
             new RenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = CsUri },
@@ -2241,7 +2529,7 @@ public class StepRenameHandlerTests
             },
             CancellationToken.None);
 
-        result.Should().BeNull();
+        await act.Should().ThrowAsync<RpcErrorException>();
         telemetry.Received(1).SendEvent(
             "Rename step command executed",
             Arg.Is<Dictionary<string, object?>>(d =>

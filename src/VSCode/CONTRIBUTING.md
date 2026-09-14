@@ -124,6 +124,40 @@ npm run build:vsix
 
 This publishes the server for all four RIDs and packages the `.vsix` in one step. Requires Docker or cross-compilation support for non-host RIDs.
 
+The bundled LSP server is published `Release` by default (`publish-server.sh`'s configuration
+argument defaults to `Release`) — quiet logging unless `reqnroll.trace.server` is raised, as
+described below.
+
+## Local install of a dev build
+
+The `.vsix` from either packaging step above installs the same way a Marketplace release would,
+just without publishing it:
+
+```sh
+cd src/VSCode
+npm run build:vsix           # or: bash scripts/build-vsix.sh <rid>, for a non-host RID
+code --install-extension reqnroll-ide-support-<version>.vsix
+```
+
+(`<version>` comes from `package.json`.) Or, from VS Code's UI: Extensions view → **...** menu →
+**Install from VSIX...**, and pick the file from `src/VSCode/`.
+
+This installs into your regular VS Code, not an Extension Development Host — reload/restart VS
+Code to activate it, and uninstall from the Extensions view when you're done testing.
+
+## Output channels
+
+The extension writes to three Output panel channels, each with a distinct purpose:
+
+- **Reqnroll** — the curated app-status channel (issue #661): extension activation, LSP client
+  start/connect/stop, and each command's one-line result (mirroring the popup notification you
+  also see). This is the one to check first for "is the extension doing something" — it also
+  auto-reveals itself on a warning or worse, and `Reqnroll: Show Output Channel` opens it
+  directly. Also teed to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
+- **Reqnroll LSP** — `vscode-languageclient`'s own general client channel: connection-level
+  diagnostics. Also teed to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
+- **Reqnroll LSP Trace** — the raw JSON-RPC wire trace, described below.
+
 ## LSP tracing
 
 To see raw JSON-RPC traffic, open VS Code Settings and set:
@@ -150,6 +184,16 @@ Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--tra
 
 Changing `reqnroll.trace.server` requires a window reload to take effect on the already-running
 server (the `--log-level` it maps to is fixed at process launch).
+
+Since `reqnroll.trace.server` is the one setting driving the server's `--log-level`, it also
+decides whether the out-of-process **Connector** (the child process that runs reflection-based
+binding discovery) persists its own log file for a routine, successful run — there's no separate
+VS Code setting for it. At `messages` or `verbose` (→ `--log-level Info`/`Verbose`) every discovery
+run writes its own `reqnroll-lsp-connector-<date>-<pid>.log` alongside the server's file; at the
+default `off` (→ `Warning`) no Connector log is written at all unless a discovery run actually
+fails. See
+[../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
+for the full mechanism.
 
 **The Output panel can appear empty even with tracing on.** `reqnroll.trace.server: verbose`
 correctly drives `vscode-languageclient` to trace (`InitializeParams.Trace`/`$/setTrace` as

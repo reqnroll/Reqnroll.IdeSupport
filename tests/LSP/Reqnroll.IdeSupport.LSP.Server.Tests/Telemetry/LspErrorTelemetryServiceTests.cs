@@ -11,7 +11,7 @@ public class LspErrorTelemetryServiceTests
     private LspErrorTelemetryService CreateSut() => new(_lspTelemetryService);
 
     [Fact]
-    public void MonitorError_sends_an_Error_event_with_exception_type_and_message()
+    public void MonitorError_sends_an_UnhandledException_event_with_exception_type_and_message()
     {
         var sut = CreateSut();
         var exception = new InvalidOperationException("boom");
@@ -19,7 +19,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(exception);
 
         _lspTelemetryService.Received(1).SendEvent(
-            "Error",
+            TelemetryEvents.UnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 (string?)props["ExceptionType"] == typeof(InvalidOperationException).FullName &&
                 (string?)props["Message"] == "boom" &&
@@ -36,7 +36,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(new Exception("test"), isFatal);
 
         _lspTelemetryService.Received(1).SendEvent(
-            "Error",
+            TelemetryEvents.UnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => (bool)props["IsFatal"]! == isFatal));
     }
 
@@ -53,7 +53,7 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(new Exception(message));
 
         _lspTelemetryService.Received(1).SendEvent(
-            "Error",
+            TelemetryEvents.UnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => (string?)props["Message"] == expected));
     }
 

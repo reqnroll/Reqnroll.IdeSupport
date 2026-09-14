@@ -106,7 +106,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
         // because lenses for an already-open .cs file were rendered before the server had counts.
         if (message.Direction == LspMessageDirection.Receive)
         {
-            if (string.Equals(method, "reqnroll/refreshCodeLens", StringComparison.Ordinal))
+            if (string.Equals(method, ReqnrollMethodNames.RefreshCodeLens, StringComparison.Ordinal))
             {
                 var isFullReplacement = body["params"]?["isFullReplacement"]?.Value<bool>() ?? false;
 
@@ -142,7 +142,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
             if (_disposed)
                 return;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "CodeLensRefreshInterceptor: queued a {RefreshKind} refresh for the C# lenses.",
                 isFullReplacement ? "full-replacement" : "incremental");
 
@@ -184,7 +184,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
         }
 
         _invalidate();
-        _logger.LogInformation("CodeLensRefreshInterceptor: invalidated all tracked C# lenses.");
+        _logger.LogDebug("CodeLensRefreshInterceptor: invalidated all tracked C# lenses.");
     }
 
     /// <inheritdoc />

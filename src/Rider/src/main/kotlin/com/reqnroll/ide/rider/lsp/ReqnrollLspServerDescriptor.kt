@@ -152,7 +152,8 @@ class ReqnrollLspServerDescriptor(project: Project) :
         // full diagnostic logging without needing a manual override every time.
         val logLevel = resolveLogLevel(System.getProperty("reqnroll.devSandbox") == "true")
 
-        ReqnrollDebugLogger.info("createCommandLine: launching $serverPath --ide rider --log-level $logLevel")
+        ReqnrollDebugLogger.info(
+            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel")
         return GeneralCommandLine(serverPath.toString())
             .withParameters("--ide", "rider", "--log-level", logLevel)
     }

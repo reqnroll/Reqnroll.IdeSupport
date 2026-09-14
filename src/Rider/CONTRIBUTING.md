@@ -136,6 +136,25 @@ There are two ways to populate `server/<rid>/`, both wired up in `build.gradle.k
   mode — Gradle never needs `dotnet` on the CI runner — and `prepareSandbox` bundles
   every RID found under `<dir>` instead of just one.
 
+## Local install of a dev build
+
+`runIde` (above) launches a disposable sandboxed Rider instance — it doesn't touch your regular
+Rider install. To install a build into your **regular** Rider instead:
+
+```
+cd src/Rider
+./gradlew buildPlugin
+```
+
+This publishes the bundled LSP server `Release` (see "Bundling the LSP server" above — `buildPlugin`
+always uses `Release`, unlike `runIde`'s `Debug`/`Verbose` build) for the host RID only, and produces
+`build/distributions/reqnroll-ide-support-rider-<version>.zip` (`<version>` from `gradle.properties`).
+Cross-publish other RIDs with `-PserverRid=<rid>` (e.g. `linux-x64`, `osx-arm64`) first if you need
+the plugin to run on a different OS than the one you built it on.
+
+In Rider: **Settings → Plugins → ⚙ (gear icon) → Install Plugin from Disk...**, pick the `.zip`, and
+restart when prompted. Uninstall from the same Plugins page when you're done testing.
+
 ## Manual verification
 
 ### Native toolchain
@@ -287,6 +306,19 @@ JVM across the same OSes VS Code does:
 This is a separate log from the *server's* own `reqnroll-<ide>-*.log` (governed by
 `--log-level`, which `runIde` sets to `Verbose` automatically — see "Bundling the LSP
 server" above) — `ReqnrollDebugLogger` only covers the plugin's own client-side glue.
+
+**A third log, `reqnroll-lsp-connector-<yyyyMMdd>-<pid>.log`, comes from the out-of-process
+Connector** (the child process the server spawns per binding-discovery run) — and because
+`runIde`'s sandbox forces `--log-level Verbose`, **every discovery run in a dev sandbox writes one
+of these**, unlike a real installed plugin (`Warning` by default), which writes one only when a
+discovery run actually fails. This isn't a Rider-specific mechanism — it's the same
+buffer-until-`--log-level Info`-or-error behavior described in
+[../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch);
+listed here because `resolveLogLevel(isDevSandbox)`'s `Verbose` default (see "Known follow-ups"
+below) means Rider contributors see it far more often than VS/VS Code contributors at their own
+defaults. Don't confuse it with `ReqnrollDebugLogger`'s own `reqnroll-rider-ext-*.log` above — the
+`-lsp-connector-` file has nothing plugin-specific in it at all, and its filename doesn't carry an
+`ide` segment naming Rider, since the Connector doesn't know which IDE launched its parent server.
 
 ## Testing
 

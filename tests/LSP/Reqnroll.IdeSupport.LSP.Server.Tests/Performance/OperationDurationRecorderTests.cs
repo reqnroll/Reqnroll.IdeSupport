@@ -36,7 +36,8 @@ public class OperationDurationRecorderTests
         var line = logger.Messages.Should().ContainSingle().Subject;
         line.Should().StartWith("PERF ");
         line.Should().Contain("op=textDocument/completion#step");
-        line.Should().Contain("ms=42.5");
+        // Rounded to the nearest whole millisecond (issue #627) - previously "ms=42.5" (tenths).
+        line.Should().Contain("ms=43");
     }
 
     [Fact]
@@ -127,7 +128,8 @@ public class OperationDurationRecorderTests
 
         sut.Record("textDocument/completion#step", 42.5);
 
-        trace.Received(1).Trace("textDocument/completion#step: 42.5ms", Arg.Any<Func<string>?>());
+        // Rounded to the nearest whole millisecond (issue #627) - previously "42.5ms" (tenths).
+        trace.Received(1).Trace("textDocument/completion#step: 43ms", Arg.Any<Func<string>?>());
     }
 
     [Fact]

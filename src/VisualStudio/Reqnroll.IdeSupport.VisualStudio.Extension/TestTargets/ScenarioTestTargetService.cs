@@ -19,8 +19,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 /// </summary>
 internal sealed class ScenarioTestTargetService
 {
-    private const string RequestMethod = "reqnroll/resolveTestTargets";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<ScenarioTestTargetService> _logger;
 
@@ -42,16 +40,16 @@ internal sealed class ScenarioTestTargetService
     {
         var paramsJson = BuildParams(fileUri, range);
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}",
-            RequestMethod, fileUri, range.Start.Line);
+            ReqnrollMethodNames.ResolveTestTargets, fileUri, range.Start.Line);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.ResolveTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         var mapped = MapResult(result as JObject);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ScenarioTestTargetService: {TargetCount} target(s) returned for {FileUri}:{StartLine}",
             mapped.Count, fileUri, range.Start.Line);
         return mapped;

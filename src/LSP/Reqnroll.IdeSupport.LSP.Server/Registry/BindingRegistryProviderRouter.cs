@@ -2,6 +2,7 @@ using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -38,9 +39,11 @@ namespace Reqnroll.IdeSupport.LSP.Server.Registry;
 /// baseline-arrival order).
 /// </para>
 /// <para>
-/// When any project's registry is replaced the router publishes a
-/// <see cref="BindingRegistryChangedNotification"/> via MediatR so that open feature files
-/// belonging to that project are re-parsed and semantic tokens refreshed.
+/// When any project's registry changes the router publishes a
+/// <see cref="BindingRegistryReplacedNotification"/> (full connector run) or
+/// <see cref="BindingRegistryPatchedNotification"/> (incremental Roslyn patch) via MediatR
+/// (issue #577) so that open feature files belonging to that project are re-parsed and semantic
+/// tokens refreshed.
 /// </para>
 /// </remarks>
 public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLookup, IDisposable
@@ -128,6 +131,67 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         return false;
     }
 
+    /// <inheritdoc/>
+    public IReadOnlyCollection<ProjectOwner>? ResolveUsageSearchScope(DocumentUri csUri)
+    {
+        var directOwners = _scopeManager.ResolveOwners(csUri);
+        if (directOwners.Count == 0)
+            return null;
+
+        var expanded = new HashSet<ProjectOwner>(
+            directOwners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)));
+
+        var filePath = csUri.GetFileSystemPath();
+        if (string.IsNullOrEmpty(filePath))
+            return expanded;
+
+        var fileBindingIds = CollectFileBindingIds(GetRegistryForUri(csUri), filePath);
+        if (fileBindingIds.Count == 0)
+            return expanded;
+
+        foreach (var (_, owner, registry) in GetAllRegistries())
+        {
+            if (expanded.Contains(owner)) continue;
+            if (registry == ProjectBindingRegistry.Invalid) continue;
+
+            var reportsAny = false;
+            foreach (var sd in registry.StepDefinitions)
+            {
+                if (!sd.IsValid) continue;
+                var sdSrc = sd.Implementation?.SourceLocation;
+                if (sdSrc is null || !PathUtils.IsSamePath(sdSrc.SourceFile, filePath)) continue;
+                if (fileBindingIds.Contains(BindingId.For(sd)))
+                {
+                    reportsAny = true;
+                    break;
+                }
+            }
+            if (reportsAny)
+                expanded.Add(owner);
+        }
+
+        return expanded;
+    }
+
+    /// <summary>Collects the <see cref="BindingId"/> of every valid step definition <paramref name="registry"/> reports for <paramref name="filePath"/>.</summary>
+    private static HashSet<BindingId> CollectFileBindingIds(ProjectBindingRegistry registry, string filePath)
+    {
+        var ids = new HashSet<BindingId>();
+        if (registry == ProjectBindingRegistry.Invalid)
+            return ids;
+
+        foreach (var binding in registry.StepDefinitions)
+        {
+            if (!binding.IsValid) continue;
+            var src = binding.Implementation?.SourceLocation;
+            if (src is null || string.IsNullOrEmpty(src.SourceFile)) continue;
+            if (!PathUtils.IsSamePath(src.SourceFile, filePath)) continue;
+
+            ids.Add(BindingId.For(binding));
+        }
+        return ids;
+    }
+
     // ── IDisposable ───────────────────────────────────────────────────────────
 
     /// <summary>Unsubscribes from project-discovery events and disposes every per-project binding registry provider this router owns.</summary>
@@ -198,8 +262,14 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         // default publisher awaits each handler in turn with no Task.Run in between, so the
         // entire reparse-every-open-feature-file cascade would run inline on that caller's
         // thread. FireAndForget genuinely backgrounds it instead.
+        //
+        // isFullReplacement selects which of the two registry-change events this run actually
+        // was (issue #577): a connector run publishes Replaced, a Roslyn per-file patch
+        // publishes Patched.
         FireAndForgetExtensions.FireAndForget(
-            () => _mediator.Publish(new BindingRegistryChangedNotification(project, isFullReplacement)),
+            () => isFullReplacement
+                ? _mediator.Publish(new BindingRegistryReplacedNotification(project))
+                : _mediator.Publish(new BindingRegistryPatchedNotification(project)),
             _logger, nameof(OnProviderChanged));
     }
 }

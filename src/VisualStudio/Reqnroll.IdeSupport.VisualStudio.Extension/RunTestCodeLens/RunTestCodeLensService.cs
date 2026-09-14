@@ -64,7 +64,7 @@ internal sealed class RunTestCodeLensService
         var outputAssemblyPath = await ResolveOutputAssemblyPathAsync(fileUri, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(outputAssemblyPath))
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RunTestCodeLensService: could not resolve an output assembly path for {FileUri}; no Run lens will render.", fileUri);
             return Array.Empty<RunTestTargetEntry>();
         }
@@ -81,9 +81,13 @@ internal sealed class RunTestCodeLensService
             .Select(target => new RunTestTargetEntry(line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName, isScenarioOutline))
             .ToList();
 
-        foreach (var entry in result)
+        // Distinct() guards against logging the identical entry twice back-to-back: a Scenario
+        // Outline row and its own scenario can resolve to the same (line, assembly, type, method)
+        // tuple, which otherwise produced two adjacent, indistinguishable log lines for what a
+        // reader would reasonably assume was one entry.
+        foreach (var entry in result.Distinct())
         {
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RunTestCodeLensService: RunTestTargetEntry line={Line} assembly={OutputAssemblyPath} type={DeclaringTypeFullName} method={MethodName} isScenarioOutline={IsScenarioOutline}",
                 entry.Line, entry.OutputAssemblyPath, entry.DeclaringTypeFullName, entry.MethodName, entry.IsScenarioOutline);
         }
@@ -156,6 +160,13 @@ internal sealed class RunTestCodeLensService
             var project = TryGetContainingProjectFromActiveDocument(dte, filePath)
                 ?? dte.Solution.FindProjectItem(filePath)?.ContainingProject;
             return project is null ? null : VsUtils.GetOutputAssemblyPath(project);
+        }
+        catch (OperationCanceledException)
+        {
+            // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while this
+            // lookup was still in flight (issue #679) -- VS re-requests the label on its own, so
+            // this isn't a failure worth surfacing to the output pane.
+            return null;
         }
         catch (Exception ex)
         {

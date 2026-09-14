@@ -70,4 +70,20 @@ public sealed class CompletionSteps
             item => item.Label == label,
             $"a completion with label '{label}' should not be present");
     }
+
+    // Issue #561: a keyword completion's textEdit used to replace the whole trimmed line, so
+    // accepting it deleted any text the user had already typed to the right of the caret (e.g. a
+    // scenario title). Every returned item's replacement range must stop at the requested column.
+    [Then(@"every completion's textEdit range does not extend past column (\d+)")]
+    public void ThenEveryCompletionsTextEditRangeDoesNotExtendPastColumn(int column)
+    {
+        _ctx.LastCompletions.Should().NotBeNull();
+        foreach (var item in _ctx.LastCompletions!.Items)
+        {
+            item.TextEdit.Should().NotBeNull($"completion '{item.Label}' should carry a textEdit");
+            item.TextEdit!.TextEdit.Should().NotBeNull($"completion '{item.Label}' should carry a plain TextEdit");
+            item.TextEdit!.TextEdit!.Range.End.Character.Should().BeLessThanOrEqualTo(
+                column, $"completion '{item.Label}' must not replace text to the right of the caret");
+        }
+    }
 }

@@ -43,12 +43,20 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     /// calls return, so tests that assert on it (or need it flushed before
     /// <c>ClearReceivedCalls</c>) must wait for it explicitly instead of asserting immediately.
     /// </summary>
-    private async Task WaitForPublishAsync(TimeSpan? timeout = null)
+    private Task WaitForPublishAsync(TimeSpan? timeout = null) => WaitForPublishAsync(atLeast: 1, timeout);
+
+    /// <summary>
+    /// Overload for a delta that removes a binding-role file (issue #577): that path publishes
+    /// two notifications in sequence (ProjectBindingFilesRemovedNotification then
+    /// BindingRegistryPatchedNotification) within the same background continuation, so a poll
+    /// landing between them would otherwise see only the first.
+    /// </summary>
+    private async Task WaitForPublishAsync(int atLeast, TimeSpan? timeout = null)
     {
         var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(2));
         while (DateTime.UtcNow < deadline)
         {
-            if (_mediator.ReceivedCalls().Any(c => c.GetMethodInfo().Name == nameof(IMediator.Publish)))
+            if (_mediator.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IMediator.Publish)) >= atLeast)
                 return;
             await Task.Delay(5);
         }
@@ -595,7 +603,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
     // ── MediatR publish ───────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Baseline_publishes_BindingRegistryChangedNotification_when_project_is_loaded()
+    public async Task Baseline_publishes_BindingRegistryReplacedNotification_when_project_is_loaded()
     {
         var p = ProjectParams();
         await _sut.HandleProjectLoadedAsync(p, CancellationToken.None);
@@ -608,7 +616,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
         await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n => n.IsFullReplacement),
+            Arg.Any<BindingRegistryReplacedNotification>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -643,15 +651,13 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
 
         // No project registered yet — the re-scan must not fire prematurely (there is nothing
         // to attribute it to).
-        _ = _mediator.DidNotReceive().Publish(
-            Arg.Any<BindingRegistryChangedNotification>(),
-            Arg.Any<CancellationToken>());
+        _ = _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
 
         await _sut.HandleProjectLoadedAsync(p, CancellationToken.None);
         await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n => n.IsFullReplacement),
+            Arg.Any<BindingRegistryReplacedNotification>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -666,13 +672,11 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
 
         await _sut.HandleProjectLoadedAsync(p, CancellationToken.None);
 
-        _ = _mediator.DidNotReceive().Publish(
-            Arg.Any<BindingRegistryChangedNotification>(),
-            Arg.Any<CancellationToken>());
+        _ = _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
     }
 
     [Fact]
-    public async Task Delta_after_baseline_publishes_an_incremental_BindingRegistryChangedNotification()
+    public async Task Delta_after_baseline_publishes_a_BindingRegistryPatchedNotification()
     {
         // Reproduces issue #32's follow-up: a Solution Explorer rename's delta typically arrives
         // just after the client's didClose/didOpen for the new URI, so the file's first
@@ -696,7 +700,7 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
         await WaitForPublishAsync();
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n => !n.IsFullReplacement),
+            Arg.Any<BindingRegistryPatchedNotification>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -720,12 +724,12 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
             DeltaParams(p.ProjectFile, p.TargetFrameworkMoniker,
                 (stepsFile, ProjectFileRole.Binding, false)),
             CancellationToken.None);
-        await WaitForPublishAsync();
+        // This delta publishes ProjectBindingFilesRemovedNotification then
+        // BindingRegistryPatchedNotification in sequence (issue #577).
+        await WaitForPublishAsync(atLeast: 2);
 
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n =>
-                n.RemovedBindingFilePaths != null &&
-                n.RemovedBindingFilePaths.Contains(stepsFile)),
+            Arg.Is<ProjectBindingFilesRemovedNotification>(n => n.Paths.Contains(stepsFile)),
             Arg.Any<CancellationToken>());
     }
 
@@ -751,10 +755,12 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
             CancellationToken.None);
         await WaitForPublishAsync();
 
+        // A feature-file (not binding-role) removal must not trigger the binding-files-removed
+        // signal at all (issue #577), though the delta's Patched notification still fires.
+        _ = _mediator.DidNotReceive().Publish(
+            Arg.Any<ProjectBindingFilesRemovedNotification>(), Arg.Any<CancellationToken>());
         _ = _mediator.Received(1).Publish(
-            Arg.Is<BindingRegistryChangedNotification>(n =>
-                n.RemovedBindingFilePaths == null || n.RemovedBindingFilePaths.Count == 0),
-            Arg.Any<CancellationToken>());
+            Arg.Any<BindingRegistryPatchedNotification>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -768,8 +774,6 @@ public class LspWorkspaceScopeManagerMembershipTests : IAsyncLifetime
                 (Feature("late"), ProjectFileRole.Feature, true)),
             CancellationToken.None);
 
-        _ = _mediator.DidNotReceive().Publish(
-            Arg.Any<BindingRegistryChangedNotification>(),
-            Arg.Any<CancellationToken>());
+        _ = _mediator.DidNotReceiveWithAnyArgs().Publish(default!, default);
     }
 }

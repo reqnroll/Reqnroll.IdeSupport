@@ -5,7 +5,6 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsageItem
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
@@ -32,19 +31,19 @@ object FindStepUsagesRunner {
 
     /** Shows the "this step definition has no usages" message directly, without another request (used when a CodeLens already reports a 0-usage count). */
     fun showNoUsages(project: Project) {
-        Messages.showInfoMessage(
+        ReqnrollNotify.info(
             project, "This step definition has no usages in any feature file.", "Find Step Usages")
     }
 
     private fun showResult(project: Project, response: FindStepUsagesResponse?) {
         if (response == null) {
-            Messages.showErrorDialog(
+            ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.", "Find Step Usages")
             return
         }
 
         if (!response.isBinding) {
-            Messages.showInfoMessage(
+            ReqnrollNotify.info(
                 project, "The caret is not on a step definition binding.", "Find Step Usages")
             return
         }

@@ -1,11 +1,10 @@
 #nullable enable
 
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 
@@ -15,8 +14,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 /// </summary>
 internal sealed class RenameStepService
 {
-    private const string RenameTargetsMethod = "reqnroll/renameTargets";
-    private const string SelectRenameTargetMethod = "reqnroll/selectRenameTarget";
     private const string RenameMethod = "textDocument/rename";
 
     private readonly LspInterception.LspInterceptingPipe _pipe;
@@ -40,17 +37,17 @@ internal sealed class RenameStepService
     {
         var paramsJson = BuildPositionParams(fileUri, line0, char0);
 
-        _logger.LogInformation(
-            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", RenameTargetsMethod, fileUri, line0, char0);
+        _logger.LogDebug(
+            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.RenameTargets, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RenameTargetsMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.RenameTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         try
         {
             var mapped = MapTargets(result);
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "RenameStepService: {TargetCount} target(s) returned", mapped?.Targets.Count ?? 0);
             return mapped;
         }
@@ -94,109 +91,57 @@ internal sealed class RenameStepService
     /// Tells the server to remember the selected attribute index for the next rename.
     /// </summary>
     public async Task SelectRenameTargetAsync(
-        string fileUri, int version, int attributeIndex,
+        string fileUri, int version, int attributeIndex, int line, int character,
         CancellationToken cancellationToken)
     {
-        var paramsJson = $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}}}";
-        _logger.LogInformation(
-            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", SelectRenameTargetMethod, attributeIndex);
+        // `position` (issue #671, R5) lets the server resolve `attributeIndex` to the binding it
+        // denotes while that candidate list is still current, instead of carrying a bare index
+        // across the rename prompt and re-applying it to a list rebuilt later.
+        var paramsJson =
+            $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}," +
+            $"\"position\":{{\"line\":{line},\"character\":{character}}}}}";
+        _logger.LogDebug(
+            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", ReqnrollMethodNames.SelectRenameTarget, attributeIndex);
 
         await _pipe
-            .SendNotificationToServerAsync(SelectRenameTargetMethod, paramsJson, cancellationToken)
+            .SendNotificationToServerAsync(ReqnrollMethodNames.SelectRenameTarget, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Sends the standard <c>textDocument/rename</c> request and returns a structured
-    /// <see cref="RenameWorkspaceEdit"/> with pre-parsed file edits, or null if the
-    /// server had no edit to return.
+    /// Sends the standard <c>textDocument/rename</c> request. Returning normally means the server
+    /// accepted the rename; the edit itself arrives separately, pushed by the server via
+    /// <c>workspace/applyEdit</c> a moment after this response (issue #671, R1). The response
+    /// body is deliberately empty for Visual Studio — VS's native rename client applies whatever
+    /// WorkspaceEdit a rename response carries, and with the push in play that applied the edit
+    /// twice — so there is nothing in it to parse.
     /// </summary>
-    public async Task<RenameWorkspaceEdit?> SendRenameRequestAsync(
+    /// <exception cref="RenameFailedException">
+    /// The server rejected the rename (issue #650) — e.g. a step-rename validation rule failed.
+    /// Carries the server's human-readable reason as <see cref="Exception.Message"/>, so callers
+    /// can show it directly instead of a generic "Rename failed."
+    /// </exception>
+    public async Task SendRenameRequestAsync(
         string fileUri, int line0, int char0, string newName,
         CancellationToken cancellationToken)
     {
         var paramsJson = BuildRenameParams(fileUri, line0, char0, newName);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "RenameStepService: sending {RenameMethod} at {FileUri}:{Line0}:{Char0}", RenameMethod, fileUri, line0, char0);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(RenameMethod, paramsJson, cancellationToken)
+        var (_, error) = await _pipe
+            .SendRequestToServerWithErrorAsync(RenameMethod, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        if (result is null)
-            return null;
-
-        _logger.LogInformation("RenameStepService: {RenameMethod} returned workspace edit", RenameMethod);
-
-        return ParseWorkspaceEdit(result);
-    }
-
-    /// <summary>
-    /// Parses a raw <c>textDocument/rename</c> JSON result into a <see cref="RenameWorkspaceEdit"/>
-    /// with local file paths and sorted text edits.
-    /// </summary>
-    internal static RenameWorkspaceEdit? ParseWorkspaceEdit(JToken result)
-    {
-        if (result is not JObject editObj)
-            return null;
-
-        var changes = editObj["changes"] as JObject;
-        if (changes is null || changes.Count == 0)
-            return null;
-
-        var workspace = new RenameWorkspaceEdit();
-
-        foreach (var fileEntry in changes)
+        if (error is not null)
         {
-            var uri = fileEntry.Key;
-            var edits = fileEntry.Value as JArray;
-            if (edits is null || edits.Count == 0)
-                continue;
-
-            var localPath = UriToLocalPath(uri);
-            var parsed = ParseTextEdits(edits);
-            if (parsed.Count > 0)
-                workspace.FileEdits[localPath] = parsed;
+            var message = error["message"]?.Value<string>() ?? "Rename failed.";
+            _logger.LogDebug(
+                "RenameStepService: {RenameMethod} rejected by server: {Message}", RenameMethod, message);
+            throw new RenameFailedException(message);
         }
 
-        return workspace.FileEdits.Count > 0 ? workspace : null;
-    }
-
-    private static string UriToLocalPath(string uri)
-    {
-        if (uri.StartsWith("file:///", System.StringComparison.OrdinalIgnoreCase))
-            return uri.Substring(8).Replace('/', '\\');
-        return uri;
-    }
-
-    private static List<TextEditItem> ParseTextEdits(JArray edits)
-    {
-        var result = new List<TextEditItem>(edits.Count);
-        foreach (var edit in edits.Cast<JObject>())
-        {
-            var range = edit["range"];
-            if (range is null) continue;
-            var start = range["start"];
-            var end   = range["end"];
-            if (start is null || end is null) continue;
-
-            result.Add(new TextEditItem(
-                start["line"]?.Value<int>() ?? 0,
-                start["character"]?.Value<int>() ?? 0,
-                end["line"]?.Value<int>() ?? 0,
-                end["character"]?.Value<int>() ?? 0,
-                edit["newText"]?.Value<string>() ?? ""
-            ));
-        }
-
-        // Sort descending so edits applied bottom-to-top keep positions valid.
-        result.Sort((a, b) =>
-        {
-            var lineCmp = b.StartLine.CompareTo(a.StartLine);
-            return lineCmp != 0 ? lineCmp : b.StartChar.CompareTo(a.StartChar);
-        });
-
-        return result;
+        _logger.LogDebug("RenameStepService: {RenameMethod} accepted by server", RenameMethod);
     }
 
     private static string BuildPositionParams(string fileUri, int line0, int char0)
@@ -214,4 +159,16 @@ internal sealed class RenameStepService
 
     internal static string JsonEscape(string value) =>
         Newtonsoft.Json.JsonConvert.ToString(value);
+}
+
+/// <summary>
+/// Thrown by <see cref="RenameStepService.SendRenameRequestAsync"/> when the server rejects a
+/// <c>textDocument/rename</c> request (issue #650) — carries the server's human-readable reason
+/// (e.g. a step-rename validation message) as <see cref="Exception.Message"/>, so
+/// <see cref="RenameStepCommand"/> can show it on the status bar instead of a generic failure.
+/// </summary>
+internal sealed class RenameFailedException : Exception
+{
+    /// <summary>Creates the exception with the server's error message.</summary>
+    public RenameFailedException(string message) : base(message) { }
 }

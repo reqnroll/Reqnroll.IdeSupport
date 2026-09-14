@@ -13,7 +13,6 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
@@ -21,7 +20,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 public class StepCodeLensHandlerTests
 {
     private readonly IBindingMatchService          _matchService   = Substitute.For<IBindingMatchService>();
-    private readonly ILspWorkspaceScopeManager     _scopeManager   = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly IIdeSupportLogger               _logger         = Substitute.For<IIdeSupportLogger>();
 
@@ -30,8 +28,6 @@ public class StepCodeLensHandlerTests
 
     public StepCodeLensHandlerTests()
     {
-        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>())
-                     .Returns(Array.Empty<LspReqnrollProject>());
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
                        .Returns(ProjectBindingRegistry.Invalid);
     }
@@ -45,7 +41,7 @@ public class StepCodeLensHandlerTests
     /// code kept ready for the first client that implements the resolve round trip.
     /// </summary>
     private StepCodeLensHandler CreateSut(string ide = "visualstudio", bool supportsCodeLensResolve = false) =>
-        new(_matchService, _scopeManager, _registryLookup,
+        new(_matchService, _registryLookup,
             new ClientIdeContext(ide, supportsCodeLensResolve), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
@@ -56,18 +52,6 @@ public class StepCodeLensHandlerTests
         var allBindings = bindings as IEnumerable<ProjectStepDefinitionBinding>;
         return new ProjectBindingRegistry(allBindings, Array.Empty<ProjectHookBinding>(), projectHash: 1);
     }
-
-    /// <summary>Creates a real (disposable) <see cref="LspReqnrollProject"/> for tests that need a genuine <see cref="ProjectOwner"/>-bearing project, not just a substitute.</summary>
-    private static LspReqnrollProject MakeProject(string projectFile) =>
-        new(new ReqnrollProjectLoadedParams
-            {
-                WorkspaceFolder        = "/workspace",
-                ProjectFile            = projectFile,
-                ProjectFolder          = System.IO.Path.GetDirectoryName(projectFile)!,
-                OutputAssemblyPath     = "/workspace/bin/Project.dll",
-                TargetFrameworkMoniker = "net8.0"
-            },
-            new LspIdeScope(Substitute.For<IIdeSupportLogger>()));
 
     // ── Non-.cs URI ───────────────────────────────────────────────────────────
 
@@ -310,14 +294,40 @@ public class StepCodeLensHandlerTests
     }
 
     // ── Project-owner filter ──────────────────────────────────────────────────
+    //
+    // The scoping decision itself (direct owners + issue #548 widening for a binding declared in
+    // an externally-referenced assembly, narrowed per issue #552) is now owned by
+    // IProjectBindingRegistryLookup.ResolveUsageSearchScope and unit-tested against the real
+    // implementation in BindingRegistryProviderRouterTests. These tests only need to prove the
+    // handler forwards whatever that method returns straight through to FindUsages -- this is
+    // also the regression guard for the bug that motivated moving it there: the step-usage
+    // CodeLens (which used to apply the #548 widening itself) reported "1 step usage" while
+    // clicking it to navigate opened a "0 usages" Find Step Usages window for the same binding,
+    // because FindStepUsagesHandler computed its own, narrower, direct-owners-only filter.
 
     [Fact]
-    public async Task Handle_passes_null_project_filter_when_no_owners()
+    public async Task Handle_passes_the_registry_lookups_resolved_scope_to_FindUsages()
+    {
+        var csPath  = CsUri.GetFileSystemPath()!;
+        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
+        var scope   = new[] { new ProjectOwner("/workspace/ReferencingProject.csproj", "net8.0") };
+        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
+        _registryLookup.ResolveUsageSearchScope(CsUri).Returns(scope);
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+
+        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        _matchService.Received(1).FindUsages(Arg.Any<SourceLocation>(), scope);
+    }
+
+    [Fact]
+    public async Task Handle_passes_null_project_filter_when_resolved_scope_is_null()
     {
         var csPath  = CsUri.GetFileSystemPath()!;
         var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
         _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _scopeManager.ResolveOwners(CsUri).Returns(Array.Empty<LspReqnrollProject>());
+        _registryLookup.ResolveUsageSearchScope(CsUri).Returns((IReadOnlyCollection<ProjectOwner>?)null);
         _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
                      .Returns(Array.Empty<StepBindingMatch>());
 
@@ -326,141 +336,6 @@ public class StepCodeLensHandlerTests
         _matchService.Received(1).FindUsages(
             Arg.Any<SourceLocation>(),
             Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f == null));
-    }
-
-    // ── External-assembly usage scoping (issue #548) ──────────────────────────
-
-    /// <summary>
-    /// A project that references another Reqnroll-bearing project (a class library) discovers
-    /// that library's bindings too via its own connector run -- the same transitive-discovery
-    /// behaviour that produced duplicate Find Unused Step Definitions rows before BindingId
-    /// normalization (issue #547). That referencing project's feature files are legitimate usage
-    /// sites for the library's steps even though it doesn't "own" the .cs file that declares
-    /// them, so the project filter passed to FindUsages must include it -- not just the .cs
-    /// file's direct owner(s), which would always undercount to zero for a step used only from
-    /// the referencing project.
-    /// </summary>
-    [Fact]
-    public async Task Handle_expands_project_filter_to_projects_whose_registry_independently_reports_the_binding()
-    {
-        var csPath = CsUri.GetFileSystemPath()!;
-        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
-
-        var libraryProject = MakeProject("/workspace/MyLibrary/MyLibrary.csproj");
-        var referencingProject = MakeProject("/workspace/ReferencingProject/ReferencingProject.csproj");
-
-        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _scopeManager.ResolveOwners(CsUri).Returns(new[] { libraryProject });
-
-        // The referencing project's own registry independently reports the very same binding
-        // object -- same content AND same physical SourceLocation.SourceFile (csPath) -- the
-        // transitively-discovered copy of the library's own file, not an unrelated project's own
-        // copy of similar-looking source (see the negative case below, issue #552).
-        var referencingProjectRegistry = MakeRegistry(binding);
-        _registryLookup.GetAllRegistries().Returns(new[]
-        {
-            ("MyLibrary", new ProjectOwner(libraryProject.ProjectFullName, libraryProject.TargetFrameworkMoniker), MakeRegistry(binding)),
-            ("ReferencingProject", new ProjectOwner(referencingProject.ProjectFullName, referencingProject.TargetFrameworkMoniker), referencingProjectRegistry),
-        });
-
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
-
-        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
-
-        _matchService.Received(1).FindUsages(
-            Arg.Any<SourceLocation>(),
-            Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
-                f != null
-                && f.Any(o => o.ProjectFile == libraryProject.ProjectFullName)
-                && f.Any(o => o.ProjectFile == referencingProject.ProjectFullName)));
-
-        libraryProject.Dispose();
-        referencingProject.Dispose();
-    }
-
-    [Fact]
-    public async Task Handle_does_not_expand_project_filter_to_projects_that_do_not_report_the_binding()
-    {
-        var csPath = CsUri.GetFileSystemPath()!;
-        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
-        var unrelatedBinding = StepBindingBuilder.Create()
-            .AtSourceFile("/workspace/Unrelated/Other.cs").AtLine(1).AtColumn(1).Build();
-
-        var libraryProject = MakeProject("/workspace/MyLibrary/MyLibrary.csproj");
-        var unrelatedProject = MakeProject("/workspace/Unrelated/Unrelated.csproj");
-
-        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _scopeManager.ResolveOwners(CsUri).Returns(new[] { libraryProject });
-        _registryLookup.GetAllRegistries().Returns(new[]
-        {
-            ("MyLibrary", new ProjectOwner(libraryProject.ProjectFullName, libraryProject.TargetFrameworkMoniker), MakeRegistry(binding)),
-            ("Unrelated", new ProjectOwner(unrelatedProject.ProjectFullName, unrelatedProject.TargetFrameworkMoniker), MakeRegistry(unrelatedBinding)),
-        });
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
-
-        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
-
-        _matchService.Received(1).FindUsages(
-            Arg.Any<SourceLocation>(),
-            Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
-                f != null
-                && f.Any(o => o.ProjectFile == libraryProject.ProjectFullName)
-                && !f.Any(o => o.ProjectFile == unrelatedProject.ProjectFullName)));
-
-        libraryProject.Dispose();
-        unrelatedProject.Dispose();
-    }
-
-    /// <summary>
-    /// Regression test for the project-scoping half of issue #552: an unrelated project with no
-    /// reference relationship at all to the .cs file's owner -- e.g. a parallel multi-targeted
-    /// sibling project (a net481 copy of the same test suite) with its own independent physical
-    /// copy of the same source -- must NOT widen the usage search, even though its copy of the
-    /// method normalizes to the identical <see cref="BindingId"/>. Doing so doubled the VS
-    /// step-usage CodeLens count for exactly this solution shape (Minimal + Minimalnet481, no
-    /// project reference between them, both with their own copy of the same step definitions and
-    /// feature files) live-tested against the fix. Only a project whose reported binding resolves
-    /// to this EXACT .cs file -- the signature of a genuine transitive-reference discovery, issue
-    /// #548 -- may be added; see the positive case above.
-    /// </summary>
-    [Fact]
-    public async Task Handle_does_not_expand_project_filter_to_a_project_with_its_own_copy_of_the_same_source()
-    {
-        var csPath = CsUri.GetFileSystemPath()!;
-        var binding = StepBindingBuilder.Create().AtSourceFile(csPath).AtLine(5).AtColumn(1).Build();
-
-        // Same content as `binding` (same synthesized method name/type/expression, so the same
-        // BindingId) but a genuinely different physical file -- not a copy discovered through a
-        // reference to `directOwner`, just a coincidentally identical sibling project.
-        var siblingCopy = StepBindingBuilder.Create()
-            .AtSourceFile("/workspace/Siblingnet481/Steps.cs").AtLine(5).AtColumn(1).Build();
-
-        var directOwner  = MakeProject("/workspace/Direct/Direct.csproj");
-        var siblingOwner = MakeProject("/workspace/Siblingnet481/Siblingnet481.csproj");
-
-        _registryLookup.GetRegistryForUri(CsUri).Returns(MakeRegistry(binding));
-        _scopeManager.ResolveOwners(CsUri).Returns(new[] { directOwner });
-        _registryLookup.GetAllRegistries().Returns(new[]
-        {
-            ("Direct",  new ProjectOwner(directOwner.ProjectFullName, directOwner.TargetFrameworkMoniker),   MakeRegistry(binding)),
-            ("Sibling", new ProjectOwner(siblingOwner.ProjectFullName, siblingOwner.TargetFrameworkMoniker), MakeRegistry(siblingCopy)),
-        });
-        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
-                     .Returns(Array.Empty<StepBindingMatch>());
-
-        await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
-
-        _matchService.Received(1).FindUsages(
-            Arg.Any<SourceLocation>(),
-            Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f =>
-                f != null
-                && f.Any(o => o.ProjectFile == directOwner.ProjectFullName)
-                && !f.Any(o => o.ProjectFile == siblingOwner.ProjectFullName)));
-
-        directOwner.Dispose();
-        siblingOwner.Dispose();
     }
 
     // ── Usage lookup is by location, not per-attribute BindingId (issue #552) ────
@@ -511,7 +386,7 @@ public class StepCodeLensHandlerTests
                      .Returns(new[] { StepBindingMatchBuilder.Create(FeatureUri) });
 
         var sut = new StepCodeLensHandler(
-            _matchService, _scopeManager, _registryLookup, new ClientIdeContext(ide), _logger);
+            _matchService, _registryLookup, new ClientIdeContext(ide), _logger);
         var result = await sut.HandleAsync(RequestFor(CsUri), CancellationToken.None);
 
         result![0].Command!.Title.Should().Be("1 step usage");

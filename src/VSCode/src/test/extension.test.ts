@@ -8,6 +8,7 @@ import './lsp/projectManager.test';
 import './lsp/watcherExclude.test';
 import './lsp/defineStepRecovery.test';
 import './lsp/lspInspectorLogger.test';
+import './lsp/lspInspectorFormatConformance.test';
 import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
 import './lsp/manualDocumentSync.test';
@@ -32,6 +33,9 @@ import './commands/commentToggle.test';
 import './util/selectionUtils.test';
 import './util/navigationUtils.test';
 import './grammar.test';
+import './logging/logPaths.test';
+import './logging/generalFileLog.test';
+import './logging/appNotify.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

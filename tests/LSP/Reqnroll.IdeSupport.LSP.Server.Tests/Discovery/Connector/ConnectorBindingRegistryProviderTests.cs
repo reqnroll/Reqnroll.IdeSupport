@@ -416,7 +416,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
@@ -439,7 +439,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 true.Equals(d["HashMatched"])));
@@ -469,10 +469,10 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => "projectLoad".Equals(d["TriggerContext"])));
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => "build".Equals(d["TriggerContext"])));
     }
 
@@ -495,7 +495,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
@@ -520,7 +520,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.DidNotReceive().SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsFailed"])));
     }
 

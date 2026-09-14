@@ -16,8 +16,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
 /// </summary>
 internal sealed class GoToMatchingScenariosService
 {
-    private const string RequestMethod = "reqnroll/goToMatchingScenarios";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<GoToMatchingScenariosService> _logger;
 
@@ -41,18 +39,18 @@ internal sealed class GoToMatchingScenariosService
     {
         var paramsJson = BuildParams(fileUri, line0, char0);
 
-        _logger.LogInformation(
-            "GoToMatchingScenariosService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
+        _logger.LogDebug(
+            "GoToMatchingScenariosService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.GoToMatchingScenarios, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.GoToMatchingScenarios, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "GoToMatchingScenariosService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
 
         var mapped = MapResult(result);
-        _logger.LogInformation("GoToMatchingScenariosService: {ScenarioCount} scenario(s) returned", mapped.Scenarios.Count);
+        _logger.LogDebug("GoToMatchingScenariosService: {ScenarioCount} scenario(s) returned", mapped.Scenarios.Count);
         return mapped;
     }
 

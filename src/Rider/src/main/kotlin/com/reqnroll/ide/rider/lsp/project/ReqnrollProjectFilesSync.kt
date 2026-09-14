@@ -109,7 +109,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
                 changes.groupBy { change -> findOwningProject(change.path, folders()) }
                     .forEach { (projectFile, group) ->
                         if (projectFile == null) return@forEach
-                        ReqnrollDebugLogger.info("projectFiles delta: $projectFile (${group.size} change(s))")
+                        ReqnrollDebugLogger.verbose("projectFiles delta: $projectFile (${group.size} change(s))")
                         ReqnrollNotificationSender.sendProjectFiles(
                             project,
                             ReqnrollProjectFilesParams(

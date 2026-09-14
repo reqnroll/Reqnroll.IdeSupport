@@ -21,10 +21,10 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("test.cs", 1, 3);
-        var consumed = sut.TryConsume("test.cs", 1, out var attributeIndex);
+        var consumed = sut.TryConsume("test.cs", 1, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(3);
+        session.AttributeIndex.Should().Be(3);
     }
 
     [Fact]
@@ -54,11 +54,11 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("test.cs", 1, 7);
-        var first = sut.TryConsume("test.cs", 1, out var firstIndex);
-        var second = sut.TryConsume("test.cs", 1, out var secondIndex);
+        var first = sut.TryConsume("test.cs", 1, out var firstSession);
+        var second = sut.TryConsume("test.cs", 1, out var secondSession);
 
         first.Should().BeTrue();
-        firstIndex.Should().Be(7);
+        firstSession.AttributeIndex.Should().Be(7);
         second.Should().BeFalse();
     }
 
@@ -70,13 +70,13 @@ public class RenameSessionManagerTests
         sut.SetSession("file-a.cs", 1, 10);
         sut.SetSession("file-b.cs", 2, 20);
 
-        var consumedA = sut.TryConsume("file-a.cs", 1, out var indexA);
-        var consumedB = sut.TryConsume("file-b.cs", 2, out var indexB);
+        var consumedA = sut.TryConsume("file-a.cs", 1, out var sessionA);
+        var consumedB = sut.TryConsume("file-b.cs", 2, out var sessionB);
 
         consumedA.Should().BeTrue();
-        indexA.Should().Be(10);
+        sessionA.AttributeIndex.Should().Be(10);
         consumedB.Should().BeTrue();
-        indexB.Should().Be(20);
+        sessionB.AttributeIndex.Should().Be(20);
     }
 
     [Fact]
@@ -85,10 +85,10 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("test.cs", 1, 5);
-        var consumed = sut.TryConsume("test.cs", 1, out var attributeIndex);
+        var consumed = sut.TryConsume("test.cs", 1, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(5);
+        session.AttributeIndex.Should().Be(5);
     }
 
     [Fact]
@@ -99,10 +99,10 @@ public class RenameSessionManagerTests
 
         sut.SetSession("test.cs", 1, 5);
         clock.UtcNow = clock.UtcNow.AddSeconds(30).AddMilliseconds(-1);
-        var consumed = sut.TryConsume("test.cs", 1, out var attributeIndex);
+        var consumed = sut.TryConsume("test.cs", 1, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(5);
+        session.AttributeIndex.Should().Be(5);
     }
 
     [Fact]
@@ -133,11 +133,11 @@ public class RenameSessionManagerTests
         sut.SetSession("file-b.cs", 2, 9);
 
         var consumedExpired = sut.TryConsume("file-a.cs", 1, out _);
-        var consumedFresh = sut.TryConsume("file-b.cs", 2, out var freshIndex);
+        var consumedFresh = sut.TryConsume("file-b.cs", 2, out var freshSession);
 
         consumedExpired.Should().BeFalse();
         consumedFresh.Should().BeTrue();
-        freshIndex.Should().Be(9);
+        freshSession.AttributeIndex.Should().Be(9);
     }
 
     [Fact]
@@ -146,10 +146,10 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("test.cs", 0, 2);
-        var consumed = sut.TryConsume("test.cs", 0, out var attributeIndex);
+        var consumed = sut.TryConsume("test.cs", 0, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(2);
+        session.AttributeIndex.Should().Be(2);
     }
 
     [Fact]
@@ -169,10 +169,10 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("file:///C:/Users/test/Steps.cs", 0, 2);
-        var consumed = sut.TryConsume("file:///c:/Users/test/Steps.cs", 0, out var attributeIndex);
+        var consumed = sut.TryConsume("file:///c:/Users/test/Steps.cs", 0, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(2);
+        session.AttributeIndex.Should().Be(2);
     }
 
     // ── Regression: VS Code's Uri.toString() percent-encodes the Windows drive-letter colon
@@ -190,10 +190,10 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("file:///c%3A/Users/test/Calculator.feature", 0, 1);
-        var consumed = sut.TryConsume("file:///c:/Users/test/Calculator.feature", 0, out var attributeIndex);
+        var consumed = sut.TryConsume("file:///c:/Users/test/Calculator.feature", 0, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(1);
+        session.AttributeIndex.Should().Be(1);
     }
 
     [Fact]
@@ -202,10 +202,10 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("file:///c:/Users/test/Calculator.feature", 0, 1);
-        var consumed = sut.TryConsume("file:///c%3A/Users/test/Calculator.feature", 0, out var attributeIndex);
+        var consumed = sut.TryConsume("file:///c%3A/Users/test/Calculator.feature", 0, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(1);
+        session.AttributeIndex.Should().Be(1);
     }
 
     /// <summary>
@@ -223,17 +223,17 @@ public class RenameSessionManagerTests
 
         // First rename — select attributeIndex 0
         sut.SetSession("file:///project/Steps.cs", 0, 0);
-        var first = sut.TryConsume("file:///project/Steps.cs", 0, out var firstIndex);
+        var first = sut.TryConsume("file:///project/Steps.cs", 0, out var firstSession);
 
         first.Should().BeTrue();
-        firstIndex.Should().Be(0);
+        firstSession.AttributeIndex.Should().Be(0);
 
         // Second rename — select attributeIndex 2 (third binding with same expression)
         sut.SetSession("file:///project/Steps.cs", 0, 2);
-        var second = sut.TryConsume("file:///project/Steps.cs", 0, out var secondIndex);
+        var second = sut.TryConsume("file:///project/Steps.cs", 0, out var secondSession);
 
         second.Should().BeTrue();
-        secondIndex.Should().Be(2);
+        secondSession.AttributeIndex.Should().Be(2);
     }
 
     [Fact]
@@ -254,9 +254,9 @@ public class RenameSessionManagerTests
         var sut = CreateSut();
 
         sut.SetSession("file:///project/%ZZ/Steps.cs", 0, 1);
-        var consumed = sut.TryConsume("file:///project/%ZZ/Steps.cs", 0, out var attributeIndex);
+        var consumed = sut.TryConsume("file:///project/%ZZ/Steps.cs", 0, out var session);
 
         consumed.Should().BeTrue();
-        attributeIndex.Should().Be(1);
+        session.AttributeIndex.Should().Be(1);
     }
 }

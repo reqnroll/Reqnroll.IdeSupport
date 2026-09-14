@@ -88,10 +88,27 @@ internal sealed class MembershipIndex
                 // background continuation deliberately outlives. Forwarding it would let the
                 // publish get silently cancelled the moment the request completes -- before the
                 // backgrounded work even runs -- defeating the notification entirely.
+                //
+                // Two notifications, not one (issue #577): a delta always needs the re-attribution
+                // reparse (BindingRegistryPatchedNotification) described above, and additionally
+                // needs the binding-file purge (ProjectBindingFilesRemovedNotification) only when
+                // this delta actually removed binding-role files. Awaited in this order within the
+                // one background continuation so the purge still completes before the reparse it
+                // used to precede in the old single-notification Handle method.
                 FireAndForgetExtensions.FireAndForget(
-                    () => _mediator.Publish(
-                        new BindingRegistryChangedNotification(deltaProject, false, removedBindingPaths),
-                        CancellationToken.None),
+                    async () =>
+                    {
+                        if (removedBindingPaths.Count > 0)
+                        {
+                            await _mediator.Publish(
+                                new ProjectBindingFilesRemovedNotification(deltaProject, removedBindingPaths),
+                                CancellationToken.None).ConfigureAwait(false);
+                        }
+
+                        await _mediator.Publish(
+                            new BindingRegistryPatchedNotification(deltaProject),
+                            CancellationToken.None).ConfigureAwait(false);
+                    },
                     _logger, nameof(HandleProjectFilesAsync));
             }
             return;
@@ -135,7 +152,7 @@ internal sealed class MembershipIndex
             // the Publish Task would not actually defer it off this call stack.
             // CancellationToken.None -- see the delta branch above for why.
             FireAndForgetExtensions.FireAndForget(
-                () => _mediator.Publish(new BindingRegistryChangedNotification(project, true), CancellationToken.None),
+                () => _mediator.Publish(new BindingRegistryReplacedNotification(project), CancellationToken.None),
                 _logger, nameof(HandleProjectFilesAsync));
         }
         else

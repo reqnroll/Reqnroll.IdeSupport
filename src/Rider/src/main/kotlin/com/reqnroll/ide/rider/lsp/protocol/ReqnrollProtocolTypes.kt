@@ -199,6 +199,28 @@ data class SelectRenameTargetParams(
     val uri: String = "",
     val version: Int = 0,
     val attributeIndex: Int = 0,
+    /**
+     * The position the disambiguation was invoked at — the same one passed to
+     * `reqnroll/renameTargets`. Lets the server resolve [attributeIndex] to the binding it denotes
+     * while that candidate list is still current, instead of carrying a bare index across the
+     * modal dialog and re-applying it to a list rebuilt later (issue #671, R5).
+     */
+    val position: Position? = null,
+)
+
+/**
+ * Params for `reqnroll/renameApplied` — mirrors RenameAppliedParams.cs field-for-field.
+ *
+ * Reports whether this client actually applied the `WorkspaceEdit` returned from
+ * `textDocument/rename`. The server stages the binding-registry and match-cache updates the edit
+ * implies and commits them only on [applied] `true`, so a rename we decline to apply (see
+ * [com.reqnroll.ide.rider.actions.RenameStepRunner]'s staleness check) no longer leaves the
+ * registry describing a step expression present in no file — issue #670, fixed under #671 R3.
+ * Must be sent either way, so the server can drop staged updates promptly instead of holding them.
+ */
+data class RenameAppliedParams(
+    val uri: String = "",
+    val applied: Boolean = false,
 )
 
 /**
