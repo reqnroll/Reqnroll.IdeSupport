@@ -257,15 +257,18 @@ Reqnroll.IdeSupport/
 │   │   │   └── globalUsings.cs
 │   │   │
 │   │   ├── Reqnroll.IdeSupport.LSP.Server/      # OmniSharp LSP host (net10.0, exe)
-│   │   │   ├── Protocol/                        # OmniSharp handler classes (LSP messages)
-│   │   │   ├── Pipeline/                        # MediatR notification handlers + ParseCoordinator (internal events)
-│   │   │   ├── Features/                        # per-capability handler + wiring (e.g. Features/Completions, Features/Formatting)
+│   │   │   ├── Protocol/                        # LspMethodNames constants; Documents/ = document extension helpers
+│   │   │   ├── Features/                        # OmniSharp handler classes (LSP messages), one folder per capability (e.g. Features/Completions, Features/Formatting, Features/SemanticTokens)
+│   │   │   ├── Pipeline/                        # MediatR notification handlers (internal events)
+│   │   │   ├── Hosting/                         # Program.cs, LanguageServerOptionsExtensions (capability + reqnroll/* registration), ClientIdeContext, ResilientMediator, ServiceCollectionExtensions
 │   │   │   ├── Discovery/
 │   │   │   │   ├── Roslyn/                      # in-process .cs discovery
 │   │   │   │   └── Connector/                   # IPC client for the reflection-based Connector, incl. AssemblyReflection/
 │   │   │   ├── Registry/                        # registry-facing orchestration atop LSP.Core/Bindings
-│   │   │   ├── Workspace/                       # WorkspaceScopeManager, ProjectScope
-│   │   │   └── Program.cs
+│   │   │   ├── Workspace/                       # LspWorkspaceScopeManager, LspProjectScope, MembershipIndex
+│   │   │   ├── Concurrency/                     # FeatureRescanDebouncer, RefreshDebouncer (debounced downstream work)
+│   │   │   ├── Parsing/                         # ParseCoordinator, FeatureDocumentReparser (parse scheduling)
+│   │   │   └── Documents/, Tagging/, Performance/, Telemetry/, Tracing/, Logging/   # per-concern support (document buffer, tagger, perf sampling, telemetry, trace, logging)
 │   │   │
 │   │   └── Reqnroll.IdeSupport.LSP.Connector/   # Reflection-based binding discovery (exe)
 │   │       └── Reqnroll.IdeSupport.LSP.Connector.Models/  # DTOs for reflection discovery results
@@ -379,7 +382,7 @@ The Document Buffer stores the effective dialect alongside each file's AST. The 
 
 ### Debounce, Cancellation, and Request Priority
 
-**Debounce policy (as-built)**: raw `textDocument/didChange` events on a `.feature` file are parsed and matched synchronously on every keystroke (see [§3 sync-first model](#3-server-architecture)) — there is no debounce on that path. Debouncing instead applies downstream, to the more expensive work a *registry* change triggers: `FeatureRescanDebouncer` (`Pipeline/FeatureRescanDebouncer.cs`, 500 ms, keyed per project) gates re-parsing every open `.feature` file after a `BindingRegistryChangedNotification`, and `RefreshDebouncer` (`Pipeline/RefreshDebouncer.cs`, generic `Schedule(key, delay, action)`) gates the `codeLens/refresh`/`inlayHint/refresh`/`semanticTokens/refresh` push notifications (`CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, each at 500 ms) fired after a registry or match-cache change. This prevents a burst of `.cs` saves or a rebuild from re-triggering downstream client refreshes once per intermediate event.
+**Debounce policy (as-built)**: raw `textDocument/didChange` events on a `.feature` file are parsed and matched synchronously on every keystroke (see [§3 sync-first model](#3-server-architecture)) — there is no debounce on that path. Debouncing instead applies downstream, to the more expensive work a *registry* change triggers: `FeatureRescanDebouncer` (`Concurrency/FeatureRescanDebouncer.cs`, 500 ms, keyed per project) gates re-parsing every open `.feature` file after a `BindingRegistryChangedNotification`, and `RefreshDebouncer` (`Concurrency/RefreshDebouncer.cs`, generic `Schedule(key, delay, action)`) gates the `codeLens/refresh`/`inlayHint/refresh`/`semanticTokens/refresh` push notifications (`CodeLensRefreshHandler`, `InlayHintRefreshHandler`, `SemanticTokensRefreshHandler`, each at 500 ms) fired after a registry or match-cache change. This prevents a burst of `.cs` saves or a rebuild from re-triggering downstream client refreshes once per intermediate event.
 
 **Cancellation**: All protocol handlers that produce responses (semantic tokens, completions, definition) accept a `CancellationToken`. If a superseding request arrives before the previous one completes, the client may send `$/cancelRequest`; OmniSharp propagates this as a cancelled token. Handlers must not leave the Document Buffer or Binding Registry in an inconsistent state if cancelled mid-flight — the previous value must remain valid until the new value is atomically committed.
 
@@ -394,7 +397,7 @@ The Document Buffer stores the effective dialect alongside each file's AST. The 
 
 ### Internal Event Architecture
 
-Protocol handlers (in `Protocol/`) are the OmniSharp-based classes that directly handle incoming LSP messages. Rather than orchestrating service calls inline, they publish typed **MediatR notifications** that trigger further processing asynchronously.
+Protocol handlers (in `Features/<Capability>/`) are the OmniSharp-based classes that directly handle incoming LSP messages. Rather than orchestrating service calls inline, they publish typed **MediatR notifications** that trigger further processing asynchronously.
 
 Internal handlers (in `Pipeline/`) subscribe to these notifications and perform the actual work, each publishing further notifications in turn. This yields an event-driven pipeline with no single orchestrating manager:
 
@@ -474,7 +477,7 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 | Property | Value | Notes |
 |----------|-------|-------|
 | Publisher / ID | `reqnroll.reqnroll-ide-support` | VS Code Marketplace ID |
-| Activation events | `onLanguage:gherkin`, `onLanguage:plaintext` | Server starts when a `.feature` file is opened |
+| Activation events | `onLanguage:gherkin`, `onLanguage:plaintext`, `workspaceContains:**/*.feature` | Server activates when a `.feature` file is opened, or earlier when the workspace is detected to contain `.feature` files |
 | Language registration | ID: `gherkin`, extensions: `.feature` | Associates `.feature` with the language server |
 | Default formatter | Reqnroll extension | `editor.defaultFormatter` for `gherkin` language |
 | `editor.formatOnType` | `true` (for `gherkin`) | Enables F12 table auto-formatting as user types |
@@ -737,7 +740,7 @@ The test project naming convention is defined in §4. The following describes th
 
 **Server integration specs (`*.LSP.Server.Specs`)**: A simulated LSP client connects to a real server instance over stdio. Test scenarios are authored as Reqnroll `.feature` files — this is the "eating your own dog food" tier where the project's own specification format drives its own test suite. These specs exercise the full protocol pipeline and are the primary verification gate for each phase.
 
-**VS integration specs (`*.VisualStudio.Specs`)**: Use the VS.Extensibility test host to drive the VS extension in-process. Coverage for VS-specific code paths: static registration, VSSDK Code Lens bridge, and wizard flows.
+**VS integration specs**: the `*.VisualStudio.Specs` tier was **eliminated** from the solution — the legacy `Reqnroll.VisualStudio.Specs` project (ported from the old extension, never wired up) was deleted per the coverage audit (see `docs/Archive/VisualStudio.Specs-Coverage-Report.md`). VS-specific code paths are covered by the unit-test tier instead: `Reqnroll.IdeSupport.VisualStudio.Tests` with `VsxStubs` test doubles (command wiring, classification interceptors, snippet service) and `Reqnroll.IdeSupport.VisualStudio.Wizards.Tests` (wizard logic).
 
 **End-to-end specs (`*.Specs`)**: Full round-trip tests against real IDE instances (VS, VS Code, Rider) using automation frameworks. Optional in early phases; mandatory before lifting the Preview designation.
 
@@ -747,7 +750,7 @@ The test project naming convention is defined in §4. The following describes th
 |---|---|
 | 1 | Server unit tests passing; F1 protocol integration spec green on all 3 IDEs in CI |
 | 2 | All Phase 2 features covered by `LSP.Server.Specs`; Connector integration test |
-| 3 | All Phase 3 features covered; VS integration specs for VSSDK paths |
+| 3 | All Phase 3 features covered; VS unit tests (`VisualStudio.Tests`/`VsxStubs`, `Wizards.Tests`) for VSSDK paths |
 | 4 | E2E suite passing; all open questions with "Needs testing" status resolved |
 
 **Performance benchmarks**: Latency targets for interactive operations (semantic tokens, completion, definition, diagnostics) and background operations (Roslyn re-discovery, reflection discovery, workspace scan) must be verified against the thresholds defined in [§9 Performance Requirements](#performance-requirements). Benchmarks are established in Phase 1 and re-run as the feature set grows.
@@ -990,7 +993,7 @@ runtime via each client's own trace-level setting (e.g. VS Code's `reqnroll.trac
 
 ### Server Lifecycle
 
-- Launch timing differs per IDE: **Visual Studio** launches eagerly at extension activation via `LspServerConnectionService` (see [§6.2](#62-visual-studio)), not on first `.feature` file open — `LanguageServerProvider.CreateServerConnectionAsync` is still invoked lazily by VS itself, but that call now just awaits a connection `LspServerConnectionService` already started. **Rider** launches eagerly at IDE/project startup via its `postStartupActivity` extension points. **VS Code** launches lazily, activated by its `onLanguage:gherkin`/`onLanguage:plaintext` activation events on first matching file open.
+- Launch timing differs per IDE: **Visual Studio** launches eagerly at extension activation via `LspServerConnectionService` (see [§6.2](#62-visual-studio)), not on first `.feature` file open — `LanguageServerProvider.CreateServerConnectionAsync` is still invoked lazily by VS itself, but that call now just awaits a connection `LspServerConnectionService` already started. **Rider** launches eagerly at IDE/project startup via its `postStartupActivity` extension points. **VS Code** launches lazily, activated by its `onLanguage:gherkin`/`onLanguage:plaintext` activation events on first matching file open — or earlier, when the workspace already contains `.feature` files, via the `workspaceContains:**/*.feature` activation event (`package.json`).
 - It is terminated when the IDE workspace is closed
 - A single server instance serves all open workspace folders (multi-root support)
 - If the server process terminates unexpectedly, the client restarts it up to 3 times per session before surfacing an error to the user (see [Error Handling and Resilience](#error-handling-and-resilience) above)
@@ -1073,4 +1076,4 @@ This section tracks engineering work that is **not** an end-user feature (F1–F
 | T1 | **Performance benchmarking harness** — a console/test harness that launches a real LSP server, drives it through a simulated client over its actual transport, and reports per-operation latency percentiles against the §9 targets (Performance Verification, Layer 2). Asserts absolute thresholds on a designated reference machine. | [Performance Verification](#performance-verification) | **Done** — `tests/Performance/Reqnroll.IdeSupport.LSP.Server.Benchmarks(.Core)`; see [src/LSP/CONTRIBUTING.md](../src/LSP/CONTRIBUTING.md#performance-benchmarking). Binding-discovery batch scenarios need a built corpus assembly (see §9 note) — tracked separately, not blocking. |
 | T2 | **Representative benchmark corpus** — a pinned, versioned set of `.feature` files and binding patterns matching the "typical workspace conditions" (≤500 feature files, ≤2,000 binding patterns), used as the controlled workload for T1. Includes a generator or curation script so the corpus is reproducible. | [Performance Verification](#performance-verification) | **Done** — `tests/Performance/Corpus/`, structural-fingerprint-pinned (`corpus.manifest.json`), guarded by `CorpusDriftTests`; regenerable via `Benchmarks generate-corpus`. |
 | T3 | **Field performance instrumentation** — wrap protocol handlers to record their own durations and emit them via the existing logging path (and optionally as a telemetry metric), for real-world P95 measurement (Performance Verification, Layer 4). | [Performance Verification](#performance-verification), [Telemetry](#telemetry) | **Done** — `LSP.Server/Performance/` (`IOperationDurationRecorder`, sampled `PerfSample`), wired into nearly every feature handler (semanticTokens, completion, definition, references, rename, code actions, code lens, document outline, folding, formatting, inlay hints, find-unused-step-defs, comment toggle, text-sync). |
-| T4 | Retrofit Reqnroll.VisualStudio.Specs tests to new code | [Testing Strategy](#8-testing-strategy) | Open |
+| T4 | VS-specific test coverage (replaces the legacy `Reqnroll.VisualStudio.Specs` retrofit — that project was eliminated from the solution; coverage now lives in the unit-test tier) | [Testing Strategy](#8-testing-strategy) | **Closed** |
