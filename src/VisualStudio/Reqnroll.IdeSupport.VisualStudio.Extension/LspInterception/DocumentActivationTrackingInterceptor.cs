@@ -142,7 +142,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             Path.GetFileName(path));
 
         var activatedParamsJson = $"{{\"uri\":{Newtonsoft.Json.JsonConvert.ToString(docUri)}}}";
-        await pipe.SendNotificationToServerAsync("reqnroll/documentActivated", activatedParamsJson, cancellationToken)
+        await pipe.SendNotificationToServerAsync(ReqnrollMethodNames.DocumentActivated, activatedParamsJson, cancellationToken)
                   .ConfigureAwait(false);
 
         return LspInterceptorResult.Consume;

@@ -106,7 +106,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
         // because lenses for an already-open .cs file were rendered before the server had counts.
         if (message.Direction == LspMessageDirection.Receive)
         {
-            if (string.Equals(method, "reqnroll/refreshCodeLens", StringComparison.Ordinal))
+            if (string.Equals(method, ReqnrollMethodNames.RefreshCodeLens, StringComparison.Ordinal))
             {
                 var isFullReplacement = body["params"]?["isFullReplacement"]?.Value<bool>() ?? false;
 

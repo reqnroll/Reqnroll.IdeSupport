@@ -43,7 +43,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
     {
         try
         {
-            if (message.IsNotification && message.Method == "reqnroll/semanticTokens")
+            if (message.IsNotification && message.Method == ReqnrollMethodNames.SemanticTokens)
             {
                 // Primary path: the server proactively pushes tokens for the VS client (which does
                 // not reliably pull them). The notification is passed through; VS ignores it.

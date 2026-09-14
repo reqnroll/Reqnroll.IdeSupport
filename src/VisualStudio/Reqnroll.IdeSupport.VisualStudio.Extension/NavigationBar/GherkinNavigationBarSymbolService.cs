@@ -38,8 +38,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 /// </remarks>
 internal sealed class GherkinNavigationBarSymbolService
 {
-    private const string RequestMethod = "reqnroll/documentSymbolHierarchical";
-
     // The LSP spec's ContentModified code (-32801). Not exposed as a named constant by any LSP
     // client library this project depends on client-side, so it is defined here.
     private const int ContentModifiedErrorCode = -32801;
@@ -95,7 +93,7 @@ internal sealed class GherkinNavigationBarSymbolService
         var paramsJson = BuildParams(fileUri);
 
         _logger.LogDebug(
-            "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", RequestMethod, fileUri);
+            "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
 
         var (result, error) = await SendWithContentModifiedRetryAsync(paramsJson, fileUri, cancellationToken)
             .ConfigureAwait(false);
@@ -104,7 +102,7 @@ internal sealed class GherkinNavigationBarSymbolService
         {
             _logger.LogDebug(
                 "GherkinNavigationBarSymbolService: {RequestMethod} for {FileUri} returned error {Error}; treating as no symbols.",
-                RequestMethod, fileUri, error);
+                ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri, error);
         }
 
         var mapped = MapResult(result as JArray);
@@ -120,7 +118,7 @@ internal sealed class GherkinNavigationBarSymbolService
         string paramsJson, string fileUri, CancellationToken cancellationToken)
     {
         var attempt = await _pipe
-            .SendRequestToServerWithErrorAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(ReqnrollMethodNames.DocumentSymbolHierarchical, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (!IsContentModified(attempt.Error))
@@ -128,10 +126,10 @@ internal sealed class GherkinNavigationBarSymbolService
 
         _logger.LogDebug(
             "GherkinNavigationBarSymbolService: {RequestMethod} for {FileUri} was cancelled with ContentModified " +
-            "(a concurrent edit raced this request); retrying once.", RequestMethod, fileUri);
+            "(a concurrent edit raced this request); retrying once.", ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
 
         return await _pipe
-            .SendRequestToServerWithErrorAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(ReqnrollMethodNames.DocumentSymbolHierarchical, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 
