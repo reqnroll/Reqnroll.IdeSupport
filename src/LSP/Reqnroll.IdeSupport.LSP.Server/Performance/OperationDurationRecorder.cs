@@ -26,6 +26,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     private readonly ILspTelemetryService? _telemetry;
     private readonly IPerformanceTelemetrySampler _sampler;
     private readonly ITraceService? _trace;
+    private readonly IFeatureUsageCounters? _counters;
 
     /// <summary>Initializes a new instance of the <see cref="OperationDurationRecorder"/> class.</summary>
     public OperationDurationRecorder(
@@ -33,13 +34,15 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         ClientIdeContext ide,
         ILspTelemetryService? telemetry = null,
         IPerformanceTelemetrySampler? sampler = null,
-        ITraceService? trace = null)
+        ITraceService? trace = null,
+        IFeatureUsageCounters? counters = null)
     {
         _logger = logger;
         _ide = ide;
         _telemetry = telemetry;
         _sampler = sampler ?? PerformanceTelemetrySampler.FromEnvironment();
         _trace = trace;
+        _counters = counters;
     }
 
     /// <summary>Starts timing <paramref name="operation"/>; disposing the returned scope records its elapsed duration.</summary>
@@ -80,6 +83,13 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
                 ["IDEClient"] = _ide.Ide,
             });
         }
+
+        // Tertiary sink (issue #582): unsampled, in-memory, no wire traffic here -- counted
+        // exactly and flushed periodically by IFeatureUsageFlushService as one aggregated event.
+        // Deliberately NOT gated by _sampler above: usage counting needs exact counts, not a
+        // rate -- see FeatureUsageOperations' remarks on why the two mechanisms stay separate.
+        if (_counters is not null && FeatureUsageOperations.IsCounted(operation))
+            _counters.Increment(operation);
     }
 
     /// <summary>Coarse latency buckets for cheap field aggregation without exposing raw paths.</summary>

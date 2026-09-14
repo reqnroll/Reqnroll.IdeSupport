@@ -881,6 +881,17 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 | `NotificationDismissed` | User-facing notification dismissed |
 | `LinkClicked` | External link opened from extension UI |
 
+**`FeatureUsageSummary`** (issue #582) — a new event, not carried forward from `Reqnroll.VisualStudio`:
+in-process counters for a closed, code-defined set of discrete commands (`FeatureUsageOperations`),
+incremented at `IOperationDurationRecorder`'s existing handler-boundary sink with zero new
+instrumentation call sites, and drained/emitted periodically (`FeatureUsageFlushService`) instead of
+per-invocation. Payload: `Counts` (operation → count, only non-zero entries), `WindowSeconds`,
+`IsFinal` (`true` for the best-effort flush at graceful shutdown), `IDEClient`. **Implemented but
+opt-in and off by default** — the periodic flush loop is a no-op unless
+`REQNROLL_FEATURE_USAGE_FLUSH_INTERVAL_SECONDS` is set, matching `PerfSample`'s opt-in posture.
+The allowlist and event schema are a strawman pending the scope decision in issue #583 (which
+commands to count, session-context/denominator, crash-loss recovery, opt-in vs. opt-out).
+
 **Required data model enhancements** over the existing VS extension:
 
 | Field | Rationale |

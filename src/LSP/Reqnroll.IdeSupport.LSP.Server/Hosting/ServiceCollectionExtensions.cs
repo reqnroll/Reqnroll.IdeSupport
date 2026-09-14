@@ -108,6 +108,16 @@ public static class ServiceCollectionExtensions
             // PERF lines to the log and (when REQNROLL_PERF_TELEMETRY_SAMPLE is set) emits sampled
             // PerfSample telemetry. Singleton so the sampler's RNG is shared across handlers.
             .AddSingleton<IPerformanceTelemetrySampler>(_ => PerformanceTelemetrySampler.FromEnvironment())
+            // Feature-usage counting (issue #582): in-memory counters incremented by the recorder
+            // below for a closed set of discrete commands, drained and emitted periodically by
+            // FeatureUsageFlushService instead of per-invocation telemetry. Singleton so counts
+            // accumulate across the whole session.
+            .AddSingleton<IFeatureUsageCounters, FeatureUsageCounters>()
+            .AddSingleton<IFeatureUsageFlushService>(sp => new FeatureUsageFlushService(
+                sp.GetRequiredService<IFeatureUsageCounters>(),
+                sp.GetRequiredService<ClientIdeContext>(),
+                sp.GetRequiredService<IIdeSupportLogger>(),
+                sp.GetRequiredService<ILspTelemetryService>()))
             // F41: tracks the LSP `trace` level (--trace / InitializeParams.Trace / $/setTrace) and
             // issues $/logTrace notifications. Singleton so the level set by $/setTrace is visible
             // to every consumer (currently OperationDurationRecorder's PERF lines).
@@ -119,7 +129,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ClientIdeContext>(),
                 sp.GetRequiredService<ILspTelemetryService>(),
                 sp.GetRequiredService<IPerformanceTelemetrySampler>(),
-                sp.GetRequiredService<ITraceService>()));
+                sp.GetRequiredService<ITraceService>(),
+                sp.GetRequiredService<IFeatureUsageCounters>()));
     }
 
     /// <summary>
