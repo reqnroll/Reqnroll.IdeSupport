@@ -2,6 +2,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Reflection;
 using EnvDTE;
 using EnvDTE80;
 using Microsoft.VisualStudio;
@@ -36,6 +37,7 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
     private readonly IServiceProvider _serviceProvider;
     private IVsOutputWindowPane? _pane;
     private bool _paneCreationAttempted;
+    private bool _logPointerShown;
 
     /// <summary>Gets the minimum trace level that will be written to the pane.</summary>
     public TraceLevel Level { get; }
@@ -52,7 +54,7 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
     {
         if (message.Level > Level) return;
 
-        var line = FormatLine(message);
+        var line = FormatLine(message, ConsumeLogPointerIfNeeded(message.Exception != null));
         var activate = ShouldActivate(message.Level);
 
         _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
@@ -69,13 +71,67 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
         });
     }
 
-    /// <summary>Formats <paramref name="message"/> the same way every other <see cref="IIdeSupportLogger"/> sink does.</summary>
-    internal static string FormatLine(LogMessage message)
+    /// <summary>
+    /// Formats <paramref name="message"/> for the pane: a one-line summary, not the full trace
+    /// (issue #680) -- <see cref="SynchronousFileLogger"/> already writes the full exception,
+    /// indented, to the per-process debug log at <see cref="Level"/>-or-Warning, so nothing is
+    /// lost by trimming what the pane shows. <paramref name="logPointer"/>, when non-null, is
+    /// appended as a trailing line pointing the user at that file; pass it only for the first
+    /// exception-carrying message in a session (see <see cref="ConsumeLogPointerIfNeeded"/>) so
+    /// it doesn't repeat on every subsequent one.
+    /// </summary>
+    internal static string FormatLine(LogMessage message, string? logPointer = null)
     {
         var line = $"{LogLineFormatter.FormatPreamble(message)}: {message.Message}";
         if (message.Exception != null)
-            line += $"{Environment.NewLine}{message.Exception}";
+        {
+            var (typeName, exceptionMessage) = UnwrapForSummary(message.Exception);
+            line += $" ({typeName}: {exceptionMessage})";
+            if (logPointer != null)
+                line += $"{Environment.NewLine}Details are in {logPointer}";
+        }
         return line;
+    }
+
+    /// <summary>
+    /// Unwraps the exception-chain wrapper types that would otherwise dominate the summary with an
+    /// unhelpful "AggregateException: One or more errors occurred" (etc.) instead of the actual
+    /// failure, mirroring how a developer reading the full trace would skip straight to the inner
+    /// exception. Only unwraps <see cref="AggregateException"/> when it carries exactly one inner
+    /// exception -- with more than one, "which one?" is itself the useful summary, so the wrapper's
+    /// own message is kept.
+    /// </summary>
+    private static (string TypeName, string Message) UnwrapForSummary(Exception exception)
+    {
+        while (true)
+        {
+            switch (exception)
+            {
+                case AggregateException { InnerExceptions.Count: 1 } aggregate:
+                    exception = aggregate.InnerExceptions[0];
+                    continue;
+                case TargetInvocationException { InnerException: { } inner }:
+                    exception = inner;
+                    continue;
+                case TypeInitializationException { InnerException: { } inner }:
+                    exception = inner;
+                    continue;
+                default:
+                    return (exception.GetType().Name, exception.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the file-log pointer text the first time an exception-carrying message is logged in
+    /// this pane's lifetime, and <see langword="null"/> every time after (issue #680) -- repeating
+    /// it on every message would itself become the noise this issue is trying to remove.
+    /// </summary>
+    internal string? ConsumeLogPointerIfNeeded(bool messageHasException)
+    {
+        if (!messageHasException || _logPointerShown) return null;
+        _logPointerShown = true;
+        return ReqnrollLogPaths.ResolveLogDirectory();
     }
 
     /// <summary>Matches the legacy pane's behavior: auto-activate on Warning-or-worse.</summary>
