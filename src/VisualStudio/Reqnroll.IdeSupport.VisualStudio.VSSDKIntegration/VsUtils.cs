@@ -656,7 +656,15 @@ public static class VsUtils
         }
     }
 
-    /// <summary>Retrieves the installed NuGet packages for the project via the NuGet brokered service; blocks synchronously on the async call.</summary>
+    /// <summary>
+    /// Retrieves the installed NuGet packages for the project via the NuGet brokered service; blocks
+    /// synchronously on the async call.
+    /// </summary>
+    /// <exception cref="NuGetProjectNotReadyException">
+    /// NuGet reports <see cref="InstalledPackageResultStatus.ProjectNotReady"/> -- the project
+    /// hasn't been nominated/restored yet. Routine during solution load (issue #690); callers should
+    /// treat this as "try again once restore finishes," not as a failure worth surfacing to the user.
+    /// </exception>
     public static IEnumerable<NuGetInstalledPackage> GetInstalledNuGetPackages(IServiceProvider serviceProvider,
         string projectFullName)
     {
@@ -684,6 +692,8 @@ public static class VsUtils
             {
                 var packagesResult =
                     await projectService.GetInstalledPackagesAsync(projectGuid, CancellationToken.None);
+                if (packagesResult.Status == InstalledPackageResultStatus.ProjectNotReady)
+                    throw new NuGetProjectNotReadyException();
                 if (packagesResult.Status != InstalledPackageResultStatus.Successful)
                     throw new Exception("Unexpected result from GetInstalledPackagesAsync: " + packagesResult.Status);
                 return packagesResult.Packages;
