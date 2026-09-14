@@ -182,9 +182,10 @@ public sealed class LspScenarioContext
 
     /// <summary>A project as the spec harness announces it over <c>reqnroll/projectLoaded</c>.</summary>
     /// <param name="PackageIds">
-    /// NuGet package ids announced with the project. Only the ids matter to the server —
-    /// TestFrameworkDetection reads them to decide which row-test attribute F26's resolver should
-    /// count on a generated Scenario Outline method — so versions are left empty.
+    /// NuGet package ids announced with the project. Only the ids matter to the specs (they feed
+    /// <c>ProjectSettingsProvider</c>'s Reqnroll/test-framework detection), so versions are left
+    /// empty. The test-target resolver no longer reads them at all — it counts row attributes in
+    /// the generated code-behind directly (issue #455).
     /// </param>
     public sealed record SpecProject(
         string ProjectFile,

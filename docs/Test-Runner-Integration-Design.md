@@ -299,17 +299,27 @@ independent of the C# side entirely.
 That allowlist is fully known now (§2 table) — bounded by Reqnroll's five supported providers, and only
 needs a new entry when Reqnroll adds or drops a supported test-framework provider, not on ordinary
 framework point releases, since a given installed Reqnroll version's provider always emits one fixed
-attribute type for that framework. `LSP.Core/TestTargets/` needs a small
-`IReadOnlyDictionary<TestFramework, string> RowAttributeTypeName` table seeded from §2, sourced from
-whatever mechanism the project's referenced test framework is already detected by (assumption to
-confirm — F2 binding discovery may already resolve this from package references; if not, it needs its
-own detection step here — and, per the MSTest lesson in §2, that detection needs to resolve the actual
-provider the project's `Reqnroll.<Framework>.Generator.ReqnrollPlugin` wires up by name, including
-MSTest's `TargetMsTestVersion`-driven V2-vs-V4 split, not just the referenced NuGet package). The
-resolver's row-tests-vs-individual-methods branch should still replicate the generator's own
-`GetTraits().HasFlag(RowTests) && config.AllowRowTests` logic (§2) rather than assuming row tests are
-always available — currently true for all five frameworks, but worth keeping as a real capability check
-rather than a hardcoded assumption.
+attribute type for that framework.
+
+> **As built (issue #455, 2026-09-13):** the allowlist lives in `LSP.Core/TestTargets/RowAttributeTypeNames.All`
+> as one flat set, and the resolver counts *any* of those attributes on the exact-name method — it does
+> **not** first detect the project's framework and count only that framework's attribute. This design
+> originally called for a `TestFramework`-keyed table fed by package-reference detection, and the first
+> implementation did exactly that (`TestFrameworkDetection` over the `projectLoaded` package IDs). Two
+> things made that step unnecessary and one made it harmful:
+> - The generated `.feature.cs` is the ground truth. Only Reqnroll's generator writes it, so a
+>   `TestCase`/`InlineData`/`Arguments`/`DataRow` attribute on the method is unambiguous regardless of
+>   which package brought the framework in. The MSTest V2-vs-V4 split is moot for the same reason: both
+>   providers emit `DataRowAttribute`.
+> - The resolver never evaluates the generator's `GetTraits().HasFlag(RowTests) && config.AllowRowTests`
+>   gate itself — the generator already applied it when it wrote the file, and the exact-name-method vs.
+>   `Name_Row…` shape *is* the outcome. So no provider/trait resolution is needed on this side.
+> - Detection failed closed: a `Detect` miss (framework package pulled in transitively via a meta-package,
+>   a custom generator plugin, or a client whose `projectLoaded` payload carries no package references)
+>   forced the row count to 0 and collapsed a row-tests Outline to one unparameterized target.
+>
+> The union count has no such failure mode. `projectPackageIds` was dropped from
+> `IScenarioTestTargetResolver.Resolve` along with `TestFrameworkDetection` and the `TestFramework` enum.
 
 **Residual risk this does *not* eliminate**, and the sharper version of the concern: even with
 positional row-correlation solved on our side, *invoking* "run row N specifically" still goes through
@@ -781,10 +791,11 @@ info/hint severity, not error severity, to stay visually low-noise against genui
    (NUnit3), `ArgumentsAttribute` (TUnit), `DataRowAttribute` (MSTest, via `MsTestV2GeneratorProvider`/
    `MsTestV4GeneratorProvider` — **not** the `MsTestGeneratorProvider` base class, a first-pass mistake
    corrected in §2; that base class is superseded/unused and its `NotSupportedException` doesn't apply
-   to real MSTest projects). All five frameworks support row tests. Still open: whether the project's
-   active test framework — including MSTest's `TargetMsTestVersion`-driven provider split — is
-   resolvable from existing project-reference detection (F2 binding discovery) or needs its own
-   detection step here.
+   to real MSTest projects). All five frameworks support row tests. The follow-up question — whether the
+   project's active test framework (incl. MSTest's `TargetMsTestVersion` split) is resolvable from
+   project-reference detection or needs its own step — was **resolved as unnecessary** (issue #455,
+   2026-09-13): the resolver counts the union of all five row attributes on the generated method and
+   needs no framework detection at all. See the §3 "As built" note.
 6. ~~**Row-level invocation addressing, per IDE**~~ **Resolved (falls back to "run all rows").** VS's
    `TestMethodIdentifier` (decompiled, §5) addresses a method, not a row. Rider's Test Runner
    (live-confirmed, §6) names a row by a formatted display string embedding its arguments, not a stable

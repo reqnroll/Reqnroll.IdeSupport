@@ -82,12 +82,6 @@ public sealed class ResolveTestTargetsHandler
         var endOffset = snapshot.ToOffset(request.Range.End.Line, request.Range.End.Character);
         var scenarioRange = Core.Documents.GherkinRange.FromPoint(snapshot, startOffset, Math.Max(0, endOffset - startOffset));
 
-        var packageIds = _scopeManager.ResolveOwners(uri)
-            .SelectMany(p => p.PackageReferences)
-            .Select(p => p.PackageName)
-            .Distinct()
-            .ToArray();
-
         var filePath = uri.GetFileSystemPath();
         if (string.IsNullOrEmpty(filePath))
         {
@@ -97,7 +91,7 @@ public sealed class ResolveTestTargetsHandler
 
         var projectFolder = _scopeManager.ResolvePrimaryOwner(uri)?.ProjectFolder;
 
-        var targets = _resolver.Resolve(new Uri(filePath), buffer.Tags, scenarioRange, packageIds, projectFolder);
+        var targets = _resolver.Resolve(new Uri(filePath), buffer.Tags, scenarioRange, projectFolder);
 
         _logger.LogVerbose($"ResolveTestTargetsHandler: {targets.Count} target(s) at range {request.Range} in {uri}");
 

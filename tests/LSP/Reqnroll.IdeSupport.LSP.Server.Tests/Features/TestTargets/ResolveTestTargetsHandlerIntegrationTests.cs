@@ -96,24 +96,6 @@ public class ResolveTestTargetsHandlerIntegrationTests : IDisposable
         return uri;
     }
 
-    /// <summary>Makes <see cref="ILspWorkspaceScopeManager.ResolveOwners"/> report a project referencing <c>Reqnroll.xUnit</c>, so <c>TestFrameworkDetection</c> recognizes row-attribute parameterization for <paramref name="uri"/>.</summary>
-    private void UseXUnitPackageReferenceFor(DocumentUri uri)
-    {
-        var project = new LspReqnrollProject(
-            new ReqnrollProjectLoadedParams
-            {
-                WorkspaceFolder = Path.GetTempPath(),
-                ProjectFile = Path.Combine(Path.GetTempPath(), "Fixture.csproj"),
-                ProjectFolder = Path.GetTempPath(),
-                OutputAssemblyPath = Path.Combine(Path.GetTempPath(), "bin", "Fixture.dll"),
-                TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
-                PackageReferences = new[] { new PackageReferenceInfo { PackageId = "Reqnroll.xUnit", Version = "3.0.0" } },
-            },
-            Substitute.For<IIdeScope>());
-
-        _scopeManager.ResolveOwners(uri).Returns(new[] { project });
-    }
-
     /// <summary>
     /// Builds a request range spanning most of <paramref name="line"/> (0-based) — a real
     /// <c>DocumentSymbol.SelectionRange</c> for a scenario is a real text span, not a zero-length
@@ -184,7 +166,6 @@ public class ResolveTestTargetsHandlerIntegrationTests : IDisposable
             }
             """;
         var uri = SetupRealBuffer(text, generatedCs);
-        UseXUnitPackageReferenceFor(uri);
 
         // Line 1 (0-based) is "Scenario Outline: Add numbers".
         var result = await CreateSut().HandleAsync(RequestAt(uri, 1, 0), CancellationToken.None);

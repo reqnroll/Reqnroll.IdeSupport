@@ -21,12 +21,6 @@ public interface IScenarioTestTargetResolver
     /// every target for that scenario (e.g. every Outline row); a range within one specific
     /// <c>Examples:</c> row resolves to just that row's target.
     /// </param>
-    /// <param name="projectPackageIds">
-    /// The owning project's referenced NuGet package IDs, used to determine which row-attribute type
-    /// (e.g. <c>Xunit.InlineDataAttribute</c>) identifies a parameterized-row instance for that
-    /// project's test framework. An empty collection is treated as "framework unknown" — Tier 1
-    /// method/class resolution still works, but row-tests parameterization is not detected.
-    /// </param>
     /// <param name="projectFolder">
     /// The owning project's directory (the folder containing its <c>.csproj</c>), used to fall back
     /// to an <c>obj/</c>-relocated code-behind file (Reqnroll 3.3.0+'s
@@ -39,6 +33,5 @@ public interface IScenarioTestTargetResolver
         Uri featureUri,
         IReadOnlyCollection<IdeSupportTag> tags,
         GherkinRange scenarioRange,
-        IReadOnlyCollection<string> projectPackageIds,
         string? projectFolder = null);
 }
