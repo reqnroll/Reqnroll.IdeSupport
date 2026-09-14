@@ -35,7 +35,6 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         Uri featureUri,
         IReadOnlyCollection<IdeSupportTag> tags,
         GherkinRange scenarioRange,
-        IReadOnlyCollection<string> projectPackageIds,
         string? projectFolder = null)
     {
         var generatedFilePath = GetGeneratedFilePath(featureUri, projectFolder);
@@ -74,7 +73,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
             .FirstOrDefault(m => m.Identifier.Text == expectedMethodName);
         if (exactMethod is not null)
             return ResolveExactMethod(exactMethod, declaringTypeFullName, expectedMethodName,
-                scenarioTag!.Data, projectPackageIds, selectedRow);
+                scenarioTag!.Data, selectedRow);
 
         var prefix = expectedMethodName + "_";
         var candidateMethods = classDecl.Members.OfType<MethodDeclarationSyntax>()
@@ -228,13 +227,16 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 
     private static IReadOnlyList<ScenarioTestTarget> ResolveExactMethod(
         MethodDeclarationSyntax method, string declaringTypeFullName, string methodName,
-        object? scenarioData, IReadOnlyCollection<string> projectPackageIds,
-        (Examples Examples, TableRow Row)? selectedRow)
+        object? scenarioData, (Examples Examples, TableRow Row)? selectedRow)
     {
-        var framework = TestFrameworkDetection.Detect(projectPackageIds);
-        var rowAttributeCount = framework is null
-            ? 0
-            : CountAttributes(method, RowAttributeTypeNames.ByFramework[framework.Value]);
+        // Counts every known provider's row attribute rather than first detecting the project's
+        // framework from its package references and counting only that one (issue #455). Only
+        // Reqnroll's generator writes this file, so any of these attributes on the method is
+        // unambiguous — and the detection step it replaces failed closed (0 rows, so a row-tests
+        // Outline collapsed to one unparameterized target) whenever the framework package wasn't a
+        // *direct* reference: a transitive pull-in via an internal meta-package, a custom generator
+        // plugin, or a client whose projectLoaded payload doesn't carry package references.
+        var rowAttributeCount = CountRowAttributes(method);
 
         if (rowAttributeCount == 0)
             return new[] { new ScenarioTestTarget(declaringTypeFullName, methodName, false, null, null) };
@@ -264,12 +266,12 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         return targets;
     }
 
-    private static int CountAttributes(MethodDeclarationSyntax method, string attributeSimpleName)
+    private static int CountRowAttributes(MethodDeclarationSyntax method)
     {
         var count = 0;
         foreach (var attributeList in method.AttributeLists)
             foreach (var attribute in attributeList.Attributes)
-                if (GetAttributeSimpleName(attribute) == attributeSimpleName)
+                if (RowAttributeTypeNames.All.Contains(GetAttributeSimpleName(attribute)))
                     count++;
         return count;
     }
