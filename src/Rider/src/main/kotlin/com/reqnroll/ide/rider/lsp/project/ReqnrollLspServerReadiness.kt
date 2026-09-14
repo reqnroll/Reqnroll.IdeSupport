@@ -45,9 +45,9 @@ object ReqnrollLspServerReadiness {
         val listenerLifetime = Disposer.newDisposable(project, "ReqnrollLspServerReadiness.runWhenRunning")
         manager.addLspServerManagerListener(
             object : LspServerManagerListener {
-                override fun serverStateChanged(server: LspServer) {
-                    if (server.providerClass == ReqnrollLspServerSupportProvider::class.java &&
-                        server.state == LspServerState.Running
+                override fun serverStateChanged(lspServer: LspServer) {
+                    if (lspServer.providerClass == ReqnrollLspServerSupportProvider::class.java &&
+                        lspServer.state == LspServerState.Running
                     ) {
                         Disposer.dispose(listenerLifetime)
                         action()
