@@ -107,6 +107,11 @@ for the full naming/format convention shared across every log in this family):
   for the full mechanism). At the DEBUG-configuration/`--log-level Verbose` default below, it *will*
   be written for every discovery run — don't be surprised to see one per project per session while
   F5-debugging the extension.
+- `reqnroll-telemetry-<yyyyMMdd>.jsonl` — **off by default**; set `REQNROLL_TELEMETRY_DEBUG_LOG=1`
+  (or a target path) before launching the experimental instance to mirror every telemetry event —
+  server-side and the VS host's own `TelemetryTransmitter` — to this file, independent of whether
+  transmission is enabled. See [../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#debugging) for the
+  full format.
 
 When debugging coloring/binding/CodeLens behavior, the ext-debug and server-debug logs together
 usually tell the whole story; the inspector log is what to reach for when you suspect a protocol
