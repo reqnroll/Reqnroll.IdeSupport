@@ -161,6 +161,13 @@ internal sealed class RunTestCodeLensService
                 ?? dte.Solution.FindProjectItem(filePath)?.ContainingProject;
             return project is null ? null : VsUtils.GetOutputAssemblyPath(project);
         }
+        catch (OperationCanceledException)
+        {
+            // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while this
+            // lookup was still in flight (issue #679) -- VS re-requests the label on its own, so
+            // this isn't a failure worth surfacing to the output pane.
+            return null;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "RunTestCodeLensService: failed to resolve the owning project's output assembly path for {FilePath}.", filePath);
