@@ -201,6 +201,30 @@ public class GherkinDocumentFormatterTests
         buffer.GetLineOneBased(5).TrimStart().Should().Be("| short | longer value |");
     }
 
+    [Fact]
+    public void FormatTable_right_aligns_a_numeric_unfinished_cell_to_match_its_column()
+    {
+        // Row missing its trailing | in a numeric column should still be right-aligned to the
+        // column width, the same as every finished numeric cell in that column (issue: the
+        // unfinished-cell fallback used to always PadRight, ignoring numeric right-alignment).
+        var sut = CreateSUT();
+        var lines = new[]
+        {
+            "Feature: foo",
+            "Scenario: bar",
+            "    Given table",
+            "    | name   | qty |",
+            "    | Widget |   5 |",
+            "    | Thing  | 12",  // missing trailing |
+            ""
+        };
+        var buffer = Buffer(lines);
+
+        sut.FormatGherkinDocument(ParseDocument(lines), buffer, _defaultSettings);
+
+        buffer.GetLineOneBased(6).TrimStart().Should().Be("| Thing  |  12 |");
+    }
+
     // ── Indentation tests ─────────────────────────────────────────────────────
 
     [Fact]
