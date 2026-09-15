@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
@@ -44,6 +45,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly StepCodeLensState _stepCodeLensState;
     private readonly CommentToggleState _commentToggleState;
     private readonly RenameStepState _renameStepState;
+    private readonly FormatDocumentState _formatDocumentState;
     private readonly LspServerConnectionService _connectionService;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
@@ -64,6 +66,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         StepCodeLensState stepCodeLensState,
         CommentToggleState commentToggleState,
         RenameStepState renameStepState,
+        FormatDocumentState formatDocumentState,
         LspServerConnectionService connectionService)
         : base(container, extensibilityObject)
     {
@@ -76,6 +79,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         _stepCodeLensState              = stepCodeLensState;
         _commentToggleState             = commentToggleState;
         _renameStepState                = renameStepState;
+        _formatDocumentState            = formatDocumentState;
         // LspServerConnectionService is a singleton already resolved (and its eager server launch
         // already kicked off) by ExtensionEntrypoint.OnInitializedAsync well before this class is
         // constructed — this constructor param just retrieves the same instance. It is NOT this
@@ -181,6 +185,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _stepCodeLensState.Service              = new StepCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<StepCodeLensService>());
             _commentToggleState.Service             = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
+            _formatDocumentState.Service             = new FormatDocumentService(interceptingPipe, _loggerFactory.CreateLogger<FormatDocumentService>());
             _navigationBarSymbolService              = new GherkinNavigationBarSymbolService(interceptingPipe, _loggerFactory.CreateLogger<GherkinNavigationBarSymbolService>());
             _hookFeatureCodeLensService               = new HookFeatureCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<HookFeatureCodeLensService>());
             _scenarioTestTargetService                = new ScenarioTestTargetService(interceptingPipe, _loggerFactory.CreateLogger<ScenarioTestTargetService>());
@@ -192,6 +197,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             // Set the VSSDK drop-down bar client redirect so the
             // Navigation Bar can fetch the Feature/Scenario/Step symbol tree.
             NavigationBarRedirect.FetchDocumentSymbolsAsync = _navigationBarSymbolService.FetchSymbolsAsync;
+
+            // Set the VSSDK command filter redirect so the keyboard shortcut interception
+            // for Edit.FormatDocument/Edit.FormatSelection calls our service.
+            FormatDocumentRedirect.FormatDocumentAsync = _formatDocumentState.Service.FormatDocumentAsync;
 
             // Set the classic hook-match-count CodeLens bridge (issue #372, unblocking #269 for
             // Visual Studio) — GetHookDetailsAsync reuses the same GoToHooksService the
@@ -317,6 +326,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _stepCodeLensState.FindUsagesRenderer = null;
             _commentToggleState.Service = null;
             _renameStepState.Service = null;
+            _formatDocumentState.Service = null;
+            FormatDocumentRedirect.FormatDocumentAsync = null;
             _navigationBarSymbolService = null;
             NavigationBarRedirect.FetchDocumentSymbolsAsync = null;
             _hookFeatureCodeLensService = null;

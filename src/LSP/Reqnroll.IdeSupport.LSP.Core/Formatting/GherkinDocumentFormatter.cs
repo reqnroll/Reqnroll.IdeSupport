@@ -141,6 +141,19 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
     private static bool IsTableCellContentRightAligned(string cellValue, GherkinFormatSettings formatSettings) =>
         formatSettings.RightAlignNumericTableCells && IsTableCellContentNumeric(cellValue);
 
+    /// <summary>
+    /// Pads <paramref name="displayValue"/> to <paramref name="width"/>, right-aligning it when
+    /// <paramref name="rawValueForAlignment"/> is numeric (per <see cref="IsTableCellContentRightAligned"/>).
+    /// The alignment check uses the raw, unescaped cell value — escaping only affects <c>\</c>/<c>|</c>/
+    /// newlines, none of which appear in numeric content, but keeping the two separate matches the
+    /// original per-cell behaviour exactly.
+    /// </summary>
+    private static string PadCell(string displayValue, int width, string rawValueForAlignment,
+        GherkinFormatSettings formatSettings) =>
+        IsTableCellContentRightAligned(rawValueForAlignment, formatSettings)
+            ? displayValue.PadLeft(width)
+            : displayValue.PadRight(width);
+
     private static string? GetUnfinishedTableCell(string lineText)
     {
         var match = Regex.Match(lineText, @"(?<!\\)(\\\\)*\|(?<remaining>.*?)$", RegexOptions.RightToLeft);
@@ -171,10 +184,7 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
                 result.Append(formatSettings.TableCellPadding);
                 var escapedCellValue = EscapeTableCellValue(item.c.Value);
                 var width = widths[item.i];
-                var paddedCell = IsTableCellContentRightAligned(item.c.Value, formatSettings)
-                    ? escapedCellValue.PadLeft(width)
-                    : escapedCellValue.PadRight(width);
-                result.Append(paddedCell);
+                result.Append(PadCell(escapedCellValue, width, item.c.Value, formatSettings));
                 result.Append(formatSettings.TableCellPadding);
                 result.Append('|');
             }
@@ -184,10 +194,9 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
             {
                 result.Append(formatSettings.TableCellPadding);
                 var cellIndex = row.Cells.Count();
-                if (cellIndex < widths.Length)
-                    result.Append(unfinishedCell.PadRight(widths[cellIndex]));
-                else
-                    result.Append(unfinishedCell);
+                result.Append(cellIndex < widths.Length
+                    ? PadCell(unfinishedCell, widths[cellIndex], unfinishedCell, formatSettings)
+                    : unfinishedCell);
                 result.Append(formatSettings.TableCellPadding);
                 result.Append('|');
             }

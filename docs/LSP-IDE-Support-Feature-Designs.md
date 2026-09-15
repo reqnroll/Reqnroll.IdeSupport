@@ -799,7 +799,9 @@ F10 is **implemented** (issue #162), following the same manual-glue pattern as F
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| ✅ Generic | ✅ Generic | ⚠️ Config |
+| ✅ Generic | 🔧 Plugin | ⚠️ Config |
+
+**Visual Studio note**: unlike VS Code, VS's out-of-process `LanguageServerProvider` model does not route the native `Edit.FormatDocument`/`Edit.FormatSelection` commands to `textDocument/formatting`/`rangeFormatting` on its own, even though the server advertises the capability — the same gap already worked around for Comment/Uncomment (F13). `FormatDocumentCommandFilter` (`VSSDKIntegration/FormatDocumentCommandFilter.cs`) is a VSSDK `IOleCommandTarget` filter that intercepts both commands, sends the standard LSP request itself via `FormatDocumentService` (`Extension/FormatDocument/FormatDocumentService.cs`), and — since this is a plain request/response rather than a server-pushed `workspace/applyEdit` — applies the returned `TextEdit`(s) to the VS text buffer directly.
 
 **Rider note**: `textDocument/formatting` takes priority via an opt-in `lspFormattingSupport` property override on the LSP server descriptor, which activates Rider's generic `LspFormattingService` — Rider's own formatter framework does not compete for `.feature` files.
 
