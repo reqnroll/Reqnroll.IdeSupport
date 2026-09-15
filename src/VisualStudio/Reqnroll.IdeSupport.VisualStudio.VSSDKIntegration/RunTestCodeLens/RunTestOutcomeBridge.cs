@@ -57,11 +57,6 @@ internal static class RunTestOutcomeBridge
 {
     private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
 
-    // Stable per-process id for the (never-unsubscribed) implicit "subscription" GetTestOutcomeAsync
-    // establishes server-side — reused across every call so a long session accumulates at most one,
-    // rather than one per scenario line ever computed.
-    private static readonly Guid DataPointId = Guid.NewGuid();
-
     private static readonly SemaphoreSlim InitLock = new(1, 1);
     private static volatile bool _unavailable;
     private static object? _serviceProxy;
@@ -114,6 +109,17 @@ internal static class RunTestOutcomeBridge
     /// yet run, or the underlying (unsupported, internal) API is unavailable for any reason —
     /// including a future VS update changing its shape. Never throws.
     /// </summary>
+    /// <param name="dataPointId">
+    /// Caller-owned subscription identity (issue #700 correction). The server's
+    /// <c>SubscriptionTracker</c> (decompiled from <c>Microsoft.VisualStudio.TestWindow.Host.dll</c>)
+    /// keys one test-method set per <paramref name="dataPointId"/> and <b>replaces</b> that set on
+    /// every <c>GetTestOutcomeAsync</c> call — it does not merge. A single id shared across every
+    /// scenario line (the original design) meant each line's poll silently evicted every other line's
+    /// push subscription, so only whichever line polled most recently ever received a completion
+    /// notification. Callers must pass a stable identity unique to what they're tracking — one per
+    /// <see cref="RunTestCodeLensDataPoint"/> instance, mirroring VS's own <c>AbstractTestDataPoint.id</c>
+    /// (an instance field, not shared), which this bridge originally deviated from.
+    /// </param>
     /// <remarks>
     /// Three stages (issue #590), each independently testable: <b>acquire</b>
     /// (<see cref="GetOrCreateProxyAsync"/> — locate the assembly, resolve the internal types, bind
@@ -126,7 +132,7 @@ internal static class RunTestOutcomeBridge
     /// test hasn't been run yet" — both of which surfaced identically as a silent <c>null</c> before
     /// this split.
     /// </remarks>
-    public static async Task<RunTestOutcome?> TryGetOutcomeAsync(TestMethodIdentifier testMethod, CancellationToken cancellationToken)
+    public static async Task<RunTestOutcome?> TryGetOutcomeAsync(Guid dataPointId, TestMethodIdentifier testMethod, CancellationToken cancellationToken)
     {
         if (_unavailable)
             return null;
@@ -137,7 +143,7 @@ internal static class RunTestOutcomeBridge
             if (proxy is null || getTestOutcomeMethod is null)
                 return null;
 
-            var outcomeName = await InvokeGetTestOutcomeAsync(proxy, getTestOutcomeMethod, testMethod, cancellationToken)
+            var outcomeName = await InvokeGetTestOutcomeAsync(proxy, getTestOutcomeMethod, dataPointId, testMethod, cancellationToken)
                 .ConfigureAwait(false);
             return ParseOutcome(outcomeName);
         }
@@ -161,9 +167,9 @@ internal static class RunTestOutcomeBridge
     /// unit test just to construct a fixture value that is never actually inspected here.
     /// </summary>
     internal static async Task<string?> InvokeGetTestOutcomeAsync(
-        object proxy, MethodInfo getTestOutcomeMethod, object testMethod, CancellationToken cancellationToken)
+        object proxy, MethodInfo getTestOutcomeMethod, Guid dataPointId, object testMethod, CancellationToken cancellationToken)
     {
-        var resultTask = (Task?)getTestOutcomeMethod.Invoke(proxy, new object[] { DataPointId, testMethod, cancellationToken });
+        var resultTask = (Task?)getTestOutcomeMethod.Invoke(proxy, new object[] { dataPointId, testMethod, cancellationToken });
         if (resultTask is null)
             return null;
 

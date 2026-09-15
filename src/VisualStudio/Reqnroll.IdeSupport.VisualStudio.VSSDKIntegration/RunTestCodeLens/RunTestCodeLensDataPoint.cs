@@ -37,6 +37,13 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint, IDispo
     private readonly int _line;
     private readonly IIdeSupportLogger _logger;
 
+    // Own subscription identity for RunTestOutcomeBridge.TryGetOutcomeAsync (issue #700 correction) —
+    // the server's SubscriptionTracker replaces a dataPointId's whole tracked-method set on every poll
+    // rather than merging, so a shared id across every line's data point meant each line's poll evicted
+    // every other line's push subscription. One Guid per instance, mirroring VS's own
+    // AbstractTestDataPoint.id, keeps each line's subscription independent.
+    private readonly Guid _outcomeSubscriptionId = Guid.NewGuid();
+
     private IReadOnlyList<TestMethodIdentifier> _cachedMethods = Array.Empty<TestMethodIdentifier>();
     private bool _subscribedToOutcomeChanges;
     private AsyncEventHandler? _invalidatedAsync;
@@ -160,7 +167,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint, IDispo
         // good enough for the common single-method case; a mixed-outcome multi-target Outline
         // (allowRowTests = false) just shows the first target's state, not an aggregate.
         ImageId? imageId = null;
-        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_cachedMethods[0], token).ConfigureAwait(false);
+        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_outcomeSubscriptionId, _cachedMethods[0], token).ConfigureAwait(false);
         if (outcome is { } resolvedOutcome)
             imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
 

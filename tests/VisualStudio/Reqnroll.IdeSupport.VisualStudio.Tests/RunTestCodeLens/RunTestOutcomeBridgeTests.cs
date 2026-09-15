@@ -81,7 +81,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
     {
         var outcome = await RunTestOutcomeBridge.InvokeGetTestOutcomeAsync(
             new FakeTestOutcomeService(), Method(nameof(FakeTestOutcomeService.GetOutcome)),
-            MakeTestMethod(), CancellationToken.None);
+            Guid.NewGuid(), MakeTestMethod(), CancellationToken.None);
 
         outcome.Should().Be("Passed");
     }
@@ -91,7 +91,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
     {
         var outcome = await RunTestOutcomeBridge.InvokeGetTestOutcomeAsync(
             new FakeTestOutcomeService(), Method(nameof(FakeTestOutcomeService.ReturnsNullTask)),
-            MakeTestMethod(), CancellationToken.None);
+            Guid.NewGuid(), MakeTestMethod(), CancellationToken.None);
 
         outcome.Should().BeNull();
     }
@@ -103,7 +103,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
         // catch-all treats as a permanent API shape change via HandleFailure.
         var act = () => RunTestOutcomeBridge.InvokeGetTestOutcomeAsync(
             new FakeTestOutcomeService(), Method(nameof(FakeTestOutcomeService.ReturnsATaskWithNoResultProperty)),
-            MakeTestMethod(), CancellationToken.None);
+            Guid.NewGuid(), MakeTestMethod(), CancellationToken.None);
 
         await act.Should().ThrowAsync<MissingMemberException>();
     }
@@ -113,7 +113,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
     {
         var act = () => RunTestOutcomeBridge.InvokeGetTestOutcomeAsync(
             new FakeTestOutcomeService(), Method(nameof(FakeTestOutcomeService.ThrowsSynchronously)),
-            MakeTestMethod(), CancellationToken.None);
+            Guid.NewGuid(), MakeTestMethod(), CancellationToken.None);
 
         await act.Should().ThrowAsync<Exception>();
     }
