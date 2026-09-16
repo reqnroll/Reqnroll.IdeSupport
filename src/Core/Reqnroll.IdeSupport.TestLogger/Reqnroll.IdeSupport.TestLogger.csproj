@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- VSTest logger (ITestLoggerWithParameters) that the IDE extensions bundle and register for
+       IDE-triggered test runs via runsettings (TestAdaptersPaths + LoggerRunSettings). It observes
+       per-test-case results directly from the vstest pipeline instead of VS's internal
+       test-outcome push (which never fires for Scenario Outline rows — issue #702).
+
+       Constraints, all load-bearing:
+       - The assembly name MUST end in "TestLogger": vstest discovers loggers from
+         TestAdaptersPaths / the test source directory by that file-name suffix
+         (TestPlatformConstants.TestLoggerEndsWithPattern), not by attribute scan.
+       - netstandard2.0 with ONLY Microsoft.TestPlatform.ObjectModel referenced: loggers load in
+         the *runner* process (VS's bundled net48 vstest.console.exe for Test Explorer, the SDK's
+         vstest.console.dll for `dotnet test`), which supplies ObjectModel itself. Nothing from
+         this repo may be referenced here — it would have to be shipped next to the logger and
+         resolved inside a process we don't control. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Reqnroll.IdeSupport.TestLogger</RootNamespace>
+    <AssemblyName>Reqnroll.IdeSupport.TestLogger</AssemblyName>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compile-time contract only; the runner provides it at run time. ExcludeAssets=runtime keeps
+         it (and its transitive closure) out of our output so the VSIX's TestLogger\ folder holds
+         nothing but our own assembly. -->
+    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.8.0" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

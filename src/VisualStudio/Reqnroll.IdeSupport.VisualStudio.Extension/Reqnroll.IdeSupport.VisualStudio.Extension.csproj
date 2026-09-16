@@ -85,6 +85,19 @@
         <Name>Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration</Name>
         <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
     </ProjectReference>
+    <!-- VSTest logger bundled under TestLogger\ (NOT the extension root, and NOT referenced by any
+         extension assembly): VSSDKIntegration's IRunSettingsService export points each Test Explorer
+         run's TestAdaptersPaths at that sub-folder, and vstest picks the logger up by its
+         *TestLogger.dll file-name suffix. Keeping it in its own folder keeps vstest's extension scan
+         away from the rest of the VSIX; BuiltProjectOutputGroup only, so its compile-time
+         Microsoft.TestPlatform.ObjectModel reference (supplied by the runner at run time) is not
+         bundled alongside. -->
+    <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.TestLogger\Reqnroll.IdeSupport.TestLogger.csproj">
+        <Name>Reqnroll.IdeSupport.TestLogger</Name>
+        <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+        <VSIXSubPath>TestLogger</VSIXSubPath>
+        <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3b</IncludeOutputGroupsInVSIX>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- ================================================================

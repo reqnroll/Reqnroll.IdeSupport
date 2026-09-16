@@ -7,6 +7,7 @@
     </Folder>
     <Folder Name="/Core/">
         <Project Path="src/Core/Reqnroll.IdeSupport.Common/Reqnroll.IdeSupport.Common.csproj" Id="9b9365f9-b9e0-48cf-a611-af594033611e" />
+        <Project Path="src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj" />
     </Folder>
     <Folder Name="/LSP/">
         <Project Path="src/LSP/Reqnroll.IdeSupport.LSP.Connector/Connector.Generic.NetFX.Bridge/Connector.NetFX.Bridge.csproj" />

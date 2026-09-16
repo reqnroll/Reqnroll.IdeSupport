@@ -59,6 +59,15 @@
         <HintPath>$(VsInstallDir)\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Microsoft.VisualStudio.TestWindow.Internal.dll</HintPath>
         <Private>false</Private>
       </Reference>
+      <!-- Microsoft.VisualStudio.TestWindow.Interfaces.dll: IRunSettingsService / IRunSettingsConfigurationInfo /
+           ITestContainer (Microsoft.VisualStudio.TestWindow.Extensibility) — the MEF hook Test Explorer uses to
+           let extensions contribute runsettings to each run (TestLogger/ReqnrollTestLoggerRunSettingsService).
+           Same vswhere-resolved, Private=false arrangement as TestWindow.Internal above, for the same reason:
+           VS-shipped, not on NuGet. -->
+      <Reference Include="Microsoft.VisualStudio.TestWindow.Interfaces">
+        <HintPath>$(VsInstallDir)\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Microsoft.VisualStudio.TestWindow.Interfaces.dll</HintPath>
+        <Private>false</Private>
+      </Reference>
     </ItemGroup>
   </Target>
 
