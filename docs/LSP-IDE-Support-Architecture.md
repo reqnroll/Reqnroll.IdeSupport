@@ -922,7 +922,7 @@ There are only two workflow files: `ci.yml` and `test-lsp.yml` (a reusable workf
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | Push to `master` / PR / manual dispatch, path-filtered to `src/{Core,LSP,VisualStudio,VSCode,Rider}/**` and the matching `tests/**` trees | Orchestrates everything below via jobs, gated per-client on which paths changed (`changes` job) |
+| `ci.yml` | Push to `main` / PR / manual dispatch, path-filtered to `src/{Core,LSP,VisualStudio,VSCode,Rider}/**` and the matching `tests/**` trees | Orchestrates everything below via jobs, gated per-client on which paths changed (`changes` job) |
 | `test-lsp.yml` | Called by `ci.yml`'s `lsp` job | Builds the LSP server as a self-contained executable for all four RIDs and runs `LSP.Core.Tests`/`LSP.Server.Tests`/`LSP.Server.Specs` |
 
 `ci.yml`'s per-client jobs (`build-vs-extension` → `test-vs-extension`/`test-vs-wizards` → `publish-vsix`; `build-vscode-extension`/`tsc-only`; `build-rider-plugin` → `test-rider-plugin` → `publish-rider-plugin`) are jobs inside that one file, not separate workflows. Despite their names, `publish-vsix` and `publish-rider-plugin` only upload the built package as a CI artifact — actual Marketplace publication is not automated by either job today.

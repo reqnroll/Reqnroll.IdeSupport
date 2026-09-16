@@ -54,7 +54,7 @@ name: CI
 on:
   push:
     branches:
-      - 'master'
+      - 'main'
     paths:
       - 'src/Core/**'
       - 'src/LSP/**'

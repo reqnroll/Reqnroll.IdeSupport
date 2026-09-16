@@ -29,7 +29,7 @@ significantly between the .NET server/VS pieces and the TypeScript VS Code piece
 
 ## General workflow
 
-- Branch from `master`; there is no long-lived `develop` branch.
+- Branch from `main`; there is no long-lived `develop` branch.
 - Keep commits scoped and use a `type(scope): summary` style commit message where it fits
   naturally (`feat(vs): …`, `fix(lsp): …`, `chore(vscode): …`) — not enforced, but it's the
   prevailing style in the history and makes `git log` skimmable.

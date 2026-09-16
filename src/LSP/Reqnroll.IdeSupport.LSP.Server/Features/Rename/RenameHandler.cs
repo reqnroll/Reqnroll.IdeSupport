@@ -435,7 +435,7 @@ public sealed class RenameHandler
         // the Rename Step command) applies whatever WorkspaceEdit this response carries, so
         // returning the real edit would apply it twice — the second pass re-runs each TextEdit
         // against the already-renamed text and corrupts every touched file. This was latent on
-        // master: the in-request push cancelled this very request (issue #654), so VS never got
+        // main: the in-request push cancelled this very request (issue #654), so VS never got
         // a response to apply. The Rename Step command ignores the result either way.
         return _clientIdeContext.IsVisualStudio ? new WorkspaceEdit() : workspaceEdit;
     }
