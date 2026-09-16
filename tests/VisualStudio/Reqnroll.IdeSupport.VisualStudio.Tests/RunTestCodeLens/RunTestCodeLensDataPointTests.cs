@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
@@ -96,6 +97,32 @@ public class RunTestCodeLensDataPointTests : IDisposable
 
         var completed = await Task.WhenAny(invalidated.Task, Task.Delay(TimeSpan.FromMilliseconds(300)));
         completed.Should().NotBe(invalidated.Task, "a disposed data point must not still react to TestChanged");
+    }
+
+    [Fact]
+    public async Task Concurrent_GetDataAsync_calls_subscribe_exactly_once()
+    {
+        // Fresh-eyes review (#701): the subscribe-once guard was a plain check-then-act on a bool.
+        // GetDataAsync's own remarks already say VS can call it more than once per instance
+        // (incremental refreshes); if two such calls overlap, both could see "not yet subscribed" and
+        // both subscribe, double-firing InvalidatedAsync per notification. Firing many concurrent
+        // calls raises the odds of exposing that interleaving if the guard ever regresses back to a
+        // plain bool -- with the fix in place (Interlocked.CompareExchange), the outcome below is
+        // deterministic regardless of interleaving.
+        var callbackService = CreateCallbackServiceReturning(
+            new RunTestTargetEntry(Line, ResolvedMethod.OutputFilePath, ResolvedMethod.ManagedType, ResolvedMethod.ManagedMethod));
+        using var sut = CreateSut(callbackService);
+
+        await Task.WhenAll(Enumerable.Range(0, 20)
+            .Select(_ => sut.GetDataAsync(new CodeLensDescriptorContext(null, new Dictionary<object, object>()), CancellationToken.None)));
+
+        var invalidationCount = 0;
+        sut.InvalidatedAsync += (_, _) => { Interlocked.Increment(ref invalidationCount); return Task.CompletedTask; };
+
+        await RaiseTestChanged(ResolvedMethod);
+        await Task.Delay(TimeSpan.FromMilliseconds(300));
+
+        invalidationCount.Should().Be(1, "GetDataAsync running concurrently must still subscribe exactly once, however many times it's called");
     }
 
     private static Task RaiseTestChanged(TestMethodIdentifier testMethod) =>

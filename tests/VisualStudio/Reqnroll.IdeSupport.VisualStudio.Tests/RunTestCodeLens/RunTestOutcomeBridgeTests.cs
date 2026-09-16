@@ -137,6 +137,18 @@ public class RunTestOutcomeBridgeTests : IDisposable
     }
 
     [Fact]
+    public void HandleFailure_latches_unavailable_for_an_InvalidCastException()
+    {
+        // Fresh-eyes review (#701): GetOrCreateProxyAsync casts the reflectively-read `rpc` field to
+        // the public StreamJsonRpc.JsonRpc type -- if a future VS update ever changes that field's
+        // declared type, the resulting InvalidCastException is exactly the same kind of permanent
+        // shape change a MissingFieldException represents, not a transient connection hiccup.
+        RunTestOutcomeBridge.HandleFailure(new InvalidCastException("field is no longer a JsonRpc"), "GetOrCreateProxyAsync");
+
+        RunTestOutcomeBridge.IsUnavailableForTests.Should().BeTrue();
+    }
+
+    [Fact]
     public void HandleFailure_does_not_latch_unavailable_for_a_transient_exception()
     {
         // The whole point of distinguishing the two (this type's own remarks): a dropped
@@ -154,6 +166,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
         {
             RunTestOutcomeBridge.HandleFailure(new TypeLoadException(), "step");
             RunTestOutcomeBridge.HandleFailure(new MissingMemberException(), "step");
+            RunTestOutcomeBridge.HandleFailure(new InvalidCastException(), "step");
             RunTestOutcomeBridge.HandleFailure(new InvalidOperationException(), "step");
             RunTestOutcomeBridge.HandleFailure(new NullReferenceException(), "step");
         };

@@ -45,7 +45,12 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint, IDispo
     private readonly Guid _outcomeSubscriptionId = Guid.NewGuid();
 
     private IReadOnlyList<TestMethodIdentifier> _cachedMethods = Array.Empty<TestMethodIdentifier>();
-    private bool _subscribedToOutcomeChanges;
+    // int, not bool: GetDataAsync can run concurrently on the same instance (VS re-queries on
+    // incremental refreshes, per its own remarks below), and a plain check-then-act on a bool let two
+    // overlapping calls both observe "not yet subscribed" and both subscribe, double-firing
+    // InvalidatedAsync per notification. Interlocked.CompareExchange makes "subscribe exactly once"
+    // atomic; 0 = not subscribed, 1 = subscribed.
+    private int _subscribedToOutcomeChanges;
     private AsyncEventHandler? _invalidatedAsync;
 
     public RunTestCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, IIdeSupportLogger logger)
@@ -83,26 +88,37 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint, IDispo
     /// The event payload is untyped <see cref="object"/> (see <see cref="RunTestOutcomeBridge.TestChanged"/>'s
     /// remarks for why) — pattern-match to the real type here, where referencing it is already required.
     /// </summary>
+    /// <remarks>
+    /// Wrapped in try/catch deliberately: this runs inside <see cref="RunTestOutcomeBridge.TestChanged"/>'s
+    /// multicast invocation, shared by every other line's data point. An unhandled exception here would
+    /// abort that invocation partway through, silently starving every subscriber registered after this
+    /// one in the list for that notification — the opposite of this feature's own "never let a failure
+    /// here take down the lens" design elsewhere in <see cref="RunTestOutcomeBridge"/>.
+    /// </remarks>
     private void OnTestOutcomeChanged(object? sender, object testMethod)
     {
-        if (testMethod is not TestMethodIdentifier identifier || !_cachedMethods.Contains(identifier))
-            return;
+        try
+        {
+            if (testMethod is not TestMethodIdentifier identifier || !_cachedMethods.Contains(identifier))
+                return;
 
-        _logger.LogVerbose($"RunTestCodeLensDataPoint: OnTestOutcomeChanged — line={_line} matched changed test, invalidating.");
-        var handler = _invalidatedAsync;
-        if (handler is not null)
-            TplExtensions.InvokeAsync(handler, this, EventArgs.Empty).Forget();
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: OnTestOutcomeChanged — line={_line} matched changed test, invalidating.");
+            var handler = _invalidatedAsync;
+            if (handler is not null)
+                TplExtensions.InvokeAsync(handler, this, EventArgs.Empty).Forget();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, $"RunTestCodeLensDataPoint: OnTestOutcomeChanged — line={_line} failed handling a test-changed notification.");
+        }
     }
 
     /// <inheritdoc />
     /// <remarks>Unsubscribes from <see cref="RunTestOutcomeBridge.TestChanged"/> (issue #700) — without this, every data point CodeLens ever created would stay reachable forever through that static event's invocation list.</remarks>
     public void Dispose()
     {
-        if (_subscribedToOutcomeChanges)
-        {
+        if (Interlocked.Exchange(ref _subscribedToOutcomeChanges, 0) != 0)
             RunTestOutcomeBridge.TestChanged -= OnTestOutcomeChanged;
-            _subscribedToOutcomeChanges = false;
-        }
     }
 
     /// <inheritdoc />
@@ -148,13 +164,11 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint, IDispo
             .ToList();
 
         // Subscribe once we actually know which methods to care about (issue #700) — a completed run
-        // for any of them should invalidate this lens so the glyph re-fetches. Guarded since GetDataAsync
-        // can run more than once per data point (VS re-queries on incremental refreshes).
-        if (!_subscribedToOutcomeChanges)
-        {
+        // for any of them should invalidate this lens so the glyph re-fetches. GetDataAsync can run
+        // concurrently on the same instance (VS re-queries on incremental refreshes), so the
+        // subscribe-exactly-once check has to be atomic, not a plain check-then-act on a bool.
+        if (Interlocked.CompareExchange(ref _subscribedToOutcomeChanges, 1, 0) == 0)
             RunTestOutcomeBridge.TestChanged += OnTestOutcomeChanged;
-            _subscribedToOutcomeChanges = true;
-        }
 
         // "Scenarios" (plural) for a Scenario Outline — running it runs every Examples: row, not a
         // single case — "Scenario" for a plain scenario. All entries on one line share the same

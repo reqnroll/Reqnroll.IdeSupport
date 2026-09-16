@@ -307,14 +307,23 @@ internal static class RunTestOutcomeBridge
 
     /// <summary>
     /// Classifies a caught exception and dispatches to the matching failure handler: a
-    /// <see cref="TypeLoadException"/> or <see cref="MissingMemberException"/> means the API's shape
-    /// has changed (permanent for the process's lifetime — see <see cref="DisablePermanently"/>);
+    /// <see cref="TypeLoadException"/>, <see cref="MissingMemberException"/> (covers the derived
+    /// <see cref="MissingFieldException"/> too), or <see cref="InvalidCastException"/> means the API's
+    /// shape has changed (permanent for the process's lifetime — see <see cref="DisablePermanently"/>);
     /// anything else is treated as transient (see <see cref="ResetForRetry"/>). Shared by every
     /// stage's catch clause so the two-way classification lives in exactly one place.
     /// </summary>
+    /// <remarks>
+    /// <see cref="InvalidCastException"/> is included because <see cref="GetOrCreateProxyAsync"/>'s
+    /// reflective read of <c>CodeLensTestInformationProxy.rpc</c> casts the field's value to the public
+    /// <c>StreamJsonRpc.JsonRpc</c> type — if a future VS update ever changes that field's declared
+    /// type, the cast failing is exactly the same kind of permanent shape change a
+    /// <see cref="MissingFieldException"/> represents, not a transient connection hiccup worth retrying
+    /// on every subsequent poll.
+    /// </remarks>
     internal static void HandleFailure(Exception ex, string step)
     {
-        if (ex is TypeLoadException or MissingMemberException)
+        if (ex is TypeLoadException or MissingMemberException or InvalidCastException)
             DisablePermanently(ex, step);
         else
             ResetForRetry(ex, step);
