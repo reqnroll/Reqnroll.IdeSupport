@@ -68,4 +68,28 @@ public static class RunTestCodeLensRedirect
         InvalidateAllCached?.Invoke();
         TaggerRegistry.InvalidateAll();
     }
+
+    private static int _outcomeRevision;
+
+    /// <summary>
+    /// Monotonic counter bumped whenever the in-proc <c>TestOutcomeStore</c> changes. Folded into every
+    /// Run lens tag's <c>ElementDescription</c> (see <c>RunTestCodeLensTaggerProvider.EncodeElementDescription</c>)
+    /// so a refresh after a test run yields a <em>new</em> descriptor per line, which is what makes the
+    /// CodeLens host discard the OOP data point and call <c>GetDataAsync</c> again — the tagger reuses the
+    /// existing tag when the description is unchanged, and an identical descriptor would leave the old
+    /// glyph in place (issue #700's root cause).
+    /// </summary>
+    public static int OutcomeRevision => Volatile.Read(ref _outcomeRevision);
+
+    /// <summary>
+    /// Outcomes changed: version the descriptors and refresh every open .feature file's Run lens tagger.
+    /// Deliberately <em>not</em> <see cref="InvalidateAll"/> — that also drops the resolved-target cache and
+    /// re-triggers <c>resolveTestTargets</c> for every visible line (issue #491); the targets haven't changed,
+    /// only their outcomes.
+    /// </summary>
+    public static void NotifyOutcomesChanged()
+    {
+        Interlocked.Increment(ref _outcomeRevision);
+        TaggerRegistry.InvalidateAll();
+    }
 }

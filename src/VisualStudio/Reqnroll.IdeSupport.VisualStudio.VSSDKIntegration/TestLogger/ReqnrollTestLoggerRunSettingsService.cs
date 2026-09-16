@@ -33,10 +33,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
 ///   every run.</item>
 /// </list>
 /// <para>
-/// <b>Spike status:</b> the logger currently writes results to
-/// <c>%LOCALAPPDATA%\Reqnroll\reqnroll-vs-testlogger-&lt;date&gt;-&lt;devenv pid&gt;.log</c>; nothing in the
-/// extension reads it back yet. That file appearing (with the injected parameters echoed on its first
-/// line) is the evidence this hook works end to end from Test Explorer.
+/// Kill switch: set <c>REQNROLL_IDE_DISABLE_TEST_LOGGER=1</c> in devenv's environment and nothing is
+/// injected (the glyph falls back to the reflection bridge). For a misbehaving logger this is cheaper
+/// than uninstalling the extension.
 /// </para>
 /// </remarks>
 [Export(typeof(IRunSettingsService))]
@@ -47,6 +46,15 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
 
     private const string ReqnrollRuntimeAssemblyFileName = "Reqnroll.dll";
+    internal const string DisableEnvironmentVariable = "REQNROLL_IDE_DISABLE_TEST_LOGGER";
+
+    private readonly TestOutcomeListener _listener;
+
+    [ImportingConstructor]
+    public ReqnrollTestLoggerRunSettingsService(TestOutcomeListener listener)
+    {
+        _listener = listener ?? throw new ArgumentNullException(nameof(listener));
+    }
 
     /// <inheritdoc />
     public string Name => "Reqnroll IDE test logger";
@@ -56,6 +64,12 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     {
         try
         {
+            if (IsDisabled())
+            {
+                Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: disabled via {DisableEnvironmentVariable}; not injecting.");
+                return inputRunSettingDocument;
+            }
+
             if (configurationInfo.RequestState != RunSettingConfigurationInfoState.Execution)
             {
                 Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: {configurationInfo.RequestState} request — not injecting.");
@@ -81,21 +95,41 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
                 return inputRunSettingDocument;
             }
 
+            var registration = _listener.RegisterRun();
+            if (registration is null)
+            {
+                log.Log(MessageLevel.Warning, "Reqnroll: could not open the loopback listener for test outcomes; live test outcomes will not be recorded for this run.");
+                return inputRunSettingDocument;
+            }
+
             int ideProcessId;
             using (var devenv = Process.GetCurrentProcess())
                 ideProcessId = devenv.Id;
-            var logFilePath = Path.Combine(
-                ReqnrollLogPaths.ResolveLogDirectory(),
-                $"reqnroll-vs-testlogger-{DateTime.Now:yyyyMMdd}-{ideProcessId}.log");
 
-            var merged = TestLoggerRunSettings.Inject(inputRunSettingDocument, loggerDirectory, new[]
+            var parameters = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string, string>(TestLoggerRunSettings.LogFilePathParameter, logFilePath),
-                new KeyValuePair<string, string>(TestLoggerRunSettings.IdeProcessIdParameter, ideProcessId.ToString()),
-            });
+                new(TestLoggerRunSettings.EndpointParameter, registration.Endpoint),
+                new(TestLoggerRunSettings.TokenParameter, registration.Token),
+                new(TestLoggerRunSettings.RunIdParameter, registration.RunId),
+                new(TestLoggerRunSettings.IdeProcessIdParameter, ideProcessId.ToString()),
+            };
 
-            log.Log(MessageLevel.Informational, $"Reqnroll: registered test logger from '{loggerDirectory}'; results will be appended to '{logFilePath}'.");
-            Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: merged runsettings:{Environment.NewLine}{merged.OuterXml}");
+            // Optional troubleshooting mirror: the same NDJSON the IDE receives, appended to a file.
+            var mirror = Environment.GetEnvironmentVariable(TestLoggerRunSettings.MirrorFileEnvironmentVariable);
+            if (!string.IsNullOrWhiteSpace(mirror))
+            {
+                var mirrorPath = string.Equals(mirror, "1", StringComparison.Ordinal)
+                    ? Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), $"reqnroll-vs-testlogger-{DateTime.Now:yyyyMMdd}-{ideProcessId}.ndjson")
+                    : mirror!;
+                parameters.Add(new KeyValuePair<string, string>(TestLoggerRunSettings.LogFilePathParameter, mirrorPath));
+            }
+
+            var merged = TestLoggerRunSettings.Inject(inputRunSettingDocument, loggerDirectory, parameters);
+
+            log.Log(MessageLevel.Informational, $"Reqnroll: registered test logger from '{loggerDirectory}' (run {registration.RunId}, endpoint {registration.Endpoint}).");
+            // The per-run token stays out of our own log (VS's Diagnostic-level Tests pane still shows it;
+            // that's VS's call, this file is ours).
+            Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: merged runsettings:{Environment.NewLine}{merged.OuterXml.Replace(registration.Token, "<redacted>")}");
             return merged;
         }
         catch (Exception ex)
@@ -105,6 +139,12 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             Logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}.{nameof(AddRunSettings)} failed");
             return inputRunSettingDocument;
         }
+    }
+
+    private static bool IsDisabled()
+    {
+        var value = Environment.GetEnvironmentVariable(DisableEnvironmentVariable);
+        return !string.IsNullOrEmpty(value) && value != "0" && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

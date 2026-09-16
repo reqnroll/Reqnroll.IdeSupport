@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -11,25 +9,29 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 namespace Reqnroll.IdeSupport.TestLogger;
 
 /// <summary>
-/// VSTest logger that records every individual <see cref="TestResult"/> of an IDE-triggered run —
-/// including one per Scenario Outline example row — so the IDE can derive pass/fail state from the
-/// standard vstest pipeline instead of VS's internal, outline-blind test-outcome push (issue #702).
+/// VSTest logger that streams every individual <see cref="TestResult"/> of an IDE-triggered run —
+/// including one per Scenario Outline example row — to the IDE that registered it, so the IDE can
+/// derive pass/fail state from the standard vstest pipeline instead of VS's internal, outline-blind
+/// test-outcome push (issue #702).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Registered by the IDE side (VS: the <c>IRunSettingsService</c> export in VSSDKIntegration) through
-/// the runsettings it injects into each run:
-/// <c>&lt;RunConfiguration&gt;&lt;TestAdaptersPaths&gt;</c> pointing at the extension's bundled copy of this
-/// assembly, and <c>&lt;LoggerRunSettings&gt;&lt;Loggers&gt;&lt;Logger friendlyName="ReqnrollIde"&gt;</c>
-/// whose <c>&lt;Configuration&gt;</c> children arrive here as the parameter dictionary of
-/// <see cref="Initialize(TestLoggerEvents, Dictionary{string, string})"/>.
+/// the runsettings it injects into each run: <c>&lt;RunConfiguration&gt;&lt;TestAdaptersPaths&gt;</c> pointing
+/// at the extension's bundled copy of this assembly, and
+/// <c>&lt;LoggerRunSettings&gt;&lt;Loggers&gt;&lt;Logger friendlyName="ReqnrollIde"&gt;</c> whose
+/// <c>&lt;Configuration&gt;</c> children arrive here as the parameter dictionary. Rider / VS Code pass the
+/// same values as <c>--logger "ReqnrollIde;Endpoint=…;Token=…"</c>.
 /// </para>
 /// <para>
-/// <b>Spike scope:</b> this writes a line-oriented log file (path supplied by the IDE in
-/// <see cref="LogFilePathParameter"/>) rather than talking to the IDE over IPC — the feasibility
-/// question it answers is "does the IDE's injected registration reach us with our parameters
-/// intact?", not the wire format. The IPC channel is the next design step; the parameter that will
-/// identify its endpoint is already carried (<see cref="IdeProcessIdParameter"/>).
+/// Wire format: newline-delimited JSON over one TCP loopback connection, IDE sends nothing back.
+/// Messages: <c>hello</c> (carries the token), <c>runStart</c>, <c>result</c> (one per test case),
+/// <c>runComplete</c>. Field names are the contract with <c>TestOutcomeListener</c> on the IDE side;
+/// <see cref="ProtocolVersion"/> is bumped for incompatible changes, unknown fields are ignored.
+/// </para>
+/// <para>
+/// Without an <c>Endpoint</c> the logger is inert (a hand-written runsettings naming it must not break
+/// a run). Every sink failure ends in "stop sending" — never in an exception reaching vstest.
 /// </para>
 /// </remarks>
 [FriendlyName(FriendlyName)]
@@ -42,11 +44,29 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
     /// <summary>Stable extension URI; the IDE may register by URI instead of friendly name.</summary>
     public const string ExtensionUri = "logger://Reqnroll/IdeSupport/v1";
 
-    /// <summary><c>&lt;Configuration&gt;</c> element: absolute path of the file this logger appends to.</summary>
+    /// <summary>Bumped for incompatible wire-format changes; sent in <c>hello</c>.</summary>
+    public const int ProtocolVersion = 1;
+
+    /// <summary><c>host:port</c> the IDE listens on for this run (loopback).</summary>
+    public const string EndpointParameter = "Endpoint";
+
+    /// <summary>Per-run secret; sent in <c>hello</c>, the IDE drops the connection on mismatch.</summary>
+    public const string TokenParameter = "Token";
+
+    /// <summary>Correlation id echoed in every message.</summary>
+    public const string RunIdParameter = "RunId";
+
+    /// <summary>PID of the IDE instance that injected the registration (diagnostic only).</summary>
+    public const string IdeProcessIdParameter = "IdeProcessId";
+
+    /// <summary>Optional troubleshooting mirror: absolute path of a file the same NDJSON lines are appended to.</summary>
     public const string LogFilePathParameter = "LogFilePath";
 
-    /// <summary><c>&lt;Configuration&gt;</c> element: PID of the IDE instance that injected the registration.</summary>
-    public const string IdeProcessIdParameter = "IdeProcessId";
+    /// <summary>Environment variable equivalent of <see cref="LogFilePathParameter"/> (set on the runner process).</summary>
+    public const string LogFileEnvironmentVariable = "REQNROLL_TESTLOGGER_FILE";
+
+    /// <summary>Upper bound on the captured stdout forwarded per result; the rest is dropped and flagged.</summary>
+    public const int MaxStdoutLength = 64 * 1024;
 
     // vstest's ManagedNameConstants (Microsoft.TestPlatform.AdapterUtilities) — the row-invariant
     // identity every adapter attaches to a test case. Read by id off TestCase.Properties rather than
@@ -54,9 +74,8 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
     private const string ManagedTypePropertyId = "TestCase.ManagedType";
     private const string ManagedMethodPropertyId = "TestCase.ManagedMethod";
 
-    private readonly object _writeLock = new();
-    private string? _logFilePath;
-    private string _ideProcessId = "?";
+    private readonly OutcomeSink _sink = new();
+    private string _runId = string.Empty;
 
     /// <inheritdoc />
     public void Initialize(TestLoggerEvents events, string testRunDirectory)
@@ -71,80 +90,114 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
         if (events is null) throw new ArgumentNullException(nameof(events));
         parameters ??= new Dictionary<string, string?>();
 
-        _logFilePath = ResolveLogFilePath(parameters);
-        // netstandard2.0's string.IsNullOrWhiteSpace carries no nullability annotation, hence the
-        // explicit null checks alongside it here and below.
-        if (parameters.TryGetValue(IdeProcessIdParameter, out var pid) && pid is not null && !string.IsNullOrWhiteSpace(pid))
-            _ideProcessId = pid;
+        _runId = Get(parameters, RunIdParameter) ?? Guid.NewGuid().ToString("N");
+        var token = Get(parameters, TokenParameter) ?? string.Empty;
+        var idePid = Get(parameters, IdeProcessIdParameter) ?? string.Empty;
 
-        Append($"initialize runner-pid={Process.GetCurrentProcess().Id} ide-pid={_ideProcessId} parameters={FormatParameters(parameters)}");
+        var filePath = Get(parameters, LogFilePathParameter) ?? Environment.GetEnvironmentVariable(LogFileEnvironmentVariable);
+        if (filePath is not null && !string.IsNullOrWhiteSpace(filePath))
+            _sink.SetFile(filePath);
 
-        events.TestRunStart += (_, e) => Append($"run-start sources={e.TestRunCriteria.Sources?.Count() ?? 0} tests={e.TestRunCriteria.Tests?.Count() ?? 0}");
-        events.TestResult += (_, e) => Append(FormatResult(e.Result));
-        events.TestRunComplete += (_, e) => Append($"run-complete executed={e.TestRunStatistics?.ExecutedTests ?? 0} aborted={e.IsAborted} canceled={e.IsCanceled} elapsed={e.ElapsedTimeInRunningTests}");
+        var endpoint = Get(parameters, EndpointParameter);
+        var connected = endpoint is not null && _sink.TryConnect(endpoint);
+
+        if (!_sink.IsActive)
+            return; // Nowhere to send: stay inert, don't even subscribe.
+
+        int runnerPid;
+        using (var self = Process.GetCurrentProcess()) runnerPid = self.Id;
+
+        _sink.Write(NdjsonWriter.Object("hello")
+            .Field("protocol", ProtocolVersion)
+            .Field("token", token)
+            .Field("runId", _runId)
+            .Field("runnerPid", runnerPid)
+            .Field("idePid", idePid)
+            .Field("connected", connected)
+            .Field("targetFramework", Get(parameters, DefaultLoggerParameterNames.TargetFramework) ?? string.Empty)
+            .Field("testRunDirectory", Get(parameters, DefaultLoggerParameterNames.TestRunDirectory) ?? string.Empty)
+            .ToLine());
+
+        events.TestRunStart += (_, e) => _sink.Write(FormatRunStart(e));
+        events.TestResult += (_, e) => _sink.Write(FormatResult(e.Result));
+        events.TestRunComplete += (_, e) =>
+        {
+            _sink.Write(FormatRunComplete(e));
+            _sink.Dispose();
+        };
     }
 
-    private static string ResolveLogFilePath(Dictionary<string, string?> parameters)
+    private string FormatRunStart(TestRunStartEventArgs e)
     {
-        if (parameters.TryGetValue(LogFilePathParameter, out var configured) && configured is not null && !string.IsNullOrWhiteSpace(configured))
-            return configured;
-
-        // Fallback for a registration that carried no path (hand-written runsettings, or the
-        // parameterless Initialize overload): the run's own results directory, so the file is at
-        // least discoverable next to the TRX/deployment output.
-        var dir = parameters.TryGetValue(DefaultLoggerParameterNames.TestRunDirectory, out var runDir) && runDir is not null && !string.IsNullOrWhiteSpace(runDir)
-            ? runDir
-            : Path.GetTempPath();
-        return Path.Combine(dir, "reqnroll-testlogger.log");
+        var criteria = e.TestRunCriteria;
+        var sources = criteria?.Sources?.ToList()
+                      ?? criteria?.Tests?.Select(t => t.Source).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                      ?? new List<string>();
+        return NdjsonWriter.Object("runStart")
+            .Field("runId", _runId)
+            .Field("testCount", criteria?.Tests?.Count() ?? 0)
+            .Field("sources", sources)
+            .ToLine();
     }
 
-    private static string FormatResult(TestResult result)
+    private string FormatResult(TestResult result)
     {
         var tc = result.TestCase;
-        return $"result outcome={result.Outcome} fqn={tc.FullyQualifiedName} display=\"{result.DisplayName ?? tc.DisplayName}\" " +
-               $"managedType={GetProperty(tc, ManagedTypePropertyId)} managedMethod={GetProperty(tc, ManagedMethodPropertyId)} " +
-               $"source={tc.Source} duration={result.Duration}";
+        var (stdout, truncated) = CollectStandardOutput(result);
+        return NdjsonWriter.Object("result")
+            .Field("runId", _runId)
+            .Field("source", tc.Source)
+            .Field("managedType", GetProperty(tc, ManagedTypePropertyId))
+            .Field("managedMethod", GetProperty(tc, ManagedMethodPropertyId))
+            .Field("fqn", tc.FullyQualifiedName)
+            .Field("displayName", result.DisplayName ?? tc.DisplayName)
+            .Field("outcome", result.Outcome.ToString())
+            .Field("durationMs", result.Duration.TotalMilliseconds)
+            .Field("errorMessage", result.ErrorMessage)
+            .Field("errorStackTrace", result.ErrorStackTrace)
+            .Field("stdout", stdout)
+            .Field("stdoutTruncated", truncated)
+            .ToLine();
     }
 
-    private static string GetProperty(TestCase testCase, string id)
+    private string FormatRunComplete(TestRunCompleteEventArgs e)
+        => NdjsonWriter.Object("runComplete")
+            .Field("runId", _runId)
+            .Field("executed", e.TestRunStatistics?.ExecutedTests ?? 0)
+            .Field("aborted", e.IsAborted)
+            .Field("canceled", e.IsCanceled)
+            .Field("elapsedMs", e.ElapsedTimeInRunningTests.TotalMilliseconds)
+            .ToLine();
+
+    private static (string? Text, bool Truncated) CollectStandardOutput(TestResult result)
+    {
+        StringBuilder? sb = null;
+        foreach (var message in result.Messages)
+        {
+            if (!string.Equals(message.Category, TestResultMessage.StandardOutCategory, StringComparison.Ordinal))
+                continue;
+            if (string.IsNullOrEmpty(message.Text))
+                continue;
+            sb ??= new StringBuilder();
+            sb.Append(message.Text);
+        }
+
+        if (sb is null) return (null, false);
+        if (sb.Length <= MaxStdoutLength) return (sb.ToString(), false);
+        return (sb.ToString(0, MaxStdoutLength), true);
+    }
+
+    private static string? GetProperty(TestCase testCase, string id)
     {
         foreach (var property in testCase.Properties)
         {
             if (string.Equals(property.Id, id, StringComparison.Ordinal))
-                return testCase.GetPropertyValue(property)?.ToString() ?? "(null)";
+                return testCase.GetPropertyValue(property)?.ToString();
         }
-        return "(absent)";
+        return null;
     }
 
-    private static string FormatParameters(Dictionary<string, string?> parameters)
-    {
-        var sb = new StringBuilder("{");
-        foreach (var kvp in parameters)
-        {
-            if (sb.Length > 1) sb.Append(", ");
-            sb.Append(kvp.Key).Append('=').Append(kvp.Value);
-        }
-        return sb.Append('}').ToString();
-    }
-
-    private void Append(string message)
-    {
-        var path = _logFilePath;
-        if (path is null) return;
-        var line = DateTime.Now.ToString("O", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine;
-        lock (_writeLock)
-        {
-            try
-            {
-                var dir = Path.GetDirectoryName(path);
-                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                File.AppendAllText(path, line);
-            }
-            catch (Exception)
-            {
-                // A logger must never fail the test run. There is nothing sensible to do with the
-                // error inside the runner process; the IDE side will notice the missing file.
-            }
-        }
-    }
+    // netstandard2.0's string.IsNullOrWhiteSpace carries no nullability annotation, hence the explicit null test.
+    private static string? Get(Dictionary<string, string?> parameters, string key)
+        => parameters.TryGetValue(key, out var value) && value is not null && !string.IsNullOrWhiteSpace(value) ? value : null;
 }

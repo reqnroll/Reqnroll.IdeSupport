@@ -56,6 +56,7 @@
     </Folder>
     <Folder Name="/Tests/Core/">
         <Project Path="tests/Core/Reqnroll.IdeSupport.Common.Tests/Reqnroll.IdeSupport.Common.Tests.csproj" />
+        <Project Path="tests/Core/Reqnroll.IdeSupport.TestLogger.Tests/Reqnroll.IdeSupport.TestLogger.Tests.csproj" />
     </Folder>
     <Folder Name="/Tests/Performance/">
         <Project Path="tests/Performance/Reqnroll.IdeSupport.LSP.Server.Benchmarks.Core/Reqnroll.IdeSupport.LSP.Server.Benchmarks.Core.csproj" />

@@ -72,6 +72,10 @@ internal sealed class RunTestCodeLensTaggerProvider : ITaggerProvider
     /// <see cref="RunTestLensLocation"/> per line (one scenario header per line), so no ordering
     /// concern like the old resolved-target grouping had.
     /// </summary>
+    // The outcome revision rides along as one more revision key: when a test run lands, the tagger's
+    // "reuse the tag if nothing changed" check sees a different description for every Run lens line
+    // and hands the CodeLens host new descriptors, so the OOP data points are re-created and pick up
+    // the new outcome (see RunTestCodeLensRedirect.NotifyOutcomesChanged).
     internal static string EncodeElementDescription(int line, IEnumerable<RunTestLensLocation> entriesOnLine) =>
-        LineElementDescription.Encode(line, entriesOnLine.Select(e => e.Key));
+        LineElementDescription.Encode(line, entriesOnLine.Select(e => e.Key).Append($"outcome-rev:{RunTestCodeLensRedirect.OutcomeRevision}"));
 }

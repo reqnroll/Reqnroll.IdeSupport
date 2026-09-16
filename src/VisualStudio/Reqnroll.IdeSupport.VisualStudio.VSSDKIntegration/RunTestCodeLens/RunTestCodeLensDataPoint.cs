@@ -38,6 +38,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
     private readonly IIdeSupportLogger _logger;
 
     private IReadOnlyList<TestMethodIdentifier> _cachedMethods = Array.Empty<TestMethodIdentifier>();
+    private RunTestOutcomeEntry? _cachedOutcome;
 
     public RunTestCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, IIdeSupportLogger logger)
     {
@@ -102,17 +103,32 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // IsScenarioOutline value (they come from a single symbol node), so the first is enough.
         var label = onThisLine[0].IsScenarioOutline ? "▶ Run Scenarios" : "▶ Run Scenario";
 
-        // Best-effort pass/fail glyph (issue #504 follow-up) — reflects into an unsupported internal
-        // VS API (see RunTestOutcomeBridge's remarks) that degrades to "no glyph" on any failure, so
-        // this never blocks the lens itself from rendering. Only the first target's outcome is used —
-        // good enough for the common single-method case; a mixed-outcome multi-target Outline
-        // (allowRowTests = false) just shows the first target's state, not an aggregate.
+        // Pass/fail glyph. Source of truth is the in-proc TestOutcomeStore, fed by the bundled VSTest
+        // logger (implementation plan §4.2) — it sees every result of an IDE-triggered run, including
+        // each Scenario Outline row (issue #702). Only when the store has never heard of this method
+        // (no run yet this session, or a project the logger can't reach — e.g. Microsoft.Testing.Platform)
+        // do we fall back to RunTestOutcomeBridge's reflection into VS's own TestStore, which degrades
+        // to "no glyph" on any failure. Only the first target's outcome is used — good enough for the
+        // common single-method case; a mixed-outcome multi-target Outline (allowRowTests = false) just
+        // shows the first target's state, not an aggregate.
         ImageId? imageId = null;
-        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_cachedMethods[0], token).ConfigureAwait(false);
-        if (outcome is { } resolvedOutcome)
-            imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
+        string outcomeSource;
+        var primary = _cachedMethods[0];
+        _cachedOutcome = await TryGetStoredOutcomeAsync(primary, token).ConfigureAwait(false);
+        if (_cachedOutcome is not null && RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } storedOutcome)
+        {
+            imageId = RunTestOutcomeBridge.ToImageId(storedOutcome);
+            outcomeSource = $"store:{_cachedOutcome.Aggregate}";
+        }
+        else
+        {
+            var bridged = await RunTestOutcomeBridge.TryGetOutcomeAsync(primary, token).ConfigureAwait(false);
+            if (bridged is { } resolvedOutcome)
+                imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
+            outcomeSource = $"bridge:{bridged?.ToString() ?? "(none)"}";
+        }
 
-        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcome?.ToString() ?? "(none)"}");
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcomeSource}");
 
         // Pre-fetch/cache now (see this type's remarks) — nothing further to resolve for GetDetailsAsync.
         return new CodeLensDataPointDescriptor { Description = label, ImageId = imageId };
@@ -146,6 +162,27 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             Entries = Array.Empty<CodeLensDetailEntryDescriptor>(),
             PaneNavigationCommands = commands,
         });
+    }
+
+    /// <summary>
+    /// Asks devenv.exe's <c>TestOutcomeStore</c> (via the same OOP→in-proc callback channel as target
+    /// resolution) for this method's last-known outcome. Null on "unknown" <em>and</em> on any failure —
+    /// the caller then consults the reflection bridge, so a broken callback never costs the glyph.
+    /// </summary>
+    private async Task<RunTestOutcomeEntry?> TryGetStoredOutcomeAsync(TestMethodIdentifier method, CancellationToken token)
+    {
+        try
+        {
+            return await _callbackService
+                .InvokeAsync<RunTestOutcomeEntry?>(this, RunTestCodeLensCallbackListener.GetOutcomeMethod,
+                    new object[] { method.OutputFilePath, method.ManagedType, method.ManagedMethod }, token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!token.IsCancellationRequested)
+        {
+            _logger.LogException(ex, $"RunTestCodeLensDataPoint: {RunTestCodeLensCallbackListener.GetOutcomeMethod} failed for {method.ManagedType}.{method.ManagedMethod}; falling back to the bridge");
+            return null;
+        }
     }
 
     private static CodeLensDetailPaneCommand BuildCommand(string displayName, int commandId, IReadOnlyList<TestMethodIdentifier> methods) =>

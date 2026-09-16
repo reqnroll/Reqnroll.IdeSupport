@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.TestLogger;
 using StreamJsonRpc;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -24,6 +25,20 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
 {
     /// <summary>Resolves exactly one line's Run target(s), instead of the whole file (issue #495).</summary>
     public const string GetTargetsForLineMethod = "Reqnroll.RunTestCodeLens.GetTargetsForLine";
+
+    /// <summary>
+    /// Last-known outcome of one generated test method from the in-proc <c>TestOutcomeStore</c> (fed by
+    /// the bundled VSTest logger — implementation plan §4.2). Null when no run has reported it.
+    /// </summary>
+    public const string GetOutcomeMethod = "Reqnroll.RunTestCodeLens.GetOutcome";
+
+    private readonly TestOutcomeStore _outcomeStore;
+
+    [ImportingConstructor]
+    public RunTestCodeLensCallbackListener(TestOutcomeStore outcomeStore)
+    {
+        _outcomeStore = outcomeStore ?? throw new ArgumentNullException(nameof(outcomeStore));
+    }
 
     // Standalone file logger (no DI/MEF import needed) — same log file as the rest of the
     // extension's devenv.exe activity, since this class always runs in-process there (unlike its
@@ -57,4 +72,26 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
             throw;
         }
     }
+
+    [JsonRpcMethod(GetOutcomeMethod)]
+    public Task<RunTestOutcomeEntry?> GetOutcomeAsync(string assemblyPath, string typeFullName, string methodName, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var outcome = _outcomeStore.TryGet(assemblyPath, typeFullName, methodName);
+            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate.ToString() ?? "(none)"}");
+            return Task.FromResult(outcome is null ? null : ToEntry(outcome));
+        }
+        catch (Exception ex)
+        {
+            // Never fail the lens over an outcome lookup — null means "fall back to the bridge".
+            Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetOutcomeAsync threw for {typeFullName}.{methodName}");
+            return Task.FromResult<RunTestOutcomeEntry?>(null);
+        }
+    }
+
+    internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome) => new(
+        outcome.Aggregate.ToString(),
+        outcome.Rows.Select(r => new RunTestOutcomeRow(r.DisplayName, r.Outcome.ToString(), r.DurationMs, r.ErrorMessage)).ToList(),
+        outcome.LastUpdatedUtc);
 }

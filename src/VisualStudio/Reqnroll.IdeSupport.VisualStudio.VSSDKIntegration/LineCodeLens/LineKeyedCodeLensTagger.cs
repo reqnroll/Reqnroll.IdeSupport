@@ -148,9 +148,11 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
                 next[group.Key] = new LineCodeLensTag(descriptor);
             }
 
-            // Tags for lines that no longer have an entry are gone — let the host know.
+            // Tags that are gone — the line has no entry any more, or its description changed and a
+            // new tag instance replaced it — get Disconnected so the host drops their data points
+            // instead of keeping a stale lens alongside the new one.
             foreach (var kvp in previous)
-                if (!next.ContainsKey(kvp.Key))
+                if (!next.TryGetValue(kvp.Key, out var replacement) || !ReferenceEquals(replacement, kvp.Value))
                     kvp.Value.RaiseDisconnected();
 
             _tagsByLine = next;

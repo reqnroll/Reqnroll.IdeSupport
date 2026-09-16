@@ -57,6 +57,7 @@ env:
   LSP_SERVER_TESTS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Reqnroll.IdeSupport.LSP.Server.Tests.csproj
   LSP_SERVER_SPECS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs/Reqnroll.IdeSupport.LSP.Server.Specs.csproj
   COMMON_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.Common.Tests/Reqnroll.IdeSupport.Common.Tests.csproj
+  TESTLOGGER_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.TestLogger.Tests/Reqnroll.IdeSupport.TestLogger.Tests.csproj
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -160,6 +161,16 @@ jobs:
 
       - name: Test Common
         run: dotnet test ${{ env.COMMON_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
+
+      - name: Restore TestLogger.Tests
+        # Reqnroll.IdeSupport.TestLogger is the IDE-bundled VSTest logger under src/Core (shared by
+        # every IDE consumer, like Common). Its tests include a real `dotnet test` of a Reqnroll fixture
+        # project (tests/Core/TestLoggerFixtures) with the logger registered via --test-adapter-path /
+        # --logger -- the regression test for issue #702's per-Outline-row outcomes.
+        run: dotnet restore ${{ env.TESTLOGGER_TESTS_PROJECT }}
+
+      - name: Test TestLogger
+        run: dotnet test ${{ env.TESTLOGGER_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Upload Test Result TRX Files
         uses: actions/upload-artifact@v7

@@ -36,8 +36,17 @@ internal static class TestLoggerRunSettings
     // from there into the VSIX root, i.e. a second *TestLogger.dll for vstest to find.
     public const string LoggerFriendlyName = "ReqnrollIde";
     public const string LoggerExtensionUri = "logger://Reqnroll/IdeSupport/v1";
-    public const string LogFilePathParameter = "LogFilePath";
+    public const string EndpointParameter = "Endpoint";
+    public const string TokenParameter = "Token";
+    public const string RunIdParameter = "RunId";
     public const string IdeProcessIdParameter = "IdeProcessId";
+    public const string LogFilePathParameter = "LogFilePath";
+
+    /// <summary>
+    /// Set to <c>1</c> for the default mirror file under the Reqnroll log directory, or to an absolute
+    /// path, to have the logger also append its NDJSON to a file (troubleshooting only).
+    /// </summary>
+    public const string MirrorFileEnvironmentVariable = "REQNROLL_IDE_TEST_LOGGER_MIRROR";
 
     /// <summary>File name of the bundled logger; the VSIX places it under <see cref="LoggerSubdirectory"/>.</summary>
     public const string LoggerAssemblyFileName = "Reqnroll.IdeSupport.TestLogger.dll";
