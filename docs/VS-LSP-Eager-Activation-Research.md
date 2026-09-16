@@ -18,7 +18,7 @@ originally written and are wrong in the places noted.**
 ### The everyday symptom does not exist
 
 On a warm start, with a `.feature` file as the only restored tab, VS activates the
-`LanguageServerProvider` **1.1–1.4 s after extension load, every run, on unmodified master**, with
+`LanguageServerProvider` **1.1–1.4 s after extension load, every run, on unmodified main**, with
 no user interaction. Eleven-plus runs across both branches. There is no "restored tab is dead until
 you click it" bug.
 

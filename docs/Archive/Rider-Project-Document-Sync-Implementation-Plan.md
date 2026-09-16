@@ -2,7 +2,7 @@
 
 > **Status:** Phase 0 spike complete (2026-07-13) — see §5 and §7. Findings verified against
 > the actual bytecode of Rider 2024.3.5's bundled `product.jar`/`intellij.rider.jar` inside the
-> devcontainer's Gradle cache (`javap`/`unzip -l`), not just JetBrains' public docs or `master`
+> devcontainer's Gradle cache (`javap`/`unzip -l`), not just JetBrains' public docs or `main`
 > branch source — those reflect a materially newer, not-yet-released API (`LspClientDescriptor`,
 > `LspClient`, a distinct `Lsp4jServer` type) that **does not exist in 2024.3.5 at all**.
 > **Phase 1 also complete** (2026-07-13) — `ReqnrollLanguageServer`, the Kotlin protocol DTOs,
@@ -79,7 +79,7 @@ need their own UI-action wiring (Rider `AnAction`s) — a separate, later plan.
   `LspServer.getLsp4jServer(): LanguageServer` both exist as real methods. Full mechanism in §3.1 —
   no longer an "open question."
 - **`LspServerDescriptor`/`ProjectWideLspServerDescriptor` are NOT deprecated at 2024.3.5** — despite
-  JetBrains' current `master` branch marking them `@Deprecated` in favor of `LspClientDescriptor`.
+  JetBrains' current `main` branch marking them `@Deprecated` in favor of `LspClientDescriptor`.
   That replacement class, along with `LspClient` and a distinct `Lsp4jServer` type, **does not exist
   in 2024.3.5's bundled jars at all** (confirmed by extracting and listing every class under
   `com/intellij/platform/lsp/api/` in `product.jar` — only the classes this plan uses are present).
