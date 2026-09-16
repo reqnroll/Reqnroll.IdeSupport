@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.Imaging;
 using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.TestWindow;
 using Reqnroll.IdeSupport.Common.Logging;
+using StreamJsonRpc;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
@@ -56,21 +57,69 @@ internal static class RunTestOutcomeBridge
 {
     private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
 
-    // Stable per-process id for the (never-unsubscribed) implicit "subscription" GetTestOutcomeAsync
-    // establishes server-side — reused across every call so a long session accumulates at most one,
-    // rather than one per scenario line ever computed.
-    private static readonly Guid DataPointId = Guid.NewGuid();
-
     private static readonly SemaphoreSlim InitLock = new(1, 1);
     private static volatile bool _unavailable;
     private static object? _serviceProxy;
     private static MethodInfo? _getTestOutcomeMethod;
 
     /// <summary>
+    /// Raised when VS's own test-outcome service reports that a test's cached result changed —
+    /// i.e. a run completed (issue #700). Mirrors VS's own <c>AbstractTestProvider.TestChanged</c>
+    /// static event (design doc §6/§7 item 3 follow-up), fired from <see cref="RunTestOutcomeCallbackTarget"/>
+    /// once we've registered it as a local RPC target on the same connection <see cref="TryGetOutcomeAsync"/>
+    /// already polls over (see <see cref="GetOrCreateProxyAsync"/>).
+    /// </summary>
+    /// <remarks>
+    /// Payload is deliberately typed <see cref="object"/> rather than the real <c>TestMethodIdentifier</c>
+    /// — that type lives in <c>Microsoft.VisualStudio.TestWindow.Internal.dll</c>, which this class's own
+    /// tests (<c>RunTestOutcomeBridgeTests</c>) run in a plain xUnit host with no VS install/process, so
+    /// it isn't on disk there. A static field's declared type is resolved when this class is first
+    /// touched at all (any static member access), not lazily per-call, so putting the real type directly
+    /// on this event would break every test in that file, not just ones exercising this event — subscribers
+    /// pattern-match to <c>TestMethodIdentifier</c> themselves (see <see cref="RunTestCodeLensDataPoint"/>),
+    /// which already requires that assembly and references it accordingly.
+    /// </remarks>
+    internal static event EventHandler<object>? TestChanged;
+
+    /// <summary>
+    /// Plain RPC target for VS's test-outcome service push notifications — deliberately <b>not</b> an
+    /// implementation of the (internal, inaccessible) <c>ICodeLensTestInformationCallbackService</c>.
+    /// <see cref="StreamJsonRpc.JsonRpc"/> dispatches incoming calls by matching public method
+    /// name/signature on whatever target object it's given (confirmed via <c>JsonRpc.AddLocalRpcTarget</c>
+    /// and <c>RemoteMethodNotFoundException</c> docs — plain reflection-based binding, no interface
+    /// contract required), so this ordinary class satisfies the wire protocol without needing to
+    /// implement anything internal. Method names/signatures must match
+    /// <c>ICodeLensTestInformationCallbackService</c> exactly (decompiled from
+    /// <c>Microsoft.VisualStudio.TestWindow.Internal.dll</c>) since that's what the server calls by name.
+    /// </summary>
+    /// <remarks>Internal rather than private so unit tests can exercise it directly without going through the real (unsupported) VS RPC connection.</remarks>
+    internal sealed class RunTestOutcomeCallbackTarget
+    {
+        public Task OnTestChangedAsync(TestMethodIdentifier testMethod)
+        {
+            TestChanged?.Invoke(null, testMethod);
+            return Task.CompletedTask;
+        }
+
+        public Task OnSettingsChangedAsync() => Task.CompletedTask;
+    }
+
+    /// <summary>
     /// Returns the cached outcome for <paramref name="testMethod"/>, or <c>null</c> when unknown, not
     /// yet run, or the underlying (unsupported, internal) API is unavailable for any reason —
     /// including a future VS update changing its shape. Never throws.
     /// </summary>
+    /// <param name="dataPointId">
+    /// Caller-owned subscription identity (issue #700 correction). The server's
+    /// <c>SubscriptionTracker</c> (decompiled from <c>Microsoft.VisualStudio.TestWindow.Host.dll</c>)
+    /// keys one test-method set per <paramref name="dataPointId"/> and <b>replaces</b> that set on
+    /// every <c>GetTestOutcomeAsync</c> call — it does not merge. A single id shared across every
+    /// scenario line (the original design) meant each line's poll silently evicted every other line's
+    /// push subscription, so only whichever line polled most recently ever received a completion
+    /// notification. Callers must pass a stable identity unique to what they're tracking — one per
+    /// <see cref="RunTestCodeLensDataPoint"/> instance, mirroring VS's own <c>AbstractTestDataPoint.id</c>
+    /// (an instance field, not shared), which this bridge originally deviated from.
+    /// </param>
     /// <remarks>
     /// Three stages (issue #590), each independently testable: <b>acquire</b>
     /// (<see cref="GetOrCreateProxyAsync"/> — locate the assembly, resolve the internal types, bind
@@ -83,7 +132,7 @@ internal static class RunTestOutcomeBridge
     /// test hasn't been run yet" — both of which surfaced identically as a silent <c>null</c> before
     /// this split.
     /// </remarks>
-    public static async Task<RunTestOutcome?> TryGetOutcomeAsync(TestMethodIdentifier testMethod, CancellationToken cancellationToken)
+    public static async Task<RunTestOutcome?> TryGetOutcomeAsync(Guid dataPointId, TestMethodIdentifier testMethod, CancellationToken cancellationToken)
     {
         if (_unavailable)
             return null;
@@ -94,7 +143,7 @@ internal static class RunTestOutcomeBridge
             if (proxy is null || getTestOutcomeMethod is null)
                 return null;
 
-            var outcomeName = await InvokeGetTestOutcomeAsync(proxy, getTestOutcomeMethod, testMethod, cancellationToken)
+            var outcomeName = await InvokeGetTestOutcomeAsync(proxy, getTestOutcomeMethod, dataPointId, testMethod, cancellationToken)
                 .ConfigureAwait(false);
             return ParseOutcome(outcomeName);
         }
@@ -118,9 +167,9 @@ internal static class RunTestOutcomeBridge
     /// unit test just to construct a fixture value that is never actually inspected here.
     /// </summary>
     internal static async Task<string?> InvokeGetTestOutcomeAsync(
-        object proxy, MethodInfo getTestOutcomeMethod, object testMethod, CancellationToken cancellationToken)
+        object proxy, MethodInfo getTestOutcomeMethod, Guid dataPointId, object testMethod, CancellationToken cancellationToken)
     {
-        var resultTask = (Task?)getTestOutcomeMethod.Invoke(proxy, new object[] { DataPointId, testMethod, cancellationToken });
+        var resultTask = (Task?)getTestOutcomeMethod.Invoke(proxy, new object[] { dataPointId, testMethod, cancellationToken });
         if (resultTask is null)
             return null;
 
@@ -183,11 +232,29 @@ internal static class RunTestOutcomeBridge
             var ctor = proxyType.GetConstructor(
                     BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(Stream), callbackInterfaceType }, null)
                 ?? throw new MissingMethodException("CodeLensTestInformationProxy(Stream, ICodeLensTestInformationCallbackService) constructor not found.");
-            // Passing null for the callback target: we don't implement (or need) the invalidation
-            // callback interface — this bridge only ever polls, it never subscribes to change
-            // notifications. If the server ever calls back regardless, that's a no-op on our side.
+            // Passing null here: ICodeLensTestInformationCallbackService is internal, so nothing in
+            // our assembly can implement it to satisfy this constructor's parameter type. We attach
+            // our own plain-object invalidation listener separately below, after construction, via
+            // JsonRpc.AddLocalRpcTarget instead — StreamJsonRpc dispatches by public method
+            // name/signature, not by interface, so that path needs no internal type at all.
             var proxy = ctor.Invoke(new object?[] { stream, null })
                 ?? throw new InvalidOperationException("CodeLensTestInformationProxy construction returned null.");
+
+            // Attach our own invalidation-push listener (issue #700) to the same duplex connection
+            // TryGetOutcomeAsync polls over. CodeLensTestInformationProxy's own constructor already
+            // called rpc.StartListening() before returning here, so AddLocalRpcTarget needs
+            // AllowModificationWhileListening — StreamJsonRpc's documented, sanctioned way to add a
+            // target after the fact (accepted race: a test-changed notification arriving in the brief
+            // window before this call runs is missed for this process's lifetime of that one event;
+            // self-heals on the next change). The private `rpc` field is declared as the fully public
+            // StreamJsonRpc.JsonRpc, so everything past this reflective field read is ordinary,
+            // compile-time-checked API — no further reflection needed for the callback wiring itself.
+            var rpcField = proxyType.GetField("rpc", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?? throw new MissingFieldException("CodeLensTestInformationProxy.rpc field not found.");
+            var rpc = (JsonRpc)(rpcField.GetValue(proxy)
+                ?? throw new InvalidOperationException("CodeLensTestInformationProxy.rpc was null."));
+            rpc.AllowModificationWhileListening = true;
+            rpc.AddLocalRpcTarget(new RunTestOutcomeCallbackTarget());
 
             // GetTestOutcomeAsync is an explicit interface implementation on the concrete proxy type,
             // so it must be looked up via the (also internal) interface, not the concrete type — a
@@ -240,14 +307,23 @@ internal static class RunTestOutcomeBridge
 
     /// <summary>
     /// Classifies a caught exception and dispatches to the matching failure handler: a
-    /// <see cref="TypeLoadException"/> or <see cref="MissingMemberException"/> means the API's shape
-    /// has changed (permanent for the process's lifetime — see <see cref="DisablePermanently"/>);
+    /// <see cref="TypeLoadException"/>, <see cref="MissingMemberException"/> (covers the derived
+    /// <see cref="MissingFieldException"/> too), or <see cref="InvalidCastException"/> means the API's
+    /// shape has changed (permanent for the process's lifetime — see <see cref="DisablePermanently"/>);
     /// anything else is treated as transient (see <see cref="ResetForRetry"/>). Shared by every
     /// stage's catch clause so the two-way classification lives in exactly one place.
     /// </summary>
+    /// <remarks>
+    /// <see cref="InvalidCastException"/> is included because <see cref="GetOrCreateProxyAsync"/>'s
+    /// reflective read of <c>CodeLensTestInformationProxy.rpc</c> casts the field's value to the public
+    /// <c>StreamJsonRpc.JsonRpc</c> type — if a future VS update ever changes that field's declared
+    /// type, the cast failing is exactly the same kind of permanent shape change a
+    /// <see cref="MissingFieldException"/> represents, not a transient connection hiccup worth retrying
+    /// on every subsequent poll.
+    /// </remarks>
     internal static void HandleFailure(Exception ex, string step)
     {
-        if (ex is TypeLoadException or MissingMemberException)
+        if (ex is TypeLoadException or MissingMemberException or InvalidCastException)
             DisablePermanently(ex, step);
         else
             ResetForRetry(ex, step);
@@ -284,5 +360,6 @@ internal static class RunTestOutcomeBridge
         _unavailable = false;
         _serviceProxy = null;
         _getTestOutcomeMethod = null;
+        TestChanged = null;
     }
 }

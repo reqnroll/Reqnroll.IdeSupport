@@ -30,14 +30,28 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 /// always runs first, on a normal async path — pre-fetches and caches the resolved
 /// <see cref="TestMethodIdentifier"/> set here; <see cref="GetDetailsAsync"/> only reads the cache.
 /// </remarks>
-internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
+internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint, IDisposable
 {
     private readonly ICodeLensCallbackService _callbackService;
     private readonly string _fileUri;
     private readonly int _line;
     private readonly IIdeSupportLogger _logger;
 
+    // Own subscription identity for RunTestOutcomeBridge.TryGetOutcomeAsync (issue #700 correction) —
+    // the server's SubscriptionTracker replaces a dataPointId's whole tracked-method set on every poll
+    // rather than merging, so a shared id across every line's data point meant each line's poll evicted
+    // every other line's push subscription. One Guid per instance, mirroring VS's own
+    // AbstractTestDataPoint.id, keeps each line's subscription independent.
+    private readonly Guid _outcomeSubscriptionId = Guid.NewGuid();
+
     private IReadOnlyList<TestMethodIdentifier> _cachedMethods = Array.Empty<TestMethodIdentifier>();
+    // int, not bool: GetDataAsync can run concurrently on the same instance (VS re-queries on
+    // incremental refreshes, per its own remarks below), and a plain check-then-act on a bool let two
+    // overlapping calls both observe "not yet subscribed" and both subscribe, double-firing
+    // InvalidatedAsync per notification. Interlocked.CompareExchange makes "subscribe exactly once"
+    // atomic; 0 = not subscribed, 1 = subscribed.
+    private int _subscribedToOutcomeChanges;
+    private AsyncEventHandler? _invalidatedAsync;
 
     public RunTestCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, IIdeSupportLogger logger)
     {
@@ -52,8 +66,60 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
     public CodeLensDescriptor Descriptor { get; }
 
     /// <inheritdoc />
-    /// <remarks>Never raised in this first pass — same reasoning as <c>HookCodeLensDataPoint</c>: no disposal hook exists to safely unsubscribe from a shared invalidation source, and labels still refresh naturally whenever CodeLens re-creates data points.</remarks>
-    public event AsyncEventHandler? InvalidatedAsync { add { } remove { } }
+    /// <remarks>
+    /// Real event as of issue #700 — raised from <see cref="OnTestOutcomeChanged"/> when
+    /// <see cref="RunTestOutcomeBridge.TestChanged"/> reports a completed run for one of
+    /// <see cref="_cachedMethods"/>, so the pass/fail glyph refreshes instead of staying frozen at
+    /// whatever it resolved to (usually nothing) the one time <see cref="GetDataAsync"/> happened to
+    /// run before any test had executed. Mirrors VS's own <c>AbstractTestDataPoint</c> pattern
+    /// (decompiled from <c>Microsoft.VisualStudio.TestWindow.CodeLens.dll</c>): subscribe once test
+    /// methods are known, unsubscribe on <see cref="Dispose"/>.
+    /// </remarks>
+    public event AsyncEventHandler? InvalidatedAsync
+    {
+        add => _invalidatedAsync += value;
+        remove => _invalidatedAsync -= value;
+    }
+
+    /// <summary>
+    /// Called on <see cref="RunTestOutcomeBridge.TestChanged"/> for every test whose cached outcome
+    /// changed process-wide, not just ones this data point cares about — filters to
+    /// <see cref="_cachedMethods"/> before invalidating, same as VS's own <c>OnTestChanged</c> override.
+    /// The event payload is untyped <see cref="object"/> (see <see cref="RunTestOutcomeBridge.TestChanged"/>'s
+    /// remarks for why) — pattern-match to the real type here, where referencing it is already required.
+    /// </summary>
+    /// <remarks>
+    /// Wrapped in try/catch deliberately: this runs inside <see cref="RunTestOutcomeBridge.TestChanged"/>'s
+    /// multicast invocation, shared by every other line's data point. An unhandled exception here would
+    /// abort that invocation partway through, silently starving every subscriber registered after this
+    /// one in the list for that notification — the opposite of this feature's own "never let a failure
+    /// here take down the lens" design elsewhere in <see cref="RunTestOutcomeBridge"/>.
+    /// </remarks>
+    private void OnTestOutcomeChanged(object? sender, object testMethod)
+    {
+        try
+        {
+            if (testMethod is not TestMethodIdentifier identifier || !_cachedMethods.Contains(identifier))
+                return;
+
+            _logger.LogVerbose($"RunTestCodeLensDataPoint: OnTestOutcomeChanged — line={_line} matched changed test, invalidating.");
+            var handler = _invalidatedAsync;
+            if (handler is not null)
+                TplExtensions.InvokeAsync(handler, this, EventArgs.Empty).Forget();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, $"RunTestCodeLensDataPoint: OnTestOutcomeChanged — line={_line} failed handling a test-changed notification.");
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Unsubscribes from <see cref="RunTestOutcomeBridge.TestChanged"/> (issue #700) — without this, every data point CodeLens ever created would stay reachable forever through that static event's invocation list.</remarks>
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _subscribedToOutcomeChanges, 0) != 0)
+            RunTestOutcomeBridge.TestChanged -= OnTestOutcomeChanged;
+    }
 
     /// <inheritdoc />
     public async Task<CodeLensDataPointDescriptor> GetDataAsync(CodeLensDescriptorContext descriptorContext, CancellationToken token)
@@ -97,6 +163,13 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             .Distinct()
             .ToList();
 
+        // Subscribe once we actually know which methods to care about (issue #700) — a completed run
+        // for any of them should invalidate this lens so the glyph re-fetches. GetDataAsync can run
+        // concurrently on the same instance (VS re-queries on incremental refreshes), so the
+        // subscribe-exactly-once check has to be atomic, not a plain check-then-act on a bool.
+        if (Interlocked.CompareExchange(ref _subscribedToOutcomeChanges, 1, 0) == 0)
+            RunTestOutcomeBridge.TestChanged += OnTestOutcomeChanged;
+
         // "Scenarios" (plural) for a Scenario Outline — running it runs every Examples: row, not a
         // single case — "Scenario" for a plain scenario. All entries on one line share the same
         // IsScenarioOutline value (they come from a single symbol node), so the first is enough.
@@ -108,7 +181,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // good enough for the common single-method case; a mixed-outcome multi-target Outline
         // (allowRowTests = false) just shows the first target's state, not an aggregate.
         ImageId? imageId = null;
-        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_cachedMethods[0], token).ConfigureAwait(false);
+        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_outcomeSubscriptionId, _cachedMethods[0], token).ConfigureAwait(false);
         if (outcome is { } resolvedOutcome)
             imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
 

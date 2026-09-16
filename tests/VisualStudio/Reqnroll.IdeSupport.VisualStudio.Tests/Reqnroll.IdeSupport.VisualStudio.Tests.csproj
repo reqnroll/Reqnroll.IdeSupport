@@ -32,4 +32,34 @@
     <ProjectReference Include="../../../src/LSP/Reqnroll.IdeSupport.LSP.Core/Reqnroll.IdeSupport.LSP.Core.csproj" />
     <ProjectReference Include="../Reqnroll.IdeSupport.VisualStudio.VsxStubs/Reqnroll.IdeSupport.VisualStudio.VsxStubs.csproj" />
   </ItemGroup>
+
+  <!-- Microsoft.VisualStudio.TestWindow.Internal.dll (TestMethodIdentifier, public type) — same
+       vswhere-resolved reference as Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration.csproj (see its
+       own comment for the full rationale). Needed here because RunTestCodeLensDataPointTests
+       constructs real TestMethodIdentifier values to test the issue #700 invalidation-matching logic
+       directly, rather than through a substituted/widened stand-in.
+       Private=true (unlike VSSDKIntegration's own Private=false): that project ships inside a VSIX
+       that always runs hosted in devenv.exe, where this assembly is already loaded — but `dotnet test`
+       runs this project standalone, no devenv.exe host to supply it from, so it must be copied to the
+       test output directory or every test in the process (not just ones touching this type) fails to
+       load at run time. -->
+  <Target Name="ResolveVsInstallDir" BeforeTargets="ResolveAssemblyReferences">
+    <PropertyGroup>
+      <VsWhereExe>$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer\vswhere.exe</VsWhereExe>
+    </PropertyGroup>
+    <Exec Command="&quot;$(VsWhereExe)&quot; -latest -property installationPath"
+          Condition="Exists('$(VsWhereExe)')"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="VsInstallDir" />
+    </Exec>
+    <Warning Text="vswhere.exe not found or no VS install detected — Microsoft.VisualStudio.TestWindow.Internal reference will be skipped; RunTestCodeLensDataPointTests will fail to compile."
+             Condition="'$(VsInstallDir)' == ''" />
+    <ItemGroup Condition="'$(VsInstallDir)' != ''">
+      <Reference Include="Microsoft.VisualStudio.TestWindow.Internal">
+        <HintPath>$(VsInstallDir)\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Microsoft.VisualStudio.TestWindow.Internal.dll</HintPath>
+        <Private>true</Private>
+      </Reference>
+    </ItemGroup>
+  </Target>
 </Project>
