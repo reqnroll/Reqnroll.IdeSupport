@@ -92,6 +92,8 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
 
     internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome) => new(
         outcome.Aggregate.ToString(),
-        outcome.Rows.Select(r => new RunTestOutcomeRow(r.DisplayName, r.Outcome.ToString(), r.DurationMs, r.ErrorMessage)).ToList(),
+        outcome.Rows.Select(r => new RunTestOutcomeRow(
+            r.DisplayName, r.Outcome.ToString(), r.DurationMs, r.ErrorMessage,
+            r.Steps.Count, r.FailedStep?.Index, r.FailedStep?.StepText, r.FailedStep?.Outcome.ToString())).ToList(),
         outcome.LastUpdatedUtc);
 }

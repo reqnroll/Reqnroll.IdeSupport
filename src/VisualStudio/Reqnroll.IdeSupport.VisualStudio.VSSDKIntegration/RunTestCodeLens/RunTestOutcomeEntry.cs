@@ -15,7 +15,15 @@ public sealed record RunTestOutcomeRow(
     /// <summary><c>Passed</c>/<c>Failed</c>/<c>Skipped</c>/<c>NotFound</c>/<c>None</c> — the <c>TestOutcomeKind</c> name.</summary>
     string Outcome,
     double DurationMs,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    /// <summary>Number of steps Reqnroll traced for this row (0 when the output carried no trace).</summary>
+    int StepCount = 0,
+    /// <summary>0-based execution index of the first failing step, or null.</summary>
+    int? FailedStepIndex = null,
+    /// <summary>The traced text of that step (keyword + text), or null.</summary>
+    string? FailedStepText = null,
+    /// <summary><c>Error</c>/<c>BindingError</c>/<c>Undefined</c> — the <c>StepTraceOutcome</c> name, or null.</summary>
+    string? FailedStepOutcome = null);
 
 /// <summary>
 /// Last-known outcome of one generated test method from the in-proc <c>TestOutcomeStore</c> (fed by the

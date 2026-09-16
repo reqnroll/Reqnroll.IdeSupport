@@ -1,5 +1,6 @@
 using System.ComponentModel.Composition;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.Common.TestOutcomes;
 
 namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
 
@@ -115,7 +116,13 @@ public sealed record RowOutcome(
     string? Stdout,
     bool StdoutTruncated,
     string RunId,
-    DateTime RecordedUtc);
+    DateTime RecordedUtc,
+    /// <summary>Reqnroll's step trace parsed out of <see cref="Stdout"/> (execution order); empty when the output carried none.</summary>
+    IReadOnlyList<StepTraceEntry> Steps)
+{
+    /// <summary>The first step that failed (error / binding error / undefined), or null.</summary>
+    public StepTraceEntry? FailedStep => Steps.FirstOrDefault(s => s.IsFailure);
+}
 
 /// <summary>Aggregate + rows for one generated test method.</summary>
 public sealed record MethodOutcome(
@@ -183,7 +190,7 @@ public sealed class TestOutcomeStore
         var when = nowUtc ?? DateTime.UtcNow;
         var row = new RowOutcome(
             result.DisplayName, result.Outcome, result.DurationMs, result.ErrorMessage, result.ErrorStackTrace,
-            result.Stdout, result.StdoutTruncated, result.RunId, when);
+            result.Stdout, result.StdoutTruncated, result.RunId, when, StepTraceParser.Parse(result.Stdout));
 
         int revision;
         lock (_gate)

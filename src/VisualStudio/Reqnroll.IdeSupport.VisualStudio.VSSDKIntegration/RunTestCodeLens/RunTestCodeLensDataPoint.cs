@@ -154,15 +154,69 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             commands.Add(BuildCommand("Show in Test Explorer", TestExplorerCommandIds.SyncCommandId, methods));
         }
 
-        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}");
+        // Per-row outcome table (implementation plan Phase 2): one entry per test case the logger
+        // reported for this method — one per Examples row for an outline — with the failing step
+        // Reqnroll's own trace attributes the failure to (not the last step, which is what the stack
+        // trace would say). Empty when no run has reported this method this session.
+        var (headers, entries) = BuildOutcomeTable(_cachedOutcome);
+
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}, rows={entries.Count}");
 
         return Task.FromResult(new CodeLensDetailsDescriptor
         {
-            Headers = Array.Empty<CodeLensDetailHeaderDescriptor>(),
-            Entries = Array.Empty<CodeLensDetailEntryDescriptor>(),
+            Headers = headers,
+            Entries = entries,
             PaneNavigationCommands = commands,
         });
     }
+
+    internal static (IReadOnlyList<CodeLensDetailHeaderDescriptor> Headers, IReadOnlyList<CodeLensDetailEntryDescriptor> Entries) BuildOutcomeTable(RunTestOutcomeEntry? outcome)
+    {
+        if (outcome is null || outcome.Rows.Count == 0)
+            return (Array.Empty<CodeLensDetailHeaderDescriptor>(), Array.Empty<CodeLensDetailEntryDescriptor>());
+
+        var headers = new[]
+        {
+            new CodeLensDetailHeaderDescriptor { UniqueName = "example",    DisplayName = "Example",     Width = 0.35 },
+            new CodeLensDetailHeaderDescriptor { UniqueName = "outcome",    DisplayName = "Outcome",     Width = 0.12 },
+            new CodeLensDetailHeaderDescriptor { UniqueName = "duration",   DisplayName = "Duration",    Width = 0.10 },
+            new CodeLensDetailHeaderDescriptor { UniqueName = "failedStep", DisplayName = "Failed step", Width = 0.43 },
+        };
+
+        var entries = outcome.Rows.Select(row =>
+        {
+            var failedStep = row.FailedStepText is null
+                ? string.Empty
+                : $"{row.FailedStepText} ({DescribeStepOutcome(row.FailedStepOutcome)}, step {row.FailedStepIndex + 1} of {row.StepCount})";
+            return new CodeLensDetailEntryDescriptor
+            {
+                Fields = new[]
+                {
+                    new CodeLensDetailEntryField { Text = row.DisplayName },
+                    new CodeLensDetailEntryField { Text = row.Outcome },
+                    new CodeLensDetailEntryField { Text = FormatDuration(row.DurationMs) },
+                    new CodeLensDetailEntryField { Text = failedStep },
+                },
+                Tooltip = row.ErrorMessage ?? row.DisplayName,
+            };
+        }).ToList();
+
+        return (headers, entries);
+    }
+
+    private static string DescribeStepOutcome(string? stepOutcome) => stepOutcome switch
+    {
+        "Error" => "threw",
+        "BindingError" => "binding error",
+        "Undefined" => "undefined step",
+        null => "failed",
+        _ => stepOutcome,
+    };
+
+    private static string FormatDuration(double milliseconds)
+        => milliseconds >= 1000
+            ? (milliseconds / 1000).ToString("0.0 s", System.Globalization.CultureInfo.InvariantCulture)
+            : milliseconds.ToString("0 ms", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Asks devenv.exe's <c>TestOutcomeStore</c> (via the same OOP→in-proc callback channel as target

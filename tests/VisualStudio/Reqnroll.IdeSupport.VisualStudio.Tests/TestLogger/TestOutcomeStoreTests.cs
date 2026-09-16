@@ -116,7 +116,7 @@ public class TestOutcomeStoreTests
     [InlineData(new TestOutcomeKind[0], TestOutcomeKind.None)]
     public void Aggregate_is_failed_over_passed_over_skipped(TestOutcomeKind[] rows, TestOutcomeKind expected)
     {
-        var rowOutcomes = rows.Select((o, i) => new RowOutcome($"row {i}", o, 0, null, null, null, false, "r", DateTime.UtcNow));
+        var rowOutcomes = rows.Select((o, i) => new RowOutcome($"row {i}", o, 0, null, null, null, false, "r", DateTime.UtcNow, Array.Empty<Reqnroll.IdeSupport.Common.TestOutcomes.StepTraceEntry>()));
 
         TestOutcomeStore.Aggregate(rowOutcomes).Should().Be(expected);
     }
