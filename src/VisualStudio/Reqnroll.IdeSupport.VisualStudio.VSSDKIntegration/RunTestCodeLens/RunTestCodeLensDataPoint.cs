@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Core.Imaging;
+using Microsoft.VisualStudio.Imaging;
+using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.TestWindow;
@@ -115,7 +117,19 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         string outcomeSource;
         var primary = _cachedMethods[0];
         _cachedOutcome = await TryGetStoredOutcomeAsync(primary, token).ConfigureAwait(false);
-        if (_cachedOutcome is not null && RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } storedOutcome)
+        if (_cachedOutcome is { IsRunning: true })
+        {
+            // A run naming this method is in flight: VS's own lens shows a spinner here.
+            imageId = ToImageId(KnownMonikers.StatusRunning);
+            outcomeSource = "store:running";
+        }
+        else if (_cachedOutcome is { IsStale: true })
+        {
+            // Recorded before the container was last rebuilt — say nothing rather than something
+            // outdated, and don't ask the bridge either: VS's TestStore would just repeat the stale value.
+            outcomeSource = $"store:stale({_cachedOutcome.Aggregate})";
+        }
+        else if (_cachedOutcome is not null && RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } storedOutcome)
         {
             imageId = RunTestOutcomeBridge.ToImageId(storedOutcome);
             outcomeSource = $"store:{_cachedOutcome.Aggregate}";
@@ -203,6 +217,8 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
 
         return (headers, entries);
     }
+
+    private static ImageId ToImageId(ImageMoniker moniker) => new(moniker.Guid, moniker.Id);
 
     private static string DescribeStepOutcome(string? stepOutcome) => stepOutcome switch
     {

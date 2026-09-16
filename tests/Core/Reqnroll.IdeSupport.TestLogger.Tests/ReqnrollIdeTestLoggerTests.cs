@@ -126,6 +126,10 @@ public class ReqnrollIdeTestLoggerTests
         start.GetProperty("type").GetString().Should().Be("runStart");
         start.GetProperty("testCount").GetInt32().Should().Be(2);
         start.GetProperty("sources").EnumerateArray().Select(e => e.GetString()).Should().Equal(Source);
+        var identities = start.GetProperty("tests").EnumerateArray().Select(e => e.GetString()!.Split(ReqnrollIdeTestLogger.TestIdentitySeparator)).ToList();
+        identities.Should().HaveCount(2);
+        identities[0].Should().Equal(Source, "Specs.CalcFeature", "So23(System.String,System.String[])", "Specs.CalcFeature.So23", "so23(Electric guitar,1,180.0,2)");
+        identities[1][4].Should().Be("so23(Guitar pick,10,15.0,3)");
 
         var r1 = Parse(lines[2]);
         r1.GetProperty("type").GetString().Should().Be("result");

@@ -129,7 +129,9 @@ public sealed record MethodOutcome(
     TestOutcomeKey Key,
     TestOutcomeKind Aggregate,
     IReadOnlyList<RowOutcome> Rows,
-    DateTime LastUpdatedUtc)
+    DateTime LastUpdatedUtc,
+    /// <summary>True between a run's <c>runStart</c> naming this method and that run's completion.</summary>
+    bool IsRunning = false)
 {
     public int FailedRowCount => Rows.Count(r => r.Outcome == TestOutcomeKind.Failed);
 }
@@ -174,6 +176,25 @@ public sealed class TestOutcomeStore
     private readonly Dictionary<TestOutcomeKey, MutableMethod> _methods = new(TestOutcomeKey.Comparer);
     private int _revision;
 
+    /// <summary>Test-visible: an empty store.</summary>
+    public TestOutcomeStore()
+    {
+    }
+
+    /// <summary>
+    /// MEF entry point: seeds the store from the last session's persisted outcomes so the Run lens shows
+    /// last-run state right after VS starts, the way VS's own <c>TestStore</c>-backed lens does. Load
+    /// failures leave the store empty and are logged by the persistence layer, never thrown here.
+    /// </summary>
+    [ImportingConstructor]
+    public TestOutcomeStore(TestOutcomePersistence persistence)
+    {
+        if (persistence is null) return;
+        var loaded = persistence.Load();
+        if (loaded.Count > 0)
+            Import(loaded);
+    }
+
     /// <summary>Monotonic change counter; bumped on every mutation. Used to version CodeLens descriptors.</summary>
     public int Revision => Volatile.Read(ref _revision);
 
@@ -199,11 +220,64 @@ public sealed class TestOutcomeStore
                 _methods[key] = method = new MutableMethod();
             method.Rows[row.DisplayName] = row;
             method.LastUpdatedUtc = when;
+            // A result for a method that was marked running by this run: still running until the run
+            // completes (other rows may follow), but a result from a *different* run supersedes.
+            if (method.RunningRunId is not null && method.RunningRunId != result.RunId)
+                method.RunningRunId = null;
             revision = ++_revision;
         }
 
         Changed?.Invoke(this, new TestOutcomesChangedEventArgs(new[] { key }, revision));
         return key;
+    }
+
+    /// <summary>
+    /// Marks the given methods as running for <paramref name="runId"/> (from the logger's <c>runStart</c>
+    /// test list). Previous rows are kept — the glyph shows "running" while the details still show the
+    /// last-known outcome. Cleared by <see cref="CompleteRun"/>.
+    /// </summary>
+    public IReadOnlyCollection<TestOutcomeKey> MarkRunning(string runId, IEnumerable<TestOutcomeKey> keys)
+    {
+        var affected = new List<TestOutcomeKey>();
+        int revision;
+        lock (_gate)
+        {
+            foreach (var key in keys)
+            {
+                if (!_methods.TryGetValue(key, out var method))
+                    _methods[key] = method = new MutableMethod();
+                method.RunningRunId = runId;
+                affected.Add(key);
+            }
+            if (affected.Count == 0) return affected;
+            revision = ++_revision;
+        }
+        Changed?.Invoke(this, new TestOutcomesChangedEventArgs(affected, revision));
+        return affected;
+    }
+
+    /// <summary>Clears the running mark of every method <paramref name="runId"/> had claimed, whether or not a result arrived.</summary>
+    public IReadOnlyCollection<TestOutcomeKey> CompleteRun(string runId)
+    {
+        var affected = new List<TestOutcomeKey>();
+        int revision;
+        lock (_gate)
+        {
+            foreach (var kvp in _methods)
+            {
+                if (kvp.Value.RunningRunId != runId) continue;
+                kvp.Value.RunningRunId = null;
+                affected.Add(kvp.Key);
+            }
+            // Methods that were only ever "running" (no rows, no result) carry nothing worth keeping.
+            foreach (var key in affected)
+                if (_methods[key].Rows.Count == 0)
+                    _methods.Remove(key);
+            if (affected.Count == 0) return affected;
+            revision = ++_revision;
+        }
+        Changed?.Invoke(this, new TestOutcomesChangedEventArgs(affected, revision));
+        return affected;
     }
 
     /// <summary>Last-known aggregate for a method, or null if no run has reported it this session.</summary>
@@ -218,13 +292,44 @@ public sealed class TestOutcomeStore
         }
     }
 
-    /// <summary>Everything the store knows, for diagnostics and (Phase 3) persistence.</summary>
+    /// <summary>Everything the store knows (methods with at least one row), for diagnostics and persistence.</summary>
     public IReadOnlyList<MethodOutcome> Snapshot()
     {
         lock (_gate)
         {
-            return _methods.Select(kvp => kvp.Value.Snapshot(kvp.Key)).ToList();
+            return _methods.Where(kvp => kvp.Value.Rows.Count > 0).Select(kvp => kvp.Value.Snapshot(kvp.Key)).ToList();
         }
+    }
+
+    /// <summary>
+    /// Merges persisted outcomes in. A live row (recorded this session) always wins over an imported one
+    /// for the same method+display name, and an imported method never overwrites a newer live method.
+    /// </summary>
+    public void Import(IEnumerable<MethodOutcome> outcomes)
+    {
+        var affected = new List<TestOutcomeKey>();
+        int revision;
+        lock (_gate)
+        {
+            foreach (var outcome in outcomes)
+            {
+                if (outcome.Rows.Count == 0) continue;
+                if (!_methods.TryGetValue(outcome.Key, out var method))
+                    _methods[outcome.Key] = method = new MutableMethod();
+                else if (method.LastUpdatedUtc >= outcome.LastUpdatedUtc)
+                    continue;
+
+                foreach (var row in outcome.Rows)
+                    if (!method.Rows.TryGetValue(row.DisplayName, out var existing) || existing.RecordedUtc < row.RecordedUtc)
+                        method.Rows[row.DisplayName] = row;
+                if (method.LastUpdatedUtc < outcome.LastUpdatedUtc)
+                    method.LastUpdatedUtc = outcome.LastUpdatedUtc;
+                affected.Add(outcome.Key);
+            }
+            if (affected.Count == 0) return;
+            revision = ++_revision;
+        }
+        Changed?.Invoke(this, new TestOutcomesChangedEventArgs(affected, revision));
     }
 
     /// <summary>Forgets everything (solution close).</summary>
@@ -274,11 +379,12 @@ public sealed class TestOutcomeStore
     {
         public readonly Dictionary<string, RowOutcome> Rows = new(StringComparer.Ordinal);
         public DateTime LastUpdatedUtc;
+        public string? RunningRunId;
 
         public MethodOutcome Snapshot(TestOutcomeKey key)
         {
             var rows = Rows.Values.OrderBy(r => r.DisplayName, StringComparer.Ordinal).ToList();
-            return new MethodOutcome(key, Aggregate(rows), rows, LastUpdatedUtc);
+            return new MethodOutcome(key, Aggregate(rows), rows, LastUpdatedUtc, RunningRunId is not null);
         }
     }
 }

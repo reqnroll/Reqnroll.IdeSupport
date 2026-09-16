@@ -194,6 +194,71 @@ public class TestOutcomeListenerTests : IDisposable
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
     }
 
+    private static string RunStart(string runId, params string[] identities)
+        => new JObject
+        {
+            ["type"] = "runStart",
+            ["runId"] = runId,
+            ["testCount"] = identities.Length,
+            ["sources"] = new JArray(Source),
+            ["tests"] = new JArray(identities),
+        }.ToString(Newtonsoft.Json.Formatting.None);
+
+    private static string Identity(string method, string display)
+        => string.Join(TestOutcomeListener.TestIdentitySeparator.ToString(), Source, "Specs.CalcFeature", method + "(System.String)", "Specs.CalcFeature." + method, display);
+
+    [Fact]
+    public async Task RunStart_marks_the_listed_methods_running_and_runComplete_clears_them()
+    {
+        var registration = _listener.RegisterRun()!;
+        var key = TestOutcomeKey.ForLookup(Source, "Specs.CalcFeature", "Add");
+
+        await SendAsync(registration.Endpoint,
+            Hello(registration.Token, registration.RunId),
+            RunStart(registration.RunId, Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)"), Identity("Sub", "Sub")));
+
+        (await WaitForStoreAsync(() => _store.TryGet(key)?.IsRunning == true)).Should().BeTrue();
+        _store.TryGet(Source, "Specs.CalcFeature", "Sub")!.IsRunning.Should().BeTrue();
+
+        // The connection above closed without runComplete → the listener completes the run itself.
+        (await WaitForStoreAsync(() => _store.TryGet(key) is null)).Should().BeTrue("a method that only ever ran, never reported, is forgotten");
+        _store.TryGet(Source, "Specs.CalcFeature", "Sub").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_full_run_persists_its_outcomes_on_completion()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "reqnroll-listener-persist-tests", Guid.NewGuid().ToString("N"), "test-outcomes.json");
+        var persistence = new TestOutcomePersistence(file, _ => DateTime.MinValue);
+        using var listener = new TestOutcomeListener(_store, () => { }, persistence);
+        var registration = listener.RegisterRun()!;
+
+        await SendAsync(registration.Endpoint,
+            Hello(registration.Token, registration.RunId),
+            RunStart(registration.RunId, Identity("Add", "Add(1,2)")),
+            Result("Add", "Add(1,2)", "Passed", registration.RunId),
+            RunComplete(registration.RunId));
+
+        (await WaitForStoreAsync(() => File.Exists(file))).Should().BeTrue();
+        persistence.Load().Should().ContainSingle().Which.Key.MethodName.Should().Be("Add");
+        _store.TryGet(Source, "Specs.CalcFeature", "Add")!.IsRunning.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ParseRunStartTests_unpacks_identities_dedupes_by_method_and_skips_malformed_entries()
+    {
+        var message = JObject.Parse(RunStart("r", Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)"), "garbage", "", Identity("Sub", "Sub")));
+
+        var keys = TestOutcomeListener.ParseRunStartTests(message);
+
+        keys.Select(k => k.MethodName).Should().Equal("Add", "Sub");
+        keys[0].TypeFullName.Should().Be("Specs.CalcFeature");
+    }
+
+    [Fact]
+    public void ParseRunStartTests_is_empty_for_a_source_based_run()
+        => TestOutcomeListener.ParseRunStartTests(JObject.Parse("{\"type\":\"runStart\",\"runId\":\"r\",\"testCount\":0,\"sources\":[\"x.dll\"]}")).Should().BeEmpty();
+
     [Fact]
     public void ToRecord_maps_every_wire_field_and_defaults_the_missing_ones()
     {

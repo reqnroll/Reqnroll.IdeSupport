@@ -79,8 +79,9 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
         try
         {
             var outcome = _outcomeStore.TryGet(assemblyPath, typeFullName, methodName);
-            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate.ToString() ?? "(none)"}");
-            return Task.FromResult(outcome is null ? null : ToEntry(outcome));
+            var stale = outcome is not null && !outcome.IsRunning && IsStale(outcome);
+            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate.ToString() ?? "(none)"}{(outcome?.IsRunning == true ? " (running)" : string.Empty)}{(stale ? " (stale)" : string.Empty)}");
+            return Task.FromResult(outcome is null ? null : ToEntry(outcome, stale));
         }
         catch (Exception ex)
         {
@@ -90,10 +91,31 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
         }
     }
 
-    internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome) => new(
+    internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome) => ToEntry(outcome, isStale: false);
+
+    internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome, bool isStale) => new(
         outcome.Aggregate.ToString(),
         outcome.Rows.Select(r => new RunTestOutcomeRow(
             r.DisplayName, r.Outcome.ToString(), r.DurationMs, r.ErrorMessage,
             r.Steps.Count, r.FailedStep?.Index, r.FailedStep?.StepText, r.FailedStep?.Outcome.ToString())).ToList(),
-        outcome.LastUpdatedUtc);
+        outcome.LastUpdatedUtc,
+        outcome.IsRunning,
+        isStale);
+
+    /// <summary>
+    /// Outcomes recorded before the container was last built describe code that no longer exists;
+    /// the lens shows them as stale (no pass/fail glyph) rather than a confident green on rebuilt code.
+    /// A stat per lens render is cheap; a missing container counts as stale too.
+    /// </summary>
+    internal static bool IsStale(MethodOutcome outcome)
+    {
+        try
+        {
+            return !File.Exists(outcome.Key.Source) || File.GetLastWriteTimeUtc(outcome.Key.Source) > outcome.LastUpdatedUtc;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 }

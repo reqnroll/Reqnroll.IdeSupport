@@ -127,16 +127,36 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
         };
     }
 
+    /// <summary>Upper bound on the test identities listed in <c>runStart</c>; beyond it the IDE just gets the count.</summary>
+    public const int MaxRunStartTests = 500;
+
+    /// <summary>Separates the five identity fields of each <c>runStart.tests</c> entry.</summary>
+    public const char TestIdentitySeparator = '';
+
     private string FormatRunStart(TestRunStartEventArgs e)
     {
         var criteria = e.TestRunCriteria;
+        var tests = criteria?.Tests?.ToList();
         var sources = criteria?.Sources?.ToList()
-                      ?? criteria?.Tests?.Select(t => t.Source).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                      ?? tests?.Select(t => t.Source).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
                       ?? new List<string>();
+
+        // For a selected-tests run (Run on a lens / in Test Explorer) the runner knows the cases up
+        // front; the IDE uses them to show "running" on the right lenses. A source-based run
+        // (Run All) has no list — the IDE just sees the count 0 and waits for results. Each entry packs
+        // the same identity fields as a result — source, managedType, managedMethod, fqn, displayName —
+        // separated by U+001F (unit separator), which cannot occur in any of them, so the writer's
+        // vocabulary stays flat (string arrays only).
+        var identities = (tests ?? new List<TestCase>())
+            .Take(MaxRunStartTests)
+            .Select(t => string.Join(TestIdentitySeparator.ToString(), t.Source ?? string.Empty, GetProperty(t, ManagedTypePropertyId) ?? string.Empty,
+                GetProperty(t, ManagedMethodPropertyId) ?? string.Empty, t.FullyQualifiedName ?? string.Empty, t.DisplayName ?? string.Empty));
+
         return NdjsonWriter.Object("runStart")
             .Field("runId", _runId)
-            .Field("testCount", criteria?.Tests?.Count() ?? 0)
+            .Field("testCount", tests?.Count ?? 0)
             .Field("sources", sources)
+            .Field("tests", identities)
             .ToLine();
     }
 

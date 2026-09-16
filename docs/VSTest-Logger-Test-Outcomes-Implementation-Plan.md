@@ -1,8 +1,9 @@
 # Test Outcomes via an IDE-Bundled VSTest Logger — Implementation Plan
 
-**Status: DRAFT, 2026-09-16.** Written after both feasibility spikes succeeded (see §1). This is an
-implementation plan, not a design record: it says what to build, in what order, and what "done" means
-for each step. It deliberately does **not** rewrite
+**Status: Phases 0–3 IMPLEMENTED on branch `fix/700-vstest-logger-runsettings-injection` (2026-09-16),
+live verification of the exit criteria pending.** Written after both feasibility spikes succeeded (see §1).
+This is an implementation plan, not a design record: it says what to build, in what order, and what
+"done" means for each step; §6 records what each phase actually became. It deliberately does **not** rewrite
 [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md); that document still describes
 the as-shipped state (reflection bridge for VS, own-execution runners for Rider/VS Code) and will be
 revised once this plan has landed. Where this plan contradicts it, this plan is the intent.
@@ -242,9 +243,10 @@ results.
 Each phase is one PR-sized unit with its own exit criteria. Phases 1–3 are VS; 4–5 are the other IDEs;
 6 is the retirement decision.
 
-### Phase 0 — Land the spike as a feature branch
+### Phase 0 — Land the spike as a feature branch — DONE (branch), issue pending
 
-- Rename `spike/vstest-logger-runsettings-injection` → `feature/702-vstest-logger` (or branch from it).
+- ~~Rename `spike/vstest-logger-runsettings-injection` → `feature/702-vstest-logger`~~ Renamed to
+  `fix/700-vstest-logger-runsettings-injection` (Chris's choice: this branch closes #700 as well as #702).
 - Open the tracking issue ("Observe test outcomes via an IDE-bundled VSTest logger") linking this plan,
   the hand-off note and #702; comment on #702 pointing at it. Don't close #702 until Phase 2 is live.
 - One live run with a user-selected runsettings file (`spike.runsettings` from the artifacts folder)
@@ -252,7 +254,17 @@ Each phase is one PR-sized unit with its own exit criteria. Phases 1–3 are VS;
 - **Exit:** issue open, branch green in CI (the new netstandard2.0 project builds on Linux; CI's
   `UseExternalLspServerBuild` path is unaffected by the new unconditional `ProjectReference`).
 
-### Phase 1 — Transport and store (VS glyph for every scenario kind)
+### Phase 1 — Transport and store (VS glyph for every scenario kind) — IMPLEMENTED (`2c51592d`)
+
+As built, two deviations from the sketch below worth knowing: the file sink survived as an optional
+troubleshooting mirror (`REQNROLL_IDE_TEST_LOGGER_MIRROR=1|<path>` on devenv, or `LogFilePath` /
+`REQNROLL_TESTLOGGER_FILE` on the logger), and invalidation uses a **descriptor revision** rather than a
+per-file mapping: `RunTestCodeLensRedirect.OutcomeRevision` is folded into every Run lens tag's
+`ElementDescription`, so `NotifyOutcomesChanged()` (bump + tagger-only refresh) yields new descriptors and
+the CodeLens host re-creates the OOP data points. The tagger now `Disconnect`s a replaced tag on the same
+line. The end-to-end `dotnet test` test lives in `tests/Core/Reqnroll.IdeSupport.TestLogger.Tests`
+against `tests/Core/TestLoggerFixtures/MsTestReqnroll` (net10.0 so CI's single runtime suffices) and
+runs in `test-lsp.yml`'s unit-test job. **Live exit criteria below still to be run.**
 
 Files: `TestLogger/NdjsonWriter.cs`, `TestLogger/OutcomeTransport.cs` (logger);
 `VSSDKIntegration/TestLogger/TestOutcomeListener.cs`, `TestOutcomeStore.cs`, `RunTestOutcomeEntry.cs`;
@@ -272,7 +284,12 @@ caught #702 in CI.
   `GetOutcome` hit, bridge not consulted). Debug run from Test Explorer behaves the same. Kill switch
   verified. #702's repro (renamed outline) passes.
 
-### Phase 2 — Per-row details and the failed-step signal
+### Phase 2 — Per-row details and the failed-step signal — IMPLEMENTED (`1f045fce`)
+
+`Common/TestOutcomes/StepTraceParser` (17 tests incl. the fixture's real captured stdout);
+`RowOutcome.Steps`/`FailedStep`; `RunTestOutcomeRow.StepCount/FailedStepIndex/FailedStepText/FailedStepOutcome`;
+details table Example / Outcome / Duration / Failed step. **Live exit criterion (deliberately failing
+middle step shows on the right step in the pane) still to be run.**
 
 - `GetDetailsAsync` renders the row table (display name, outcome, duration) from the DTO — the
   "which example failed" answer that VS's own lens gives for `.feature.cs`.
@@ -283,7 +300,10 @@ caught #702 in CI.
 - **Exit:** a deliberately failing middle step shows as `error` on the right step in the details pane;
   `binding error`/`undefined` outcomes parse.
 
-### Phase 3 — Persistence, freshness, and run-in-progress
+### Phase 3 — Persistence, freshness, and run-in-progress — IMPLEMENTED (see §4.2 "as built")
+
+Single global file instead of per-solution files (rationale in §4.2). **Live exit criteria (restart →
+glyphs present; rebuild → glyphs cleared; two instances → no cross-talk) still to be run.**
 
 - Store serialization per solution (§4.2), invalidated by source-assembly timestamp.
 - `runStart` marks the listed test cases as running so the lens can show an in-progress state

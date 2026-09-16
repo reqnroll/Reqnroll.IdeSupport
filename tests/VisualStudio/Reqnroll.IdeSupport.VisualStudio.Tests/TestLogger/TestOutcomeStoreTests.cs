@@ -178,6 +178,53 @@ public class TestOutcomeStoreTests
     }
 
     [Fact]
+    public void MarkRunning_flags_the_method_and_keeps_its_last_known_rows()
+    {
+        var store = new TestOutcomeStore();
+        var key = store.Record(Result(outcome: TestOutcomeKind.Failed))!;
+
+        store.MarkRunning("run-2", new[] { key });
+
+        var outcome = store.TryGet(key)!;
+        outcome.IsRunning.Should().BeTrue();
+        outcome.Aggregate.Should().Be(TestOutcomeKind.Failed, "the last outcome stays visible in the details while running");
+        outcome.Rows.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void CompleteRun_clears_running_for_that_run_only_and_forgets_methods_that_never_reported()
+    {
+        var store = new TestOutcomeStore();
+        var reported = TestOutcomeKey.ForLookup(Source, Type, "Reported");
+        var silent = TestOutcomeKey.ForLookup(Source, Type, "Silent");
+        var other = TestOutcomeKey.ForLookup(Source, Type, "OtherRun");
+        store.MarkRunning("run-2", new[] { reported, silent });
+        store.MarkRunning("run-3", new[] { other });
+        store.Record(Result(method: "Reported", managedMethod: "Reported()", runId: "run-2"));
+
+        store.TryGet(reported)!.IsRunning.Should().BeTrue("a result mid-run doesn't end the run");
+        var affected = store.CompleteRun("run-2");
+
+        affected.Should().BeEquivalentTo(new[] { reported, silent });
+        store.TryGet(reported)!.IsRunning.Should().BeFalse();
+        store.TryGet(silent).Should().BeNull("nothing was ever recorded for it");
+        store.TryGet(other)!.IsRunning.Should().BeTrue("run-3 is still going");
+        store.Snapshot().Select(m => m.Key.MethodName).Should().Equal("Reported");
+    }
+
+    [Fact]
+    public void A_result_from_a_different_run_supersedes_a_stale_running_mark()
+    {
+        var store = new TestOutcomeStore();
+        var key = TestOutcomeKey.ForLookup(Source, Type, "So23");
+        store.MarkRunning("run-crashed", new[] { key });
+
+        store.Record(Result(runId: "run-later"));
+
+        store.TryGet(key)!.IsRunning.Should().BeFalse();
+    }
+
+    [Fact]
     public void Snapshots_are_immutable_copies()
     {
         var store = new TestOutcomeStore();

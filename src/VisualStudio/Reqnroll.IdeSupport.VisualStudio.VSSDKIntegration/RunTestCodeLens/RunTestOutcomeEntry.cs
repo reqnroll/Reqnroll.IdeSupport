@@ -34,4 +34,8 @@ public sealed record RunTestOutcomeEntry(
     /// <summary>Aggregate over <see cref="Rows"/>: <c>Failed</c> &gt; <c>Passed</c> &gt; <c>Skipped</c> &gt; other.</summary>
     string Aggregate,
     IReadOnlyList<RunTestOutcomeRow> Rows,
-    DateTime LastUpdatedUtc);
+    DateTime LastUpdatedUtc,
+    /// <summary>A run naming this method has started and not yet completed.</summary>
+    bool IsRunning = false,
+    /// <summary>The container assembly was rebuilt after these outcomes were recorded; they describe old code.</summary>
+    bool IsStale = false);

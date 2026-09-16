@@ -45,6 +45,7 @@ public sealed class TestOutcomeListener : IDisposable
     private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
 
     private readonly TestOutcomeStore _store;
+    private readonly TestOutcomePersistence? _persistence;
     private readonly Action _refreshLenses;
     private readonly ConcurrentDictionary<string, (string RunId, DateTime IssuedUtc)> _tokens = new(StringComparer.Ordinal);
     private readonly object _gate = new();
@@ -53,16 +54,17 @@ public sealed class TestOutcomeListener : IDisposable
     private bool _disposed;
 
     [ImportingConstructor]
-    public TestOutcomeListener(TestOutcomeStore store)
-        : this(store, RunTestCodeLensRedirect.NotifyOutcomesChanged)
+    public TestOutcomeListener(TestOutcomeStore store, TestOutcomePersistence persistence)
+        : this(store, RunTestCodeLensRedirect.NotifyOutcomesChanged, persistence)
     {
     }
 
-    /// <summary>Test seam: <paramref name="refreshLenses"/> replaces the CodeLens tagger refresh.</summary>
-    internal TestOutcomeListener(TestOutcomeStore store, Action refreshLenses)
+    /// <summary>Test seam: <paramref name="refreshLenses"/> replaces the CodeLens tagger refresh; <paramref name="persistence"/> may be null.</summary>
+    internal TestOutcomeListener(TestOutcomeStore store, Action refreshLenses, TestOutcomePersistence? persistence = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _refreshLenses = refreshLenses ?? throw new ArgumentNullException(nameof(refreshLenses));
+        _persistence = persistence;
         _store.Changed += (_, _) => ScheduleRefresh();
     }
 
@@ -185,7 +187,8 @@ public sealed class TestOutcomeListener : IDisposable
                 switch (message.Value<string>("type"))
                 {
                     case "runStart":
-                        Logger.LogVerbose($"{nameof(TestOutcomeListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s)");
+                        var running = _store.MarkRunning(runId, ParseRunStartTests(message));
+                        Logger.LogVerbose($"{nameof(TestOutcomeListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
                         break;
                     case "result":
                         if (_store.Record(ToRecord(runId, message)) is not null) results++;
@@ -210,10 +213,42 @@ public sealed class TestOutcomeListener : IDisposable
             if (runId is not null && !completed)
                 Logger.LogWarning($"{nameof(TestOutcomeListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
             try { client.Dispose(); } catch (Exception) { }
-            // Whatever arrived is already in the store; make sure the lenses catch up even if the
-            // debounce timer was cancelled by disposal ordering.
+            if (runId is not null)
+            {
+                // Whether the run completed or the runner died: nothing is running any more, and
+                // whatever arrived is worth keeping for the next session.
+                _store.CompleteRun(runId);
+                if (results > 0)
+                    _persistence?.Save(_store.Snapshot());
+            }
+            // Make sure the lenses catch up even if the debounce timer was cancelled by disposal ordering.
             if (results > 0) ScheduleRefresh();
         }
+    }
+
+    /// <summary>Mirror of the logger's <c>ReqnrollIdeTestLogger.TestIdentitySeparator</c> (U+001F).</summary>
+    internal const char TestIdentitySeparator = (char)0x1f;
+
+    /// <summary>
+    /// <c>runStart.tests</c>: one packed identity per selected test case
+    /// (<c>source␟managedType␟managedMethod␟fqn␟displayName</c>, U+001F-separated — see the logger's
+    /// <c>FormatRunStart</c>). Absent for source-based runs.
+    /// </summary>
+    internal static IReadOnlyList<TestOutcomeKey> ParseRunStartTests(JObject message)
+    {
+        var keys = new List<TestOutcomeKey>();
+        if (message["tests"] is not JArray tests) return keys;
+        foreach (var entry in tests)
+        {
+            var packed = entry.Value<string>();
+            if (string.IsNullOrEmpty(packed)) continue;
+            var parts = packed!.Split(TestIdentitySeparator);
+            if (parts.Length < 4) continue;
+            var key = TestOutcomeKey.From(parts[0], parts[1], parts[2], parts[3]);
+            if (key is not null && !keys.Contains(key, TestOutcomeKey.Comparer))
+                keys.Add(key);
+        }
+        return keys;
     }
 
     internal static TestResultRecord ToRecord(string runId, JObject message) => new(
