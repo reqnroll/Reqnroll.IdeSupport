@@ -41,7 +41,7 @@ public sealed class TestOutcomePersistence
 
     [ImportingConstructor]
     public TestOutcomePersistence()
-        : this(Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), "test-outcomes.json"), DefaultSourceLastWriteUtc)
+        : this(ResolveDefaultFilePath(), TestOutcomeFreshness.DefaultSourceLastWriteUtc)
     {
     }
 
@@ -50,6 +50,28 @@ public sealed class TestOutcomePersistence
     {
         _filePath = filePath;
         _sourceLastWriteUtc = sourceLastWriteUtc;
+    }
+
+    /// <summary>
+    /// This runs inside the MEF constructor chain — <c>RunTestCodeLensCallbackListener</c> imports
+    /// <c>TestOutcomeStore</c>, which imports this class — so an exception here would fail composition
+    /// of a callback that used to have zero external dependencies and always worked (fresh-eyes review
+    /// finding). <see cref="ReqnrollLogPaths.ResolveLogDirectory"/> is broadly safe (its own file
+    /// enumeration is already guarded) but still resolves environment-dependent paths via
+    /// <see cref="Path.Combine(string, string)"/>, which can throw on a sufficiently unusual
+    /// environment; never let that take the whole outcome pipeline down.
+    /// </summary>
+    private static string ResolveDefaultFilePath()
+    {
+        try
+        {
+            return Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), "test-outcomes.json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: could not resolve the Reqnroll log directory; falling back to the temp directory");
+            return Path.Combine(Path.GetTempPath(), "reqnroll-test-outcomes.json");
+        }
     }
 
     public string FilePath => _filePath;
@@ -107,22 +129,7 @@ public sealed class TestOutcomePersistence
 
     /// <summary>A persisted outcome is usable while its container still exists and hasn't been rebuilt since.</summary>
     internal bool IsFresh(MethodOutcome outcome)
-    {
-        var written = _sourceLastWriteUtc(outcome.Key.Source);
-        return written is not null && written.Value <= outcome.LastUpdatedUtc;
-    }
-
-    private static DateTime? DefaultSourceLastWriteUtc(string source)
-    {
-        try
-        {
-            return File.Exists(source) ? File.GetLastWriteTimeUtc(source) : null;
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
+        => TestOutcomeFreshness.IsFresh(outcome.Key.Source, outcome.LastUpdatedUtc, _sourceLastWriteUtc);
 
     // ---- file format (hand-mapped so the on-disk shape is explicit and independent of the record types) ----
 

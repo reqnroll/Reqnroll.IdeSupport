@@ -79,6 +79,17 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
         try
         {
             var outcome = _outcomeStore.TryGet(assemblyPath, typeFullName, methodName);
+            var aged = outcome is not null && !outcome.IsRunning && IsTooOldToTrust(outcome);
+            if (aged)
+            {
+                // Unlike rebuild-staleness below, an aged-out entry isn't "known to be wrong" — it's
+                // "we can no longer vouch for it" (see MaxTrustedAge's remarks). Treat it exactly like
+                // the store never heard of this method at all, so the caller falls through to the live
+                // bridge instead of the dead end a stale-but-still-returned entry would be.
+                Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → aged out ({DateTime.UtcNow - outcome!.LastUpdatedUtc} since last seen); falling back to the bridge");
+                return Task.FromResult<RunTestOutcomeEntry?>(null);
+            }
+
             var stale = outcome is not null && !outcome.IsRunning && IsStale(outcome);
             Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate.ToString() ?? "(none)"}{(outcome?.IsRunning == true ? " (running)" : string.Empty)}{(stale ? " (stale)" : string.Empty)}");
             return Task.FromResult(outcome is null ? null : ToEntry(outcome, stale));
@@ -103,19 +114,29 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
         isStale);
 
     /// <summary>
+    /// The store only ever hears about a method from an IDE-observed run. If it hasn't heard about
+    /// this method in a while, a run it never saw may have happened since — a container-heuristic
+    /// miss, a disabled logger, a CLI run — and the entry should stop indefinitely shadowing the
+    /// reflection bridge's live check (fresh-eyes review finding: previously the store's answer was
+    /// trusted forever, with no way back to the bridge short of a rebuild). Deliberately a separate
+    /// check from <see cref="IsStale"/>, not folded into it: rebuild-staleness means "known wrong, and
+    /// the bridge would say the same stale thing" (skip it), while aging out means "no longer vouched
+    /// for" (the bridge might know something new — see the call site in <see cref="GetOutcomeAsync"/>,
+    /// which treats an aged-out entry as absent rather than stale).
+    /// </summary>
+    internal static bool IsTooOldToTrust(MethodOutcome outcome, DateTime? nowUtc = null)
+        => (nowUtc ?? DateTime.UtcNow) - outcome.LastUpdatedUtc > MaxTrustedAge;
+
+    internal static readonly TimeSpan MaxTrustedAge = TimeSpan.FromHours(2);
+
+    /// <summary>
     /// Outcomes recorded before the container was last built describe code that no longer exists;
-    /// the lens shows them as stale (no pass/fail glyph) rather than a confident green on rebuilt code.
-    /// A stat per lens render is cheap; a missing container counts as stale too.
+    /// the lens shows them as stale (no pass/fail glyph, and no bridge fallback — VS's TestStore would
+    /// just repeat the same stale value) rather than a confident green on rebuilt code. A missing
+    /// container, or any failure determining the container's write time, counts as stale too
+    /// (<see cref="TestOutcomeFreshness"/> — this used to be a second, independently-written copy of
+    /// that rule that disagreed with it on the error path).
     /// </summary>
     internal static bool IsStale(MethodOutcome outcome)
-    {
-        try
-        {
-            return !File.Exists(outcome.Key.Source) || File.GetLastWriteTimeUtc(outcome.Key.Source) > outcome.LastUpdatedUtc;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
+        => !TestOutcomeFreshness.IsFresh(outcome.Key.Source, outcome.LastUpdatedUtc, TestOutcomeFreshness.DefaultSourceLastWriteUtc);
 }

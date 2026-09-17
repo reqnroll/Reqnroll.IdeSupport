@@ -1,5 +1,6 @@
 using System.Xml;
 using System.Xml.XPath;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 
 namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
 
@@ -125,12 +126,14 @@ internal static class TestLoggerRunSettings
     /// <summary>
     /// vstest splits <c>TestAdaptersPaths</c> on <c>;</c> (RunSettingsUtilities.GetTestAdaptersPaths).
     /// Existing entries are preserved verbatim; ours is appended unless an equivalent path is already
-    /// listed (case-insensitive, trailing separator ignored — Windows paths).
+    /// listed — equivalence via <see cref="PathUtils.IsSamePath"/>, the one path-comparison routine
+    /// the extension uses everywhere else (issue #515 lesson: two independent normalizations always
+    /// end up disagreeing on some input eventually; this used to be its own weaker trailing-separator
+    /// trim that didn't collapse <c>..</c>/<c>.</c> segments or unify <c>/</c> vs <c>\</c>).
     /// </summary>
     private static string AppendPath(string? existing, string loggerDirectory)
     {
         existing ??= string.Empty;
-        var normalizedNew = Normalize(loggerDirectory);
         var parts = existing
             .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Trim())
@@ -138,13 +141,11 @@ internal static class TestLoggerRunSettings
             .ToList();
 
         // Already listed: hand the user's value back byte-for-byte rather than a re-joined copy.
-        if (parts.Any(p => string.Equals(Normalize(p), normalizedNew, StringComparison.OrdinalIgnoreCase)))
+        if (parts.Any(p => PathUtils.IsSamePath(p, loggerDirectory)))
             return existing;
 
         parts.Add(loggerDirectory);
         return string.Join(";", parts);
-
-        static string Normalize(string path) => path.TrimEnd('\\', '/');
     }
 
     private static void RemoveExistingRegistration(XmlElement loggers)

@@ -43,14 +43,29 @@ internal sealed class OutcomeSink : IDisposable
         if (!TryParseEndpoint(endpoint, out var address, out var port))
             return false;
 
+        TcpClient? client = null;
         try
         {
-            var client = new TcpClient(address.AddressFamily) { NoDelay = true, SendTimeout = (int)SendTimeout.TotalMilliseconds };
+            client = new TcpClient(address.AddressFamily) { NoDelay = true, SendTimeout = (int)SendTimeout.TotalMilliseconds };
             var connect = client.ConnectAsync(address, port);
-            if (!connect.Wait(ConnectTimeout) || !client.Connected)
+
+            // Task.Wait rethrows (as AggregateException) when the task is already faulted by the time
+            // the timeout elapses — a fast connection-refused finishes well inside ConnectTimeout, so
+            // that path is a genuine "didn't connect" outcome here, not an error to propagate.
+            bool connected;
+            try
             {
-                // Observe the eventual fault of a timed-out connect so it never surfaces as an
-                // UnobservedTaskException inside the runner.
+                connected = connect.Wait(ConnectTimeout) && client.Connected;
+            }
+            catch (AggregateException)
+            {
+                connected = false;
+            }
+
+            if (!connected)
+            {
+                // Observe the eventual fault (of a still-pending timed-out connect) so it never
+                // surfaces as an UnobservedTaskException inside the runner.
                 _ = connect.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
                 client.Dispose();
                 return false;
@@ -66,6 +81,9 @@ internal sealed class OutcomeSink : IDisposable
         }
         catch (Exception)
         {
+            // Any other failure (constructing the client, GetStream, ...): the client is either not
+            // yet assigned to _client or never will be, so dispose it here rather than leaking it.
+            client?.Dispose();
             return false;
         }
     }

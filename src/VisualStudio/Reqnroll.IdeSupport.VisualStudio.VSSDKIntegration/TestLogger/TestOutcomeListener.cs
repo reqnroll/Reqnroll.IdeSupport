@@ -51,6 +51,7 @@ public sealed class TestOutcomeListener : IDisposable
     private readonly object _gate = new();
     private TcpListener? _listener;
     private Timer? _refreshTimer;
+    private int _refreshScheduled;
     private bool _disposed;
 
     [ImportingConstructor]
@@ -265,11 +266,37 @@ public sealed class TestOutcomeListener : IDisposable
         Stdout: message.Value<string>("stdout"),
         StdoutTruncated: message.Value<bool?>("stdoutTruncated") ?? false);
 
+    /// <summary>
+    /// Throttle, not debounce: once a fire is scheduled, further calls during the wait are absorbed
+    /// (a single <see cref="Interlocked.CompareExchange(ref int, int, int)"/>, no <see cref="Timer.Change"/>
+    /// call) rather than each resetting the wait, so a fast, continuous stream of results — e.g. a
+    /// large Scenario Outline finishing in well under <see cref="RefreshDebounce"/> — fires at a
+    /// bounded, predictable cadence instead of two failure modes a reset-on-every-call debounce is
+    /// prone to: many redundant <c>Timer.Change</c> calls during the burst, or, if results keep
+    /// arriving faster than the debounce interval for long enough, never firing at all until the
+    /// stream finally goes quiet (starvation — the exact opposite of "live" outcomes).
+    /// </summary>
+    /// <remarks>
+    /// This does <em>not</em> bound how often a full invalidation happens when results are spaced
+    /// <em>further</em> apart than <see cref="RefreshDebounce"/> (e.g. a slow-running suite) — each
+    /// such result still triggers its own fire, same as before. Scoping invalidation to only the
+    /// files/lines an outcome change actually affects (rather than every open <c>.feature</c> file)
+    /// would need the store's changed keys mapped back to file/line, which the OOP data-point side
+    /// resolves lazily and the tagger side deliberately never does (design doc §5/§6, issue #491) — a
+    /// cross-project change out of scope here; left as a known follow-up.
+    /// </remarks>
     private void ScheduleRefresh()
     {
+        if (Interlocked.CompareExchange(ref _refreshScheduled, 1, 0) != 0)
+            return; // Already queued to fire within the interval; this event will be covered by it.
+
         lock (_gate)
         {
-            if (_disposed) return;
+            if (_disposed)
+            {
+                Interlocked.Exchange(ref _refreshScheduled, 0);
+                return;
+            }
             _refreshTimer ??= new Timer(_ => FireRefresh(), null, Timeout.Infinite, Timeout.Infinite);
             _refreshTimer.Change(RefreshDebounce, Timeout.InfiniteTimeSpan);
         }
@@ -277,6 +304,7 @@ public sealed class TestOutcomeListener : IDisposable
 
     private void FireRefresh()
     {
+        Interlocked.Exchange(ref _refreshScheduled, 0);
         try { _refreshLenses(); }
         catch (Exception ex) { Logger.LogException(ex, $"{nameof(TestOutcomeListener)}: lens refresh failed"); }
     }

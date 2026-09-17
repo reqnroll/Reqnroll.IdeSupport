@@ -209,9 +209,13 @@ public sealed class TestOutcomeStore
         if (key is null) return null;
 
         var when = nowUtc ?? DateTime.UtcNow;
+        // The raw stdout/stack trace are parsed into Steps right here and never read again anywhere
+        // in the extension (confirmed by grep) — retaining them verbatim would keep up to 64 KB of
+        // dead string per row alive in devenv.exe for the store's entire lifetime (fresh-eyes review
+        // finding). Persistence already dropped them on write; do the same in memory.
         var row = new RowOutcome(
-            result.DisplayName, result.Outcome, result.DurationMs, result.ErrorMessage, result.ErrorStackTrace,
-            result.Stdout, result.StdoutTruncated, result.RunId, when, StepTraceParser.Parse(result.Stdout));
+            result.DisplayName, result.Outcome, result.DurationMs, result.ErrorMessage, ErrorStackTrace: null,
+            Stdout: null, result.StdoutTruncated, result.RunId, when, StepTraceParser.Parse(result.Stdout));
 
         int revision;
         lock (_gate)

@@ -85,6 +85,11 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         {
             _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — no target resolved for line={_line} in {_fileUri}.");
             _cachedMethods = Array.Empty<TestMethodIdentifier>();
+            // Clear alongside _cachedMethods: a stale entry here would leave GetDetailsAsync
+            // rendering a previous outcome's row table for a line that just resolved to no target at
+            // all (fresh-eyes review finding — this can happen on a transient failure of the callback
+            // above, not just a genuinely deleted scenario).
+            _cachedOutcome = null;
             return new CodeLensDataPointDescriptor { Description = string.Empty };
         }
 
@@ -125,9 +130,13 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         }
         else if (_cachedOutcome is { IsStale: true })
         {
-            // Recorded before the container was last rebuilt — say nothing rather than something
-            // outdated, and don't ask the bridge either: VS's TestStore would just repeat the stale value.
+            // Recorded before the container was last rebuilt, or just too old to keep trusting (see
+            // RunTestCodeLensCallbackListener.IsStale's remarks) — say nothing rather than something
+            // outdated, and don't ask the bridge either: VS's TestStore would just repeat the stale
+            // value. Also clear the cache itself, not just the glyph: a details-pane click must not
+            // render this stale entry's row table as if it were current (fresh-eyes review finding).
             outcomeSource = $"store:stale({_cachedOutcome.Aggregate})";
+            _cachedOutcome = null;
         }
         else if (_cachedOutcome is not null && RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } storedOutcome)
         {

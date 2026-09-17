@@ -236,4 +236,20 @@ public class TestOutcomeStoreTests
         first.Rows.Should().HaveCount(1);
         store.TryGet(Source, Type, "So23")!.Rows.Should().HaveCount(2);
     }
+
+    [Fact]
+    public void Record_parses_the_step_trace_but_does_not_retain_the_raw_stdout_or_stack_trace()
+    {
+        var store = new TestOutcomeStore();
+        var trace = "Given x\n-> done: S.X() (0.0s)\n";
+        var record = new TestResultRecord("run-1", Source, Type, "So23()", $"{Type}.So23", "row", TestOutcomeKind.Failed, 5, "boom", "at S.X()", trace, false);
+
+        store.Record(record);
+
+        var row = store.TryGet(Source, Type, "So23")!.Rows.Single();
+        row.Steps.Should().ContainSingle("the trace was parsed before being discarded");
+        row.Stdout.Should().BeNull("nothing downstream reads it again — retaining it would leak up to 64 KB per row for the store's lifetime");
+        row.ErrorStackTrace.Should().BeNull();
+        row.ErrorMessage.Should().Be("boom", "the (small, still useful) error message is kept");
+    }
 }

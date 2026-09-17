@@ -50,6 +50,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
 
     private volatile IReadOnlyDictionary<int, LineCodeLensTag> _tagsByLine = EmptyTags;
     private int _refreshInFlight;
+    private int _refreshPending;
     private bool _disposed;
 
     private static readonly IReadOnlyDictionary<int, LineCodeLensTag> EmptyTags = new Dictionary<int, LineCodeLensTag>();
@@ -103,11 +104,20 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
         }
     }
 
-    /// <summary>Kicks off an async re-pull of entry data for this buffer's file, coalescing concurrent requests. Safe to call from any thread.</summary>
+    /// <summary>
+    /// Kicks off an async re-pull of entry data for this buffer's file, coalescing concurrent
+    /// requests. Safe to call from any thread. A request that arrives while one is already in flight
+    /// is not dropped — it is recorded and re-run once the in-flight one finishes (fresh-eyes review
+    /// finding: the previous version discarded it outright, so a request landing between two other
+    /// refreshes could be lost until some unrelated later refresh happened to occur).
+    /// </summary>
     internal void RequestRefresh()
     {
         if (Interlocked.CompareExchange(ref _refreshInFlight, 1, 0) != 0)
+        {
+            Volatile.Write(ref _refreshPending, 1);
             return;
+        }
 
         _ = RefreshAsync();
     }
@@ -167,6 +177,11 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
         finally
         {
             Interlocked.Exchange(ref _refreshInFlight, 0);
+            // A RequestRefresh arrived while the above was in flight — its caller was told "you're
+            // covered", but the fetch above may have started before that request's reason for asking
+            // even existed, so honour it with one more refresh instead of treating this one as good enough.
+            if (!_disposed && Interlocked.Exchange(ref _refreshPending, 0) == 1)
+                RequestRefresh();
         }
     }
 
