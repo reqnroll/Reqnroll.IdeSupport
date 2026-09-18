@@ -112,6 +112,18 @@ owns — if your workspace already points it at a `.runsettings` file, that file
 preserved and merged with the bundled logger's configuration, never replaced. If you turn the
 CodeLens off again, re-run a build so C# Dev Kit picks up the setting change cleanly.
 ```
+
+```{admonition} No outcome shown for Microsoft.Testing.Platform projects
+:class: warning
+
+This CodeLens is sourced from the same bundled VSTest logger as VS's and Rider's outcome glyphs —
+a project running under
+[Microsoft.Testing.Platform](https://learn.microsoft.com/dotnet/core/testing/microsoft-testing-platform-intro)
+instead of VSTest (for example, `TestingPlatformDotnetTestSupport=true`) never feeds it any data.
+Unlike Visual Studio and Rider, there's no fallback source here — the CodeLens simply never
+appears on that project's scenarios, rather than showing a stale or incorrect result. Use C# Dev
+Kit's own Test Explorer for results on those projects.
+```
 ````
 
 ````{tab-item} Rider
@@ -134,14 +146,20 @@ can currently plug into for that. Treat it as a quick way to check one scenario 
 against the generated test project directly.
 ```
 
-```{admonition} Per-row detail needs the bundled logger; a plain pass/fail always works
-:class: note
+```{admonition} Microsoft.Testing.Platform projects: the Run lens can misreport a failure
+:class: warning
 
-The per-row Scenario Outline breakdown depends on the bundled VSTest logger reaching Rider's LSP
-server for that run. If it doesn't (the server isn't reachable, or the project uses
-Microsoft.Testing.Platform instead of VSTest), the lens automatically falls back to the same
-aggregate pass/fail it always showed — a single glyph across the whole scenario, with no per-row
-or per-step detail. The Run button and the aggregate glyph are unaffected either way.
+Two different things can prevent the per-row breakdown, and they don't behave the same way. If the
+LSP server is simply unreachable for that run, the lens falls back cleanly to a plain aggregate
+pass/fail, exactly as it always has — no problem. But a project running under
+[Microsoft.Testing.Platform](https://learn.microsoft.com/dotnet/core/testing/microsoft-testing-platform-intro)
+instead of VSTest (for example, `TestingPlatformDotnetTestSupport=true`) is a different case: both
+the bundled outcome logger *and* the plain TRX logger this lens has always used to detect a
+completed run are VSTest concepts that Microsoft.Testing.Platform silently ignores. No TRX file is
+produced, so the lens currently reports **"dotnet test failed to run"** even when the tests
+actually ran and passed. If you see that message on a Microsoft.Testing.Platform project, treat it
+as a known limitation rather than a real failure, and use Rider's own Test Runner against the
+generated test project to see accurate results in the meantime.
 ```
 ````
 
@@ -166,6 +184,18 @@ is expected, not a bug — a result is only trusted for the exact build that pro
 the project is rebuilt, the previous outcome is treated as describing code that no longer exists
 and is dropped rather than shown as a possibly-wrong green/red. Run the scenario again to get a
 current result.
+
+**Rider: "dotnet test failed to run" even though the tests actually passed.** This happens
+specifically for projects running under Microsoft.Testing.Platform instead of VSTest (see the
+admonition on the Rider tab above) — both the outcome pipeline's logger and the lens's plain TRX
+logger are silently ignored by Microsoft.Testing.Platform, so no result file is ever produced. It
+is a known limitation, not a real failure; use Rider's own Test Runner against the generated test
+project to confirm the actual result.
+
+**VS Code: the outcome CodeLens never appears for a particular project, even after a successful
+run.** Confirm the project isn't running under Microsoft.Testing.Platform instead of VSTest — this
+CodeLens has no fallback source for that case (see the admonition on the VS Code tab above), so it
+never appears at all rather than showing a stale result.
 
 **VS Code: the outcome CodeLens doesn't appear (or doesn't update) after enabling the setting.**
 Reload the window (**Developer: Reload Window**) after toggling `reqnroll.testOutcomes.enabled` —
