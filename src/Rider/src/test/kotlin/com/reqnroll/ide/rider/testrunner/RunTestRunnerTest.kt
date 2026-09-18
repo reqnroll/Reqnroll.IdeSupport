@@ -1,6 +1,9 @@
 package com.reqnroll.ide.rider.testrunner
 
+import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
+import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
+import com.reqnroll.ide.rider.lsp.protocol.TestOutcomeRowItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -67,5 +70,52 @@ class RunTestRunnerTest {
     @Test
     fun `an empty target list produces an empty filter`() {
         assertEquals("", RunTestRunner.buildTestFilter(emptyList()))
+    }
+
+    // ── buildLoggerArgument ──────────────────────────────────────────────────
+
+    @Test
+    fun `buildLoggerArgument matches the friendly name and parameter keys VS injects into runsettings`() {
+        val registration = RegisterTestRunResponse(success = true, runId = "run-1", endpoint = "127.0.0.1:5000", token = "tok")
+
+        assertEquals(
+            "ReqnrollIde;Endpoint=127.0.0.1:5000;Token=tok;RunId=run-1;IdeProcessId=4242",
+            RunTestRunner.buildLoggerArgument(registration, ideProcessId = 4242L),
+        )
+    }
+
+    // ── combineServerOutcomes ────────────────────────────────────────────────
+
+    private fun outcome(aggregate: String, vararg rows: TestOutcomeRowItem) =
+        GetTestOutcomeResponse(found = true, aggregate = aggregate, rows = rows.toList())
+
+    private fun row(displayName: String, outcome: String, failedStepText: String? = null) =
+        TestOutcomeRowItem(displayName = displayName, outcome = outcome, failedStepText = failedStepText)
+
+    @Test
+    fun `combineServerOutcomes is Passed when every method's aggregate passed`() {
+        val result = RunTestRunner.combineServerOutcomes(listOf(outcome("Passed", row("r1", "Passed"))))
+        assertEquals(RunOutcome.PASSED, result.outcome)
+    }
+
+    @Test
+    fun `combineServerOutcomes is Failed if any method's aggregate failed, even when others passed`() {
+        val result = RunTestRunner.combineServerOutcomes(
+            listOf(outcome("Passed", row("r1", "Passed")), outcome("Failed", row("r2", "Failed"))),
+        )
+        assertEquals(RunOutcome.FAILED, result.outcome)
+    }
+
+    @Test
+    fun `combineServerOutcomes flattens rows across every method and carries the failed-step text`() {
+        val result = RunTestRunner.combineServerOutcomes(
+            listOf(
+                outcome("Passed", row("row 1", "Passed")),
+                outcome("Failed", row("row 2", "Failed", "When the calculation explodes")),
+            ),
+        )
+        assertEquals(2, result.rows.size)
+        assertEquals(RunResultRow("row 1", RunOutcome.PASSED, null), result.rows[0])
+        assertEquals(RunResultRow("row 2", RunOutcome.FAILED, "When the calculation explodes"), result.rows[1])
     }
 }

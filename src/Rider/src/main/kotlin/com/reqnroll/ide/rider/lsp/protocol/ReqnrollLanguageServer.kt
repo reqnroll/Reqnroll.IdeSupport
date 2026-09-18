@@ -102,4 +102,25 @@ interface ReqnrollLanguageServer : LanguageServer {
      */
     @JsonRequest("reqnroll/resolveTestTargets")
     fun resolveTestTargets(params: ResolveTestTargetsParams): CompletableFuture<ResolveTestTargetsResponse>
+
+    /**
+     * LSP-server outcome pipeline (#700/#702, refactored out of a Visual Studio-only,
+     * in-proc pipeline): mints a fresh, single-use endpoint+token for one test run — see
+     * RegisterTestRunHandler.cs. Called by
+     * [com.reqnroll.ide.rider.testrunner.RunTestRunner] before shelling to `dotnet test`, so the
+     * bundled VSTest logger can be pointed at the returned endpoint via `--test-adapter-path`/
+     * `--logger`.
+     */
+    @JsonRequest("reqnroll/testOutcomes/registerRun")
+    fun registerTestRun(params: ReqnrollEmptyParams): CompletableFuture<RegisterTestRunResponse>
+
+    /**
+     * LSP-server outcome pipeline (#700/#702) — the outcome lookup for one generated test method,
+     * including the staleness/trust-window logic server-side (see GetTestOutcomeHandler.cs).
+     * Called by [com.reqnroll.ide.rider.testrunner.RunTestRunner] after a run completes; a
+     * [GetTestOutcomeResponse.found] of `false` means the caller should fall back to its own
+     * TRX-parsed result.
+     */
+    @JsonRequest("reqnroll/testOutcomes/getOutcome")
+    fun getTestOutcome(params: GetTestOutcomeParams): CompletableFuture<GetTestOutcomeResponse>
 }

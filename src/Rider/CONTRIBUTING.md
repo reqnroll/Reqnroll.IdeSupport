@@ -115,12 +115,12 @@ There are two ways to populate `server/<rid>/`, both wired up in `build.gradle.k
   ```
 
   Requires the .NET SDK (`dotnet`) on `PATH`. On the native toolchain track this is
-  normally already there if you do any .NET development. The devcontainer does *not*
-  currently include one (Rider's own bundled backend/Test Explorer inside it has its own
-  separate .NET runtime it manages independently, which does *not* put `dotnet` on the
-  container's `PATH` for Gradle to find) — run `publishServer` from the Windows host
-  instead (see "Manual verification — devcontainer" below), or add the SDK to
-  `docker/dev.Dockerfile` if you need it to work inside the container directly.
+  normally already there if you do any .NET development. The devcontainer *does* now
+  have one on `PATH` too (added for an unrelated reason — see "Manual verification —
+  devcontainer" below for the full story), but the recommended devcontainer flow still
+  publishes from the Windows host and points Gradle at the result instead, to stay
+  identical to what CI does; see that section before assuming you can skip straight to
+  `./gradlew runIde` in the container without it.
 
   `runIde` specifically publishes with `--configuration Debug` (detected from
   `gradle.startParameter.taskNames`); `buildPlugin`/CI publish `Release`. `runIde`'s
@@ -136,6 +136,32 @@ There are two ways to populate `server/<rid>/`, both wired up in `build.gradle.k
   mode — Gradle never needs `dotnet` on the CI runner — and `prepareSandbox` bundles
   every RID found under `<dir>` instead of just one.
 
+## Bundling the TestLogger
+
+`ReqnrollTestLoggerPathResolver` expects the published logger under
+`testlogger/Reqnroll.IdeSupport.TestLogger.dll` inside the plugin's own install
+directory (LSP-server outcome pipeline, #700/#702 — `RunTestRunner` points the bundled
+VSTest logger at the LSP server via `--test-adapter-path`/`--logger` so per-row Scenario
+Outline outcomes and failed-step detail are available on the Run lens, the same
+mechanism the Visual Studio extension uses). Unlike the server above, there's no
+per-RID layout to manage: the logger targets netstandard2.0 with no self-contained
+runtime, so one framework-dependent publish serves every OS Rider itself runs on.
+
+Same two ways to populate `testlogger/`, mirroring the server's mechanism exactly:
+
+- **Local dev** — the `publishTestLogger` task runs `dotnet publish` on
+  `src/Core/Reqnroll.IdeSupport.TestLogger` into `testlogger/` here (gitignored).
+  `prepareSandbox` depends on it automatically, so plain `./gradlew runIde`/`buildPlugin`
+  bundles it with no extra flags. Requires `dotnet` on `PATH` — same caveat as
+  `publishServer` above.
+- **CI** — passes `-PlspTestLoggerBuildDir=<dir>`, where `<dir>` contains the published
+  logger directly (no RID subdirectories, unlike `-PlspServerBuildDir`). Skips
+  `publishTestLogger` entirely.
+
+A missing/unbundled logger isn't fatal — `RunTestRunner` falls back to its pre-#700
+TRX-parsed result (coarser: one pass/fail bit, no per-row detail) exactly as if the LSP
+server itself weren't running.
+
 ## Local install of a dev build
 
 `runIde` (above) launches a disposable sandboxed Rider instance — it doesn't touch your regular
@@ -146,11 +172,13 @@ cd src/Rider
 ./gradlew buildPlugin
 ```
 
-This publishes the bundled LSP server `Release` (see "Bundling the LSP server" above — `buildPlugin`
-always uses `Release`, unlike `runIde`'s `Debug`/`Verbose` build) for the host RID only, and produces
+This publishes the bundled LSP server and TestLogger, both `Release` (see "Bundling the LSP server"/
+"Bundling the TestLogger" above — `buildPlugin` always uses `Release`, unlike `runIde`'s `Debug`/
+`Verbose` build), the server for the host RID only, and produces
 `build/distributions/reqnroll-ide-support-rider-<version>.zip` (`<version>` from `gradle.properties`).
-Cross-publish other RIDs with `-PserverRid=<rid>` (e.g. `linux-x64`, `osx-arm64`) first if you need
-the plugin to run on a different OS than the one you built it on.
+Cross-publish other server RIDs with `-PserverRid=<rid>` (e.g. `linux-x64`, `osx-arm64`) first if you
+need the plugin to run on a different OS than the one you built it on — the TestLogger needs no such
+step, since one build already covers every OS.
 
 In Rider: **Settings → Plugins → ⚙ (gear icon) → Install Plugin from Disk...**, pick the `.zip`, and
 restart when prompted. Uninstall from the same Plugins page when you're done testing.
@@ -174,10 +202,25 @@ to "What to check" below.
 
 This is the fallback for a constrained workstation — it runs Rider
 headless-from-the-container's-perspective, displayed on the host desktop over WSLg's X11
-forwarding (`DISPLAY=:0`). All verification below happens *inside* the container, except
-publishing the server (the container has no .NET SDK — see "Bundling the LSP server"
-above — so publish from the Windows host, into the bind-mounted repo, and point Gradle
-at it exactly the way CI does).
+forwarding (`DISPLAY=:0`).
+
+**Correction to an earlier version of this section:** the container *does* now include a
+.NET SDK (`docker/dev.Dockerfile` installs channels 10.0 and 8.0) — but only so two things
+unrelated to Gradle's own build work inside a running sandbox: `RunTestRunner`'s own
+`dotnet test` shell-out for the Run lens (issue #262), and Rider's backend restoring a
+bind-mounted host `.sln` opened for manual testing (see "Testing against a real host
+solution" below). Publishing the server/logger for **Gradle to bundle into the plugin**
+still deliberately goes through the same external-build-dir mechanism CI uses (publish
+once from the Windows host, point Gradle at the result) rather than letting
+`publishServer`/`publishTestLogger` invoke the container's own `dotnet` directly — keeping
+the two `dotnet` usages (the plugin's own bundled build tooling vs. the sandboxed IDE's
+live test-running feature) cleanly separate. (Confirmed live, 2026-09-18: running
+`publishServer`/`publishTestLogger` directly inside the container with the external-dir
+env vars unset does actually work now — real `dotnet restore`/`publish`, real output — so
+this split is a deliberate choice to keep matching CI's flow exactly, not a hard
+technical requirement anymore. If you don't need that parity, publishing directly inside
+the container instead of round-tripping through the Windows host is a legitimate
+shortcut; the steps below describe the still-recommended, CI-identical path.)
 
 1. **Rebuild the container** in VS Code (`Dev Containers: Rebuild and Reopen in
    Container`) after any `docker/dev.Dockerfile` change. The image needs
@@ -190,13 +233,15 @@ at it exactly the way CI does).
    which that backend SIGABRTs (`exit code 134`) right after the frontend loads.
 2. **From the Windows host** (has `dotnet`), publish the server for `linux-x64` — that's
    the RID the container needs, since Rider itself runs inside it regardless of the
-   host OS:
+   host OS — and the TestLogger (no RID needed; see "Bundling the TestLogger" above):
    ```
    dotnet restore src/LSP/Reqnroll.IdeSupport.LSP.Connector/Connector/Connector.csproj --runtime linux-x64
    dotnet publish src/LSP/Reqnroll.IdeSupport.LSP.Server/Reqnroll.IdeSupport.LSP.Server.csproj --configuration Release --runtime linux-x64 --self-contained true --output src/Rider/downloaded-server/linux-x64
+   dotnet publish src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj --configuration Release --output src/Rider/downloaded-testlogger
    ```
-3. **Inside the container**, the published binary needs its executable bit set — Windows
-   bind mounts don't reliably preserve it:
+3. **Inside the container**, the published server binary needs its executable bit set —
+   Windows bind mounts don't reliably preserve it (the TestLogger is a managed `.dll`,
+   never executable directly, so it needs no such step):
    ```
    chmod +x src/Rider/downloaded-server/linux-x64/Reqnroll.IdeSupport.LSP.Server
    ```
@@ -206,9 +251,10 @@ at it exactly the way CI does).
    cd src/Rider
    ./gradlew runIde
    ```
-   `devcontainer.json` sets `ORG_GRADLE_PROJECT_lspServerBuildDir` in `containerEnv`,
-   so Gradle automatically uses the CI-style external build dir above and never needs
-   `dotnet` — no `-P` flag required here.
+   `devcontainer.json` sets `ORG_GRADLE_PROJECT_lspServerBuildDir`/
+   `ORG_GRADLE_PROJECT_lspTestLoggerBuildDir` in `containerEnv`, so Gradle automatically
+   uses the CI-style external build dirs above and never needs `dotnet` for its own
+   bundling — no `-P` flag required here.
 5. First run downloads the Rider platform SDK (large, one-time). A sandboxed Rider
    window should eventually appear on the Windows desktop via WSLg.
 
@@ -232,8 +278,8 @@ the committed `devcontainer.json` — add your own `mounts` line locally instead
    ```
 3. Rebuild the container. The solution is then reachable at `/workspaces/host-solution`
    in Rider's Open dialog. Also needs a real .NET SDK inside the container to restore —
-   see "Bundling the LSP server" above; the devcontainer installs one via
-   `dotnet-install.sh` for exactly this reason.
+   see the "Devcontainer" manual-verification section above; the devcontainer installs
+   one via `dotnet-install.sh` for exactly this reason (among others).
 
 Don't commit the `mounts` line — `${localEnv:...}` resolves to an empty/invalid path (and
 fails the container build) for anyone who hasn't set the variable, so this only belongs
@@ -270,9 +316,11 @@ Applies regardless of which track launched the sandbox.
      inputs cover the full `src/LSP`/`src/Core` source trees (content-hashed), so
      `./gradlew runIde` republishes automatically whenever server-side source actually
      changed and skips it (fast) when it didn't — a stale binary shouldn't be the culprit
-     if something doesn't reflect a recent server-side change. (Devcontainer track only:
-     this doesn't apply to the `-PlspServerBuildDir` external-build-dir flow, which skips
-     `publishServer` entirely — republish manually via step 2 above after server changes.)
+     if something doesn't reflect a recent server-side change. `publishTestLogger`'s
+     inputs are scoped to just `src/Core/Reqnroll.IdeSupport.TestLogger`, same idea.
+     (Devcontainer track only: neither applies to the `-PlspServerBuildDir`/
+     `-PlspTestLoggerBuildDir` external-build-dir flow, which skips both tasks entirely —
+     republish manually via step 2 above after server/logger changes.)
 
 ## Logging
 

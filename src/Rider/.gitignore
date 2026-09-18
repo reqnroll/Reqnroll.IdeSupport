@@ -7,3 +7,5 @@ server/
 .intellijPlatform/
 .kotlin/
 downloaded-server/
+testlogger/
+downloaded-testlogger/

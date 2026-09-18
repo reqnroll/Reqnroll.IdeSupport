@@ -235,6 +235,38 @@ val publishServer by tasks.registering(Exec::class) {
     )
 }
 
+// ── Bundle the Reqnroll.IdeSupport.TestLogger (LSP-server outcome pipeline, #700/#702) ──
+//
+// Unlike the server above, the logger targets netstandard2.0 with no self-contained runtime
+// (it loads inside whichever dotnet test/vstest process is already running — see its own
+// project file's remarks), so there is no per-RID bundling to do: one framework-dependent
+// publish serves every OS. ReqnrollTestLoggerPathResolver expects
+// testlogger/Reqnroll.IdeSupport.TestLogger.dll directly under the plugin's install directory.
+val testLoggerOutputDir = layout.projectDirectory.dir("testlogger")
+val testLoggerProject = File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj")
+
+// Mirrors -PlspServerBuildDir: set by CI once test-lsp.yml publishes the logger once and shares
+// it, so Gradle never needs `dotnet` on the CI runner building the Rider plugin.
+val externalTestLoggerBuildDir = (findProperty("lspTestLoggerBuildDir") as String?)?.let { File(it) }
+
+val publishTestLogger by tasks.registering(Exec::class) {
+    group = "reqnroll"
+    description = "Publishes Reqnroll.IdeSupport.TestLogger into testlogger/. Skipped when -PlspTestLoggerBuildDir is set."
+    onlyIf { externalTestLoggerBuildDir == null }
+
+    inputs.files(
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestLogger")) { exclude("**/bin/**", "**/obj/**") },
+    )
+    outputs.dir(testLoggerOutputDir)
+
+    commandLine(
+        "dotnet", "publish", testLoggerProject.toString(),
+        "--configuration", serverConfiguration,
+        "--nologo",
+        "--output", testLoggerOutputDir.asFile.absolutePath,
+    )
+}
+
 tasks.named<Sync>("prepareSandbox") {
     val externalDir = externalServerBuildDir
     if (externalDir == null) {
@@ -250,6 +282,18 @@ tasks.named<Sync>("prepareSandbox") {
                     into("${project.name}/server/$rid")
                 }
             }
+        }
+    }
+
+    val externalLoggerDir = externalTestLoggerBuildDir
+    if (externalLoggerDir == null) {
+        dependsOn(publishTestLogger)
+        from(testLoggerOutputDir) {
+            into("${project.name}/testlogger")
+        }
+    } else {
+        from(externalLoggerDir) {
+            into("${project.name}/testlogger")
         }
     }
 }
