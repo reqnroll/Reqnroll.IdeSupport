@@ -37,7 +37,6 @@ suite('runSettingsInjector', () => {
     test('starting from nothing, creates RunSettings/RunConfiguration/TestAdaptersPaths and the Logger entry', async () => {
       const xml = await injectLogger(undefined, LOGGER_DIR, [
         ['Endpoint', '127.0.0.1:5000'],
-        ['Token', 'tok'],
         ['RunId', 'run-1'],
       ]);
 
@@ -48,7 +47,6 @@ suite('runSettingsInjector', () => {
       assert.strictEqual(logger.$.friendlyName, LOGGER_FRIENDLY_NAME);
       assert.strictEqual(logger.$.enabled, 'True');
       assert.strictEqual(logger.Configuration[0].Endpoint[0], '127.0.0.1:5000');
-      assert.strictEqual(logger.Configuration[0].Token[0], 'tok');
       assert.strictEqual(logger.Configuration[0].RunId[0], 'run-1');
     });
 
@@ -57,7 +55,6 @@ suite('runSettingsInjector', () => {
 
       const xml = await injectLogger(input, LOGGER_DIR, [
         ['Endpoint', 'e'],
-        ['Token', 't'],
         ['RunId', 'r'],
       ]);
 
@@ -73,7 +70,6 @@ suite('runSettingsInjector', () => {
 
       const xml = await injectLogger(input, LOGGER_DIR, [
         ['Endpoint', 'e'],
-        ['Token', 't'],
         ['RunId', 'r'],
       ]);
 
@@ -89,7 +85,6 @@ suite('runSettingsInjector', () => {
 
       const xml = await injectLogger(input, LOGGER_DIR, [
         ['Endpoint', 'e'],
-        ['Token', 't'],
         ['RunId', 'r'],
       ]);
 
@@ -103,13 +98,11 @@ suite('runSettingsInjector', () => {
     test('re-injecting replaces our own prior registration rather than duplicating it', async () => {
       const first = await injectLogger(undefined, LOGGER_DIR, [
         ['Endpoint', 'old'],
-        ['Token', 'old'],
         ['RunId', 'old'],
       ]);
 
       const second = await injectLogger(first, LOGGER_DIR, [
         ['Endpoint', 'new'],
-        ['Token', 'new'],
         ['RunId', 'new'],
       ]);
 
@@ -124,7 +117,6 @@ suite('runSettingsInjector', () => {
 
       const xml = await injectLogger(input, LOGGER_DIR, [
         ['Endpoint', 'fresh'],
-        ['Token', 't'],
         ['RunId', 'r'],
       ]);
 

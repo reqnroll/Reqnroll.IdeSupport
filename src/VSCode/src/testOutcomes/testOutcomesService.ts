@@ -9,7 +9,6 @@ import {
   ENDPOINT_PARAMETER,
   IDE_PROCESS_ID_PARAMETER,
   RUN_ID_PARAMETER,
-  TOKEN_PARAMETER,
   injectLogger,
   isSamePath,
 } from './runSettingsInjector';
@@ -27,19 +26,19 @@ import { resolveTestLoggerDirectory } from './testLoggerPath';
  * our own LSP server over the loopback socket, exactly like VS/Rider, entirely independent of
  * whatever C# Dev Kit's own UI shows.
  *
- * **Session-scoped token, not per-run (deliberate, confirmed trade-off).** VS and Rider mint a
- * fresh, single-use token per run because *their own code* launches the test process each time
- * and can hand it a brand-new token on the way out. Here, C# Dev Kit launches the process, and
- * there is no confirmed VS Code event for "a test run is about to start" that this extension could
- * hook to rotate the runsettings file's content just beforehand — `vscode.tests` exports no such
- * signal, and C# Dev Kit's own run lifecycle isn't observable from outside it (same "no
- * cross-controller" finding recorded in docs/Test-Runner-Integration-Design.md for issue #504).
- * One token is minted per extension activation instead (effectively: once per VS Code window
- * session, refreshed on reload/restart) and merged into a Reqnroll-managed runsettings file that
- * `dotnet.unitTests.runSettingsPath` then points at for the rest of that session. This accepts a
- * longer-lived local credential than VS/Rider's per-run design, but the threat model is unchanged:
- * "any local process that can read this file" has the same access either way, since the file is
- * just as readable regardless of how often its content rotates.
+ * **Session-scoped registration, not per-run.** VS and Rider re-register with the server for every
+ * run because *their own code* launches the test process each time and can hand the fresh
+ * registration to it on the way out. Here, C# Dev Kit launches the process, and there is no
+ * confirmed VS Code event for "a test run is about to start" that this extension could hook to
+ * refresh the runsettings file's content just beforehand — `vscode.tests` exports no such signal,
+ * and C# Dev Kit's own run lifecycle isn't observable from outside it (same "no cross-controller"
+ * finding recorded in docs/Test-Runner-Integration-Design.md for issue #504). Registration happens
+ * once per extension activation instead (effectively: once per VS Code window session, refreshed on
+ * reload/restart) and is merged into a Reqnroll-managed runsettings file that
+ * `dotnet.unitTests.runSettingsPath` then points at for the rest of that session. This works safely
+ * because the server's endpoint doesn't expire and carries no per-connection secret to go stale —
+ * see `TestOutcomeTcpListener`'s remarks on the server side for why a per-run token was tried and
+ * removed (it broke exactly this one-registration-many-connections shape).
  *
  * **Off by default, opt-in via `reqnroll.testOutcomes.enabled`.** Unlike everything else this
  * extension does, this writes to a setting namespaced under `dotnet.*`, not `reqnroll.*` — shared
@@ -59,7 +58,6 @@ interface RegisterTestRunResponse {
   success: boolean;
   runId?: string;
   endpoint?: string;
-  token?: string;
 }
 
 /**
@@ -99,12 +97,7 @@ export async function activateTestOutcomes(
     return;
   }
 
-  if (
-    !registration.success ||
-    !registration.endpoint ||
-    !registration.token ||
-    !registration.runId
-  ) {
+  if (!registration.success || !registration.endpoint || !registration.runId) {
     logWarn('testOutcomes: server declined to register a run this session; skipping.');
     return;
   }
@@ -139,7 +132,6 @@ async function mergeRunSettings(
 
   const merged = await injectLogger(inputXml, loggerDirectory, [
     [ENDPOINT_PARAMETER, registration.endpoint!],
-    [TOKEN_PARAMETER, registration.token!],
     [RUN_ID_PARAMETER, registration.runId!],
     [IDE_PROCESS_ID_PARAMETER, String(ideProcessId)],
   ]);
@@ -210,12 +202,9 @@ export interface GetTestOutcomeResponse {
  * the request fails outright (no server running, transport error) — distinct from a successful
  * response with `found: false`, which means "no run has reported this method yet."
  *
- * Not called from anywhere yet: this extension has no Run/CodeLens surface of its own to attach
- * outcome data to (issue #504 — VS Code fully defers test discovery/execution to C# Dev Kit).
- * `activateTestOutcomes` above only gets the data flowing into the LSP server; a later change
- * would need its own answer to "where does the outcome show up in the UI" before this becomes
- * useful, given #504's history of trying and reverting two different `.feature`-file UI surfaces
- * for this same class of feature.
+ * Called from `testOutcomeCodeLens.ts`'s read-only outcome lens — see that module's doc comment
+ * for why it carries no Run/Debug action (issue #504's history of reverted `.feature`-file UI
+ * surfaces).
  */
 export async function getTestOutcome(
   client: LanguageClient,
