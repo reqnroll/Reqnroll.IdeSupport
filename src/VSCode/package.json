@@ -176,6 +176,11 @@
           ],
           "default": "off",
           "description": "Traces the communication between VS Code and the Reqnroll LSP server, and also controls the server's own log verbosity ('off' -> Warning, 'messages' -> Info, 'verbose' -> Verbose). When set to 'verbose', a log file is also written to the Reqnroll log directory. Requires a window reload to take effect on the running server."
+        },
+        "reqnroll.testOutcomes.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in (LSP-server outcome pipeline, #700/#702). C# Dev Kit owns test discovery/execution in VS Code, not this extension (issue #504) -- when enabled, Reqnroll registers a run with the LSP server and merges the bundled VSTest logger into the 'dotnet.unitTests.runSettingsPath' setting C# Dev Kit already reads, so per-row Scenario Outline outcomes and failed-step detail become available without changing how you run tests. Off by default because this writes to a setting your workspace may already have its own value for; your existing runsettings file's content is preserved and merged, never replaced. Requires a window reload to take effect."
         }
       }
     },
@@ -239,6 +244,8 @@
     "package": "vsce package",
     "build:server": "bash scripts/publish-server.sh",
     "build:server:dev": "node scripts/dev-publish-server.mjs",
+    "build:testlogger": "bash scripts/publish-testlogger.sh",
+    "build:testlogger:dev": "node scripts/dev-publish-testlogger.mjs",
     "build:vsix": "bash scripts/build-vsix.sh",
     "validate:tokens": "node scripts/validate-semantic-token-scopes.mjs",
     "prepare": "cd ../.. && node src/VSCode/node_modules/husky/bin.js"
@@ -251,6 +258,7 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^26.5.1",
     "@types/vscode": "~1.96.0",
+    "@types/xml2js": "^0.4.14",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.0.0",
     "esbuild": "^0.28.2",
@@ -270,6 +278,7 @@
   },
   "dependencies": {
     "@vscode/extension-telemetry": "^1.5.2",
-    "vscode-languageclient": "^10.1.1"
+    "vscode-languageclient": "^10.1.1",
+    "xml2js": "^0.6.2"
   }
 }

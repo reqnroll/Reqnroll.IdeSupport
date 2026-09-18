@@ -417,13 +417,77 @@ Code work started.
   devcontainer verification; the host cannot build Gradle).
 - **Exit:** outline rows report individually in Rider's Run lens; TRX parsing no longer on the hot path.
 
-### Phase 5 — VS Code adoption
+### Phase 5 — VS Code adoption — plumbing and UI surface IMPLEMENTED
 
-- Blocked on the C# Dev Kit injection-point question from §4.3: VS Code has no runner of its own by
-  design (issue #504), so this phase is not "build a runner and add two arguments" — it's "find out
-  whether C# Dev Kit's own `dotnet test`/vstest invocation can be pointed at our logger at all" (a
-  `dotnet.unitTests.runSettingsPath`-style setting, or a `.runsettings` file it auto-discovers). If
-  that spike comes back negative, this phase may not be achievable without reopening #504.
+The C# Dev Kit injection-point question from §4.3 is answered, confirmed against the actual
+`dotnet/vscode-csharp` source (the open-source extension C# Dev Kit builds its testing UI on) —
+not assumed: `ms-dotnettools.csharp` contributes a genuine `dotnet.unitTests.runSettingsPath`
+setting ("Path to the .runsettings file which should be used when running unit tests"), an
+ordinary shared VS Code configuration key any extension can read and write via
+`vscode.workspace.getConfiguration('dotnet')`. No C# Dev Kit-specific API, no cross-extension
+`vscode.tests` access needed — the bundled logger reports to our own LSP server over the loopback
+socket, exactly like VS/Rider, entirely independent of whatever C# Dev Kit's own Test Explorer UI
+shows. This also means the earlier framing of this phase as "possibly not achievable without
+reopening #504" was too pessimistic — it's achievable without touching #504's decision at all,
+since nothing here adds a competing Run/Debug affordance or a `TestController`.
+
+**Built (`src/VSCode/src/testOutcomes/`):** `publishTestLogger`-equivalent bundling
+(`scripts/publish-testlogger.sh`, no RID needed — netstandard2.0, one build for every OS);
+`reqnroll/testOutcomes/registerRun`/`getOutcome` wired into `lspMethods.ts`;
+`runSettingsInjector.ts` (a TypeScript port of `TestLoggerRunSettings.cs`'s merge logic, using
+`xml2js` — ported carefully, not by inspection alone: an early version broke on `Builder`'s
+`Invalid character in name` because `parseStringPromise`'s `explicitArray: true` wraps every
+*descendant* element in a one-item array but returns the parsed **root** element bare, a real
+xml2js quirk confirmed by direct reproduction, not documented anywhere obvious); and
+`testOutcomesService.ts`, which registers a run at extension activation and merges the logger into
+whatever `dotnet.unitTests.runSettingsPath` already resolves to (the user's own file's content is
+always preserved, never replaced).
+
+**Session-scoped registration, not per-run.** VS and Rider re-register with the server for every run
+because their own code launches the test process each time. Here, C# Dev Kit launches it, and there
+is no confirmed VS Code event for "a test run is about to start" to hook for a per-run refresh —
+`vscode.tests` exports no such signal, and C# Dev Kit's own run lifecycle isn't observable from
+outside it. Registration happens once per extension activation instead, refreshed on window
+reload/restart. This is safe because the server's endpoint doesn't expire and, since 2026-09-18,
+carries no per-connection secret to go stale — see §5.1 for why an earlier per-run token was tried
+and removed (it broke exactly this one-registration-many-connections shape: the token was single-use,
+so every test-host connection after the first in a session was rejected).
+
+**Off by default, opt-in via `reqnroll.testOutcomes.enabled`.** Unlike everything else this
+extension does, this writes to a `dotnet.*`-namespaced setting shared with C# Dev Kit, persisted to
+the workspace's own `.vscode/settings.json` (visible to teammates, possibly committed) — a bigger,
+more visible side effect on shared state than anything VS/Rider's own state-only changes touch, so
+it stays opt-in rather than defaulting to on.
+
+**UI surface: a read-only `.feature`-file CodeLens (`src/VSCode/src/testOutcomes/testOutcomeCodeLens.ts`),
+not a Run/Debug affordance.** VS Code's Reqnroll extension had tried and reverted two different
+`.feature`-file UI surfaces for this exact class of feature already (a CodeLens, then a
+`vscode.TestController` — see §4.3/#504's history), both because they duplicated C# Dev Kit's own
+gutter/Test Explorer `Run` affordance for no benefit. This lens sidesteps that history by carrying
+no action at all: its command (`reqnroll.testOutcomes.noop`) is a genuine no-op, registered only
+because an unresolved `vscode.CodeLens` (no command) may never render, per `vscode.CodeLens`'s own
+doc comment. It surfaces `✓`/`✗` on each Scenario/Scenario Outline line, sourced from
+`reqnroll/testOutcomes/getOutcome`, refreshed by a new `reqnroll/testOutcomes/changed` push
+notification (fired by the server after each debounced result batch) via
+`CodeLensProvider.onDidChangeCodeLenses` — so a C# Dev Kit-triggered run updates the lens without
+requiring the user to touch the `.feature` file. Scenario/Outline positions come from a standard
+`textDocument/documentSymbol` request (`SymbolKind.Method` nodes, recursing through `Rule`-kind
+`Namespace` nodes for nested scenarios), mirroring the Rider plugin's `RunLensSupport.collectMethodSymbols`.
+The owning project's output assembly path (needed for `getOutcome`'s lookup key) is cached in
+`ProjectManager` from the same MSBuild evaluation that already produces it for
+`reqnroll/projectLoaded`, rather than re-evaluating. What this adds that C# Dev Kit's own UI
+structurally cannot: C# Dev Kit annotates the *generated* `.cs` method, never the `.feature` file,
+and has no notion of "one row of a Scenario Outline" — this lens sits on the `.feature`
+Scenario/Outline line and names which row failed, on which step, when there's more than one.
+
+- **Exit:** `reqnroll.testOutcomes.enabled` merges the logger into `dotnet.unitTests.runSettingsPath`
+  without disturbing the user's existing runsettings content, and (same flag) renders the read-only
+  outcome CodeLens; 32 new unit tests (253/254 in the full suite passing — the one failure is the
+  same pre-existing, environment-sensitive fs-watcher test noted throughout this doc, unrelated to
+  this change) exercise the runsettings merge logic, the bundling path-resolution logic, symbol
+  collection, outcome aggregation, and title rendering. **Not yet verified live** (would need an
+  actual C# Dev Kit-driven test run reporting through the merged runsettings, observed through the
+  lens) — this remains the one open verification gap for the whole VS Code leg.
 
 ### Phase 6 — Retirement decision for `RunTestOutcomeBridge`
 
