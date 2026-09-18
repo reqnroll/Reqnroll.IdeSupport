@@ -115,6 +115,7 @@ export class ProjectManager {
   private readonly _watcher: vscode.FileSystemWatcher;
   private readonly _fileWatcher: vscode.FileSystemWatcher;
   private readonly _knownProjects = new Set<string>();
+  private readonly _outputAssemblyPaths = new Map<string, string>();
   private readonly _resendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private _disposables: vscode.Disposable[] = [];
 
@@ -151,6 +152,17 @@ export class ProjectManager {
     return this._knownProjects;
   }
 
+  /**
+   * The last MSBuild-evaluated output assembly path for `projectFile` (LSP-server outcome
+   * pipeline, #700/#702) — the same value already sent to the server as
+   * `reqnroll/projectLoaded`'s `outputAssemblyPath`, cached here so a client-side consumer (the
+   * test-outcome CodeLens) doesn't re-run MSBuild evaluation itself. `undefined` before the
+   * project's first successful evaluation, or if MSBuild was unavailable for it (v1 compat path).
+   */
+  getOutputAssemblyPath(projectFile: string): string | undefined {
+    return this._outputAssemblyPaths.get(projectFile);
+  }
+
   /** Releases watchers, pending timers, and event subscriptions. */
   dispose(): void {
     this._watcher.dispose();
@@ -160,6 +172,7 @@ export class ProjectManager {
     for (const d of this._disposables) d.dispose();
     this._disposables = [];
     this._knownProjects.clear();
+    this._outputAssemblyPaths.clear();
   }
 
   // ── Discovery ─────────────────────────────────────────────────────────
@@ -298,6 +311,9 @@ export class ProjectManager {
     const projectFolder = path.dirname(projectFile);
 
     const props = await evaluateProject(projectFile);
+    if (props?.outputAssemblyPath) {
+      this._outputAssemblyPaths.set(projectFile, props.outputAssemblyPath);
+    }
 
     const params = {
       workspaceFolder,
@@ -361,6 +377,7 @@ export class ProjectManager {
     try {
       await this._client.sendNotification(ReqnrollMethods.projectUnloaded, params);
       this._knownProjects.delete(projectFile);
+      this._outputAssemblyPaths.delete(projectFile);
     } catch (err) {
       console.error(`ProjectManager: failed to send projectUnloaded for ${projectFile}:`, err);
     }

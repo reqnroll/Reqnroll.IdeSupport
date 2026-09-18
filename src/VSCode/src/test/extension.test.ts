@@ -36,6 +36,9 @@ import './grammar.test';
 import './logging/logPaths.test';
 import './logging/generalFileLog.test';
 import './logging/appNotify.test';
+import './testOutcomes/runSettingsInjector.test';
+import './testOutcomes/testLoggerPath.test';
+import './testOutcomes/testOutcomeCodeLens.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

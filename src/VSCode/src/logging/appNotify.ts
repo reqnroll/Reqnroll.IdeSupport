@@ -13,6 +13,16 @@ export function setAppLogChannel(channel: vscode.LogOutputChannel | undefined): 
   appLogChannel = channel;
 }
 
+/** Writes to the curated "Reqnroll" output channel only — no popup. For background diagnostics (e.g. an opt-in feature silently degrading) that would be disproportionate to surface as a notification. */
+export function logInfo(message: string): void {
+  appLogChannel?.info(message);
+}
+
+/** Writes to the curated "Reqnroll" output channel only — no popup. See {@link logInfo}. */
+export function logWarn(message: string): void {
+  appLogChannel?.warn(message);
+}
+
 /** Shows an information message popup and mirrors it to the curated "Reqnroll" output channel. */
 export function showInfo(message: string, ...items: string[]): Thenable<string | undefined> {
   appLogChannel?.info(message);
