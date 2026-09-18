@@ -168,11 +168,16 @@ export function appendPath(existing: string | undefined, loggerDirectory: string
   return parts.join(';');
 }
 
-/** Case-insensitive-on-Windows, `.`/`..`-collapsing path comparison — the one routine this module uses for "is this the same directory," mirroring `PathUtils.IsSamePath`. */
+/**
+ * Case-insensitive, `.`/`..`-collapsing path comparison — the one routine this module uses for "is
+ * this the same directory," mirroring `PathUtils.IsSamePath`, which is unconditionally
+ * case-insensitive (`OrdinalIgnoreCase`) regardless of the host OS. Earlier gated the
+ * case-folding on `process.platform === 'win32'`, which diverged from that C# routine on
+ * Linux/macOS (exactly the "two independently-written path-comparison routines always eventually
+ * disagree" trap #515 already burned this codebase on once) and failed CI, which runs on Linux.
+ */
 export function isSamePath(a: string, b: string): boolean {
-  const normalize = (p: string) => {
-    const resolved = path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '');
-    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-  };
+  const normalize = (p: string) =>
+    path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   return normalize(a) === normalize(b);
 }
