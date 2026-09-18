@@ -20,7 +20,6 @@ import { Builder, parseStringPromise } from 'xml2js';
 export const LOGGER_FRIENDLY_NAME = 'ReqnrollIde';
 export const LOGGER_EXTENSION_URI = 'logger://Reqnroll/IdeSupport/v1';
 export const ENDPOINT_PARAMETER = 'Endpoint';
-export const TOKEN_PARAMETER = 'Token';
 export const RUN_ID_PARAMETER = 'RunId';
 export const IDE_PROCESS_ID_PARAMETER = 'IdeProcessId';
 

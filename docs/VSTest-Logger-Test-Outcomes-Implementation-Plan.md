@@ -443,14 +443,15 @@ xml2js quirk confirmed by direct reproduction, not documented anywhere obvious);
 whatever `dotnet.unitTests.runSettingsPath` already resolves to (the user's own file's content is
 always preserved, never replaced).
 
-**Session-scoped token, not per-run (deliberate, decided trade-off — see §4.3/§5.1's per-run
-rationale for what's being traded away).** VS and Rider mint a fresh, single-use token per run
-because their own code launches the test process each time. Here, C# Dev Kit launches it, and
-there is no confirmed VS Code event for "a test run is about to start" to hook for a per-run
-rotation — `vscode.tests` exports no such signal, and C# Dev Kit's own run lifecycle isn't
-observable from outside it. One token is minted per extension activation instead, refreshed on
-window reload/restart. The threat model is unchanged either way ("any local process that can read
-this file"), so this trades per-run freshness for needing no lifecycle hook, not security.
+**Session-scoped registration, not per-run.** VS and Rider re-register with the server for every run
+because their own code launches the test process each time. Here, C# Dev Kit launches it, and there
+is no confirmed VS Code event for "a test run is about to start" to hook for a per-run refresh —
+`vscode.tests` exports no such signal, and C# Dev Kit's own run lifecycle isn't observable from
+outside it. Registration happens once per extension activation instead, refreshed on window
+reload/restart. This is safe because the server's endpoint doesn't expire and, since 2026-09-18,
+carries no per-connection secret to go stale — see §5.1 for why an earlier per-run token was tried
+and removed (it broke exactly this one-registration-many-connections shape: the token was single-use,
+so every test-host connection after the first in a session was rejected).
 
 **Off by default, opt-in via `reqnroll.testOutcomes.enabled`.** Unlike everything else this
 extension does, this writes to a `dotnet.*`-namespaced setting shared with C# Dev Kit, persisted to
