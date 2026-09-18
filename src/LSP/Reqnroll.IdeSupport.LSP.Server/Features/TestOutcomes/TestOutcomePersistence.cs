@@ -1,67 +1,68 @@
-using System.ComponentModel.Composition;
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.TestOutcomes;
 
-namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
+namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
 /// <summary>
-/// Keeps <see cref="TestOutcomeStore"/>'s contents across VS sessions in one JSON file under the Reqnroll
-/// log directory (<c>%LOCALAPPDATA%\Reqnroll\test-outcomes.json</c>), keyed by test-container path like
-/// the store itself — so no per-solution bookkeeping is needed: whichever solution owns a container,
-/// its outcomes are found by the container's path.
+/// Keeps <see cref="TestOutcomeStore"/>'s contents across server restarts in one JSON file under the
+/// Reqnroll log directory (<c>%LOCALAPPDATA%\Reqnroll\test-outcomes.json</c>), keyed by test-container
+/// path like the store itself — so no per-solution or per-IDE bookkeeping is needed: whichever solution
+/// owns a container, its outcomes are found by the container's path. One file shared by every IDE the
+/// server serves, since the server process (not the IDE) now owns this state.
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
 ///   <item><b>Freshness.</b> An entry whose container assembly has been rebuilt since the outcome was
 ///   recorded (file write time newer than <c>LastUpdatedUtc</c>), or whose container no longer exists,
-///   is dropped on load — a green glyph on rebuilt code would be a lie VS's own lens happily tells.</item>
+///   is dropped on load — a green glyph on rebuilt code would be a lie.</item>
 ///   <item><b>Retention.</b> Entries older than <see cref="MaxAge"/> are dropped on save.</item>
-///   <item><b>Concurrency.</b> Several VS instances share the file. Save merges into whatever is on disk
-///   at that moment (newest <c>LastUpdatedUtc</c> per method wins) and writes via temp file + replace,
-///   so the worst case of two simultaneous saves is one instance's last run being re-merged on its next
-///   save, never a torn file.</item>
+///   <item><b>Concurrency.</b> Several server instances (one per open VS/Rider/VS Code window) could in
+///   principle share the file. Save merges into whatever is on disk at that moment (newest
+///   <c>LastUpdatedUtc</c> per method wins) and writes via temp file + replace, so the worst case of two
+///   simultaneous saves is one instance's last run being re-merged on its next save, never a torn file.</item>
 ///   <item><b>Size.</b> Rows are persisted without their raw stdout / stack trace — the parsed steps and
 ///   the error message are what the IDE renders.</item>
 /// </list>
 /// Every failure is logged and swallowed: persistence is a convenience, never a reason for a lens to fail.
 /// </remarks>
-[Export]
-[PartCreationPolicy(CreationPolicy.Shared)]
 public sealed class TestOutcomePersistence
 {
     internal const int FormatVersion = 1;
     internal static readonly TimeSpan MaxAge = TimeSpan.FromDays(30);
 
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
-
     private readonly string _filePath;
     private readonly Func<string, DateTime?> _sourceLastWriteUtc;
+    private readonly IIdeSupportLogger _logger;
     private readonly object _gate = new();
 
-    [ImportingConstructor]
-    public TestOutcomePersistence()
-        : this(ResolveDefaultFilePath(), TestOutcomeFreshness.DefaultSourceLastWriteUtc)
+    /// <summary>DI entry point.</summary>
+    public TestOutcomePersistence(IIdeSupportLogger logger)
+        : this(ResolveDefaultFilePath(logger), TestOutcomeFreshness.DefaultSourceLastWriteUtc, logger)
     {
     }
 
     /// <summary>Test seam: explicit file and container-timestamp lookup.</summary>
-    internal TestOutcomePersistence(string filePath, Func<string, DateTime?> sourceLastWriteUtc)
+    internal TestOutcomePersistence(string filePath, Func<string, DateTime?> sourceLastWriteUtc, IIdeSupportLogger logger)
     {
         _filePath = filePath;
         _sourceLastWriteUtc = sourceLastWriteUtc;
+        _logger = logger;
     }
 
     /// <summary>
-    /// This runs inside the MEF constructor chain — <c>RunTestCodeLensCallbackListener</c> imports
-    /// <c>TestOutcomeStore</c>, which imports this class — so an exception here would fail composition
-    /// of a callback that used to have zero external dependencies and always worked (fresh-eyes review
-    /// finding). <see cref="ReqnrollLogPaths.ResolveLogDirectory"/> is broadly safe (its own file
+    /// <see cref="Logging.ReqnrollLogPaths.ResolveLogDirectory"/> is broadly safe (its own file
     /// enumeration is already guarded) but still resolves environment-dependent paths via
     /// <see cref="Path.Combine(string, string)"/>, which can throw on a sufficiently unusual
     /// environment; never let that take the whole outcome pipeline down.
     /// </summary>
-    private static string ResolveDefaultFilePath()
+    private static string ResolveDefaultFilePath(IIdeSupportLogger logger)
     {
         try
         {
@@ -69,7 +70,7 @@ public sealed class TestOutcomePersistence
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: could not resolve the Reqnroll log directory; falling back to the temp directory");
+            logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: could not resolve the Reqnroll log directory; falling back to the temp directory");
             return Path.Combine(Path.GetTempPath(), "reqnroll-test-outcomes.json");
         }
     }
@@ -84,12 +85,12 @@ public sealed class TestOutcomePersistence
             List<MethodOutcome> onDisk;
             lock (_gate) onDisk = ReadFile();
             var fresh = onDisk.Where(IsFresh).ToList();
-            Logger.LogVerbose($"{nameof(TestOutcomePersistence)}: loaded {fresh.Count} fresh of {onDisk.Count} persisted method outcome(s) from {_filePath}");
+            _logger.LogVerbose($"{nameof(TestOutcomePersistence)}: loaded {fresh.Count} fresh of {onDisk.Count} persisted method outcome(s) from {_filePath}");
             return fresh;
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: load failed; starting empty");
+            _logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: load failed; starting empty");
             return Array.Empty<MethodOutcome>();
         }
     }
@@ -118,12 +119,12 @@ public sealed class TestOutcomePersistence
                     .ToList();
 
                 WriteFile(kept);
-                Logger.LogVerbose($"{nameof(TestOutcomePersistence)}: saved {kept.Count} method outcome(s) to {_filePath}");
+                _logger.LogVerbose($"{nameof(TestOutcomePersistence)}: saved {kept.Count} method outcome(s) to {_filePath}");
             }
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: save failed");
+            _logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: save failed");
         }
     }
 
@@ -145,7 +146,7 @@ public sealed class TestOutcomePersistence
         }
         catch (Exception ex)
         {
-            Logger.LogWarning($"{nameof(TestOutcomePersistence)}: existing {_filePath} is unreadable ({ex.Message}); overwriting.");
+            _logger.LogWarning($"{nameof(TestOutcomePersistence)}: existing {_filePath} is unreadable ({ex.Message}); overwriting.");
             return new List<MethodOutcome>();
         }
     }
@@ -158,7 +159,7 @@ public sealed class TestOutcomePersistence
         var root = JObject.Parse(File.ReadAllText(_filePath));
         if ((root.Value<int?>("version") ?? 0) != FormatVersion)
         {
-            Logger.LogInfo($"{nameof(TestOutcomePersistence)}: ignoring {_filePath} with format version {root.Value<int?>("version")} (expected {FormatVersion})");
+            _logger.LogInfo($"{nameof(TestOutcomePersistence)}: ignoring {_filePath} with format version {root.Value<int?>("version")} (expected {FormatVersion})");
             return result;
         }
 
@@ -235,8 +236,6 @@ public sealed class TestOutcomePersistence
         var temp = _filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            // Parameterless ToString(): JToken.ToString(Formatting) is a known MissingMethodException in
-            // the VS host (see the repo memory on Newtonsoft in devenv).
             File.WriteAllText(temp, root.ToString());
             if (File.Exists(_filePath))
                 File.Replace(temp, _filePath, destinationBackupFileName: null);

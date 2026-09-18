@@ -110,8 +110,8 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // IsScenarioOutline value (they come from a single symbol node), so the first is enough.
         var label = onThisLine[0].IsScenarioOutline ? "▶ Run Scenarios" : "▶ Run Scenario";
 
-        // Pass/fail glyph. Source of truth is the in-proc TestOutcomeStore, fed by the bundled VSTest
-        // logger (implementation plan §4.2) — it sees every result of an IDE-triggered run, including
+        // Pass/fail glyph. Source of truth is the LSP server's TestOutcomeStore, fed by the bundled
+        // VSTest logger (implementation plan §4.2) — it sees every result of an IDE-triggered run, including
         // each Scenario Outline row (issue #702). Only when the store has never heard of this method
         // (no run yet this session, or a project the logger can't reach — e.g. Microsoft.Testing.Platform)
         // do we fall back to RunTestOutcomeBridge's reflection into VS's own TestStore, which degrades
@@ -244,8 +244,8 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             : milliseconds.ToString("0 ms", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Asks devenv.exe's <c>TestOutcomeStore</c> (via the same OOP→in-proc callback channel as target
-    /// resolution) for this method's last-known outcome. Null on "unknown" <em>and</em> on any failure —
+    /// Asks the LSP server's <c>TestOutcomeStore</c> (via the same OOP→in-proc→LSP callback channel as
+    /// target resolution) for this method's last-known outcome. Null on "unknown" <em>and</em> on any failure —
     /// the caller then consults the reflection bridge, so a broken callback never costs the glyph.
     /// </summary>
     private async Task<RunTestOutcomeEntry?> TryGetStoredOutcomeAsync(TestMethodIdentifier method, CancellationToken token)

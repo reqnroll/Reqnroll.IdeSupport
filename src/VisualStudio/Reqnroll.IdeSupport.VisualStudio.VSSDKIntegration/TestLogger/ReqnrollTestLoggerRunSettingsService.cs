@@ -1,7 +1,10 @@
 using System.ComponentModel.Composition;
+using System.Threading;
 using System.Xml.XPath;
+using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.TestWindow.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 using ILogger = Microsoft.VisualStudio.TestWindow.Extensibility.ILogger;
 
 namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
@@ -37,6 +40,21 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
 /// injected (the glyph falls back to the reflection bridge). For a misbehaving logger this is cheaper
 /// than uninstalling the extension.
 /// </para>
+/// <para>
+/// <b>LSP-server outcome pipeline.</b> Run registration used to be a same-process, in-memory call
+/// (<c>TestOutcomeListener.RegisterRun()</c>); the receiver, store, and persistence now live in the
+/// LSP server so every IDE shares one implementation, which makes this call a cross-process JSON-RPC
+/// round trip over <c>LspInterceptingPipe</c>. <see cref="AddRunSettings"/> is a synchronous VS Test
+/// Platform callback with no async overload, so that round trip is awaited synchronously via
+/// <c>ThreadHelper.JoinableTaskFactory.Run</c> (the same sync-over-async bridge this codebase already
+/// uses elsewhere, e.g. <c>VsUtils.GetInstalledNuGetPackages</c>), bounded by
+/// <see cref="RegistrationTimeout"/> so a slow or unresponsive server degrades to "inject nothing for
+/// this run" — same as today's "listener couldn't start" path — rather than hanging test-run
+/// configuration. The pipe's own read/write pumps run on background tasks with no UI-thread affinity
+/// (<c>ServerToVsPump</c>/<c>VsToServerPump</c>), so this does not depend on <c>AddRunSettings</c>
+/// happening to run off the UI thread — JoinableTaskFactory.Run's reentrancy protection covers the
+/// case where it doesn't.
+/// </para>
 /// </remarks>
 [Export(typeof(IRunSettingsService))]
 public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
@@ -48,13 +66,8 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     private const string ReqnrollRuntimeAssemblyFileName = "Reqnroll.dll";
     internal const string DisableEnvironmentVariable = "REQNROLL_IDE_DISABLE_TEST_LOGGER";
 
-    private readonly TestOutcomeListener _listener;
-
-    [ImportingConstructor]
-    public ReqnrollTestLoggerRunSettingsService(TestOutcomeListener listener)
-    {
-        _listener = listener ?? throw new ArgumentNullException(nameof(listener));
-    }
+    /// <summary>Bounds the blocking wait for the server's registration response — see the class remarks.</summary>
+    internal static readonly TimeSpan RegistrationTimeout = TimeSpan.FromSeconds(5);
 
     /// <inheritdoc />
     public string Name => "Reqnroll IDE test logger";
@@ -95,10 +108,10 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
                 return inputRunSettingDocument;
             }
 
-            var registration = _listener.RegisterRun();
+            var registration = RegisterRunBlocking();
             if (registration is null)
             {
-                log.Log(MessageLevel.Warning, "Reqnroll: could not open the loopback listener for test outcomes; live test outcomes will not be recorded for this run.");
+                log.Log(MessageLevel.Warning, "Reqnroll: could not register this run with the LSP server for test outcomes; live test outcomes will not be recorded for this run.");
                 return inputRunSettingDocument;
             }
 
@@ -138,6 +151,41 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             log.Log(MessageLevel.Warning, $"Reqnroll: failed to register the test logger — {ex.Message}");
             Logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}.{nameof(AddRunSettings)} failed");
             return inputRunSettingDocument;
+        }
+    }
+
+    /// <summary>
+    /// Blocks (bounded by <see cref="RegistrationTimeout"/>) on the LSP-server round trip that mints
+    /// this run's endpoint+token. Returns null on a missing connection, a timeout, or any exception —
+    /// every one of those means "inject nothing", never "hang the run".
+    /// </summary>
+    private static TestRunRegistration? RegisterRunBlocking()
+    {
+        var registerAsync = RunTestCodeLensRedirect.RegisterTestRunAsync;
+        if (registerAsync is null)
+        {
+            Logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: LSP connection not established yet; not registering.");
+            return null;
+        }
+
+        using var timeout = new CancellationTokenSource(RegistrationTimeout);
+        try
+        {
+            // JoinableTaskFactory.Run, not a raw .GetAwaiter().GetResult(): same sync-over-async
+            // bridge this codebase already uses elsewhere (VsUtils.GetInstalledNuGetPackages,
+            // DocumentInitializationMonitor) to stay deadlock-safe under VS's threading model,
+            // rather than a bare blocking wait the VSTHRD002 analyzer (correctly) flags as unsafe.
+            return ThreadHelper.JoinableTaskFactory.Run(() => registerAsync(timeout.Token));
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: timed out after {RegistrationTimeout} waiting for the LSP server to register this run.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}: RegisterRunBlocking failed");
+            return null;
         }
     }
 

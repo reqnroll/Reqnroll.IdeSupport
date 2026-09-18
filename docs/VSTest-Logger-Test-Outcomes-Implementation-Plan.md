@@ -177,11 +177,36 @@ Serialize the store to `%LOCALAPPDATA%\Reqnroll\test-outcomes\<solution-key>.jso
 load on solution open, discard entries whose source assembly is newer than the stored `LastUpdatedUtc`
 (stale after a rebuild — arguably better than VS, which shows a stale green for rebuilt code).
 
-### 4.3 Rider and VS Code (adopt, don't redesign)
+### 4.3 Rider and VS Code (reconsidered — see Phase 3.5)
 
-Both IDEs own their execution via `dotnet test --filter` (Rider today parses a TRX; VS Code has no
-in-tree runner yet — nothing under `src/VSCode/src` invokes `dotnet test`). Adoption means adding two
-arguments to the command line they already build and listening on a loopback socket:
+Superseded in its original form (below, kept for the record) by the LSP-server outcome pipeline
+refactor (Phase 3.5): the receiver, `TestOutcomeStore`, and persistence that Phase 1–3 built as a
+Visual Studio-only, in-proc pipeline now live once in the LSP server, shared by every IDE, rather
+than VS/Rider/VS Code each growing an independent copy. Two things forced this reconsideration
+before Rider/VS Code work started:
+
+- **Registration feasibility differs per IDE, and isn't symmetric with VS's original design.** Rider
+  already owns its `dotnet test --filter` invocation (`RunTestRunner.kt`), so injecting the two
+  extra arguments is straightforward — no different in kind from what VS's `IRunSettingsService`
+  hook already does. VS Code does **not** own test execution at all: C# Dev Kit provides the gutter
+  run/debug and Test Explorer integration (a CodeLens-based "▶ Run" and a `vscode.TestController`
+  migration were both tried and reverted — issue #504), so "VS Code has no in-tree runner yet" (the
+  original wording above) was misleading — it reads as "not built yet" when it is actually a
+  deliberate, already-settled position. The real Phase 5 question is whether the logger can be
+  injected into C# Dev Kit's *own* `dotnet test`/vstest invocation (a runsettings-path setting it
+  reads, or a file it auto-discovers) — unconfirmed, and a materially different, harder question
+  than Rider's. Not yet spiked; Phase 5 is blocked on it.
+- **One implementation, not three.** Once server-side registration was on the table for Rider/VS
+  Code, keeping VS's copy of the store/persistence/receiver as a fourth, VS-only implementation
+  stopped making sense. VS already runs an LSP client alongside its VSSDK extension, and other VS
+  CodeLens providers (step-usage counts, hook-match counts) already flow through the shared LSP
+  server rather than an in-proc VS-only path — the Run CodeLens outcome pipeline was the one
+  exception. Phase 3.5 removes that exception.
+
+Original text, superseded: both IDEs own their execution via `dotnet test --filter` (Rider today
+parses a TRX; VS Code has no in-tree runner yet — nothing under `src/VSCode/src` invokes
+`dotnet test`). Adoption means adding two arguments to the command line they already build and
+listening on a loopback socket:
 
 ```
 dotnet test <proj> --filter "<expr>" \
@@ -194,7 +219,8 @@ and the step trace, as results arrive rather than after the process exits. The l
 the plugin/extension package the same way the LSP server already does. The JVM side is why the
 transport is TCP loopback rather than a named pipe (§5.1). Rider's `RunTestResultStore` (keyed
 `(uri, line)`) and VS's `TestOutcomeStore` (keyed by method) should converge on the method key; the
-uri/line mapping is the same `resolveTestTargets` data on every IDE.
+uri/line mapping is the same `resolveTestTargets` data on every IDE. The registration/store split is
+now Phase 3.5's job instead of each IDE's own; the uri/line convergence point stands as written.
 
 ## 5. Decisions
 
@@ -266,8 +292,11 @@ line. The end-to-end `dotnet test` test lives in `tests/Core/Reqnroll.IdeSupport
 against `tests/Core/TestLoggerFixtures/MsTestReqnroll` (net10.0 so CI's single runtime suffices) and
 runs in `test-lsp.yml`'s unit-test job. **Live exit criteria below still to be run.**
 
-Files: `TestLogger/NdjsonWriter.cs`, `TestLogger/OutcomeTransport.cs` (logger);
-`VSSDKIntegration/TestLogger/TestOutcomeListener.cs`, `TestOutcomeStore.cs`, `RunTestOutcomeEntry.cs`;
+Files (as originally built — see Phase 3.5 for where the receiver/store/persistence actually live
+now): `TestLogger/NdjsonWriter.cs`, `TestLogger/OutcomeTransport.cs` (logger);
+`VSSDKIntegration/TestLogger/TestOutcomeListener.cs`, `TestOutcomeStore.cs`, `RunTestOutcomeEntry.cs`
+(the first two relocated to the LSP server in Phase 3.5; `RunTestOutcomeEntry.cs` — the OOP wire DTO —
+stays);
 edits to `ReqnrollTestLoggerRunSettingsService`, `RunTestCodeLensCallbackListener`,
 `RunTestCodeLensDataPoint`, `ReqnrollLanguageClient` (wire store → `TaggerRegistry` invalidation).
 
@@ -313,19 +342,75 @@ glyphs present; rebuild → glyphs cleared; two instances → no cross-talk) sti
 - **Exit:** restart VS → last-run glyphs present; rebuild → glyphs cleared; concurrent-instance check
   passes.
 
+### Phase 3.5 — LSP-server outcome pipeline refactor — IMPLEMENTED
+
+Moves the receiver, `TestOutcomeStore`, and persistence out of the Visual Studio-only
+VSSDKIntegration project and into the shared LSP server (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/TestOutcomes/`),
+so Rider and VS Code (once Phase 4/5 land) share the exact same aggregation/persistence code VS uses,
+instead of each growing an independent copy — see §4.3 for why this was reconsidered before Rider/VS
+Code work started.
+
+- **New custom LSP protocol** (`LspMethodNames`): `reqnroll/testOutcomes/registerRun` (request —
+  mints a fresh, single-use endpoint+token for one run), `reqnroll/testOutcomes/getOutcome` (request —
+  the outcome lookup, including the staleness/trust-window logic that used to live in
+  `RunTestCodeLensCallbackListener`), and `reqnroll/testOutcomes/changed` (server→client push,
+  mirroring `reqnroll/refreshCodeLens`). The server also advertises the feature (method names only,
+  not a live credential) via the standard `experimental` capability bucket in the `initialize`
+  response — the spec's sanctioned extension point for exactly this, and the answer to "is there room
+  in the LSP spec for a server to tell the client about a custom side-channel": yes for capability
+  discovery, no for the per-run token itself (a capability describes static feature availability; the
+  token must stay short-lived and freshly minted per run, so it's a live request, not part of the
+  one-time handshake).
+- **VS integration**: `TestOutcomeListener`/`TestOutcomeStore`/`TestOutcomePersistence`/
+  `TestOutcomeFreshness` deleted from VSSDKIntegration; `RunTestCodeLensCallbackListener.GetOutcomeAsync`
+  now calls through `RunTestCodeLensRedirect.GetTestOutcomeAsync` (a new VS-Extension-set delegate,
+  same pattern as the existing `GetTargetsForLineAsync`) instead of an in-proc store read.
+  `ReqnrollTestLoggerRunSettingsService.AddRunSettings` — a **synchronous** VS Test Platform callback
+  with no async overload — now blocks (bounded by a 5 s timeout, via `ThreadHelper.JoinableTaskFactory.Run`,
+  the same sync-over-async bridge used elsewhere in this codebase) on the LSP round trip to register a
+  run, instead of a same-process call. This was a deliberate, explicitly-decided trade-off (not a
+  default choice): the alternative of a pre-minted token pool avoids the blocking call entirely at the
+  cost of pool/race-handling complexity; blocking-with-a-bound was chosen for a simpler pipeline,
+  accepting a few extra milliseconds of run-configuration latency and graceful ("inject nothing")
+  degradation if the server is slow or unreachable.
+- **Client-side push**: a new `TestOutcomesChangedInterceptor` (mirrors `CodeLensRefreshInterceptor`,
+  but with no debounce/rate-limit of its own — the server already throttles this notification, and
+  unlike the CodeLens refresh push this one never touches VS.Extensibility's `CodeLens.Invalidate()`,
+  so it carries none of issue #156's reconnect risk) forwards the push to
+  `RunTestCodeLensRedirect.NotifyOutcomesChanged()`, unchanged from Phase 1.
+- Tests moved with the code: `tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Features/TestOutcomes/`
+  now covers `TestOutcomeStore`, `TestOutcomeFreshness`/`GetTestOutcomeHandler` (including the
+  aged-out-vs-stale distinction from the earlier code-review fix pass), `TestOutcomeTcpListener`, and
+  `TestOutcomePersistence`; VS-side `TestOutcomeDetailsTests` was trimmed to only the
+  `RunTestCodeLensDataPoint` rendering tests, which stayed VS-side.
+- **Not done here**: Rider/VS Code do not yet call the new requests (that's Phase 4/5, and Phase 5 is
+  still blocked on the C# Dev Kit injection-point question above). VS's own registration/lookup calls
+  are live end to end against the server.
+- **Exit:** 1081/1082 LSP server tests, 396/396 VS tests, 17/17 logger tests, 182/182 Common tests
+  green (the one LSP server failure is a pre-existing, unrelated performance-threshold test that is
+  flaky under machine load and passes in isolation); full solution builds clean. **Live verification
+  in VS — glyphs still update end to end now that registration and lookup are cross-process — not yet
+  run; the same exit criteria as Phase 1/3 apply.**
+
 ### Phase 4 — Rider adoption
 
-- Bundle the logger in the plugin (same Gradle path that bundles the LSP server), add a
-  `ServerSocket(0, …, loopback)` listener in `testrunner/`, pass `--test-adapter-path`/`--logger`,
-  key `RunTestResultStore` by method, keep the TRX path as the fallback for one release.
+- Bundle the logger in the plugin (same Gradle path that bundles the LSP server), add the two
+  runsettings arguments to the `dotnet test --filter` invocation `RunTestRunner.kt` already builds
+  (no listener of its own to write — Phase 3.5 moved that server-side), call
+  `reqnroll/testOutcomes/registerRun`/`getOutcome` the same way VS does, key `RunTestResultStore` by
+  method to converge with the server's `TestOutcomeKey`, keep the TRX path as the fallback for one
+  release.
 - Verify in the devcontainer (`./gradlew test --offline` + a live run — see the memory on
   devcontainer verification; the host cannot build Gradle).
 - **Exit:** outline rows report individually in Rider's Run lens; TRX parsing no longer on the hot path.
 
 ### Phase 5 — VS Code adoption
 
-- Depends on VS Code having an own-execution runner at all (none in-tree today). When it does, same
-  two arguments, `net.createServer` on loopback, the same store shape in TypeScript.
+- Blocked on the C# Dev Kit injection-point question from §4.3: VS Code has no runner of its own by
+  design (issue #504), so this phase is not "build a runner and add two arguments" — it's "find out
+  whether C# Dev Kit's own `dotnet test`/vstest invocation can be pointed at our logger at all" (a
+  `dotnet.unitTests.runSettingsPath`-style setting, or a `.runsettings` file it auto-discovers). If
+  that spike comes back negative, this phase may not be achievable without reopening #504.
 
 ### Phase 6 — Retirement decision for `RunTestOutcomeBridge`
 
@@ -341,8 +426,8 @@ glyphs present; rebuild → glyphs cleared; two instances → no cross-talk) sti
 | Logger serialization + transport | xUnit, in-proc listener, subclass `TestLoggerEvents` to raise events directly | new `tests/Core/Reqnroll.IdeSupport.TestLogger.Tests` |
 | Logger end-to-end (no IDE) | spawn `dotnet test` on a fixture with `--test-adapter-path`/`--logger`, assert NDJSON received | same project, `[Trait("Category","Integration")]` |
 | Runsettings merge | existing 16 tests, plus a case where the user's file already lists a *different* `*TestLogger.dll` directory | `Reqnroll.IdeSupport.VisualStudio.Tests/TestLogger` |
-| Store | pure unit tests: aggregation, row upsert, path normalization, debounce | same |
-| Listener | token accept/reject, half-open connection, concurrent runs | same |
+| Store | pure unit tests: aggregation, row upsert, path normalization, debounce | `Reqnroll.IdeSupport.LSP.Server.Tests/Features/TestOutcomes` (Phase 3.5; was VS-side) |
+| Listener | token accept/reject, half-open connection, concurrent runs | same (Phase 3.5; was VS-side) |
 | CodeLens wiring | interface-shaped glue; substitute the callback and assert store-first/bridge-fallback order | existing `RunTestCodeLens` test folder |
 | VS live | the recipe in the hand-off note, extended with Debug, user runsettings, two instances | manual, recorded in the issue |
 | Rider | devcontainer live run | manual |

@@ -1,52 +1,59 @@
+#nullable enable
+
+using System;
 using System.Collections.Concurrent;
-using System.ComponentModel.Composition;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
-namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
+namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
-/// <summary>What the runsettings service hands the logger for one run.</summary>
+/// <summary>What <see cref="RegisterTestRunHandler"/> hands back for one run.</summary>
 public sealed record TestRunRegistration(string RunId, string Endpoint, string Token);
 
 /// <summary>
-/// In-proc (devenv.exe) receiving end of the bundled VSTest logger: one TCP loopback listener per VS
-/// instance, one connection per test run, newline-delimited JSON in, nothing out. Feeds
-/// <see cref="TestOutcomeStore"/> and, debounced, refreshes the Run CodeLens taggers so the OOP data points
-/// are re-created against the new outcomes.
+/// Server-side receiving end of the bundled VSTest logger: one TCP loopback listener per server
+/// process, one connection per test run, newline-delimited JSON in, nothing out. Feeds
+/// <see cref="TestOutcomeStore"/> and, debounced, pushes <c>reqnroll/testOutcomes/changed</c> to the
+/// connected client so it re-pulls fresh outcomes.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Tokens.</b> <see cref="RegisterRun"/> mints a random token per registration; the logger's first
-/// line (<c>hello</c>) must carry one that is unexpired and unused, else the connection is closed
-/// unread. VS calls <c>AddRunSettings(Execution)</c> twice per Run click (implementation plan §1), so
-/// one token per run goes unused — they expire after <see cref="TokenLifetime"/>. This turns "any local
-/// process can connect" into "any local process that has read this run's runsettings", which is the
-/// right size of lock for a loopback-only, minutes-lived channel whose only power is posting outcomes.
+/// This is the LSP-server-side successor to the Visual Studio-only <c>TestOutcomeListener</c>: the same
+/// receiver, store, and persistence now live once in the server, shared by every IDE, instead of VS
+/// growing its own and Rider/VS Code eventually growing two more independent copies.
 /// </para>
 /// <para>
-/// <b>Lifetime.</b> Started lazily on the first registration, lives for the process. Connection handling
-/// is fully asynchronous on the thread pool; nothing here touches the UI thread. Every fault is logged
-/// and contained — a broken listener degrades to "no live glyphs", exactly like the reflection bridge it
-/// supersedes.
+/// <b>Tokens.</b> <see cref="RegisterRun"/> mints a random token per registration; the logger's first
+/// line (<c>hello</c>) must carry one that is unexpired and unused, else the connection is closed
+/// unread. Tokens expire after <see cref="TokenLifetime"/>. This turns "any local process can connect"
+/// into "any local process that has read this run's runsettings", which is the right size of lock for a
+/// loopback-only, minutes-lived channel whose only power is posting outcomes.
+/// </para>
+/// <para>
+/// <b>Lifetime.</b> Started lazily on the first registration, lives for the server process. Connection
+/// handling is fully asynchronous on the thread pool. Every fault is logged and contained — a broken
+/// listener degrades to "no live glyphs", exactly like the reflection bridge it supersedes.
 /// </para>
 /// </remarks>
-[Export]
-[PartCreationPolicy(CreationPolicy.Shared)]
-public sealed class TestOutcomeListener : IDisposable
+public sealed class TestOutcomeTcpListener : IDisposable
 {
     internal static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RefreshDebounce = TimeSpan.FromMilliseconds(250);
 
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
-
     private readonly TestOutcomeStore _store;
     private readonly TestOutcomePersistence? _persistence;
-    private readonly Action _refreshLenses;
+    private readonly IIdeSupportLogger _logger;
+    private readonly Action _notifyChanged;
     private readonly ConcurrentDictionary<string, (string RunId, DateTime IssuedUtc)> _tokens = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private TcpListener? _listener;
@@ -54,17 +61,18 @@ public sealed class TestOutcomeListener : IDisposable
     private int _refreshScheduled;
     private bool _disposed;
 
-    [ImportingConstructor]
-    public TestOutcomeListener(TestOutcomeStore store, TestOutcomePersistence persistence)
-        : this(store, RunTestCodeLensRedirect.NotifyOutcomesChanged, persistence)
+    /// <summary>DI entry point: pushes <c>reqnroll/testOutcomes/changed</c> to the connected client on change.</summary>
+    public TestOutcomeTcpListener(TestOutcomeStore store, TestOutcomePersistence persistence, ILanguageServerFacade languageServer, IIdeSupportLogger logger)
+        : this(store, logger, () => TestOutcomesChangedRequester.NotifyChanged(languageServer, logger), persistence)
     {
     }
 
-    /// <summary>Test seam: <paramref name="refreshLenses"/> replaces the CodeLens tagger refresh; <paramref name="persistence"/> may be null.</summary>
-    internal TestOutcomeListener(TestOutcomeStore store, Action refreshLenses, TestOutcomePersistence? persistence = null)
+    /// <summary>Test seam: <paramref name="notifyChanged"/> replaces the LSP push; <paramref name="persistence"/> may be null.</summary>
+    internal TestOutcomeTcpListener(TestOutcomeStore store, IIdeSupportLogger logger, Action notifyChanged, TestOutcomePersistence? persistence = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        _refreshLenses = refreshLenses ?? throw new ArgumentNullException(nameof(refreshLenses));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _notifyChanged = notifyChanged ?? throw new ArgumentNullException(nameof(notifyChanged));
         _persistence = persistence;
         _store.Changed += (_, _) => ScheduleRefresh();
     }
@@ -109,12 +117,12 @@ public sealed class TestOutcomeListener : IDisposable
                 listener.Start(backlog: 8);
                 _listener = listener;
                 _ = Task.Run(() => AcceptLoopAsync(listener));
-                Logger.LogInfo($"{nameof(TestOutcomeListener)}: listening on {Endpoint}");
+                _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: listening on {Endpoint}");
                 return true;
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, $"{nameof(TestOutcomeListener)}: failed to start loopback listener");
+                _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: failed to start loopback listener");
                 return false;
             }
         }
@@ -133,7 +141,7 @@ public sealed class TestOutcomeListener : IDisposable
             catch (Exception ex)
             {
                 if (_disposed) return;
-                Logger.LogException(ex, $"{nameof(TestOutcomeListener)}: accept failed");
+                _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: accept failed");
                 continue;
             }
             _ = Task.Run(() => HandleConnectionAsync(client));
@@ -156,22 +164,22 @@ public sealed class TestOutcomeListener : IDisposable
             var hello = JObject.Parse(helloLine);
             if (!string.Equals(hello.Value<string>("type"), "hello", StringComparison.Ordinal))
             {
-                Logger.LogWarning($"{nameof(TestOutcomeListener)}: first line was not a hello; closing.");
+                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: first line was not a hello; closing.");
                 return;
             }
 
             var token = hello.Value<string>("token") ?? string.Empty;
             if (!_tokens.TryRemove(token, out var issued) || DateTime.UtcNow - issued.IssuedUtc > TokenLifetime)
             {
-                Logger.LogWarning($"{nameof(TestOutcomeListener)}: rejected connection with unknown or expired token.");
+                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: rejected connection with unknown or expired token.");
                 return;
             }
 
             runId = hello.Value<string>("runId") ?? issued.RunId;
             var protocol = hello.Value<int?>("protocol") ?? 0;
-            Logger.LogInfo($"{nameof(TestOutcomeListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
+            _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
             if (protocol != 1)
-                Logger.LogWarning($"{nameof(TestOutcomeListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
+                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
 
             string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
@@ -181,7 +189,7 @@ public sealed class TestOutcomeListener : IDisposable
                 try { message = JObject.Parse(line); }
                 catch (Exception ex)
                 {
-                    Logger.LogWarning($"{nameof(TestOutcomeListener)}: unparseable line from run {runId}: {ex.Message}");
+                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: unparseable line from run {runId}: {ex.Message}");
                     continue;
                 }
 
@@ -189,30 +197,30 @@ public sealed class TestOutcomeListener : IDisposable
                 {
                     case "runStart":
                         var running = _store.MarkRunning(runId, ParseRunStartTests(message));
-                        Logger.LogVerbose($"{nameof(TestOutcomeListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
+                        _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
                         break;
                     case "result":
                         if (_store.Record(ToRecord(runId, message)) is not null) results++;
                         break;
                     case "runComplete":
                         completed = true;
-                        Logger.LogInfo($"{nameof(TestOutcomeListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={message.Value<bool?>("aborted") ?? false}, canceled={message.Value<bool?>("canceled") ?? false}, {results} result(s) stored");
+                        _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={message.Value<bool?>("aborted") ?? false}, canceled={message.Value<bool?>("canceled") ?? false}, {results} result(s) stored");
                         break;
                 }
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)
         {
-            Logger.LogVerbose($"{nameof(TestOutcomeListener)}: connection for run {runId ?? "?"} dropped: {ex.Message}");
+            _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: connection for run {runId ?? "?"} dropped: {ex.Message}");
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"{nameof(TestOutcomeListener)}: connection handler failed for run {runId ?? "?"}");
+            _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: connection handler failed for run {runId ?? "?"}");
         }
         finally
         {
             if (runId is not null && !completed)
-                Logger.LogWarning($"{nameof(TestOutcomeListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
+                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
             try { client.Dispose(); } catch (Exception) { }
             if (runId is not null)
             {
@@ -222,7 +230,7 @@ public sealed class TestOutcomeListener : IDisposable
                 if (results > 0)
                     _persistence?.Save(_store.Snapshot());
             }
-            // Make sure the lenses catch up even if the debounce timer was cancelled by disposal ordering.
+            // Make sure the client catches up even if the debounce timer was cancelled by disposal ordering.
             if (results > 0) ScheduleRefresh();
         }
     }
@@ -274,16 +282,18 @@ public sealed class TestOutcomeListener : IDisposable
     /// bounded, predictable cadence instead of two failure modes a reset-on-every-call debounce is
     /// prone to: many redundant <c>Timer.Change</c> calls during the burst, or, if results keep
     /// arriving faster than the debounce interval for long enough, never firing at all until the
-    /// stream finally goes quiet (starvation — the exact opposite of "live" outcomes).
+    /// stream finally goes quiet (starvation — the exact opposite of "live" outcomes). Deliberately NOT
+    /// the shared <c>IRefreshDebouncer</c> used elsewhere in this server: that is a reset-on-every-call
+    /// debounce by design (see its remarks), which is exactly the starvation-prone shape this throttle
+    /// was built to avoid.
     /// </summary>
     /// <remarks>
     /// This does <em>not</em> bound how often a full invalidation happens when results are spaced
     /// <em>further</em> apart than <see cref="RefreshDebounce"/> (e.g. a slow-running suite) — each
     /// such result still triggers its own fire, same as before. Scoping invalidation to only the
     /// files/lines an outcome change actually affects (rather than every open <c>.feature</c> file)
-    /// would need the store's changed keys mapped back to file/line, which the OOP data-point side
-    /// resolves lazily and the tagger side deliberately never does (design doc §5/§6, issue #491) — a
-    /// cross-project change out of scope here; left as a known follow-up.
+    /// would need the store's changed keys mapped back to file/line, which the client side resolves
+    /// lazily and deliberately never does today — left as a known follow-up.
     /// </remarks>
     private void ScheduleRefresh()
     {
@@ -305,8 +315,8 @@ public sealed class TestOutcomeListener : IDisposable
     private void FireRefresh()
     {
         Interlocked.Exchange(ref _refreshScheduled, 0);
-        try { _refreshLenses(); }
-        catch (Exception ex) { Logger.LogException(ex, $"{nameof(TestOutcomeListener)}: lens refresh failed"); }
+        try { _notifyChanged(); }
+        catch (Exception ex) { _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: change notification failed"); }
     }
 
     private void PruneExpiredTokens()
@@ -333,6 +343,22 @@ public sealed class TestOutcomeListener : IDisposable
             _listener = null;
             _refreshTimer?.Dispose();
             _refreshTimer = null;
+        }
+    }
+}
+
+/// <summary>Sends the <c>reqnroll/testOutcomes/changed</c> notification to the connected client. Mirrors <see cref="Reqnroll.IdeSupport.LSP.Server.Features.CodeLens.CodeLensRefreshRequester"/>.</summary>
+internal static class TestOutcomesChangedRequester
+{
+    public static void NotifyChanged(ILanguageServerFacade languageServer, IIdeSupportLogger logger)
+    {
+        try
+        {
+            languageServer.SendNotification(LspMethodNames.ReqnrollTestOutcomesChanged, new TestOutcomesChangedParams());
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning($"{LspMethodNames.ReqnrollTestOutcomesChanged} failed: {ex.Message}");
         }
     }
 }

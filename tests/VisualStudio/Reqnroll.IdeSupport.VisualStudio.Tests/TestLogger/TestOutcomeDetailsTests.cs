@@ -1,85 +1,22 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
-using Reqnroll.IdeSupport.VisualStudio.TestLogger;
 using Xunit;
 
 namespace Reqnroll.VisualStudio.Tests.TestLogger;
 
 /// <summary>
 /// Phase 2 of the implementation plan: the step trace carried in each result's stdout becomes per-row
-/// failed-step information, flows through the OOP DTO, and renders as the Run CodeLens details table.
+/// failed-step information and renders as the Run CodeLens details table. The trace-parsing and
+/// store/handler side of this (previously covered here via a local <c>TestOutcomeStore</c> and
+/// <c>RunTestCodeLensCallbackListener.ToEntry</c>) moved to
+/// <c>Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes.GetTestOutcomeHandlerTests</c> along
+/// with the store and handler themselves (LSP-server outcome pipeline refactor). What's left here is
+/// purely the OOP DTO's rendering into the Details popup table, which stays VS-side.
 /// </summary>
 public class TestOutcomeDetailsTests
 {
-    private const string Source = @"C:\repo\Specs\bin\Debug\net8.0\Specs.dll";
-    private const string Type = "Specs.Features.CalculatorFeature";
-
-    private const string FailingMiddleStepTrace =
-        "TestContext Messages:\n" +
-        "Given the first number is 1\n" +
-        "-> done: CalculatorSteps.GivenTheFirstNumberIs(1) (0.0s)\n" +
-        "When the calculation explodes\n" +
-        "-> error: deliberate failure in the middle step (0.0s)\n" +
-        "Then the result should be 2\n" +
-        "-> skipped because of previous errors\n";
-
-    private static TestResultRecord Result(string method, string display, TestOutcomeKind outcome, string? stdout, string? error = null)
-        => new("run-1", Source, Type, method + "()", $"{Type}.{method}", display, outcome, 1234.5, error, null, stdout, false);
-
-    [Fact]
-    public void Store_parses_the_step_trace_and_exposes_the_failing_step()
-    {
-        var store = new TestOutcomeStore();
-        store.Record(Result("AStepInTheMiddleFails", "A step in the middle fails", TestOutcomeKind.Failed, FailingMiddleStepTrace, "deliberate failure in the middle step"));
-
-        var row = store.TryGet(Source, Type, "AStepInTheMiddleFails")!.Rows.Single();
-        row.Steps.Should().HaveCount(3);
-        row.FailedStep.Should().NotBeNull();
-        row.FailedStep!.Index.Should().Be(1, "the middle step threw; the trace, unlike the stack trace, says so");
-        row.FailedStep.StepText.Should().Be("When the calculation explodes");
-    }
-
-    [Fact]
-    public void Rows_without_a_trace_have_no_steps_and_no_failed_step()
-    {
-        var store = new TestOutcomeStore();
-        store.Record(Result("Plain", "Plain", TestOutcomeKind.Failed, stdout: null, error: "boom"));
-
-        var row = store.TryGet(Source, Type, "Plain")!.Rows.Single();
-        row.Steps.Should().BeEmpty();
-        row.FailedStep.Should().BeNull();
-    }
-
-    [Fact]
-    public void Callback_entry_carries_the_failed_step_per_row()
-    {
-        var store = new TestOutcomeStore();
-        store.Record(Result("AddingRows", "Adding rows(1,2,3,2)", TestOutcomeKind.Passed,
-            "Given the first number is 1\n-> done: S.G(1) (0.0s)\nThen the result should be 3\n-> done: S.T(3) (0.0s)\n"));
-        store.Record(Result("AddingRows", "Adding rows(5,5,11,4)", TestOutcomeKind.Failed,
-            "Given the first number is 5\n-> done: S.G(5) (0.0s)\nThen the result should be 11\n-> error: Assert.AreEqual failed. Expected:<11>. Actual:<10>.  (0.0s)\n",
-            "Assert.AreEqual failed. Expected:<11>. Actual:<10>."));
-
-        var entry = RunTestCodeLensCallbackListener.ToEntry(store.TryGet(Source, Type, "AddingRows")!);
-
-        entry.Aggregate.Should().Be("Failed");
-        entry.Rows.Should().HaveCount(2);
-        var passed = entry.Rows.Single(r => r.Outcome == "Passed");
-        passed.StepCount.Should().Be(2);
-        passed.FailedStepIndex.Should().BeNull();
-        passed.FailedStepText.Should().BeNull();
-        var failed = entry.Rows.Single(r => r.Outcome == "Failed");
-        failed.StepCount.Should().Be(2);
-        failed.FailedStepIndex.Should().Be(1);
-        failed.FailedStepText.Should().Be("Then the result should be 11");
-        failed.FailedStepOutcome.Should().Be("Error");
-        failed.ErrorMessage.Should().StartWith("Assert.AreEqual failed");
-        failed.DurationMs.Should().Be(1234.5);
-    }
-
     [Fact]
     public void Details_table_has_one_entry_per_row_with_the_failed_step_described()
     {

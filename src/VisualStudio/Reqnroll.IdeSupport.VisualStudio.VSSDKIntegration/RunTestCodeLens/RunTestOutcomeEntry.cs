@@ -26,8 +26,8 @@ public sealed record RunTestOutcomeRow(
     string? FailedStepOutcome = null);
 
 /// <summary>
-/// Last-known outcome of one generated test method from the in-proc <c>TestOutcomeStore</c> (fed by the
-/// bundled VSTest logger), for the Run CodeLens glyph and details pane. Null from the callback means
+/// Last-known outcome of one generated test method from the LSP server's <c>TestOutcomeStore</c> (fed by
+/// the bundled VSTest logger), for the Run CodeLens glyph and details pane. Null from the callback means
 /// "no run reported this method this session" and the data point falls back to the reflection bridge.
 /// </summary>
 public sealed record RunTestOutcomeEntry(

@@ -2,12 +2,14 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -241,6 +243,7 @@ public class Program
             ApplyStaticCodeLensCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
+            ApplyTestOutcomesCapability();
 
             return Task.CompletedTask;
 
@@ -375,6 +378,28 @@ public class Program
                 response.Capabilities.RenameProvider = new RenameRegistrationOptions.StaticOptions
                 {
                     PrepareProvider = true
+                };
+            }
+
+            // Advertises the custom LSP-server outcome pipeline (run registration, outcome lookup,
+            // and the "changed" push) via the standard `experimental` capability bucket — the spec's
+            // sanctioned extension point for exactly this: a client that doesn't recognize the key
+            // ignores it, per LSP's general "unknown fields are ignored" rule. Only the *feature's
+            // existence and method names* are advertised here; the actual per-run endpoint+token is
+            // deliberately NOT part of this one-time handshake payload (see
+            // RegisterTestRunHandler/TestOutcomeTcpListener's remarks) — a capability describes
+            // static feature availability, while a run's credential must stay short-lived and
+            // single-use, minted fresh per request instead.
+            void ApplyTestOutcomesCapability()
+            {
+                response.Capabilities.Experimental = new Dictionary<string, JToken>
+                {
+                    ["reqnroll/testOutcomes"] = JObject.FromObject(new
+                    {
+                        registerRunMethod = LspMethodNames.ReqnrollRegisterTestRun,
+                        getOutcomeMethod = LspMethodNames.ReqnrollGetTestOutcome,
+                        changedNotification = LspMethodNames.ReqnrollTestOutcomesChanged,
+                    }),
                 };
             }
         });

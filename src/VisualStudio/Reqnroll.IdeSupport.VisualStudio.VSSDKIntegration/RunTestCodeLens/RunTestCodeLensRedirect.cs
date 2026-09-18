@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.TestLogger;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
@@ -54,6 +55,24 @@ public static class RunTestCodeLensRedirect
 
     /// <summary>Set by the Extension project alongside <see cref="GetTargetsAsync"/> — see <see cref="InvalidateCachedFile"/>.</summary>
     public static Action? InvalidateAllCached { get; set; }
+
+    /// <summary>
+    /// Delegate set by the Extension project: asks the LSP server to mint a fresh, single-use
+    /// endpoint+token for one test run (LSP-server outcome pipeline refactor) — called synchronously,
+    /// with a bounded wait, from <c>ReqnrollTestLoggerRunSettingsService.AddRunSettings</c>, which is
+    /// itself a synchronous VS Test Platform callback with no async overload. Null (not yet connected)
+    /// or a timed-out/failed call both mean "inject nothing for this run", same as the old in-proc
+    /// listener returning null when it couldn't start.
+    /// </summary>
+    public static Func<CancellationToken, Task<TestRunRegistration?>>? RegisterTestRunAsync { get; set; }
+
+    /// <summary>
+    /// Delegate set by the Extension project: <c>(assemblyPath, typeFullName, methodName, ct) →
+    /// the method's last-known outcome from the LSP server's <c>TestOutcomeStore</c></c>, or null when
+    /// no run has reported it this session (the caller then falls back to the reflection bridge).
+    /// Replaces a direct, in-proc <c>TestOutcomeStore</c> read now that the store lives server-side.
+    /// </summary>
+    public static Func<string, string, string, CancellationToken, Task<RunTestOutcomeEntry?>>? GetTestOutcomeAsync { get; set; }
 
     /// <summary>Requests a re-pull of Run targets for <paramref name="fileUri"/>. Safe to call from any thread.</summary>
     public static void InvalidateFile(string fileUri)

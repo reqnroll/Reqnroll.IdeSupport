@@ -1,18 +1,13 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using AwesomeAssertions;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.TestOutcomes;
-using Reqnroll.IdeSupport.VisualStudio.TestLogger;
-using Xunit;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
-namespace Reqnroll.VisualStudio.Tests.TestLogger;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
 /// <summary>
-/// Phase 3 of the implementation plan: outcomes survive a VS restart, but never outlive a rebuild of the
-/// container they describe, and several VS instances can share the file.
+/// Phase 3 of the implementation plan: outcomes survive a server restart, but never outlive a rebuild
+/// of the container they describe, and several server instances can share the file.
 /// </summary>
 public class TestOutcomePersistenceTests : IDisposable
 {
@@ -21,6 +16,7 @@ public class TestOutcomePersistenceTests : IDisposable
 
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "reqnroll-outcome-persistence-tests", Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, DateTime?> _writeTimes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private static readonly DateTime T0 = new(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc);
 
     public TestOutcomePersistenceTests()
@@ -36,7 +32,7 @@ public class TestOutcomePersistenceTests : IDisposable
     }
 
     private TestOutcomePersistence Persistence(string? file = null)
-        => new(Path.Combine(_dir, file ?? "test-outcomes.json"), source => _writeTimes.TryGetValue(source, out var t) ? t : null);
+        => new(Path.Combine(_dir, file ?? "test-outcomes.json"), source => _writeTimes.TryGetValue(source, out var t) ? t : null, _logger);
 
     private static MethodOutcome Outcome(string source, string method, DateTime updated, params (string Display, TestOutcomeKind Kind, string? Error, string? Stdout)[] rows)
     {

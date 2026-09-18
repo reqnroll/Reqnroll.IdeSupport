@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.VisualStudio.TestLogger;
 using StreamJsonRpc;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -27,18 +26,10 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
     public const string GetTargetsForLineMethod = "Reqnroll.RunTestCodeLens.GetTargetsForLine";
 
     /// <summary>
-    /// Last-known outcome of one generated test method from the in-proc <c>TestOutcomeStore</c> (fed by
-    /// the bundled VSTest logger — implementation plan §4.2). Null when no run has reported it.
+    /// Last-known outcome of one generated test method from the LSP server's <c>TestOutcomeStore</c>
+    /// (fed by the bundled VSTest logger — implementation plan §4.2). Null when no run has reported it.
     /// </summary>
     public const string GetOutcomeMethod = "Reqnroll.RunTestCodeLens.GetOutcome";
-
-    private readonly TestOutcomeStore _outcomeStore;
-
-    [ImportingConstructor]
-    public RunTestCodeLensCallbackListener(TestOutcomeStore outcomeStore)
-    {
-        _outcomeStore = outcomeStore ?? throw new ArgumentNullException(nameof(outcomeStore));
-    }
 
     // Standalone file logger (no DI/MEF import needed) — same log file as the rest of the
     // extension's devenv.exe activity, since this class always runs in-process there (unlike its
@@ -74,69 +65,29 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
     }
 
     [JsonRpcMethod(GetOutcomeMethod)]
-    public Task<RunTestOutcomeEntry?> GetOutcomeAsync(string assemblyPath, string typeFullName, string methodName, CancellationToken cancellationToken)
+    public async Task<RunTestOutcomeEntry?> GetOutcomeAsync(string assemblyPath, string typeFullName, string methodName, CancellationToken cancellationToken)
     {
+        var fetch = RunTestCodeLensRedirect.GetTestOutcomeAsync;
+        if (fetch is null)
+        {
+            Logger.LogVerbose("RunTestCodeLensCallbackListener: GetOutcomeAsync — LSP connection not wired up yet; falling back to the bridge.");
+            return null;
+        }
+
         try
         {
-            var outcome = _outcomeStore.TryGet(assemblyPath, typeFullName, methodName);
-            var aged = outcome is not null && !outcome.IsRunning && IsTooOldToTrust(outcome);
-            if (aged)
-            {
-                // Unlike rebuild-staleness below, an aged-out entry isn't "known to be wrong" — it's
-                // "we can no longer vouch for it" (see MaxTrustedAge's remarks). Treat it exactly like
-                // the store never heard of this method at all, so the caller falls through to the live
-                // bridge instead of the dead end a stale-but-still-returned entry would be.
-                Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → aged out ({DateTime.UtcNow - outcome!.LastUpdatedUtc} since last seen); falling back to the bridge");
-                return Task.FromResult<RunTestOutcomeEntry?>(null);
-            }
-
-            var stale = outcome is not null && !outcome.IsRunning && IsStale(outcome);
-            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate.ToString() ?? "(none)"}{(outcome?.IsRunning == true ? " (running)" : string.Empty)}{(stale ? " (stale)" : string.Empty)}");
-            return Task.FromResult(outcome is null ? null : ToEntry(outcome, stale));
+            // Staleness/age-out are now computed server-side (GetTestOutcomeHandler) — the LSP
+            // server owns the store, so it's the one place that can compare an outcome's timestamp
+            // against the container's write time without a second, IDE-side copy of that rule.
+            var outcome = await fetch(assemblyPath, typeFullName, methodName, cancellationToken).ConfigureAwait(false);
+            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate ?? "(none)"}{(outcome?.IsRunning == true ? " (running)" : string.Empty)}{(outcome?.IsStale == true ? " (stale)" : string.Empty)}");
+            return outcome;
         }
         catch (Exception ex)
         {
             // Never fail the lens over an outcome lookup — null means "fall back to the bridge".
             Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetOutcomeAsync threw for {typeFullName}.{methodName}");
-            return Task.FromResult<RunTestOutcomeEntry?>(null);
+            return null;
         }
     }
-
-    internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome) => ToEntry(outcome, isStale: false);
-
-    internal static RunTestOutcomeEntry ToEntry(MethodOutcome outcome, bool isStale) => new(
-        outcome.Aggregate.ToString(),
-        outcome.Rows.Select(r => new RunTestOutcomeRow(
-            r.DisplayName, r.Outcome.ToString(), r.DurationMs, r.ErrorMessage,
-            r.Steps.Count, r.FailedStep?.Index, r.FailedStep?.StepText, r.FailedStep?.Outcome.ToString())).ToList(),
-        outcome.LastUpdatedUtc,
-        outcome.IsRunning,
-        isStale);
-
-    /// <summary>
-    /// The store only ever hears about a method from an IDE-observed run. If it hasn't heard about
-    /// this method in a while, a run it never saw may have happened since — a container-heuristic
-    /// miss, a disabled logger, a CLI run — and the entry should stop indefinitely shadowing the
-    /// reflection bridge's live check (fresh-eyes review finding: previously the store's answer was
-    /// trusted forever, with no way back to the bridge short of a rebuild). Deliberately a separate
-    /// check from <see cref="IsStale"/>, not folded into it: rebuild-staleness means "known wrong, and
-    /// the bridge would say the same stale thing" (skip it), while aging out means "no longer vouched
-    /// for" (the bridge might know something new — see the call site in <see cref="GetOutcomeAsync"/>,
-    /// which treats an aged-out entry as absent rather than stale).
-    /// </summary>
-    internal static bool IsTooOldToTrust(MethodOutcome outcome, DateTime? nowUtc = null)
-        => (nowUtc ?? DateTime.UtcNow) - outcome.LastUpdatedUtc > MaxTrustedAge;
-
-    internal static readonly TimeSpan MaxTrustedAge = TimeSpan.FromHours(2);
-
-    /// <summary>
-    /// Outcomes recorded before the container was last built describe code that no longer exists;
-    /// the lens shows them as stale (no pass/fail glyph, and no bridge fallback — VS's TestStore would
-    /// just repeat the same stale value) rather than a confident green on rebuilt code. A missing
-    /// container, or any failure determining the container's write time, counts as stale too
-    /// (<see cref="TestOutcomeFreshness"/> — this used to be a second, independently-written copy of
-    /// that rule that disagreed with it on the error path).
-    /// </summary>
-    internal static bool IsStale(MethodOutcome outcome)
-        => !TestOutcomeFreshness.IsFresh(outcome.Key.Source, outcome.LastUpdatedUtc, TestOutcomeFreshness.DefaultSourceLastWriteUtc);
 }

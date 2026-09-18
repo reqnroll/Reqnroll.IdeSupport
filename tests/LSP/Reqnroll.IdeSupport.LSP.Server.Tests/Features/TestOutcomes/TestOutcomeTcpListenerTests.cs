@@ -1,31 +1,28 @@
-using System;
-using System.IO;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using AwesomeAssertions;
 using Newtonsoft.Json.Linq;
-using Reqnroll.IdeSupport.VisualStudio.TestLogger;
-using Xunit;
+using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
-namespace Reqnroll.VisualStudio.Tests.TestLogger;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
 /// <summary>
-/// <see cref="TestOutcomeListener"/> over a real loopback socket, driven by hand-written NDJSON in the
-/// exact shape <c>Reqnroll.IdeSupport.TestLogger</c> emits. The logger's own serializer is covered in its
-/// own test project; this is the receiving contract.
+/// <see cref="TestOutcomeTcpListener"/> over a real loopback socket, driven by hand-written NDJSON in
+/// the exact shape <c>Reqnroll.IdeSupport.TestLogger</c> emits. The logger's own serializer is covered
+/// in its own test project; this is the receiving contract. Moved here from the Visual Studio-only
+/// VSSDKIntegration project's <c>TestOutcomeListenerTests</c> (LSP-server outcome pipeline refactor).
 /// </summary>
-public class TestOutcomeListenerTests : IDisposable
+public class TestOutcomeTcpListenerTests : IDisposable
 {
     private readonly TestOutcomeStore _store = new();
+    private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly ManualResetEventSlim _refreshed = new();
     private int _refreshCount;
-    private readonly TestOutcomeListener _listener;
+    private readonly TestOutcomeTcpListener _listener;
 
-    public TestOutcomeListenerTests()
+    public TestOutcomeTcpListenerTests()
     {
-        _listener = new TestOutcomeListener(_store, () => { Interlocked.Increment(ref _refreshCount); _refreshed.Set(); });
+        _listener = new TestOutcomeTcpListener(_store, _logger, () => { Interlocked.Increment(ref _refreshCount); _refreshed.Set(); });
     }
 
     public void Dispose() => _listener.Dispose();
@@ -88,14 +85,14 @@ public class TestOutcomeListenerTests : IDisposable
         var first = _listener.RegisterRun()!;
         var second = _listener.RegisterRun()!;
 
-        first.Endpoint.Should().StartWith("127.0.0.1:").And.Be(second.Endpoint, "one listener per VS instance");
+        first.Endpoint.Should().StartWith("127.0.0.1:").And.Be(second.Endpoint, "one listener per server instance");
         first.Token.Should().NotBe(second.Token);
         first.RunId.Should().NotBe(second.RunId);
         first.Token.Should().MatchRegex("^[A-Za-z0-9_-]{20,}$", "token must be safe to embed in runsettings XML and a command line");
     }
 
     [Fact]
-    public async Task A_run_with_a_valid_token_lands_in_the_store_and_refreshes_the_lenses()
+    public async Task A_run_with_a_valid_token_lands_in_the_store_and_notifies_the_client()
     {
         var registration = _listener.RegisterRun()!;
 
@@ -109,23 +106,23 @@ public class TestOutcomeListenerTests : IDisposable
         var outcome = _store.TryGet(Source, "Specs.CalcFeature", "Add")!;
         outcome.Aggregate.Should().Be(TestOutcomeKind.Failed);
         outcome.Rows.Should().Contain(r => r.DisplayName == "Add(3,4)" && r.ErrorMessage == "boom");
-        _refreshed.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue("the debounced lens refresh must fire after results arrive");
+        _refreshed.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue("the debounced change notification must fire after results arrive");
     }
 
     [Fact]
-    public async Task Results_arriving_in_a_burst_coalesce_into_one_lens_refresh()
+    public async Task Results_arriving_in_a_burst_coalesce_into_one_change_notification()
     {
         var registration = _listener.RegisterRun()!;
 
-        var lines = new System.Collections.Generic.List<string> { Hello(registration.Token, registration.RunId) };
+        var lines = new List<string> { Hello(registration.Token, registration.RunId) };
         for (var i = 0; i < 25; i++) lines.Add(Result("Add", $"row {i}", "Passed", registration.RunId));
         lines.Add(RunComplete(registration.RunId));
         await SendAsync(registration.Endpoint, lines.ToArray());
 
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add")?.Rows.Count == 25)).Should().BeTrue();
         _refreshed.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue();
-        await Task.Delay(TestOutcomeListener.RefreshDebounce + TimeSpan.FromMilliseconds(300));
-        Volatile.Read(ref _refreshCount).Should().BeLessThanOrEqualTo(2, "25 results within the debounce window are one refresh, plus at most one trailing refresh on close");
+        await Task.Delay(TestOutcomeTcpListener.RefreshDebounce + TimeSpan.FromMilliseconds(300));
+        Volatile.Read(ref _refreshCount).Should().BeLessThanOrEqualTo(2, "25 results within the debounce window are one notification, plus at most one trailing notification on close");
     }
 
     [Fact]
@@ -205,7 +202,7 @@ public class TestOutcomeListenerTests : IDisposable
         }.ToString(Newtonsoft.Json.Formatting.None);
 
     private static string Identity(string method, string display)
-        => string.Join(TestOutcomeListener.TestIdentitySeparator.ToString(), Source, "Specs.CalcFeature", method + "(System.String)", "Specs.CalcFeature." + method, display);
+        => string.Join(TestOutcomeTcpListener.TestIdentitySeparator.ToString(), Source, "Specs.CalcFeature", method + "(System.String)", "Specs.CalcFeature." + method, display);
 
     [Fact]
     public async Task RunStart_marks_the_listed_methods_running_and_runComplete_clears_them()
@@ -213,12 +210,26 @@ public class TestOutcomeListenerTests : IDisposable
         var registration = _listener.RegisterRun()!;
         var key = TestOutcomeKey.ForLookup(Source, "Specs.CalcFeature", "Add");
 
-        await SendAsync(registration.Endpoint,
-            Hello(registration.Token, registration.RunId),
-            RunStart(registration.RunId, Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)"), Identity("Sub", "Sub")));
+        // Keeps the connection open (unlike SendAsync's helper, which sends then closes after a fixed
+        // delay) so "still running" is asserted while the socket is provably still open, rather than
+        // racing the server's EOF detection against the assertion — on net10.0's socket stack a
+        // loopback FIN is detected fast enough that SendAsync's old fixed 50ms grace window had
+        // already closed and cleaned up the run before the assertion ran (net481, where this test
+        // originated, tolerated that timing; net10.0 does not).
+        var colon = registration.Endpoint.LastIndexOf(':');
+        using (var client = new TcpClient())
+        {
+            await client.ConnectAsync(registration.Endpoint.Substring(0, colon), int.Parse(registration.Endpoint.Substring(colon + 1)));
+            using var stream = client.GetStream();
+            var bytes = Encoding.UTF8.GetBytes(string.Join("\n",
+                Hello(registration.Token, registration.RunId),
+                RunStart(registration.RunId, Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)"), Identity("Sub", "Sub"))) + "\n");
+            await stream.WriteAsync(bytes, 0, bytes.Length);
+            await stream.FlushAsync();
 
-        (await WaitForStoreAsync(() => _store.TryGet(key)?.IsRunning == true)).Should().BeTrue();
-        _store.TryGet(Source, "Specs.CalcFeature", "Sub")!.IsRunning.Should().BeTrue();
+            (await WaitForStoreAsync(() => _store.TryGet(key)?.IsRunning == true)).Should().BeTrue();
+            _store.TryGet(Source, "Specs.CalcFeature", "Sub")!.IsRunning.Should().BeTrue();
+        } // Connection closes here, without a runComplete.
 
         // The connection above closed without runComplete → the listener completes the run itself.
         (await WaitForStoreAsync(() => _store.TryGet(key) is null)).Should().BeTrue("a method that only ever ran, never reported, is forgotten");
@@ -229,8 +240,8 @@ public class TestOutcomeListenerTests : IDisposable
     public async Task A_full_run_persists_its_outcomes_on_completion()
     {
         var file = Path.Combine(Path.GetTempPath(), "reqnroll-listener-persist-tests", Guid.NewGuid().ToString("N"), "test-outcomes.json");
-        var persistence = new TestOutcomePersistence(file, _ => DateTime.MinValue);
-        using var listener = new TestOutcomeListener(_store, () => { }, persistence);
+        var persistence = new TestOutcomePersistence(file, _ => DateTime.MinValue, _logger);
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, persistence);
         var registration = listener.RegisterRun()!;
 
         await SendAsync(registration.Endpoint,
@@ -249,7 +260,7 @@ public class TestOutcomeListenerTests : IDisposable
     {
         var message = JObject.Parse(RunStart("r", Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)"), "garbage", "", Identity("Sub", "Sub")));
 
-        var keys = TestOutcomeListener.ParseRunStartTests(message);
+        var keys = TestOutcomeTcpListener.ParseRunStartTests(message);
 
         keys.Select(k => k.MethodName).Should().Equal("Add", "Sub");
         keys[0].TypeFullName.Should().Be("Specs.CalcFeature");
@@ -257,14 +268,14 @@ public class TestOutcomeListenerTests : IDisposable
 
     [Fact]
     public void ParseRunStartTests_is_empty_for_a_source_based_run()
-        => TestOutcomeListener.ParseRunStartTests(JObject.Parse("{\"type\":\"runStart\",\"runId\":\"r\",\"testCount\":0,\"sources\":[\"x.dll\"]}")).Should().BeEmpty();
+        => TestOutcomeTcpListener.ParseRunStartTests(JObject.Parse("{\"type\":\"runStart\",\"runId\":\"r\",\"testCount\":0,\"sources\":[\"x.dll\"]}")).Should().BeEmpty();
 
     [Fact]
     public void ToRecord_maps_every_wire_field_and_defaults_the_missing_ones()
     {
         var message = JObject.Parse(Result("Add", "Add(1,2)", "Failed", stdout: "Given x\n-> done: ..."));
 
-        var record = TestOutcomeListener.ToRecord("fallback-run", message);
+        var record = TestOutcomeTcpListener.ToRecord("fallback-run", message);
 
         record.RunId.Should().Be("run-1");
         record.Source.Should().Be(Source);
@@ -278,7 +289,7 @@ public class TestOutcomeListenerTests : IDisposable
         record.Stdout.Should().Be("Given x\n-> done: ...");
         record.StdoutTruncated.Should().BeFalse();
 
-        var sparse = TestOutcomeListener.ToRecord("fallback-run", JObject.Parse("{\"type\":\"result\",\"source\":\"x.dll\",\"fqn\":\"A.B\"}"));
+        var sparse = TestOutcomeTcpListener.ToRecord("fallback-run", JObject.Parse("{\"type\":\"result\",\"source\":\"x.dll\",\"fqn\":\"A.B\"}"));
         sparse.RunId.Should().Be("fallback-run");
         sparse.DisplayName.Should().Be("A.B");
         sparse.Outcome.Should().Be(TestOutcomeKind.None);

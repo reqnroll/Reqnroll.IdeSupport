@@ -1,16 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using AwesomeAssertions;
-using Reqnroll.IdeSupport.VisualStudio.TestLogger;
-using Xunit;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
-namespace Reqnroll.VisualStudio.Tests.TestLogger;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
 /// <summary>
-/// Aggregation and identity rules of <see cref="TestOutcomeStore"/> — the in-proc replacement for
-/// reading outcomes through <c>RunTestOutcomeBridge</c>. Row shapes mirror what the bundled logger
-/// actually sent in the 2026-09-16 live runs (MSTest: signature-bearing <c>ManagedMethod</c>, per-row
+/// Aggregation and identity rules of <see cref="TestOutcomeStore"/> — the LSP-server-side outcome
+/// aggregate shared by every connected IDE (LSP-server outcome pipeline refactor; moved here from the
+/// Visual Studio-only VSSDKIntegration project). Row shapes mirror what the bundled logger actually
+/// sent in the 2026-09-16 live runs (MSTest: signature-bearing <c>ManagedMethod</c>, per-row
 /// <c>DisplayName</c>).
 /// </summary>
 public class TestOutcomeStoreTests

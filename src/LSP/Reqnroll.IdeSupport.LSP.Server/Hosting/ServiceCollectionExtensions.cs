@@ -38,6 +38,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -236,6 +237,15 @@ public static class ServiceCollectionExtensions
             .AddSingleton<CSharpAttributeLiteralResolver>()
             .AddSingleton<RenameTargetsHandler>()
             .AddSingleton<InlayHintHandler>()
-            .AddSingleton<SetTraceNotificationHandler>();
+            .AddSingleton<SetTraceNotificationHandler>()
+            // LSP-server outcome pipeline: persistence and the store are singletons so the same
+            // instance backs every request; the listener is a singleton so its TCP port and
+            // subscribed store.Changed handler are created exactly once and live for the server's
+            // lifetime, not per-request.
+            .AddSingleton<TestOutcomePersistence>()
+            .AddSingleton<TestOutcomeStore>()
+            .AddSingleton<TestOutcomeTcpListener>()
+            .AddSingleton<RegisterTestRunHandler>()
+            .AddSingleton<GetTestOutcomeHandler>();
     }
 }
