@@ -15,7 +15,6 @@ import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.diagnostics.ReqnrollLspDiagnosticsSupport
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
 import com.reqnroll.ide.rider.lsp.semantictokens.ReqnrollSemanticTokensSupport
-import com.reqnroll.ide.rider.telemetry.ReqnrollTelemetryEventInterceptor
 import org.eclipse.lsp4j.ClientCapabilities
 import org.eclipse.lsp4j.CodeLensWorkspaceCapabilities
 import org.eclipse.lsp4j.FormattingCapabilities
@@ -86,22 +85,17 @@ class ReqnrollLspServerDescriptor(project: Project) :
         isFeatureExtension(file.extension) || isCsExtension(file.extension)
 
     /**
-     * Wraps the platform's own handler so `workspace/inlayHint/refresh` also refreshes `.feature`
-     * inlay hints (see [ReqnrollInlayHintRefreshInterceptor]), `workspace/codeLens/refresh` also
-     * refreshes the step-usages CodeVision lens (see [ReqnrollCodeLensRefreshInterceptor]), and
-     * `telemetry/event` is forwarded to Application Insights (see
-     * [ReqnrollTelemetryEventInterceptor]) — nested so all three wrap the same underlying platform
-     * handler via Kotlin interface delegation.
+     * Returns a [ReqnrollLsp4jClient], which layers in, in order: `workspace/inlayHint/refresh`
+     * also refreshing `.feature` inlay hints (see [ReqnrollInlayHintRefreshInterceptor]),
+     * `workspace/codeLens/refresh` also refreshing the step-usages CodeVision lens (see
+     * [ReqnrollCodeLensRefreshInterceptor]), `telemetry/event` forwarded to Application Insights
+     * (see [com.reqnroll.ide.rider.telemetry.ReqnrollTelemetryEventInterceptor]), and — the one
+     * reqnroll-custom push, which needs a real [Lsp4jClient] subclass rather than another
+     * decorator, see that class's doc comment — `reqnroll/testOutcomes/changed` refreshing the
+     * Run lens.
      */
     override fun createLsp4jClient(handler: LspServerNotificationsHandler): Lsp4jClient =
-        Lsp4jClient(
-            ReqnrollTelemetryEventInterceptor(
-                ReqnrollCodeLensRefreshInterceptor(
-                    project,
-                    ReqnrollInlayHintRefreshInterceptor(project, handler),
-                ),
-            ),
-        )
+        ReqnrollLsp4jClient(project, handler)
 
     // Rider's own default ClientCapabilities doesn't advertise workspace.inlayHint.refreshSupport
     // (confirmed live: the server's InlayHintRefreshHandler never fired — its capability guard

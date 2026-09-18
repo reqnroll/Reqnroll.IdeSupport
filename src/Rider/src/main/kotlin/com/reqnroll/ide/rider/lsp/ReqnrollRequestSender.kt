@@ -10,9 +10,12 @@ import kotlinx.coroutines.withTimeout
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
+import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeParams
+import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
 import com.reqnroll.ide.rider.lsp.protocol.GoToHooksRequestParams
 import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
 import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
+import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetsResponse
@@ -67,6 +70,8 @@ object ReqnrollRequestSender {
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
     private const val RESOLVE_TEST_TARGETS_TIMEOUT_MS = 10_000
+    private const val REGISTER_TEST_RUN_TIMEOUT_MS = 10_000
+    private const val GET_TEST_OUTCOME_TIMEOUT_MS = 10_000
 
     /** Runs `reqnroll/findUnusedStepDefinitions`. Returns null if no Reqnroll LSP server is running, or on failure. */
     fun findUnusedStepDefinitions(project: Project): FindUnusedStepDefinitionsResponse? {
@@ -426,6 +431,47 @@ object ReqnrollRequestSender {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("resolveTestTargets: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs `reqnroll/testOutcomes/registerRun` (LSP-server outcome pipeline, #700/#702). Returns
+     * null if no Reqnroll LSP server is running, or on failure — [RunTestRunner]
+     * [com.reqnroll.ide.rider.testrunner.RunTestRunner] treats that the same as
+     * [RegisterTestRunResponse.success] `false`: fall back to the TRX-only path for this run.
+     */
+    fun registerTestRun(project: Project): RegisterTestRunResponse? {
+        val server = firstRunningServer(project) ?: return null
+        return try {
+            server.sendRequestSync(REGISTER_TEST_RUN_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).registerTestRun(ReqnrollEmptyParams())
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("registerTestRun: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs `reqnroll/testOutcomes/getOutcome` for one generated test method (LSP-server outcome
+     * pipeline, #700/#702). [assemblyPath] must be the compiled test container path, matching
+     * what the bundled VSTest logger reports as `TestCase.Source` — not the `.csproj` path.
+     * Returns null if no Reqnroll LSP server is running, or on failure.
+     */
+    fun getTestOutcome(project: Project, assemblyPath: String, typeFullName: String, methodName: String): GetTestOutcomeResponse? {
+        val server = firstRunningServer(project) ?: return null
+        val params = GetTestOutcomeParams(assemblyPath, typeFullName, methodName)
+        return try {
+            server.sendRequestSync(GET_TEST_OUTCOME_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).getTestOutcome(params)
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("getTestOutcome: request failed", ex)
             null
         }
     }

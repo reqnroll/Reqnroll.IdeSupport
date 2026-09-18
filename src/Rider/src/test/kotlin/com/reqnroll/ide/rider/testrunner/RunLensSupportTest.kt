@@ -74,4 +74,38 @@ class RunLensSupportTest {
     fun `renderTitle shows the cross glyph for a cached failing result`() {
         assertEquals("✗ Run", RunLensSupport.renderTitle(RunOutcome.FAILED))
     }
+
+    // ── renderTooltip ────────────────────────────────────────────────────────
+
+    @Test
+    fun `renderTooltip falls back to the title when there is no result`() {
+        assertEquals("▶ Run", RunLensSupport.renderTooltip("▶ Run", null))
+    }
+
+    @Test
+    fun `renderTooltip falls back to the title for a TRX-sourced result with no row detail`() {
+        assertEquals("✗ Run", RunLensSupport.renderTooltip("✗ Run", RunResult(RunOutcome.FAILED)))
+    }
+
+    @Test
+    fun `renderTooltip falls back to the title when every row passed`() {
+        val result = RunResult(RunOutcome.PASSED, listOf(RunResultRow("row 1", RunOutcome.PASSED)))
+        assertEquals("✓ Run", RunLensSupport.renderTooltip("✓ Run", result))
+    }
+
+    @Test
+    fun `renderTooltip lists only the failed rows, with their failed-step text when known`() {
+        val result = RunResult(
+            RunOutcome.FAILED,
+            listOf(
+                RunResultRow("row 1", RunOutcome.PASSED),
+                RunResultRow("row 2", RunOutcome.FAILED, failedStepText = "When the calculation explodes"),
+                RunResultRow("row 3", RunOutcome.FAILED),
+            ),
+        )
+        assertEquals(
+            "row 2: When the calculation explodes\nrow 3",
+            RunLensSupport.renderTooltip("✗ Run", result),
+        )
+    }
 }
