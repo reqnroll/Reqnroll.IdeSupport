@@ -77,7 +77,7 @@ object RunTestRunner {
                     return
                 }
 
-                // Registers before running: the endpoint+token must be baked into the dotnet test
+                // Registers before running: the endpoint must be baked into the dotnet test
                 // command line below. A null/unsuccessful registration (no server running, or it
                 // couldn't start its listener) just means the two extra arguments are omitted —
                 // the run proceeds exactly as it did before #700, TRX-only.
@@ -159,10 +159,12 @@ object RunTestRunner {
      * `TestLoggerRunSettings`'s friendly name and parameter keys on the Visual Studio side (kept
      * in sync manually — see that class's own note on why it isn't referenced directly). `internal`
      * for testability; vstest's logger URI syntax has no need to escape any of these values (an
-     * endpoint, a URL-safe token, a hex run id, a numeric pid).
+     * endpoint, a hex run id, a numeric pid). No per-connection secret — see
+     * `TestOutcomeTcpListener`'s remarks (server side) for why an earlier per-run token was tried
+     * and removed.
      */
     internal fun buildLoggerArgument(registration: RegisterTestRunResponse, ideProcessId: Long): String =
-        "$LOGGER_FRIENDLY_NAME;Endpoint=${registration.endpoint};Token=${registration.token};" +
+        "$LOGGER_FRIENDLY_NAME;Endpoint=${registration.endpoint};" +
             "RunId=${registration.runId};IdeProcessId=$ideProcessId"
 
     /**

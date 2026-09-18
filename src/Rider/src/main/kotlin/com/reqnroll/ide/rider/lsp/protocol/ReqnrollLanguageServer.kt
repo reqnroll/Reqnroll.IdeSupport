@@ -105,8 +105,9 @@ interface ReqnrollLanguageServer : LanguageServer {
 
     /**
      * LSP-server outcome pipeline (#700/#702, refactored out of a Visual Studio-only,
-     * in-proc pipeline): mints a fresh, single-use endpoint+token for one test run — see
-     * RegisterTestRunHandler.cs. Called by
+     * in-proc pipeline): returns the listener's endpoint and a fresh run id to correlate with — no
+     * per-connection secret, see TestOutcomeTcpListener.cs's remarks. See RegisterTestRunHandler.cs.
+     * Called by
      * [com.reqnroll.ide.rider.testrunner.RunTestRunner] before shelling to `dotnet test`, so the
      * bundled VSTest logger can be pointed at the returned endpoint via `--test-adapter-path`/
      * `--logger`.

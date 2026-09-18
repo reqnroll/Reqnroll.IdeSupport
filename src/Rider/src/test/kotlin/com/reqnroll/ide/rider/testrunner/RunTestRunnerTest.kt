@@ -76,10 +76,10 @@ class RunTestRunnerTest {
 
     @Test
     fun `buildLoggerArgument matches the friendly name and parameter keys VS injects into runsettings`() {
-        val registration = RegisterTestRunResponse(success = true, runId = "run-1", endpoint = "127.0.0.1:5000", token = "tok")
+        val registration = RegisterTestRunResponse(success = true, runId = "run-1", endpoint = "127.0.0.1:5000")
 
         assertEquals(
-            "ReqnrollIde;Endpoint=127.0.0.1:5000;Token=tok;RunId=run-1;IdeProcessId=4242",
+            "ReqnrollIde;Endpoint=127.0.0.1:5000;RunId=run-1;IdeProcessId=4242",
             RunTestRunner.buildLoggerArgument(registration, ideProcessId = 4242L),
         )
     }

@@ -253,7 +253,6 @@ data class RegisterTestRunResponse(
     val success: Boolean = false,
     val runId: String? = null,
     val endpoint: String? = null,
-    val token: String? = null,
 )
 
 /** Params for `reqnroll/testOutcomes/getOutcome` — mirrors GetTestOutcomeParams.cs field-for-field. [assemblyPath] must match the *compiled* test container path (the same value vstest reports as `TestCase.Source`), not the `.csproj` path. */
