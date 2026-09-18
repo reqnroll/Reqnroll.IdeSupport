@@ -97,7 +97,6 @@ public class ReqnrollIdeTestLoggerTests
         logger.Initialize(events, new Dictionary<string, string?>
         {
             [ReqnrollIdeTestLogger.EndpointParameter] = ide.Endpoint,
-            [ReqnrollIdeTestLogger.TokenParameter] = "tok-123",
             [ReqnrollIdeTestLogger.RunIdParameter] = "run-1",
             [ReqnrollIdeTestLogger.IdeProcessIdParameter] = "999",
             [DefaultLoggerParameterNames.TargetFramework] = ".NETCoreApp,Version=v8.0",
@@ -116,7 +115,6 @@ public class ReqnrollIdeTestLoggerTests
         var hello = Parse(lines[0]);
         hello.GetProperty("type").GetString().Should().Be("hello");
         hello.GetProperty("protocol").GetInt32().Should().Be(ReqnrollIdeTestLogger.ProtocolVersion);
-        hello.GetProperty("token").GetString().Should().Be("tok-123");
         hello.GetProperty("runId").GetString().Should().Be("run-1");
         hello.GetProperty("idePid").GetString().Should().Be("999");
         hello.GetProperty("runnerPid").GetInt32().Should().Be(Environment.ProcessId);

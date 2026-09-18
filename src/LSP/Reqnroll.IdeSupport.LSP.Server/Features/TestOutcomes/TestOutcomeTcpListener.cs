@@ -1,12 +1,10 @@
 #nullable enable
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,7 +16,7 @@ using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
 /// <summary>What <see cref="RegisterTestRunHandler"/> hands back for one run.</summary>
-public sealed record TestRunRegistration(string RunId, string Endpoint, string Token);
+public sealed record TestRunRegistration(string RunId, string Endpoint);
 
 /// <summary>
 /// Server-side receiving end of the bundled VSTest logger: one TCP loopback listener per server
@@ -33,11 +31,16 @@ public sealed record TestRunRegistration(string RunId, string Endpoint, string T
 /// growing its own and Rider/VS Code eventually growing two more independent copies.
 /// </para>
 /// <para>
-/// <b>Tokens.</b> <see cref="RegisterRun"/> mints a random token per registration; the logger's first
-/// line (<c>hello</c>) must carry one that is unexpired and unused, else the connection is closed
-/// unread. Tokens expire after <see cref="TokenLifetime"/>. This turns "any local process can connect"
-/// into "any local process that has read this run's runsettings", which is the right size of lock for a
-/// loopback-only, minutes-lived channel whose only power is posting outcomes.
+/// <b>No per-connection secret.</b> An earlier revision minted a single-use token per
+/// <see cref="RegisterRun"/> call and rejected any <c>hello</c> that didn't present it. That broke down
+/// for VS Code, which mints one registration per extension activation (there is no "a run is about to
+/// start" hook to rotate a token against) but can see several test-host connections against that one
+/// registration in a session — every connection after the first was rejected as "unknown or expired
+/// token". Since the token never protected anything a loopback bind doesn't already: it is handed to
+/// the runner process via the very runsettings file that names this listener's port, so "must have read
+/// the token" and "must be a local process" were already the same bar. Removing it turns that
+/// coincidence into the actual contract — any local process that can reach <see cref="Endpoint"/> may
+/// connect and post outcomes, same as before in practice, just without the pretense of a lock.
 /// </para>
 /// <para>
 /// <b>Lifetime.</b> Started lazily on the first registration, lives for the server process. Connection
@@ -47,14 +50,12 @@ public sealed record TestRunRegistration(string RunId, string Endpoint, string T
 /// </remarks>
 public sealed class TestOutcomeTcpListener : IDisposable
 {
-    internal static readonly TimeSpan TokenLifetime = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan RefreshDebounce = TimeSpan.FromMilliseconds(250);
 
     private readonly TestOutcomeStore _store;
     private readonly TestOutcomePersistence? _persistence;
     private readonly IIdeSupportLogger _logger;
     private readonly Action _notifyChanged;
-    private readonly ConcurrentDictionary<string, (string RunId, DateTime IssuedUtc)> _tokens = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private TcpListener? _listener;
     private Timer? _refreshTimer;
@@ -90,19 +91,15 @@ public sealed class TestOutcomeTcpListener : IDisposable
     }
 
     /// <summary>
-    /// Starts the listener if needed and mints a fresh token for one run. Returns null if the listener
-    /// cannot be started (port exhaustion, socket policy) — the caller then injects nothing.
+    /// Starts the listener if needed and mints a fresh run id to correlate with. Returns null if the
+    /// listener cannot be started (port exhaustion, socket policy) — the caller then injects nothing.
     /// </summary>
     public TestRunRegistration? RegisterRun()
     {
         if (!EnsureStarted())
             return null;
 
-        PruneExpiredTokens();
-        var runId = Guid.NewGuid().ToString("N");
-        var token = NewToken();
-        _tokens[token] = (runId, DateTime.UtcNow);
-        return new TestRunRegistration(runId, Endpoint!, token);
+        return new TestRunRegistration(Guid.NewGuid().ToString("N"), Endpoint!);
     }
 
     private bool EnsureStarted()
@@ -168,14 +165,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
                 return;
             }
 
-            var token = hello.Value<string>("token") ?? string.Empty;
-            if (!_tokens.TryRemove(token, out var issued) || DateTime.UtcNow - issued.IssuedUtc > TokenLifetime)
-            {
-                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: rejected connection with unknown or expired token.");
-                return;
-            }
-
-            runId = hello.Value<string>("runId") ?? issued.RunId;
+            runId = hello.Value<string>("runId") ?? Guid.NewGuid().ToString("N");
             var protocol = hello.Value<int?>("protocol") ?? 0;
             _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
             if (protocol != 1)
@@ -317,21 +307,6 @@ public sealed class TestOutcomeTcpListener : IDisposable
         Interlocked.Exchange(ref _refreshScheduled, 0);
         try { _notifyChanged(); }
         catch (Exception ex) { _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: change notification failed"); }
-    }
-
-    private void PruneExpiredTokens()
-    {
-        var cutoff = DateTime.UtcNow - TokenLifetime;
-        foreach (var kvp in _tokens)
-            if (kvp.Value.IssuedUtc < cutoff)
-                _tokens.TryRemove(kvp.Key, out _);
-    }
-
-    private static string NewToken()
-    {
-        var bytes = new byte[24];
-        using (var rng = RandomNumberGenerator.Create()) rng.GetBytes(bytes);
-        return Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
     public void Dispose()

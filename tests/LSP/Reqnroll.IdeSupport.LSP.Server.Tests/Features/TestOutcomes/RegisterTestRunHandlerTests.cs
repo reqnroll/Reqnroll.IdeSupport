@@ -24,7 +24,7 @@ public class RegisterTestRunHandlerTests : IDisposable
     public void Dispose() => _listener.Dispose();
 
     [Fact]
-    public async Task HandleAsync_returns_a_fresh_endpoint_and_token_per_call()
+    public async Task HandleAsync_returns_a_fresh_run_id_per_call_on_the_same_endpoint()
     {
         var first = await _handler.HandleAsync(new RegisterTestRunParams(), CancellationToken.None);
         var second = await _handler.HandleAsync(new RegisterTestRunParams(), CancellationToken.None);
@@ -32,7 +32,6 @@ public class RegisterTestRunHandlerTests : IDisposable
         first.Success.Should().BeTrue();
         second.Success.Should().BeTrue();
         first.Endpoint.Should().Be(second.Endpoint, "one listener per server instance");
-        first.Token.Should().NotBe(second.Token);
         first.RunId.Should().NotBe(second.RunId);
     }
 
@@ -46,6 +45,5 @@ public class RegisterTestRunHandlerTests : IDisposable
         response.Success.Should().BeFalse();
         response.RunId.Should().BeNull();
         response.Endpoint.Should().BeNull();
-        response.Token.Should().BeNull();
     }
 }

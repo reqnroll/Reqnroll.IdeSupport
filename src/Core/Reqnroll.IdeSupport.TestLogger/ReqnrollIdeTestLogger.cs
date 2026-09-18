@@ -21,12 +21,14 @@ namespace Reqnroll.IdeSupport.TestLogger;
 /// at the extension's bundled copy of this assembly, and
 /// <c>&lt;LoggerRunSettings&gt;&lt;Loggers&gt;&lt;Logger friendlyName="ReqnrollIde"&gt;</c> whose
 /// <c>&lt;Configuration&gt;</c> children arrive here as the parameter dictionary. Rider / VS Code pass the
-/// same values as <c>--logger "ReqnrollIde;Endpoint=…;Token=…"</c>.
+/// same values as <c>--logger "ReqnrollIde;Endpoint=…"</c>.
 /// </para>
 /// <para>
 /// Wire format: newline-delimited JSON over one TCP loopback connection, IDE sends nothing back.
-/// Messages: <c>hello</c> (carries the token), <c>runStart</c>, <c>result</c> (one per test case),
-/// <c>runComplete</c>. Field names are the contract with <c>TestOutcomeListener</c> on the IDE side;
+/// Messages: <c>hello</c>, <c>runStart</c>, <c>result</c> (one per test case), <c>runComplete</c>.
+/// Field names are the contract with <c>TestOutcomeListener</c> on the IDE side; there is no
+/// per-connection secret — the loopback bind is the whole trust boundary (see
+/// <c>TestOutcomeTcpListener</c>'s remarks for why an earlier per-run token was removed).
 /// <see cref="ProtocolVersion"/> is bumped for incompatible changes, unknown fields are ignored.
 /// </para>
 /// <para>
@@ -49,9 +51,6 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
 
     /// <summary><c>host:port</c> the IDE listens on for this run (loopback).</summary>
     public const string EndpointParameter = "Endpoint";
-
-    /// <summary>Per-run secret; sent in <c>hello</c>, the IDE drops the connection on mismatch.</summary>
-    public const string TokenParameter = "Token";
 
     /// <summary>Correlation id echoed in every message.</summary>
     public const string RunIdParameter = "RunId";
@@ -91,7 +90,6 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
         parameters ??= new Dictionary<string, string?>();
 
         _runId = Get(parameters, RunIdParameter) ?? Guid.NewGuid().ToString("N");
-        var token = Get(parameters, TokenParameter) ?? string.Empty;
         var idePid = Get(parameters, IdeProcessIdParameter) ?? string.Empty;
 
         var filePath = Get(parameters, LogFilePathParameter) ?? Environment.GetEnvironmentVariable(LogFileEnvironmentVariable);
@@ -109,7 +107,6 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
 
         _sink.Write(NdjsonWriter.Object("hello")
             .Field("protocol", ProtocolVersion)
-            .Field("token", token)
             .Field("runId", _runId)
             .Field("runnerPid", runnerPid)
             .Field("idePid", idePid)

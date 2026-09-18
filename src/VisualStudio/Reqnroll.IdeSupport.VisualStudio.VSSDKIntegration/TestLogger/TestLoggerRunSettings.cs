@@ -38,7 +38,6 @@ internal static class TestLoggerRunSettings
     public const string LoggerFriendlyName = "ReqnrollIde";
     public const string LoggerExtensionUri = "logger://Reqnroll/IdeSupport/v1";
     public const string EndpointParameter = "Endpoint";
-    public const string TokenParameter = "Token";
     public const string RunIdParameter = "RunId";
     public const string IdeProcessIdParameter = "IdeProcessId";
     public const string LogFilePathParameter = "LogFilePath";

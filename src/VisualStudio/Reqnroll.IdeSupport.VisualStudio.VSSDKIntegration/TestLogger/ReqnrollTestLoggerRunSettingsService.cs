@@ -122,7 +122,6 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             var parameters = new List<KeyValuePair<string, string>>
             {
                 new(TestLoggerRunSettings.EndpointParameter, registration.Endpoint),
-                new(TestLoggerRunSettings.TokenParameter, registration.Token),
                 new(TestLoggerRunSettings.RunIdParameter, registration.RunId),
                 new(TestLoggerRunSettings.IdeProcessIdParameter, ideProcessId.ToString()),
             };
@@ -140,9 +139,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             var merged = TestLoggerRunSettings.Inject(inputRunSettingDocument, loggerDirectory, parameters);
 
             log.Log(MessageLevel.Informational, $"Reqnroll: registered test logger from '{loggerDirectory}' (run {registration.RunId}, endpoint {registration.Endpoint}).");
-            // The per-run token stays out of our own log (VS's Diagnostic-level Tests pane still shows it;
-            // that's VS's call, this file is ours).
-            Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: merged runsettings:{Environment.NewLine}{merged.OuterXml.Replace(registration.Token, "<redacted>")}");
+            Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: merged runsettings:{Environment.NewLine}{merged.OuterXml}");
             return merged;
         }
         catch (Exception ex)
@@ -156,7 +153,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
 
     /// <summary>
     /// Blocks (bounded by <see cref="RegistrationTimeout"/>) on the LSP-server round trip that mints
-    /// this run's endpoint+token. Returns null on a missing connection, a timeout, or any exception —
+    /// this run's endpoint. Returns null on a missing connection, a timeout, or any exception —
     /// every one of those means "inject nothing", never "hang the run".
     /// </summary>
     private static TestRunRegistration? RegisterRunBlocking()

@@ -43,7 +43,6 @@ public sealed class RegisterTestRunHandler
             Success = true,
             RunId = registration.RunId,
             Endpoint = registration.Endpoint,
-            Token = registration.Token,
         });
     }
 }

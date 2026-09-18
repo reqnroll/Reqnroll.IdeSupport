@@ -16,7 +16,4 @@ public sealed class RegisterTestRunResponse
 
     [JsonProperty("endpoint")]
     public string? Endpoint { get; set; }
-
-    [JsonProperty("token")]
-    public string? Token { get; set; }
 }

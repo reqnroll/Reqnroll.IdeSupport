@@ -29,8 +29,8 @@ public class TestOutcomeTcpListenerTests : IDisposable
 
     private const string Source = @"C:\repo\Specs\bin\Debug\net8.0\Specs.dll";
 
-    private static string Hello(string token, string runId = "run-1", int protocol = 1)
-        => $"{{\"type\":\"hello\",\"protocol\":{protocol},\"token\":\"{token}\",\"runId\":\"{runId}\",\"runnerPid\":4242,\"idePid\":\"1\",\"targetFramework\":\".NETCoreApp,Version=v8.0\"}}";
+    private static string Hello(string runId = "run-1", int protocol = 1)
+        => $"{{\"type\":\"hello\",\"protocol\":{protocol},\"runId\":\"{runId}\",\"runnerPid\":4242,\"idePid\":\"1\",\"targetFramework\":\".NETCoreApp,Version=v8.0\"}}";
 
     private static string Result(string method, string display, string outcome, string runId = "run-1", string? stdout = null)
         => new JObject
@@ -78,7 +78,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
     }
 
     [Fact]
-    public void RegisterRun_starts_a_loopback_listener_and_mints_distinct_tokens()
+    public void RegisterRun_starts_a_loopback_listener_and_mints_distinct_run_ids()
     {
         _listener.Endpoint.Should().BeNull();
 
@@ -86,18 +86,16 @@ public class TestOutcomeTcpListenerTests : IDisposable
         var second = _listener.RegisterRun()!;
 
         first.Endpoint.Should().StartWith("127.0.0.1:").And.Be(second.Endpoint, "one listener per server instance");
-        first.Token.Should().NotBe(second.Token);
         first.RunId.Should().NotBe(second.RunId);
-        first.Token.Should().MatchRegex("^[A-Za-z0-9_-]{20,}$", "token must be safe to embed in runsettings XML and a command line");
     }
 
     [Fact]
-    public async Task A_run_with_a_valid_token_lands_in_the_store_and_notifies_the_client()
+    public async Task A_run_lands_in_the_store_and_notifies_the_client()
     {
         var registration = _listener.RegisterRun()!;
 
         await SendAsync(registration.Endpoint,
-            Hello(registration.Token, registration.RunId),
+            Hello(registration.RunId),
             Result("Add", "Add(1,2)", "Passed", registration.RunId),
             Result("Add", "Add(3,4)", "Failed", registration.RunId),
             RunComplete(registration.RunId));
@@ -114,7 +112,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
     {
         var registration = _listener.RegisterRun()!;
 
-        var lines = new List<string> { Hello(registration.Token, registration.RunId) };
+        var lines = new List<string> { Hello(registration.RunId) };
         for (var i = 0; i < 25; i++) lines.Add(Result("Add", $"row {i}", "Passed", registration.RunId));
         lines.Add(RunComplete(registration.RunId));
         await SendAsync(registration.Endpoint, lines.ToArray());
@@ -126,31 +124,35 @@ public class TestOutcomeTcpListenerTests : IDisposable
     }
 
     [Fact]
-    public async Task A_connection_with_an_unknown_token_is_dropped_without_touching_the_store()
+    public async Task A_connection_that_never_registered_a_run_is_still_accepted()
     {
-        var registration = _listener.RegisterRun()!;
+        // There is no per-connection secret any more (see TestOutcomeTcpListener's remarks) — the
+        // loopback bind is the whole trust boundary, so a connection naming a run id nobody asked for
+        // is processed exactly like any other.
+        await SendAsync(_listener.RegisterRun()!.Endpoint,
+            Hello("uninvited"),
+            Result("Add", "Add(1,2)", "Passed", "uninvited"),
+            RunComplete("uninvited"));
 
-        await SendAsync(registration.Endpoint,
-            Hello("not-a-token", "rogue"),
-            Result("Add", "Add(1,2)", "Passed", "rogue"),
-            RunComplete("rogue"));
-
-        await Task.Delay(300);
-        _store.Snapshot().Should().BeEmpty();
-        Volatile.Read(ref _refreshCount).Should().Be(0);
+        (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
     }
 
     [Fact]
-    public async Task A_token_is_single_use()
+    public async Task A_registration_is_reusable_across_multiple_connections()
     {
+        // The bug this fixes: VS Code mints one registration per extension activation (there is no
+        // "a run is about to start" hook to rotate anything against), so it can see several test-host
+        // connections against the same registration in one session. A single-use secret rejected every
+        // connection after the first; without one, every connection for the same run id is accepted.
         var registration = _listener.RegisterRun()!;
-        await SendAsync(registration.Endpoint, Hello(registration.Token, registration.RunId), Result("Add", "first", "Passed", registration.RunId), RunComplete(registration.RunId));
+        await SendAsync(registration.Endpoint, Hello(registration.RunId), Result("Add", "first", "Passed", registration.RunId), RunComplete(registration.RunId));
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
 
-        await SendAsync(registration.Endpoint, Hello(registration.Token, registration.RunId), Result("Add", "second", "Passed", registration.RunId), RunComplete(registration.RunId));
+        await SendAsync(registration.Endpoint, Hello(registration.RunId), Result("Add", "second", "Passed", registration.RunId), RunComplete(registration.RunId));
 
-        await Task.Delay(300);
-        _store.TryGet(Source, "Specs.CalcFeature", "Add")!.Rows.Should().ContainSingle(r => r.DisplayName == "first");
+        (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add")?.Rows.Count == 2)).Should().BeTrue();
+        _store.TryGet(Source, "Specs.CalcFeature", "Add")!.Rows.Should().Contain(r => r.DisplayName == "first")
+            .And.Contain(r => r.DisplayName == "second");
     }
 
     [Fact]
@@ -170,7 +172,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         var registration = _listener.RegisterRun()!;
 
         // No runComplete — the runner died, or the user cancelled.
-        await SendAsync(registration.Endpoint, Hello(registration.Token, registration.RunId), Result("Add", "Add(1,2)", "Passed", registration.RunId));
+        await SendAsync(registration.Endpoint, Hello(registration.RunId), Result("Add", "Add(1,2)", "Passed", registration.RunId));
 
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
         _refreshed.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue();
@@ -182,7 +184,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         var registration = _listener.RegisterRun()!;
 
         await SendAsync(registration.Endpoint,
-            Hello(registration.Token, registration.RunId),
+            Hello(registration.RunId),
             "this is not json",
             "",
             Result("Add", "Add(1,2)", "Passed", registration.RunId),
@@ -222,7 +224,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
             await client.ConnectAsync(registration.Endpoint.Substring(0, colon), int.Parse(registration.Endpoint.Substring(colon + 1)));
             using var stream = client.GetStream();
             var bytes = Encoding.UTF8.GetBytes(string.Join("\n",
-                Hello(registration.Token, registration.RunId),
+                Hello(registration.RunId),
                 RunStart(registration.RunId, Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)"), Identity("Sub", "Sub"))) + "\n");
             await stream.WriteAsync(bytes, 0, bytes.Length);
             await stream.FlushAsync();
@@ -245,7 +247,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         var registration = listener.RegisterRun()!;
 
         await SendAsync(registration.Endpoint,
-            Hello(registration.Token, registration.RunId),
+            Hello(registration.RunId),
             RunStart(registration.RunId, Identity("Add", "Add(1,2)")),
             Result("Add", "Add(1,2)", "Passed", registration.RunId),
             RunComplete(registration.RunId));

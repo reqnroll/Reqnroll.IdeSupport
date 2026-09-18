@@ -32,8 +32,8 @@ internal sealed class RunTestOutcomeService
     }
 
     /// <summary>
-    /// Asks the server to mint a fresh, single-use endpoint+token for one test run. Returns null on
-    /// any failure (server not reachable, malformed response) — the caller then injects nothing for
+    /// Asks the server for its listening endpoint and a fresh run id to correlate with. Returns null
+    /// on any failure (server not reachable, malformed response) — the caller then injects nothing for
     /// this run, exactly like the old in-proc listener's "couldn't start" path.
     /// </summary>
     public async Task<TestRunRegistration?> RegisterRunAsync(CancellationToken cancellationToken)
@@ -90,11 +90,10 @@ internal sealed class RunTestOutcomeService
 
         var runId = result["runId"]?.Value<string>();
         var endpoint = result["endpoint"]?.Value<string>();
-        var token = result["token"]?.Value<string>();
-        if (string.IsNullOrEmpty(runId) || string.IsNullOrEmpty(endpoint) || string.IsNullOrEmpty(token))
+        if (string.IsNullOrEmpty(runId) || string.IsNullOrEmpty(endpoint))
             return null;
 
-        return new TestRunRegistration(runId!, endpoint!, token!);
+        return new TestRunRegistration(runId!, endpoint!);
     }
 
     internal static RunTestOutcomeEntry? MapOutcome(JObject? result)

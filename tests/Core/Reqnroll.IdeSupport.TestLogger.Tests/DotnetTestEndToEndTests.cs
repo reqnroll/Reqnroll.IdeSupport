@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.TestLogger.Tests;
 /// <summary>
 /// The whole logger path without an IDE: a real <c>dotnet test</c> on a real Reqnroll + MSTest project
 /// (<c>tests/Core/TestLoggerFixtures/MsTestReqnroll</c>), the logger registered exactly the way Rider /
-/// VS Code will (<c>--test-adapter-path</c> + <c>--logger "ReqnrollIde;Endpoint=…;Token=…"</c>) and the
+/// VS Code will (<c>--test-adapter-path</c> + <c>--logger "ReqnrollIde;Endpoint=…"</c>) and the
 /// way VS's injected runsettings amount to, with this test playing the IDE on a loopback socket.
 /// </summary>
 /// <remarks>
@@ -57,7 +57,6 @@ public class DotnetTestEndToEndTests
     public async Task Dotnet_test_with_the_logger_registered_streams_one_result_per_scenario_and_per_outline_row()
     {
         var loggerDir = StageLoggerDirectory();
-        var token = Guid.NewGuid().ToString("N");
         var runId = "e2e-" + Guid.NewGuid().ToString("N");
 
         using var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -85,7 +84,7 @@ public class DotnetTestEndToEndTests
         psi.ArgumentList.Add("--test-adapter-path");
         psi.ArgumentList.Add(loggerDir);
         psi.ArgumentList.Add("--logger");
-        psi.ArgumentList.Add($"{ReqnrollIdeTestLogger.FriendlyName};{ReqnrollIdeTestLogger.EndpointParameter}={endpoint};{ReqnrollIdeTestLogger.TokenParameter}={token};{ReqnrollIdeTestLogger.RunIdParameter}={runId}");
+        psi.ArgumentList.Add($"{ReqnrollIdeTestLogger.FriendlyName};{ReqnrollIdeTestLogger.EndpointParameter}={endpoint};{ReqnrollIdeTestLogger.RunIdParameter}={runId}");
         psi.ArgumentList.Add("-nologo");
         // The outer test host is itself a vstest run; don't let its environment leak into the inner one.
         foreach (var key in psi.Environment.Keys.Where(k => k.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase)).ToList())
@@ -114,7 +113,6 @@ public class DotnetTestEndToEndTests
         messages.Select(m => m.GetProperty("type").GetString()).Last().Should().Be("runComplete");
 
         var hello = messages[0];
-        hello.GetProperty("token").GetString().Should().Be(token);
         hello.GetProperty("runId").GetString().Should().Be(runId);
         hello.GetProperty("runnerPid").GetInt32().Should().NotBe(Environment.ProcessId, "the logger runs in the runner, not in this process");
         hello.GetProperty("targetFramework").GetString().Should().StartWith(".NETCoreApp,Version=v");

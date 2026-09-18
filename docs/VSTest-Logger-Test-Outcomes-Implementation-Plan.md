@@ -2,6 +2,16 @@
 
 **Status: Phases 0–3 IMPLEMENTED on branch `fix/700-vstest-logger-runsettings-injection` (2026-09-16),
 live verification of the exit criteria pending.** Written after both feasibility spikes succeeded (see §1).
+
+**Revision (2026-09-18): the per-run token described throughout this plan has been removed.** Live
+VS Code testing surfaced a real design flaw: the server enforced the token as single-use, but VS Code
+mints one registration per extension activation (there is no "a run is about to start" hook to rotate
+a token against) and can see several test-host connections against that one registration in a
+session — every connection after the first was rejected as "unknown or expired token". The token never
+protected anything a loopback bind doesn't already (it travels to the runner inside the very
+runsettings file that names the listener's port), so removing it fixes the VS Code bug and simplifies
+every IDE's client-side code without changing the actual trust boundary. Every `Token`/`token` mention
+below is historical; the as-built contract is `Endpoint` + `RunId` only.
 This is an implementation plan, not a design record: it says what to build, in what order, and what
 "done" means for each step; §6 records what each phase actually became. It deliberately does **not** rewrite
 [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md); that document still describes
@@ -56,10 +66,10 @@ Consequences that shape everything below:
  │ ReqnrollTestLoggerRunSettingsService (MEF)    │        │ Reqnroll.IdeSupport.TestLogger   │
  │  - Execution requests only                    │ inject │  ITestLoggerWithParameters       │
  │  - Reqnroll containers only                   │───────▶│  loaded via TestAdaptersPaths    │
- │  - TestAdaptersPaths + LoggerRunSettings      │ per run│  params: Endpoint, Token, RunId  │
- │    (Endpoint, Token, RunId, IdeProcessId)     │        │                                  │
+ │  - TestAdaptersPaths + LoggerRunSettings      │ per run│  params: Endpoint, RunId         │
+ │    (Endpoint, RunId, IdeProcessId)            │        │                                  │
  ├───────────────────────────────────────────────┤        │  TestRunStart / TestResult /     │
- │ TestOutcomeListener (TCP loopback, token)     │◀───────│  TestRunComplete → NDJSON lines  │
+ │ TestOutcomeListener (TCP loopback)             │◀───────│  TestRunComplete → NDJSON lines  │
  │  - accepts N runs, one connection per run     │ NDJSON │  fire-and-forget, never blocks   │
  ├───────────────────────────────────────────────┤        └──────────────────────────────────┘
  │ TestOutcomeStore                              │
@@ -96,7 +106,6 @@ repo referenced. **No JSON library** — the runner may or may not have one we c
 | Key | Required | Meaning |
 |---|---|---|
 | `Endpoint` | yes* | `127.0.0.1:<port>` the IDE is listening on for this run |
-| `Token` | yes* | per-run random secret; first line of the connection; IDE drops the connection if it doesn't match |
 | `RunId` | no | correlation id echoed in every message and in the IDE's logs |
 | `IdeProcessId` | no | diagnostic only |
 | `LogFilePath` | no | spike-era file sink; keep as an optional secondary sink for troubleshooting (`REQNROLL_TESTLOGGER_FILE` env var also honoured) |
@@ -108,7 +117,7 @@ that names the logger without an endpoint must not break a run.
 sends nothing back. `protocol` is an integer the IDE checks; unknown fields are ignored on both sides.
 
 ```jsonc
-{"type":"hello","protocol":1,"token":"…","runId":"…","runnerPid":17164,"idePid":14968,"targetFramework":".NETCoreApp,Version=v8.0"}
+{"type":"hello","protocol":1,"runId":"…","runnerPid":17164,"idePid":14968,"targetFramework":".NETCoreApp,Version=v8.0"}
 {"type":"runStart","runId":"…","testCount":2,"sources":["C:\\…\\ReqnrollQuickstart.Specs.dll"]}
 {"type":"result","runId":"…","source":"C:\\…\\ReqnrollQuickstart.Specs.dll",
   "managedType":"ReqnrollQuickstart.Specs.Features.PriceCalculation2Feature",
@@ -134,16 +143,16 @@ sends nothing back. `protocol` is an integer the IDE checks; unknown fields are 
 
 ### 4.2 Visual Studio
 
-**`ReqnrollTestLoggerRunSettingsService`** (exists) — changes: emit `Endpoint`/`Token`/`RunId` from the
+**`ReqnrollTestLoggerRunSettingsService`** (exists) — changes: emit `Endpoint`/`RunId` from the
 listener instead of `LogFilePath`; keep `IdeProcessId`. The listener is a MEF singleton it imports.
 Add a kill switch (`REQNROLL_IDE_DISABLE_TEST_LOGGER=1` env var for now; an Options-page toggle can
 follow) so a misbehaving logger can be turned off without uninstalling.
 
 **`TestOutcomeListener`** (new, VSSDKIntegration, in-proc) — `TcpListener` on `127.0.0.1:0`, started
-lazily on first `AddRunSettings(Execution)`, one accept loop, one `Token` per run handed out by
-`RegisterRun()` and expired when that run completes or after a timeout (5 min) so the two-calls-per-Run
-quirk (§1) just creates one unused token. Parses NDJSON with the JSON library the extension already has
-(Newtonsoft.Json via `Reqnroll.IdeSupport.Common`), feeds `TestOutcomeStore`.
+lazily on first `AddRunSettings(Execution)`, one accept loop, one fresh `RunId` per `RegisterRun()`
+call so the two-calls-per-Run quirk (§1) just mints one unused id. No per-connection secret — see §5.1
+for why. Parses NDJSON with the JSON library the extension already has (Newtonsoft.Json via
+`Reqnroll.IdeSupport.Common`), feeds `TestOutcomeStore`.
 
 **`TestOutcomeStore`** (new, VSSDKIntegration, pure, unit-tested) —
 
@@ -211,7 +220,7 @@ listening on a loopback socket:
 ```
 dotnet test <proj> --filter "<expr>" \
   --test-adapter-path "<plugin dir>/testlogger" \
-  --logger "ReqnrollIde;Endpoint=127.0.0.1:<port>;Token=<token>;RunId=<id>"
+  --logger "ReqnrollIde;Endpoint=127.0.0.1:<port>;RunId=<id>"
 ```
 
 What it buys them over TRX/stdout scraping: per-row outcomes for outlines, structured error text,
@@ -224,15 +233,23 @@ now Phase 3.5's job instead of each IDE's own; the uri/line convergence point st
 
 ## 5. Decisions
 
-### 5.1 Transport: TCP loopback + per-run token (not a named pipe, not files)
+### 5.1 Transport: TCP loopback, no per-connection secret (not a named pipe, not files)
 
 Named pipes are natural for VS↔.NET, but the JVM has no first-class Windows named-pipe client, and
 one transport for all three IDEs is worth more than idiomatic-per-platform. Loopback listeners on
-`127.0.0.1` do not trigger Windows Firewall prompts. The token makes "any local process can connect"
-into "any local process that has read this run's runsettings can connect" — that document is visible
-in VS's Tests output pane at Diagnostic level, which is acceptable for a per-run, minutes-lived
-secret whose only power is to post fake outcomes to one IDE instance. File-based (the spike's sink)
-stays as an optional troubleshooting mirror only.
+`127.0.0.1` do not trigger Windows Firewall prompts. File-based (the spike's sink) stays as an
+optional troubleshooting mirror only.
+
+**No token.** An earlier revision minted a per-run random token and rejected any `hello` that didn't
+present it, on the theory that this turned "any local process can connect" into "any local process
+that has read this run's runsettings can connect". In practice those were never different bars — the
+token travels to the runner process inside the very runsettings file that names the listener's port,
+so reading one means reading the other — and treating the token as single-use broke VS Code, which
+registers once per extension activation (no "a run is about to start" hook exists to rotate a token
+against) and can legitimately see several test-host connections against that one registration. Removed
+entirely (2026-09-18): the listener accepts any `hello` on its loopback port. The threat model is
+unchanged in practice — "any local process can post fake outcomes to one IDE instance" — just stated
+honestly instead of behind a token that didn't add a real barrier.
 
 ### 5.2 Format: NDJSON, hand-serialized in the logger
 
@@ -351,16 +368,12 @@ instead of each growing an independent copy — see §4.3 for why this was recon
 Code work started.
 
 - **New custom LSP protocol** (`LspMethodNames`): `reqnroll/testOutcomes/registerRun` (request —
-  mints a fresh, single-use endpoint+token for one run), `reqnroll/testOutcomes/getOutcome` (request —
-  the outcome lookup, including the staleness/trust-window logic that used to live in
-  `RunTestCodeLensCallbackListener`), and `reqnroll/testOutcomes/changed` (server→client push,
-  mirroring `reqnroll/refreshCodeLens`). The server also advertises the feature (method names only,
-  not a live credential) via the standard `experimental` capability bucket in the `initialize`
-  response — the spec's sanctioned extension point for exactly this, and the answer to "is there room
-  in the LSP spec for a server to tell the client about a custom side-channel": yes for capability
-  discovery, no for the per-run token itself (a capability describes static feature availability; the
-  token must stay short-lived and freshly minted per run, so it's a live request, not part of the
-  one-time handshake).
+  returns the listener's endpoint and a fresh run id to correlate with; no per-connection secret, see
+  §5.1), `reqnroll/testOutcomes/getOutcome` (request — the outcome lookup, including the
+  staleness/trust-window logic that used to live in `RunTestCodeLensCallbackListener`), and
+  `reqnroll/testOutcomes/changed` (server→client push, mirroring `reqnroll/refreshCodeLens`). The
+  server also advertises the feature via the standard `experimental` capability bucket in the
+  `initialize` response — the spec's sanctioned extension point for exactly this.
 - **VS integration**: `TestOutcomeListener`/`TestOutcomeStore`/`TestOutcomePersistence`/
   `TestOutcomeFreshness` deleted from VSSDKIntegration; `RunTestCodeLensCallbackListener.GetOutcomeAsync`
   now calls through `RunTestCodeLensRedirect.GetTestOutcomeAsync` (a new VS-Extension-set delegate,
@@ -369,10 +382,10 @@ Code work started.
   with no async overload — now blocks (bounded by a 5 s timeout, via `ThreadHelper.JoinableTaskFactory.Run`,
   the same sync-over-async bridge used elsewhere in this codebase) on the LSP round trip to register a
   run, instead of a same-process call. This was a deliberate, explicitly-decided trade-off (not a
-  default choice): the alternative of a pre-minted token pool avoids the blocking call entirely at the
-  cost of pool/race-handling complexity; blocking-with-a-bound was chosen for a simpler pipeline,
-  accepting a few extra milliseconds of run-configuration latency and graceful ("inject nothing")
-  degradation if the server is slow or unreachable.
+  default choice): the alternative of a pre-fetched pool of endpoint/run-id pairs avoids the blocking
+  call entirely at the cost of pool/race-handling complexity; blocking-with-a-bound was chosen for a
+  simpler pipeline, accepting a few extra milliseconds of run-configuration latency and graceful
+  ("inject nothing") degradation if the server is slow or unreachable.
 - **Client-side push**: a new `TestOutcomesChangedInterceptor` (mirrors `CodeLensRefreshInterceptor`,
   but with no debounce/rate-limit of its own — the server already throttles this notification, and
   unlike the CodeLens refresh push this one never touches VS.Extensibility's `CodeLens.Invalidate()`,
@@ -427,7 +440,7 @@ Code work started.
 | Logger end-to-end (no IDE) | spawn `dotnet test` on a fixture with `--test-adapter-path`/`--logger`, assert NDJSON received | same project, `[Trait("Category","Integration")]` |
 | Runsettings merge | existing 16 tests, plus a case where the user's file already lists a *different* `*TestLogger.dll` directory | `Reqnroll.IdeSupport.VisualStudio.Tests/TestLogger` |
 | Store | pure unit tests: aggregation, row upsert, path normalization, debounce | `Reqnroll.IdeSupport.LSP.Server.Tests/Features/TestOutcomes` (Phase 3.5; was VS-side) |
-| Listener | token accept/reject, half-open connection, concurrent runs | same (Phase 3.5; was VS-side) |
+| Listener | uninvited connection accepted, registration reusable across connections, half-open connection, concurrent runs | same (Phase 3.5; was VS-side) |
 | CodeLens wiring | interface-shaped glue; substitute the callback and assert store-first/bridge-fallback order | existing `RunTestCodeLens` test folder |
 | VS live | the recipe in the hand-off note, extended with Debug, user runsettings, two instances | manual, recorded in the issue |
 | Rider | devcontainer live run | manual |
@@ -440,13 +453,13 @@ Spec-suite (`.feature`) coverage is not the right layer here — nothing crosses
 |---|---|---|---|
 | 1 | **Microsoft.Testing.Platform projects** (`HasTestingPlatformServerCapability: True`) don't use VSTest loggers; VS runs them in "testing platform server mode". A Reqnroll project on MSTest 3.x with `EnableMSTestRunner`, TUnit, or xunit.v3 in MTP mode gets no logger. | Glyphs fall back to the bridge for those projects; the bridge's outline blindness (#702) remains for them. | Detect per container (the capability is visible to VS; whether `ITestContainer` exposes it needs a look) and log it. MTP has its own extension model registered *in the test project* — that would be a core-repo conversation and is explicitly out of scope here. Drives §5.3. |
 | 2 | **Path normalization** between `TestCase.Source` and `ScenarioTestTarget.OutputAssemblyPath` | Silent "no outcome" for a project | Reuse the extension's single normalization helper; unit-test the store with mixed case / trailing separators / `8.3` forms. #515 is the precedent. |
-| 3 | `AddRunSettings(Execution)` called twice per Run | Two tokens minted per run | Tokens are cheap and expire; never key state on "one call = one run". |
+| 3 | `AddRunSettings(Execution)` called twice per Run | Two run ids minted per run, one unused | Cheap; never key state on "one call = one run". |
 | 4 | A user's own runsettings lists a `TestAdaptersPaths` directory that contains an older `Reqnroll.IdeSupport.TestLogger.dll` (e.g. a copied extension folder) | Two loggers with the same friendly name; vstest picks one | Version the `ExtensionUri`? No — vstest resolves by friendly name. Log the full `TestAdaptersPaths` at Info; document it. Low likelihood. |
 | 5 | Result batching: vstest batches testhost→runner results (`BatchSize` default 10 + timer) | Glyph latency up to ~1–2 s on long suites | Acceptable; `BatchSize` is ours to set in the injected runsettings if it isn't. |
 | 6 | `Microsoft.VisualStudio.TestWindow.Interfaces` resolves to whatever VS is installed at build time (18.0.0.0 on the dev machine) while the VSIX targets 17.14+ | Same class of caveat the existing `TestWindow.Internal` reference already carries | Verify once on a 17.14 install or CI image before Phase 1 ships; VS ships binding redirects for its own assemblies, which is why the existing reference works. |
 | 7 | NUnit / xUnit `ManagedMethod` shapes for outline rows not yet observed live | Wrong key → no glyph on those frameworks | Add NUnit and xUnit fixtures to the Phase 1 end-to-end test; it is exactly the property that test asserts. |
 | 8 | Loopback listener flagged by endpoint-protection software | Logger can't connect; glyphs silently stale | Logger and listener both log the failure; Tests output pane gets a one-line warning on `runComplete`-without-connection detection. Named-pipe transport can be added behind the same `Endpoint` parameter later if this turns out to be real. |
-| 9 | Token visible in VS's Diagnostic-level Tests output | Local disclosure of a short-lived secret | Accepted (§5.1). Never log it in our own logs. |
+| 9 | No per-connection secret (removed 2026-09-18, §5.1) | Any local process that can reach the loopback port can post fake outcomes to one IDE instance | Accepted — this was already true in practice with the token (it traveled inside the runsettings file the runner reads), so removing it changes nothing except honesty about the boundary. |
 
 ## 9. Issue / PR breakdown
 
