@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using Gherkin;
 
 namespace Reqnroll.IdeSupport.Common.TestOutcomes;
 
@@ -79,9 +81,10 @@ public sealed class StepTraceEntry
 /// A step's text is the line Reqnroll traced for it. Between one outcome and the next there may be
 /// other test output too — hook output before the step, a binding's own <c>Console.WriteLine</c> after
 /// it, table/doc-string arguments (indented) — so the step line is chosen as: the first non-indented
-/// candidate that starts with a Gherkin step keyword (English + <c>*</c>), else the last non-indented
-/// candidate. Correlation to the feature file should use <see cref="StepTraceEntry.Index"/> anyway; the
-/// text is for display.
+/// candidate that starts with a Gherkin step keyword in any Gherkin-supported language (a step's
+/// traced text preserves whatever keyword the <c>.feature</c> file's own declared <c>#language:</c>
+/// uses — Reqnroll never translates it to English), else the last non-indented candidate. Correlation
+/// to the feature file should use <see cref="StepTraceEntry.Index"/> anyway; the text is for display.
 /// </para>
 /// </remarks>
 public static class StepTraceParser
@@ -93,7 +96,58 @@ public static class StepTraceParser
     // "{text} ({d}s)" — the duration is the trailing parenthesised number; the text may itself contain parentheses.
     private static readonly Regex TrailingDuration = new(@"^(?<text>.*)\s\((?<seconds>\d+(?:[.,]\d+)?)s\)\s*$", RegexOptions.Compiled | RegexOptions.Singleline);
 
-    private static readonly string[] EnglishKeywords = { "Given ", "When ", "Then ", "And ", "But ", "* " };
+    /// <summary>
+    /// Every language code <c>gherkin-languages.json</c> (cucumber/gherkin, upstream of the <c>Gherkin</c>
+    /// package this project references) defines, as of that package's 39.1.0 release. A feature file
+    /// declares one of these via <c>#language:</c>; Reqnroll traces the step using whichever keyword the
+    /// file itself used, so recognising only English keywords mis-picks the step line for every other
+    /// language's features — see <see cref="StepKeywords"/>.
+    /// </summary>
+    private static readonly string[] SupportedLanguageCodes =
+    {
+        "af", "am", "amh", "an", "ar", "ast", "az", "be", "bg", "bm", "bs", "ca", "cs", "cy-GB", "da",
+        "de", "el", "em", "en", "en-Scouse", "en-au", "en-lol", "en-old", "en-pirate", "en-tx", "eo", "es",
+        "et", "fa", "fi", "fr", "ga", "gj", "gl", "he", "hi", "hr", "ht", "hu", "id", "is", "it", "ja",
+        "jv", "ka", "kn", "ko", "lt", "lu", "lv", "mk-Cyrl", "mk-Latn", "ml", "mn", "mr", "ne", "nl", "no",
+        "pa", "pl", "pt", "ro", "ru", "sk", "sl", "sr-Cyrl", "sr-Latn", "sv", "ta", "te", "th", "tlh",
+        "tr", "tt", "uk", "ur", "uz", "vi", "zh-CN", "zh-TW",
+    };
+
+    /// <summary>
+    /// Union of every Given/When/Then/And/But keyword (plus the universal <c>*</c>) across every
+    /// language in <see cref="SupportedLanguageCodes"/>, each with its trailing space/apostrophe intact
+    /// (<c>GherkinDialect</c>'s own convention, e.g. <c>"Given "</c>, <c>"Sachant qu'"</c>). Built once;
+    /// a language this specific <c>Gherkin</c> package version doesn't recognise is skipped rather than
+    /// failing the whole set, so a future mismatch against <see cref="SupportedLanguageCodes"/> degrades
+    /// gracefully instead of throwing at static-init time.
+    /// </summary>
+    private static readonly IReadOnlyCollection<string> StepKeywords = BuildStepKeywords();
+
+    private static IReadOnlyCollection<string> BuildStepKeywords()
+    {
+        var provider = new GherkinDialectProvider("en");
+        var keywords = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var code in SupportedLanguageCodes)
+        {
+            GherkinDialect dialect;
+            try
+            {
+                dialect = provider.GetDialect(code, null);
+            }
+            catch (NoSuchLanguageException)
+            {
+                continue;
+            }
+
+            foreach (var keyword in dialect.GivenStepKeywords
+                         .Concat(dialect.WhenStepKeywords)
+                         .Concat(dialect.ThenStepKeywords)
+                         .Concat(dialect.AndStepKeywords)
+                         .Concat(dialect.ButStepKeywords))
+                keywords.Add(keyword);
+        }
+        return keywords;
+    }
 
     public static IReadOnlyList<StepTraceEntry> Parse(string? stdout)
     {
@@ -164,7 +218,7 @@ public static class StepTraceParser
         {
             if (char.IsWhiteSpace(candidate[0])) continue; // argument / continuation line
             last = candidate;
-            foreach (var keyword in EnglishKeywords)
+            foreach (var keyword in StepKeywords)
                 if (candidate.StartsWith(keyword, StringComparison.Ordinal))
                     return candidate;
         }
