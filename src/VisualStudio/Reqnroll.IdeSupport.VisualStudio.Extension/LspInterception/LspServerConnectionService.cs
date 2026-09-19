@@ -451,6 +451,11 @@ internal sealed class LspServerConnectionService : IDisposable
             _codeLensRefreshInterceptor = new CodeLensRefreshInterceptor(
                 _stepCodeLensState, _loggerFactory.CreateLogger<CodeLensRefreshInterceptor>());
 
+            // Watches the server's reqnroll/testOutcomes/changed push (LSP-server outcome pipeline
+            // refactor) and refreshes the Run CodeLens taggers.
+            var testOutcomesChangedInterceptor = new TestOutcomesChangedInterceptor(
+                _loggerFactory.CreateLogger<TestOutcomesChangedInterceptor>());
+
             // Drives DocumentActivationState's didOpen/didClose transitions (issue #85) and, in
             // the activation-before-open case, sends reqnroll/documentActivated itself right
             // after re-forwarding didOpen. Uses a lazy reference for the same reason as above:
@@ -479,7 +484,7 @@ internal sealed class LspServerConnectionService : IDisposable
             var telemetryInterceptor = new TelemetryEventInterceptor(
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             var receiveInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
+                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
             _interceptingPipe = new LspInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());

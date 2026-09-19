@@ -260,6 +260,37 @@ public class LineKeyedCodeLensTaggerTests
         sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle();
     }
 
+    // ── Fresh-eyes review: a request arriving mid-flight is queued, not dropped ───
+
+    [Fact]
+    public async Task RequestRefresh_arriving_while_one_is_in_flight_is_not_dropped_but_reruns_after()
+    {
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var buffer = CreateBuffer(snapshot);
+        var fetchCount = 0;
+        var gate = new TaskCompletionSource<IReadOnlyList<TestEntry>?>();
+        var sut = CreateSut(buffer, (_, _) =>
+        {
+            fetchCount++;
+            // The constructor's own initial refresh (fetchCount == 1) blocks on `gate`; every
+            // subsequent fetch completes immediately.
+            return fetchCount == 1 ? gate.Task : Task.FromResult<IReadOnlyList<TestEntry>?>(Array.Empty<TestEntry>());
+        });
+        fetchCount.Should().Be(1, "the constructor's own initial refresh");
+
+        sut.RequestRefresh(); // arrives while that first fetch is still pending on `gate`
+
+        fetchCount.Should().Be(1, "a request arriving mid-flight must not start a second, concurrent fetch");
+
+        gate.SetResult(Array.Empty<TestEntry>()); // let the first fetch complete
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (fetchCount < 2 && DateTime.UtcNow < deadline)
+            await Task.Delay(10);
+
+        fetchCount.Should().Be(2, "the request that arrived mid-flight must still be honoured once the in-flight one finishes, not silently lost");
+    }
+
     // ── Registry integration ─────────────────────────────────────────────────────
 
     [Fact]
