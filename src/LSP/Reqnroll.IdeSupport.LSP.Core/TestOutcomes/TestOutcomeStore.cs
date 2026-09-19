@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading;
 using Reqnroll.IdeSupport.Common.TestOutcomes;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
+namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 
 /// <summary>
 /// Server-side aggregate of test outcomes received from the bundled VSTest logger, keyed by generated

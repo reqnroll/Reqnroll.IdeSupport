@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.TestOutcomes;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
+namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 
 /// <summary>
 /// Keeps <see cref="TestOutcomeStore"/>'s contents across server restarts in one JSON file under the

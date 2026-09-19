@@ -1,9 +1,8 @@
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.TestOutcomes;
-using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
+namespace Reqnroll.IdeSupport.LSP.Core.Tests.TestOutcomes;
 
 /// <summary>
 /// Phase 3 of the implementation plan: outcomes survive a server restart, but never outlive a rebuild
