@@ -263,4 +263,17 @@ public class StepTraceParserTests
     [InlineData("just some console output with no trace at all")]
     public void Empty_or_traceless_output_yields_no_steps(string? stdout)
         => StepTraceParser.Parse(stdout).Should().BeEmpty();
+
+    [Fact]
+    public void Reflected_keyword_set_covers_a_realistic_number_of_languages()
+    {
+        // BuildStepKeywords reflects on Gherkin's private CreateGherkinDialectFor_<code>() naming
+        // convention rather than a hand-maintained language-code list, specifically so it never goes
+        // stale — but that also means a future Gherkin package version restructuring dialect
+        // generation would silently return fewer (in the limit, English-only or zero) keywords
+        // instead of failing to compile. 587 is the real, measured count for the referenced Gherkin
+        // 39.1.0 package (80 languages); this floor is generous enough not to break on ordinary
+        // language additions/removals while still catching a collapse back toward "English only".
+        StepTraceParser.StepKeywordCountForTests.Should().BeGreaterThan(300);
+    }
 }
