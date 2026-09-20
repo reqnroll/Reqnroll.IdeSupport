@@ -154,6 +154,14 @@ call so the two-calls-per-Run quirk (§1) just mints one unused id. No per-conne
 for why. Parses NDJSON with the JSON library the extension already has (Newtonsoft.Json via
 `Reqnroll.IdeSupport.Common`), feeds `TestOutcomeStore`.
 
+> **As built (2026-09-20):** `RunId` is a *correlation* id only. The store's running marks are keyed by a
+> per-connection id the listener mints on `hello` (`<runId>/<seq>`), because a runId is not unique per
+> connection in practice: VS Code registers once per session and bakes that id into a static runsettings
+> file, and vstest.console in design mode Initializes the logger 2–3 times per Run click, only one of
+> which ever sends `runStart`. Keying by runId let an idle instance's late socket drop clear the real
+> run's running marks (seen in the 2026-09-20 VS Code log). Those idle drops are now logged at Verbose,
+> not as "treated as aborted"; `runComplete` clears the marks immediately rather than at socket close.
+
 **`TestOutcomeStore`** (new, VSSDKIntegration, pure, unit-tested) —
 
 - Key: `(normalizedSourcePath, managedType, methodName)` where `methodName` = `managedMethod` up to

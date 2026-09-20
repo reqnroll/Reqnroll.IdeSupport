@@ -21,7 +21,8 @@ public sealed record TestRunRegistration(string RunId, string Endpoint);
 
 /// <summary>
 /// Server-side receiving end of the bundled VSTest logger: one TCP loopback listener per server
-/// process, one connection per test run, newline-delimited JSON in, nothing out. Feeds
+/// process, one connection per logger instance (one or more per test run), newline-delimited JSON in,
+/// nothing out. Feeds
 /// <see cref="TestOutcomeStore"/> and, debounced, pushes <c>reqnroll/testOutcomes/changed</c> to the
 /// connected client so it re-pulls fresh outcomes.
 /// </summary>
@@ -61,6 +62,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
     private TcpListener? _listener;
     private Timer? _refreshTimer;
     private int _refreshScheduled;
+    private int _connectionSeq;
     private bool _disposed;
 
     /// <summary>DI entry point: pushes <c>reqnroll/testOutcomes/changed</c> to the connected client on change.</summary>
@@ -149,7 +151,9 @@ public sealed class TestOutcomeTcpListener : IDisposable
     private async Task HandleConnectionAsync(TcpClient client)
     {
         string? runId = null;
+        string? connectionId = null;
         var results = 0;
+        var started = false;
         var completed = false;
         try
         {
@@ -167,6 +171,12 @@ public sealed class TestOutcomeTcpListener : IDisposable
             }
 
             runId = hello.Value<string>("runId") ?? Guid.NewGuid().ToString("N");
+            // The store's running marks are owned per *connection*, not per registration id. VS Code
+            // registers once per session and bakes that one id into a static runsettings file, and
+            // vstest.console in design mode re-Initializes the logger several times per Run click, so
+            // several live connections can share a runId — a stale, idle one dropping mid-run must not
+            // clear the marks the real one set.
+            connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
             var protocol = hello.Value<int?>("protocol") ?? 0;
             _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
             if (protocol != 1)
@@ -187,14 +197,18 @@ public sealed class TestOutcomeTcpListener : IDisposable
                 switch (message.Value<string>("type"))
                 {
                     case "runStart":
-                        var running = _store.MarkRunning(runId, ParseRunStartTests(message));
+                        started = true;
+                        var running = _store.MarkRunning(connectionId, ParseRunStartTests(message));
                         _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
                         break;
                     case "result":
-                        if (_store.Record(ToRecord(runId, message)) is not null) results++;
+                        if (_store.Record(ToRecord(connectionId, message)) is not null) results++;
                         break;
                     case "runComplete":
                         completed = true;
+                        // Clear the running marks now rather than at socket close: the logger closes
+                        // right after this line, but the glyph should follow the protocol, not the FIN.
+                        _store.CompleteRun(connectionId);
                         _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={message.Value<bool?>("aborted") ?? false}, canceled={message.Value<bool?>("canceled") ?? false}, {results} result(s) stored");
                         break;
                 }
@@ -210,14 +224,22 @@ public sealed class TestOutcomeTcpListener : IDisposable
         }
         finally
         {
-            if (runId is not null && !completed)
-                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
-            try { client.Dispose(); } catch (Exception) { }
-            if (runId is not null)
+            if (connectionId is not null && !completed)
             {
-                // Whether the run completed or the runner died: nothing is running any more, and
-                // whatever arrived is worth keeping for the next session.
-                _store.CompleteRun(runId);
+                // A connection that never even sent runStart is vstest.console's spare logger
+                // instance (it Initializes the logger more than once per run and only closes the idle
+                // sockets later) — routine, not a lost run.
+                if (started || results > 0)
+                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
+                else
+                    _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: idle connection for run {runId} closed without a runStart; ignoring.");
+            }
+            try { client.Dispose(); } catch (Exception) { }
+            if (connectionId is not null)
+            {
+                // Whether the run completed or the runner died: nothing this connection marked is
+                // running any more, and whatever arrived is worth keeping for the next session.
+                _store.CompleteRun(connectionId);
                 if (results > 0)
                     _persistence?.Save(_store.Snapshot());
             }
@@ -251,8 +273,13 @@ public sealed class TestOutcomeTcpListener : IDisposable
         return keys;
     }
 
-    internal static TestResultRecord ToRecord(string runId, JObject message) => new(
-        RunId: message.Value<string>("runId") ?? runId,
+    /// <summary>
+    /// <paramref name="connectionId"/> becomes the record's <see cref="TestResultRecord.RunId"/> — the
+    /// store matches it against the mark <see cref="TestOutcomeStore.MarkRunning"/> set for the same
+    /// connection, so the wire message's own <c>runId</c> (shared across connections) is not used.
+    /// </summary>
+    internal static TestResultRecord ToRecord(string connectionId, JObject message) => new(
+        RunId: connectionId,
         Source: message.Value<string>("source") ?? string.Empty,
         ManagedType: message.Value<string>("managedType"),
         ManagedMethod: message.Value<string>("managedMethod"),
