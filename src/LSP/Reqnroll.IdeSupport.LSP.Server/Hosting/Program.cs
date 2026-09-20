@@ -2,12 +2,14 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -241,6 +243,7 @@ public class Program
             ApplyStaticCodeLensCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
+            ApplyCustomProtocolCapabilities();
 
             return Task.CompletedTask;
 
@@ -376,6 +379,62 @@ public class Program
                 {
                     PrepareProvider = true
                 };
+            }
+
+            // Advertises the rest of this server's custom reqnroll/* protocol surface -- every
+            // method registered via manual OnRequest/OnNotification routing in
+            // InitializeCustomProtocolRouting that isn't already covered by one of the Apply*
+            // functions above -- as typed, top-level entries in ServerCapabilities.ExtensionData
+            // rather than leaving them undeclared. See ReqnrollMethodProvider's remarks for why
+            // this is documentation (the initialize response as a readable manifest, backed by a
+            // regression test per entry) rather than feature-detection: every one of these methods
+            // has existed since this server's first version, so no client conditionally branches on
+            // whether one is present.
+            void ApplyCustomProtocolCapabilities()
+            {
+                response.Capabilities.ExtensionData ??= new Dictionary<string, JToken>();
+                var extensionData = response.Capabilities.ExtensionData;
+
+                extensionData["reqnrollWorkspaceLifecycleProvider"] = JObject.FromObject(new ReqnrollWorkspaceLifecycleOptions
+                {
+                    ProjectLoadedMethod = LspMethodNames.ReqnrollProjectLoaded,
+                    ProjectUnloadedMethod = LspMethodNames.ReqnrollProjectUnloaded,
+                    ProjectFilesMethod = LspMethodNames.ReqnrollProjectFiles,
+                });
+
+                extensionData["reqnrollFindStepUsagesProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepUsages });
+
+                extensionData["reqnrollGoToHooksProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToHooks });
+
+                extensionData["reqnrollGoToMatchingScenariosProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToMatchingScenarios });
+
+                extensionData["reqnrollResolveTestTargetsProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollResolveTestTargets });
+
+                extensionData["reqnrollFindUnusedStepDefinitionsProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindUnusedStepDefinitions });
+
+                extensionData["reqnrollStepRenameProvider"] = JObject.FromObject(new ReqnrollStepRenameOptions
+                {
+                    RenameTargetsMethod = LspMethodNames.ReqnrollRenameTargets,
+                    SelectRenameTargetMethod = LspMethodNames.ReqnrollSelectRenameTarget,
+                    RenameAppliedMethod = LspMethodNames.ReqnrollRenameApplied,
+                });
+
+                extensionData["reqnrollRefreshCodeLensProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollRefreshCodeLens });
+
+                extensionData["reqnrollSemanticTokensPushProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollSemanticTokens });
+
+                extensionData["reqnrollDocumentSymbolHierarchicalProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollDocumentSymbolHierarchical });
+
+                extensionData["reqnrollDocumentActivatedProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollDocumentActivated });
             }
         });
     }

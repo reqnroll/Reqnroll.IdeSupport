@@ -326,6 +326,33 @@ public sealed class ProtocolSteps
                 "races VS Code's restore of previously-open .feature tabs on window load, and losing " +
                 "that race silently disables the provider for the rest of the session");
 
+    // Asserted via ExtensionData, not a typed sibling property: OmniSharp's InitializeResult.
+    // Capabilities is init-only, so ApplyCustomProtocolCapabilities (Program.cs) writes each entry
+    // into the [JsonExtensionData] catch-all instead of a ServerCapabilities subclass. A client
+    // with no matching Reqnroll type of its own -- including this harness's plain OmniSharp client
+    // -- lands the same data there on the way in, which is exactly the round trip this asserts.
+    // Each table row names one capability's top-level key, one field on its payload, and the
+    // method name that field must carry -- a single-method capability (e.g.
+    // reqnrollFindStepUsagesProvider) has one row with field "method"; a grouped one (e.g.
+    // reqnrollStepRenameProvider) has one row per method it bundles.
+    [Then("the server advertises the following custom protocol capabilities")]
+    public void ThenTheServerAdvertisesTheFollowingCustomProtocolCapabilities(Table table)
+    {
+        var extensionData = _ctx.Harness.ServerInitializeResult.Capabilities.ExtensionData;
+        extensionData.Should().NotBeNull("ApplyCustomProtocolCapabilities always writes these entries");
+
+        foreach (var row in table.Rows)
+        {
+            var capability = row["capability"];
+            var field = row["field"];
+            var expectedMethod = row["method"];
+
+            extensionData!.Should().ContainKey(capability);
+            extensionData[capability].Value<string>(field).Should().Be(
+                expectedMethod, $"{capability}.{field} should advertise its wired-up method name");
+        }
+    }
+
     [Then("the semantic tokens legend includes the token types")]
     public void ThenTheLegendIncludesTokenTypes(Table table)
     {
