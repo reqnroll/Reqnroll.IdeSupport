@@ -245,8 +245,9 @@ val publishServer by tasks.registering(Exec::class) {
 val testLoggerOutputDir = layout.projectDirectory.dir("testlogger")
 val testLoggerProject = File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj")
 
-// Mirrors -PlspServerBuildDir: set by CI once test-lsp.yml publishes the logger once and shares
-// it, so Gradle never needs `dotnet` on the CI runner building the Rider plugin.
+// Mirrors -PlspServerBuildDir: ci.yml's build-rider-plugin job sets it to test-lsp.yml's
+// downloaded `testlogger` artifact, so Gradle never needs `dotnet` on the CI runner building
+// the Rider plugin.
 val externalTestLoggerBuildDir = (findProperty("lspTestLoggerBuildDir") as String?)?.let { File(it) }
 
 val publishTestLogger by tasks.registering(Exec::class) {
