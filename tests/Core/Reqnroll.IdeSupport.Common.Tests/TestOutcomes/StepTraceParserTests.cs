@@ -176,15 +176,47 @@ public class StepTraceParserTests
     }
 
     [Fact]
-    public void Without_a_recognisable_keyword_the_last_non_indented_line_before_the_outcome_is_the_step()
+    public void Localized_German_step_keyword_is_recognised_even_with_trailing_binding_output()
     {
-        // e.g. a localized feature ("Angenommen …") — the parser only knows English keywords by name.
+        // A German feature file (#language: de) traces "Angenommen ..." verbatim — Reqnroll never
+        // translates the keyword to English. Hook output surrounds it on both sides, so this only
+        // passes if "Angenommen" is actually recognised as a keyword (picking the *first* matching
+        // candidate) rather than falling back to the *last* non-indented line, which here would
+        // wrongly be the binding's own console output.
         var steps = StepTraceParser.Parse(
             "Some hook output\n" +
             "Angenommen die erste Zahl ist 1\n" +
+            "binding wrote this to the console\n" +
             "-> done: Steps.Given(1) (0.0s)\n");
 
         steps.Should().ContainSingle().Which.StepText.Should().Be("Angenommen die erste Zahl ist 1");
+    }
+
+    [Fact]
+    public void Localized_French_step_keyword_with_an_elided_apostrophe_form_is_recognised()
+    {
+        // French has several synonyms for "Given", including apostrophe-elided forms ("Sachant qu'")
+        // — GherkinDialect keeps the apostrophe as part of the keyword itself, no trailing space.
+        var steps = StepTraceParser.Parse(
+            "Sachant qu'il fait beau\n" +
+            "binding wrote this to the console\n" +
+            "-> done: Steps.Given() (0.0s)\n");
+
+        steps.Should().ContainSingle().Which.StepText.Should().Be("Sachant qu'il fait beau");
+    }
+
+    [Fact]
+    public void Without_any_recognisable_keyword_the_last_non_indented_line_before_the_outcome_is_the_step()
+    {
+        // Genuinely unrecognisable text (not a real Gherkin keyword in any supported language) still
+        // falls back to the last non-indented candidate, same as before this parser knew about
+        // languages other than English.
+        var steps = StepTraceParser.Parse(
+            "Some hook output\n" +
+            "not a gherkin step at all\n" +
+            "-> done: Steps.Given(1) (0.0s)\n");
+
+        steps.Should().ContainSingle().Which.StepText.Should().Be("not a gherkin step at all");
     }
 
     [Fact]
@@ -231,4 +263,17 @@ public class StepTraceParserTests
     [InlineData("just some console output with no trace at all")]
     public void Empty_or_traceless_output_yields_no_steps(string? stdout)
         => StepTraceParser.Parse(stdout).Should().BeEmpty();
+
+    [Fact]
+    public void Reflected_keyword_set_covers_a_realistic_number_of_languages()
+    {
+        // BuildStepKeywords reflects on Gherkin's private CreateGherkinDialectFor_<code>() naming
+        // convention rather than a hand-maintained language-code list, specifically so it never goes
+        // stale — but that also means a future Gherkin package version restructuring dialect
+        // generation would silently return fewer (in the limit, English-only or zero) keywords
+        // instead of failing to compile. 587 is the real, measured count for the referenced Gherkin
+        // 39.1.0 package (80 languages); this floor is generous enough not to break on ordinary
+        // language additions/removals while still catching a collapse back toward "English only".
+        StepTraceParser.StepKeywordCountForTests.Should().BeGreaterThan(300);
+    }
 }

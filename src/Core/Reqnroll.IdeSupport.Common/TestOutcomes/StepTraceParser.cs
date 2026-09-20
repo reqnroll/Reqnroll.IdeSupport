@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using Gherkin;
 
 namespace Reqnroll.IdeSupport.Common.TestOutcomes;
 
@@ -79,9 +82,10 @@ public sealed class StepTraceEntry
 /// A step's text is the line Reqnroll traced for it. Between one outcome and the next there may be
 /// other test output too — hook output before the step, a binding's own <c>Console.WriteLine</c> after
 /// it, table/doc-string arguments (indented) — so the step line is chosen as: the first non-indented
-/// candidate that starts with a Gherkin step keyword (English + <c>*</c>), else the last non-indented
-/// candidate. Correlation to the feature file should use <see cref="StepTraceEntry.Index"/> anyway; the
-/// text is for display.
+/// candidate that starts with a Gherkin step keyword in any Gherkin-supported language (a step's
+/// traced text preserves whatever keyword the <c>.feature</c> file's own declared <c>#language:</c>
+/// uses — Reqnroll never translates it to English), else the last non-indented candidate. Correlation
+/// to the feature file should use <see cref="StepTraceEntry.Index"/> anyway; the text is for display.
 /// </para>
 /// </remarks>
 public static class StepTraceParser
@@ -93,7 +97,58 @@ public static class StepTraceParser
     // "{text} ({d}s)" — the duration is the trailing parenthesised number; the text may itself contain parentheses.
     private static readonly Regex TrailingDuration = new(@"^(?<text>.*)\s\((?<seconds>\d+(?:[.,]\d+)?)s\)\s*$", RegexOptions.Compiled | RegexOptions.Singleline);
 
-    private static readonly string[] EnglishKeywords = { "Given ", "When ", "Then ", "And ", "But ", "* " };
+    /// <summary>
+    /// Union of every Given/When/Then/And/But keyword (plus the universal <c>*</c>) across every
+    /// language <c>GherkinDialectProvider</c> knows about, each with its trailing space/apostrophe
+    /// intact (<c>GherkinDialect</c>'s own convention, e.g. <c>"Given "</c>, <c>"Sachant qu'"</c>). A
+    /// feature file declares its language via <c>#language:</c>; Reqnroll traces the step using
+    /// whichever keyword that language uses, never translated to English, so this has to cover every
+    /// language the parser might see, not just English. Built once, via reflection (see
+    /// <see cref="BuildStepKeywords"/>) rather than a hand-maintained language-code list, so it stays
+    /// correct as the referenced <c>Gherkin</c> package gains languages without this file changing.
+    /// </summary>
+    private static readonly IReadOnlyCollection<string> StepKeywords = BuildStepKeywords();
+
+    /// <summary>`internal` so a regression test can assert this reflects a real, many-language set rather than silently degrading toward zero if the reflection this relies on ever stops matching anything.</summary>
+    internal static int StepKeywordCountForTests => StepKeywords.Count;
+
+    /// <summary>
+    /// <c>GherkinDialectProvider</c> has no public "list every language" API — it only resolves one
+    /// code at a time (<c>GetDialect(string, Location?)</c>), and a per-language keyword lookup would
+    /// need this class to hand-maintain the same list of ~80 language codes <c>gherkin-languages.json</c>
+    /// defines, which is exactly the kind of list that silently goes stale. Instead, this reflects on
+    /// the private, code-generated <c>CreateGherkinDialectFor_&lt;code&gt;()</c> factory methods the
+    /// package itself compiles one-per-language (confirmed directly against the referenced 39.1.0
+    /// package, not assumed) and invokes every one of them — genuinely data-driven off whatever
+    /// languages that specific package version ships, with no list of this parser's own to fall out of
+    /// sync. Relies on an internal naming convention rather than a public contract, so if a future
+    /// major version of the package restructures dialect generation, this returns fewer (in the limit,
+    /// zero) dialects instead of throwing — degrading no worse than this parser did before it knew
+    /// about any language but English — and a low <see cref="StepKeywords"/> count is covered by a
+    /// dedicated regression test rather than left to fail silently.
+    /// </summary>
+    private static IReadOnlyCollection<string> BuildStepKeywords()
+    {
+        var keywords = new HashSet<string>(StringComparer.Ordinal);
+        var factories = typeof(GherkinDialectProvider)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(m => m.Name.StartsWith("CreateGherkinDialectFor_", StringComparison.Ordinal)
+                        && m.GetParameters().Length == 0
+                        && typeof(GherkinDialect).IsAssignableFrom(m.ReturnType));
+
+        foreach (var factory in factories)
+        {
+            if (factory.Invoke(null, null) is not GherkinDialect dialect) continue;
+
+            foreach (var keyword in dialect.GivenStepKeywords
+                         .Concat(dialect.WhenStepKeywords)
+                         .Concat(dialect.ThenStepKeywords)
+                         .Concat(dialect.AndStepKeywords)
+                         .Concat(dialect.ButStepKeywords))
+                keywords.Add(keyword);
+        }
+        return keywords;
+    }
 
     public static IReadOnlyList<StepTraceEntry> Parse(string? stdout)
     {
@@ -164,7 +219,7 @@ public static class StepTraceParser
         {
             if (char.IsWhiteSpace(candidate[0])) continue; // argument / continuation line
             last = candidate;
-            foreach (var keyword in EnglishKeywords)
+            foreach (var keyword in StepKeywords)
                 if (candidate.StartsWith(keyword, StringComparison.Ordinal))
                     return candidate;
         }

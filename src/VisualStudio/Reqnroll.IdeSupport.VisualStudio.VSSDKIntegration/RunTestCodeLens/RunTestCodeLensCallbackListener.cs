@@ -31,35 +31,39 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
     /// </summary>
     public const string GetOutcomeMethod = "Reqnroll.RunTestCodeLens.GetOutcome";
 
-    // Standalone file logger (no DI/MEF import needed) — same log file as the rest of the
-    // extension's devenv.exe activity, since this class always runs in-process there (unlike its
-    // OOP counterpart RunTestCodeLensDataPoint, which needs its own logger instance because it
-    // runs under a different process/PID entirely). Added while investigating a live report of the
-    // Run CodeLens rendering but never producing a working Details popup on click (no prior
-    // instrumentation existed on either side of this OOP↔in-process callback boundary).
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+    private readonly IIdeSupportLogger _logger;
+
+    // This class runs in-process in devenv.exe (unlike its OOP counterpart RunTestCodeLensDataPoint,
+    // which runs under a different process/PID entirely and genuinely needs its own logger instance),
+    // so it imports the same shared IIdeSupportLogger MEF export every other devenv.exe-side
+    // component uses.
+    [ImportingConstructor]
+    public RunTestCodeLensCallbackListener(IIdeSupportLogger logger)
+    {
+        _logger = logger;
+    }
 
     [JsonRpcMethod(GetTargetsForLineMethod)]
     public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsForLineAsync(string fileUri, int line, CancellationToken cancellationToken)
     {
-        Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync called for {fileUri}:{line}");
+        _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync called for {fileUri}:{line}");
 
         var fetch = RunTestCodeLensRedirect.GetTargetsForLineAsync;
         if (fetch is null)
         {
-            Logger.LogWarning("RunTestCodeLensCallbackListener: RunTestCodeLensRedirect.GetTargetsForLineAsync is null — LSP connection not wired up yet; returning empty.");
+            _logger.LogWarning("RunTestCodeLensCallbackListener: RunTestCodeLensRedirect.GetTargetsForLineAsync is null — LSP connection not wired up yet; returning empty.");
             return Array.Empty<RunTestTargetEntry>();
         }
 
         try
         {
             var entries = await fetch(fileUri, line, cancellationToken).ConfigureAwait(false);
-            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync returning {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {fileUri}:{line}");
+            _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync returning {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {fileUri}:{line}");
             return entries;
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsForLineAsync threw for {fileUri}:{line}");
+            _logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsForLineAsync threw for {fileUri}:{line}");
             throw;
         }
     }
@@ -70,23 +74,20 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
         var fetch = RunTestCodeLensRedirect.GetTestOutcomeAsync;
         if (fetch is null)
         {
-            Logger.LogVerbose("RunTestCodeLensCallbackListener: GetOutcomeAsync — LSP connection not wired up yet; falling back to the bridge.");
+            _logger.LogVerbose("RunTestCodeLensCallbackListener: GetOutcomeAsync — LSP connection not wired up yet; falling back to the bridge.");
             return null;
         }
 
         try
         {
-            // Staleness/age-out are now computed server-side (GetTestOutcomeHandler) — the LSP
-            // server owns the store, so it's the one place that can compare an outcome's timestamp
-            // against the container's write time without a second, IDE-side copy of that rule.
             var outcome = await fetch(assemblyPath, typeFullName, methodName, cancellationToken).ConfigureAwait(false);
-            Logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate ?? "(none)"}{(outcome?.IsRunning == true ? " (running)" : string.Empty)}{(outcome?.IsStale == true ? " (stale)" : string.Empty)}");
+            _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetOutcomeAsync {typeFullName}.{methodName} → {outcome?.Aggregate ?? "(none)"}{(outcome?.IsRunning == true ? " (running)" : string.Empty)}{(outcome?.IsStale == true ? " (stale)" : string.Empty)}");
             return outcome;
         }
         catch (Exception ex)
         {
             // Never fail the lens over an outcome lookup — null means "fall back to the bridge".
-            Logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetOutcomeAsync threw for {typeFullName}.{methodName}");
+            _logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetOutcomeAsync threw for {typeFullName}.{methodName}");
             return null;
         }
     }

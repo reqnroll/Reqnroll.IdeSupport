@@ -1,6 +1,4 @@
-using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
-
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
+namespace Reqnroll.IdeSupport.LSP.Core.Tests.TestOutcomes;
 
 /// <summary>
 /// Aggregation and identity rules of <see cref="TestOutcomeStore"/> — the LSP-server-side outcome

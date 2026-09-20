@@ -6,7 +6,7 @@ using System.Linq;
 using System.Threading;
 using Reqnroll.IdeSupport.Common.TestOutcomes;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
+namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 
 /// <summary>
 /// Server-side aggregate of test outcomes received from the bundled VSTest logger, keyed by generated
@@ -111,7 +111,11 @@ public sealed class TestOutcomeStore
         return affected;
     }
 
-    /// <summary>Clears the running mark of every method <paramref name="runId"/> had claimed, whether or not a result arrived.</summary>
+    /// <summary>
+    /// Clears the running mark of every method <paramref name="runId"/> had claimed, whether or not a
+    /// result arrived. Marks set under a different id — another logger connection sharing the same
+    /// registration, or a concurrent run — are left alone.
+    /// </summary>
     public IReadOnlyCollection<TestOutcomeKey> CompleteRun(string runId)
     {
         var affected = new List<TestOutcomeKey>();

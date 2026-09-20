@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
@@ -238,6 +239,60 @@ public class TestOutcomeTcpListenerTests : IDisposable
         _store.TryGet(Source, "Specs.CalcFeature", "Sub").Should().BeNull();
     }
 
+    private static async Task<TcpClient> OpenAsync(string endpoint, params string[] lines)
+    {
+        var colon = endpoint.LastIndexOf(':');
+        var client = new TcpClient();
+        await client.ConnectAsync(endpoint.Substring(0, colon), int.Parse(endpoint.Substring(colon + 1)));
+        var bytes = Encoding.UTF8.GetBytes(string.Join("\n", lines) + "\n");
+        await client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+        await client.GetStream().FlushAsync();
+        return client;
+    }
+
+    /// <summary>
+    /// Live VS Code log, 2026-09-20: the extension registers one runId per session and vstest.console
+    /// (design mode) opens 1–2 extra logger connections per Run click that say hello but never send
+    /// runStart, dropping them only later — sometimes while the real connection's run is still going.
+    /// Those idle drops must not clear the real run's running marks, and must not be logged as aborts.
+    /// </summary>
+    [Fact]
+    public async Task An_idle_connection_sharing_the_runId_does_not_clear_another_connections_running_marks()
+    {
+        var registration = _listener.RegisterRun()!;
+        var add = TestOutcomeKey.ForLookup(Source, "Specs.CalcFeature", "Add");
+
+        using var idle = await OpenAsync(registration.Endpoint, Hello(registration.RunId));
+        using var real = await OpenAsync(registration.Endpoint,
+            Hello(registration.RunId),
+            RunStart(registration.RunId, Identity("Add", "Add(1,2)"), Identity("Add", "Add(3,4)")));
+        (await WaitForStoreAsync(() => _store.TryGet(add)?.IsRunning == true)).Should().BeTrue();
+
+        // The spare logger instance goes away mid-run.
+        idle.Close();
+        await Task.Delay(300);
+        _store.TryGet(add)!.IsRunning.Should().BeTrue("only the connection that set a running mark may clear it");
+        // LogWarning is an extension over IIdeSupportLogger.Log(LogMessage); assert on the underlying call.
+        _logger.DidNotReceive().Log(Arg.Is<LogMessage>(m => m.Level == System.Diagnostics.TraceLevel.Warning && m.Message.Contains("closed without runComplete")));
+        _logger.Received().Log(Arg.Is<LogMessage>(m => m.Message.Contains("idle connection") && m.Message.Contains("ignoring")));
+
+        // The first row lands on the real connection: still running, the run isn't over yet.
+        var bytes = Encoding.UTF8.GetBytes(Result("Add", "Add(1,2)", "Passed", registration.RunId) + "\n");
+        await real.GetStream().WriteAsync(bytes, 0, bytes.Length);
+        await real.GetStream().FlushAsync();
+        (await WaitForStoreAsync(() => _store.TryGet(add)?.Rows.Count == 1)).Should().BeTrue();
+        _store.TryGet(add)!.IsRunning.Should().BeTrue("a result from the same connection keeps the method running until that connection completes");
+
+        bytes = Encoding.UTF8.GetBytes(RunComplete(registration.RunId) + "\n");
+        await real.GetStream().WriteAsync(bytes, 0, bytes.Length);
+        await real.GetStream().FlushAsync();
+        (await WaitForStoreAsync(() => _store.TryGet(add)?.IsRunning == false)).Should().BeTrue("runComplete ends the running state without waiting for the socket to close");
+        _store.TryGet(add)!.Aggregate.Should().Be(TestOutcomeKind.Passed);
+        real.Close();
+        await Task.Delay(200);
+        _store.TryGet(add)!.Rows.Should().ContainSingle("closing the completed connection keeps its results");
+    }
+
     [Fact]
     public async Task A_full_run_persists_its_outcomes_on_completion()
     {
@@ -277,9 +332,9 @@ public class TestOutcomeTcpListenerTests : IDisposable
     {
         var message = JObject.Parse(Result("Add", "Add(1,2)", "Failed", stdout: "Given x\n-> done: ..."));
 
-        var record = TestOutcomeTcpListener.ToRecord("fallback-run", message);
+        var record = TestOutcomeTcpListener.ToRecord("run-1/7", message);
 
-        record.RunId.Should().Be("run-1");
+        record.RunId.Should().Be("run-1/7", "the connection id, not the wire runId, is what the store matches running marks against");
         record.Source.Should().Be(Source);
         record.ManagedType.Should().Be("Specs.CalcFeature");
         record.ManagedMethod.Should().Be("Add(System.String)");
@@ -291,8 +346,8 @@ public class TestOutcomeTcpListenerTests : IDisposable
         record.Stdout.Should().Be("Given x\n-> done: ...");
         record.StdoutTruncated.Should().BeFalse();
 
-        var sparse = TestOutcomeTcpListener.ToRecord("fallback-run", JObject.Parse("{\"type\":\"result\",\"source\":\"x.dll\",\"fqn\":\"A.B\"}"));
-        sparse.RunId.Should().Be("fallback-run");
+        var sparse = TestOutcomeTcpListener.ToRecord("run-1/8", JObject.Parse("{\"type\":\"result\",\"source\":\"x.dll\",\"fqn\":\"A.B\"}"));
+        sparse.RunId.Should().Be("run-1/8");
         sparse.DisplayName.Should().Be("A.B");
         sparse.Outcome.Should().Be(TestOutcomeKind.None);
     }
