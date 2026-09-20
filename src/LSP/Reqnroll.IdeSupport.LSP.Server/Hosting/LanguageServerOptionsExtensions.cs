@@ -20,6 +20,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
@@ -185,6 +186,18 @@ public static class LanguageServerOptionsExtensions
         options.OnRequest<ResolveTestTargetsParams, ResolveTestTargetsResponse>(
             LspMethodNames.ReqnrollResolveTestTargets,
             (request, ct) => resolver!.Get<ResolveTestTargetsHandler>().HandleAsync(request, ct));
+
+        // LSP-server outcome pipeline (VSTest logger → server → every connected IDE): the run
+        // registration and outcome lookup that used to be an in-proc, VS-only pair
+        // (TestOutcomeListener/RunTestCodeLensCallbackListener) are now custom requests any IDE's
+        // glue component can call the same way.
+        options.OnRequest<RegisterTestRunParams, RegisterTestRunResponse>(
+            LspMethodNames.ReqnrollRegisterTestRun,
+            (request, ct) => resolver!.Get<RegisterTestRunHandler>().HandleAsync(request, ct));
+
+        options.OnRequest<GetTestOutcomeParams, GetTestOutcomeResponse>(
+            LspMethodNames.ReqnrollGetTestOutcome,
+            (request, ct) => resolver!.Get<GetTestOutcomeHandler>().HandleAsync(request, ct));
 
         // A single manual registration handles textDocument/codeLens for every lens kind:
         // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches,

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
@@ -325,6 +326,25 @@ public sealed class ProtocolSteps
                 "inlayHint/foldingRange must be declared statically — dynamic client/registerCapability " +
                 "races VS Code's restore of previously-open .feature tabs on window load, and losing " +
                 "that race silently disables the provider for the rest of the session");
+
+    // Asserted via ExtensionData rather than a typed sibling property: OmniSharp's
+    // InitializeResult.Capabilities is init-only, so the server can't swap in a ServerCapabilities
+    // subclass — it writes reqnrollTestOutcomesProvider into the [JsonExtensionData] catch-all
+    // instead (see ApplyTestOutcomesCapability in Program.cs). A client with no matching Reqnroll
+    // type of its own -- including this harness's plain OmniSharp client -- lands the same data
+    // there on the way in, which is exactly the round trip this asserts.
+    [Then("the server advertises a testOutcomes provider capability")]
+    public void ThenTheServerAdvertisesATestOutcomesProviderCapability()
+    {
+        var extensionData = _ctx.Harness.ServerInitializeResult.Capabilities.ExtensionData;
+        extensionData.Should().NotBeNull("ApplyTestOutcomesCapability always writes this entry");
+        extensionData!.Should().ContainKey("reqnrollTestOutcomesProvider");
+
+        var provider = extensionData["reqnrollTestOutcomesProvider"];
+        provider.Value<string>("registerRunMethod").Should().Be(LspMethodNames.ReqnrollRegisterTestRun);
+        provider.Value<string>("getOutcomeMethod").Should().Be(LspMethodNames.ReqnrollGetTestOutcome);
+        provider.Value<string>("changedNotification").Should().Be(LspMethodNames.ReqnrollTestOutcomesChanged);
+    }
 
     [Then("the semantic tokens legend includes the token types")]
     public void ThenTheLegendIncludesTokenTypes(Table table)

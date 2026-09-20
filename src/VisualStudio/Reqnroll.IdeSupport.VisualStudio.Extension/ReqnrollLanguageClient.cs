@@ -19,6 +19,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
@@ -52,6 +53,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private ScenarioTestTargetService? _scenarioTestTargetService;
     private RunTestCodeLensService? _runTestCodeLensService;
     private RunTestCodeLensResultCache? _runTestCodeLensResultCache;
+    private RunTestOutcomeService? _runTestOutcomeService;
 
     /// <summary>Creates the language client, resolving the shared state holders and the already-launching connection service.</summary>
     public ReqnrollLanguageClient(
@@ -259,6 +261,13 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 RunTestCodeLensRedirect.GetTagLocationsAsync = _runTestCodeLensService.GetTagLocationsAsync;
                 RunTestCodeLensRedirect.InvalidateCachedFile = _runTestCodeLensResultCache.InvalidateFile;
                 RunTestCodeLensRedirect.InvalidateAllCached = _runTestCodeLensResultCache.InvalidateAll;
+
+                // LSP-server outcome pipeline (run registration + outcome lookup now served by the
+                // LSP server instead of an in-proc, VS-only TestOutcomeListener/TestOutcomeStore).
+                _runTestOutcomeService = new RunTestOutcomeService(
+                    interceptingPipe, _loggerFactory.CreateLogger<RunTestOutcomeService>());
+                RunTestCodeLensRedirect.RegisterTestRunAsync = _runTestOutcomeService.RegisterRunAsync;
+                RunTestCodeLensRedirect.GetTestOutcomeAsync = _runTestOutcomeService.GetOutcomeAsync;
                 _logger.LogInformation(
                     "ReqnrollLanguageClient: ITelemetryTransmitter resolved: {Resolved}",
                     _connectionService.TelemetryTransmitter is not null ? "yes" : "no");
@@ -341,6 +350,9 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             RunTestCodeLensRedirect.GetTagLocationsAsync = null;
             RunTestCodeLensRedirect.InvalidateCachedFile = null;
             RunTestCodeLensRedirect.InvalidateAllCached = null;
+            _runTestOutcomeService = null;
+            RunTestCodeLensRedirect.RegisterTestRunAsync = null;
+            RunTestCodeLensRedirect.GetTestOutcomeAsync = null;
 
             // _connectionService itself is NOT disposed here: it's a DI-owned singleton whose
             // lifetime spans the whole extension session, not just this provider instance.
