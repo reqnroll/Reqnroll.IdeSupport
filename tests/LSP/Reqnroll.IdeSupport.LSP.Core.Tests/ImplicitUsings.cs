@@ -21,6 +21,7 @@ global using Reqnroll.IdeSupport.LSP.Core.Documents;
 global using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 global using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 global using Reqnroll.IdeSupport.LSP.Core.Matching;
+global using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 global using Reqnroll.IdeSupport.LSP.Core.TestTargets;
 
 

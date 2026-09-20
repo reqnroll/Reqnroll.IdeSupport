@@ -18,4 +18,8 @@ export const ReqnrollMethods = {
   renameTargets: 'reqnroll/renameTargets',
   selectRenameTarget: 'reqnroll/selectRenameTarget',
   renameApplied: 'reqnroll/renameApplied',
+  resolveTestTargets: 'reqnroll/resolveTestTargets',
+  registerTestRun: 'reqnroll/testOutcomes/registerRun',
+  getTestOutcome: 'reqnroll/testOutcomes/getOutcome',
+  testOutcomesChanged: 'reqnroll/testOutcomes/changed',
 } as const;

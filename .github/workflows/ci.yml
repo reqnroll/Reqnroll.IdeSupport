@@ -550,7 +550,11 @@ jobs:
   # Gradle never invokes `dotnet` in CI: -PlspServerBuildDir tells
   # build.gradle.kts's prepareSandbox task to bundle the already-downloaded
   # server-<rid> directories directly instead of running its local-dev-only
-  # publishServer task.
+  # publishServer task, and -PlspTestLoggerBuildDir does the same for the
+  # bundled VSTest logger (the lsp job's `testlogger` artifact) in place of
+  # the local-dev-only publishTestLogger task. Without the latter flag Gradle
+  # would `dotnet publish` the logger on this runner — which happens to work
+  # only because ubuntu-latest ships a .NET SDK, not by contract.
   #
   # Rider runs on every desktop OS, so the plugin bundles all four RIDs into
   # one universal .zip and picks the right one at runtime
@@ -608,12 +612,24 @@ jobs:
           name: server-osx-arm64
           path: ${{ env.RIDER_DIR }}/downloaded-server/osx-arm64
 
+      - name: Download TestLogger
+        uses: actions/download-artifact@v8
+        with:
+          name: testlogger
+          path: ${{ env.RIDER_DIR }}/downloaded-testlogger
+
       - name: Build plugin
-        run: ./gradlew buildPlugin -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
+        run: >-
+          ./gradlew buildPlugin
+          -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
+          -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
         working-directory: ${{ env.RIDER_DIR }}
 
       - name: Verify plugin
-        run: ./gradlew verifyPlugin -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
+        run: >-
+          ./gradlew verifyPlugin
+          -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
+          -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
         working-directory: ${{ env.RIDER_DIR }}
 
       - name: Upload plugin candidate artifact

@@ -1,6 +1,9 @@
 package com.reqnroll.ide.rider.testrunner
 
+import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
+import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
+import com.reqnroll.ide.rider.lsp.protocol.TestOutcomeRowItem
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -67,5 +70,90 @@ class RunTestRunnerTest {
     @Test
     fun `an empty target list produces an empty filter`() {
         assertEquals("", RunTestRunner.buildTestFilter(emptyList()))
+    }
+
+    // ── buildLoggerArgument ──────────────────────────────────────────────────
+
+    @Test
+    fun `buildLoggerArgument matches the friendly name and parameter keys VS injects into runsettings`() {
+        val registration = RegisterTestRunResponse(success = true, runId = "run-1", endpoint = "127.0.0.1:5000")
+
+        assertEquals(
+            "ReqnrollIde;Endpoint=127.0.0.1:5000;RunId=run-1;IdeProcessId=4242",
+            RunTestRunner.buildLoggerArgument(registration, ideProcessId = 4242L),
+        )
+    }
+
+    // ── combineServerOutcomes ────────────────────────────────────────────────
+
+    private fun outcome(aggregate: String, vararg rows: TestOutcomeRowItem) =
+        GetTestOutcomeResponse(found = true, aggregate = aggregate, rows = rows.toList())
+
+    private fun row(displayName: String, outcome: String, failedStepText: String? = null) =
+        TestOutcomeRowItem(displayName = displayName, outcome = outcome, failedStepText = failedStepText)
+
+    @Test
+    fun `combineServerOutcomes is Passed when every method's aggregate passed`() {
+        val result = RunTestRunner.combineServerOutcomes(listOf(outcome("Passed", row("r1", "Passed"))))
+        assertEquals(RunOutcome.PASSED, result.outcome)
+    }
+
+    @Test
+    fun `combineServerOutcomes is Failed if any method's aggregate failed, even when others passed`() {
+        val result = RunTestRunner.combineServerOutcomes(
+            listOf(outcome("Passed", row("r1", "Passed")), outcome("Failed", row("r2", "Failed"))),
+        )
+        assertEquals(RunOutcome.FAILED, result.outcome)
+    }
+
+    @Test
+    fun `combineServerOutcomes flattens rows across every method and carries the failed-step text`() {
+        val result = RunTestRunner.combineServerOutcomes(
+            listOf(
+                outcome("Passed", row("row 1", "Passed")),
+                outcome("Failed", row("row 2", "Failed", "When the calculation explodes")),
+            ),
+        )
+        assertEquals(2, result.rows.size)
+        assertEquals(RunResultRow("row 1", RunOutcome.PASSED, null), result.rows[0])
+        assertEquals(RunResultRow("row 2", RunOutcome.FAILED, "When the calculation explodes"), result.rows[1])
+    }
+
+    // ── combineIfComplete ────────────────────────────────────────────────────
+
+    @Test
+    fun `combineIfComplete combines when every method has a fresh, settled outcome`() {
+        val result = RunTestRunner.combineIfComplete(
+            listOf(outcome("Passed", row("r1", "Passed")), outcome("Failed", row("r2", "Failed"))),
+        )
+        assertEquals(RunOutcome.FAILED, result?.outcome)
+        assertEquals(2, result?.rows?.size)
+    }
+
+    @Test
+    fun `combineIfComplete is null when any method's lookup failed or was not found`() {
+        assertNull(RunTestRunner.combineIfComplete(listOf(outcome("Passed", row("r1", "Passed")), null)))
+        assertNull(
+            RunTestRunner.combineIfComplete(
+                listOf(outcome("Passed", row("r1", "Passed")), GetTestOutcomeResponse(found = false)),
+            ),
+        )
+    }
+
+    @Test
+    fun `combineIfComplete rejects a previous run's stale outcome instead of reporting it as this run's`() {
+        val stale = outcome("Failed", row("r1", "Failed")).copy(isStale = true)
+        assertNull(RunTestRunner.combineIfComplete(listOf(stale)))
+    }
+
+    @Test
+    fun `combineIfComplete keeps waiting while a method is still marked running`() {
+        val running = outcome("Running", row("r1", "Running")).copy(isRunning = true)
+        assertNull(RunTestRunner.combineIfComplete(listOf(outcome("Passed", row("r0", "Passed")), running)))
+    }
+
+    @Test
+    fun `combineIfComplete is null for no methods at all`() {
+        assertNull(RunTestRunner.combineIfComplete(emptyList()))
     }
 }

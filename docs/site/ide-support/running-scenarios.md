@@ -185,6 +185,40 @@ the project is rebuilt, the previous outcome is treated as describing code that 
 and is dropped rather than shown as a possibly-wrong green/red. Run the scenario again to get a
 current result.
 
+**Visual Studio: the pass/fail glyph never updates, or updates slowly, after a test run.** The
+glyph is fed by a Reqnroll-bundled VSTest logger the extension injects into each test run's
+runsettings automatically. One environment variable is a kill switch for that pipeline; two more
+mirror its outcome stream to disk for troubleshooting or attaching to a bug report — but only one of
+those two applies at a time, and which one depends on **how the tests are being run**, not on which
+one you'd rather use:
+
+- `REQNROLL_IDE_DISABLE_TEST_LOGGER` — set to any value other than empty, `0`, or `false` to disable
+  logger injection entirely. With it disabled, the glyph falls back to Visual Studio's own built-in
+  test-outcome cache instead. Use this to rule out (or work around) a misbehaving logger without
+  uninstalling the extension.
+- **Running through Visual Studio's Test Explorer** (the normal case — this is what feeds the
+  glyph): set `REQNROLL_IDE_TEST_LOGGER_MIRROR`, in the environment `devenv.exe` itself was launched
+  in, to `1` (writes to an auto-named file under the standard Reqnroll log directory,
+  `reqnroll-vs-testlogger-<date>-<pid>.ndjson`) or to an explicit path. The extension injects this
+  as a `LogFilePath` runsettings parameter, which is the only delivery mechanism guaranteed to reach
+  the test host process regardless of how Visual Studio's test infrastructure ends up spawning it.
+- **Running tests without Visual Studio in the picture at all** — a bare `dotnet test`, a CI
+  pipeline, or any other direct `vstest` invocation that has the bundled logger wired in manually:
+  set `REQNROLL_TESTLOGGER_FILE` (always an explicit path — no `1` shorthand) on that process's own
+  environment instead. There's no extension present to inject a runsettings parameter in this case,
+  so the logger reads its own environment directly.
+
+These aren't interchangeable — if both happen to be set during a Visual Studio-orchestrated run,
+the injected runsettings parameter always wins and `REQNROLL_TESTLOGGER_FILE` is silently ignored,
+which is confusing to debug if you don't know that precedence exists. Set whichever one matches how
+you're actually running the tests, not both.
+
+`REQNROLL_IDE_DISABLE_TEST_LOGGER` and `REQNROLL_IDE_TEST_LOGGER_MIRROR` are read from devenv's own
+process environment on every test run, but a process's environment is fixed at launch — set them as
+a user/system environment variable, or in the shell used to start `devenv.exe`, *before* opening
+Visual Studio. Setting them while Visual Studio is already running has no effect until it's closed
+and reopened from an environment where the variable is set.
+
 **Rider: "dotnet test failed to run" even though the tests actually passed.** This happens
 specifically for projects running under Microsoft.Testing.Platform instead of VSTest (see the
 admonition on the Rider tab above) — both the outcome pipeline's logger and the lens's plain TRX

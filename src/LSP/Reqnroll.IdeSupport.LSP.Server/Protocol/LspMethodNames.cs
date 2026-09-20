@@ -38,6 +38,12 @@ public static class LspMethodNames
     public const string ReqnrollDocumentSymbolHierarchical = "reqnroll/documentSymbolHierarchical";
     /// <summary>Method name for the <c>reqnroll/documentActivated</c> notification.</summary>
     public const string ReqnrollDocumentActivated = "reqnroll/documentActivated";
+    /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
+    public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
+    /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>
+    public const string ReqnrollGetTestOutcome = "reqnroll/testOutcomes/getOutcome";
+    /// <summary>Method name for the <c>reqnroll/testOutcomes/changed</c> push notification (LSP-server outcome pipeline).</summary>
+    public const string ReqnrollTestOutcomesChanged = "reqnroll/testOutcomes/changed";
 
     // ── Standard LSP Methods ────────────────────────────────────────────────
     /// <summary>Method name for the <c>textDocument/semanticTokens/full</c> request.</summary>
