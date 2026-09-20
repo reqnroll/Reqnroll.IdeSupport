@@ -2,6 +2,7 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
@@ -381,26 +382,30 @@ public class Program
                 };
             }
 
-            // Advertises the custom LSP-server outcome pipeline (run registration, outcome lookup,
-            // and the "changed" push) via the standard `experimental` capability bucket — the spec's
-            // sanctioned extension point for exactly this: a client that doesn't recognize the key
-            // ignores it, per LSP's general "unknown fields are ignored" rule. Only the *feature's
-            // existence and method names* are advertised here; the actual per-run endpoint+token is
-            // deliberately NOT part of this one-time handshake payload (see
-            // RegisterTestRunHandler/TestOutcomeTcpListener's remarks) — a capability describes
-            // static feature availability, while a run's credential must stay short-lived and
-            // single-use, minted fresh per request instead.
+            // Advertises the custom LSP-server outcome pipeline as a typed, top-level sibling of
+            // the spec's own capability fields — `reqnrollTestOutcomesProvider`, keyed and shaped
+            // by ReqnrollTestOutcomesOptions, not nested under `experimental` — mirroring the wire
+            // shape Roslyn's own LSP server uses for its custom capabilities.
+            //
+            // Not a real property on a ServerCapabilities subclass, though: InitializeResult.
+            // Capabilities is init-only (OmniSharp record type), and OnInitialized hands us an
+            // already-constructed InitializeResult with no way to swap what object that property
+            // points to — only to mutate the existing instance's own settable members. So this
+            // goes through ServerCapabilities.ExtensionData, OmniSharp's own [JsonExtensionData]
+            // catch-all, which both writes an extra top-level property during serialization AND
+            // (for a peer with no matching Reqnroll type of its own) captures an unknown one
+            // losslessly on the way in — the same "ignored, not dropped" safety `experimental`
+            // relied on, just without forcing every value into the same shared dictionary key.
             void ApplyTestOutcomesCapability()
             {
-                response.Capabilities.Experimental = new Dictionary<string, JToken>
-                {
-                    ["reqnroll/testOutcomes"] = JObject.FromObject(new
+                response.Capabilities.ExtensionData ??= new Dictionary<string, JToken>();
+                response.Capabilities.ExtensionData["reqnrollTestOutcomesProvider"] = JObject.FromObject(
+                    new ReqnrollTestOutcomesOptions
                     {
-                        registerRunMethod = LspMethodNames.ReqnrollRegisterTestRun,
-                        getOutcomeMethod = LspMethodNames.ReqnrollGetTestOutcome,
-                        changedNotification = LspMethodNames.ReqnrollTestOutcomesChanged,
-                    }),
-                };
+                        RegisterRunMethod = LspMethodNames.ReqnrollRegisterTestRun,
+                        GetOutcomeMethod = LspMethodNames.ReqnrollGetTestOutcome,
+                        ChangedNotification = LspMethodNames.ReqnrollTestOutcomesChanged,
+                    });
             }
         });
     }
