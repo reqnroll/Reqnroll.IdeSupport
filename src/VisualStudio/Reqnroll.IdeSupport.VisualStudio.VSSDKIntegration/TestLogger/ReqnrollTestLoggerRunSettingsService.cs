@@ -59,15 +59,26 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestLogger;
 [Export(typeof(IRunSettingsService))]
 public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
 {
-    // Same in-proc devenv.exe file log as the rest of the extension (see RunTestCodeLensCallbackListener
-    // for why a standalone instance rather than a MEF import).
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+    private readonly IIdeSupportLogger _logger;
 
     private const string ReqnrollRuntimeAssemblyFileName = "Reqnroll.dll";
     internal const string DisableEnvironmentVariable = "REQNROLL_IDE_DISABLE_TEST_LOGGER";
 
     /// <summary>Bounds the blocking wait for the server's registration response — see the class remarks.</summary>
     internal static readonly TimeSpan RegistrationTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// MEF composes this class in-proc in devenv.exe, the same composition root that exports the
+    /// shared <see cref="IIdeSupportLogger"/> (see <c>IdeSupportLoggerExportProvider</c>) -- imported
+    /// here rather than constructing a standalone <c>SynchronousFileLogger</c>, which would otherwise
+    /// write to the same physical log file through its own unrelated write lock (see
+    /// <c>RunTestCodeLensCallbackListener</c>'s remarks for the full reasoning).
+    /// </summary>
+    [ImportingConstructor]
+    public ReqnrollTestLoggerRunSettingsService(IIdeSupportLogger logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc />
     public string Name => "Reqnroll IDE test logger";
@@ -79,13 +90,16 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
         {
             if (IsDisabled())
             {
-                Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: disabled via {DisableEnvironmentVariable}; not injecting.");
+                // Visible in the Tests output pane, not just our own verbose log: a user who set this
+                // kill switch themselves should see it confirmed without having to go find a log file.
+                log.Log(MessageLevel.Informational, $"Reqnroll: test logger disabled via {DisableEnvironmentVariable}; not injecting.");
+                _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: disabled via {DisableEnvironmentVariable}; not injecting.");
                 return inputRunSettingDocument;
             }
 
             if (configurationInfo.RequestState != RunSettingConfigurationInfoState.Execution)
             {
-                Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: {configurationInfo.RequestState} request — not injecting.");
+                _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: {configurationInfo.RequestState} request — not injecting.");
                 return inputRunSettingDocument;
             }
 
@@ -93,11 +107,12 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
                 .Select(c => c.Source)
                 .Where(s => !string.IsNullOrEmpty(s))
                 .ToList();
-            Logger.LogInfo($"{nameof(ReqnrollTestLoggerRunSettingsService)}: execution request for {containers.Count} container(s): {string.Join(", ", containers)}");
+            _logger.LogInfo($"{nameof(ReqnrollTestLoggerRunSettingsService)}: execution request for {containers.Count} container(s): {string.Join(", ", containers)}");
 
             if (!containers.Any(IsReqnrollTestContainer))
             {
                 log.Log(MessageLevel.Informational, "Reqnroll: no Reqnroll test containers in this run; test logger not registered.");
+                _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: no Reqnroll test containers in this run; not injecting.");
                 return inputRunSettingDocument;
             }
 
@@ -105,6 +120,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             if (loggerDirectory is null)
             {
                 log.Log(MessageLevel.Warning, $"Reqnroll: bundled test logger '{TestLoggerRunSettings.LoggerAssemblyFileName}' not found next to the extension; live test outcomes will not be recorded.");
+                _logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: bundled test logger '{TestLoggerRunSettings.LoggerAssemblyFileName}' not found next to the extension; not injecting.");
                 return inputRunSettingDocument;
             }
 
@@ -139,14 +155,14 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             var merged = TestLoggerRunSettings.Inject(inputRunSettingDocument, loggerDirectory, parameters);
 
             log.Log(MessageLevel.Informational, $"Reqnroll: registered test logger from '{loggerDirectory}' (run {registration.RunId}, endpoint {registration.Endpoint}).");
-            Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: merged runsettings:{Environment.NewLine}{merged.OuterXml}");
+            _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: merged runsettings:{Environment.NewLine}{merged.OuterXml}");
             return merged;
         }
         catch (Exception ex)
         {
             // VS would also catch and revert, but reporting it ourselves keeps the message specific.
             log.Log(MessageLevel.Warning, $"Reqnroll: failed to register the test logger — {ex.Message}");
-            Logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}.{nameof(AddRunSettings)} failed");
+            _logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}.{nameof(AddRunSettings)} failed");
             return inputRunSettingDocument;
         }
     }
@@ -156,12 +172,12 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     /// this run's endpoint. Returns null on a missing connection, a timeout, or any exception —
     /// every one of those means "inject nothing", never "hang the run".
     /// </summary>
-    private static TestRunRegistration? RegisterRunBlocking()
+    private TestRunRegistration? RegisterRunBlocking()
     {
         var registerAsync = RunTestCodeLensRedirect.RegisterTestRunAsync;
         if (registerAsync is null)
         {
-            Logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: LSP connection not established yet; not registering.");
+            _logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: LSP connection not established yet; not registering.");
             return null;
         }
 
@@ -176,17 +192,17 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
         }
         catch (OperationCanceledException)
         {
-            Logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: timed out after {RegistrationTimeout} waiting for the LSP server to register this run.");
+            _logger.LogWarning($"{nameof(ReqnrollTestLoggerRunSettingsService)}: timed out after {RegistrationTimeout} waiting for the LSP server to register this run.");
             return null;
         }
         catch (Exception ex)
         {
-            Logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}: RegisterRunBlocking failed");
+            _logger.LogException(ex, $"{nameof(ReqnrollTestLoggerRunSettingsService)}: RegisterRunBlocking failed");
             return null;
         }
     }
 
-    private static bool IsDisabled()
+    private bool IsDisabled()
     {
         var value = Environment.GetEnvironmentVariable(DisableEnvironmentVariable);
         return !string.IsNullOrEmpty(value) && value != "0" && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
@@ -197,7 +213,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     /// project copies <c>Reqnroll.dll</c> to its output. Cheap, no project-system round-trip, and good
     /// enough to keep the logger out of unrelated solutions.
     /// </summary>
-    private static bool IsReqnrollTestContainer(string source)
+    private bool IsReqnrollTestContainer(string source)
     {
         try
         {
@@ -206,7 +222,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
         }
         catch (Exception ex)
         {
-            Logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: could not inspect container '{source}': {ex.Message}");
+            _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: could not inspect container '{source}': {ex.Message}");
             return false;
         }
     }
@@ -215,7 +231,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     /// The VSIX places the logger under <c>TestLogger\</c> next to this assembly (extension root).
     /// Returns null when it isn't there rather than pointing vstest at a non-existent directory.
     /// </summary>
-    private static string? ResolveLoggerDirectory()
+    private string? ResolveLoggerDirectory()
     {
         var extensionDirectory = Path.GetDirectoryName(typeof(ReqnrollTestLoggerRunSettingsService).Assembly.Location);
         if (extensionDirectory is null) return null;
