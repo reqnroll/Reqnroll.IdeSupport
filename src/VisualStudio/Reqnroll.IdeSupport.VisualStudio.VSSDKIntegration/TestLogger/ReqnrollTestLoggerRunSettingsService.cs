@@ -200,5 +200,4 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
             return null;
         }
     }
-
 }
