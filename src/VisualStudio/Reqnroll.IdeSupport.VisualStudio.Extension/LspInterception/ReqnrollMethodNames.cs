@@ -53,4 +53,10 @@ internal static class ReqnrollMethodNames
     public const string DocumentSymbolHierarchical = "reqnroll/documentSymbolHierarchical";
     /// <summary>Method name for the <c>reqnroll/documentActivated</c> notification.</summary>
     public const string DocumentActivated = "reqnroll/documentActivated";
+    /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
+    public const string RegisterTestRun = "reqnroll/testOutcomes/registerRun";
+    /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>
+    public const string GetTestOutcome = "reqnroll/testOutcomes/getOutcome";
+    /// <summary>Method name for the <c>reqnroll/testOutcomes/changed</c> push notification (LSP-server outcome pipeline).</summary>
+    public const string TestOutcomesChanged = "reqnroll/testOutcomes/changed";
 }

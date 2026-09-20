@@ -104,8 +104,10 @@ internal object RunLensSupport {
         startLine: Int,
         targets: List<ScenarioTestTargetItem>,
     ): ClickableTextCodeVisionEntry {
-        val title = renderTitle(RunTestResultStore.get(uri, startLine)?.outcome)
-        return StepUsagesCodeVisionProvider.buildEntry(title, providerId) {
+        val lastResult = RunTestResultStore.get(uri, startLine)
+        val title = renderTitle(lastResult?.outcome)
+        val tooltip = renderTooltip(title, lastResult)
+        return StepUsagesCodeVisionProvider.buildEntry(title, providerId, tooltip) {
             RunTestRunner.run(project, uri, startLine, targets)
         }
     }
@@ -115,5 +117,20 @@ internal object RunLensSupport {
         null -> "▶ Run"
         RunOutcome.PASSED -> "✓ Run"
         RunOutcome.FAILED -> "✗ Run"
+    }
+
+    /**
+     * Summarizes the failed row(s) from [result]'s per-row detail (LSP-server outcome pipeline,
+     * #700/#702) for the lens tooltip — the plain [title] alone doesn't say *which* Scenario
+     * Outline row failed or on what step. Falls back to [title] verbatim when [result] has no rows
+     * (a TRX-sourced fallback result, or no run yet), same as before this detail existed.
+     * `internal` so it's unit-testable without a platform fixture.
+     */
+    internal fun renderTooltip(title: String, result: RunResult?): String {
+        val failedRows = result?.rows?.filter { it.outcome == RunOutcome.FAILED } ?: emptyList()
+        if (failedRows.isEmpty()) return title
+        return failedRows.joinToString("\n") { row ->
+            if (row.failedStepText != null) "${row.displayName}: ${row.failedStepText}" else row.displayName
+        }
     }
 }

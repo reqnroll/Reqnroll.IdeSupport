@@ -29,13 +29,16 @@ src/VSCode/               ← this directory (TypeScript extension)
     msbuildEvaluator.ts   ← dotnet msbuild property evaluation
     lspInspectorLogger.ts ← optional JSON-RPC file logger
     statusBar.ts          ← LSP server status bar item
+    testOutcomes/         ← LSP-server outcome pipeline VS Code leg (#700/#702, opt-in)
     test/                 ← Mocha suite (runs in an Extension Development Host)
   syntaxes/               ← TextMate grammar (.tmLanguage.json)
   scripts/
     publish-server.sh     ← publishes the LSP server for all RIDs
+    publish-testlogger.sh ← publishes the bundled TestLogger (no RID needed)
     build-vsix.sh         ← packages the .vsix
     validate-semantic-token-scopes.mjs  ← CI validation
 src/LSP/                  ← the shared LSP server (C#)
+src/Core/Reqnroll.IdeSupport.TestLogger/  ← the bundled VSTest logger (C#, shared with VS/Rider)
 ```
 
 ## Activation events
@@ -61,6 +64,22 @@ npm run build:server
 ```
 
 This runs `scripts/publish-server.sh`, which publishes the server for your host platform into `src/VSCode/server/<rid>/`.
+
+### 1b. Build the TestLogger (opt-in feature, LSP-server outcome pipeline #700/#702)
+
+Only needed if you're working on `src/testOutcomes/` or testing `reqnroll.testOutcomes.enabled`
+(off by default — see that setting's own description, and `testOutcomesService.ts`'s doc comment
+for why: it merges into the shared `dotnet.unitTests.runSettingsPath` setting C# Dev Kit reads,
+not something namespaced under `reqnroll.*`). Skippable for everything else.
+
+```sh
+cd src/VSCode
+npm run build:testlogger
+```
+
+This runs `scripts/publish-testlogger.sh`, which publishes `Reqnroll.IdeSupport.TestLogger` into
+`src/VSCode/testlogger/`. Unlike the server, there's no RID to choose — the logger targets
+netstandard2.0 with no self-contained runtime, so one build serves every OS.
 
 ### 2. Install npm dependencies
 

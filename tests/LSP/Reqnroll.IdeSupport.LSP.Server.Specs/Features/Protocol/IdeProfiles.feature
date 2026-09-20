@@ -89,6 +89,24 @@ Examples:
 	| rider        |
 	| unknown-ide  |
 
+# ── LSP-server outcome pipeline capability advertisement ───────────────────────
+#
+# reqnrollTestOutcomesProvider is a typed top-level sibling of the spec's own capability fields
+# (not nested under the generic `experimental` bucket), written via ServerCapabilities.ExtensionData
+# because InitializeResult.Capabilities is init-only and can't be swapped for a subclass. Advertised
+# to every client alike -- the feature has no per-IDE variation.
+
+Scenario Outline: All clients receive the testOutcomes provider capability
+	Given the LSP server is started for IDE "<ide>"
+	Then the server advertises a testOutcomes provider capability
+
+Examples:
+	| ide          |
+	| visualstudio |
+	| vscode       |
+	| rider        |
+	| unknown-ide  |
+
 # ── Custom protocol surface manifest ────────────────────────────────────────────
 #
 # Every reqnroll/* method registered via manual OnRequest/OnNotification routing in
