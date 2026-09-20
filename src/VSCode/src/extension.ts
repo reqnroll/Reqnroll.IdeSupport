@@ -30,6 +30,8 @@ import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
+import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
+import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
 
 let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
@@ -390,6 +392,15 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
       context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
       // Forward server-emitted telemetry/event notifications to Application Insights.
       registerTelemetry(client!, context);
+      // LSP-server outcome pipeline (#700/#702), opt-in via reqnroll.testOutcomes.enabled —
+      // registers this session with the server and merges the bundled VSTest logger into
+      // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
+      // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
+      // blocks activation, and every failure degrades silently (see the module's own doc comment).
+      void activateTestOutcomes(context, client!);
+      // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
+      // doc comment for why it carries no real Run/Debug action (issue #504).
+      registerTestOutcomeCodeLens(client!, projectManager, context);
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
