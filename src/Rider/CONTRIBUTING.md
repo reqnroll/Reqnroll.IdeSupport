@@ -162,6 +162,23 @@ A missing/unbundled logger isn't fatal — `RunTestRunner` falls back to its pre
 TRX-parsed result (coarser: one pass/fail bit, no per-row detail) exactly as if the LSP
 server itself weren't running.
 
+**Known limitation — Unit Tests tool window runs don't reach the pipeline.** The logger
+is only injected into the plugin's *own* `dotnet test` shell-out (the Run lens). A run
+started from Rider's native Unit Tests tool window / test gutter icons goes through
+JetBrains' proprietary `ReSharperTestRunner` host (`dotnet exec … ReSharperTestRunner.dll
+connect --port …`, strategy `MsTestTestRunnerRunStrategy` for MSTest), whose RunSettings
+carry only `ResultsDirectory`/`SolutionDirectory` — no `TestAdaptersPaths`, no
+`LoggerRunSettings` — and which never loads VSTest `ITestLogger` extensions at all. So
+those runs produce no `reqnroll/testOutcomes/registerRun`, no TCP connection to the
+server, and the Run lens glyph doesn't update after them. This is by construction, not a
+misconfiguration: the Kotlin-only plugin has no hook into Rider's unit-test session
+pipeline (the Visual Studio extension's `IRunSettingsService` injection has no Rider
+equivalent). Feeding native runs into the lens would need a different mechanism — a
+ReSharper-backend plugin part subscribing to unit-test results, or the frontend
+`RdUnitTestHost` protocol — and is out of scope for #700/#702. To confirm which path a run
+took, look in the sandbox's `log/UnitTestLogs/Sessions/*.log` (UTF-16; `iconv -f UTF-16`)
+for the `Starting process:` line, and in the LSP server log for `registerRun`.
+
 ## Local install of a dev build
 
 `runIde` (above) launches a disposable sandboxed Rider instance — it doesn't touch your regular
