@@ -61,8 +61,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
 {
     private readonly IIdeSupportLogger _logger;
 
-    private const string ReqnrollRuntimeAssemblyFileName = "Reqnroll.dll";
-    internal const string DisableEnvironmentVariable = "REQNROLL_IDE_DISABLE_TEST_LOGGER";
+    internal const string DisableEnvironmentVariable = TestLoggerActivationRules.DisableEnvironmentVariable;
 
     /// <summary>Bounds the blocking wait for the server's registration response — see the class remarks.</summary>
     internal static readonly TimeSpan RegistrationTimeout = TimeSpan.FromSeconds(5);
@@ -88,7 +87,7 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
     {
         try
         {
-            if (IsDisabled())
+            if (TestLoggerActivationRules.IsDisabled())
             {
                 // Visible in the Tests output pane, not just our own verbose log: a user who set this
                 // kill switch themselves should see it confirmed without having to go find a log file.
@@ -109,14 +108,14 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
                 .ToList();
             _logger.LogInfo($"{nameof(ReqnrollTestLoggerRunSettingsService)}: execution request for {containers.Count} container(s): {string.Join(", ", containers)}");
 
-            if (!containers.Any(IsReqnrollTestContainer))
+            if (!containers.Any(source => TestLoggerActivationRules.IsReqnrollTestContainer(source, _logger)))
             {
                 log.Log(MessageLevel.Informational, "Reqnroll: no Reqnroll test containers in this run; test logger not registered.");
                 _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: no Reqnroll test containers in this run; not injecting.");
                 return inputRunSettingDocument;
             }
 
-            var loggerDirectory = ResolveLoggerDirectory();
+            var loggerDirectory = TestLoggerActivationRules.ResolveLoggerDirectory(typeof(ReqnrollTestLoggerRunSettingsService).Assembly.Location);
             if (loggerDirectory is null)
             {
                 log.Log(MessageLevel.Warning, $"Reqnroll: bundled test logger '{TestLoggerRunSettings.LoggerAssemblyFileName}' not found next to the extension; live test outcomes will not be recorded.");
@@ -202,43 +201,4 @@ public sealed class ReqnrollTestLoggerRunSettingsService : IRunSettingsService
         }
     }
 
-    private bool IsDisabled()
-    {
-        var value = Environment.GetEnvironmentVariable(DisableEnvironmentVariable);
-        return !string.IsNullOrEmpty(value) && value != "0" && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// A test container is "Reqnroll's" if the Reqnroll runtime sits beside it — every Reqnroll test
-    /// project copies <c>Reqnroll.dll</c> to its output. Cheap, no project-system round-trip, and good
-    /// enough to keep the logger out of unrelated solutions.
-    /// </summary>
-    private bool IsReqnrollTestContainer(string source)
-    {
-        try
-        {
-            var directory = Path.GetDirectoryName(source);
-            return directory is not null && File.Exists(Path.Combine(directory, ReqnrollRuntimeAssemblyFileName));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogVerbose($"{nameof(ReqnrollTestLoggerRunSettingsService)}: could not inspect container '{source}': {ex.Message}");
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// The VSIX places the logger under <c>TestLogger\</c> next to this assembly (extension root).
-    /// Returns null when it isn't there rather than pointing vstest at a non-existent directory.
-    /// </summary>
-    private string? ResolveLoggerDirectory()
-    {
-        var extensionDirectory = Path.GetDirectoryName(typeof(ReqnrollTestLoggerRunSettingsService).Assembly.Location);
-        if (extensionDirectory is null) return null;
-
-        var loggerDirectory = Path.Combine(extensionDirectory, TestLoggerRunSettings.LoggerSubdirectory);
-        return File.Exists(Path.Combine(loggerDirectory, TestLoggerRunSettings.LoggerAssemblyFileName))
-            ? loggerDirectory
-            : null;
-    }
 }
