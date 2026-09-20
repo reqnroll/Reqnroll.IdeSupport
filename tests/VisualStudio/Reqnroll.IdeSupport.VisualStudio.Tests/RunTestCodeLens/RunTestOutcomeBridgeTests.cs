@@ -137,6 +137,18 @@ public class RunTestOutcomeBridgeTests : IDisposable
     }
 
     [Fact]
+    public void HandleFailure_latches_unavailable_for_an_InvalidCastException()
+    {
+        // GetOrCreateProxyAsync/InvokeGetTestOutcomeAsync cast reflectively-invoked results to
+        // Task/Stream -- if a future VS update changes one of those declared return types, the
+        // resulting InvalidCastException is exactly the same kind of permanent shape change as a
+        // MissingMemberException, not a transient connection hiccup worth retrying every poll.
+        RunTestOutcomeBridge.HandleFailure(new InvalidCastException("result is no longer a Task"), "GetOrCreateProxyAsync");
+
+        RunTestOutcomeBridge.IsUnavailableForTests.Should().BeTrue();
+    }
+
+    [Fact]
     public void HandleFailure_does_not_latch_unavailable_for_a_transient_exception()
     {
         // The whole point of distinguishing the two (this type's own remarks): a dropped
@@ -154,6 +166,7 @@ public class RunTestOutcomeBridgeTests : IDisposable
         {
             RunTestOutcomeBridge.HandleFailure(new TypeLoadException(), "step");
             RunTestOutcomeBridge.HandleFailure(new MissingMemberException(), "step");
+            RunTestOutcomeBridge.HandleFailure(new InvalidCastException(), "step");
             RunTestOutcomeBridge.HandleFailure(new InvalidOperationException(), "step");
             RunTestOutcomeBridge.HandleFailure(new NullReferenceException(), "step");
         };
