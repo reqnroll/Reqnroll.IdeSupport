@@ -89,14 +89,17 @@
          extension assembly): VSSDKIntegration's IRunSettingsService export points each Test Explorer
          run's TestAdaptersPaths at that sub-folder, and vstest picks the logger up by its
          *TestLogger.dll file-name suffix. Keeping it in its own folder keeps vstest's extension scan
-         away from the rest of the VSIX; BuiltProjectOutputGroup only, so its compile-time
-         Microsoft.TestPlatform.ObjectModel reference (supplied by the runner at run time) is not
-         bundled alongside. -->
+         away from the rest of the VSIX. BuiltProjectOutputGroup for the logger's own assembly, plus
+         ReferenceCopyLocalPathsOutputGroup so its Reqnroll.IdeSupport.TestReporter.Common
+         ProjectReference (the shared NDJSON/wire-format code) is bundled alongside it — its
+         compile-time Microsoft.TestPlatform.ObjectModel reference (supplied by the runner at run
+         time) is excluded from that group by ExcludeAssets="runtime" on the PackageReference
+         itself, so it still isn't bundled. -->
     <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.TestLogger\Reqnroll.IdeSupport.TestLogger.csproj">
         <Name>Reqnroll.IdeSupport.TestLogger</Name>
         <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
         <VSIXSubPath>TestLogger</VSIXSubPath>
-        <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3b</IncludeOutputGroupsInVSIX>
+        <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
     </ProjectReference>
   </ItemGroup>
 

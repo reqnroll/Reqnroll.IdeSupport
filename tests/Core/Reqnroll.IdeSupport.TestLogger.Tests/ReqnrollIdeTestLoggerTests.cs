@@ -8,6 +8,7 @@ using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
 using Reqnroll.IdeSupport.TestLogger;
+using Reqnroll.IdeSupport.TestReporter.Common;
 using Xunit;
 
 namespace Reqnroll.IdeSupport.TestLogger.Tests;
