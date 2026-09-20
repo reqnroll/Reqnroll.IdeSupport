@@ -118,4 +118,42 @@ class RunTestRunnerTest {
         assertEquals(RunResultRow("row 1", RunOutcome.PASSED, null), result.rows[0])
         assertEquals(RunResultRow("row 2", RunOutcome.FAILED, "When the calculation explodes"), result.rows[1])
     }
+
+    // ── combineIfComplete ────────────────────────────────────────────────────
+
+    @Test
+    fun `combineIfComplete combines when every method has a fresh, settled outcome`() {
+        val result = RunTestRunner.combineIfComplete(
+            listOf(outcome("Passed", row("r1", "Passed")), outcome("Failed", row("r2", "Failed"))),
+        )
+        assertEquals(RunOutcome.FAILED, result?.outcome)
+        assertEquals(2, result?.rows?.size)
+    }
+
+    @Test
+    fun `combineIfComplete is null when any method's lookup failed or was not found`() {
+        assertNull(RunTestRunner.combineIfComplete(listOf(outcome("Passed", row("r1", "Passed")), null)))
+        assertNull(
+            RunTestRunner.combineIfComplete(
+                listOf(outcome("Passed", row("r1", "Passed")), GetTestOutcomeResponse(found = false)),
+            ),
+        )
+    }
+
+    @Test
+    fun `combineIfComplete rejects a previous run's stale outcome instead of reporting it as this run's`() {
+        val stale = outcome("Failed", row("r1", "Failed")).copy(isStale = true)
+        assertNull(RunTestRunner.combineIfComplete(listOf(stale)))
+    }
+
+    @Test
+    fun `combineIfComplete keeps waiting while a method is still marked running`() {
+        val running = outcome("Running", row("r1", "Running")).copy(isRunning = true)
+        assertNull(RunTestRunner.combineIfComplete(listOf(outcome("Passed", row("r0", "Passed")), running)))
+    }
+
+    @Test
+    fun `combineIfComplete is null for no methods at all`() {
+        assertNull(RunTestRunner.combineIfComplete(emptyList()))
+    }
 }

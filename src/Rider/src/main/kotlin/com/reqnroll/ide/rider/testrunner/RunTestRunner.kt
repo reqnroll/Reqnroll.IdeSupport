@@ -35,9 +35,9 @@ import java.util.concurrent.TimeUnit
  * [ReqnrollRequestSender.getTestOutcome] per target method afterward for per-row detail (Scenario
  * Outline rows, failed-step text) that plain TRX scraping never captured. TRX parsing itself is
  * untouched and always still runs — both loggers report from the same `dotnet test` invocation —
- * so a server lookup that comes back empty (server not running, logger not bundled correctly, the
- * runner process exited before the server finished processing) falls back to the pre-#700
- * TRX-only result exactly as before. This fallback is deliberately kept for at least one release
+ * so a server lookup that comes back empty, stale, or incomplete (server not running, logger not
+ * bundled correctly, the runner process exited before the server finished processing — see
+ * [combineIfComplete]) falls back to the pre-#700 TRX-only result exactly as before. This fallback is deliberately kept for at least one release
  * (implementation plan Phase 4) rather than becoming the only path immediately.
  */
 object RunTestRunner {
@@ -171,19 +171,39 @@ object RunTestRunner {
      * Polls the server for every distinct target method's outcome, retrying briefly
      * ([OUTCOME_POLL_ATTEMPTS] × [OUTCOME_POLL_DELAY_MS]) since the logger's final `runComplete`
      * write and the server processing it are not guaranteed to have landed the instant the
-     * `dotnet test` process itself exits. Returns null (fall back to TRX) if nothing is found
-     * after every attempt. Runs on the calling (background task) thread — never call from the EDT.
+     * `dotnet test` process itself exits. Returns null (fall back to TRX) unless *every* method
+     * has a usable outcome ([combineIfComplete]) within the attempts. Runs on the calling
+     * (background task) thread — never call from the EDT.
      */
     private fun pollServerResult(project: Project, assemblyPath: String, targets: List<ScenarioTestTargetItem>): RunResult? {
         val distinctMethods = targets.map { it.declaringTypeFullName to it.methodName }.distinct()
         repeat(OUTCOME_POLL_ATTEMPTS) { attempt ->
-            val found = distinctMethods.mapNotNull { (type, method) ->
-                ReqnrollRequestSender.getTestOutcome(project, assemblyPath, type, method)?.takeIf { it.found }
+            val responses = distinctMethods.map { (type, method) ->
+                ReqnrollRequestSender.getTestOutcome(project, assemblyPath, type, method)
             }
-            if (found.isNotEmpty()) return combineServerOutcomes(found)
+            combineIfComplete(responses)?.let { return it }
             if (attempt < OUTCOME_POLL_ATTEMPTS - 1) Thread.sleep(OUTCOME_POLL_DELAY_MS)
         }
         return null
+    }
+
+    /**
+     * One poll attempt's verdict: [combineServerOutcomes] over [responses] only when every one is
+     * usable for *this* run, else null (keep polling / fall back to TRX). "Usable" means
+     * [GetTestOutcomeResponse.found] and neither [GetTestOutcomeResponse.isStale] nor
+     * [GetTestOutcomeResponse.isRunning]: the server's `TryGet` happily returns the *previous*
+     * run's outcome for a method (`Found = true`) with `IsStale = true` once this run's build has
+     * rewritten the container, so accepting `found` alone would report last time's glyph as this
+     * run's whenever this run's own result hasn't landed yet — or never does (logger failed to
+     * load/connect). Requiring every method, not just one, keeps a multi-target scenario from
+     * being summarized off a partial set (method A recorded, B still in flight) — the same
+     * `Failed` > `Passed` precedence as [combineServerOutcomes] is meaningless over half the rows.
+     * `internal` for testability.
+     */
+    internal fun combineIfComplete(responses: List<GetTestOutcomeResponse?>): RunResult? {
+        if (responses.isEmpty()) return null
+        val usable = responses.map { it?.takeIf { r -> r.found && !r.isStale && !r.isRunning } ?: return null }
+        return combineServerOutcomes(usable)
     }
 
     /**
