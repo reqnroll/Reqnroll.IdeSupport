@@ -413,17 +413,40 @@ Code work started.
   in VS — glyphs still update end to end now that registration and lookup are cross-process — not yet
   run; the same exit criteria as Phase 1/3 apply.**
 
-### Phase 4 — Rider adoption
+### Phase 4 — Rider adoption — IMPLEMENTED (unit-tested; live devcontainer run not yet done)
 
-- Bundle the logger in the plugin (same Gradle path that bundles the LSP server), add the two
-  runsettings arguments to the `dotnet test --filter` invocation `RunTestRunner.kt` already builds
-  (no listener of its own to write — Phase 3.5 moved that server-side), call
-  `reqnroll/testOutcomes/registerRun`/`getOutcome` the same way VS does, key `RunTestResultStore` by
-  method to converge with the server's `TestOutcomeKey`, keep the TRX path as the fallback for one
-  release.
-- Verify in the devcontainer (`./gradlew test --offline` + a live run — see the memory on
-  devcontainer verification; the host cannot build Gradle).
-- **Exit:** outline rows report individually in Rider's Run lens; TRX parsing no longer on the hot path.
+- Bundled the logger via a new `publishTestLogger` Gradle task mirroring `publishServer`'s
+  `-PlspServerBuildDir`-style external-build-dir mechanism (`-PlspTestLoggerBuildDir`), but with no
+  per-RID loop: the logger targets netstandard2.0 with no self-contained runtime, so one
+  framework-dependent publish serves every OS. `ReqnrollTestLoggerPathResolver` (mirrors
+  `ReqnrollServerPathResolver`, minus the RID logic) resolves it under the plugin's own
+  `testlogger/` directory.
+- `RunTestRunner.run` now calls `reqnroll/testOutcomes/registerRun` before shelling to
+  `dotnet test`; on success it adds `--test-adapter-path`/`--logger "ReqnrollIde;..."` to the
+  *same* invocation that already asks for a TRX logger (vstest allows multiple `--logger` flags in
+  one run), rather than replacing it. After the process exits it polls
+  `reqnroll/testOutcomes/getOutcome` per distinct target method (bounded: 10 attempts × 100ms,
+  since the logger's final `runComplete` write and the server processing it are not guaranteed to
+  have landed the instant the runner process itself terminates) and combines the results with the
+  same `Failed` > `Passed` precedence the server's own `TestOutcomeStore.Aggregate` uses. Any
+  failure at any step (no server running, logger not bundled, nothing found after polling) falls
+  back to the pre-#700 TRX-parsed result unchanged — the fallback this phase was scoped to keep.
+- **Convergence point found, not assumed:** the server's `TestOutcomeKey.Source` needs the
+  *compiled* container path, not the `.csproj` path `RunTestRunner` already had. Confirmed via
+  `javap` against the actual bundled Rider 2024.3.5 classes (`RunnableProject.projectOutputs` →
+  `ProjectOutput.exePath`) rather than assumed — Rider's RD protocol model has no
+  test-project-specific "output assembly" field, so this reuses the same field the platform's own
+  run infrastructure uses for a project's built artifact generally.
+- Per-row detail (Scenario Outline rows, failed-step text) that TRX scraping never captured now
+  populates `RunResult.rows`; the Run lens tooltip lists failed rows with their failing step when
+  the server-sourced path is live, falling back to the plain title for a TRX-sourced result.
+- **Verified:** `./gradlew compileKotlin compileTestKotlin test --offline` in the devcontainer —
+  193 tests, 0 failures (was ~163 before this phase; new coverage in `RunTestRunnerTest`/
+  `RunLensSupportTest`). **Not verified:** an actual live run (the devcontainer has no .NET SDK to
+  publish the server/logger or run `dotnet test`, and there is no Windows-host Rider install to run
+  outside it — see the devcontainer-verification memory) — outline rows reporting individually in
+  Rider's live Run lens is the live exit criterion still to be run, same status as VS's own
+  still-pending live checks.
 
 ### Phase 5 — VS Code adoption — plumbing and UI surface IMPLEMENTED
 

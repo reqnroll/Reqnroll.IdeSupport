@@ -2,7 +2,9 @@
 # test-lsp.yml — reusable workflow that builds and tests the LSP layer
 # (LSP.Core, LSP.Server, Connector, and the shared Reqnroll.IdeSupport.Common
 # library) once, then publishes self-contained server binaries for every
-# supported RID as artifacts named `server-<rid>`.
+# supported RID as artifacts named `server-<rid>`, plus the IDE-bundled VSTest
+# logger (src/Core/Reqnroll.IdeSupport.TestLogger) as a single `testlogger`
+# artifact — netstandard2.0, framework-dependent, so one publish serves every RID.
 #
 # ci.yml's `lsp` job calls this once via `uses: ./.github/workflows/test-lsp.yml`,
 # shared by whichever of the VS/VS Code/Rider job chains actually run for a given
@@ -57,6 +59,7 @@ env:
   LSP_SERVER_TESTS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Reqnroll.IdeSupport.LSP.Server.Tests.csproj
   LSP_SERVER_SPECS_PROJECT: tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs/Reqnroll.IdeSupport.LSP.Server.Specs.csproj
   COMMON_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.Common.Tests/Reqnroll.IdeSupport.Common.Tests.csproj
+  TESTLOGGER_PROJECT: src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj
   TESTLOGGER_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.TestLogger.Tests/Reqnroll.IdeSupport.TestLogger.Tests.csproj
 
 jobs:
@@ -282,4 +285,56 @@ jobs:
         with:
           name: server-${{ matrix.rid }}
           path: publish/${{ matrix.rid }}/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Publish TestLogger — the IDE-bundled VSTest logger
+  # (Reqnroll.IdeSupport.TestLogger, LSP-server outcome pipeline, #700/#702),
+  # uploaded as a single `testlogger` artifact. Same gating as publish-lsp-server
+  # (its own tests ran in unit-test-lsp's "Test TestLogger" step), but no RID
+  # matrix: the logger is netstandard2.0 and loads inside whichever vstest runner
+  # process is already running, so one framework-dependent publish serves every
+  # OS. Exists so consumers that bundle it (the Rider plugin via
+  # -PlspTestLoggerBuildDir) never have to run `dotnet publish` themselves on
+  # their own runner — the same contract `server-<rid>` gives them for the server.
+  # ---------------------------------------------------------------------------
+  publish-test-logger:
+    name: Publish (testlogger)
+    needs: [build-lsp, unit-test-lsp, spec-test-lsp]
+    if: |
+      always() &&
+      needs.build-lsp.result == 'success' &&
+      (needs.unit-test-lsp.result == 'success' || needs.unit-test-lsp.result == 'skipped') &&
+      (needs.spec-test-lsp.result == 'success' || needs.spec-test-lsp.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Publish TestLogger
+        # Mirrors src/Rider/build.gradle.kts's local-dev publishTestLogger task argument-for-argument
+        # (framework-dependent, no --runtime), so the artifact is byte-for-byte what a local build bundles.
+        run: |
+          dotnet publish ${{ env.TESTLOGGER_PROJECT }}             --configuration ${{ env.CONFIGURATION }}             --nologo             --output publish/testlogger             ${{ env.BUILD_NUMBER_ARG }}
+
+      - name: Upload TestLogger artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: testlogger
+          path: publish/testlogger/
           if-no-files-found: error

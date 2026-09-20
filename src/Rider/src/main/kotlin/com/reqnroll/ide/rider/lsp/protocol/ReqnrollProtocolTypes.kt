@@ -247,3 +247,38 @@ data class ScenarioTestTargetItem(
     val rowArguments: Map<String, String>? = null,
     val rowIndex: Int? = null,
 )
+
+/** Response for `reqnroll/testOutcomes/registerRun` (takes [ReqnrollEmptyParams] — see its doc comment) — mirrors RegisterTestRunResponse.cs field-for-field. [success] false means "the server couldn't start its loopback listener"; the caller falls back to its own execution's TRX output. */
+data class RegisterTestRunResponse(
+    val success: Boolean = false,
+    val runId: String? = null,
+    val endpoint: String? = null,
+)
+
+/** Params for `reqnroll/testOutcomes/getOutcome` — mirrors GetTestOutcomeParams.cs field-for-field. [assemblyPath] must match the *compiled* test container path (the same value vstest reports as `TestCase.Source`), not the `.csproj` path. */
+data class GetTestOutcomeParams(
+    val assemblyPath: String = "",
+    val typeFullName: String = "",
+    val methodName: String = "",
+)
+
+/** Response for `reqnroll/testOutcomes/getOutcome` — mirrors GetTestOutcomeResponse.cs field-for-field. [found] false means "no run reported this method this session"; the caller falls back to TRX. */
+data class GetTestOutcomeResponse(
+    val found: Boolean = false,
+    val aggregate: String = "",
+    val rows: List<TestOutcomeRowItem> = emptyList(),
+    val isRunning: Boolean = false,
+    val isStale: Boolean = false,
+)
+
+/** One row (test case) of a method's last-known outcome — mirrors TestOutcomeRowDto.cs field-for-field. */
+data class TestOutcomeRowItem(
+    val displayName: String = "",
+    val outcome: String = "",
+    val durationMs: Double = 0.0,
+    val errorMessage: String? = null,
+    val stepCount: Int = 0,
+    val failedStepIndex: Int? = null,
+    val failedStepText: String? = null,
+    val failedStepOutcome: String? = null,
+)
