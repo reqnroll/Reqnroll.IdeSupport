@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- End-to-end fixture for Reqnroll.IdeSupport.TestReporter.MTP.Tests: a minimal Reqnroll + MSTest
+       project running under Microsoft.Testing.Platform (MTP), MtpCompat mode (EnableMSTestRunner +
+       TestingPlatformDotnetTestSupport, plain `dotnet test`). Mirrors
+       tests/Core/TestLoggerFixtures/MsTestReqnroll (the VSTest-logger fixture) as closely as MTP's own
+       project shape allows. Not part of the solution's normal build graph beyond housing this project;
+       built on demand by the test.
+
+       The <TestingPlatformBuilderHook> item below is Phase 2's stand-in for the ephemeral MSBuild
+       injection mechanism Phase 4 will add (issue #715 plan §5.6/§6) — declaring it directly here is
+       explicitly sanctioned for this phase's own tests ("reference it directly ... no injection
+       mechanism yet"). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ReqnrollMtpReporterFixture</RootNamespace>
+    <!-- Keep this fixture's intermediates out of the test project's globs and the repo's Directory.Build.props warnings-as-errors. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Reqnroll.MsTest" Version="3.3.4" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.2.3" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\Core\Reqnroll.IdeSupport.TestReporter.MTP\Reqnroll.IdeSupport.TestReporter.MTP.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <TestingPlatformBuilderHook Include="a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c">
+      <DisplayName>Reqnroll.IdeSupport.TestReporter.MTP</DisplayName>
+      <TypeFullName>Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook</TypeFullName>
+    </TestingPlatformBuilderHook>
+  </ItemGroup>
+</Project>
