@@ -53,9 +53,18 @@ internal static class SessionBreadcrumbMatcher
 
             return new SessionBreadcrumb(endpoint, workspaceRoot);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception)
         {
-            return null; // A breadcrumb mid-write, or left over from an incompatible version: skip it, not fatal.
+            // A breadcrumb mid-write, left over from an incompatible version, or any other per-file
+            // failure: skip just this one file and let the caller's foreach keep going. Deliberately
+            // catch-all rather than an allowlist of expected types (IOException/UnauthorizedAccessException/
+            // JsonException) — ReadAll's whole point is tolerating one stale/corrupt breadcrumb alongside
+            // good ones from other concurrently-open IDE windows, and a narrower filter would let an
+            // unenumerated exception type escape this method, abort the foreach in ReadAll entirely, and
+            // discard every other (possibly good) breadcrumb in the same call — not just this file. The
+            // caller (ReqnrollMtpReporter.TryConnect) already swallows everything at its own boundary, but
+            // that only prevents a crash; it doesn't restore the per-file isolation this loop is built around.
+            return null;
         }
     }
 
