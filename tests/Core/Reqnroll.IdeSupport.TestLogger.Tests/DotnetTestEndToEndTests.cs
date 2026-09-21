@@ -40,16 +40,23 @@ public class DotnetTestEndToEndTests
     private static string FixtureProject() => Path.Combine(RepoRoot(), "tests", "Core", "TestLoggerFixtures", "MsTestReqnroll", "MsTestReqnroll.Fixture.csproj");
 
     /// <summary>
-    /// A directory holding only the logger, for <c>--test-adapter-path</c>. Pointing vstest at this
-    /// test's own output directory would also make it pick up <c>xunit.runner.visualstudio.testadapter.dll</c>
-    /// and friends by their <c>*TestAdapter.dll</c> suffix.
+    /// A directory holding only the logger and its own <see cref="TestReporterCommonAssemblyName"/>
+    /// dependency, for <c>--test-adapter-path</c>. Named explicitly rather than "copy everything next
+    /// to the logger": <c>typeof(ReqnrollIdeTestLogger).Assembly.Location</c> resolves to *this test
+    /// project's own* output directory at run time (where the test host loaded it from), which also
+    /// holds <c>xunit.runner.visualstudio.testadapter.dll</c> and friends — copying that wholesale
+    /// would reintroduce exactly the adapter contamination this staging step exists to avoid.
     /// </summary>
+    private const string TestReporterCommonAssemblyName = "Reqnroll.IdeSupport.TestReporter.Common.dll";
+
     private static string StageLoggerDirectory()
     {
         var source = typeof(ReqnrollIdeTestLogger).Assembly.Location;
+        var sourceDir = Path.GetDirectoryName(source)!;
         var dir = Path.Combine(Path.GetTempPath(), "reqnroll-testlogger-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         File.Copy(source, Path.Combine(dir, Path.GetFileName(source)));
+        File.Copy(Path.Combine(sourceDir, TestReporterCommonAssemblyName), Path.Combine(dir, TestReporterCommonAssemblyName));
         return dir;
     }
 

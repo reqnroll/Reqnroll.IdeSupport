@@ -9,11 +9,15 @@
        - The assembly name MUST end in "TestLogger": vstest discovers loggers from
          TestAdaptersPaths / the test source directory by that file-name suffix
          (TestPlatformConstants.TestLoggerEndsWithPattern), not by attribute scan.
-       - netstandard2.0 with ONLY Microsoft.TestPlatform.ObjectModel referenced: loggers load in
-         the *runner* process (VS's bundled net48 vstest.console.exe for Test Explorer, the SDK's
-         vstest.console.dll for `dotnet test`), which supplies ObjectModel itself. Nothing from
-         this repo may be referenced here — it would have to be shipped next to the logger and
-         resolved inside a process we don't control. -->
+       - netstandard2.0 with ONLY Microsoft.TestPlatform.ObjectModel as a package reference: loggers
+         load in the *runner* process (VS's bundled net48 vstest.console.exe for Test Explorer, the
+         SDK's vstest.console.dll for `dotnet test`), which supplies ObjectModel itself. A NuGet
+         package dependency may not be referenced here — it would have to be shipped next to the
+         logger and resolved inside a process we don't control. The ProjectReference to
+         Reqnroll.IdeSupport.TestReporter.Common below is the one deliberate exception: it is itself
+         a dependency-free netstandard2.0 library (see its own csproj), and its output DLL is copied
+         alongside this one into the VSIX's TestLogger\ folder, so it resolves the same way this
+         assembly's own DLL does — no dependency the runner process doesn't already get handed. -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>12</LangVersion>
@@ -30,6 +34,7 @@
          it (and its transitive closure) out of our output so the VSIX's TestLogger\ folder holds
          nothing but our own assembly. -->
     <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.8.0" ExcludeAssets="runtime" PrivateAssets="all" />
+    <ProjectReference Include="..\Reqnroll.IdeSupport.TestReporter.Common\Reqnroll.IdeSupport.TestReporter.Common.csproj" />
   </ItemGroup>
 
   <ItemGroup>

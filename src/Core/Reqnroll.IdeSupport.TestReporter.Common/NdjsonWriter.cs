@@ -3,15 +3,15 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace Reqnroll.IdeSupport.TestLogger;
+namespace Reqnroll.IdeSupport.TestReporter.Common;
 
 /// <summary>
-/// Minimal single-object JSON writer for the logger's wire format: flat objects with string, number,
-/// bool and string-array fields, one object per line. Hand-rolled on purpose — this assembly must not
-/// take a JSON dependency into the test runner process (see the csproj header), and the vocabulary is
-/// small enough that a serializer would be more code than this.
+/// Minimal single-object JSON writer for the reporter wire format: flat objects with string, number,
+/// bool and string-array fields, one object per line. Hand-rolled on purpose — the reporters that use
+/// this must not take a JSON dependency into the process they load into (a test runner), and the
+/// vocabulary is small enough that a serializer would be more code than this.
 /// </summary>
-internal sealed class NdjsonWriter
+public sealed class NdjsonWriter
 {
     private readonly StringBuilder _sb = new("{");
     private bool _hasField;

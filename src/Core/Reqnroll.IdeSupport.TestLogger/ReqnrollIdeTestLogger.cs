@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Client;
+using Reqnroll.IdeSupport.TestReporter.Common;
 
 namespace Reqnroll.IdeSupport.TestLogger;
 

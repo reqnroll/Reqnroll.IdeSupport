@@ -7,15 +7,15 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Reqnroll.IdeSupport.TestLogger;
+namespace Reqnroll.IdeSupport.TestReporter.Common;
 
 /// <summary>
-/// Where the logger's NDJSON lines go. Two sinks, both optional and both fire-and-forget: a TCP
-/// loopback connection to the IDE that registered the logger (the real channel), and an append-only
-/// file (troubleshooting mirror, also what the spike used). Every failure mode ends in "stop sending",
-/// never in an exception reaching vstest — a logger must not slow down or fail a test run.
+/// Where a reporter's NDJSON lines go. Two sinks, both optional and both fire-and-forget: a TCP
+/// loopback connection to the IDE that registered the reporter (the real channel), and an append-only
+/// file (troubleshooting mirror). Every failure mode ends in "stop sending", never in an exception
+/// reaching the test runner — a reporter must not slow down or fail a test run.
 /// </summary>
-internal sealed class OutcomeSink : IDisposable
+public sealed class OutcomeSink : IDisposable
 {
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(2);
@@ -142,7 +142,7 @@ internal sealed class OutcomeSink : IDisposable
         }
     }
 
-    internal static bool TryParseEndpoint(string? endpoint, out IPAddress address, out int port)
+    public static bool TryParseEndpoint(string? endpoint, out IPAddress address, out int port)
     {
         address = IPAddress.Loopback;
         port = 0;
