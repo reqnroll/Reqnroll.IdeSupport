@@ -85,4 +85,64 @@ public sealed class MtpProjectDetectionTests : IDisposable
 
         MtpProjectDetection.IsMtpCapable(Path.Combine(_dir, "Missing", "Missing.csproj")).Should().BeFalse();
     }
+
+    // ── MSBuild-evaluation fallback (issue #722-equivalent: imported-props-file gap) ──────────
+
+    [Fact]
+    public void IsMtpCapable_trusts_a_true_MSBuild_evaluation_for_a_test_project_the_text_scan_missed()
+    {
+        // A project made MTP-capable only through an imported props file (e.g. the full xunit.v3
+        // runner package pulling in Microsoft.Testing.Platform.MSBuild) has none of the marker
+        // properties as literal text anywhere a scan would look, but a real MSBuild evaluation sees it.
+        var project = ProjectFile(
+            "<Project><ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.14.1\" /></ItemGroup></Project>");
+
+        MtpProjectDetection.IsMtpCapable(project, _ => true).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsMtpCapable_does_not_invoke_MSBuild_evaluation_for_a_project_that_is_not_a_test_project()
+    {
+        // Gated on "looks like a test project" so a solution-wide scan doesn't shell out to
+        // `dotnet msbuild` for every ordinary non-test project.
+        var project = ProjectFile("<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+        var evaluated = false;
+
+        var result = MtpProjectDetection.IsMtpCapable(project, _ => { evaluated = true; return true; });
+
+        result.Should().BeFalse();
+        evaluated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsMtpCapable_is_false_when_the_MSBuild_evaluation_returns_false_for_a_test_project()
+    {
+        var project = ProjectFile(
+            "<Project><ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.14.1\" /></ItemGroup></Project>");
+
+        MtpProjectDetection.IsMtpCapable(project, _ => false).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsMtpCapable_is_false_when_the_MSBuild_evaluation_is_unavailable_for_a_test_project()
+    {
+        var project = ProjectFile(
+            "<Project><ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.14.1\" /></ItemGroup></Project>");
+
+        MtpProjectDetection.IsMtpCapable(project, _ => null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsMtpCapable_does_not_invoke_MSBuild_evaluation_when_the_text_scan_already_found_a_match()
+    {
+        var project = ProjectFile(
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup>" +
+            "<ItemGroup><PackageReference Include=\"Microsoft.NET.Test.Sdk\" Version=\"17.14.1\" /></ItemGroup></Project>");
+        var evaluated = false;
+
+        var result = MtpProjectDetection.IsMtpCapable(project, _ => { evaluated = true; return true; });
+
+        result.Should().BeTrue();
+        evaluated.Should().BeFalse();
+    }
 }
