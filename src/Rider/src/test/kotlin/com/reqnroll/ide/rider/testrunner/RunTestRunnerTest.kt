@@ -192,7 +192,7 @@ class RunTestRunnerTest {
                 "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
         )
 
-        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -201,13 +201,21 @@ class RunTestRunnerTest {
         val project = projectFile(root, "<Project><PropertyGroup><EnableNUnitRunner>true</EnableNUnitRunner></PropertyGroup></Project>")
         File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
 
-        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
-    fun `looksLikeMtpProject is false when only MTP-capable, with no evidence dotnet test actually redirects to it`() {
-        // Plan §7 risk #5: EnableMSTestRunner/EnableNUnitRunner alone doesn't mean dotnet test
-        // ignores --logger trx — a project can be MTP-capable and still run under plain VSTest.
+    fun `looksLikeMtpProject is true when only MTP-capable, with no evidence dotnet test actually redirects to it`() {
+        // Corrected (issue #722 follow-up) from the original plan §7 risk #5 assumption that
+        // capability alone is harmless without a redirect/native signal — live-verified false: a
+        // project with IsTestingPlatformApplication=true and neither TestingPlatformDotnetTestSupport
+        // nor a native global.json opt-in set still has *every* dotnet test invocation hard-rejected
+        // by Microsoft.Testing.Platform.MSBuild.targets on the .NET 10 SDK ("Testing with VSTest
+        // target is no longer supported..."), --logger or not. looksLikeMtpProject only answers "was
+        // a missing TRX our fault", so capability alone is exactly the right (broader) signal for it
+        // — detectDotnetTestMode's own VS_TEST-when-no-redirect choice is unaffected by this: it's a
+        // separate question (which command-line shape to *attempt*), and it stays covered by the
+        // other detectDotnetTestMode tests above.
         val root = tempDir()
         val project = projectFile(
             root,
@@ -215,7 +223,7 @@ class RunTestRunnerTest {
                 "<IsTestingPlatformApplication>true</IsTestingPlatformApplication></PropertyGroup></Project>",
         )
 
-        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -223,7 +231,7 @@ class RunTestRunnerTest {
         val root = tempDir()
         val project = projectFile(root, "<Project><PropertyGroup><TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>")
 
-        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -231,7 +239,7 @@ class RunTestRunnerTest {
         val root = tempDir()
         val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
 
-        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -243,7 +251,7 @@ class RunTestRunnerTest {
                 "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
         )
 
-        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -256,7 +264,7 @@ class RunTestRunnerTest {
         )
         val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>", "src/Tests/Tests.csproj")
 
-        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -271,7 +279,7 @@ class RunTestRunnerTest {
         )
         val project = projectFile(root, "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup></Project>", "src/Tests/Tests.csproj")
 
-        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
@@ -285,14 +293,14 @@ class RunTestRunnerTest {
         File(repo, ".git").mkdirs()
         val project = projectFile(repo, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>", "src/Tests/Tests.csproj")
 
-        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path) { null })
     }
 
     @Test
     fun `looksLikeMtpProject is false for a project file that does not exist and no props anywhere`() {
         val root = tempDir()
 
-        assertFalse(RunTestRunner.looksLikeMtpProject(File(root, "Missing/Missing.csproj").path))
+        assertFalse(RunTestRunner.looksLikeMtpProject(File(root, "Missing/Missing.csproj").path) { null })
     }
 
     // ── detectDotnetTestMode ─────────────────────────────────────────────────
@@ -302,7 +310,7 @@ class RunTestRunnerTest {
         val root = tempDir()
         val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
 
-        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path))
+        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path) { null })
     }
 
     @Test
@@ -310,7 +318,7 @@ class RunTestRunnerTest {
         val root = tempDir()
         val project = projectFile(root, "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup></Project>")
 
-        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path))
+        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path) { null })
     }
 
     @Test
@@ -322,7 +330,7 @@ class RunTestRunnerTest {
                 "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
         )
 
-        assertEquals(DotnetTestMode.MTP_COMPAT, RunTestRunner.detectDotnetTestMode(project.path))
+        assertEquals(DotnetTestMode.MTP_COMPAT, RunTestRunner.detectDotnetTestMode(project.path) { null })
     }
 
     @Test
@@ -337,7 +345,7 @@ class RunTestRunnerTest {
         )
         File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
 
-        assertEquals(DotnetTestMode.MTP_NATIVE, RunTestRunner.detectDotnetTestMode(project.path))
+        assertEquals(DotnetTestMode.MTP_NATIVE, RunTestRunner.detectDotnetTestMode(project.path) { null })
     }
 
     @Test
@@ -347,7 +355,7 @@ class RunTestRunnerTest {
         File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
         val project = projectFile(root, "<Project><PropertyGroup><EnableNUnitRunner>true</EnableNUnitRunner></PropertyGroup></Project>", "src/Tests/Tests.csproj")
 
-        assertEquals(DotnetTestMode.MTP_NATIVE, RunTestRunner.detectDotnetTestMode(project.path))
+        assertEquals(DotnetTestMode.MTP_NATIVE, RunTestRunner.detectDotnetTestMode(project.path) { null })
     }
 
     @Test
@@ -356,6 +364,124 @@ class RunTestRunnerTest {
         val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
         File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
 
-        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path))
+        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path) { null })
+    }
+
+    // ── detectDotnetTestMode: MSBuild-evaluated signal (issue #722) ─────────────
+
+    @Test
+    fun `detectDotnetTestMode trusts a true MSBuild evaluation even when the project file text says nothing`() {
+        // Reproduces issue #722: a project made MTP-capable only through an imported props file
+        // (e.g. referencing the full xunit.v3 runner package) has none of the marker properties as
+        // literal text anywhere a scan would look, but a real MSBuild evaluation sees it.
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>")
+
+        val mode = RunTestRunner.detectDotnetTestMode(project.path) {
+            RunTestRunner.MtpEvaluation(mtpCapable = true, dotnetTestRedirectsToMtp = true)
+        }
+
+        assertEquals(DotnetTestMode.MTP_COMPAT, mode)
+    }
+
+    @Test
+    fun `detectDotnetTestMode is VS_TEST when the MSBuild evaluation says mtpCapable but nothing redirects`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>")
+
+        val mode = RunTestRunner.detectDotnetTestMode(project.path) {
+            RunTestRunner.MtpEvaluation(mtpCapable = true, dotnetTestRedirectsToMtp = false)
+        }
+
+        assertEquals(DotnetTestMode.VS_TEST, mode)
+    }
+
+    @Test
+    fun `detectDotnetTestMode combines a true MSBuild evaluation with a native global json opt-in`() {
+        val root = tempDir()
+        File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>")
+
+        val mode = RunTestRunner.detectDotnetTestMode(project.path) {
+            RunTestRunner.MtpEvaluation(mtpCapable = true, dotnetTestRedirectsToMtp = false)
+        }
+
+        assertEquals(DotnetTestMode.MTP_NATIVE, mode)
+    }
+
+    @Test
+    fun `detectDotnetTestMode falls back to the text scan when the MSBuild evaluation is unavailable`() {
+        val root = tempDir()
+        val project = projectFile(
+            root,
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
+        )
+
+        val mode = RunTestRunner.detectDotnetTestMode(project.path) { null }
+
+        assertEquals(DotnetTestMode.MTP_COMPAT, mode)
+    }
+
+    @Test
+    fun `detectDotnetTestMode does not let a Directory Build props text match override a false MSBuild evaluation`() {
+        // The MSBuild evaluation already reflects every imported props file's real, Condition-aware
+        // resolved value — a plain text match in Directory.Build.props (which could sit inside a
+        // Condition that never actually applies) must not override a real "not capable" result.
+        val root = tempDir()
+        File(root, ".git").mkdirs()
+        File(root, "Directory.Build.props").writeText(
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>"
+        )
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>", "src/Tests/Tests.csproj")
+
+        val mode = RunTestRunner.detectDotnetTestMode(project.path) {
+            RunTestRunner.MtpEvaluation(mtpCapable = false, dotnetTestRedirectsToMtp = false)
+        }
+
+        assertEquals(DotnetTestMode.VS_TEST, mode)
+    }
+
+    // ── isMtpCapable / looksLikeMtpProject: MSBuild-evaluated signal ─────────
+
+    @Test
+    fun `isMtpCapable is true from a true MSBuild evaluation even without a redirect signal`() {
+        // The exact shape live-verified against a real project (IsTestingPlatformApplication=true,
+        // TestingPlatformDotnetTestSupport unset): detectDotnetTestMode correctly still picks
+        // VS_TEST as the command-line shape to attempt, but isMtpCapable must be true so a resulting
+        // "no TRX" reads as Inconclusive, not Failure.
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>")
+
+        val capable = RunTestRunner.isMtpCapable(project.path) {
+            RunTestRunner.MtpEvaluation(mtpCapable = true, dotnetTestRedirectsToMtp = false)
+        }
+
+        assertTrue(capable)
+    }
+
+    @Test
+    fun `isMtpCapable is false from a false MSBuild evaluation`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>")
+
+        val capable = RunTestRunner.isMtpCapable(project.path) {
+            RunTestRunner.MtpEvaluation(mtpCapable = false, dotnetTestRedirectsToMtp = false)
+        }
+
+        assertFalse(capable)
+    }
+
+    // ── evaluateMtpPropertiesViaMsbuild ──────────────────────────────────────
+
+    @Test
+    fun `evaluateMtpPropertiesViaMsbuild returns null for a project path that cannot be evaluated`() {
+        // No real dotnet/MSBuild project exists at this path — exercises the "process fails/exits
+        // non-zero" branch without asserting anything about a specific error message.
+        val root = tempDir()
+        val missing = File(root, "Missing/Missing.csproj").path
+
+        assertNull(RunTestRunner.evaluateMtpPropertiesViaMsbuild(missing))
     }
 }

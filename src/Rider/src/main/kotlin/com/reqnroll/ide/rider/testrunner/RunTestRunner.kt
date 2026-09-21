@@ -1,5 +1,6 @@
 package com.reqnroll.ide.rider.testrunner
 
+import com.google.gson.JsonParser
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -477,38 +478,54 @@ object RunTestRunner {
     /**
      * Ad hoc, narrow mode detection (issue #715 plan §5.7/§6 phase 4: *"this phase can ship with a
      * narrower, ad hoc version of that detection, since the full mode-detection machinery isn't
-     * needed yet"* — phase 3's wording, graduated here into the real three-way state) — a plain
-     * text scan of [projectFilePath] itself and every `Directory.Build.props`/`global.json` found
-     * walking up from its folder to the nearest `.git`/`.sln`. Not a full MSBuild evaluation
-     * (misses e.g. a condition-guarded property, or one set only via an `Import`), but enough to
-     * catch the common case Microsoft's own docs recommend — setting the property once in a
-     * repo-root `Directory.Build.props` — without needing a generic MSBuild-property read off
-     * Rider's `RunnableProject` model, which has none (plan §5.7 risk #7: unlike VS's
-     * `project.Properties.Item(name)` or VS Code's `-getProperty:`, Rider's TFM read goes through a
-     * narrower, purpose-built RD-protocol field — confirmed by
-     * [com.reqnroll.ide.rider.lsp.project.ReqnrollProjectBaseline]'s own `toClassicMoniker`
-     * workaround for that same gap; still unconfirmed whether a generic path exists at all).
+     * needed yet"* — phase 3's wording, graduated here into the real three-way state), now backed
+     * primarily by [evaluateMtp] (production default [evaluateMtpPropertiesViaMsbuild]) — a real
+     * `dotnet msbuild -getProperty:...` evaluation — with a plain text scan of [projectFilePath]
+     * itself and every `Directory.Build.props`/`global.json` found walking up from its folder to
+     * the nearest `.git`/`.sln` as the fallback when that evaluation can't run at all (issue #722:
+     * the original text-only scan missed a project made MTP-capable only through an *imported*
+     * `.props`/`.targets` file — e.g. referencing the full `xunit.v3` runner package pulls in
+     * `microsoft.testing.platform.msbuild`, which sets `IsTestingPlatformApplication=true` from its
+     * own props, invisible to a scan of the project file's own literal text. Undetected, this kept
+     * sending `--logger trx` into a project whose `dotnet test` now hard-rejects it: *"Testing with
+     * VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and
+     * later"* — a real Run/Test-Explorer failure, not merely a missed classification).
      *
-     * Combines two independent signals exactly as plan §5.7 describes: [MTP_CAPABLE_PATTERN]
-     * (per-project) and, if capable, which of [GLOBAL_JSON_MTP_RUNNER_PATTERN] (workspace-level —
-     * native mode, checked/overridden by the `DOTNET_TEST_RUNNER` env var per its own documented
-     * precedence) or [DOTNET_TEST_MTP_REDIRECT_PATTERN] (per-project — legacy `dotnet test`
-     * redirect) applies. Plan §7 risk #5's warning is the reason capability alone isn't enough: a
-     * project can set `EnableMSTestRunner`/`EnableNUnitRunner` and still run under plain VSTest
-     * today (TRX written normally, native-mode CLI shape never used) if neither is active.
-     * `internal` for testability.
+     * Combines two independent signals exactly as plan §5.7 describes: capability (per-project) and,
+     * if capable, which of [GLOBAL_JSON_MTP_RUNNER_PATTERN] (workspace-level — native mode,
+     * checked/overridden by the `DOTNET_TEST_RUNNER` env var per its own documented precedence) or
+     * the redirect signal (per-project — legacy `dotnet test` redirect) applies. Plan §7 risk #5's
+     * warning is the reason capability alone isn't enough: a project can set
+     * `EnableMSTestRunner`/`EnableNUnitRunner` and still run under plain VSTest today (TRX written
+     * normally, native-mode CLI shape never used) if neither is active. `internal` for testability;
+     * tests inject `{ null }` for [evaluateMtp] to exercise the text-scan fallback in isolation
+     * without shelling out to a real `dotnet msbuild`.
      */
-    internal fun detectDotnetTestMode(projectFilePath: String): DotnetTestMode {
+    internal fun detectDotnetTestMode(
+        projectFilePath: String,
+        evaluateMtp: (String) -> MtpEvaluation? = ::evaluateMtpPropertiesViaMsbuild,
+    ): DotnetTestMode {
         val projectFile = File(projectFilePath)
-        var mtpCapable = readTextOrNull(projectFile)?.let(MTP_CAPABLE_PATTERN::containsMatchIn) == true
-        var dotnetTestRedirectsToMtp = readTextOrNull(projectFile)?.let(DOTNET_TEST_MTP_REDIRECT_PATTERN::containsMatchIn) == true
+        val evaluation = evaluateMtp(projectFilePath)
+        var mtpCapable = evaluation?.mtpCapable
+            ?: (readTextOrNull(projectFile)?.let(MTP_CAPABLE_PATTERN::containsMatchIn) == true)
+        var dotnetTestRedirectsToMtp = evaluation?.dotnetTestRedirectsToMtp
+            ?: (readTextOrNull(projectFile)?.let(DOTNET_TEST_MTP_REDIRECT_PATTERN::containsMatchIn) == true)
         var nativeModeActive = false
 
         var dir = projectFile.parentFile
         while (dir != null) {
-            readTextOrNull(File(dir, "Directory.Build.props"))?.let { props ->
-                if (MTP_CAPABLE_PATTERN.containsMatchIn(props)) mtpCapable = true
-                if (DOTNET_TEST_MTP_REDIRECT_PATTERN.containsMatchIn(props)) dotnetTestRedirectsToMtp = true
+            // Only fold the Directory.Build.props text scan into mtpCapable/dotnetTestRedirectsToMtp
+            // when there's no real MSBuild evaluation to trust instead — that evaluation already
+            // reflects every imported props file's *actual* resolved value (Conditions included), so
+            // letting this less reliable text match OR its way past a real "false" would reintroduce
+            // exactly the kind of false positive a plain scan can't rule out (e.g. text sitting inside
+            // a Condition-guarded PropertyGroup that never actually applies).
+            if (evaluation == null) {
+                readTextOrNull(File(dir, "Directory.Build.props"))?.let { props ->
+                    if (MTP_CAPABLE_PATTERN.containsMatchIn(props)) mtpCapable = true
+                    if (DOTNET_TEST_MTP_REDIRECT_PATTERN.containsMatchIn(props)) dotnetTestRedirectsToMtp = true
+                }
             }
             readTextOrNull(File(dir, "global.json"))?.let { json ->
                 if (GLOBAL_JSON_MTP_RUNNER_PATTERN.containsMatchIn(json)) nativeModeActive = true
@@ -534,9 +551,118 @@ object RunTestRunner {
         }
     }
 
-    /** True for either MTP state — the reactive safety-net check inside [runDotnetTest]'s VsTest branch uses this, not the full [DotnetTestMode]. See [detectDotnetTestMode]. */
-    internal fun looksLikeMtpProject(projectFilePath: String): Boolean =
-        detectDotnetTestMode(projectFilePath) != DotnetTestMode.VS_TEST
+    /**
+     * The reactive safety-net check inside [runDotnetTest]'s VsTest branch: whether "no TRX
+     * appeared" should be read as *inconclusive* (an MTP-related quirk, not a genuine launch
+     * failure) rather than [DotnetTestOutcome.Failure]. Deliberately keys off raw MTP *capability*
+     * alone — [isMtpCapable] — rather than `detectDotnetTestMode(...) != DotnetTestMode.VS_TEST`.
+     * Those aren't equivalent: live-verified (issue #722 follow-up) that a project with
+     * `IsTestingPlatformApplication=true` but *neither* `TestingPlatformDotnetTestSupport` nor a
+     * native `global.json` opt-in set — which [detectDotnetTestMode] correctly still resolves to
+     * `VS_TEST`, since that's genuinely the right *command-line shape* to attempt — nonetheless has
+     * *every* `dotnet test` invocation hard-rejected by `Microsoft.Testing.Platform.MSBuild.targets`
+     * on the .NET 10 SDK ("Testing with VSTest target is no longer supported..."), `--logger` or
+     * not. So a project can be MTP-*capable* enough to break `dotnet test` outright while still
+     * being the mode [detectDotnetTestMode] should attempt first — those are two different
+     * questions, and only capability alone answers "was this run's failure even our fault."
+     */
+    internal fun looksLikeMtpProject(
+        projectFilePath: String,
+        evaluateMtp: (String) -> MtpEvaluation? = ::evaluateMtpPropertiesViaMsbuild,
+    ): Boolean = isMtpCapable(projectFilePath, evaluateMtp)
+
+    /** The `mtpCapable` half of [detectDotnetTestMode]'s computation, standalone — see [looksLikeMtpProject] for why this needs to exist separately from the full mode precedence. */
+    internal fun isMtpCapable(
+        projectFilePath: String,
+        evaluateMtp: (String) -> MtpEvaluation? = ::evaluateMtpPropertiesViaMsbuild,
+    ): Boolean {
+        val projectFile = File(projectFilePath)
+        val evaluation = evaluateMtp(projectFilePath)
+        var mtpCapable = evaluation?.mtpCapable
+            ?: (readTextOrNull(projectFile)?.let(MTP_CAPABLE_PATTERN::containsMatchIn) == true)
+
+        if (evaluation == null) {
+            var dir = projectFile.parentFile
+            while (dir != null) {
+                readTextOrNull(File(dir, "Directory.Build.props"))?.let { props ->
+                    if (MTP_CAPABLE_PATTERN.containsMatchIn(props)) mtpCapable = true
+                }
+                if (File(dir, ".git").exists()) break // Workspace root reached; stop climbing.
+                dir = dir.parentFile
+            }
+        }
+        return mtpCapable
+    }
+
+    /** [detectDotnetTestMode]'s two MSBuild-evaluated signals — see [evaluateMtpPropertiesViaMsbuild]. */
+    internal data class MtpEvaluation(val mtpCapable: Boolean, val dotnetTestRedirectsToMtp: Boolean)
+
+    /** The property names [evaluateMtpPropertiesViaMsbuild] asks MSBuild to resolve; each one set to `true` makes a project MTP-*capable* (mirrors [MTP_CAPABLE_PATTERN]'s vocabulary). */
+    private val MTP_CAPABLE_PROPERTY_NAMES = listOf(
+        "EnableMSTestRunner", "EnableNUnitRunner", "UseMicrosoftTestingPlatformRunner", "IsTestingPlatformApplication",
+    )
+
+    /** The property [evaluateMtpPropertiesViaMsbuild] asks MSBuild to resolve for the legacy `dotnet test` redirect (mirrors [DOTNET_TEST_MTP_REDIRECT_PATTERN]). */
+    private const val MTP_REDIRECT_PROPERTY_NAME = "TestingPlatformDotnetTestSupport"
+
+    /** How long to wait for `dotnet msbuild -getProperty:...` before giving up and falling back to the text scan. */
+    private const val MSBUILD_EVAL_TIMEOUT_SECONDS = 20L
+
+    /**
+     * Evaluates [projectFilePath]'s *real*, MSBuild-resolved MTP opt-in properties via `dotnet
+     * msbuild -getProperty:...` (mirrors VS Code's `msbuildEvaluator.ts` — plan §5.7 risk #7 flagged
+     * this gap for Rider specifically, since its `RunnableProject` model has no generic
+     * property-read). Unlike [MTP_CAPABLE_PATTERN]'s plain text scan of the project file and
+     * `Directory.Build.props`, this also sees a property set only via an *imported*
+     * `.props`/`.targets` file — which is exactly how a project referencing the full `xunit.v3`
+     * runner package becomes MTP-capable (`microsoft.testing.platform.msbuild` sets
+     * `IsTestingPlatformApplication=true` from its own props, never appearing as literal text in
+     * either file a scan would read — issue #722, confirmed live: `dotnet msbuild
+     * -getProperty:IsTestingPlatformApplication` returns `true` for such a project while a grep of
+     * its `.csproj` text finds nothing).
+     *
+     * Returns null — callers fall back to the text scan — if the process can't start, times out,
+     * exits non-zero, or its output isn't the expected `{"Properties": {...}}` shape; this must
+     * never throw or block a Run click indefinitely on a broken/unrestorable project.
+     */
+    internal fun evaluateMtpPropertiesViaMsbuild(projectFilePath: String): MtpEvaluation? {
+        val propertyNames = MTP_CAPABLE_PROPERTY_NAMES + MTP_REDIRECT_PROPERTY_NAME
+        return try {
+            // stderr is discarded, not merely unread — an un-drained pipe that fills its OS buffer
+            // would otherwise block the child process writing to it, hanging the readText() below
+            // until the timeout even for an evaluation that would otherwise succeed (same pitfall
+            // runDotnetTest's own Redirect.DISCARD comment documents).
+            val process = ProcessBuilder(
+                DotnetCliLocator.resolve(), "msbuild", projectFilePath,
+                "-getProperty:${propertyNames.joinToString(",")}", "-nologo",
+            )
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            val completed = process.waitFor(MSBUILD_EVAL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                return null
+            }
+            if (process.exitValue() != 0) return null
+
+            val properties = JsonParser.parseString(output).asJsonObject.getAsJsonObject("Properties") ?: return null
+            fun isTrue(name: String) = properties.get(name)
+                ?.takeIf { it.isJsonPrimitive }
+                ?.asString
+                ?.trim()
+                ?.equals("true", ignoreCase = true) == true
+
+            MtpEvaluation(
+                mtpCapable = MTP_CAPABLE_PROPERTY_NAMES.any(::isTrue),
+                dotnetTestRedirectsToMtp = isTrue(MTP_REDIRECT_PROPERTY_NAME),
+            )
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn(
+                "RunTestRunner: MSBuild property evaluation failed for $projectFilePath — falling back to a text scan", ex)
+            null
+        }
+    }
 
     private fun readTextOrNull(file: File): String? =
         try {
