@@ -306,11 +306,17 @@ object RunTestRunner {
         var ephemeralInjectionDir: File? = null
 
         return try {
-            val command = mutableListOf(DotnetCliLocator.resolve(), "test", projectFile, "--filter", filter, "--nologo")
+            val command = mutableListOf(DotnetCliLocator.resolve(), "test", projectFile, "--filter", filter)
 
             when (mode) {
                 DotnetTestMode.VS_TEST -> {
+                    // --nologo is VSTest-CLI-only: live-verified (issue #722 follow-up) that
+                    // `dotnet test` under native/compat MTP mode doesn't recognize it at all, and
+                    // its mere presence — even alone, with no --filter — derails the run entirely
+                    // ("Zero tests ran", exit code 5) instead of being ignored as an unknown flag.
+                    // So it must never be added outside this branch.
                     command += listOf(
+                        "--nologo",
                         "--logger", "trx;LogFileName=$trxFileName",
                         "--results-directory", resultsDir.absolutePath,
                     )
@@ -322,9 +328,11 @@ object RunTestRunner {
                     }
                 }
                 DotnetTestMode.MTP_COMPAT, DotnetTestMode.MTP_NATIVE -> {
-                    // Nothing added here: outcomes for these modes come from the ephemerally
-                    // injected reporter reporting to the LSP server directly (below), not from
-                    // anything on this command line.
+                    // No --logger/--test-adapter-path here: outcomes for these modes come from the
+                    // ephemerally injected reporter reporting to the LSP server directly (below),
+                    // not from anything on this command line. --filter (above) does work here —
+                    // live-verified: MTP's own "Extension Options" documents --filter as accepting
+                    // "the VSTest filter syntax" directly, no translation needed.
                 }
             }
 
