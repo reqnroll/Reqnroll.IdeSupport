@@ -154,7 +154,30 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcomeSource}");
 
         // Pre-fetch/cache now (see this type's remarks) — nothing further to resolve for GetDetailsAsync.
-        return new CodeLensDataPointDescriptor { Description = label, ImageId = imageId };
+        return new CodeLensDataPointDescriptor { Description = label, TooltipText = BuildTooltip(_cachedOutcome), ImageId = imageId };
+    }
+
+    /// <summary>
+    /// The lens's own inline hover text. Left unset (VS falls back to its generic keybinding hint,
+    /// e.g. "Alt+1") when there's no outcome yet to summarize — that's the correct "nothing to say"
+    /// state, not a bug. When there is one, this is the only place the failure detail
+    /// (<see cref="BuildOutcomeTable"/> renders the same data per-row, but only inside the Details
+    /// popup a click opens) reaches the hover a user sees without clicking through.
+    /// </summary>
+    internal static string? BuildTooltip(RunTestOutcomeEntry? outcome)
+    {
+        if (outcome is null || outcome.Rows.Count == 0)
+            return null;
+
+        var failing = outcome.Rows.FirstOrDefault(r => string.Equals(r.Outcome, "Failed", StringComparison.OrdinalIgnoreCase));
+        if (failing is null)
+            return outcome.Aggregate;
+
+        var stepDetail = failing.FailedStepText is null
+            ? string.Empty
+            : $": {failing.FailedStepText} ({DescribeStepOutcome(failing.FailedStepOutcome)})";
+        var message = string.IsNullOrEmpty(failing.ErrorMessage) ? string.Empty : $" — {failing.ErrorMessage}";
+        return $"{outcome.Aggregate}{stepDetail}{message}";
     }
 
     /// <inheritdoc />
