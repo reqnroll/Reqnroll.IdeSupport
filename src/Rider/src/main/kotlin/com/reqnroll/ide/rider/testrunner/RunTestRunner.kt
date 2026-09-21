@@ -163,16 +163,48 @@ object RunTestRunner {
             .joinToString("|") { "FullyQualifiedName=$it" }
 
     /**
-     * The compiled test container path for [runnableProject] — what the bundled VSTest logger
-     * reports as `TestCase.Source`, needed to look up outcomes server-side (`TestOutcomeKey`
-     * requires it; type+method alone isn't guaranteed unique across containers). Rider's RD
-     * project model has no dedicated "test output assembly" concept; [ProjectOutput.exePath] is
-     * the field the platform's own run infrastructure uses for exactly this — the built artifact
-     * path — for any SDK-style project, executable or not. Returns null (skip the server lookup
-     * entirely, fall back to TRX) rather than guessing when a project has no recorded output.
+     * The compiled test container path for [runnableProject] — what the bundled VSTest logger and
+     * the MTP reporter both report as their result's `Source`/`Assembly.GetEntryAssembly()?.Location`,
+     * needed to look up outcomes server-side (`TestOutcomeKey` requires it; type+method alone isn't
+     * guaranteed unique across containers). Rider's RD project model has no dedicated "test output
+     * assembly" concept; [ProjectOutput.exePath] is the field the platform's own run infrastructure
+     * uses for exactly this — the built artifact path — for any SDK-style project, executable or
+     * not. Returns null (skip the server lookup entirely, fall back to TRX/exit-code) rather than
+     * guessing when a project has no recorded output.
+     *
+     * [normalizeToManagedAssemblyPath] corrects one specific way that doc comment turns out to be
+     * wrong: an MTP-mode project's `xunit.v3` package forces `OutputType=Exe`, which gets it a real
+     * native apphost binary alongside its managed `.dll` — and `exePath` then points at *that*
+     * apphost, not the `.dll` (issue #722 follow-up: circumstantial but decisive evidence — the
+     * persisted `test-outcomes.json` had a perfectly detailed row stored under a `.dll` `Source`
+     * after a real run, yet ten straight `getOutcome` polls for the exact same type+method all came
+     * back not-found; the reporter always reports `Assembly.GetEntryAssembly()?.Location`, which is
+     * always the managed `.dll` even when launched via an apphost, so `Source` was the only field
+     * that could explain a mismatch given type/method are independently derived from the same
+     * Reqnroll-generated method on both sides). This surfaced as the Run lens glyph correctly
+     * updating (exit-code fallback still worked) but its hover never showing more than "Run" — no
+     * failed-step detail — because `pollServerResult` always timed out and fell back to the
+     * detail-free exit-code-only result.
      */
     internal fun outputAssemblyPath(runnableProject: RunnableProject): String? =
-        runnableProject.projectOutputs.firstOrNull()?.exePath?.takeIf { it.isNotBlank() }
+        runnableProject.projectOutputs.firstOrNull()?.exePath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalizeToManagedAssemblyPath)
+
+    /**
+     * If [rawExePath] already names a `.dll`, returns it unchanged (the pre-MTP case this always
+     * used to be). Otherwise it's a native apphost binary — SDK convention names it identically to
+     * its managed assembly, sans extension, in the same directory — so this returns that `.dll`
+     * sibling when it actually exists on disk, or [rawExePath] unchanged if it doesn't (a project
+     * shape this hasn't anticipated; better to try the — possibly wrong — original path than to
+     * invent one that's certainly wrong). `internal` for testability.
+     */
+    internal fun normalizeToManagedAssemblyPath(rawExePath: String): String {
+        if (rawExePath.endsWith(".dll", ignoreCase = true)) return rawExePath
+        val exeFile = File(rawExePath)
+        val dllSibling = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".dll")
+        return if (dllSibling.exists()) dllSibling.path else rawExePath
+    }
 
     /**
      * The vstest `--logger` argument value registering the bundled logger, mirroring

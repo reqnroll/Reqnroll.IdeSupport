@@ -59,6 +59,42 @@ class RunTestRunnerTest {
         assertNull(RunTestRunner.findOwningProjectPath("/repo/Foo/A.feature", emptyList()))
     }
 
+    // ── normalizeToManagedAssemblyPath ───────────────────────────────────────
+
+    @Test
+    fun `normalizeToManagedAssemblyPath returns a dll path unchanged`() {
+        val path = "/repo/bin/Debug/net8.0/Tests.dll"
+        assertEquals(path, RunTestRunner.normalizeToManagedAssemblyPath(path))
+    }
+
+    @Test
+    fun `normalizeToManagedAssemblyPath resolves an apphost binary to its dll sibling when it exists`() {
+        // Reproduces issue #722 follow-up: an MTP-mode project's exePath points at the native
+        // apphost (no extension on Linux/macOS), not the managed .dll the reporter actually reports.
+        val root = tempDir()
+        val exePath = File(root, "Tests").path
+        File(root, "Tests.dll").writeText("not a real assembly, just needs to exist")
+
+        assertEquals(File(root, "Tests.dll").path, RunTestRunner.normalizeToManagedAssemblyPath(exePath))
+    }
+
+    @Test
+    fun `normalizeToManagedAssemblyPath resolves a Windows apphost exe to its dll sibling`() {
+        val root = tempDir()
+        val exePath = File(root, "Tests.exe").path
+        File(root, "Tests.dll").writeText("not a real assembly, just needs to exist")
+
+        assertEquals(File(root, "Tests.dll").path, RunTestRunner.normalizeToManagedAssemblyPath(exePath))
+    }
+
+    @Test
+    fun `normalizeToManagedAssemblyPath falls back to the original path when no dll sibling exists`() {
+        val root = tempDir()
+        val exePath = File(root, "Tests").path
+
+        assertEquals(exePath, RunTestRunner.normalizeToManagedAssemblyPath(exePath))
+    }
+
     // ── buildTestFilter ──────────────────────────────────────────────────────
 
     @Test
