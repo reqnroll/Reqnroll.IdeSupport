@@ -4,6 +4,7 @@ import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
@@ -303,7 +304,16 @@ val publishMtpReporter by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named<Sync>("prepareSandbox") {
+// The IntelliJ Platform Gradle Plugin registers one PrepareSandboxTask per run/test entry point
+// (prepareSandbox, prepareSandbox_runIde, prepareSandbox_runIdeBackend, prepareSandbox_runIdeFrontend,
+// prepareTestSandbox, ...) — each populating its own separate sandbox directory. Configuring only the
+// plain "prepareSandbox" task by name (the original shape here) left every other variant's sandbox
+// without server/testlogger/mtpreporter: `runIde`, `runIdeBackend`, and `runIdeFrontend` each depend on
+// their own *_runIde*-suffixed task, not on "prepareSandbox" — so a plugin launched via `runIde` got a
+// sandbox with only the plugin jar, and the LSP server failed to start with "server not found" (no
+// server/<rid>/ directory at all). withType(...).configureEach applies this to every current and future
+// PrepareSandboxTask instance uniformly, regardless of which entry point registered it.
+tasks.withType<PrepareSandboxTask>().configureEach {
     val externalDir = externalServerBuildDir
     if (externalDir == null) {
         dependsOn(publishServer)
