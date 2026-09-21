@@ -133,5 +133,7 @@ public class DotnetTestEndToEndTests
 
         var complete = messages[^1];
         complete.GetProperty("executed").GetInt32().Should().Be(5);
+        complete.GetProperty("aborted").GetBoolean().Should().BeFalse();
+        complete.GetProperty("canceled").GetBoolean().Should().BeFalse("this run was neither aborted nor canceled");
     }
 }

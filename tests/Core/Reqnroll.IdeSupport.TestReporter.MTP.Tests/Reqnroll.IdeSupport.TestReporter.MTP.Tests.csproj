@@ -17,6 +17,12 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="AwesomeAssertions" Version="9.4.0" />
+    <!-- Reqnroll.IdeSupport.TestReporter.MTP's own reference to this package is ExcludeAssets="runtime"
+         (it must load whatever copy the real MTP test host already provides, never ship its own) — so
+         a direct in-process unit test of a type from that project (ReqnrollMtpReporterTests) needs its
+         own, unexcluded reference to actually have the assembly on disk to load. Pinned to the same
+         version the reporter project itself targets. -->
+    <PackageReference Include="Microsoft.Testing.Platform" Version="2.2.3" />
   </ItemGroup>
 
   <ItemGroup>
