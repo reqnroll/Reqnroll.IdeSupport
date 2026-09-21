@@ -41,14 +41,15 @@ public class DotnetTestEndToEndTests
     {
         var dir = Path.Combine(Path.GetTempPath(), "reqnroll-mtp-reporter-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        var thelspServerPid = 999999; 
         var json = JsonSerializer.Serialize(new
         {
             endpoint,
             workspaceRoot = RepoRoot(),
-            lspServerPid = 999999,
+            lspServerPid = thelspServerPid,
             startedUtc = DateTime.UtcNow,
         });
-        File.WriteAllText(Path.Combine(dir, "999999.json"), json);
+        File.WriteAllText(Path.Combine(dir, $"{thelspServerPid}.json"), json);
         return dir;
     }
 
@@ -133,5 +134,7 @@ public class DotnetTestEndToEndTests
 
         var complete = messages[^1];
         complete.GetProperty("executed").GetInt32().Should().Be(5);
+        complete.GetProperty("aborted").GetBoolean().Should().BeFalse();
+        complete.GetProperty("canceled").GetBoolean().Should().BeFalse("this run was neither aborted nor canceled");
     }
 }

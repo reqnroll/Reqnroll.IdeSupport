@@ -58,6 +58,26 @@ public class SessionBreadcrumbMatcherTests : IDisposable
     }
 
     [Fact]
+    public void ReadAll_skips_one_bad_file_and_still_returns_a_good_one_in_the_same_call()
+    {
+        // A top-level JSON array (not an object) makes JsonElement.TryGetProperty throw
+        // InvalidOperationException — a type TryRead's catch previously did NOT filter for (only
+        // IOException/UnauthorizedAccessException/JsonException were caught), so this one file used
+        // to escape TryRead, abort ReadAll's whole foreach, and discard every other breadcrumb —
+        // including a good one from another concurrently-open IDE window — in the same call.
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "100.json"), "[1,2,3]");
+        WriteBreadcrumb("200.json", "127.0.0.1:2", @"C:\repo");
+
+        Action act = () => SessionBreadcrumbMatcher.ReadAll(_dir);
+
+        act.Should().NotThrow();
+        var result = SessionBreadcrumbMatcher.ReadAll(_dir);
+        result.Should().ContainSingle();
+        result[0].Endpoint.Should().Be("127.0.0.1:2");
+    }
+
+    [Fact]
     public void FindBestMatch_returns_null_when_my_workspace_root_is_null()
         => SessionBreadcrumbMatcher.FindBestMatch(null, [new SessionBreadcrumb("127.0.0.1:1", @"C:\repo")]).Should().BeNull();
 

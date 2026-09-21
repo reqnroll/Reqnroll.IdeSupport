@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -56,6 +57,8 @@ public sealed class TestOutcomeTcpListener : IDisposable
 
     private readonly TestOutcomeStore _store;
     private readonly TestOutcomePersistence? _persistence;
+    private readonly TestOutcomeSessionBreadcrumb? _breadcrumb;
+    private readonly Func<string?> _resolveWorkspaceRoot;
     private readonly IIdeSupportLogger _logger;
     private readonly Action _notifyChanged;
     private readonly object _gate = new();
@@ -66,20 +69,38 @@ public sealed class TestOutcomeTcpListener : IDisposable
     private bool _disposed;
 
     /// <summary>DI entry point: pushes <c>reqnroll/testOutcomes/changed</c> to the connected client on change.</summary>
-    public TestOutcomeTcpListener(TestOutcomeStore store, TestOutcomePersistence persistence, ILanguageServerFacade languageServer, IIdeSupportLogger logger)
-        : this(store, logger, () => TestOutcomesChangedRequester.NotifyChanged(languageServer, logger), persistence)
+    public TestOutcomeTcpListener(TestOutcomeStore store, TestOutcomePersistence persistence, TestOutcomeSessionBreadcrumb breadcrumb, ILanguageServerFacade languageServer, IIdeSupportLogger logger)
+        : this(store, logger, () => TestOutcomesChangedRequester.NotifyChanged(languageServer, logger), persistence, breadcrumb, () => ResolveWorkspaceRoot(languageServer))
     {
     }
 
-    /// <summary>Test seam: <paramref name="notifyChanged"/> replaces the LSP push; <paramref name="persistence"/> may be null.</summary>
-    internal TestOutcomeTcpListener(TestOutcomeStore store, IIdeSupportLogger logger, Action notifyChanged, TestOutcomePersistence? persistence = null)
+    /// <summary>
+    /// Test seam: <paramref name="notifyChanged"/> replaces the LSP push; <paramref name="persistence"/>,
+    /// <paramref name="breadcrumb"/> and <paramref name="resolveWorkspaceRoot"/> may be null/omitted.
+    /// </summary>
+    internal TestOutcomeTcpListener(TestOutcomeStore store, IIdeSupportLogger logger, Action notifyChanged,
+        TestOutcomePersistence? persistence = null, TestOutcomeSessionBreadcrumb? breadcrumb = null, Func<string?>? resolveWorkspaceRoot = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _notifyChanged = notifyChanged ?? throw new ArgumentNullException(nameof(notifyChanged));
         _persistence = persistence;
+        _breadcrumb = breadcrumb;
+        _resolveWorkspaceRoot = resolveWorkspaceRoot ?? (() => null);
         _store.Changed += (_, _) => ScheduleRefresh();
     }
+
+    /// <summary>
+    /// The first non-empty workspace-folder path the client reported at <c>initialize</c> time — a
+    /// best-effort single root for the breadcrumb's <c>workspaceRoot</c> field. A multi-folder
+    /// workspace has more than one candidate; picking the right one for a given test project is a
+    /// reporter-side matching concern (issue #715 plan §7 risk #3: deepest-match-wins), not this
+    /// listener's — it only needs to publish something a reporter can use as a starting point.
+    /// </summary>
+    private static string? ResolveWorkspaceRoot(ILanguageServerFacade languageServer)
+        => languageServer.ClientSettings.WorkspaceFolders?
+            .Select(f => f.Uri.GetFileSystemPath())
+            .FirstOrDefault(p => !string.IsNullOrEmpty(p));
 
     /// <summary>The bound loopback endpoint once started, e.g. <c>127.0.0.1:53412</c>; null before the first registration.</summary>
     public string? Endpoint
@@ -118,6 +139,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
                 _listener = listener;
                 _ = Task.Run(() => AcceptLoopAsync(listener));
                 _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: listening on {Endpoint}");
+                _breadcrumb?.Write(Endpoint!, _resolveWorkspaceRoot());
                 return true;
             }
             catch (Exception ex)
@@ -347,6 +369,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
             _refreshTimer?.Dispose();
             _refreshTimer = null;
         }
+        _breadcrumb?.Delete();
     }
 }
 

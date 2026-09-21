@@ -31,6 +31,18 @@ public class WorkspaceRootLocatorTests
     }
 
     [Fact]
+    public void FindNearestRoot_propagates_an_exception_from_looksLikeRoot()
+    {
+        // FindNearestRoot's own while loop has no try/catch — LooksLikeRoot (the production delegate)
+        // is the one responsible for swallowing per-directory failures, exactly like a JsonException
+        // must be swallowed inside SessionBreadcrumbMatcher.TryRead rather than by ReadAll's foreach.
+        // This just documents that contract for the injected-delegate seam this class is built around.
+        Action act = () => WorkspaceRootLocator.FindNearestRoot(@"C:\repo\tests\Fixture", _ => throw new InvalidOperationException());
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void LooksLikeRoot_is_true_for_a_directory_containing_a_sln_file()
     {
         var dir = Path.Combine(Path.GetTempPath(), "reqnroll-mtp-workspaceroot-tests", Guid.NewGuid().ToString("N"));
@@ -92,5 +104,19 @@ public class WorkspaceRootLocatorTests
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    [Fact]
+    public void LooksLikeRoot_returns_false_instead_of_throwing_for_a_path_Directory_EnumerateFiles_rejects()
+    {
+        // A NUL character makes Directory.EnumerateFiles throw ArgumentException — a type the catch
+        // previously did NOT filter for (only IOException/UnauthorizedAccessException were caught), so
+        // this path alone used to escape LooksLikeRoot, abort FindNearestRoot's walk-up entirely, and
+        // give up on a .sln/.git marker that might sit at an ancestor above it, rather than treating
+        // just this one level as "not a root" and letting the walk continue.
+        Action act = () => WorkspaceRootLocator.LooksLikeRoot("bad\0path");
+
+        act.Should().NotThrow();
+        WorkspaceRootLocator.LooksLikeRoot("bad\0path").Should().BeFalse();
     }
 }

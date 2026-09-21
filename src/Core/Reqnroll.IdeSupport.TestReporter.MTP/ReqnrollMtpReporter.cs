@@ -88,17 +88,29 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     public Task OnTestSessionFinishingAsync(ITestSessionContext context)
     {
         if (_sink.IsActive)
-        {
-            _sink.Write(NdjsonWriter.Object("runComplete")
-                .Field("runId", _runId)
-                .Field("executed", _results)
-                .Field("aborted", false)
-                .Field("canceled", false)
-                .ToLine());
-        }
+            _sink.Write(FormatRunComplete(context.CancellationToken.IsCancellationRequested));
         _sink.Dispose();
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// <paramref name="canceled"/> comes from <see cref="ITestSessionContext.CancellationToken"/>, which
+    /// is signaled for a user-initiated cancel (IDE Cancel button, Ctrl+C, <c>--test-timeout</c>) that
+    /// still reaches this orderly-teardown hook — a real, observable signal, so it must be read rather
+    /// than hardcoded. <c>aborted</c> stays hardcoded <c>false</c>: a genuine abort (host process
+    /// crashed/killed) means <see cref="OnTestSessionFinishingAsync"/> never runs at all — MTP only calls
+    /// it once the framework "has finished executing all tests and has reported all relevant data to the
+    /// platform". The server already infers an abort from the connection dropping without a runComplete
+    /// line (see <c>TestOutcomeTcpListener.HandleConnectionAsync</c>'s finally block), so there is no
+    /// case where this reporter could observe an abort and reach this line to report it.
+    /// </summary>
+    internal string FormatRunComplete(bool canceled) =>
+        NdjsonWriter.Object("runComplete")
+            .Field("runId", _runId)
+            .Field("executed", _results)
+            .Field("aborted", false)
+            .Field("canceled", canceled)
+            .ToLine();
 
     /// <summary>Breadcrumb discovery + connect-and-verify. Every failure is swallowed: discovery must never fail the test run.</summary>
     private bool TryConnect()

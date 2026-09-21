@@ -244,6 +244,7 @@ public static class ServiceCollectionExtensions
             // subscribed store.Changed handler are created exactly once and live for the server's
             // lifetime, not per-request.
             .AddSingleton<TestOutcomePersistence>()
+            .AddSingleton<TestOutcomeSessionBreadcrumb>()
             .AddSingleton<TestOutcomeStore>()
             .AddSingleton<TestOutcomeTcpListener>()
             .AddSingleton<RegisterTestRunHandler>()

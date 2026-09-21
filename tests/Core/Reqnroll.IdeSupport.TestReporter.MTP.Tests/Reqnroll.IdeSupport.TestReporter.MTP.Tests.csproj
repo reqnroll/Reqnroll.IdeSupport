@@ -7,6 +7,15 @@
     <IsPackable>false</IsPackable>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>../../../reqnroll.snk</AssemblyOriginatorKeyFile>
+    <!-- This project references Microsoft.Testing.Platform below purely so ReqnrollMtpReporterTests
+         can load MTP types in-process — it is an ordinary xUnit v2/VSTest test project, never a real
+         Microsoft.Testing.Platform test host. Some Test Explorer versions infer "is this an MTP
+         application" partly from whether Microsoft.Testing.Platform.dll is referenced at all, not
+         strictly from IsTestingPlatformApplication/Microsoft.Testing.Platform.MSBuild — without this
+         explicit opt-out, that misdetection routes discovery through MTP's own execution pipeline
+         instead of the VSTest adapter, which has no real entry point here and reports every test as
+         skipped (found live in Visual Studio Test Explorer after adding the reference below). -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +26,12 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="AwesomeAssertions" Version="9.4.0" />
+    <!-- Reqnroll.IdeSupport.TestReporter.MTP's own reference to this package is ExcludeAssets="runtime"
+         (it must load whatever copy the real MTP test host already provides, never ship its own) — so
+         a direct in-process unit test of a type from that project (ReqnrollMtpReporterTests) needs its
+         own, unexcluded reference to actually have the assembly on disk to load. Pinned to the same
+         version the reporter project itself targets. -->
+    <PackageReference Include="Microsoft.Testing.Platform" Version="2.2.3" />
   </ItemGroup>
 
   <ItemGroup>
