@@ -43,9 +43,16 @@ internal static class WorkspaceRootLocator
             var gitPath = Path.Combine(dir, ".git");
             return File.Exists(gitPath) || Directory.Exists(gitPath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception)
         {
-            return false; // An unreadable ancestor (permissions, a removed network share) just isn't a match.
+            // An unreadable ancestor (permissions, a removed network share) just isn't a match — same
+            // reasoning for any other exception type as for IOException/UnauthorizedAccessException
+            // specifically: FindNearestRoot's while loop has no catch of its own, so a narrower filter
+            // here would let an unenumerated type escape this method, abort the walk-up entirely, and
+            // give up on a `.sln`/`.git` marker that might sit one or two levels further up — rather
+            // than treating just this one ancestor as "not a root" and continuing to climb, which is
+            // what every other failure at this exact call site already does.
+            return false;
         }
     }
 }
