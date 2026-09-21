@@ -10,6 +10,7 @@ import com.jetbrains.rider.model.runnableProjectsModel
 import com.jetbrains.rider.projectView.solution
 import com.reqnroll.ide.rider.actions.ReqnrollNotify
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.ReqnrollMtpReporterPathResolver
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.ReqnrollTestLoggerPathResolver
 import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
@@ -78,34 +79,45 @@ object RunTestRunner {
                 }
 
                 // Registers before running: the endpoint must be baked into the dotnet test
-                // command line below. A null/unsuccessful registration (no server running, or it
-                // couldn't start its listener) just means the two extra arguments are omitted —
-                // the run proceeds exactly as it did before #700, TRX-only.
+                // command line below (VsTest mode) or discoverable via the LSP server's session
+                // breadcrumb (MTP modes — see EnsureStarted's side effect on the server, plan §4).
+                // A null/unsuccessful registration (no server running, or it couldn't start its
+                // listener) just means the extra arguments/injection are omitted — the run
+                // proceeds exactly as it did before #700, TRX-only (VsTest) or exit-code-only (MTP).
                 val registration = ReqnrollRequestSender.registerTestRun(project)
                     ?.takeIf { it.success }
-                val loggerDirectory = registration?.let { ReqnrollTestLoggerPathResolver.resolve() }
+                val mode = detectDotnetTestMode(runnableProject.projectFilePath)
+                val loggerDirectory = registration?.takeIf { mode == DotnetTestMode.VS_TEST }?.let { ReqnrollTestLoggerPathResolver.resolve() }
+                val reporterInjected = registration != null && mode != DotnetTestMode.VS_TEST &&
+                    ReqnrollMtpReporterPathResolver.resolve() != null
 
-                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter, registration, loggerDirectory)
-                val results = when (testOutcome) {
+                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter, registration, loggerDirectory, mode)
+                val fallbackResult = when (testOutcome) {
                     is DotnetTestOutcome.Failure -> {
                         notifyError(project, testOutcome.message)
                         return
                     }
                     is DotnetTestOutcome.Inconclusive -> {
-                        // No modal here (unlike Failure): this fires on every Run click for an
-                        // MTP-mode project until #715 phase 4 ships real support for it, and a
-                        // dialog on every click would itself be the regression this phase fixes.
+                        // No modal here (unlike Failure): this fires on every Run click for a
+                        // project this ad hoc scan missed classifying as MTP upfront, and a dialog
+                        // on every click would itself be the regression #715 phase 3 fixed.
                         ReqnrollDebugLogger.warn("RunTestRunner: ${testOutcome.message}")
                         return
                     }
-                    is DotnetTestOutcome.Success -> testOutcome.results
+                    is DotnetTestOutcome.Success -> trxResult(testOutcome.results)
+                    // MTP modes (issue #715 phase 4): no TRX exists by design, so the process's own
+                    // exit code is the only always-available signal — live-verified against a real
+                    // native-mode dotnet test. Per-row detail, when available, comes from the
+                    // server poll below, same as the VsTest server-pipeline path.
+                    is DotnetTestOutcome.ExitCodeOnly ->
+                        RunResult(if (testOutcome.exitCode == 0) RunOutcome.PASSED else RunOutcome.FAILED)
                 }
 
                 val assemblyPath = registration?.let { outputAssemblyPath(runnableProject) }
-                val result = if (registration != null && loggerDirectory != null && assemblyPath != null) {
-                    pollServerResult(project, assemblyPath, targets) ?: trxResult(results)
+                val result = if (assemblyPath != null && (loggerDirectory != null || reporterInjected)) {
+                    pollServerResult(project, assemblyPath, targets) ?: fallbackResult
                 } else {
-                    trxResult(results)
+                    fallbackResult
                 }
                 RunTestResultStore.set(uri, startLine, result)
 
@@ -243,55 +255,104 @@ object RunTestRunner {
         data class Failure(val message: String) : DotnetTestOutcome()
 
         /**
-         * No TRX was produced, but [looksLikeMtpProject] says this is an MTP-mode project — the
-         * expected, documented shape (issue #715 plan §1), not a genuine launch failure: under
-         * `TestingPlatformDotnetTestSupport=true` the `--logger trx;...` this code always appends
-         * is silently ignored (tests still ran, possibly all green), and under the native `dotnet
-         * test` MTP mode `--logger`/`--test-adapter-path` aren't part of the CLI surface at all and
-         * fail the run outright. Distinguished from [Failure] so the call site logs instead of
-         * showing a *modal* error dialog on every single Run click for a project this plugin can't
-         * get live results from yet.
+         * No TRX was produced, but [looksLikeMtpProject] says this is an MTP-mode project our
+         * upfront [detectDotnetTestMode] scan missed (plan §7 risk #5's blind spots — a
+         * condition-guarded property, or one set only via an `Import`) — not a genuine launch
+         * failure. Distinguished from [Failure] so the call site logs instead of showing a *modal*
+         * error dialog on every single Run click for a project this plugin misclassified.
          */
         data class Inconclusive(val message: String) : DotnetTestOutcome()
+
+        /**
+         * [DotnetTestMode.MTP_COMPAT]/[DotnetTestMode.MTP_NATIVE]'s *expected* outcome shape (issue
+         * #715 phase 4): no TRX exists by design in either mode — the run never asked for one —
+         * so the process's own exit code (0 = every test passed) is the only signal always
+         * available without the LSP-server pipeline. Live-verified: a real native-mode `dotnet
+         * test` exits 0 when its (filtered) selection all pass, non-zero otherwise, same contract
+         * VSTest's own exit code already has.
+         */
+        data class ExitCodeOnly(val exitCode: Int) : DotnetTestOutcome()
     }
 
     /**
-     * Shells to `dotnet test --filter` with a TRX logger — plus, when [registration] succeeded and
-     * [loggerDirectory] is non-null, the bundled `Reqnroll.IdeSupport.TestLogger` alongside it —
-     * and parses the TRX result. Returns [DotnetTestOutcome.Failure] when the run itself couldn't
-     * be started/completed — a non-zero exit code from failing tests is not itself a failure, only
-     * the absence of a TRX file is.
+     * Shells to `dotnet test --filter`, shaped per [mode] (issue #715 phase 4):
+     * - [DotnetTestMode.VS_TEST]: a TRX logger, plus — when [registration] succeeded and
+     *   [loggerDirectory] is non-null — the bundled `Reqnroll.IdeSupport.TestLogger` alongside it.
+     *   Parses the TRX result; [DotnetTestOutcome.Failure] means the run itself couldn't be
+     *   started/completed (a non-zero exit code from failing tests is not itself a failure, only
+     *   the absence of a TRX file is).
+     * - [DotnetTestMode.MTP_COMPAT]/[DotnetTestMode.MTP_NATIVE]: neither `--logger` nor
+     *   `--test-adapter-path` — live-verified: MTP-compat mode silently ignores them, native mode
+     *   treats `--logger` as an unrecognized option and hard-fails the whole run with exit code 5.
+     *   Instead, when [registration] succeeded and the bundled MTP reporter is found
+     *   ([ReqnrollMtpReporterPathResolver]), ephemerally injects it via the
+     *   `CustomAfterMicrosoftCommonTargets` MSBuild extensibility point (plan §5.6) — live-verified
+     *   end to end: the generated `SelfRegisteredExtensions.g.cs` picks up the injected
+     *   `TestingPlatformBuilderHook` item with zero changes to the project file itself, and the
+     *   reporter's own DLL is copied to the build output alongside its dependency. Returns
+     *   [DotnetTestOutcome.ExitCodeOnly] rather than parsing a TRX that was never requested.
      */
     private fun runDotnetTest(
         projectFile: String,
         filter: String,
         registration: RegisterTestRunResponse?,
         loggerDirectory: Path?,
+        mode: DotnetTestMode,
     ): DotnetTestOutcome {
         val resultsDir = Files.createTempDirectory("reqnroll-test-").toFile()
         val trxFileName = "result.trx"
         val trxFile = File(resultsDir, trxFileName)
+        var ephemeralInjectionDir: File? = null
 
         return try {
-            val command = mutableListOf(
-                DotnetCliLocator.resolve(), "test", projectFile,
-                "--filter", filter,
-                "--logger", "trx;LogFileName=$trxFileName",
-                "--results-directory", resultsDir.absolutePath,
-                "--nologo",
-            )
-            if (registration != null && loggerDirectory != null) {
-                command += listOf(
-                    "--test-adapter-path", loggerDirectory.toString(),
-                    "--logger", buildLoggerArgument(registration, ProcessHandle.current().pid()),
-                )
+            val command = mutableListOf(DotnetCliLocator.resolve(), "test", projectFile, "--filter", filter, "--nologo")
+
+            when (mode) {
+                DotnetTestMode.VS_TEST -> {
+                    command += listOf(
+                        "--logger", "trx;LogFileName=$trxFileName",
+                        "--results-directory", resultsDir.absolutePath,
+                    )
+                    if (registration != null && loggerDirectory != null) {
+                        command += listOf(
+                            "--test-adapter-path", loggerDirectory.toString(),
+                            "--logger", buildLoggerArgument(registration, ProcessHandle.current().pid()),
+                        )
+                    }
+                }
+                DotnetTestMode.MTP_COMPAT, DotnetTestMode.MTP_NATIVE -> {
+                    // Nothing added here: outcomes for these modes come from the ephemerally
+                    // injected reporter reporting to the LSP server directly (below), not from
+                    // anything on this command line.
+                }
             }
-            // Neither stdout nor stderr is read anywhere (results come from the TRX file, not
-            // live process output) — Redirect.DISCARD avoids the classic ProcessBuilder deadlock
-            // where an un-drained pipe fills its OS buffer and the child blocks writing to it,
-            // making `waitFor` hang until the timeout even for a run that would otherwise succeed.
+
+            val processBuilder = ProcessBuilder(command)
+                // Required for global.json (native MTP mode) discovery, which the .NET SDK
+                // resolves relative to the *working directory*, not the project file's own
+                // directory — live-verified: without this, dotnet test falls back to legacy
+                // VSTest-mode detection and hard-errors on an MTP-capable/.NET-10-SDK project
+                // ("Testing with VSTest target is no longer supported..."), even though the
+                // project's own global.json correctly opts into native mode. An independent fix
+                // from the mode-detection/injection work above — this plugin's dotnet test
+                // shell-out never set a working directory at all before phase 4.
+                .directory(File(projectFile).parentFile)
+            if (mode != DotnetTestMode.VS_TEST && registration != null) {
+                ReqnrollMtpReporterPathResolver.resolve()?.let { reporterDll ->
+                    val preExisting = processBuilder.environment()["CustomAfterMicrosoftCommonTargets"]
+                    val targetsFile = writeEphemeralMtpTargetsFile(reporterDll, preExisting)
+                    ephemeralInjectionDir = targetsFile.parentFile
+                    processBuilder.environment()["CustomAfterMicrosoftCommonTargets"] = targetsFile.path
+                }
+            }
+
+            // Neither stdout nor stderr is read anywhere (results come from the TRX file or the
+            // exit code, not live process output) — Redirect.DISCARD avoids the classic
+            // ProcessBuilder deadlock where an un-drained pipe fills its OS buffer and the child
+            // blocks writing to it, making `waitFor` hang until the timeout even for a run that
+            // would otherwise succeed.
             val process = try {
-                ProcessBuilder(command)
+                processBuilder
                     .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start()
@@ -310,11 +371,16 @@ object RunTestRunner {
                 return DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
             }
 
+            if (mode != DotnetTestMode.VS_TEST) {
+                return DotnetTestOutcome.ExitCodeOnly(process.exitValue())
+            }
+
             // A non-zero dotnet test exit code (failing tests) is expected and not itself a run
-            // failure — only the absence of a TRX file means the run itself never completed. An
-            // MTP-mode project (issue #715 plan §1) is the one case where "no TRX" doesn't mean
-            // that: report it as Inconclusive, not Failure, so the call site doesn't show a false
-            // error on a run whose tests may well have passed.
+            // failure — only the absence of a TRX file means the run itself never completed. A
+            // project this ad hoc scan missed classifying as MTP upfront (plan §7 risk #5's blind
+            // spots) is the one case where "no TRX" doesn't mean that: report it as Inconclusive,
+            // not Failure, so the call site doesn't show a false error on a run whose tests may
+            // well have passed.
             if (!trxFile.exists()) {
                 return if (looksLikeMtpProject(projectFile))
                     DotnetTestOutcome.Inconclusive(
@@ -332,7 +398,56 @@ object RunTestRunner {
             DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
         } finally {
             resultsDir.deleteRecursively()
+            ephemeralInjectionDir?.deleteRecursively()
         }
+    }
+
+    /**
+     * Random, permanent identifier for this hook registration (issue #715 plan §5.6/§7's "Include
+     * GUID is a random identifier — never copy one from another extension's props file" note) —
+     * must match the same literal value the phase-2 test fixture
+     * (`tests/Core/TestReporterFixtures/MsTestReqnrollMtp/MsTestReqnrollMtp.Fixture.csproj`) and any
+     * future NuGet-packaged `buildMultiTargeting` props file declares for this same hook.
+     */
+    private const val MTP_REPORTER_HOOK_GUID = "a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c"
+
+    /**
+     * Writes a small, distinctly-named `.targets` file (plan §5.6) declaring a `HintPath`
+     * `<Reference>` to the bundled MTP reporter plus the `<TestingPlatformBuilderHook>` item that
+     * gets it auto-registered via MTP's own `SelfRegisteredExtensions` generation — never touching
+     * the user's own project file. Live-verified: `CustomAfterMicrosoftCommonTargets` pointed at
+     * this file is enough on its own, with zero project-file changes, for the generated entry point
+     * to call into the reporter's hook and for its DLL (and its
+     * `Reqnroll.IdeSupport.TestReporter.Common` dependency) to land in the build output.
+     *
+     * [preExistingCustomAfterTargets], when non-null, is chain-imported first (plan §7 risk #6):
+     * `CustomAfterMicrosoftCommonTargets` is a general-purpose MSBuild extensibility slot a repo
+     * could already be using for something unrelated — overwriting it outright would silently break
+     * that customization for the duration of this one build. `Exists(...)` guards the import so a
+     * value that happened to be a stale/invalid path doesn't itself break the build.
+     */
+    private fun writeEphemeralMtpTargetsFile(reporterDllPath: Path, preExistingCustomAfterTargets: String?): File {
+        val dir = Files.createTempDirectory("reqnroll-mtp-inject-").toFile()
+        val file = File(dir, "Reqnroll.IdeSupport.TestReporter.MTP.g.targets")
+        val chainImport = preExistingCustomAfterTargets
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "  <Import Project=\"$it\" Condition=\"Exists('$it')\" />\n" }
+            .orEmpty()
+        file.writeText(
+            "<Project>\n" +
+                chainImport +
+                "  <ItemGroup>\n" +
+                "    <Reference Include=\"Reqnroll.IdeSupport.TestReporter.MTP\">\n" +
+                "      <HintPath>$reporterDllPath</HintPath>\n" +
+                "    </Reference>\n" +
+                "    <TestingPlatformBuilderHook Include=\"$MTP_REPORTER_HOOK_GUID\">\n" +
+                "      <DisplayName>Reqnroll.IdeSupport.TestReporter.MTP</DisplayName>\n" +
+                "      <TypeFullName>Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook</TypeFullName>\n" +
+                "    </TestingPlatformBuilderHook>\n" +
+                "  </ItemGroup>\n" +
+                "</Project>\n"
+        )
+        return file
     }
 
     private fun notifyError(project: Project, message: String) {
@@ -360,31 +475,34 @@ object RunTestRunner {
     )
 
     /**
-     * Ad hoc, narrow MTP detection (issue #715 plan §6 phase 3: *"this phase can ship with a
+     * Ad hoc, narrow mode detection (issue #715 plan §5.7/§6 phase 4: *"this phase can ship with a
      * narrower, ad hoc version of that detection, since the full mode-detection machinery isn't
-     * needed yet"*) — a plain text scan of [projectFilePath] itself and every
-     * `Directory.Build.props`/`global.json` found walking up from its folder to the nearest
-     * `.git`/`.sln`. Not a full MSBuild evaluation (misses e.g. a condition-guarded property, or
-     * one set only via an `Import`), but enough to catch the common case Microsoft's own docs
-     * recommend — setting the property once in a repo-root `Directory.Build.props` — without
-     * needing a generic MSBuild-property read off Rider's `RunnableProject` model, which has none
-     * (plan §5.7 risk #7: unlike VS's `project.Properties.Item(name)` or VS Code's `-getProperty:`,
-     * Rider's TFM read goes through a narrower, purpose-built RD-protocol field — confirmed by
+     * needed yet"* — phase 3's wording, graduated here into the real three-way state) — a plain
+     * text scan of [projectFilePath] itself and every `Directory.Build.props`/`global.json` found
+     * walking up from its folder to the nearest `.git`/`.sln`. Not a full MSBuild evaluation
+     * (misses e.g. a condition-guarded property, or one set only via an `Import`), but enough to
+     * catch the common case Microsoft's own docs recommend — setting the property once in a
+     * repo-root `Directory.Build.props` — without needing a generic MSBuild-property read off
+     * Rider's `RunnableProject` model, which has none (plan §5.7 risk #7: unlike VS's
+     * `project.Properties.Item(name)` or VS Code's `-getProperty:`, Rider's TFM read goes through a
+     * narrower, purpose-built RD-protocol field — confirmed by
      * [com.reqnroll.ide.rider.lsp.project.ReqnrollProjectBaseline]'s own `toClassicMoniker`
-     * workaround for that same gap).
+     * workaround for that same gap; still unconfirmed whether a generic path exists at all).
      *
-     * Requires **both** [MTP_CAPABLE_PATTERN] and evidence that `dotnet test` actually redirects to
-     * MTP for this project ([DOTNET_TEST_MTP_REDIRECT_PATTERN] or [GLOBAL_JSON_MTP_RUNNER_PATTERN])
-     * — plan §7 risk #5's own warning applies here just as much as to phase 2's injection gating: a
+     * Combines two independent signals exactly as plan §5.7 describes: [MTP_CAPABLE_PATTERN]
+     * (per-project) and, if capable, which of [GLOBAL_JSON_MTP_RUNNER_PATTERN] (workspace-level —
+     * native mode, checked/overridden by the `DOTNET_TEST_RUNNER` env var per its own documented
+     * precedence) or [DOTNET_TEST_MTP_REDIRECT_PATTERN] (per-project — legacy `dotnet test`
+     * redirect) applies. Plan §7 risk #5's warning is the reason capability alone isn't enough: a
      * project can set `EnableMSTestRunner`/`EnableNUnitRunner` and still run under plain VSTest
-     * today (TRX written normally) if neither is active. Gating on MTP-capability alone would
-     * wrongly swallow a *real* run failure for such a project as a false "this is MTP, no big deal".
+     * today (TRX written normally, native-mode CLI shape never used) if neither is active.
      * `internal` for testability.
      */
-    internal fun looksLikeMtpProject(projectFilePath: String): Boolean {
+    internal fun detectDotnetTestMode(projectFilePath: String): DotnetTestMode {
         val projectFile = File(projectFilePath)
         var mtpCapable = readTextOrNull(projectFile)?.let(MTP_CAPABLE_PATTERN::containsMatchIn) == true
         var dotnetTestRedirectsToMtp = readTextOrNull(projectFile)?.let(DOTNET_TEST_MTP_REDIRECT_PATTERN::containsMatchIn) == true
+        var nativeModeActive = false
 
         var dir = projectFile.parentFile
         while (dir != null) {
@@ -393,14 +511,32 @@ object RunTestRunner {
                 if (DOTNET_TEST_MTP_REDIRECT_PATTERN.containsMatchIn(props)) dotnetTestRedirectsToMtp = true
             }
             readTextOrNull(File(dir, "global.json"))?.let { json ->
-                if (GLOBAL_JSON_MTP_RUNNER_PATTERN.containsMatchIn(json)) dotnetTestRedirectsToMtp = true
+                if (GLOBAL_JSON_MTP_RUNNER_PATTERN.containsMatchIn(json)) nativeModeActive = true
             }
-            if (mtpCapable && dotnetTestRedirectsToMtp) return true
             if (File(dir, ".git").exists()) break // Workspace root reached; stop climbing.
             dir = dir.parentFile
         }
-        return mtpCapable && dotnetTestRedirectsToMtp
+
+        // DOTNET_TEST_RUNNER (.NET 11 Preview 6+) overrides global.json for the current process
+        // when recognized. This repo's own SDK (10.0.401) predates it, so this branch is
+        // forward-looking and not live-verified — safe regardless, since an unset/unrecognized
+        // value leaves the global.json-derived signal above untouched.
+        when (System.getenv("DOTNET_TEST_RUNNER")?.trim()?.lowercase()) {
+            "microsoft.testing.platform" -> nativeModeActive = true
+            "vstest" -> nativeModeActive = false
+        }
+
+        return when {
+            !mtpCapable -> DotnetTestMode.VS_TEST
+            nativeModeActive -> DotnetTestMode.MTP_NATIVE
+            dotnetTestRedirectsToMtp -> DotnetTestMode.MTP_COMPAT
+            else -> DotnetTestMode.VS_TEST
+        }
     }
+
+    /** True for either MTP state — the reactive safety-net check inside [runDotnetTest]'s VsTest branch uses this, not the full [DotnetTestMode]. See [detectDotnetTestMode]. */
+    internal fun looksLikeMtpProject(projectFilePath: String): Boolean =
+        detectDotnetTestMode(projectFilePath) != DotnetTestMode.VS_TEST
 
     private fun readTextOrNull(file: File): String? =
         try {
@@ -409,3 +545,9 @@ object RunTestRunner {
             null // Unreadable (permissions, mid-write): treat as "no evidence", not a crash.
         }
 }
+
+/**
+ * Which `dotnet test` shape a project needs (issue #715 plan §5.7) — see
+ * [RunTestRunner.detectDotnetTestMode].
+ */
+internal enum class DotnetTestMode { VS_TEST, MTP_COMPAT, MTP_NATIVE }

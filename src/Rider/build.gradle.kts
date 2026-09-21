@@ -268,6 +268,41 @@ val publishTestLogger by tasks.registering(Exec::class) {
     )
 }
 
+// ── Bundle the Reqnroll.IdeSupport.TestReporter.MTP (issue #715 phase 4) ──
+//
+// The MTP-side counterpart to the VSTest logger above: net8.0, framework-dependent (MTP v2's
+// minimum runtime — no per-RID bundling needed, same reasoning as the logger). Unlike the logger,
+// it isn't injected via runsettings/--test-adapter-path — RunTestRunner.kt ephemerally injects a
+// HintPath <Reference> to this DLL via CustomAfterMicrosoftCommonTargets (plan §5.6), so
+// ReqnrollMtpReporterPathResolver expects mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.dll
+// directly under the plugin's install directory. `dotnet publish` on the reporter project alone
+// also carries its Reqnroll.IdeSupport.TestReporter.Common ProjectReference output into the same
+// output directory (verified: both DLLs land in mtpreporter/), same as the logger's own build.
+val mtpReporterOutputDir = layout.projectDirectory.dir("mtpreporter")
+val mtpReporterProject = File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.MTP/Reqnroll.IdeSupport.TestReporter.MTP.csproj")
+
+// Mirrors -PlspTestLoggerBuildDir above.
+val externalMtpReporterBuildDir = (findProperty("lspMtpReporterBuildDir") as String?)?.let { File(it) }
+
+val publishMtpReporter by tasks.registering(Exec::class) {
+    group = "reqnroll"
+    description = "Publishes Reqnroll.IdeSupport.TestReporter.MTP into mtpreporter/. Skipped when -PlspMtpReporterBuildDir is set."
+    onlyIf { externalMtpReporterBuildDir == null }
+
+    inputs.files(
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.MTP")) { exclude("**/bin/**", "**/obj/**") },
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.Common")) { exclude("**/bin/**", "**/obj/**") },
+    )
+    outputs.dir(mtpReporterOutputDir)
+
+    commandLine(
+        "dotnet", "publish", mtpReporterProject.toString(),
+        "--configuration", serverConfiguration,
+        "--nologo",
+        "--output", mtpReporterOutputDir.asFile.absolutePath,
+    )
+}
+
 tasks.named<Sync>("prepareSandbox") {
     val externalDir = externalServerBuildDir
     if (externalDir == null) {
@@ -295,6 +330,18 @@ tasks.named<Sync>("prepareSandbox") {
     } else {
         from(externalLoggerDir) {
             into("${project.name}/testlogger")
+        }
+    }
+
+    val externalMtpDir = externalMtpReporterBuildDir
+    if (externalMtpDir == null) {
+        dependsOn(publishMtpReporter)
+        from(mtpReporterOutputDir) {
+            into("${project.name}/mtpreporter")
+        }
+    } else {
+        from(externalMtpDir) {
+            into("${project.name}/mtpreporter")
         }
     }
 }

@@ -294,4 +294,68 @@ class RunTestRunnerTest {
 
         assertFalse(RunTestRunner.looksLikeMtpProject(File(root, "Missing/Missing.csproj").path))
     }
+
+    // ── detectDotnetTestMode ─────────────────────────────────────────────────
+
+    @Test
+    fun `detectDotnetTestMode is VS_TEST for a plain project`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
+
+        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path))
+    }
+
+    @Test
+    fun `detectDotnetTestMode is VS_TEST when MTP-capable but nothing redirects dotnet test to it`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup></Project>")
+
+        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path))
+    }
+
+    @Test
+    fun `detectDotnetTestMode is MTP_COMPAT when TestingPlatformDotnetTestSupport is set and no native mode`() {
+        val root = tempDir()
+        val project = projectFile(
+            root,
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
+        )
+
+        assertEquals(DotnetTestMode.MTP_COMPAT, RunTestRunner.detectDotnetTestMode(project.path))
+    }
+
+    @Test
+    fun `detectDotnetTestMode is MTP_NATIVE when global json opts into native mode, even with TestingPlatformDotnetTestSupport also set`() {
+        // Plan §5.7's state machine: NativeDotnetTestModeActive takes precedence over the compat
+        // redirect when both are somehow present.
+        val root = tempDir()
+        val project = projectFile(
+            root,
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
+        )
+        File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
+
+        assertEquals(DotnetTestMode.MTP_NATIVE, RunTestRunner.detectDotnetTestMode(project.path))
+    }
+
+    @Test
+    fun `detectDotnetTestMode is MTP_NATIVE from a global json found only by climbing to the repo root`() {
+        val root = tempDir()
+        File(root, ".git").mkdirs()
+        File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
+        val project = projectFile(root, "<Project><PropertyGroup><EnableNUnitRunner>true</EnableNUnitRunner></PropertyGroup></Project>", "src/Tests/Tests.csproj")
+
+        assertEquals(DotnetTestMode.MTP_NATIVE, RunTestRunner.detectDotnetTestMode(project.path))
+    }
+
+    @Test
+    fun `detectDotnetTestMode is VS_TEST when global json opts into native mode but the project is not MTP-capable`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
+        File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
+
+        assertEquals(DotnetTestMode.VS_TEST, RunTestRunner.detectDotnetTestMode(project.path))
+    }
 }
