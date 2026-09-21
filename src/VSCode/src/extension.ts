@@ -31,6 +31,7 @@ import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
+import { activateMtpEphemeralInjection } from './testOutcomes/mtpEphemeralInjection';
 import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
 
 let client: LanguageClient | undefined;
@@ -140,6 +141,13 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
   });
   setAppLogChannel(appLogChannel);
   appLogChannel.info('Reqnroll extension activated.');
+
+  // MTP ephemeral injection (issue #715 phase 4) must run as early as possible — before any test
+  // run C# Dev Kit might launch could plausibly start — since it sets an environment variable that
+  // only affects `dotnet test` processes spawned *after* it's set. Independent of the LSP client
+  // (no `await client.start()` needed), unlike `activateTestOutcomes` below.
+  activateMtpEphemeralInjection(context);
+
   const traceChannel = createTraceChannel();
 
   context.subscriptions.push(

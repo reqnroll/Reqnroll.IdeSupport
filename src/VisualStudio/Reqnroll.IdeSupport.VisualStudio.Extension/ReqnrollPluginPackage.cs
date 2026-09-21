@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 using IServiceProvider = System.IServiceProvider;
 
@@ -81,6 +82,13 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         _logger.LogInfo("Waiting for solution load...");
 
         await WaitForSolutionLoadAsync(cancellationToken);
+
+        // Issue #715 phase 4 (VS leg): must run as early as possible in this devenv.exe session,
+        // before any build happens — a process-level environment variable, not a per-run runsettings
+        // injection like ReqnrollTestLoggerRunSettingsService, since VS's own Test Explorer never
+        // hands this extension a per-run hook for an MTP-capable project's "testing platform server
+        // mode" pipeline the way it does for ordinary VSTest execution requests.
+        await TryEnableMtpEphemeralInjectionAsync(cancellationToken);
 
         // NOTE: We intentionally do NOT realize .feature stub frames here. Doing so at
         // solution load races with VS's own restore of feature tabs and spawns a second
@@ -330,6 +338,48 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         }
 
         _logger.LogInfo("WaitForSolutionLoadAsync: max attempts reached, proceeding anyway.");
+    }
+
+    /// <summary>
+    /// Issue #715 phase 4 (VS leg): resolves the solution directory and the bundled MTP reporter,
+    /// then defers to <see cref="MtpEphemeralInjection.TryEnableForSolution"/> for the actual
+    /// detection/injection. Best-effort — any failure here is logged and otherwise ignored; this must
+    /// never prevent the rest of package initialization from completing.
+    /// </summary>
+    private async Task TryEnableMtpEphemeralInjectionAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
+            if (solution is null)
+                return;
+
+            solution.GetSolutionInfo(out var solutionDirectory, out _, out _);
+            if (string.IsNullOrEmpty(solutionDirectory))
+            {
+                _logger.LogVerbose("ReqnrollPluginPackage: no solution directory available; skipping MTP ephemeral injection.");
+                return;
+            }
+
+            var reporterDllPath = MtpReporterPathResolver.Resolve(typeof(ReqnrollPluginPackage).Assembly.Location);
+            if (reporterDllPath is null)
+            {
+                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; skipping MTP ephemeral injection.");
+                return;
+            }
+
+            MtpEphemeralInjection.TryEnableForSolution(solutionDirectory, reporterDllPath, _logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: TryEnableMtpEphemeralInjectionAsync failed.");
+        }
     }
 
     protected override void Dispose(bool disposing)
