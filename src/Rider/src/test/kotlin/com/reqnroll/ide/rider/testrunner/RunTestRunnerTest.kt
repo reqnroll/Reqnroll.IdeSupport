@@ -4,11 +4,28 @@ import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
 import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
 import com.reqnroll.ide.rider.lsp.protocol.TestOutcomeRowItem
+import java.io.File
+import java.nio.file.Files
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class RunTestRunnerTest {
+    private val tempDirs = mutableListOf<File>()
+
+    @AfterTest
+    fun cleanUpTempDirs() {
+        tempDirs.forEach { it.deleteRecursively() }
+    }
+
+    private fun tempDir(): File {
+        val dir = Files.createTempDirectory("reqnroll-run-test-runner-test").toFile()
+        tempDirs += dir
+        return dir
+    }
     private fun target(
         declaringTypeFullName: String = "Tests.FFeature",
         methodName: String = "AddNumbers",
@@ -155,5 +172,126 @@ class RunTestRunnerTest {
     @Test
     fun `combineIfComplete is null for no methods at all`() {
         assertNull(RunTestRunner.combineIfComplete(emptyList()))
+    }
+
+    // ── looksLikeMtpProject ──────────────────────────────────────────────────
+
+    private fun projectFile(root: File, xml: String, relativePath: String = "Proj/Proj.csproj"): File {
+        val file = File(root, relativePath)
+        file.parentFile.mkdirs()
+        file.writeText(xml)
+        return file
+    }
+
+    @Test
+    fun `looksLikeMtpProject is true when the project itself sets EnableMSTestRunner and TestingPlatformDotnetTestSupport`() {
+        val root = tempDir()
+        val project = projectFile(
+            root,
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
+        )
+
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject is true when the project sets EnableNUnitRunner and dotnet test opts into native MTP mode via global json`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><EnableNUnitRunner>true</EnableNUnitRunner></PropertyGroup></Project>")
+        File(root, "global.json").writeText("""{ "test": { "runner": "Microsoft.Testing.Platform" } }""")
+
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject is false when only MTP-capable, with no evidence dotnet test actually redirects to it`() {
+        // Plan §7 risk #5: EnableMSTestRunner/EnableNUnitRunner alone doesn't mean dotnet test
+        // ignores --logger trx — a project can be MTP-capable and still run under plain VSTest.
+        val root = tempDir()
+        val project = projectFile(
+            root,
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<IsTestingPlatformApplication>true</IsTestingPlatformApplication></PropertyGroup></Project>",
+        )
+
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject is false when only the dotnet test redirect is set, with no MTP-capable framework`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>")
+
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject is false for a plain VSTest project with no Directory Build props`() {
+        val root = tempDir()
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>")
+
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject is false when EnableMSTestRunner is explicitly false`() {
+        val root = tempDir()
+        val project = projectFile(
+            root,
+            "<Project><PropertyGroup><EnableMSTestRunner>false</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>",
+        )
+
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject finds a repo-root Directory Build props the project itself doesn't set`() {
+        val root = tempDir()
+        File(root, ".git").mkdirs()
+        File(root, "Directory.Build.props").writeText(
+            "<Project><PropertyGroup><TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>" +
+                "<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner></PropertyGroup></Project>"
+        )
+        val project = projectFile(root, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>", "src/Tests/Tests.csproj")
+
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject combines a capability signal from one file with a redirect signal from another`() {
+        // EnableMSTestRunner in the project itself, TestingPlatformDotnetTestSupport only in the
+        // repo-root Directory.Build.props — both must be honored even though they come from
+        // different files along the ancestor chain.
+        val root = tempDir()
+        File(root, ".git").mkdirs()
+        File(root, "Directory.Build.props").writeText(
+            "<Project><PropertyGroup><TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>"
+        )
+        val project = projectFile(root, "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup></Project>", "src/Tests/Tests.csproj")
+
+        assertTrue(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject does not climb above the git root`() {
+        val outside = tempDir()
+        File(outside, "Directory.Build.props").writeText(
+            "<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner>" +
+                "<TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport></PropertyGroup></Project>"
+        )
+        val repo = File(outside, "repo")
+        File(repo, ".git").mkdirs()
+        val project = projectFile(repo, "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>", "src/Tests/Tests.csproj")
+
+        assertFalse(RunTestRunner.looksLikeMtpProject(project.path))
+    }
+
+    @Test
+    fun `looksLikeMtpProject is false for a project file that does not exist and no props anywhere`() {
+        val root = tempDir()
+
+        assertFalse(RunTestRunner.looksLikeMtpProject(File(root, "Missing/Missing.csproj").path))
     }
 }
