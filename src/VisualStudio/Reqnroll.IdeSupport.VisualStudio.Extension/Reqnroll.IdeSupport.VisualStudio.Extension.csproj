@@ -102,8 +102,8 @@
         <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
     </ProjectReference>
     <!-- MTP reporter bundled under MtpReporter\ (issue #715 phase 4) — never referenced by any
-         extension assembly, resolved at runtime by MtpReporterPathResolver and injected via
-         MtpEphemeralInjection's CustomAfterMicrosoftCommonTargets mechanism, not runsettings.
+         extension assembly, resolved at runtime by MtpReporterPathResolver and registered via
+         MtpBuildIntegration's user-global MSBuild ImportAfter file-drop, not runsettings.
          ReferenceOutputAssembly=false + explicit output groups: same cross-TFM pattern already used
          below for the net10.0 LSP server reference from this net481 project. -->
     <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.TestReporter.MTP\Reqnroll.IdeSupport.TestReporter.MTP.csproj">

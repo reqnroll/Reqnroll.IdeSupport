@@ -9,11 +9,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestReporter;
 /// </summary>
 /// <remarks>
 /// Unlike the VSTest logger (injected per-run via runsettings/<c>TestAdaptersPaths</c>, which needs a
-/// <em>directory</em>), this assembly is referenced via a <c>HintPath</c> inside an
-/// ephemerally-injected <c>.targets</c> file (<see cref="MtpEphemeralInjection"/>'s
-/// <c>CustomAfterMicrosoftCommonTargets</c> mechanism, plan §5.6), set once for the whole
-/// <c>devenv.exe</c> session rather than per Test Explorer run — so callers need the DLL's own file
-/// path, not a containing directory.
+/// <em>directory</em>), this assembly is referenced via a <c>HintPath</c> inside the user-global
+/// MSBuild ImportAfter <c>.targets</c> file <see cref="MtpBuildIntegration"/> drops (plan §5.6), so
+/// callers need the DLL's own file path, not a containing directory.
 /// </remarks>
 public static class MtpReporterPathResolver
 {

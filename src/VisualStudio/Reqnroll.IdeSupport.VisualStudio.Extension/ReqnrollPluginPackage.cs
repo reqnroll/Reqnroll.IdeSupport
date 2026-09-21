@@ -73,6 +73,14 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
 
+        // Issue #715 phase 4 (VS leg): a user-global MSBuild ImportAfter file-drop
+        // (MtpBuildIntegration), not solution-scoped and not tied to this devenv.exe session — no
+        // dependency on solution load, so it runs here rather than after WaitForSolutionLoadAsync
+        // below. (An earlier per-session CustomAfterMicrosoftCommonTargets environment-variable
+        // design was live-verified to never reach VS's actual build — see MtpBuildIntegration's
+        // remarks for why.)
+        TryEnableMtpBuildIntegration();
+
         // Advise before the solution-load wait, not after: the restored .feature stubs we want to
         // observe are realized *during* restore, so a subscription taken afterwards would miss the
         // very transitions this is here to time (issue #533, phase 2). Diagnostic only — it never
@@ -82,13 +90,6 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         _logger.LogInfo("Waiting for solution load...");
 
         await WaitForSolutionLoadAsync(cancellationToken);
-
-        // Issue #715 phase 4 (VS leg): must run as early as possible in this devenv.exe session,
-        // before any build happens — a process-level environment variable, not a per-run runsettings
-        // injection like ReqnrollTestLoggerRunSettingsService, since VS's own Test Explorer never
-        // hands this extension a per-run hook for an MTP-capable project's "testing platform server
-        // mode" pipeline the way it does for ordinary VSTest execution requests.
-        await TryEnableMtpEphemeralInjectionAsync(cancellationToken);
 
         // NOTE: We intentionally do NOT realize .feature stub frames here. Doing so at
         // solution load races with VS's own restore of feature tabs and spawns a second
@@ -341,44 +342,28 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     }
 
     /// <summary>
-    /// Issue #715 phase 4 (VS leg): resolves the solution directory and the bundled MTP reporter,
-    /// then defers to <see cref="MtpEphemeralInjection.TryEnableForSolution"/> for the actual
-    /// detection/injection. Best-effort — any failure here is logged and otherwise ignored; this must
-    /// never prevent the rest of package initialization from completing.
+    /// Issue #715 phase 4 (VS leg): resolves the bundled MTP reporter and defers to
+    /// <see cref="MtpBuildIntegration.TryEnable(string, IIdeSupportLogger)"/> for the actual
+    /// registration. No VS API needed (no solution, no main-thread switch) — the ImportAfter file
+    /// drop is entirely a filesystem operation. Best-effort — any failure here is logged and
+    /// otherwise ignored; this must never prevent the rest of package initialization from completing.
     /// </summary>
-    private async Task TryEnableMtpEphemeralInjectionAsync(CancellationToken cancellationToken)
+    private void TryEnableMtpBuildIntegration()
     {
         try
         {
-            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-
-            var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
-            if (solution is null)
-                return;
-
-            solution.GetSolutionInfo(out var solutionDirectory, out _, out _);
-            if (string.IsNullOrEmpty(solutionDirectory))
-            {
-                _logger.LogVerbose("ReqnrollPluginPackage: no solution directory available; skipping MTP ephemeral injection.");
-                return;
-            }
-
             var reporterDllPath = MtpReporterPathResolver.Resolve(typeof(ReqnrollPluginPackage).Assembly.Location);
             if (reporterDllPath is null)
             {
-                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; skipping MTP ephemeral injection.");
+                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; skipping MTP build integration.");
                 return;
             }
 
-            MtpEphemeralInjection.TryEnableForSolution(solutionDirectory, reporterDllPath, _logger);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            MtpBuildIntegration.TryEnable(reporterDllPath, _logger);
         }
         catch (Exception ex)
         {
-            _logger.LogException(ex, "ReqnrollPluginPackage: TryEnableMtpEphemeralInjectionAsync failed.");
+            _logger.LogException(ex, "ReqnrollPluginPackage: TryEnableMtpBuildIntegration failed.");
         }
     }
 
