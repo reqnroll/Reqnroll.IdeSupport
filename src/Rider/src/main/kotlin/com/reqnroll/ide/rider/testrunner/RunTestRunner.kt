@@ -91,6 +91,13 @@ object RunTestRunner {
                         notifyError(project, testOutcome.message)
                         return
                     }
+                    is DotnetTestOutcome.Inconclusive -> {
+                        // No modal here (unlike Failure): this fires on every Run click for an
+                        // MTP-mode project until #715 phase 4 ships real support for it, and a
+                        // dialog on every click would itself be the regression this phase fixes.
+                        ReqnrollDebugLogger.warn("RunTestRunner: ${testOutcome.message}")
+                        return
+                    }
                     is DotnetTestOutcome.Success -> testOutcome.results
                 }
 
@@ -234,6 +241,18 @@ object RunTestRunner {
     private sealed class DotnetTestOutcome {
         data class Success(val results: List<TrxUnitTestResult>) : DotnetTestOutcome()
         data class Failure(val message: String) : DotnetTestOutcome()
+
+        /**
+         * No TRX was produced, but [looksLikeMtpProject] says this is an MTP-mode project — the
+         * expected, documented shape (issue #715 plan §1), not a genuine launch failure: under
+         * `TestingPlatformDotnetTestSupport=true` the `--logger trx;...` this code always appends
+         * is silently ignored (tests still ran, possibly all green), and under the native `dotnet
+         * test` MTP mode `--logger`/`--test-adapter-path` aren't part of the CLI surface at all and
+         * fail the run outright. Distinguished from [Failure] so the call site logs instead of
+         * showing a *modal* error dialog on every single Run click for a project this plugin can't
+         * get live results from yet.
+         */
+        data class Inconclusive(val message: String) : DotnetTestOutcome()
     }
 
     /**
@@ -292,8 +311,20 @@ object RunTestRunner {
             }
 
             // A non-zero dotnet test exit code (failing tests) is expected and not itself a run
-            // failure — only the absence of a TRX file means the run itself never completed.
-            if (!trxFile.exists()) return DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
+            // failure — only the absence of a TRX file means the run itself never completed. An
+            // MTP-mode project (issue #715 plan §1) is the one case where "no TRX" doesn't mean
+            // that: report it as Inconclusive, not Failure, so the call site doesn't show a false
+            // error on a run whose tests may well have passed.
+            if (!trxFile.exists()) {
+                return if (looksLikeMtpProject(projectFile))
+                    DotnetTestOutcome.Inconclusive(
+                        "dotnet test produced no TRX file for $projectFile — this project uses " +
+                            "Microsoft.Testing.Platform (MTP), whose dotnet test integration this " +
+                            "plugin doesn't support live results for yet (issue #715)."
+                    )
+                else
+                    DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
+            }
 
             DotnetTestOutcome.Success(TrxParser.parse(trxFile.readText()))
         } catch (ex: Exception) {
@@ -309,4 +340,72 @@ object RunTestRunner {
             if (!project.isDisposed) ReqnrollNotify.error(project, message, "Reqnroll: Run Test")
         }
     }
+
+    /** Matches an MSBuild property element that declares a project MTP-*capable*, set to `true`. */
+    private val MTP_CAPABLE_PATTERN = Regex(
+        """<(EnableMSTestRunner|EnableNUnitRunner|UseMicrosoftTestingPlatformRunner|IsTestingPlatformApplication)>\s*true\s*<""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Matches the MSBuild property that redirects the *legacy* `dotnet test` CLI to the MTP host for an MTP-capable project, set to `true`. */
+    private val DOTNET_TEST_MTP_REDIRECT_PATTERN = Regex(
+        """<TestingPlatformDotnetTestSupport>\s*true\s*<""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Matches `global.json`'s opt-in to the *native* `dotnet test` MTP mode (.NET 10 SDK+). */
+    private val GLOBAL_JSON_MTP_RUNNER_PATTERN = Regex(
+        """"runner"\s*:\s*"Microsoft\.Testing\.Platform"""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Ad hoc, narrow MTP detection (issue #715 plan §6 phase 3: *"this phase can ship with a
+     * narrower, ad hoc version of that detection, since the full mode-detection machinery isn't
+     * needed yet"*) — a plain text scan of [projectFilePath] itself and every
+     * `Directory.Build.props`/`global.json` found walking up from its folder to the nearest
+     * `.git`/`.sln`. Not a full MSBuild evaluation (misses e.g. a condition-guarded property, or
+     * one set only via an `Import`), but enough to catch the common case Microsoft's own docs
+     * recommend — setting the property once in a repo-root `Directory.Build.props` — without
+     * needing a generic MSBuild-property read off Rider's `RunnableProject` model, which has none
+     * (plan §5.7 risk #7: unlike VS's `project.Properties.Item(name)` or VS Code's `-getProperty:`,
+     * Rider's TFM read goes through a narrower, purpose-built RD-protocol field — confirmed by
+     * [com.reqnroll.ide.rider.lsp.project.ReqnrollProjectBaseline]'s own `toClassicMoniker`
+     * workaround for that same gap).
+     *
+     * Requires **both** [MTP_CAPABLE_PATTERN] and evidence that `dotnet test` actually redirects to
+     * MTP for this project ([DOTNET_TEST_MTP_REDIRECT_PATTERN] or [GLOBAL_JSON_MTP_RUNNER_PATTERN])
+     * — plan §7 risk #5's own warning applies here just as much as to phase 2's injection gating: a
+     * project can set `EnableMSTestRunner`/`EnableNUnitRunner` and still run under plain VSTest
+     * today (TRX written normally) if neither is active. Gating on MTP-capability alone would
+     * wrongly swallow a *real* run failure for such a project as a false "this is MTP, no big deal".
+     * `internal` for testability.
+     */
+    internal fun looksLikeMtpProject(projectFilePath: String): Boolean {
+        val projectFile = File(projectFilePath)
+        var mtpCapable = readTextOrNull(projectFile)?.let(MTP_CAPABLE_PATTERN::containsMatchIn) == true
+        var dotnetTestRedirectsToMtp = readTextOrNull(projectFile)?.let(DOTNET_TEST_MTP_REDIRECT_PATTERN::containsMatchIn) == true
+
+        var dir = projectFile.parentFile
+        while (dir != null) {
+            readTextOrNull(File(dir, "Directory.Build.props"))?.let { props ->
+                if (MTP_CAPABLE_PATTERN.containsMatchIn(props)) mtpCapable = true
+                if (DOTNET_TEST_MTP_REDIRECT_PATTERN.containsMatchIn(props)) dotnetTestRedirectsToMtp = true
+            }
+            readTextOrNull(File(dir, "global.json"))?.let { json ->
+                if (GLOBAL_JSON_MTP_RUNNER_PATTERN.containsMatchIn(json)) dotnetTestRedirectsToMtp = true
+            }
+            if (mtpCapable && dotnetTestRedirectsToMtp) return true
+            if (File(dir, ".git").exists()) break // Workspace root reached; stop climbing.
+            dir = dir.parentFile
+        }
+        return mtpCapable && dotnetTestRedirectsToMtp
+    }
+
+    private fun readTextOrNull(file: File): String? =
+        try {
+            if (file.isFile) file.readText() else null
+        } catch (ex: java.io.IOException) {
+            null // Unreadable (permissions, mid-write): treat as "no evidence", not a crash.
+        }
 }

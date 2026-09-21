@@ -106,3 +106,41 @@ Examples:
 	| vscode       |
 	| rider        |
 	| unknown-ide  |
+
+# ── Custom protocol surface manifest ────────────────────────────────────────────
+#
+# Every reqnroll/* method registered via manual OnRequest/OnNotification routing in
+# InitializeCustomProtocolRouting bypasses OmniSharp's AddHandler-driven dynamic capability
+# registration, so without an explicit entry here the initialize response says nothing about
+# them. ApplyCustomProtocolCapabilities (Program.cs) advertises each one as a typed top-level
+# entry in ServerCapabilities.ExtensionData -- documentation of the full custom protocol surface
+# for a developer reading the handshake, and (via this scenario) a regression guard that a
+# handler wasn't silently dropped from InitializeCustomProtocolRouting. This is advertised to
+# every client alike; none of it varies per IDE.
+
+Scenario Outline: All clients receive the custom protocol capability manifest
+	Given the LSP server is started for IDE "<ide>"
+	Then the server advertises the following custom protocol capabilities
+		| capability                                  | field                     | method                                    |
+		| reqnrollWorkspaceLifecycleProvider           | projectLoadedMethod       | reqnroll/projectLoaded                    |
+		| reqnrollWorkspaceLifecycleProvider           | projectUnloadedMethod     | reqnroll/projectUnloaded                  |
+		| reqnrollWorkspaceLifecycleProvider           | projectFilesMethod        | reqnroll/projectFiles                     |
+		| reqnrollFindStepUsagesProvider               | method                    | reqnroll/findStepUsages                   |
+		| reqnrollGoToHooksProvider                    | method                    | reqnroll/goToHooks                        |
+		| reqnrollGoToMatchingScenariosProvider        | method                    | reqnroll/goToMatchingScenarios            |
+		| reqnrollResolveTestTargetsProvider           | method                    | reqnroll/resolveTestTargets               |
+		| reqnrollFindUnusedStepDefinitionsProvider    | method                    | reqnroll/findUnusedStepDefinitions        |
+		| reqnrollStepRenameProvider                   | renameTargetsMethod       | reqnroll/renameTargets                    |
+		| reqnrollStepRenameProvider                   | selectRenameTargetMethod  | reqnroll/selectRenameTarget               |
+		| reqnrollStepRenameProvider                   | renameAppliedMethod       | reqnroll/renameApplied                    |
+		| reqnrollRefreshCodeLensProvider              | method                    | reqnroll/refreshCodeLens                  |
+		| reqnrollSemanticTokensPushProvider           | method                    | reqnroll/semanticTokens                   |
+		| reqnrollDocumentSymbolHierarchicalProvider   | method                    | reqnroll/documentSymbolHierarchical       |
+		| reqnrollDocumentActivatedProvider            | method                    | reqnroll/documentActivated                |
+
+Examples:
+	| ide          |
+	| visualstudio |
+	| vscode       |
+	| rider        |
+	| unknown-ide  |
