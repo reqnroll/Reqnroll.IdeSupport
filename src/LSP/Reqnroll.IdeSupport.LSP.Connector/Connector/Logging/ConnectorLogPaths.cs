@@ -1,8 +1,8 @@
 namespace ReqnrollConnector.Logging;
 
 /// <summary>
-/// Resolves the per-OS Reqnroll log directory and prunes stale log files in it, for
-/// <see cref="FileLogger"/> (issue #628).
+/// Resolves the per-OS Reqnroll <c>logs</c> directory and prunes stale log files in it, for
+/// <see cref="FileLogger"/> (issue #628, issue #726).
 /// </summary>
 /// <remarks>
 /// This deliberately duplicates <c>Reqnroll.IdeSupport.Common.Logging.ReqnrollLogPaths</c> rather
@@ -12,12 +12,14 @@ namespace ReqnrollConnector.Logging;
 /// Microsoft.Extensions.* packages that this project has otherwise never needed - not a footprint
 /// worth adding to every one of those eight builds just to share ~15 lines of directory logic.
 /// Keep this in sync by hand with <c>ReqnrollLogPaths</c> if that per-OS convention ever changes.
+/// The Connector writes only log files, never persisted state, so unlike the .NET host side there
+/// is no equivalent of <c>ReqnrollLogPaths.ResolveApplicationDirectory</c> to keep here.
 /// </remarks>
 internal static class ConnectorLogPaths
 {
     private static readonly TimeSpan MaxAge = TimeSpan.FromDays(10);
 
-    /// <summary>Resolves the Reqnroll log directory for the current OS and prunes stale log files in it.</summary>
+    /// <summary>Resolves the Reqnroll <c>logs</c> directory for the current OS and prunes stale log files in it.</summary>
     public static string ResolveLogDirectory()
     {
         var dir = ResolveDirectoryForCurrentPlatform();
@@ -37,7 +39,7 @@ internal static class ConnectorLogPaths
 #else
         // The net462/net472/net481 builds only ever run on Windows, so LocalApplicationData
         // (which .NET only mismaps on macOS - see ReqnrollLogPaths' remarks) is correct as-is here.
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Reqnroll");
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Reqnroll", "logs");
 #endif
     }
 
@@ -52,10 +54,10 @@ internal static class ConnectorLogPaths
         var platform = platformDescription.ToLowerInvariant();
         // Check macOS/Darwin before Windows: "darwin" contains the substring "win".
         if (platform.Contains("mac") || platform.Contains("darwin") || platform.Contains("osx"))
-            return Path.Combine(userProfile, "Library", "Logs", "Reqnroll");
+            return Path.Combine(userProfile, "Library", "Logs", "Reqnroll", "logs");
         if (platform.Contains("windows"))
-            return Path.Combine(localAppData ?? userProfile, "Reqnroll");
-        return Path.Combine(userProfile, ".local", "share", "Reqnroll");
+            return Path.Combine(localAppData ?? userProfile, "Reqnroll", "logs");
+        return Path.Combine(userProfile, ".local", "share", "Reqnroll", "logs");
     }
 
     /// <summary>Deletes <c>reqnroll-*</c> files older than 10 days from <paramref name="logDirectory"/>.</summary>

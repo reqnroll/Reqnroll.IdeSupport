@@ -79,7 +79,7 @@ scope any of these narrower):
 ```{tab-item} Visual Studio
 :sync: vs
 
-Log files are written to `%LOCALAPPDATA%\Reqnroll\`, one set per process,
+Log files are written to `%LOCALAPPDATA%\Reqnroll\logs\`, one set per process,
 named `reqnroll-vs-<role>-<yyyyMMdd>-<pid>.log`:
 
 - `reqnroll-vs-server-*.log` — the LSP server's application log
@@ -110,7 +110,7 @@ Two Output channels (**View → Output**, then pick from the dropdown):
 **Changing the log level:** set `"reqnroll.trace.server"` in
 `settings.json` to `"off"`, `"messages"`, or `"verbose"`. Setting it to
 `"verbose"` also writes a timestamped trace file under
-`%LOCALAPPDATA%\Reqnroll\` (Windows) or `~/Library/Logs/Reqnroll/` (macOS):
+`%LOCALAPPDATA%\Reqnroll\logs\` (Windows) or `~/Library/Logs/Reqnroll/logs/` (macOS):
 `reqnroll-vscode-inspector-<timestamp>.log`. **Reload the window** after
 changing this setting for it to take effect.
 ```
@@ -118,9 +118,9 @@ changing this setting for it to take effect.
 ```{tab-item} Rider
 :sync: rider
 
-Log files are written to a per-OS Reqnroll log directory — Windows
-`%LOCALAPPDATA%\Reqnroll\`, macOS `~/Library/Logs/Reqnroll/`, Linux
-`~/.local/share/Reqnroll/` — named `reqnroll-rider-<role>-<yyyyMMdd>-<pid>.log`
+Log files are written to a per-OS Reqnroll `logs` directory — Windows
+`%LOCALAPPDATA%\Reqnroll\logs\`, macOS `~/Library/Logs/Reqnroll/logs/`, Linux
+`~/.local/share/Reqnroll/logs/` — named `reqnroll-rider-<role>-<yyyyMMdd>-<pid>.log`
 (`ext` for the plugin side, `server`/`protocol` for the LSP server). These
 are not written to Rider's own `idea.log` or a dedicated tool window.
 

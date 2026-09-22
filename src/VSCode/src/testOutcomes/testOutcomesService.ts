@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
-import { resolveLogDirectory } from '../logging/logPaths';
+import { resolveApplicationDirectory } from '../logging/logPaths';
 import { logInfo, logWarn } from '../logging/appNotify';
 import {
   ENDPOINT_PARAMETER,
@@ -52,6 +52,11 @@ import { resolveTestLoggerDirectory } from './testLoggerPath';
 
 const RUNSETTINGS_CONFIG_SECTION = 'dotnet';
 const RUNSETTINGS_CONFIG_KEY = 'unitTests.runSettingsPath';
+// Deliberately lives in the application directory's root, not under resolveLogDirectory()'s
+// `logs` subfolder (issue #726): this is a generated config file the user's own
+// `dotnet.unitTests.runSettingsPath` setting points at, not a log, and its name starting with
+// "reqnroll-" would otherwise make it eligible for pruneOldLogs' 10-day sweep if it ever sat in
+// that directory.
 const GENERATED_FILE_NAME = 'reqnroll-vscode-test-outcomes.runsettings';
 
 interface RegisterTestRunResponse {
@@ -124,7 +129,7 @@ async function mergeRunSettings(
   loggerDirectory: string,
   ideProcessId: number,
 ): Promise<void> {
-  const generatedPath = path.join(resolveLogDirectory(), GENERATED_FILE_NAME);
+  const generatedPath = path.join(resolveApplicationDirectory(), GENERATED_FILE_NAME);
   const config = vscode.workspace.getConfiguration(RUNSETTINGS_CONFIG_SECTION);
   const currentSetting = config.get<string>(RUNSETTINGS_CONFIG_KEY);
 

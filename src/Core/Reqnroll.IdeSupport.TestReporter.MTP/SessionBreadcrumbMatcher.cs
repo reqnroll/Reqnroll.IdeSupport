@@ -7,7 +7,7 @@ internal sealed record SessionBreadcrumb(string Endpoint, string? WorkspaceRoot)
 
 /// <summary>
 /// Reads the session breadcrumb files the LSP server writes under
-/// <c>&lt;Reqnroll log dir&gt;\test-outcomes\sessions\*.json</c> and picks the best match for this
+/// <c>&lt;Reqnroll application dir&gt;\test-outcomes\sessions\*.json</c> and picks the best match for this
 /// reporter's own resolved workspace root. Deepest-match-wins: among breadcrumbs whose
 /// <c>workspaceRoot</c> is an ancestor of (or equal to) this reporter's root, the one with the longest
 /// <c>workspaceRoot</c> wins — mirrors Rider's <c>RunTestRunner.findOwningProjectPath</c> tie-break

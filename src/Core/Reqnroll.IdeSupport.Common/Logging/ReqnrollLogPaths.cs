@@ -5,9 +5,10 @@ using System.Runtime.InteropServices;
 namespace Reqnroll.IdeSupport.Common.Logging;
 
 /// <summary>
-/// Resolves the per-OS Reqnroll log directory and prunes stale log files in it — shared by every
-/// .NET process (VS extension, LSP server, Connector) so they agree on one directory per OS with
-/// the VS Code extension's <c>resolveLogDirectory</c> (<c>lspInspectorLogger.ts</c>) and the Rider
+/// Resolves the per-OS Reqnroll application directory and its <c>logs</c> subfolder, and prunes
+/// stale log files in the latter — shared by every .NET process (VS extension, LSP server,
+/// Connector) so they agree on one directory per OS with the VS Code extension's
+/// <c>resolveLogDirectory</c>/<c>resolveApplicationDirectory</c> (<c>logPaths.ts</c>) and the Rider
 /// plugin's <c>ReqnrollDebugLogger.logDirectory</c> (issue #625).
 /// </summary>
 /// <remarks>
@@ -20,9 +21,29 @@ namespace Reqnroll.IdeSupport.Common.Logging;
 public static class ReqnrollLogPaths
 {
     private const string ApplicationFolderName = "Reqnroll";
+    private const string LogsFolderName = "logs";
     private static readonly TimeSpan MaxAge = TimeSpan.FromDays(10);
 
-    /// <summary>Resolves the Reqnroll log directory for the current OS and prunes stale log files in it.</summary>
+    /// <summary>
+    /// Resolves the Reqnroll application directory for the current OS (<c>%LOCALAPPDATA%\Reqnroll</c>
+    /// on Windows, etc.) — the shared root that also holds non-log state such as
+    /// <c>test-outcomes.json</c> and the telemetry <c>userid</c> file. Log files themselves live one
+    /// level deeper, under <see cref="ResolveLogDirectory()"/> (issue #726) — use this instead of
+    /// that when what's being resolved isn't actually a log.
+    /// </summary>
+    public static string ResolveApplicationDirectory()
+        => ResolveApplicationDirectory(
+            RuntimeInformation.OSDescription,
+            Environment.GetEnvironmentVariable("LOCALAPPDATA"),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+    /// <summary>
+    /// Resolves the Reqnroll <c>logs</c> directory for the current OS and prunes stale log files in
+    /// it. This is <see cref="ResolveApplicationDirectory()"/> plus a <c>logs</c> segment (issue
+    /// #726) — before that issue, log files were written directly into the application directory
+    /// alongside unrelated persisted state (test outcomes, the telemetry user id), making that
+    /// directory's contents hard to tell apart at a glance.
+    /// </summary>
     public static string ResolveLogDirectory()
     {
         var dir = ResolveLogDirectory(
@@ -34,12 +55,13 @@ public static class ReqnrollLogPaths
     }
 
     /// <summary>
-    /// Pure per-OS resolution, taking explicit platform/LOCALAPPDATA/home values rather than
-    /// reading them directly, so every branch is unit-testable without depending on the OS the
-    /// tests happen to run on. Mirrors the Rider plugin's <c>ReqnrollDebugLogger.logDirectory</c>
-    /// and the VS Code extension's <c>resolveLogDirectory</c>.
+    /// Pure per-OS resolution of the application directory, taking explicit
+    /// platform/LOCALAPPDATA/home values rather than reading them directly, so every branch is
+    /// unit-testable without depending on the OS the tests happen to run on. Mirrors the Rider
+    /// plugin's per-OS branch inside <c>ReqnrollDebugLogger.logDirectory</c> and the VS Code
+    /// extension's <c>resolveApplicationDirectory</c>.
     /// </summary>
-    internal static string ResolveLogDirectory(string platformDescription, string? localAppData, string userProfile)
+    internal static string ResolveApplicationDirectory(string platformDescription, string? localAppData, string userProfile)
     {
         var platform = platformDescription.ToLowerInvariant();
         // Check macOS/Darwin before Windows: "darwin" contains the substring "win", so a
@@ -51,6 +73,15 @@ public static class ReqnrollLogPaths
         // Linux and anything else POSIX-ish.
         return Path.Combine(userProfile, ".local", "share", ApplicationFolderName);
     }
+
+    /// <summary>
+    /// Pure per-OS resolution of the <c>logs</c> subdirectory, taking explicit
+    /// platform/LOCALAPPDATA/home values for the same testability reason as
+    /// <see cref="ResolveApplicationDirectory(string, string?, string)"/>, which this simply appends
+    /// a <c>logs</c> segment onto.
+    /// </summary>
+    internal static string ResolveLogDirectory(string platformDescription, string? localAppData, string userProfile)
+        => Path.Combine(ResolveApplicationDirectory(platformDescription, localAppData, userProfile), LogsFolderName);
 
     /// <summary>
     /// Deletes <c>reqnroll-*</c> files older than 10 days from <paramref name="logDirectory"/>.
