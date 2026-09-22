@@ -87,23 +87,24 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return (lastGood, lastHash);
         }
 
-        // Gate the connector on the project actually being a Reqnroll/SpecFlow project (issue #731).
+        // Gate the connector on the project actually being a Reqnroll project (issue #731).
         // No client filters what it sends -- VS and VS Code report every project in the
         // solution/workspace, Rider every runnable project -- so without this check every ordinary
         // library in the solution got a connector process that loaded its assembly and dependency
         // closure into a runtime only to find no bindings, on every build. Checked after the
-        // file-exists check above because one of the detector's two signals is the Reqnroll runtime
-        // assembly sitting next to this output assembly, and before hashing so a non-Reqnroll
-        // project does not pay for a full-file hash either.
+        // file-exists check above because one of the detector's signals is Reqnroll.dll sitting
+        // next to this output assembly, and before hashing so a non-Reqnroll project does not pay
+        // for a full-file hash either.
         if (!_projectDetector.IsReqnrollProject(scope))
         {
             if (!_loggedNonReqnrollSkip)
             {
                 _loggedNonReqnrollSkip = true;
                 _logger.LogInfo(
-                    $"[{scope.ProjectName}] Not a Reqnroll project (no Reqnroll/SpecFlow package reference " +
-                    $"and no Reqnroll/SpecFlow assembly next to {Path.GetFileName(assemblyPath)}); " +
-                    "skipping binding discovery.");
+                    $"[{scope.ProjectName}] Not a Reqnroll project (no Reqnroll package reference and no " +
+                    $"Reqnroll.dll next to {Path.GetFileName(assemblyPath)}); skipping binding discovery. " +
+                    "Set 'ide.reqnroll.isReqnrollProject' to true in the project's reqnroll.json to " +
+                    "override this.");
             }
             else
             {

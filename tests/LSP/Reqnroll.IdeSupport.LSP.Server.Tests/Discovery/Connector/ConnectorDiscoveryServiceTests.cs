@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
@@ -64,6 +65,8 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         scope.ProjectName.Returns("MyApp.Tests");
         scope.ProjectFolder.Returns(_projectFolder);
         scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        scope.Properties.Returns(new ConcurrentDictionary<Type, object>());
+        scope.IdeScope.FileSystem.Returns(new FileSystemForIDE());
         // A Reqnroll package reference, so the issue-#731 gate in ConnectorDiscoveryService lets
         // discovery through: every test below except the gate's own is about what happens after it.
         scope.PackageReferences.Returns([
@@ -72,7 +75,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         return scope;
     }
 
-    /// <summary>A project the issue-#731 gate must reject: no Reqnroll/SpecFlow package reference, and no Reqnroll/SpecFlow assembly in its output folder.</summary>
+    /// <summary>A project the issue-#731 gate must reject: no Reqnroll package reference, and no Reqnroll.dll in its output folder.</summary>
     private IProjectScope MakeNonReqnrollScope(string assemblyPath)
     {
         var scope = Substitute.For<IProjectScope>();
@@ -80,6 +83,8 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         scope.ProjectName.Returns("MyApp.Utilities");
         scope.ProjectFolder.Returns(_projectFolder);
         scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        scope.Properties.Returns(new ConcurrentDictionary<Type, object>());
+        scope.IdeScope.FileSystem.Returns(new FileSystemForIDE());
         scope.PackageReferences.Returns([
             new NuGetPackageReference("Newtonsoft.Json", new NuGetVersion("13.0.3", "13.0.3"), null)
         ]);
@@ -231,19 +236,6 @@ public class ConnectorDiscoveryServiceTests : IDisposable
             scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
 
         registry.StepDefinitions.Should().HaveCount(1);
-        _factory.Received(1).Create(scope);
-    }
-
-    [Fact]
-    public void RunDiscovery_runs_for_a_legacy_specflow_project()
-    {
-        File.WriteAllText(Path.Combine(_projectFolder, "TechTalk.SpecFlow.dll"), "not a real assembly");
-        GivenConnectorReturns(SuccessfulResult());
-        var scope = MakeNonReqnrollScope(_assemblyPath);
-
-        CreateSut().RunDiscovery(
-            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
-
         _factory.Received(1).Create(scope);
     }
 

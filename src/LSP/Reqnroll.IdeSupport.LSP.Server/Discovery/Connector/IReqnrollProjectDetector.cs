@@ -14,8 +14,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 public interface IReqnrollProjectDetector
 {
     /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="scope"/> is a Reqnroll (or legacy
-    /// SpecFlow) project and discovery should run for it.
+    /// Returns <see langword="true"/> when <paramref name="scope"/> is a Reqnroll project and
+    /// discovery should run for it.
     /// </summary>
     bool IsReqnrollProject(IProjectScope scope);
 }

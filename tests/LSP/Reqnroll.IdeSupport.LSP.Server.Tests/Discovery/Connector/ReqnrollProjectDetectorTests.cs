@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
@@ -10,11 +11,16 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 /// </summary>
 public class ReqnrollProjectDetectorTests : IDisposable
 {
-    private readonly string _outputFolder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+    private readonly string _projectFolder = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+    private readonly string _outputFolder;
     private readonly string _assemblyPath;
 
     public ReqnrollProjectDetectorTests()
     {
+        // A real output folder under the project folder, so the reqnroll.json the configuration
+        // provider looks for in the project folder and the runtime-assembly probe in the output
+        // folder are independent of each other.
+        _outputFolder = Path.Combine(_projectFolder, "bin", "Debug", "net10.0");
         Directory.CreateDirectory(_outputFolder);
         _assemblyPath = Path.Combine(_outputFolder, "MyApp.Tests.dll");
         File.WriteAllText(_assemblyPath, "not a real assembly");
@@ -22,8 +28,8 @@ public class ReqnrollProjectDetectorTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_outputFolder))
-            Directory.Delete(_outputFolder, recursive: true);
+        if (Directory.Exists(_projectFolder))
+            Directory.Delete(_projectFolder, recursive: true);
     }
 
     private static ReqnrollProjectDetector CreateSut() => new(new FileSystemForIDE());
@@ -32,11 +38,30 @@ public class ReqnrollProjectDetectorTests : IDisposable
     {
         var scope = Substitute.For<IProjectScope>();
         scope.ProjectName.Returns("MyApp.Tests");
+        scope.ProjectFolder.Returns(_projectFolder);
         scope.OutputAssemblyPath.Returns(_assemblyPath);
+        // A real bag: the configuration provider is created lazily and cached in it.
+        scope.Properties.Returns(new ConcurrentDictionary<Type, object>());
+        scope.IdeScope.FileSystem.Returns(new FileSystemForIDE());
         scope.PackageReferences.Returns(packageNames
             .Select(name => new NuGetPackageReference(name, new NuGetVersion("1.0.0", "1.0.0"), null))
             .ToArray());
         return scope;
+    }
+
+    /// <summary>Writes a reqnroll.json carrying the <c>ide.reqnroll.isReqnrollProject</c> override.</summary>
+    private void GivenReqnrollJsonWithIsReqnrollProject(bool value)
+    {
+        var json = $$"""
+        {
+          "ide": {
+            "reqnroll": {
+              "isReqnrollProject": {{(value ? "true" : "false")}}
+            }
+          }
+        }
+        """;
+        File.WriteAllText(Path.Combine(_projectFolder, "reqnroll.json"), json);
     }
 
     // ── Package-reference signal ──────────────────────────────────────────────
@@ -44,16 +69,15 @@ public class ReqnrollProjectDetectorTests : IDisposable
     [Theory]
     [InlineData("Reqnroll")]
     [InlineData("Reqnroll.MsTest")]
+    [InlineData("Reqnroll.NUnit")]
+    [InlineData("Reqnroll.xUnit")]
     [InlineData("Reqnroll.xunit.v3")]
+    [InlineData("Reqnroll.TUnit")]
     [InlineData("Reqnroll.Tools.MsBuild.Generation")]
     [InlineData("Reqnroll.SpecFlowCompatibility.ReqnrollPlugin")]
     [InlineData("SpecSync.AzureDevOps.Reqnroll.2-1")]
-    [InlineData("SpecFlow")]
-    [InlineData("TechTalk.SpecFlow")]
-    [InlineData("SpecFlow.NUnit")]
-    [InlineData("CucumberExpressions.SpecFlow.3-9")]
     [InlineData("reqnroll.mstest")] // package ids are compared case-insensitively
-    public void Recognises_a_reqnroll_or_specflow_package_reference(string packageName)
+    public void Recognises_a_reqnroll_package_reference(string packageName)
     {
         CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json", packageName)).Should().BeTrue();
     }
@@ -70,16 +94,24 @@ public class ReqnrollProjectDetectorTests : IDisposable
         CreateSut().IsReqnrollProject(MakeScope()).Should().BeFalse();
     }
 
+    [Fact]
+    public void Rejects_a_legacy_specflow_project()
+    {
+        // SpecFlow is out of scope for this tooling: a SpecFlow-only project is skipped like any
+        // other non-Reqnroll project, whichever signal it would otherwise have matched on.
+        File.WriteAllText(Path.Combine(_outputFolder, "TechTalk.SpecFlow.dll"), "not a real assembly");
+
+        CreateSut().IsReqnrollProject(MakeScope("SpecFlow", "SpecFlow.NUnit")).Should().BeFalse();
+    }
+
     // ── Output-folder signal ──────────────────────────────────────────────────
 
-    [Theory]
-    [InlineData("Reqnroll.dll")]
-    [InlineData("TechTalk.SpecFlow.dll")]
-    public void Recognises_a_runtime_assembly_next_to_the_output_assembly(string runtimeAssemblyName)
+    [Fact]
+    public void Recognises_the_runtime_assembly_next_to_the_output_assembly()
     {
         // Clients that report no package references at all still have to work: Rider sends an
         // empty list for every project, and VS can send one transiently while NuGet loads (#690).
-        File.WriteAllText(Path.Combine(_outputFolder, runtimeAssemblyName), "not a real assembly");
+        File.WriteAllText(Path.Combine(_outputFolder, "Reqnroll.dll"), "not a real assembly");
 
         CreateSut().IsReqnrollProject(MakeScope()).Should().BeTrue();
     }
@@ -97,10 +129,8 @@ public class ReqnrollProjectDetectorTests : IDisposable
     [Fact]
     public void Rejects_a_project_whose_output_assembly_path_is_empty()
     {
-        var scope = Substitute.For<IProjectScope>();
-        scope.ProjectName.Returns("MyApp.Utilities");
+        var scope = MakeScope();
         scope.OutputAssemblyPath.Returns(string.Empty);
-        scope.PackageReferences.Returns([]);
 
         CreateSut().IsReqnrollProject(scope).Should().BeFalse();
     }
@@ -108,11 +138,48 @@ public class ReqnrollProjectDetectorTests : IDisposable
     [Fact]
     public void Tolerates_a_null_package_reference_collection()
     {
-        var scope = Substitute.For<IProjectScope>();
-        scope.ProjectName.Returns("MyApp.Utilities");
-        scope.OutputAssemblyPath.Returns(_assemblyPath);
+        var scope = MakeScope();
         scope.PackageReferences.Returns((IEnumerable<NuGetPackageReference>?)null);
 
         CreateSut().IsReqnrollProject(scope).Should().BeFalse();
+    }
+
+    // ── Configuration override (ide.reqnroll.isReqnrollProject) ───────────────
+
+    [Fact]
+    public void Configured_true_forces_discovery_on_for_a_project_neither_heuristic_recognises()
+    {
+        GivenReqnrollJsonWithIsReqnrollProject(true);
+
+        CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Configured_false_forces_discovery_off_despite_a_reqnroll_package_reference()
+    {
+        GivenReqnrollJsonWithIsReqnrollProject(false);
+
+        CreateSut().IsReqnrollProject(MakeScope("Reqnroll.MsTest")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Configured_false_forces_discovery_off_despite_the_runtime_assembly()
+    {
+        GivenReqnrollJsonWithIsReqnrollProject(false);
+        File.WriteAllText(Path.Combine(_outputFolder, "Reqnroll.dll"), "not a real assembly");
+
+        CreateSut().IsReqnrollProject(MakeScope()).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Falls_back_to_the_heuristics_when_a_reqnroll_json_omits_the_setting()
+    {
+        // A reqnroll.json is present but says nothing about isReqnrollProject: the tri-state
+        // bool? is null, which means "not configured", not "false".
+        File.WriteAllText(Path.Combine(_projectFolder, "reqnroll.json"),
+            """{ "language": { "feature": "en-US" } }""");
+
+        CreateSut().IsReqnrollProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
+        CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json")).Should().BeFalse();
     }
 }

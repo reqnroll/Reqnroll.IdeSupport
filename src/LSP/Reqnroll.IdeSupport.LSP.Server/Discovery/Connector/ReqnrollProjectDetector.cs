@@ -1,12 +1,13 @@
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
-/// Decides whether a project reported by the IDE glue is a Reqnroll (or legacy SpecFlow)
-/// project at all, so that <see cref="ConnectorDiscoveryService"/> never spawns the
-/// out-of-process connector against an assembly that cannot contain bindings (issue #731).
+/// Decides whether a project reported by the IDE glue is a Reqnroll project at all, so that
+/// <see cref="ConnectorDiscoveryService"/> never spawns the out-of-process connector against an
+/// assembly that cannot contain bindings (issue #731).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,26 +17,39 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 /// each loading an unrelated assembly and its dependency closure into a runtime — on every build.
 /// </para>
 /// <para>
-/// Two independent signals are accepted, and either one is enough:
+/// Three signals, in the order the legacy VS extension's
+/// <c>ReqnrollProjectSettingsProvider</c> applied them:
 /// </para>
 /// <list type="number">
 /// <item><description>
-/// A NuGet package reference whose name mentions Reqnroll or SpecFlow. Deliberately a substring
-/// match rather than the exact-name/version resolution <c>ReqnrollPackageDetector</c> performs:
-/// this gate only has to answer "could this project possibly have bindings", and the extension
-/// ecosystem (Reqnroll.MsTest, Reqnroll.SpecFlowCompatibility.ReqnrollPlugin,
-/// SpecSync.AzureDevOps.Reqnroll.*, CucumberExpressions.SpecFlow.*, TechTalk.SpecFlow, …) is
-/// open-ended. A project that references none of them is not a Reqnroll project.
+/// The <c>ide.reqnroll.isReqnrollProject</c> setting in the project's <c>reqnroll.json</c>, which
+/// is authoritative in <b>both</b> directions when present: <see langword="true"/> forces
+/// discovery on for a project neither heuristic below recognises, <see langword="false"/> forces
+/// it off for one they would. This is the user's escape hatch from a wrong answer here, and
+/// matches the tri-state <c>bool?</c> contract the legacy extension documented.
 /// </description></item>
 /// <item><description>
-/// A Reqnroll or SpecFlow runtime assembly sitting next to the project's output assembly. This
-/// is what keeps Rider working: <c>ReqnrollProjectBaseline.kt</c> sends an empty
-/// <c>packageReferences</c> list for every project because Rider exposes no model for resolved
-/// NuGet references yet. It also covers VS sending an empty list transiently while NuGet is
-/// still loading (issue #690), and projects that pull Reqnroll in transitively via an internal
-/// meta-package rather than as a direct reference.
+/// A NuGet package reference whose name mentions Reqnroll. Deliberately a substring match rather
+/// than the exact-name/version resolution <c>ReqnrollPackageDetector</c> performs: this gate only
+/// has to answer "could this project possibly have bindings", and one rule covers every current
+/// test-framework package (Reqnroll.MsTest, Reqnroll.NUnit, Reqnroll.xUnit, Reqnroll.xunit.v3,
+/// Reqnroll.TUnit), the tooling and plugin packages (Reqnroll.Tools.MsBuild.Generation,
+/// Reqnroll.SpecFlowCompatibility.ReqnrollPlugin), third-party extensions
+/// (SpecSync.AzureDevOps.Reqnroll.*) and any package added later, without this list going stale.
+/// </description></item>
+/// <item><description>
+/// <c>Reqnroll.dll</c> sitting next to the project's output assembly. This is what keeps Rider
+/// working: <c>ReqnrollProjectBaseline.kt</c> sends an empty <c>packageReferences</c> list for
+/// every project because Rider exposes no model for resolved NuGet references yet. It also covers
+/// VS sending an empty list transiently while NuGet is still loading (issue #690), and projects
+/// that pull Reqnroll in transitively via an internal meta-package rather than as a direct
+/// reference.
 /// </description></item>
 /// </list>
+/// <para>
+/// Legacy SpecFlow is deliberately not detected: it is out of scope for this tooling, so a
+/// SpecFlow-only project is treated like any other non-Reqnroll project and skipped.
+/// </para>
 /// <para>
 /// The assembly probe is only meaningful once the project has been built, which is exactly when
 /// <see cref="ConnectorDiscoveryService"/> consults this type — it has already established that
@@ -44,14 +58,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 /// </remarks>
 public sealed class ReqnrollProjectDetector : IReqnrollProjectDetector
 {
-    // Matched case-insensitively as substrings of the package name; see the class remarks for
+    // Matched case-insensitively as a substring of the package name; see the class remarks for
     // why this is deliberately broader than ReqnrollPackageDetector's exact-name resolution.
-    private static readonly string[] PackageNameMarkers = ["Reqnroll", "SpecFlow"];
+    private const string PackageNameMarker = "Reqnroll";
 
-    // Runtime assemblies that only ever appear in the output folder of a project that uses
-    // Reqnroll or legacy SpecFlow. Same file names ReqnrollProjectSettingsProvider probes for
-    // when it derives the version from the output folder.
-    private static readonly string[] RuntimeAssemblyNames = ["Reqnroll.dll", "TechTalk.SpecFlow.dll"];
+    // The runtime assembly, which only ever lands in the output folder of a project that uses
+    // Reqnroll. Same file name ReqnrollProjectSettingsProvider probes for when it derives the
+    // version from the output folder.
+    private const string RuntimeAssemblyName = "Reqnroll.dll";
 
     private readonly IFileSystemForIDE _fileSystem;
 
@@ -64,6 +78,14 @@ public sealed class ReqnrollProjectDetector : IReqnrollProjectDetector
     /// <inheritdoc/>
     public bool IsReqnrollProject(IProjectScope scope)
     {
+        // Configured answer wins over both heuristics, on or off (see the class remarks). The
+        // configuration is loaded once and cached in the project's property bag, and this same
+        // call is made a few lines later by OutProcReqnrollConnectorFactory on the path this
+        // gate guards, so consulting it here costs nothing extra.
+        var configured = scope.GetIdeSupportConfiguration()?.Reqnroll?.IsReqnrollProject;
+        if (configured.HasValue)
+            return configured.Value;
+
         if (HasReqnrollPackageReference(scope))
             return true;
 
@@ -73,7 +95,7 @@ public sealed class ReqnrollProjectDetector : IReqnrollProjectDetector
     private static bool HasReqnrollPackageReference(IProjectScope scope) =>
         (scope.PackageReferences ?? []).Any(package =>
             package?.PackageName is { } name &&
-            PackageNameMarkers.Any(marker => name.Contains(marker, StringComparison.OrdinalIgnoreCase)));
+            name.Contains(PackageNameMarker, StringComparison.OrdinalIgnoreCase));
 
     private bool HasReqnrollRuntimeAssemblyInOutputFolder(IProjectScope scope)
     {
@@ -96,7 +118,6 @@ public sealed class ReqnrollProjectDetector : IReqnrollProjectDetector
         if (string.IsNullOrEmpty(outputFolder))
             return false;
 
-        return RuntimeAssemblyNames.Any(assemblyName =>
-            _fileSystem.File.Exists(_fileSystem.Path.Combine(outputFolder, assemblyName)));
+        return _fileSystem.File.Exists(_fileSystem.Path.Combine(outputFolder, RuntimeAssemblyName));
     }
 }
