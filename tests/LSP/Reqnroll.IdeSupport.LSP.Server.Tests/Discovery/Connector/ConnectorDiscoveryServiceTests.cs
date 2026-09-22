@@ -64,6 +64,25 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         scope.ProjectName.Returns("MyApp.Tests");
         scope.ProjectFolder.Returns(_projectFolder);
         scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        // A Reqnroll package reference, so the issue-#731 gate in ConnectorDiscoveryService lets
+        // discovery through: every test below except the gate's own is about what happens after it.
+        scope.PackageReferences.Returns([
+            new NuGetPackageReference("Reqnroll.MsTest", new NuGetVersion("2.1.0", "2.1.0"), null)
+        ]);
+        return scope;
+    }
+
+    /// <summary>A project the issue-#731 gate must reject: no Reqnroll/SpecFlow package reference, and no Reqnroll/SpecFlow assembly in its output folder.</summary>
+    private IProjectScope MakeNonReqnrollScope(string assemblyPath)
+    {
+        var scope = Substitute.For<IProjectScope>();
+        scope.OutputAssemblyPath.Returns(assemblyPath);
+        scope.ProjectName.Returns("MyApp.Utilities");
+        scope.ProjectFolder.Returns(_projectFolder);
+        scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        scope.PackageReferences.Returns([
+            new NuGetPackageReference("Newtonsoft.Json", new NuGetVersion("13.0.3", "13.0.3"), null)
+        ]);
         return scope;
     }
 
@@ -180,6 +199,65 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         secondRegistry.Should().BeSameAs(firstRegistry);
         secondHash.Should().Be(hash);
         _factory.DidNotReceive().Create(Arg.Any<IProjectScope>());
+    }
+
+    // ── Reqnroll-project gate (issue #731) ───────────────────────────────────────
+
+    [Fact]
+    public void RunDiscovery_does_not_run_the_connector_for_a_non_reqnroll_project()
+    {
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+        var lastGood = SuccessfulRegistry();
+
+        var (registry, hash) = CreateSut().RunDiscovery(
+            scope, lastGood, lastHash: "prev", CancellationToken.None);
+
+        registry.Should().BeSameAs(lastGood);
+        hash.Should().Be("prev");
+        _factory.DidNotReceive().Create(Arg.Any<IProjectScope>());
+    }
+
+    [Fact]
+    public void RunDiscovery_runs_for_a_project_whose_output_folder_contains_the_reqnroll_runtime()
+    {
+        // The Rider case: its projectLoaded payload carries no package references at all, so the
+        // gate has to fall back to the runtime assembly sitting next to the output assembly.
+        File.WriteAllText(Path.Combine(_projectFolder, "Reqnroll.dll"), "not a real assembly");
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+
+        var (registry, _) = CreateSut().RunDiscovery(
+            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        registry.StepDefinitions.Should().HaveCount(1);
+        _factory.Received(1).Create(scope);
+    }
+
+    [Fact]
+    public void RunDiscovery_runs_for_a_legacy_specflow_project()
+    {
+        File.WriteAllText(Path.Combine(_projectFolder, "TechTalk.SpecFlow.dll"), "not a real assembly");
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(
+            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        _factory.Received(1).Create(scope);
+    }
+
+    [Fact]
+    public void RunDiscovery_logs_the_non_reqnroll_skip_only_once_per_project()
+    {
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+        var sut = CreateSut();
+
+        sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+        sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Level == TraceLevel.Info && m.Message.Contains("Not a Reqnroll project")));
     }
 
     // ── Resilience ───────────────────────────────────────────────────────────────

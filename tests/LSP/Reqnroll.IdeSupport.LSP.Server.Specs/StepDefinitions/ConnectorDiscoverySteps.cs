@@ -48,7 +48,13 @@ public sealed class ConnectorDiscoverySteps
             projectFolder = project.ProjectFolder,
             outputAssemblyPath = FixtureDiscovery.FixtureAssemblyPath,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            packageReferences = Array.Empty<object>()
+            // The fixture is a Reqnroll project and has to say so: only its own assembly is
+            // deployed next to the test host, so the output-folder fallback in
+            // ReqnrollProjectDetector cannot see a Reqnroll runtime there (issue #731).
+            packageReferences = new object[]
+            {
+                new { packageId = "Reqnroll", version = "2.1.0", installPath = "" }
+            }
         });
     }
 }
