@@ -84,6 +84,21 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         ReqnrollProjectLoadedParams parameters,
         CancellationToken cancellationToken)
     {
+        // A shared project (.shproj) is not a project this server can own anything for: it has no
+        // output assembly, so its registry could never be populated, and because its folder is the
+        // innermost one containing its own files it would then win ResolvePrimaryOwner for them --
+        // resolving those files to an empty registry instead of the referencing test project's
+        // populated one, which shows up as every step in a shared .feature file being reported
+        // undefined (issue #735). Its content still reaches the server: each project that imports
+        // the .projitems compiles those files, and lists them in its own membership baseline.
+        if (ProjectFileTypes.IsSharedProject(parameters.ProjectFile))
+        {
+            _logger.LogVerbose(
+                $"Ignoring projectLoaded for shared project '{parameters.ProjectFile}': its files " +
+                "belong to the projects that import it.");
+            return Task.CompletedTask;
+        }
+
         // Ensure the workspace folder exists (create it if the IDE sends the project
         // notification before the LSP initialize workspace-folders arrive).
         var folderKey = Normalise(parameters.WorkspaceFolder);
@@ -270,7 +285,19 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     public Task HandleProjectFilesAsync(
         ReqnrollProjectFilesParams parameters,
         CancellationToken cancellationToken)
-        => _membershipIndex.HandleProjectFilesAsync(parameters, cancellationToken);
+    {
+        // Same reasoning as HandleProjectLoadedAsync (issue #735): indexing a shared project's
+        // baseline would attribute its files to a project that is deliberately never registered,
+        // so they would resolve to no owner at all rather than to the importing project.
+        if (ProjectFileTypes.IsSharedProject(parameters.ProjectFile))
+        {
+            _logger.LogVerbose(
+                $"Ignoring projectFiles baseline for shared project '{parameters.ProjectFile}'.");
+            return Task.CompletedTask;
+        }
+
+        return _membershipIndex.HandleProjectFilesAsync(parameters, cancellationToken);
+    }
 
     /// <summary>Looks up every project that claims <paramref name="uri"/> via the membership index (does not fall back to folder-prefix matching).</summary>
     public IReadOnlyCollection<LspReqnrollProject> GetProjectsForUri(DocumentUri uri)

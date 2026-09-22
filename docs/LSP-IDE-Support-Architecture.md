@@ -716,6 +716,8 @@ Roslyn-based (source-level) discovery runs **in-process** within the LSP server 
 | `Reqnroll.dll` next to the output assembly | Project uses Reqnroll. Required for Rider, which sends no package references at all, and covers transitive references and VS's transient empty list (#690). |
 | Owns at least one feature file, per the membership index | Only then is it a *test* project. A Reqnroll project with no feature files of its own is a binding library; its bindings reach the IDE through the referencing test project's output assembly, which that project's own run reflects over. |
 
+Ahead of all of this, a **shared project** (`.shproj`, and the `.projitems` beside it) is not registered as a project at all — `LspWorkspaceScopeManager` ignores both `reqnroll/projectLoaded` and `reqnroll/projectFiles` for one, and the VS glue does not send them (`VsUtils.IsSolutionProject`). A shared project produces no assembly, so its registry could never be populated, and since its folder is the innermost one containing its own files it would otherwise win `ResolvePrimaryOwner` for them and resolve them to that empty registry (issue #735). Its content is owned instead by each project that imports it, which is where those sources actually compile.
+
 The feature-file signal reads the [membership index](#project-membership-the-path--projects-index), never the project folder, so a *linked* feature file counts. It reports "unknown" until a project's `reqnroll/projectFiles` baseline arrives, and unknown runs discovery — skipping a real test project is worse than one redundant Connector run, and the next trigger re-evaluates. Legacy SpecFlow is deliberately not detected; a SpecFlow-only project is skipped like any other non-Reqnroll project.
 
 ```

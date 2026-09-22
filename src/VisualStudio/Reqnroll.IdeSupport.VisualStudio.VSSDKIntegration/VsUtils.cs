@@ -1,4 +1,4 @@
-#nullable disable
+﻿#nullable disable
 using EnvDTE;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.ComponentModelHost;
@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
 using NuGet.VisualStudio.Contracts;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.VisualStudio.Interop;
 using System.Reflection;
 using System.Windows.Media;
@@ -129,14 +130,22 @@ public static class VsUtils
         }
     }
 
-    /// <summary>Returns <see langword="true"/> if <paramref name="project"/> has a resolvable file path (i.e. is a real solution project, not a solution folder).</summary>
+    /// <summary>Returns <see langword="true"/> if <paramref name="project"/> has a resolvable file path (i.e. is a real solution project, not a solution folder) and is not a shared project.</summary>
+    /// <remarks>
+    /// A solution folder is excluded because it has no path at all. A shared project (.shproj) is
+    /// excluded because, although it does have one, it produces no assembly and owns no files of
+    /// its own at build time -- its sources compile into every project that imports its
+    /// .projitems, and sending it as a project makes the server treat it as the owner of those
+    /// files (issue #735).
+    /// </remarks>
     public static bool IsSolutionProject(Project project)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
             return !string.IsNullOrWhiteSpace(project.FullName) &&
-                   Path.GetDirectoryName(project.FullName) != null;
+                   Path.GetDirectoryName(project.FullName) != null &&
+                   !ProjectFileTypes.IsSharedProject(project.FullName);
         }
         catch (Exception ex)
         {
