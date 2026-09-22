@@ -356,10 +356,12 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
     /// </summary>
     private void EnsureNuGetRestoreResendSubscription()
     {
-        ThreadHelper.ThrowIfNotOnUIThread();
+        // Latched before the thread assert: if this is ever reached off the UI thread the throw
+        // must not leave the flag clear, or every subsequent project repeats the failure (#730).
         if (_nugetRestoreResendSubscriptionAttempted)
             return;
         _nugetRestoreResendSubscriptionAttempted = true;
+        ThreadHelper.ThrowIfNotOnUIThread();
 
         _nugetProjectUpdateEvents = VsUtils.ResolveMefDependency<IVsNuGetProjectUpdateEvents>(_serviceProvider);
         if (_nugetProjectUpdateEvents is null)
@@ -409,7 +411,12 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             // restore-finished signal so the real package list gets sent once it's known, instead of
             // leaving the project misclassified until the next build or solution reload.
             if (!payload.PackageReferencesReady)
+            {
+                // The send above used ConfigureAwait(false), so this continuation is no longer on
+                // the UI thread; EnsureNuGetRestoreResendSubscription is UI-affine (issue #730).
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(ct);
                 EnsureNuGetRestoreResendSubscription();
+            }
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
