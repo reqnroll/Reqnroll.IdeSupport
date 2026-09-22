@@ -97,10 +97,22 @@ public sealed class TestOutcomeTcpListener : IDisposable
     /// reporter-side matching concern (issue #715 plan §7 risk #3: deepest-match-wins), not this
     /// listener's — it only needs to publish something a reporter can use as a starting point.
     /// </summary>
-    private static string? ResolveWorkspaceRoot(ILanguageServerFacade languageServer)
+    /// <remarks>
+    /// Falls back to the legacy single-root <c>InitializeParams.RootPath</c>/<c>RootUri</c> fields
+    /// when <c>WorkspaceFolders</c> is empty — live-verified against VS: its LSP client only ever
+    /// advertises the <em>capability</em> (<c>capabilities.workspace.workspaceFolders</c>), it never
+    /// actually sends the <c>workspaceFolders</c> array param itself, so <c>ClientSettings.WorkspaceFolders</c>
+    /// is always empty for a VS session and this resolved to null unconditionally — silently disabling
+    /// the whole MTP breadcrumb-matching mechanism (the reporter's <c>SessionBreadcrumbMatcher.FindBestMatch</c>
+    /// skips any candidate whose <c>WorkspaceRoot</c> is null), even once every other piece of the
+    /// pipeline worked. VS does send <c>rootUri</c>/<c>rootPath</c> (confirmed live via the raw
+    /// <c>initialize</c> request), which <c>RootPath</c> exposes pre-resolved to a file-system path.
+    /// </remarks>
+    internal static string? ResolveWorkspaceRoot(ILanguageServerFacade languageServer)
         => languageServer.ClientSettings.WorkspaceFolders?
             .Select(f => f.Uri.GetFileSystemPath())
-            .FirstOrDefault(p => !string.IsNullOrEmpty(p));
+            .FirstOrDefault(p => !string.IsNullOrEmpty(p))
+           ?? (string.IsNullOrEmpty(languageServer.ClientSettings.RootPath) ? null : languageServer.ClientSettings.RootPath);
 
     /// <summary>The bound loopback endpoint once started, e.g. <c>127.0.0.1:53412</c>; null before the first registration.</summary>
     public string? Endpoint
