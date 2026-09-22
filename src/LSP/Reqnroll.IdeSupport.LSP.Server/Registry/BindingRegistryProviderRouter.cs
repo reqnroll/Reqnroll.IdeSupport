@@ -54,6 +54,7 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
     private readonly IIdeSupportLogger            _logger;
     private readonly ILspTelemetryService?     _telemetryService;
     private readonly IFileSystemForIDE         _fileSystem;
+    private readonly IProjectFeatureFileLookup _featureFileLookup;
 
     // Store (provider, handler) together so Dispose can unsubscribe by the exact delegate
     // that was passed to += in OnProjectDiscovered.
@@ -77,6 +78,8 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
         _logger       = logger;
         _fileSystem   = fileSystem;
         _telemetryService = telemetryService;
+
+        _featureFileLookup = new MembershipIndexFeatureFileLookup(scopeManager);
 
         scopeManager.ProjectDiscovered += OnProjectDiscovered;
         scopeManager.ProjectRemoved    += OnProjectRemoved;
@@ -212,7 +215,8 @@ public sealed class BindingRegistryProviderRouter : IProjectBindingRegistryLooku
 
     private void OnProjectDiscovered(LspReqnrollProject project)
     {
-        var provider = new ConnectorBindingRegistryProvider(project, _logger, _fileSystem, _telemetryService);
+        var provider = new ConnectorBindingRegistryProvider(
+            project, _logger, _fileSystem, _telemetryService, _featureFileLookup);
 
         // Capture project in a named local so the closure below can reference it.
         // Store the delegate so Dispose can unsubscribe by identity.

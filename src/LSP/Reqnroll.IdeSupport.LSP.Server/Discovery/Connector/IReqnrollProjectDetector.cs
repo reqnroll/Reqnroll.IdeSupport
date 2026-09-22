@@ -3,8 +3,8 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
-/// Answers whether a project can contain Reqnroll bindings at all, gating the out-of-process
-/// connector so it is never launched against an unrelated assembly (issue #731).
+/// Answers whether a project is a Reqnroll test project, gating the out-of-process connector so
+/// it is never launched against an assembly whose bindings nothing would match (issue #731).
 /// </summary>
 /// <remarks>
 /// Extracted as an interface so <see cref="ConnectorDiscoveryService"/> can be unit-tested with
@@ -14,8 +14,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 public interface IReqnrollProjectDetector
 {
     /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="scope"/> is a Reqnroll project and
-    /// discovery should run for it.
+    /// Returns <see langword="true"/> when <paramref name="scope"/> uses Reqnroll and owns at
+    /// least one feature file, so discovery should run for it.
     /// </summary>
-    bool IsReqnrollProject(IProjectScope scope);
+    bool IsReqnrollTestProject(IProjectScope scope);
 }

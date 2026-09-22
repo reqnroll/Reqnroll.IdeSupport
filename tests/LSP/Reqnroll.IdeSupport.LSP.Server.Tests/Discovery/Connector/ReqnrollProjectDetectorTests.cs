@@ -79,19 +79,19 @@ public class ReqnrollProjectDetectorTests : IDisposable
     [InlineData("reqnroll.mstest")] // package ids are compared case-insensitively
     public void Recognises_a_reqnroll_package_reference(string packageName)
     {
-        CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json", packageName)).Should().BeTrue();
+        CreateSut().IsReqnrollTestProject(MakeScope("Newtonsoft.Json", packageName)).Should().BeTrue();
     }
 
     [Fact]
     public void Rejects_a_project_with_only_unrelated_package_references()
     {
-        CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json", "Serilog")).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(MakeScope("Newtonsoft.Json", "Serilog")).Should().BeFalse();
     }
 
     [Fact]
     public void Rejects_a_project_with_no_package_references_and_no_runtime_assembly()
     {
-        CreateSut().IsReqnrollProject(MakeScope()).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(MakeScope()).Should().BeFalse();
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
         // other non-Reqnroll project, whichever signal it would otherwise have matched on.
         File.WriteAllText(Path.Combine(_outputFolder, "TechTalk.SpecFlow.dll"), "not a real assembly");
 
-        CreateSut().IsReqnrollProject(MakeScope("SpecFlow", "SpecFlow.NUnit")).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(MakeScope("SpecFlow", "SpecFlow.NUnit")).Should().BeFalse();
     }
 
     // ── Output-folder signal ──────────────────────────────────────────────────
@@ -113,7 +113,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
         // empty list for every project, and VS can send one transiently while NuGet loads (#690).
         File.WriteAllText(Path.Combine(_outputFolder, "Reqnroll.dll"), "not a real assembly");
 
-        CreateSut().IsReqnrollProject(MakeScope()).Should().BeTrue();
+        CreateSut().IsReqnrollTestProject(MakeScope()).Should().BeTrue();
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
         // Reqnroll, but the runtime still lands in the output folder.
         File.WriteAllText(Path.Combine(_outputFolder, "Reqnroll.dll"), "not a real assembly");
 
-        CreateSut().IsReqnrollProject(MakeScope("Contoso.Testing.Common")).Should().BeTrue();
+        CreateSut().IsReqnrollTestProject(MakeScope("Contoso.Testing.Common")).Should().BeTrue();
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
         var scope = MakeScope();
         scope.OutputAssemblyPath.Returns(string.Empty);
 
-        CreateSut().IsReqnrollProject(scope).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(scope).Should().BeFalse();
     }
 
     [Fact]
@@ -141,7 +141,74 @@ public class ReqnrollProjectDetectorTests : IDisposable
         var scope = MakeScope();
         scope.PackageReferences.Returns((IEnumerable<NuGetPackageReference>?)null);
 
-        CreateSut().IsReqnrollProject(scope).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(scope).Should().BeFalse();
+    }
+
+    // ── Feature-file axis (legacy IsReqnrollTestProject) ──────────────────────
+
+    /// <summary>A membership lookup that reports a definite answer for any scope.</summary>
+    private static IProjectFeatureFileLookup LookupReporting(bool? hasFeatureFiles)
+    {
+        var lookup = Substitute.For<IProjectFeatureFileLookup>();
+        lookup.HasFeatureFiles(Arg.Any<IProjectScope>()).Returns(hasFeatureFiles);
+        return lookup;
+    }
+
+    [Fact]
+    public void Rejects_a_reqnroll_project_that_owns_no_feature_files()
+    {
+        // A binding library: it uses Reqnroll, but its bindings belong to the registry of the
+        // test project that references it, whose output assembly they are compiled into. Legacy
+        // classified this as ReqnrollLibProject and its DiscoveryInvoker skipped it.
+        var sut = new ReqnrollProjectDetector(new FileSystemForIDE(), LookupReporting(false));
+
+        sut.IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Runs_for_a_reqnroll_project_that_owns_feature_files()
+    {
+        var sut = new ReqnrollProjectDetector(new FileSystemForIDE(), LookupReporting(true));
+
+        sut.IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Runs_while_the_membership_baseline_has_not_arrived_yet()
+    {
+        // Unknown must never be read as "no feature files": that would skip every project on the
+        // first discovery run after a solution opens, before any baseline lands.
+        var sut = new ReqnrollProjectDetector(new FileSystemForIDE(), LookupReporting(null));
+
+        sut.IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Ignores_the_project_folder_walk_entirely()
+    {
+        // IProjectScope.GetFeatureFileCount walks the project folder, so it reports 0 for a
+        // project whose feature files are all linked in from outside it. That known-wrong zero
+        // must not reach the gate -- only the link-aware membership index decides this axis.
+        var scope = MakeScope("Reqnroll.MsTest");
+        scope.GetFeatureFileCount().Returns(0);
+        var sut = new ReqnrollProjectDetector(new FileSystemForIDE(), LookupReporting(null));
+
+        sut.IsReqnrollTestProject(scope).Should().BeTrue();
+        scope.DidNotReceive().GetFeatureFileCount();
+    }
+
+    [Fact]
+    public void Skips_the_feature_file_axis_when_no_lookup_is_supplied()
+    {
+        CreateSut().IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Applies_the_feature_file_axis_only_to_projects_that_use_reqnroll()
+    {
+        var sut = new ReqnrollProjectDetector(new FileSystemForIDE(), LookupReporting(true));
+
+        sut.IsReqnrollTestProject(MakeScope("Newtonsoft.Json")).Should().BeFalse();
     }
 
     // ── Configuration override (ide.reqnroll.isReqnrollProject) ───────────────
@@ -151,7 +218,18 @@ public class ReqnrollProjectDetectorTests : IDisposable
     {
         GivenReqnrollJsonWithIsReqnrollProject(true);
 
-        CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json")).Should().BeTrue();
+        CreateSut().IsReqnrollTestProject(MakeScope("Newtonsoft.Json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Configured_true_forces_discovery_on_for_a_project_with_no_feature_files()
+    {
+        // Deliberately broader than legacy, where the setting fed only the "uses Reqnroll" half
+        // and a configured-true project with no feature files was still skipped as a lib project.
+        GivenReqnrollJsonWithIsReqnrollProject(true);
+        var sut = new ReqnrollProjectDetector(new FileSystemForIDE(), LookupReporting(false));
+
+        sut.IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
     }
 
     [Fact]
@@ -159,7 +237,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
     {
         GivenReqnrollJsonWithIsReqnrollProject(false);
 
-        CreateSut().IsReqnrollProject(MakeScope("Reqnroll.MsTest")).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeFalse();
     }
 
     [Fact]
@@ -168,7 +246,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
         GivenReqnrollJsonWithIsReqnrollProject(false);
         File.WriteAllText(Path.Combine(_outputFolder, "Reqnroll.dll"), "not a real assembly");
 
-        CreateSut().IsReqnrollProject(MakeScope()).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(MakeScope()).Should().BeFalse();
     }
 
     [Fact]
@@ -179,7 +257,7 @@ public class ReqnrollProjectDetectorTests : IDisposable
         File.WriteAllText(Path.Combine(_projectFolder, "reqnroll.json"),
             """{ "language": { "feature": "en-US" } }""");
 
-        CreateSut().IsReqnrollProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
-        CreateSut().IsReqnrollProject(MakeScope("Newtonsoft.Json")).Should().BeFalse();
+        CreateSut().IsReqnrollTestProject(MakeScope("Reqnroll.MsTest")).Should().BeTrue();
+        CreateSut().IsReqnrollTestProject(MakeScope("Newtonsoft.Json")).Should().BeFalse();
     }
 }

@@ -209,7 +209,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     // ── Reqnroll-project gate (issue #731) ───────────────────────────────────────
 
     [Fact]
-    public void RunDiscovery_does_not_run_the_connector_for_a_non_reqnroll_project()
+    public void RunDiscovery_does_not_run_the_connector_for_a_non_reqnroll_test_project()
     {
         GivenConnectorReturns(SuccessfulResult());
         var scope = MakeNonReqnrollScope(_assemblyPath);
@@ -249,7 +249,7 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
 
         _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
-            m.Level == TraceLevel.Info && m.Message.Contains("Not a Reqnroll project")));
+            m.Level == TraceLevel.Info && m.Message.Contains("Not a Reqnroll test project")));
     }
 
     // ── Resilience ───────────────────────────────────────────────────────────────

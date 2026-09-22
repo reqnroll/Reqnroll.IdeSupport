@@ -45,6 +45,17 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     }
 
     /// <summary>
+    /// Initializes a new instance whose Reqnroll-test-project gate consults
+    /// <paramref name="featureFileLookup"/> for the project's feature files, so linked ones
+    /// outside the project folder count.
+    /// </summary>
+    public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory,
+        IFileSystemForIDE fileSystem, IProjectFeatureFileLookup? featureFileLookup)
+        : this(logger, connectorFactory, fileSystem, new ReqnrollProjectDetector(fileSystem, featureFileLookup))
+    {
+    }
+
+    /// <summary>
     /// Initializes a new instance with a caller-supplied Reqnroll-project detector. Used by tests
     /// to substitute the gate that decides whether the connector may run at all.
     /// </summary>
@@ -87,7 +98,9 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return (lastGood, lastHash);
         }
 
-        // Gate the connector on the project actually being a Reqnroll project (issue #731).
+        // Gate the connector on the project actually being a Reqnroll *test* project -- one that
+        // uses Reqnroll and owns at least one feature file, the same gate the legacy VS
+        // extension's DiscoveryInvoker applied (issue #731).
         // No client filters what it sends -- VS and VS Code report every project in the
         // solution/workspace, Rider every runnable project -- so without this check every ordinary
         // library in the solution got a connector process that loaded its assembly and dependency
@@ -95,20 +108,21 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // file-exists check above because one of the detector's signals is Reqnroll.dll sitting
         // next to this output assembly, and before hashing so a non-Reqnroll project does not pay
         // for a full-file hash either.
-        if (!_projectDetector.IsReqnrollProject(scope))
+        if (!_projectDetector.IsReqnrollTestProject(scope))
         {
             if (!_loggedNonReqnrollSkip)
             {
                 _loggedNonReqnrollSkip = true;
                 _logger.LogInfo(
-                    $"[{scope.ProjectName}] Not a Reqnroll project (no Reqnroll package reference and no " +
-                    $"Reqnroll.dll next to {Path.GetFileName(assemblyPath)}); skipping binding discovery. " +
-                    "Set 'ide.reqnroll.isReqnrollProject' to true in the project's reqnroll.json to " +
-                    "override this.");
+                    $"[{scope.ProjectName}] Not a Reqnroll test project (it needs a Reqnroll package " +
+                    $"reference or a Reqnroll.dll next to {Path.GetFileName(assemblyPath)}, plus at least " +
+                    "one feature file of its own); skipping binding discovery. Set " +
+                    "'ide.reqnroll.isReqnrollProject' to true in the project's reqnroll.json to override " +
+                    "this.");
             }
             else
             {
-                _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll project; skipping binding discovery.");
+                _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll test project; skipping binding discovery.");
             }
 
             return (lastGood, lastHash);
