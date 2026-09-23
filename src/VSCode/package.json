@@ -22,7 +22,6 @@
     "feature"
   ],
   "activationEvents": [
-    "onLanguage:gherkin",
     "onLanguage:plaintext",
     "workspaceContains:**/*.feature"
   ],
