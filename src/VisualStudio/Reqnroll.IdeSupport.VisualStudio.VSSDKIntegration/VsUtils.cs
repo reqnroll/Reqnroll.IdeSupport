@@ -602,22 +602,126 @@ public static class VsUtils
         return projectItem.FileNames[1];
     }
 
-    //public static IEnumerable<Project> GetAllProjects(DTE dte)
-    //{
-    //    var projects = dte.Solution.Projects.OfType<Project>().ToArray();
-    //    return EnumerateProjectHierarchy(projects);
-    //}
+    /// <summary>
+    /// Returns every real project in the solution, descending into solution folders to arbitrary
+    /// depth. <see cref="EnvDTE.Solution.Projects"/> is flat: it yields solution folders as
+    /// <see cref="Project"/> objects, and the projects nested inside them are reachable only via
+    /// <see cref="ProjectItem.SubProject"/> — so enumerating it directly silently drops every
+    /// nested project (issue #729). Solution folders themselves are not returned.
+    /// </summary>
+    public static IEnumerable<Project> GetAllProjects(Solution solution)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
 
-    //private static IEnumerable<Project> EnumerateProjectHierarchy(IEnumerable<Project> projects)
-    //{
-    //    foreach (var project in projects)
-    //    {
-    //        yield return project;
-    //        var subProjects = project.ProjectItems.OfType<ProjectItem>().Select(x => x.SubProject).OfType<Project>()
-    //            .ToArray();
-    //        foreach (var subProject in EnumerateProjectHierarchy(subProjects)) yield return subProject;
-    //    }
-    //}
+        var roots = solution?.Projects;
+        if (roots == null)
+            return Array.Empty<Project>();
+
+        // Materialised rather than lazy: the traversal touches COM, so it must complete while the
+        // caller is still on the UI thread rather than at some later point of enumeration.
+        return ProjectHierarchyWalker
+            .Flatten(roots.OfType<Project>(), GetProjectKey, GetSubProjects)
+            .ToList();
+    }
+
+    /// <summary>
+    /// A project's identity for hierarchy de-duplication: its file path, or <see langword="null"/>
+    /// when the node is a solution folder (or a project whose path cannot be read), which marks it
+    /// as "descend into but do not return".
+    /// </summary>
+    private static string GetProjectKey(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        try
+        {
+            // Kind first: a solution folder is never a project, even on the project types that
+            // report a non-empty FullName for one.
+            return !IsSolutionFolder(project) && IsSolutionProject(project)
+                ? project.FullName
+                : null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex, $"{nameof(VsUtils)}.{nameof(GetProjectKey)}");
+            return null;
+        }
+    }
+
+    /// <summary>The well-known DTE project kind GUID for a solution folder (<c>vsProjectKindSolutionFolder</c>).</summary>
+    private const string SolutionFolderKind = "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}";
+
+    /// <summary>
+    /// Best-effort read of a solution folder's nested sub-projects.
+    /// <para>
+    /// Only solution folders are descended into. A real project's <see cref="Project.ProjectItems"/>
+    /// is its file list, which can run to thousands of entries; probing <c>SubProject</c> on each
+    /// would cost a COM round-trip per file on the UI thread, for nodes that cannot contain a
+    /// nested project anyway.
+    /// </para>
+    /// <para>
+    /// Returns empty rather than throwing: <see cref="Project.ProjectItems"/> is null for some
+    /// project types and can throw for unloaded ones, and one bad node must not abort the walk.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<Project> GetSubProjects(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (!IsSolutionFolder(project))
+            return Array.Empty<Project>();
+
+        ProjectItems items;
+        try
+        {
+            items = project.ProjectItems;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex, $"{nameof(VsUtils)}.{nameof(GetSubProjects)}");
+            return Array.Empty<Project>();
+        }
+
+        if (items == null)
+            return Array.Empty<Project>();
+
+        var result = new List<Project>();
+        foreach (var item in items.OfType<ProjectItem>())
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            Project subProject;
+            try
+            {
+                subProject = item.SubProject;
+            }
+            catch
+            {
+                continue;   // not a container item, or an unloaded project
+            }
+
+            if (subProject != null)
+                result.Add(subProject);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="project"/> is a solution folder — the
+    /// only kind of node that can contain nested projects.
+    /// </summary>
+    private static bool IsSolutionFolder(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        try
+        {
+            return string.Equals(project.Kind, SolutionFolderKind, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex, $"{nameof(VsUtils)}.{nameof(IsSolutionFolder)}");
+            return false;
+        }
+    }
 
     /// <summary>Returns the DTE version string (e.g. "17.0"), falling back to a hard-coded default if unavailable.</summary>
     public static string GetVsMainVersion(IServiceProvider serviceProvider)

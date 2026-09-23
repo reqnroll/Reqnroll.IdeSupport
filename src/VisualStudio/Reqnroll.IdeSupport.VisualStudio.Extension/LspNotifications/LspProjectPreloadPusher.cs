@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
@@ -54,11 +56,14 @@ internal static class LspProjectPreloadPusher
             await pipe.ConnectAsync(15000, cancellationToken).ConfigureAwait(false);
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-            foreach (Project project in solution.Projects)
+            // Materialised on the UI thread before the writes below, which resume off it. The walk
+            // descends into solution folders; a flat Solution.Projects loop drops every nested
+            // project (issue #729).
+            var projects = VsUtils.GetAllProjects(solution).ToList();
+
+            foreach (var project in projects)
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-                if (!VsUtils.IsSolutionProject(project))
-                    continue;
 
                 // A ProjectNotReady baseline here (issue #690) is fine to leave as-is: this preload
                 // push is a best-effort head start (see class remarks), always superseded by
