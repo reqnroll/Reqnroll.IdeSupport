@@ -20,6 +20,13 @@
     <AssemblyName>Reqnroll.IdeSupport.TestReporter.MTP</AssemblyName>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>
+    <!-- Referencing Microsoft.Testing.Platform above (even ExcludeAssets="runtime") is enough for some
+         Test Explorer versions to infer "is this an MTP application" and try to launch this library's
+         DLL directly as an MTP test host — it has no apphost/runtimeconfig.json, so that launch fails
+         with a hostpolicy.dll error (found live in Visual Studio Test Explorer). This project is a
+         plain class library, never a real Microsoft.Testing.Platform test host; see the matching
+         opt-out and explanation in Reqnroll.IdeSupport.TestReporter.MTP.Tests.csproj. -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 
   <ItemGroup>
