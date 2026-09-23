@@ -22,7 +22,6 @@
     "feature"
   ],
   "activationEvents": [
-    "onLanguage:gherkin",
     "onLanguage:plaintext",
     "workspaceContains:**/*.feature"
   ],
@@ -246,6 +245,8 @@
     "build:server:dev": "node scripts/dev-publish-server.mjs",
     "build:testlogger": "bash scripts/publish-testlogger.sh",
     "build:testlogger:dev": "node scripts/dev-publish-testlogger.mjs",
+    "build:mtpreporter": "bash scripts/publish-mtpreporter.sh",
+    "build:mtpreporter:dev": "node scripts/dev-publish-mtpreporter.mjs",
     "build:vsix": "bash scripts/build-vsix.sh",
     "validate:tokens": "node scripts/validate-semantic-token-scopes.mjs",
     "prepare": "cd ../.. && node src/VSCode/node_modules/husky/bin.js"

@@ -133,7 +133,11 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         if (solution?.IsOpen != true)
             return;
 
-        foreach (Project project in solution.Projects)
+        // Materialised before the first await: the enumeration walks DTE on the UI thread, and the
+        // awaits below can resume elsewhere (issue #729).
+        var projects = VsUtils.GetAllProjects(solution).ToList();
+
+        foreach (var project in projects)
         {
             await TrySendProjectLoadedAsync(project, ct).ConfigureAwait(false);
             await TrySendProjectFilesAsync(project, ct).ConfigureAwait(false);
@@ -212,10 +216,8 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
 
         Project? best    = null;
         int      bestLen = 0;
-        foreach (Project project in solution.Projects)
+        foreach (var project in VsUtils.GetAllProjects(solution))
         {
-            if (!IsSolutionProject(project))
-                continue;
             var folder = Path.GetDirectoryName(project.FullName) ?? string.Empty;
             if (PathUtils.IsUnderFolder(filePath, folder) &&
                 folder.Length > bestLen)

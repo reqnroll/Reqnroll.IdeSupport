@@ -33,12 +33,14 @@ src/VSCode/               ← this directory (TypeScript extension)
     test/                 ← Mocha suite (runs in an Extension Development Host)
   syntaxes/               ← TextMate grammar (.tmLanguage.json)
   scripts/
-    publish-server.sh     ← publishes the LSP server for all RIDs
-    publish-testlogger.sh ← publishes the bundled TestLogger (no RID needed)
-    build-vsix.sh         ← packages the .vsix
+    publish-server.sh      ← publishes the LSP server for all RIDs
+    publish-testlogger.sh  ← publishes the bundled TestLogger (no RID needed)
+    publish-mtpreporter.sh ← publishes the bundled TestReporter.MTP (no RID needed)
+    build-vsix.sh          ← packages the .vsix
     validate-semantic-token-scopes.mjs  ← CI validation
 src/LSP/                  ← the shared LSP server (C#)
-src/Core/Reqnroll.IdeSupport.TestLogger/  ← the bundled VSTest logger (C#, shared with VS/Rider)
+src/Core/Reqnroll.IdeSupport.TestLogger/      ← the bundled VSTest logger (C#, shared with VS/Rider)
+src/Core/Reqnroll.IdeSupport.TestReporter.MTP/ ← the bundled MTP in-process reporter (C#, shared with VS/Rider)
 ```
 
 ## Activation events
@@ -80,6 +82,24 @@ npm run build:testlogger
 This runs `scripts/publish-testlogger.sh`, which publishes `Reqnroll.IdeSupport.TestLogger` into
 `src/VSCode/testlogger/`. Unlike the server, there's no RID to choose — the logger targets
 netstandard2.0 with no self-contained runtime, so one build serves every OS.
+
+### 1c. Build the TestReporter.MTP (opt-in feature, LSP-server outcome pipeline, issue #715 phase 4)
+
+Only needed if you're working on `src/testOutcomes/mtpEphemeralInjection.ts` or testing
+`reqnroll.testOutcomes.enabled` against an MTP-mode (Microsoft.Testing.Platform) test project.
+Same opt-in setting as the TestLogger above — skippable for everything else.
+
+```sh
+cd src/VSCode
+npm run build:mtpreporter
+```
+
+This runs `scripts/publish-mtpreporter.sh`, which publishes `Reqnroll.IdeSupport.TestReporter.MTP`
+into `src/VSCode/mtpreporter/`. Like the TestLogger, there's no RID to choose. Unlike the
+TestLogger, this reporter is never referenced via `dotnet.unitTests.runSettingsPath` — it's
+injected ephemerally via a `CustomAfterMicrosoftCommonTargets` environment variable set at
+extension activation (see `mtpEphemeralInjection.ts`'s own doc comment for the mechanism and its
+unverified risk).
 
 ### 2. Install npm dependencies
 
