@@ -112,7 +112,7 @@ suite('mtpEphemeralInjection', () => {
       }
     });
 
-    test('sets the environment variable when an MTP-capable project exists', () => {
+    test('sets the environment variable when an MTP-capable project exists', async () => {
       fs.writeFileSync(
         path.join(dir, 'Tests.csproj'),
         '<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup></Project>',
@@ -121,7 +121,7 @@ suite('mtpEphemeralInjection', () => {
       const reporterDllPath = path.join(dir, 'Reqnroll.IdeSupport.TestReporter.MTP.dll');
       fs.writeFileSync(reporterDllPath, 'not a real assembly', 'utf8');
 
-      const result = tryEnableForWorkspace([dir], reporterDllPath);
+      const result = await tryEnableForWorkspace([dir], reporterDllPath);
 
       assert.strictEqual(result, true);
       const value = process.env[CUSTOM_AFTER_MICROSOFT_COMMON_TARGETS_VARIABLE];
@@ -129,7 +129,10 @@ suite('mtpEphemeralInjection', () => {
       assert.strictEqual(fs.existsSync(value), true);
     });
 
-    test('does not set the environment variable when no project is MTP-capable', () => {
+    test('does not set the environment variable when no project is MTP-capable', async () => {
+      // No Microsoft.NET.Test.Sdk reference either, so the MSBuild-evaluation fallback
+      // (issue #722) isn't reached and this stays a pure in-memory check — no real `dotnet
+      // msbuild` subprocess spawned by this test.
       fs.writeFileSync(
         path.join(dir, 'Tests.csproj'),
         '<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>',
@@ -138,20 +141,20 @@ suite('mtpEphemeralInjection', () => {
       const reporterDllPath = path.join(dir, 'Reqnroll.IdeSupport.TestReporter.MTP.dll');
       fs.writeFileSync(reporterDllPath, 'not a real assembly', 'utf8');
 
-      const result = tryEnableForWorkspace([dir], reporterDllPath);
+      const result = await tryEnableForWorkspace([dir], reporterDllPath);
 
       assert.strictEqual(result, false);
       assert.strictEqual(process.env[CUSTOM_AFTER_MICROSOFT_COMMON_TARGETS_VARIABLE], undefined);
     });
 
-    test('does not set the environment variable when the reporter dll is missing', () => {
+    test('does not set the environment variable when the reporter dll is missing', async () => {
       fs.writeFileSync(
         path.join(dir, 'Tests.csproj'),
         '<Project><PropertyGroup><EnableMSTestRunner>true</EnableMSTestRunner></PropertyGroup></Project>',
         'utf8',
       );
 
-      const result = tryEnableForWorkspace([dir], path.join(dir, 'Missing.dll'));
+      const result = await tryEnableForWorkspace([dir], path.join(dir, 'Missing.dll'));
 
       assert.strictEqual(result, false);
       assert.strictEqual(process.env[CUSTOM_AFTER_MICROSOFT_COMMON_TARGETS_VARIABLE], undefined);

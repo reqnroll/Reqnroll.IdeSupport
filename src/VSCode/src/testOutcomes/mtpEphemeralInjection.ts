@@ -107,10 +107,10 @@ export function writeTargetsFile(
  * process's lifetime. Returns `true` when it enabled injection, `false` otherwise (no MTP-capable
  * project found, or the bundled reporter is missing) — never throws.
  */
-export function tryEnableForWorkspace(
+export async function tryEnableForWorkspace(
   workspaceFolderPaths: readonly string[],
   reporterDllPath: string,
-): boolean {
+): Promise<boolean> {
   try {
     if (!fs.existsSync(reporterDllPath)) {
       logWarn(
@@ -119,9 +119,11 @@ export function tryEnableForWorkspace(
       return false;
     }
 
-    const mtpCapable = workspaceFolderPaths.some((folder) =>
-      enumerateProjectFiles(folder).some((projectFile) => isMtpCapable(projectFile)),
+    const projectFiles = workspaceFolderPaths.flatMap((folder) => enumerateProjectFiles(folder));
+    const mtpCapableFlags = await Promise.all(
+      projectFiles.map((projectFile) => isMtpCapable(projectFile)),
     );
+    const mtpCapable = mtpCapableFlags.some((capable) => capable);
     if (!mtpCapable) {
       logInfo(
         'testOutcomes: no MTP-capable project found in the workspace; not enabling ephemeral injection.',
@@ -149,9 +151,9 @@ export function tryEnableForWorkspace(
  * than the VSTest-logger path) and must run as early in `activate()` as possible, before any test
  * run C# Dev Kit might launch could plausibly start. Never throws.
  */
-export function activateMtpEphemeralInjection(
+export async function activateMtpEphemeralInjection(
   context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath'>,
-): void {
+): Promise<void> {
   const enabled = vscode.workspace
     .getConfiguration('reqnroll')
     .get<boolean>('testOutcomes.enabled', false);
@@ -168,7 +170,7 @@ export function activateMtpEphemeralInjection(
   const workspaceFolderPaths = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
   if (workspaceFolderPaths.length === 0) return;
 
-  tryEnableForWorkspace(
+  await tryEnableForWorkspace(
     workspaceFolderPaths,
     path.join(reporterDirectory, MTP_REPORTER_ASSEMBLY_FILE_NAME),
   );

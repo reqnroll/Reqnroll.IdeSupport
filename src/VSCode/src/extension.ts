@@ -121,7 +121,7 @@ export interface ReqnrollExtensionApi {
  * language client (middleware, status bar, telemetry, manual `.cs` document sync), and
  * registers all Reqnroll commands.
  */
-export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi {
+export async function activate(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
   const api: ReqnrollExtensionApi = { getClient: () => client };
 
   const notReady = (label: string) => () => {
@@ -145,8 +145,12 @@ export function activate(context: vscode.ExtensionContext): ReqnrollExtensionApi
   // MTP ephemeral injection (issue #715 phase 4) must run as early as possible — before any test
   // run C# Dev Kit might launch could plausibly start — since it sets an environment variable that
   // only affects `dotnet test` processes spawned *after* it's set. Independent of the LSP client
-  // (no `await client.start()` needed), unlike `activateTestOutcomes` below.
-  activateMtpEphemeralInjection(context);
+  // (no `await client.start()` needed), unlike `activateTestOutcomes` below. Awaited here (rather
+  // than fire-and-forget) because its MTP-capability scan can shell out to `dotnet msbuild`
+  // (issue #722) — awaiting keeps that subprocess call off VS Code's synchronous activation path
+  // while still guaranteeing the env var is set before `activate()` returns and any test run can
+  // plausibly start.
+  await activateMtpEphemeralInjection(context);
 
   const traceChannel = createTraceChannel();
 
