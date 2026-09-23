@@ -23,10 +23,12 @@ fun interface ReqnrollConsoleSink {
  * (src/Core/Reqnroll.IdeSupport.Common/Logging/AsynchronousFileLogger.cs): plugin
  * lifecycle/diagnostic messages — not LSP wire traffic, see CONTRIBUTING.md for why that
  * part isn't replicable here — appended to
- * `<Reqnroll log dir>/reqnroll-rider-ext-<yyyyMMdd>-<pid>.log`, pruned after 10 days.
- * Log directory follows the VS Code extension's per-OS convention (lspInspectorLogger.ts
- * resolveLogDirectory), since this plugin runs on the JVM across the same OSes VS Code
- * does, unlike the Windows-only VS extension.
+ * `<Reqnroll log dir>/reqnroll-rider-ext-<yyyyMMdd>-<pid>.log`, pruned after 10 days. The log
+ * directory is a `logs` subfolder of the shared Reqnroll application directory (issue #726),
+ * keeping it separate from unrelated persisted state that directory may hold. Its per-OS
+ * resolution follows the VS Code extension's convention (logPaths.ts's resolveLogDirectory),
+ * since this plugin runs on the JVM across the same OSes VS Code does, unlike the Windows-only
+ * VS extension.
  *
  * Timestamps are UTC (issue #625) — the previous `LocalDateTime.now()` carried no offset at
  * all, so a log collected from a machine in an unknown timezone couldn't be correlated with
@@ -126,13 +128,18 @@ object ReqnrollDebugLogger {
      * selection be unit tested for every OS without mutating global JVM/environment state. Mirrors
      * [com.reqnroll.ide.rider.lsp.ReqnrollServerPathResolver]'s identical rationale for its own
      * `rid`/`isWindows` functions.
+     *
+     * Returns the `logs` subfolder of the per-OS Reqnroll application directory, not that
+     * directory itself (issue #726) — this plugin has no non-log state to keep at the
+     * application-directory root, so unlike the .NET host side there is no separate
+     * `resolveApplicationDirectory` equivalent here; every caller wants the log location.
      */
     internal fun logDirectory(osName: String, localAppData: String?, home: String): File {
         val os = osName.lowercase()
         return when {
-            os.contains("win") -> File(localAppData ?: home, "Reqnroll")
-            os.contains("mac") -> File(home, "Library/Logs/Reqnroll")
-            else -> File(home, ".local/share/Reqnroll")
+            os.contains("win") -> File(localAppData ?: home, "Reqnroll/logs")
+            os.contains("mac") -> File(home, "Library/Logs/Reqnroll/logs")
+            else -> File(home, ".local/share/Reqnroll/logs")
         }
     }
 

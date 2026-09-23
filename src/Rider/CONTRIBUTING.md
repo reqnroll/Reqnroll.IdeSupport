@@ -361,12 +361,12 @@ resolved server path, launch command, exceptions — not wire traffic). `Reqnrol
 `AsynchronousFileLogger`/`SynchronousFileLogger` convention
 (`src/Core/Reqnroll.IdeSupport.Common/Logging`): appends to
 `<Reqnroll log dir>/reqnroll-rider-ext-<yyyyMMdd>-<pid>.log`, pruned after 10 days. Log
-directory follows the VS Code extension's per-OS convention (`lspInspectorLogger.ts`
+directory follows the VS Code extension's per-OS convention (`logPaths.ts`
 `resolveLogDirectory`) rather than the Windows-only VS one, since this plugin runs on the
 JVM across the same OSes VS Code does:
-- Windows: `%LOCALAPPDATA%\Reqnroll`
-- macOS: `~/Library/Logs/Reqnroll`
-- Linux: `~/.local/share/Reqnroll`
+- Windows: `%LOCALAPPDATA%\Reqnroll\logs`
+- macOS: `~/Library/Logs/Reqnroll/logs`
+- Linux: `~/.local/share/Reqnroll/logs`
 
 This is a separate log from the *server's* own `reqnroll-<ide>-*.log` (governed by
 `--log-level`, which `runIde` sets to `Verbose` automatically — see "Bundling the LSP

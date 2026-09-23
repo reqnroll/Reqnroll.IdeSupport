@@ -12,7 +12,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 
 /// <summary>
 /// Keeps <see cref="TestOutcomeStore"/>'s contents across server restarts in one JSON file under the
-/// Reqnroll log directory (<c>%LOCALAPPDATA%\Reqnroll\test-outcomes.json</c>), keyed by test-container
+/// Reqnroll application directory (<c>%LOCALAPPDATA%\Reqnroll\test-outcomes.json</c> — a sibling of
+/// the <c>logs</c> subfolder, not inside it; issue #726), keyed by test-container
 /// path like the store itself — so no per-solution or per-IDE bookkeeping is needed: whichever solution
 /// owns a container, its outcomes are found by the container's path. One file shared by every IDE the
 /// server serves, since the server process (not the IDE) now owns this state.
@@ -57,8 +58,12 @@ public sealed class TestOutcomePersistence
     }
 
     /// <summary>
-    /// <see cref="Logging.ReqnrollLogPaths.ResolveLogDirectory"/> is broadly safe (its own file
-    /// enumeration is already guarded) but still resolves environment-dependent paths via
+    /// Uses <see cref="Logging.ReqnrollLogPaths.ResolveApplicationDirectory"/>, not
+    /// <c>ResolveLogDirectory</c> — this file is persisted state, not a log, so it belongs in the
+    /// application directory's root alongside the telemetry <c>userid</c> file rather than under
+    /// the <c>logs</c> subfolder (issue #726); it is also exempt from the 10-day log-retention
+    /// pruning that directory gets. Resolution is broadly safe (its own file enumeration is
+    /// already guarded) but still combines environment-dependent paths via
     /// <see cref="Path.Combine(string, string)"/>, which can throw on a sufficiently unusual
     /// environment; never let that take the whole outcome pipeline down.
     /// </summary>
@@ -66,11 +71,11 @@ public sealed class TestOutcomePersistence
     {
         try
         {
-            return Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), "test-outcomes.json");
+            return Path.Combine(ReqnrollLogPaths.ResolveApplicationDirectory(), "test-outcomes.json");
         }
         catch (Exception ex)
         {
-            logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: could not resolve the Reqnroll log directory; falling back to the temp directory");
+            logger.LogException(ex, $"{nameof(TestOutcomePersistence)}: could not resolve the Reqnroll application directory; falling back to the temp directory");
             return Path.Combine(Path.GetTempPath(), "reqnroll-test-outcomes.json");
         }
     }

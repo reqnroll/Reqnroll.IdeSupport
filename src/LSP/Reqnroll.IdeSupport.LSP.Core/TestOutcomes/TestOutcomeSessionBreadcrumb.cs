@@ -13,7 +13,8 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 /// so a test-runner-hosted reporter that cannot be handed the endpoint per-run (Microsoft.Testing.Platform
 /// — issue #715, which has no per-run config injection channel the way VSTest's runsettings does) can
 /// discover it instead: one file per LSP server process under
-/// <c>&lt;Reqnroll log dir&gt;\test-outcomes\sessions\&lt;pid&gt;.json</c>, named by this process's own
+/// <c>&lt;Reqnroll application dir&gt;\test-outcomes\sessions\&lt;pid&gt;.json</c> (a sibling of the
+/// <c>logs</c> subfolder, not inside it; issue #726), named by this process's own
 /// PID so concurrently-running server instances (one per open VS/Rider/VS Code window) never collide.
 /// </summary>
 /// <remarks>
@@ -60,16 +61,23 @@ public sealed class TestOutcomeSessionBreadcrumb : IDisposable
 
     private string FilePath => Path.Combine(_sessionsDirectory, $"{_pid}.json");
 
-    /// <summary>Mirrors <see cref="Reqnroll.IdeSupport.Common.Logging.TelemetryDebugLog.DefaultPath"/>'s pattern: never let path resolution take the pipeline down.</summary>
+    /// <summary>
+    /// Uses <see cref="ReqnrollLogPaths.ResolveApplicationDirectory"/>, not <c>ResolveLogDirectory</c>
+    /// — these breadcrumbs are discovery state for the MTP reporter, not logs (issue #726), and this
+    /// location must keep agreeing with the reporter side's independent
+    /// <c>Reqnroll.IdeSupport.TestReporter.MTP.SessionsDirectory.Resolve</c>, which was never changed
+    /// by that issue. Mirrors <see cref="Reqnroll.IdeSupport.Common.Logging.TelemetryDebugLog.DefaultPath"/>'s
+    /// pattern: never let path resolution take the pipeline down.
+    /// </summary>
     private static string ResolveDefaultSessionsDirectory(IIdeSupportLogger logger)
     {
         try
         {
-            return Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), "test-outcomes", "sessions");
+            return Path.Combine(ReqnrollLogPaths.ResolveApplicationDirectory(), "test-outcomes", "sessions");
         }
         catch (Exception ex)
         {
-            logger.LogException(ex, $"{nameof(TestOutcomeSessionBreadcrumb)}: could not resolve the Reqnroll log directory; falling back to the temp directory");
+            logger.LogException(ex, $"{nameof(TestOutcomeSessionBreadcrumb)}: could not resolve the Reqnroll application directory; falling back to the temp directory");
             return Path.Combine(Path.GetTempPath(), "reqnroll-test-outcomes-sessions");
         }
     }

@@ -9,7 +9,7 @@ public class ConnectorLogPathsTests
     {
         ConnectorLogPaths
             .ResolveLogDirectory("Microsoft Windows 10.0.22631", @"C:\Users\me\AppData\Local", @"C:\Users\me")
-            .Should().Be(Path.Combine(@"C:\Users\me\AppData\Local", "Reqnroll"));
+            .Should().Be(Path.Combine(@"C:\Users\me\AppData\Local", "Reqnroll", "logs"));
     }
 
     [Fact]
@@ -17,7 +17,7 @@ public class ConnectorLogPathsTests
     {
         ConnectorLogPaths
             .ResolveLogDirectory("Microsoft Windows 10.0.22631", null, @"C:\Users\me")
-            .Should().Be(Path.Combine(@"C:\Users\me", "Reqnroll"));
+            .Should().Be(Path.Combine(@"C:\Users\me", "Reqnroll", "logs"));
     }
 
     [Fact]
@@ -25,7 +25,7 @@ public class ConnectorLogPathsTests
     {
         ConnectorLogPaths
             .ResolveLogDirectory("Darwin 23.6.0 Darwin Kernel Version 23.6.0", null, "/Users/me")
-            .Should().Be(Path.Combine("/Users/me", "Library", "Logs", "Reqnroll"));
+            .Should().Be(Path.Combine("/Users/me", "Library", "Logs", "Reqnroll", "logs"));
     }
 
     [Fact]
@@ -33,7 +33,7 @@ public class ConnectorLogPathsTests
     {
         ConnectorLogPaths
             .ResolveLogDirectory("Linux 6.8.0-generic", null, "/home/me")
-            .Should().Be(Path.Combine("/home/me", ".local", "share", "Reqnroll"));
+            .Should().Be(Path.Combine("/home/me", ".local", "share", "Reqnroll", "logs"));
     }
 
     [Fact]

@@ -205,7 +205,7 @@ To see raw JSON-RPC traffic, open VS Code Settings and set:
 reqnroll.trace.server: verbose
 ```
 
-Traffic appears in the **Output** panel under **Reqnroll LSP Trace**. When set to `verbose`, a timestamped log file is also written to `%LOCALAPPDATA%\Reqnroll\` (Windows) or `~/.local/share/Reqnroll/` (macOS/Linux).
+Traffic appears in the **Output** panel under **Reqnroll LSP Trace**. When set to `verbose`, a timestamped log file is also written to `%LOCALAPPDATA%\Reqnroll\logs\` (Windows) or `~/.local/share/Reqnroll/logs/` (macOS/Linux).
 
 Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--trace` or
 `--protocol-log-level` — `reqnroll.trace.server` is the one setting that drives both sides:
@@ -241,7 +241,7 @@ independent display-level filter — set only by the user, via that channel's ow
 Output panel (or Command Palette → "Developer: Set Log Level…" → pick the channel). Nothing in
 `reqnroll.trace.server`, or anywhere else in the extension, can raise that filter programmatically,
 so a channel left at its default level will silently show nothing even while tracing is fully
-active. If the panel looks empty, check the timestamped file log under `%LOCALAPPDATA%\Reqnroll\`
+active. If the panel looks empty, check the timestamped file log under `%LOCALAPPDATA%\Reqnroll\logs\`
 (or the platform equivalent above) instead — it's written directly to disk and isn't subject to
 this filter, so it's the more reliable place to look.
 

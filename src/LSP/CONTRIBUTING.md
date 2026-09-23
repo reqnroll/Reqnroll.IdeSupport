@@ -174,7 +174,7 @@ see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md) and
 
 ## Debugging
 
-Runtime logs land in `%LocalAppData%\Reqnroll\` (Windows) / `~/.local/share/Reqnroll/`
+Runtime logs land in `%LocalAppData%\Reqnroll\logs\` (Windows) / `~/.local/share/Reqnroll/logs/`
 (macOS/Linux), pruned after 10 days (`ReqnrollLogPaths`/`ConnectorLogPaths`). Every .NET-side log
 file (server, Connector, VS/VS Code file sinks) shares one canonical preamble — UTC timestamp,
 level, origin, thread id (`LogLineFormatter.FormatPreamble`) — so entries from different

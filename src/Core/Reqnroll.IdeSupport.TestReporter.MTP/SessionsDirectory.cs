@@ -3,8 +3,9 @@ using System.Runtime.InteropServices;
 namespace Reqnroll.IdeSupport.TestReporter.MTP;
 
 /// <summary>
-/// Resolves <c>&lt;Reqnroll log dir&gt;\test-outcomes\sessions</c> — the directory the LSP server's
-/// <c>TestOutcomeSessionBreadcrumb</c> (issue #715 phase 1) writes session breadcrumb files into.
+/// Resolves <c>&lt;Reqnroll application dir&gt;\test-outcomes\sessions</c> — the directory the LSP
+/// server's <c>TestOutcomeSessionBreadcrumb</c> (issue #715 phase 1) writes session breadcrumb
+/// files into.
 /// </summary>
 /// <remarks>
 /// This deliberately duplicates <c>Reqnroll.IdeSupport.Common.Logging.ReqnrollLogPaths</c>'s per-OS
@@ -13,6 +14,13 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP;
 /// adding to that process just to share ~15 lines of directory logic — the same reasoning already
 /// applied to the Connector's <c>ConnectorLogPaths</c>. Keep this in sync by hand with
 /// <c>ReqnrollLogPaths</c>/<c>ConnectorLogPaths</c> if that per-OS convention ever changes.
+/// <para>
+/// This intentionally mirrors <see cref="Reqnroll.IdeSupport.Common.Logging.ReqnrollLogPaths.ResolveApplicationDirectory()"/>,
+/// not <c>ResolveLogDirectory()</c> — session breadcrumbs are discovery state for the reporter, not
+/// logs, and must keep pointing at the same location <c>TestOutcomeSessionBreadcrumb</c> resolves on
+/// the server side, which issue #726 (relocating log files under a <c>logs</c> subfolder) left
+/// unchanged for exactly this reason.
+/// </para>
 /// </remarks>
 internal static class SessionsDirectory
 {

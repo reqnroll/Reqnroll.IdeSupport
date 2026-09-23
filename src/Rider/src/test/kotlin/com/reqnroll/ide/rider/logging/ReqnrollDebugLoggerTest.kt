@@ -48,7 +48,7 @@ class ReqnrollDebugLoggerTest {
     @Test
     fun `logDirectory uses LOCALAPPDATA on Windows`() {
         assertEquals(
-            File("C:\\Users\\me\\AppData\\Local", "Reqnroll"),
+            File("C:\\Users\\me\\AppData\\Local", "Reqnroll/logs"),
             ReqnrollDebugLogger.logDirectory("Windows 11", "C:\\Users\\me\\AppData\\Local", "C:\\Users\\me"),
         )
     }
@@ -56,7 +56,7 @@ class ReqnrollDebugLoggerTest {
     @Test
     fun `logDirectory falls back to home when LOCALAPPDATA is unset on Windows`() {
         assertEquals(
-            File("C:\\Users\\me", "Reqnroll"),
+            File("C:\\Users\\me", "Reqnroll/logs"),
             ReqnrollDebugLogger.logDirectory("Windows 11", null, "C:\\Users\\me"),
         )
     }
@@ -64,7 +64,7 @@ class ReqnrollDebugLoggerTest {
     @Test
     fun `logDirectory uses Library-Logs on macOS`() {
         assertEquals(
-            File("/Users/me", "Library/Logs/Reqnroll"),
+            File("/Users/me", "Library/Logs/Reqnroll/logs"),
             ReqnrollDebugLogger.logDirectory("Mac OS X", null, "/Users/me"),
         )
     }
@@ -72,7 +72,7 @@ class ReqnrollDebugLoggerTest {
     @Test
     fun `logDirectory falls back to XDG-style local-share for anything else`() {
         assertEquals(
-            File("/home/me", ".local/share/Reqnroll"),
+            File("/home/me", ".local/share/Reqnroll/logs"),
             ReqnrollDebugLogger.logDirectory("Linux", null, "/home/me"),
         )
     }
@@ -80,7 +80,7 @@ class ReqnrollDebugLoggerTest {
     @Test
     fun `logDirectory os detection is case-insensitive`() {
         assertEquals(
-            File("C:\\Users\\me", "Reqnroll"),
+            File("C:\\Users\\me", "Reqnroll/logs"),
             ReqnrollDebugLogger.logDirectory("WINDOWS 10", null, "C:\\Users\\me"),
         )
     }
