@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 using IServiceProvider = System.IServiceProvider;
 
@@ -71,6 +72,14 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         await ResolveLoggerAndTelemetryAsync(cancellationToken);
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
+
+        // Issue #715 phase 4 (VS leg): a user-global MSBuild ImportAfter file-drop
+        // (MtpBuildIntegration), not solution-scoped and not tied to this devenv.exe session — no
+        // dependency on solution load, so it runs here rather than after WaitForSolutionLoadAsync
+        // below. (An earlier per-session CustomAfterMicrosoftCommonTargets environment-variable
+        // design was live-verified to never reach VS's actual build — see MtpBuildIntegration's
+        // remarks for why.)
+        TryEnableMtpBuildIntegration();
 
         // Advise before the solution-load wait, not after: the restored .feature stubs we want to
         // observe are realized *during* restore, so a subscription taken afterwards would miss the
@@ -330,6 +339,32 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         }
 
         _logger.LogInfo("WaitForSolutionLoadAsync: max attempts reached, proceeding anyway.");
+    }
+
+    /// <summary>
+    /// Issue #715 phase 4 (VS leg): resolves the bundled MTP reporter and defers to
+    /// <see cref="MtpBuildIntegration.TryEnable(string, IIdeSupportLogger)"/> for the actual
+    /// registration. No VS API needed (no solution, no main-thread switch) — the ImportAfter file
+    /// drop is entirely a filesystem operation. Best-effort — any failure here is logged and
+    /// otherwise ignored; this must never prevent the rest of package initialization from completing.
+    /// </summary>
+    private void TryEnableMtpBuildIntegration()
+    {
+        try
+        {
+            var reporterDllPath = MtpReporterPathResolver.Resolve(typeof(ReqnrollPluginPackage).Assembly.Location);
+            if (reporterDllPath is null)
+            {
+                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; skipping MTP build integration.");
+                return;
+            }
+
+            MtpBuildIntegration.TryEnable(reporterDllPath, _logger);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: TryEnableMtpBuildIntegration failed.");
+        }
     }
 
     protected override void Dispose(bool disposing)

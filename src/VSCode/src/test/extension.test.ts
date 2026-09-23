@@ -39,6 +39,9 @@ import './logging/appNotify.test';
 import './testOutcomes/runSettingsInjector.test';
 import './testOutcomes/testLoggerPath.test';
 import './testOutcomes/testOutcomeCodeLens.test';
+import './testOutcomes/mtpProjectDetection.test';
+import './testOutcomes/mtpReporterPath.test';
+import './testOutcomes/mtpEphemeralInjection.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.
