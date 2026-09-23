@@ -115,9 +115,14 @@ async function computeCodeLenses(
 
     // The command is a genuine no-op (see NOOP_COMMAND's registration) — this lens is
     // display-only by design (see the module doc comment); it just needs *a* command to stay
-    // "resolved" so VS Code actually renders it.
+    // "resolved" so VS Code actually renders it. `tooltip` is a real `vscode.Command` field (the
+    // lens's own inline hover) — issue #723, the same bug already fixed on the VS side in
+    // 4bdefaf5 (`RunTestCodeLensDataPoint.BuildTooltip`/`HookCodeLensDataPoint.BuildTooltip`):
+    // this went unset here too, so hovering the lens showed nothing at all instead of failure
+    // detail.
     const codeLens = new vscode.CodeLens(new vscode.Range(range.start, range.start), {
       title: renderTitle(outcome),
+      tooltip: buildTooltip(outcome),
       command: NOOP_COMMAND,
     });
     lenses.push(codeLens);
@@ -203,10 +208,10 @@ export function combineOutcomes(
 }
 
 /**
- * Builds the lens title from an aggregate outcome — the whole "tooltip" this lens has, since a
- * command-less `vscode.CodeLens` has nowhere else to put detail. Names the first failing row's
- * step when there is exactly one failing row (the common case), otherwise a count, so a Scenario
- * Outline failure says *which* example broke without needing a click. `export`ed for unit testing.
+ * Builds the lens's always-visible inline title from an aggregate outcome. Names the first
+ * failing row's step when there is exactly one failing row (the common case), otherwise a count,
+ * so a Scenario Outline failure says *which* example broke without needing to hover.
+ * `export`ed for unit testing.
  */
 export function renderTitle(outcome: GetTestOutcomeResponse): string {
   const suffix = outcome.isStale ? ' (stale)' : '';
@@ -224,4 +229,46 @@ export function renderTitle(outcome: GetTestOutcomeResponse): string {
 
 function describeFailedRow(row: TestOutcomeRow): string {
   return row.failedStepText ? `${row.displayName}: ${row.failedStepText}` : row.displayName;
+}
+
+/**
+ * Builds the lens's hover text (`vscode.Command.tooltip`) — the VS Code counterpart of VS's
+ * `RunTestCodeLensDataPoint.BuildTooltip`/`HookCodeLensDataPoint.BuildTooltip` (4bdefaf5). Unlike
+ * `renderTitle`, which only names the *first* failing row (to keep the always-visible inline text
+ * short), this lists every failing row with its failed step and error message — the detail VS
+ * puts behind a Details-popup click and Rider puts in its own hover, neither of which this
+ * command-less lens has an equivalent surface for, so the hover is the only place VS Code can put
+ * it. Returns `undefined` (no hover) only when there is nothing to say — a passing, non-stale
+ * outcome. `export`ed for unit testing.
+ */
+export function buildTooltip(outcome: GetTestOutcomeResponse): string | undefined {
+  if (outcome.aggregate !== 'Failed') {
+    return outcome.isStale ? '✓ Passed (stale — rerun to confirm)' : undefined;
+  }
+
+  const failedRows = outcome.rows.filter((r) => r.outcome === 'Failed');
+  if (failedRows.length === 0) return '✗ Failed';
+
+  return failedRows.map(describeFailedRowDetail).join('\n\n');
+}
+
+function describeFailedRowDetail(row: TestOutcomeRow): string {
+  const stepDetail = row.failedStepText
+    ? `${row.displayName}: ${row.failedStepText} (${describeStepOutcome(row.failedStepOutcome)})`
+    : row.displayName;
+  return row.errorMessage ? `${stepDetail}\n${row.errorMessage}` : stepDetail;
+}
+
+/** Mirrors VS's `RunTestCodeLensDataPoint.DescribeStepOutcome` word-for-word for cross-IDE consistency. */
+function describeStepOutcome(stepOutcome: string | undefined): string {
+  switch (stepOutcome) {
+    case 'Error':
+      return 'threw';
+    case 'BindingError':
+      return 'binding error';
+    case 'Undefined':
+      return 'undefined step';
+    default:
+      return stepOutcome ?? 'failed';
+  }
 }

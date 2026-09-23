@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import { DocumentSymbol, SymbolInformation, SymbolKind } from 'vscode-languageclient/node';
 import { GetTestOutcomeResponse, TestOutcomeRow } from '../../testOutcomes/testOutcomesService';
 import {
+  buildTooltip,
   collectMethodSymbols,
   combineOutcomes,
   renderTitle,
@@ -31,8 +32,13 @@ function namespaceSymbol(name: string, children: DocumentSymbol[]): DocumentSymb
   };
 }
 
-function row(displayName: string, outcome: string, failedStepText?: string): TestOutcomeRow {
-  return { displayName, outcome, durationMs: 0, stepCount: 0, failedStepText };
+function row(
+  displayName: string,
+  outcome: string,
+  failedStepText?: string,
+  extra: Partial<TestOutcomeRow> = {},
+): TestOutcomeRow {
+  return { displayName, outcome, durationMs: 0, stepCount: 0, failedStepText, ...extra };
 }
 
 function response(
@@ -143,6 +149,59 @@ suite('testOutcomeCodeLens', () => {
         response('Failed', [row('r1', 'Failed'), row('r2', 'Failed'), row('r3', 'Passed')]),
       );
       assert.strictEqual(result, '✗ Failed (2 of 3 rows)');
+    });
+  });
+
+  // ── buildTooltip (issue #723: lens hover showed nothing — same bug as VS's 4bdefaf5) ─────────
+
+  suite('buildTooltip', () => {
+    test('is undefined for a passing, non-stale outcome', () => {
+      assert.strictEqual(buildTooltip(response('Passed')), undefined);
+    });
+
+    test('notes a stale passing outcome rather than showing nothing', () => {
+      assert.strictEqual(
+        buildTooltip(response('Passed', [], true)),
+        '✓ Passed (stale — rerun to confirm)',
+      );
+    });
+
+    test('describes a failing row with its step, step outcome kind, and error message', () => {
+      const result = buildTooltip(
+        response('Failed', [
+          row('row 1', 'Failed', 'When the calculation explodes', {
+            failedStepOutcome: 'Error',
+            errorMessage: 'System.DivideByZeroException: Attempted to divide by zero.',
+          }),
+        ]),
+      );
+      assert.strictEqual(
+        result,
+        'row 1: When the calculation explodes (threw)\n' +
+          'System.DivideByZeroException: Attempted to divide by zero.',
+      );
+    });
+
+    test('falls back to the row name alone when no failed-step text is known', () => {
+      const result = buildTooltip(response('Failed', [row('row 1', 'Failed')]));
+      assert.strictEqual(result, 'row 1');
+    });
+
+    test('lists every failing row, unlike the inline title which only names the first', () => {
+      const result = buildTooltip(
+        response('Failed', [
+          row('r1', 'Failed', 'step A', { failedStepOutcome: 'Undefined' }),
+          row('r2', 'Passed'),
+          row('r3', 'Failed', 'step B', { failedStepOutcome: 'BindingError' }),
+        ]),
+      );
+      assert.strictEqual(result, 'r1: step A (undefined step)\n\nr3: step B (binding error)');
+    });
+
+    test('falls back to a bare "Failed" when the aggregate is Failed but no row is marked Failed', () => {
+      // Defensive: shouldn't happen in practice (combineOutcomes only sets aggregate=Failed when
+      // a row is), but must not throw or show an empty string.
+      assert.strictEqual(buildTooltip(response('Failed', [row('r1', 'Passed')])), '✗ Failed');
     });
   });
 });
