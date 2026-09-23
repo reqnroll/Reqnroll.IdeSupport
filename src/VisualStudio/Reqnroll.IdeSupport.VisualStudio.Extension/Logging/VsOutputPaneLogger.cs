@@ -18,7 +18,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Logging;
 /// <c>OutputWindowPaneLogger</c> pair, which the new architecture never carried over. Previously
 /// the "Reqnroll Language Client" pane visible in VS was VS.Extensibility's own generic LSP-trace
 /// pane, and application-level messages (e.g. the "Rename failed" report that surfaced this) were
-/// only ever written to the per-PID file log under %LOCALAPPDATA%\Reqnroll\.
+/// only ever written to the per-PID file log under %LOCALAPPDATA%\Reqnroll\logs\.
 /// </summary>
 /// <remarks>
 /// Pane creation and writes are STA-bound, so <see cref="Log"/> posts the work to the UI thread

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Nerdbank.Streams;
 using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
@@ -426,8 +427,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 _serverProcess.StandardInput.BaseStream.UsePipeWriter());
 
             // Build the LSP Inspector log file path, unique per session.
-            var logDir  = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Reqnroll");
-            var logFile = Path.Combine(logDir, $"reqnroll-vs-inspector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+            var logFile = Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), $"reqnroll-vs-inspector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
             _logger.LogInformation(
                 "LspServerConnectionService: server process started (PID {ProcessId}). Inspector log: {LogFile}",
                 _serverProcess.Id, logFile);
