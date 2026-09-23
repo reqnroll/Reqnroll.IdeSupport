@@ -149,6 +149,68 @@ public class LspWorkspaceScopeManagerTests : IDisposable
             TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0"
         };
 
+    // ── Shared projects (issue #735) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_ignores_a_shared_project()
+    {
+        // A .shproj has no output assembly, so its registry could never be populated -- and since
+        // its folder is the innermost one containing its own files, registering it would make it
+        // win ResolvePrimaryOwner for them, resolving those files to that empty registry.
+        _sut.OpenWorkspace(_root1);
+        var discovered = new List<LspReqnrollProject>();
+        _sut.ProjectDiscovered += discovered.Add;
+
+        await _sut.HandleProjectLoadedAsync(ProjectParams(_root1, "Shared.shproj"), CancellationToken.None);
+
+        discovered.Should().BeEmpty();
+        _sut.GetProjectForUri(DocumentUri.FromFileSystemPath(Path.Combine(_root1, "a.feature")))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_ignores_a_shared_items_file()
+    {
+        _sut.OpenWorkspace(_root1);
+        var discovered = new List<LspReqnrollProject>();
+        _sut.ProjectDiscovered += discovered.Add;
+
+        await _sut.HandleProjectLoadedAsync(ProjectParams(_root1, "Shared.projitems"), CancellationToken.None);
+
+        discovered.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_still_registers_an_ordinary_project()
+    {
+        _sut.OpenWorkspace(_root1);
+        var discovered = new List<LspReqnrollProject>();
+        _sut.ProjectDiscovered += discovered.Add;
+
+        await _sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        discovered.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task HandleProjectFilesAsync_ignores_a_shared_project_baseline()
+    {
+        // Indexing it would attribute the shared files to a project that is deliberately never
+        // registered; they belong to the membership of each project that imports the .projitems.
+        _sut.OpenWorkspace(_root1);
+        var featurePath = Path.Combine(_root1, "Shared", "a.feature");
+
+        await _sut.HandleProjectFilesAsync(new ReqnrollProjectFilesParams
+        {
+            ProjectFile            = Path.Combine(_root1, "Shared.shproj"),
+            TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
+            Kind                   = ProjectFilesKind.Baseline,
+            Files                  = [new ProjectFileEntry { Path = featurePath, Role = ProjectFileRole.Feature, Added = true }]
+        }, CancellationToken.None);
+
+        _sut.GetProjectsForUri(DocumentUri.FromFileSystemPath(featurePath)).Should().BeEmpty();
+    }
+
     [Fact]
     public async Task HandleProjectLoadedAsync_emits_OpenProject_telemetry_for_a_newly_discovered_project()
     {

@@ -68,14 +68,19 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// </summary>
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
-        ILspTelemetryService? telemetryService = null)
-        : this(project, CreateDefaultDiscoveryService(logger, fileSystem), logger, telemetryService)
+        ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null)
+        : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService)
     {
     }
 
+    // featureFileLookup reaches the Reqnroll-test-project gate in ConnectorDiscoveryService: it is
+    // how a *linked* feature file, owned by the project but living outside its folder, still counts
+    // (issue #731). Null degrades the gate to the project-folder walk, which is what a caller that
+    // has no membership index (tests) gets.
     private static IConnectorDiscoveryService CreateDefaultDiscoveryService(
-        IIdeSupportLogger logger, IFileSystemForIDE? fileSystem) =>
-        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger), fileSystem ?? new FileSystemForIDE());
+        IIdeSupportLogger logger, IFileSystemForIDE? fileSystem, IProjectFeatureFileLookup? featureFileLookup) =>
+        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger),
+            fileSystem ?? new FileSystemForIDE(), featureFileLookup);
 
     /// <summary>
     /// Creates a provider backed by a caller-supplied discovery service.  Used by tests to

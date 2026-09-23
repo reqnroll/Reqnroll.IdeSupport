@@ -16,7 +16,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 /// no-op re-runs.
 /// </summary>
 /// <remarks>
-/// This service is stateless and synchronous; callers run it on a background thread
+/// This service is synchronous and effectively stateless (it keeps one flag, to log the
+/// "not a Reqnroll project" skip once rather than on every build); callers run it on a background thread
 /// (typically via <see cref="ConnectorBindingRegistryProvider"/>).  Connector construction
 /// is delegated to an <see cref="IOutProcConnectorFactory"/> so the selection of generic vs
 /// custom connector lives in one place and this orchestrator can be tested with a fake.
@@ -26,14 +27,45 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     private readonly IIdeSupportLogger _logger;
     private readonly IOutProcConnectorFactory _connectorFactory;
     private readonly IFileSystemForIDE _fileSystem;
+    private readonly IReqnrollProjectDetector _projectDetector;
+
+    // The one piece of state this service keeps (see the class remarks): whether the
+    // "not a Reqnroll project" skip has already been reported for this project, so a solution
+    // full of ordinary libraries logs one line each rather than one per build. One instance is
+    // created per project by ConnectorBindingRegistryProvider, so an instance field is per-project.
+    // Deliberately unsynchronised: a cancelled run overlapping its replacement could race here,
+    // and the worst outcome is one duplicate log line.
+    private bool _loggedNonReqnrollSkip;
 
     /// <summary>Initializes a new instance of the <see cref="ConnectorDiscoveryService"/> class.</summary>
     public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory,
         IFileSystemForIDE fileSystem)
+        : this(logger, connectorFactory, fileSystem, new ReqnrollProjectDetector(fileSystem))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance whose Reqnroll-test-project gate consults
+    /// <paramref name="featureFileLookup"/> for the project's feature files, so linked ones
+    /// outside the project folder count.
+    /// </summary>
+    public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory,
+        IFileSystemForIDE fileSystem, IProjectFeatureFileLookup? featureFileLookup)
+        : this(logger, connectorFactory, fileSystem, new ReqnrollProjectDetector(fileSystem, featureFileLookup))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance with a caller-supplied Reqnroll-project detector. Used by tests
+    /// to substitute the gate that decides whether the connector may run at all.
+    /// </summary>
+    public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory,
+        IFileSystemForIDE fileSystem, IReqnrollProjectDetector projectDetector)
     {
         _logger = logger;
         _connectorFactory = connectorFactory;
         _fileSystem = fileSystem;
+        _projectDetector = projectDetector;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -63,6 +95,36 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         if (!_fileSystem.File.Exists(assemblyPath))
         {
             _logger.LogInfo($"[{scope.ProjectName}] Output assembly not found (project not yet built?): {assemblyPath}");
+            return (lastGood, lastHash);
+        }
+
+        // Gate the connector on the project actually being a Reqnroll *test* project -- one that
+        // uses Reqnroll and owns at least one feature file, the same gate the legacy VS
+        // extension's DiscoveryInvoker applied (issue #731).
+        // No client filters what it sends -- VS and VS Code report every project in the
+        // solution/workspace, Rider every runnable project -- so without this check every ordinary
+        // library in the solution got a connector process that loaded its assembly and dependency
+        // closure into a runtime only to find no bindings, on every build. Checked after the
+        // file-exists check above because one of the detector's signals is Reqnroll.dll sitting
+        // next to this output assembly, and before hashing so a non-Reqnroll project does not pay
+        // for a full-file hash either.
+        if (!_projectDetector.IsReqnrollTestProject(scope))
+        {
+            if (!_loggedNonReqnrollSkip)
+            {
+                _loggedNonReqnrollSkip = true;
+                _logger.LogInfo(
+                    $"[{scope.ProjectName}] Not a Reqnroll test project (it needs a Reqnroll package " +
+                    $"reference or a Reqnroll.dll next to {Path.GetFileName(assemblyPath)}, plus at least " +
+                    "one feature file of its own); skipping binding discovery. Set " +
+                    "'ide.reqnroll.isReqnrollProject' to true in the project's reqnroll.json to override " +
+                    "this.");
+            }
+            else
+            {
+                _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll test project; skipping binding discovery.");
+            }
+
             return (lastGood, lastHash);
         }
 
