@@ -61,6 +61,7 @@ env:
   COMMON_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.Common.Tests/Reqnroll.IdeSupport.Common.Tests.csproj
   TESTLOGGER_PROJECT: src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj
   TESTLOGGER_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.TestLogger.Tests/Reqnroll.IdeSupport.TestLogger.Tests.csproj
+  MTP_REPORTER_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.TestReporter.MTP.Tests/Reqnroll.IdeSupport.TestReporter.MTP.Tests.csproj
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -174,6 +175,17 @@ jobs:
 
       - name: Test TestLogger
         run: dotnet test ${{ env.TESTLOGGER_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
+
+      - name: Restore TestReporter.MTP.Tests
+        # Reqnroll.IdeSupport.TestReporter.MTP is the Microsoft.Testing.Platform counterpart of the
+        # TestLogger, shipped to every IDE as a source bundle (issue #741). Its tests include the
+        # in-process MTP pipeline harness, real `dotnet build`s of throwaway user projects across the
+        # supported Microsoft.Testing.Platform range through the project-local obj/ stub, and a real
+        # `dotnet test` of tests/Core/TestReporterFixtures/MsTestReqnrollMtp.
+        run: dotnet restore ${{ env.MTP_REPORTER_TESTS_PROJECT }}
+
+      - name: Test TestReporter.MTP
+        run: dotnet test ${{ env.MTP_REPORTER_TESTS_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults ${{ env.BUILD_NUMBER_ARG }}
 
       - name: Upload Test Result TRX Files
         uses: actions/upload-artifact@v7

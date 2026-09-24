@@ -271,14 +271,14 @@ val publishTestLogger by tasks.registering(Exec::class) {
 
 // ── Bundle the Reqnroll.IdeSupport.TestReporter.MTP (issue #715 phase 4) ──
 //
-// The MTP-side counterpart to the VSTest logger above: net8.0, framework-dependent (MTP v2's
-// minimum runtime — no per-RID bundling needed, same reasoning as the logger). Unlike the logger,
-// it isn't injected via runsettings/--test-adapter-path — RunTestRunner.kt ephemerally injects a
-// HintPath <Reference> to this DLL via CustomAfterMicrosoftCommonTargets (plan §5.6), so
-// ReqnrollMtpReporterPathResolver expects mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.dll
-// directly under the plugin's install directory. `dotnet publish` on the reporter project alone
-// also carries its Reqnroll.IdeSupport.TestReporter.Common ProjectReference output into the same
-// output directory (verified: both DLLs land in mtpreporter/), same as the logger's own build.
+// The MTP-side counterpart to the VSTest logger above. Issue #741: what ships is the reporter's
+// *source bundle* — Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource/*.cs, both Content
+// items of the reporter project, so `dotnet publish` copies them into mtpreporter/ (next to the
+// reporter's own DLLs, which nothing uses at run time). RunTestRunner writes each MTP project's
+// project-local obj/<Project>.csproj.reqnroll-ide.targets stub (MtpProjectStubs) importing that
+// .targets file, which compiles the sources into the user's own test assembly;
+// ReqnrollMtpReporterPathResolver expects mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets and
+// mtpreporter/ReporterSource/ directly under the plugin's install directory.
 val mtpReporterOutputDir = layout.projectDirectory.dir("mtpreporter")
 val mtpReporterProject = File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.MTP/Reqnroll.IdeSupport.TestReporter.MTP.csproj")
 

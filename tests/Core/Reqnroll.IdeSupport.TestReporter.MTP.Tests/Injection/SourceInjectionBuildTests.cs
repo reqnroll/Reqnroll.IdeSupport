@@ -69,6 +69,28 @@ public class SourceInjectionBuildTests
         workspace.ReporterHookRegistered().Should().BeTrue();
     }
 
+    /// <summary>
+    /// Issue #741 T9: the latest published MSTest + Microsoft.Testing.Platform. Run weekly by
+    /// .github/workflows/mtp-reporter-latest.yml; skipped otherwise, because its result depends on
+    /// nuget.org rather than on the commit. Fails when a new release breaks the injected sources at
+    /// compile time, or ships a major outside the range the .targets file gates on.
+    /// </summary>
+    [LatestPublishedFact]
+    public void The_LatestPublished_MSTest_and_platform_still_compile_the_sources_and_register_the_hook()
+    {
+        using var workspace = InjectionWorkspace.Create("Mtp.csproj", MsTestMtpProject("*", extraItems: """<PackageReference Include="Microsoft.Testing.Platform" Version="*" />"""));
+
+        var result = Build(workspace, "-v:d");
+
+        ShouldSucceed(result);
+        var reqnrollMessages = string.Join("\n", result.Output.Split('\n')
+            .Where(l => l.Contains("Reqnroll IDE Support:", StringComparison.Ordinal))
+            .Select(l => l.Trim())
+            .Distinct());
+        workspace.ReporterHookRegistered().Should().BeTrue(
+            "the reporter must still compile into a project on the latest releases; if a new major shipped, revisit the supported range in Reqnroll.IdeSupport.TestReporter.MTP.targets. Reqnroll build messages:\n" + reqnrollMessages);
+    }
+
     [Fact]
     public void A_platform_version_outside_the_supported_range_is_skipped_with_a_message_not_broken()
     {
@@ -226,5 +248,17 @@ public class SourceInjectionBuildTests
         ShouldSucceed(Build(workspace));
 
         workspace.ReporterHookRegistered().Should().BeTrue();
+    }
+}
+
+/// <summary>A <see cref="FactAttribute"/> that only runs when <c>REQNROLL_MTP_TEST_LATEST=true</c> (the scheduled mtp-reporter-latest workflow).</summary>
+internal sealed class LatestPublishedFactAttribute : FactAttribute
+{
+    public const string EnvironmentVariable = "REQNROLL_MTP_TEST_LATEST";
+
+    public LatestPublishedFactAttribute()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable(EnvironmentVariable), "true", StringComparison.OrdinalIgnoreCase))
+            Skip = $"Depends on nuget.org, not on the commit: set {EnvironmentVariable}=true to run (.github/workflows/mtp-reporter-latest.yml).";
     }
 }

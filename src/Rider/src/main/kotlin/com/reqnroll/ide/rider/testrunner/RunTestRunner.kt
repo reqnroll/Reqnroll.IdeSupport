@@ -317,13 +317,13 @@ object RunTestRunner {
      * - [DotnetTestMode.MTP_COMPAT]/[DotnetTestMode.MTP_NATIVE]: neither `--logger` nor
      *   `--test-adapter-path` — live-verified: MTP-compat mode silently ignores them, native mode
      *   treats `--logger` as an unrecognized option and hard-fails the whole run with exit code 5.
-     *   Instead, when [registration] succeeded and the bundled MTP reporter is found
-     *   ([ReqnrollMtpReporterPathResolver]), ephemerally injects it via the
-     *   `CustomAfterMicrosoftCommonTargets` MSBuild extensibility point (plan §5.6) — live-verified
-     *   end to end: the generated `SelfRegisteredExtensions.g.cs` picks up the injected
-     *   `TestingPlatformBuilderHook` item with zero changes to the project file itself, and the
-     *   reporter's own DLL is copied to the build output alongside its dependency. Returns
-     *   [DotnetTestOutcome.ExitCodeOnly] rather than parsing a TRX that was never requested.
+     *   Instead, when [registration] succeeded and the bundled MTP reporter source bundle is found
+     *   ([ReqnrollMtpReporterPathResolver]), writes the project's project-local
+     *   `obj/<Project>.csproj.reqnroll-ide.targets` stub ([MtpProjectStubs], issue #741), which
+     *   compiles the reporter's sources into the project's own test assembly and registers its
+     *   `TestingPlatformBuilderHook` — no project-file change, no environment variable, and it stays
+     *   in place for later builds of that project, including ones Rider's own test runner starts.
+     *   Returns [DotnetTestOutcome.ExitCodeOnly] rather than parsing a TRX that was never requested.
      */
     private fun runDotnetTest(
         projectFile: String,
@@ -335,7 +335,6 @@ object RunTestRunner {
         val resultsDir = Files.createTempDirectory("reqnroll-test-").toFile()
         val trxFileName = "result.trx"
         val trxFile = File(resultsDir, trxFileName)
-        var ephemeralInjectionDir: File? = null
 
         return try {
             val command = mutableListOf(DotnetCliLocator.resolve(), "test", projectFile, "--filter", filter)
@@ -361,7 +360,7 @@ object RunTestRunner {
                 }
                 DotnetTestMode.MTP_COMPAT, DotnetTestMode.MTP_NATIVE -> {
                     // No --logger/--test-adapter-path here: outcomes for these modes come from the
-                    // ephemerally injected reporter reporting to the LSP server directly (below),
+                    // source-injected reporter reporting to the LSP server directly (below),
                     // not from anything on this command line. --filter (above) does work here —
                     // live-verified: MTP's own "Extension Options" documents --filter as accepting
                     // "the VSTest filter syntax" directly, no translation needed.
@@ -379,11 +378,8 @@ object RunTestRunner {
                 // shell-out never set a working directory at all before phase 4.
                 .directory(File(projectFile).parentFile)
             if (mode != DotnetTestMode.VS_TEST && registration != null) {
-                ReqnrollMtpReporterPathResolver.resolve()?.let { reporterDll ->
-                    val preExisting = processBuilder.environment()["CustomAfterMicrosoftCommonTargets"]
-                    val targetsFile = writeEphemeralMtpTargetsFile(reporterDll, preExisting)
-                    ephemeralInjectionDir = targetsFile.parentFile
-                    processBuilder.environment()["CustomAfterMicrosoftCommonTargets"] = targetsFile.path
+                ReqnrollMtpReporterPathResolver.resolve()?.let { bundleTargets ->
+                    MtpProjectStubs.writeStub(projectFile, bundleTargets.toString())
                 }
             }
 
@@ -439,56 +435,7 @@ object RunTestRunner {
             DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
         } finally {
             resultsDir.deleteRecursively()
-            ephemeralInjectionDir?.deleteRecursively()
         }
-    }
-
-    /**
-     * Random, permanent identifier for this hook registration (issue #715 plan §5.6/§7's "Include
-     * GUID is a random identifier — never copy one from another extension's props file" note) —
-     * must match the same literal value the phase-2 test fixture
-     * (`tests/Core/TestReporterFixtures/MsTestReqnrollMtp/MsTestReqnrollMtp.Fixture.csproj`) and any
-     * future NuGet-packaged `buildMultiTargeting` props file declares for this same hook.
-     */
-    private const val MTP_REPORTER_HOOK_GUID = "a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c"
-
-    /**
-     * Writes a small, distinctly-named `.targets` file (plan §5.6) declaring a `HintPath`
-     * `<Reference>` to the bundled MTP reporter plus the `<TestingPlatformBuilderHook>` item that
-     * gets it auto-registered via MTP's own `SelfRegisteredExtensions` generation — never touching
-     * the user's own project file. Live-verified: `CustomAfterMicrosoftCommonTargets` pointed at
-     * this file is enough on its own, with zero project-file changes, for the generated entry point
-     * to call into the reporter's hook and for its DLL (and its
-     * `Reqnroll.IdeSupport.TestReporter.Common` dependency) to land in the build output.
-     *
-     * [preExistingCustomAfterTargets], when non-null, is chain-imported first (plan §7 risk #6):
-     * `CustomAfterMicrosoftCommonTargets` is a general-purpose MSBuild extensibility slot a repo
-     * could already be using for something unrelated — overwriting it outright would silently break
-     * that customization for the duration of this one build. `Exists(...)` guards the import so a
-     * value that happened to be a stale/invalid path doesn't itself break the build.
-     */
-    private fun writeEphemeralMtpTargetsFile(reporterDllPath: Path, preExistingCustomAfterTargets: String?): File {
-        val dir = Files.createTempDirectory("reqnroll-mtp-inject-").toFile()
-        val file = File(dir, "Reqnroll.IdeSupport.TestReporter.MTP.g.targets")
-        val chainImport = preExistingCustomAfterTargets
-            ?.takeIf { it.isNotBlank() }
-            ?.let { "  <Import Project=\"$it\" Condition=\"Exists('$it')\" />\n" }
-            .orEmpty()
-        file.writeText(
-            "<Project>\n" +
-                chainImport +
-                "  <ItemGroup>\n" +
-                "    <Reference Include=\"Reqnroll.IdeSupport.TestReporter.MTP\">\n" +
-                "      <HintPath>$reporterDllPath</HintPath>\n" +
-                "    </Reference>\n" +
-                "    <TestingPlatformBuilderHook Include=\"$MTP_REPORTER_HOOK_GUID\">\n" +
-                "      <DisplayName>Reqnroll.IdeSupport.TestReporter.MTP</DisplayName>\n" +
-                "      <TypeFullName>Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook</TypeFullName>\n" +
-                "    </TestingPlatformBuilderHook>\n" +
-                "  </ItemGroup>\n" +
-                "</Project>\n"
-        )
-        return file
     }
 
     private fun notifyError(project: Project, message: String) {

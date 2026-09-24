@@ -41,7 +41,7 @@ import './testOutcomes/testLoggerPath.test';
 import './testOutcomes/testOutcomeCodeLens.test';
 import './testOutcomes/mtpProjectDetection.test';
 import './testOutcomes/mtpReporterPath.test';
-import './testOutcomes/mtpEphemeralInjection.test';
+import './testOutcomes/mtpProjectStubs.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

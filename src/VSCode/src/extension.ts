@@ -31,7 +31,7 @@ import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import { registerTelemetry } from './telemetry';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
-import { activateMtpEphemeralInjection } from './testOutcomes/mtpEphemeralInjection';
+import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
 import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
 
 let client: LanguageClient | undefined;
@@ -142,15 +142,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
   setAppLogChannel(appLogChannel);
   appLogChannel.info('Reqnroll extension activated.');
 
-  // MTP ephemeral injection (issue #715 phase 4) must run as early as possible — before any test
-  // run C# Dev Kit might launch could plausibly start — since it sets an environment variable that
-  // only affects `dotnet test` processes spawned *after* it's set. Independent of the LSP client
-  // (no `await client.start()` needed), unlike `activateTestOutcomes` below. Awaited here (rather
-  // than fire-and-forget) because its MTP-capability scan can shell out to `dotnet msbuild`
-  // (issue #722) — awaiting keeps that subprocess call off VS Code's synchronous activation path
-  // while still guaranteeing the env var is set before `activate()` returns and any test run can
-  // plausibly start.
-  await activateMtpEphemeralInjection(context);
+  // Project-local MTP reporter stubs (issue #741): obj/<Project>.csproj.reqnroll-ide.targets for each
+  // MTP-capable project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
+  // compiles the reporter in. Runs early, before any test run could plausibly start, and independent
+  // of the LSP client, unlike `activateTestOutcomes` below. Awaited because its MTP-capability scan
+  // can shell out to `dotnet msbuild` (issue #722).
+  await activateMtpProjectStubs(context);
 
   const traceChannel = createTraceChannel();
 
