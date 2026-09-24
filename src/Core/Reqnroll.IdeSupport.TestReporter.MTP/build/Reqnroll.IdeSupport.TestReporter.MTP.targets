@@ -1,0 +1,107 @@
+<Project>
+  <!--
+    Reqnroll IDE Support: Microsoft.Testing.Platform (MTP) test-outcome reporter injection (issue #741).
+
+    Imported ONLY by a project that has a project-local stub, obj\<Project>.csproj.reqnroll-ide.targets,
+    written by the Reqnroll IDE extension (Visual Studio, Rider or VS Code). MSBuild imports that stub
+    through its standard $(MSBuildProjectExtensionsPath)$(MSBuildProjectFile).*.targets wildcard (the
+    same mechanism NuGet's obj\<Project>.csproj.nuget.g.targets uses), so nothing here affects any other
+    project, solution or user: no ImportAfter drop, no environment variable, no project-file edit.
+
+    What it does, for a project that passes every gate below: copies the reporter's sources (shipped
+    next to this file in ReporterSource\) into $(IntermediateOutputPath)ReqnrollIdeSupport\, compiles
+    them into the project's own test assembly, and registers the reporter with MTP through a
+    TestingPlatformBuilderHook item. Because the reporter is compiled from source against the
+    project's own Microsoft.Testing.Platform version, there is no second MTP assembly version to
+    conflict with (MSB3277/CS1705) and no binary to mismatch at runtime (issue #727).
+
+    Every gate is evaluated inside the target, at execution time, so it sees the final values of
+    properties that test-framework packages set late (e.g. MSTest.TestAdapter's IsTestingPlatformApplication)
+    and the resolved package references. A project that fails a gate gets nothing added and a
+    low-importance build message saying why. Opt out explicitly with
+    <ReqnrollIdeSupportDisableMtpReporter>true</ReqnrollIdeSupportDisableMtpReporter>.
+  -->
+  <PropertyGroup>
+    <_ReqnrollIdeMtpReporterSourceDirectory>$(MSBuildThisFileDirectory)ReporterSource\</_ReqnrollIdeMtpReporterSourceDirectory>
+    <!-- Supported Microsoft.Testing.Platform range: [minimum, next major). The canonical project builds against the minimum. -->
+    <_ReqnrollIdeMtpMinimumVersion>2.0.0</_ReqnrollIdeMtpMinimumVersion>
+    <_ReqnrollIdeMtpExclusiveMaximumVersion>3.0.0</_ReqnrollIdeMtpExclusiveMaximumVersion>
+    <!-- Lowest C# version the injected sources are written for (the canonical project's LangVersion). -->
+    <_ReqnrollIdeMtpMinimumLangVersion>12.0</_ReqnrollIdeMtpMinimumLangVersion>
+  </PropertyGroup>
+
+  <!--
+    Runs after reference resolution (the version gate reads @(ReferencePath)) and before MTP's own
+    _GenerateSelfRegisteredExtensionsFileInputCache, which hashes the TestingPlatformBuilderHook items
+    into SelfRegisteredExtensions.cs — adding the hook any later would be silently ignored. BeforeCompile
+    is listed too so the target still runs in a project whose MTP MSBuild targets are absent (it then
+    skips at the MTP gate). BeforeTargets naming a target that doesn't exist is not an error.
+  -->
+  <Target Name="ReqnrollIdeSupportInjectMtpReporter"
+          BeforeTargets="_GenerateSelfRegisteredExtensionsFileInputCache;BeforeCompile"
+          DependsOnTargets="ResolveAssemblyReferences"
+          Condition="'$(TargetFramework)' != ''">
+
+    <ItemGroup>
+      <_ReqnrollIdeMtpPlatformReference Include="@(ReferencePath->WithMetadataValue('NuGetPackageId', 'Microsoft.Testing.Platform'))" />
+      <_ReqnrollIdeMtpPlatformVersionItem Include="@(_ReqnrollIdeMtpPlatformReference->'%(NuGetPackageVersion)'->Distinct())" />
+    </ItemGroup>
+
+    <PropertyGroup>
+      <_ReqnrollIdeMtpPlatformVersion>@(_ReqnrollIdeMtpPlatformVersionItem)</_ReqnrollIdeMtpPlatformVersion>
+      <_ReqnrollIdeMtpPlatformVersionCore>$([System.Text.RegularExpressions.Regex]::Match('$(_ReqnrollIdeMtpPlatformVersion)', '^\d+(\.\d+){0,3}').Value)</_ReqnrollIdeMtpPlatformVersionCore>
+      <_ReqnrollIdeMtpNumericLangVersion Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(LangVersion)', '^\d+(\.\d+)?$'))">true</_ReqnrollIdeMtpNumericLangVersion>
+
+      <_ReqnrollIdeMtpSkipReason />
+      <_ReqnrollIdeMtpSkipReason Condition="'$(ReqnrollIdeSupportDisableMtpReporter)' == 'true'">ReqnrollIdeSupportDisableMtpReporter is true</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(Language)' != 'C#'">the project language is '$(Language)', and the reporter sources are C#</_ReqnrollIdeMtpSkipReason>
+      <!-- IsTestProject alone is not enough: only Microsoft.NET.Test.Sdk (VSTest-era) sets it, so an
+           MTP-only project never has it. MTP test hosts are executables; a plain library that merely
+           references Microsoft.Testing.Platform (which defaults IsTestingPlatformApplication to true) is not. -->
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(IsTestProject)' != 'true' and '$(OutputType)' != 'Exe'">it is not a test host (IsTestProject is not true and OutputType is not Exe)</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(IsTestingPlatformApplication)' != 'true' and '$(EnableMSTestRunner)' != 'true' and '$(EnableNUnitRunner)' != 'true' and '$(UseMicrosoftTestingPlatformRunner)' != 'true'">it does not run on Microsoft.Testing.Platform</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(TargetFrameworkIdentifier)' != '.NETCoreApp'">target framework '$(TargetFramework)' is not .NET (Core); .NET Framework is not supported yet</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and !$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">target framework '$(TargetFramework)' is older than net8.0</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(_ReqnrollIdeMtpNumericLangVersion)' == 'true' and $([MSBuild]::VersionLessThan('$(LangVersion)', '$(_ReqnrollIdeMtpMinimumLangVersion)'))">LangVersion $(LangVersion) is older than C# $(_ReqnrollIdeMtpMinimumLangVersion)</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(_ReqnrollIdeMtpPlatformVersionCore)' == ''">the resolved Microsoft.Testing.Platform package version could not be determined ('$(_ReqnrollIdeMtpPlatformVersion)')</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and ($([MSBuild]::VersionLessThan('$(_ReqnrollIdeMtpPlatformVersionCore)', '$(_ReqnrollIdeMtpMinimumVersion)')) or $([MSBuild]::VersionGreaterThanOrEquals('$(_ReqnrollIdeMtpPlatformVersionCore)', '$(_ReqnrollIdeMtpExclusiveMaximumVersion)')))">Microsoft.Testing.Platform $(_ReqnrollIdeMtpPlatformVersion) is outside the supported range [$(_ReqnrollIdeMtpMinimumVersion), $(_ReqnrollIdeMtpExclusiveMaximumVersion))</_ReqnrollIdeMtpSkipReason>
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and !Exists('$(_ReqnrollIdeMtpReporterSourceDirectory)')">the reporter sources were not found at '$(_ReqnrollIdeMtpReporterSourceDirectory)'</_ReqnrollIdeMtpSkipReason>
+
+      <_ReqnrollIdeMtpGeneratedDirectory>$(IntermediateOutputPath)ReqnrollIdeSupport\</_ReqnrollIdeMtpGeneratedDirectory>
+    </PropertyGroup>
+
+    <Message Importance="low"
+             Condition="'$(_ReqnrollIdeMtpSkipReason)' != ''"
+             Text="Reqnroll IDE Support: not adding the Microsoft.Testing.Platform test reporter to $(MSBuildProjectName) ($(TargetFramework)): $(_ReqnrollIdeMtpSkipReason)." />
+
+    <ItemGroup Condition="'$(_ReqnrollIdeMtpSkipReason)' == ''">
+      <_ReqnrollIdeMtpReporterTemplate Include="$(_ReqnrollIdeMtpReporterSourceDirectory)*.cs" />
+    </ItemGroup>
+
+    <!-- Source-level API differences inside the supported range are selected with #if (issue #741 §2.3a):
+         Microsoft.Testing.Platform 2.1.0 renamed AddTestSessionLifetimeHandle and made the old name a
+         compile error. Csc reads DefineConstants at execution time, so setting it here, before CoreCompile, applies. -->
+    <PropertyGroup Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and $([MSBuild]::VersionLessThan('$(_ReqnrollIdeMtpPlatformVersionCore)', '2.1.0'))">
+      <DefineConstants>$(DefineConstants);REQNROLL_IDE_MTP_BEFORE_2_1</DefineConstants>
+    </PropertyGroup>
+
+    <!-- SkipUnchangedFiles + File.Copy's preserved timestamps keep CoreCompile incremental. -->
+    <Copy Condition="'$(_ReqnrollIdeMtpSkipReason)' == ''"
+          SourceFiles="@(_ReqnrollIdeMtpReporterTemplate)"
+          DestinationFolder="$(_ReqnrollIdeMtpGeneratedDirectory)"
+          SkipUnchangedFiles="true" />
+
+    <ItemGroup Condition="'$(_ReqnrollIdeMtpSkipReason)' == ''">
+      <Compile Include="@(_ReqnrollIdeMtpReporterTemplate->'$(_ReqnrollIdeMtpGeneratedDirectory)%(Filename)%(Extension)')" Visible="false" />
+      <FileWrites Include="@(_ReqnrollIdeMtpReporterTemplate->'$(_ReqnrollIdeMtpGeneratedDirectory)%(Filename)%(Extension)')" />
+      <TestingPlatformBuilderHook Include="a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c" Visible="false">
+        <DisplayName>Reqnroll.IdeSupport.TestReporter.MTP</DisplayName>
+        <TypeFullName>Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook</TypeFullName>
+      </TestingPlatformBuilderHook>
+    </ItemGroup>
+
+    <Message Importance="low"
+             Condition="'$(_ReqnrollIdeMtpSkipReason)' == ''"
+             Text="Reqnroll IDE Support: compiled the Microsoft.Testing.Platform test reporter into $(MSBuildProjectName) ($(TargetFramework), Microsoft.Testing.Platform $(_ReqnrollIdeMtpPlatformVersion))." />
+  </Target>
+</Project>

@@ -8,8 +8,11 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 
 /// <summary>
 /// The whole MTP reporter path without an IDE: a real <c>dotnet test</c> (native MTP mode, via the
-/// fixture's own scoped <c>global.json</c>) against a real Reqnroll + MSTest project
-/// (<c>tests/Core/TestReporterFixtures/MsTestReqnrollMtp</c>) with the reporter compiled in, discovering
+/// fixture's own scoped <c>global.json</c>) against a copy of a real Reqnroll + MSTest project
+/// (<c>tests/Core/TestReporterFixtures/MsTestReqnrollMtp</c>) connected to the reporter exactly the way
+/// the IDEs connect a user's project (issue #741): a project-local
+/// <c>obj/&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub importing the source bundle, which
+/// compiles the reporter's sources into the fixture's own test assembly — discovering
 /// this test's loopback listener through a hand-written session breadcrumb file — exactly the discovery
 /// path <c>SessionBreadcrumbMatcher</c>/<c>WorkspaceRootLocator</c> implement, with this test playing
 /// the LSP server's role on both sides (the breadcrumb writer and the listener).
@@ -36,8 +39,8 @@ public class DotnetTestEndToEndTests
 
     private static string FixtureDirectory() => Path.Combine(RepoRoot(), "tests", "Core", "TestReporterFixtures", "MsTestReqnrollMtp");
 
-    /// <summary>Writes a session breadcrumb (the shape <c>TestOutcomeSessionBreadcrumb</c> writes) into a hermetic temp directory, naming this repo's own root — the same root <see cref="WorkspaceRootLocator"/> resolves from the fixture's build output.</summary>
-    private static string StageSessionsDirectory(string endpoint)
+    /// <summary>Writes a session breadcrumb (the shape <c>TestOutcomeSessionBreadcrumb</c> writes) into a hermetic temp directory, naming <paramref name="workspaceRoot"/> — the same root <see cref="WorkspaceRootLocator"/> resolves from the fixture's build output.</summary>
+    private static string StageSessionsDirectory(string endpoint, string workspaceRoot)
     {
         var dir = Path.Combine(Path.GetTempPath(), "reqnroll-mtp-reporter-e2e", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
@@ -45,7 +48,7 @@ public class DotnetTestEndToEndTests
         var json = JsonSerializer.Serialize(new
         {
             endpoint,
-            workspaceRoot = RepoRoot(),
+            workspaceRoot,
             lspServerPid = thelspServerPid,
             startedUtc = DateTime.UtcNow,
         });
@@ -59,7 +62,10 @@ public class DotnetTestEndToEndTests
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var endpoint = $"127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}";
-        var sessionsDir = StageSessionsDirectory(endpoint);
+        using var workspace = Injection.InjectionWorkspace.Create("MsTestReqnrollMtp.Fixture.csproj",
+            File.ReadAllText(Path.Combine(FixtureDirectory(), "MsTestReqnrollMtp.Fixture.csproj")));
+        workspace.CopyFrom(FixtureDirectory(), "global.json", "Features", "StepDefinitions");
+        var sessionsDir = StageSessionsDirectory(endpoint, workspace.Root);
 
         var receive = Task.Run(async () =>
         {
@@ -76,12 +82,12 @@ public class DotnetTestEndToEndTests
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            WorkingDirectory = FixtureDirectory(),
+            WorkingDirectory = workspace.ProjectDirectory,
         };
         psi.ArgumentList.Add("test");
         psi.Environment[SessionsDirectory.OverrideEnvironmentVariable] = sessionsDir;
         // The outer test host is itself a testing-platform run; don't let its environment leak into the inner one.
-        foreach (var key in psi.Environment.Keys.Where(k => k.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase)).ToList())
+        foreach (var key in psi.Environment.Keys.Where(k => k.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("MSBUILD", StringComparison.OrdinalIgnoreCase) || k.Equals("DOTNET_HOST_PATH", StringComparison.OrdinalIgnoreCase)).ToList())
             psi.Environment.Remove(key);
 
         using var process = Process.Start(psi)!;
@@ -112,6 +118,8 @@ public class DotnetTestEndToEndTests
         var results = messages.Where(m => m.GetProperty("type").GetString() == "result").ToList();
         results.Should().HaveCount(5, "2 scenarios + 3 outline rows");
         results.Should().OnlyContain(r => r.GetProperty("source").GetString()!.EndsWith("MsTestReqnrollMtp.Fixture.dll", StringComparison.OrdinalIgnoreCase));
+        workspace.ReporterHookRegistered().Should().BeTrue();
+        Directory.GetFiles(workspace.OutputDirectory(), "Reqnroll.IdeSupport.*").Should().BeEmpty("the reporter is compiled into the fixture's own assembly");
 
         // Ordinary scenarios.
         var adding = results.Single(r => r.GetProperty("fqn").GetString()!.EndsWith(".AddingTwoNumbers"));
