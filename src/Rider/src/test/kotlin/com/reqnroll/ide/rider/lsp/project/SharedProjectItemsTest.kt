@@ -123,6 +123,9 @@ class SharedProjectItemsTest {
         return file.path
     }
 
+    // Imports/items are substituted *after* trimIndent(): interpolating several lines directly
+    // leaves the extra lines at column 0, so trimIndent() strips nothing and the <?xml?>
+    // declaration keeps its leading whitespace -- which the XML parser rejects.
     private fun writeProject(relativePath: String, vararg imports: String): String {
         val file = File(root, relativePath)
         file.parentFile.mkdirs()
@@ -130,9 +133,9 @@ class SharedProjectItemsTest {
             """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-              ${imports.joinToString("\n")}
+              IMPORTS
             </Project>
-            """.trimIndent(),
+            """.trimIndent().replace("IMPORTS", imports.joinToString("\n")),
         )
         return file.path
     }
@@ -146,10 +149,10 @@ class SharedProjectItemsTest {
             <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
               <PropertyGroup><HasSharedItems>true</HasSharedItems></PropertyGroup>
               <ItemGroup>
-                ${items.joinToString("\n")}
+                ITEMS
               </ItemGroup>
             </Project>
-            """.trimIndent(),
+            """.trimIndent().replace("ITEMS", items.joinToString("\n")),
         )
     }
 }
