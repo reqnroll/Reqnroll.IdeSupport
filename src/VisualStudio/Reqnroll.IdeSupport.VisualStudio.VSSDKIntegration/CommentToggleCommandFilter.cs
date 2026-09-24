@@ -133,7 +133,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                 var endLine   = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
                     startLine, endContainingLine.LineNumber, endPos == endContainingLine.Start);
 
-                _logger.LogInfo(
+                _logger.LogVerbose(
                     $"CommentToggleCommandFilter: redirecting command id={commandId} mode={mode} uri='{fileUri}' lines[{startLine}..{endLine}]");
 
                 _ = Task.Run(async () =>
