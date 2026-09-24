@@ -87,13 +87,7 @@ object ReqnrollProjectBaseline {
 
     /** Builds and sends the `reqnroll/projectFiles` baseline (kind=BASELINE) for a single project file. */
     fun sendProjectFilesBaseline(project: Project, projectFile: String) {
-        val folder = File(projectFile).parent ?: return
-        val files = File(folder).walkTopDown()
-            .filter { it.isFile }
-            .mapNotNull { file ->
-                ProjectFileRole.classify(file.path)?.let { role -> ProjectFileEntry(file.path, role) }
-            }
-            .toList()
+        val files = buildProjectFileEntries(projectFile) ?: return
 
         ReqnrollDebugLogger.verbose("projectFiles baseline: $projectFile (${files.size} file(s))")
         ReqnrollNotificationSender.sendProjectFiles(
@@ -105,6 +99,33 @@ object ReqnrollProjectBaseline {
                 files = files,
             ),
         )
+    }
+
+    /**
+     * The feature/binding files of [projectFile]: everything under its folder, plus the files it
+     * compiles from the shared projects it imports (issue #736) — those live outside its folder by
+     * definition, so the walk alone never finds them. Null when [projectFile] has no parent folder.
+     * `internal` purely so it's unit-testable without a `Project` fixture.
+     */
+    internal fun buildProjectFileEntries(projectFile: String): List<ProjectFileEntry>? {
+        val folder = File(projectFile).parent ?: return null
+        val folderFiles = File(folder).walkTopDown()
+            .filter { it.isFile }
+            .map { it.path }
+            .toList()
+        // A shared project can sit inside the importing project's folder; drop what the walk
+        // already found. Case-insensitive only here: a .projitems may spell a path in a different
+        // case than the disk, while the walk's own paths must stay distinct on case-sensitive
+        // filesystems.
+        val folderKeys = folderFiles.mapTo(HashSet()) { it.lowercase() }
+        val sharedFiles = SharedProjectItems.getImportedFiles(projectFile)
+            .filter { it.lowercase() !in folderKeys }
+        if (sharedFiles.isNotEmpty()) {
+            ReqnrollDebugLogger.verbose("projectFiles baseline: $projectFile imports ${sharedFiles.size} shared-project file(s)")
+        }
+
+        return (folderFiles + sharedFiles)
+            .mapNotNull { path -> ProjectFileRole.classify(path)?.let { role -> ProjectFileEntry(path, role) } }
     }
 
     /**

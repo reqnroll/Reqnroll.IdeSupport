@@ -6,6 +6,7 @@ using EnvDTE;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.VisualStudio;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
@@ -90,9 +91,11 @@ internal static class VsProjectPayloadBuilder
             // nested under its .feature via DependentUpon, causing the feature node to be walked
             // twice). Deduplicate by full path so the server receives each file once.
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in VsUtils.GetPhysicalFileProjectItems(project))
+            var paths = VsUtils.GetPhysicalFileProjectItems(project)
+                               .Select(VsUtils.GetFilePath)
+                               .Concat(GetSharedProjectFiles(project, logger));
+            foreach (var path in paths)
             {
-                var path = VsUtils.GetFilePath(item);
                 if (path is null)
                     continue;
 
@@ -119,6 +122,27 @@ internal static class VsProjectPayloadBuilder
                 project.Name);
             return Array.Empty<object>();
         }
+    }
+
+    /// <summary>
+    /// The files this project compiles from the shared projects (<c>.shproj</c>) it imports (issue
+    /// #736). DTE's <c>ProjectItems</c> for the importing project do not include them -- they hang
+    /// off the shared project's own node, which is never sent as a project (issue #735) -- so they
+    /// are read from the <c>.projitems</c> the project file imports.
+    /// </summary>
+    private static IReadOnlyList<string> GetSharedProjectFiles(Project project, ILogger logger)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        var projectFile = project.FullName;
+        if (string.IsNullOrEmpty(projectFile))
+            return Array.Empty<string>();
+
+        var files = SharedProjectItems.GetImportedFiles(projectFile);
+        if (files.Count > 0)
+            logger.LogDebug(
+                "VsProjectPayloadBuilder: {Count} shared-project file(s) imported by {ProjectName}",
+                files.Count, project.Name);
+        return files;
     }
 
     private static (object[] References, bool Ready) GetPackageReferences(
