@@ -91,6 +91,20 @@
           DestinationFolder="$(_ReqnrollIdeMtpGeneratedDirectory)"
           SkipUnchangedFiles="true" />
 
+    <!-- A prebuilt copy of the reporter may still be referenced by an older mechanism: the per-user
+         ImportAfter file earlier extension versions dropped (another VS install or hive may still write
+         it), or a hand-written reference. Compiling the sources as well would put the same types in
+         two assemblies (CS0436, an error under TreatWarningsAsErrors) and register the hook twice, so
+         the source wins: drop the resolved reference, its copy-local files and any existing hook item. -->
+    <ItemGroup Condition="'$(_ReqnrollIdeMtpSkipReason)' == ''">
+      <_ReqnrollIdeMtpStaleReference Include="@(ReferencePath)" Condition="'%(Filename)' == 'Reqnroll.IdeSupport.TestReporter.MTP' or '%(Filename)' == 'Reqnroll.IdeSupport.TestReporter.Common'" />
+      <ReferencePath Remove="@(_ReqnrollIdeMtpStaleReference)" />
+      <!-- CoreCompile consumes ReferencePathWithRefAssemblies, which may already be derived from ReferencePath. -->
+      <ReferencePathWithRefAssemblies Remove="@(ReferencePathWithRefAssemblies)" Condition="'%(Filename)' == 'Reqnroll.IdeSupport.TestReporter.MTP' or '%(Filename)' == 'Reqnroll.IdeSupport.TestReporter.Common'" />
+      <ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('Reqnroll.IdeSupport.TestReporter.'))" />
+      <TestingPlatformBuilderHook Remove="a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c" />
+    </ItemGroup>
+
     <ItemGroup Condition="'$(_ReqnrollIdeMtpSkipReason)' == ''">
       <Compile Include="@(_ReqnrollIdeMtpReporterTemplate->'$(_ReqnrollIdeMtpGeneratedDirectory)%(Filename)%(Extension)')" Visible="false" />
       <FileWrites Include="@(_ReqnrollIdeMtpReporterTemplate->'$(_ReqnrollIdeMtpGeneratedDirectory)%(Filename)%(Extension)')" />

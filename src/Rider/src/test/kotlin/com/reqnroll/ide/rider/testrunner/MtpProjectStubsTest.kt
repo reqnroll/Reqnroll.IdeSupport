@@ -38,9 +38,18 @@ class MtpProjectStubsTest {
     fun `the stub is an Exists-guarded import of the bundle and nothing else`() {
         val xml = MtpProjectStubs.buildStubXml(bundleTargets)
 
-        assertTrue(xml.contains("<Import Project=\"$bundleTargets\" Condition=\"Exists('$bundleTargets')\" />"))
+        assertTrue(xml.contains("<_ReqnrollIdeMtpReporterBundle>$bundleTargets</_ReqnrollIdeMtpReporterBundle>"))
+        assertTrue(xml.contains("<Import Project=\"\$(_ReqnrollIdeMtpReporterBundle)\" Condition=\"Exists('\$(_ReqnrollIdeMtpReporterBundle)')\" />"))
         assertFalse(xml.contains("<Reference"))
         assertFalse(xml.contains("TestingPlatformBuilderHook"))
+    }
+
+    @Test
+    fun `the stub escapes a user-profile path that would otherwise break every build`() {
+        val xml = MtpProjectStubs.buildStubXml("/home/O'Brien & \$Co 100%;@x/mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets")
+
+        assertTrue(xml.contains("<_ReqnrollIdeMtpReporterBundle>/home/O'Brien &amp; %24Co 100%25%3B%40x/mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets</_ReqnrollIdeMtpReporterBundle>"))
+        javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xml.byteInputStream())
     }
 
     @Test

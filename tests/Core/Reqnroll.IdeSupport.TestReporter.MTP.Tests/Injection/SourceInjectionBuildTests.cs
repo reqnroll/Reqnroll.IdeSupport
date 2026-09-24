@@ -220,6 +220,50 @@ public class SourceInjectionBuildTests
         workspace.InjectedSources().Should().BeEmpty();
     }
 
+    // ---- Fresh-eyes findings ----------------------------------------------------------------
+
+    [Fact]
+    public void A_bundle_under_a_path_with_quote_ampersand_dollar_and_percent_still_imports()
+    {
+        // The IDE bundle lives under the user profile, so the user name is part of the path. Before the
+        // stub escaped it and moved it out of the Exists('...') literal, a name like O'Brien broke every
+        // build of the project (MSB4024).
+        using var workspace = InjectionWorkspace.Create("Mtp.csproj", MsTestMtpProject(), writeStub: false);
+        var odd = Path.Combine(workspace.Root, "O'Brien & $Co 100%");
+        Directory.CreateDirectory(Path.Combine(odd, "ReporterSource"));
+        File.Copy(InjectionWorkspace.BundleTargetsPath, Path.Combine(odd, Path.GetFileName(InjectionWorkspace.BundleTargetsPath)));
+        foreach (var source in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "ReporterSource")))
+            File.Copy(source, Path.Combine(odd, "ReporterSource", Path.GetFileName(source)));
+        workspace.WriteStub(Path.Combine(odd, Path.GetFileName(InjectionWorkspace.BundleTargetsPath)));
+
+        ShouldSucceed(Build(workspace));
+
+        workspace.ReporterHookRegistered().Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_leftover_prebuilt_reporter_reference_and_hook_item_are_superseded_not_duplicated()
+    {
+        // What the per-user ImportAfter file earlier extension versions wrote (and another VS install may
+        // still write): a HintPath reference to the prebuilt DLL plus the same hook item.
+        var dll = Path.Combine(AppContext.BaseDirectory, "Reqnroll.IdeSupport.TestReporter.MTP.dll");
+        using var workspace = InjectionWorkspace.Create("Mtp.csproj", MsTestMtpProject(
+            extraProperties: "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>",
+            extraItems: $"""
+                <Reference Include="Reqnroll.IdeSupport.TestReporter.MTP"><HintPath>{dll}</HintPath></Reference>
+                <TestingPlatformBuilderHook Include="a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c">
+                  <DisplayName>Reqnroll.IdeSupport.TestReporter.MTP</DisplayName>
+                  <TypeFullName>Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook</TypeFullName>
+                </TestingPlatformBuilderHook>
+                """));
+
+        ShouldSucceed(Build(workspace));
+
+        var registrations = workspace.SelfRegisteredExtensions().Split("Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook.AddExtensions").Length - 1;
+        registrations.Should().Be(1, "the hook must be registered exactly once");
+        Directory.GetFiles(workspace.OutputDirectory(), "Reqnroll.IdeSupport.*").Should().BeEmpty("the stale prebuilt reference is superseded by the compiled sources");
+    }
+
     // ---- T6: collisions with user types and global usings -----------------------------------
 
     [Fact]

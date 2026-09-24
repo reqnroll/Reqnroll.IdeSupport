@@ -50,13 +50,28 @@ public static class MtpProjectStubs
 
     private static readonly ConcurrentDictionary<string, string?> EvaluatedDirectories = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The stub: the bundle path in a property, imported through that property. The path is MSBuild-escaped
+    /// (<c>%</c> <c>$</c> <c>@</c> <c>;</c>) and XML-escaped, and never appears inside a quoted
+    /// condition literal: the extension's install path contains the Windows user name, and a name such
+    /// as O'Brien, or a path with <c>&amp;</c> or <c>$</c>, must not turn the stub into a file that breaks
+    /// every build of the project.
+    /// </summary>
     public static string BuildStubXml(string bundleTargetsPath) =>
         "<Project>" + Environment.NewLine +
         "  <!-- Written by the Reqnroll IDE extension (issue #741): connects this project to the Reqnroll" + Environment.NewLine +
         "       Microsoft.Testing.Platform test-outcome reporter. Project-local and inert when the extension" + Environment.NewLine +
         "       is not installed. Opt out with <ReqnrollIdeSupportDisableMtpReporter>true</ReqnrollIdeSupportDisableMtpReporter>. -->" + Environment.NewLine +
-        $"  <Import Project=\"{bundleTargetsPath}\" Condition=\"Exists('{bundleTargetsPath}')\" />" + Environment.NewLine +
+        "  <PropertyGroup>" + Environment.NewLine +
+        $"    <_ReqnrollIdeMtpReporterBundle>{EscapeForMSBuildXml(bundleTargetsPath)}</_ReqnrollIdeMtpReporterBundle>" + Environment.NewLine +
+        "  </PropertyGroup>" + Environment.NewLine +
+        "  <Import Project=\"$(_ReqnrollIdeMtpReporterBundle)\" Condition=\"Exists('$(_ReqnrollIdeMtpReporterBundle)')\" />" + Environment.NewLine +
         "</Project>" + Environment.NewLine;
+
+    /// <summary>MSBuild escaping (<c>%</c> first) then XML text escaping.</summary>
+    internal static string EscapeForMSBuildXml(string value) =>
+        value.Replace("%", "%25").Replace("$", "%24").Replace("@", "%40").Replace(";", "%3B")
+             .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
     /// <summary>
     /// The directory MSBuild imports <c>$(MSBuildProjectFile).*.targets</c> from. Fast path:
@@ -191,12 +206,23 @@ public static class MtpProjectStubs
             };
             using var process = Process.Start(psi);
             if (process is null) return null;
+            // Event-based reads so the timeout below is real: a blocking ReadToEnd would wait on a hung
+            // process forever, before WaitForExit ever started counting.
+            var output = new System.Text.StringBuilder();
+            process.OutputDataReceived += (_, e) => { if (e.Data is not null) lock (output) output.AppendLine(e.Data); };
             process.ErrorDataReceived += (_, _) => { };
+            process.BeginOutputReadLine();
             process.BeginErrorReadLine();
-            var output = process.StandardOutput.ReadToEnd();
-            if (!process.WaitForExit(30_000) || process.ExitCode != 0) return null;
+            if (!process.WaitForExit(30_000))
+            {
+                try { process.Kill(); } catch (InvalidOperationException) { /* already exited */ }
+                return null;
+            }
+            process.WaitForExit(); // Flushes the asynchronous output handlers.
+            if (process.ExitCode != 0) return null;
             // A single -getProperty prints the bare value.
-            var value = output.Trim();
+            string value;
+            lock (output) value = output.ToString().Trim();
             return value.Length == 0 ? null : value;
         }
         catch (Exception)

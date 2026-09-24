@@ -30,13 +30,27 @@ internal object MtpProjectStubs {
 
     private val evaluatedDirectories = ConcurrentHashMap<String, String>()
 
+    /**
+     * The stub: the bundle path in a property, imported through that property. The path is MSBuild-escaped
+     * (`%` `$` `@` `;`) and XML-escaped, and never appears inside a quoted condition literal: the
+     * plugin's install path contains the user name, and a name such as O'Brien, or a path with `&` or
+     * `$`, must not turn the stub into a file that breaks every build of the project.
+     */
     fun buildStubXml(bundleTargetsPath: String): String =
         "<Project>\n" +
             "  <!-- Written by the Reqnroll IDE extension (issue #741): connects this project to the Reqnroll\n" +
             "       Microsoft.Testing.Platform test-outcome reporter. Project-local and inert when the extension\n" +
             "       is not installed. Opt out with <ReqnrollIdeSupportDisableMtpReporter>true</ReqnrollIdeSupportDisableMtpReporter>. -->\n" +
-            "  <Import Project=\"$bundleTargetsPath\" Condition=\"Exists('$bundleTargetsPath')\" />\n" +
+            "  <PropertyGroup>\n" +
+            "    <_ReqnrollIdeMtpReporterBundle>${escapeForMsbuildXml(bundleTargetsPath)}</_ReqnrollIdeMtpReporterBundle>\n" +
+            "  </PropertyGroup>\n" +
+            "  <Import Project=\"\$(_ReqnrollIdeMtpReporterBundle)\" Condition=\"Exists('\$(_ReqnrollIdeMtpReporterBundle)')\" />\n" +
             "</Project>\n"
+
+    /** MSBuild escaping (`%` first) then XML text escaping. */
+    internal fun escapeForMsbuildXml(value: String): String =
+        value.replace("%", "%25").replace("$", "%24").replace("@", "%40").replace(";", "%3B")
+            .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     /**
      * The directory MSBuild imports `$(MSBuildProjectFile).*.targets` from. Fast path: `<project dir>/obj`,

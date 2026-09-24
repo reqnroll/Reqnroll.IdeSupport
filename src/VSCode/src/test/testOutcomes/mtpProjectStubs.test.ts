@@ -78,9 +78,28 @@ suite('mtpProjectStubs', () => {
     const xml = buildStubXml(bundleTargets);
 
     assert.ok(
-      xml.includes(`<Import Project="${bundleTargets}" Condition="Exists('${bundleTargets}')" />`),
+      xml.includes(
+        `<_ReqnrollIdeMtpReporterBundle>${bundleTargets}</_ReqnrollIdeMtpReporterBundle>`,
+      ),
+    );
+    assert.ok(
+      xml.includes(
+        `<Import Project="$(_ReqnrollIdeMtpReporterBundle)" Condition="Exists('$(_ReqnrollIdeMtpReporterBundle)')" />`,
+      ),
     );
     assert.doesNotMatch(xml, /<Reference|TestingPlatformBuilderHook|<ItemGroup/);
+  });
+
+  test('the stub escapes a user-profile path that would otherwise break every build', () => {
+    const xml = buildStubXml(
+      "/home/O'Brien & $Co 100%;@x/mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets",
+    );
+
+    assert.ok(
+      xml.includes(
+        "<_ReqnrollIdeMtpReporterBundle>/home/O'Brien &amp; %24Co 100%25%3B%40x/mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets</_ReqnrollIdeMtpReporterBundle>",
+      ),
+    );
   });
 
   // ── resolveProjectExtensionsDirectory ───────────────────────────────────

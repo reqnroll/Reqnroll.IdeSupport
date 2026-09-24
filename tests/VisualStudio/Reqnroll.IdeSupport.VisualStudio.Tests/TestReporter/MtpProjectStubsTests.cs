@@ -43,9 +43,19 @@ public sealed class MtpProjectStubsTests : IDisposable
     {
         var xml = MtpProjectStubs.BuildStubXml(BundleTargets);
 
-        xml.Should().Contain($"<Import Project=\"{BundleTargets}\" Condition=\"Exists('{BundleTargets}')\" />");
+        xml.Should().Contain($"<_ReqnrollIdeMtpReporterBundle>{BundleTargets}</_ReqnrollIdeMtpReporterBundle>");
+        xml.Should().Contain("<Import Project=\"$(_ReqnrollIdeMtpReporterBundle)\" Condition=\"Exists('$(_ReqnrollIdeMtpReporterBundle)')\" />");
         xml.Should().NotContain("<Reference").And.NotContain("<ItemGroup").And.NotContain("TestingPlatformBuilderHook",
             "all gating and injection lives in the bundle's .targets file, shared by every IDE");
+    }
+
+    [Fact]
+    public void BuildStubXml_escapes_a_user_profile_path_that_would_otherwise_break_every_build()
+    {
+        var xml = MtpProjectStubs.BuildStubXml(@"C:\Users\O'Brien & $Co 100%;@x\MtpReporter\Reqnroll.IdeSupport.TestReporter.MTP.targets");
+
+        xml.Should().Contain(@"<_ReqnrollIdeMtpReporterBundle>C:\Users\O'Brien &amp; %24Co 100%25%3B%40x\MtpReporter\Reqnroll.IdeSupport.TestReporter.MTP.targets</_ReqnrollIdeMtpReporterBundle>");
+        System.Xml.Linq.XDocument.Parse(xml).Should().NotBeNull("the stub must stay well-formed XML");
     }
 
     // ── ResolveProjectExtensionsDirectory ────────────────────────────────────

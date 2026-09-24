@@ -64,14 +64,36 @@ export function enumerateProjectFiles(root: string): string[] {
   return found;
 }
 
-/** The stub's content: an `Exists`-guarded import of the bundle's `.targets` file and nothing else. Exported for testing. */
+/**
+ * MSBuild escaping (`%` first) then XML text escaping. The extension's install path contains the user
+ * name; a name such as O'Brien, or a path with `&` or `$`, must not produce a stub that breaks every
+ * build. Exported for testing.
+ */
+export function escapeForMsbuildXml(value: string): string {
+  return value
+    .replace(/%/g, '%25')
+    .replace(/\$/g, '%24')
+    .replace(/@/g, '%40')
+    .replace(/;/g, '%3B')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * The stub's content: the bundle path in a property (escaped, and never inside a quoted condition
+ * literal), imported through that property, and nothing else. Exported for testing.
+ */
 export function buildStubXml(bundleTargetsPath: string): string {
   return (
     '<Project>\n' +
     '  <!-- Written by the Reqnroll IDE extension (issue #741): connects this project to the Reqnroll\n' +
     '       Microsoft.Testing.Platform test-outcome reporter. Project-local and inert when the extension\n' +
     '       is not installed. Opt out with <ReqnrollIdeSupportDisableMtpReporter>true</ReqnrollIdeSupportDisableMtpReporter>. -->\n' +
-    `  <Import Project="${bundleTargetsPath}" Condition="Exists('${bundleTargetsPath}')" />\n` +
+    '  <PropertyGroup>\n' +
+    `    <_ReqnrollIdeMtpReporterBundle>${escapeForMsbuildXml(bundleTargetsPath)}</_ReqnrollIdeMtpReporterBundle>\n` +
+    '  </PropertyGroup>\n' +
+    `  <Import Project="$(_ReqnrollIdeMtpReporterBundle)" Condition="Exists('$(_ReqnrollIdeMtpReporterBundle)')" />\n` +
     '</Project>\n'
   );
 }
@@ -221,8 +243,14 @@ export async function activateMtpProjectStubs(
     .getConfiguration('reqnroll')
     .get<boolean>('testOutcomes.enabled', false);
   if (!enabled) {
+    // Cleanup must stay cheap for the (default) disabled case: only the obj/ fast path, never a
+    // `dotnet msbuild` evaluation per project that moves its obj/.
     const projectFiles = workspaceFolderPaths.flatMap((folder) => enumerateProjectFiles(folder));
-    await Promise.all(projectFiles.map((projectFile) => removeStub(projectFile)));
+    await Promise.all(
+      projectFiles.map((projectFile) =>
+        removeStub(projectFile, undefined, () => Promise.resolve(undefined)),
+      ),
+    );
     return;
   }
 

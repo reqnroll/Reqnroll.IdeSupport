@@ -68,12 +68,18 @@ internal sealed class InjectionWorkspace : IDisposable
 
     public string StubPath => Path.Combine(ProjectDirectory, "obj", Path.GetFileName(ProjectFile) + StubSuffix);
 
-    /// <summary>Writes the stub exactly as the IDEs do: an <c>Exists</c>-guarded import of the bundle's .targets file.</summary>
+    /// <summary>Writes the stub in the same shape the IDEs do (MtpProjectStubs.cs/.kt/.ts): the escaped bundle path in a property, imported through it.</summary>
     public void WriteStub(string? importPath = null)
     {
         importPath ??= BundleTargetsPath;
+        var escaped = importPath.Replace("%", "%25").Replace("$", "%24").Replace("@", "%40").Replace(";", "%3B")
+            .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
         Directory.CreateDirectory(Path.GetDirectoryName(StubPath)!);
-        File.WriteAllText(StubPath, $"<Project>\n  <Import Project=\"{importPath}\" Condition=\"Exists('{importPath}')\" />\n</Project>\n");
+        File.WriteAllText(StubPath,
+            "<Project>\n" +
+            $"  <PropertyGroup>\n    <_ReqnrollIdeMtpReporterBundle>{escaped}</_ReqnrollIdeMtpReporterBundle>\n  </PropertyGroup>\n" +
+            "  <Import Project=\"$(_ReqnrollIdeMtpReporterBundle)\" Condition=\"Exists('$(_ReqnrollIdeMtpReporterBundle)')\" />\n" +
+            "</Project>\n");
     }
 
     public string IntermediateDirectory(string tfm = "net10.0") => Path.Combine(ProjectDirectory, "obj", "Debug", tfm);
