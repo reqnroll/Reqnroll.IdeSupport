@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AwesomeAssertions;
 using NSubstitute;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -139,18 +140,114 @@ public sealed class MtpProjectStubsTests : IDisposable
         Directory.Exists(Path.Combine(_dir, "App", "obj")).Should().BeFalse();
     }
 
-    [Fact]
-    public void WriteStubs_writes_one_stub_per_CSharp_project_and_only_inside_each_project()
+    // ── Reqnroll projects only ───────────────────────────────────────────────
+
+    /// <summary>A trimmed project.assets.json whose restore graph is <paramref name="libraries"/> ("Name/Version").</summary>
+    private static string Assets(params string[] libraries)
     {
-        var a = CreateProject(@"A\A.csproj");
-        var b = CreateProject(@"B\B.csproj");
-        var vb = CreateProject(@"C\C.vbproj");
+        var entries = string.Join("," + Environment.NewLine,
+            libraries.Select(l => $$"""    "{{l}}": { "type": "package", "path": "{{l.ToLowerInvariant()}}" }"""));
+        return $$"""
+            {
+              "version": 3,
+              "targets": { "net10.0": {} },
+              "libraries": {
+            {{entries}}
+              },
+              "packageFolders": { "C:\\Users\\me\\.nuget\\packages\\": {} },
+              "project": { "restore": { "projectName": "App", "projectPath": "C:\\src\\ReqnrollDemo\\App.csproj" } },
+              "logs": [ { "code": "NU1603", "message": "Reqnroll/3.3.4" } ]
+            }
+            """;
+    }
 
-        MtpProjectStubs.WriteStubs(new List<string> { a, b, vb }, BundleTargets, _logger).Should().Be(2);
+    private string CreateRestoredProject(string relativePath, params string[] libraries)
+    {
+        var project = CreateProject(relativePath);
+        var obj = CreateDir(Path.Combine(Path.GetDirectoryName(relativePath)!, "obj"));
+        File.WriteAllText(Path.Combine(obj, "project.assets.json"), Assets(libraries));
+        return project;
+    }
 
-        File.Exists(Path.Combine(_dir, "A", "obj", "A.csproj.reqnroll-ide.targets")).Should().BeTrue();
-        File.Exists(Path.Combine(_dir, "B", "obj", "B.csproj.reqnroll-ide.targets")).Should().BeTrue();
-        Directory.GetFiles(_dir, "*.reqnroll-ide.targets", SearchOption.AllDirectories).Should().HaveCount(2);
+    [Theory]
+    [InlineData("Reqnroll.xunit.v3/3.3.3")]       // a runner plugin, referenced directly
+    [InlineData("Reqnroll/3.3.4")]                // the runtime alone, e.g. arriving through an in-house meta-package
+    [InlineData("MyCompany.ReqnrollSteps/1.0.0")] // a third-party package or project reference with the name in it
+    [InlineData("reqnroll.mstest/3.3.4")]         // case-insensitive, like the LSP server's rule
+    public void DetectReqnrollUsage_finds_Reqnroll_anywhere_in_the_restore_graph(string reqnrollLibrary)
+    {
+        MtpProjectStubs.DetectReqnrollUsage(Assets("MSTest.TestAdapter/4.2.3", reqnrollLibrary, "System.Text.Json/9.0.0"))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void DetectReqnrollUsage_is_false_without_Reqnroll_even_when_paths_and_messages_mention_it_and_unknown_before_restore()
+    {
+        MtpProjectStubs.DetectReqnrollUsage(Assets("MSTest.TestAdapter/4.2.3", "Microsoft.Testing.Platform/2.2.3"))
+            .Should().BeFalse("the project path and the restore log mention Reqnroll, but no package or project reference does");
+        MtpProjectStubs.DetectReqnrollUsage(null).Should().BeNull("with no restore output yet the answer is not known");
+    }
+
+    [Fact]
+    public void TrySyncStub_writes_a_stub_for_a_restored_Reqnroll_project()
+    {
+        var project = CreateRestoredProject(@"App\App.csproj", "Reqnroll.MsTest/3.3.4", "Reqnroll/3.3.4");
+
+        MtpProjectStubs.TrySyncStub(project, BundleTargets, _logger, ReadOrNull, NoEvaluation).Should().Be(MtpStubSyncResult.Written);
+
+        File.ReadAllText(Path.Combine(_dir, "App", "obj", "App.csproj.reqnroll-ide.targets")).Should().Be(MtpProjectStubs.BuildStubXml(BundleTargets));
+    }
+
+    [Fact]
+    public void TrySyncStub_writes_nothing_into_a_project_that_does_not_use_Reqnroll_and_removes_an_earlier_stub()
+    {
+        var project = CreateRestoredProject(@"App\App.csproj", "MSTest.TestAdapter/4.2.3");
+        var stub = Path.Combine(_dir, "App", "obj", "App.csproj.reqnroll-ide.targets");
+        File.WriteAllText(stub, MtpProjectStubs.BuildStubXml(BundleTargets)); // e.g. from an earlier build of the extension, or Reqnroll since removed
+        var nuGetTargets = Path.Combine(_dir, "App", "obj", "App.csproj.nuget.g.targets");
+        File.WriteAllText(nuGetTargets, "<Project />");
+
+        MtpProjectStubs.TrySyncStub(project, BundleTargets, _logger, ReadOrNull, NoEvaluation).Should().Be(MtpStubSyncResult.NotReqnroll);
+
+        File.Exists(stub).Should().BeFalse();
+        File.Exists(nuGetTargets).Should().BeTrue("only our own stub is ever removed");
+    }
+
+    [Fact]
+    public void TrySyncStub_leaves_a_project_that_has_not_been_restored_yet_alone()
+    {
+        var project = CreateProject(@"App\App.csproj");
+
+        MtpProjectStubs.TrySyncStub(project, BundleTargets, _logger, ReadOrNull, NoEvaluation).Should().Be(MtpStubSyncResult.NotRestored);
+
+        Directory.Exists(Path.Combine(_dir, "App", "obj")).Should().BeFalse("nothing is written until restore says whether the project uses Reqnroll");
+    }
+
+    [Fact]
+    public void TrySyncStub_reads_the_restore_output_from_a_moved_obj_directory()
+    {
+        var project = CreateProject(@"App\App.csproj", @"<Project Sdk=""Microsoft.NET.Sdk""><PropertyGroup><BaseIntermediateOutputPath>..\out\App\</BaseIntermediateOutputPath></PropertyGroup></Project>");
+        var moved = CreateDir(@"out\App");
+        File.WriteAllText(Path.Combine(moved, "project.assets.json"), Assets("Reqnroll.NUnit/3.3.4"));
+
+        MtpProjectStubs.TrySyncStub(project, BundleTargets, _logger, ReadOrNull, _ => moved).Should().Be(MtpStubSyncResult.Written);
+
+        File.Exists(Path.Combine(moved, "App.csproj.reqnroll-ide.targets")).Should().BeTrue();
+        Directory.Exists(Path.Combine(_dir, "App", "obj")).Should().BeFalse();
+    }
+
+    [Fact]
+    public void SyncStubs_puts_a_stub_only_in_the_Reqnroll_CSharp_projects_of_a_solution()
+    {
+        var specs = CreateRestoredProject(@"Specs\Specs.csproj", "Reqnroll.xunit.v3/3.3.3");
+        var unitTests = CreateRestoredProject(@"UnitTests\UnitTests.csproj", "xunit.v3.mtp-v2/4.0.1");
+        var app = CreateRestoredProject(@"App\App.csproj");
+        var vbSpecs = CreateRestoredProject(@"VbSpecs\VbSpecs.vbproj", "Reqnroll.xunit.v3/3.3.3");
+
+        MtpProjectStubs.SyncStubs(new List<string> { specs, unitTests, app, vbSpecs }, BundleTargets, _logger).Should().Be(1);
+
+        Directory.GetFiles(_dir, "*.reqnroll-ide.targets", SearchOption.AllDirectories)
+            .Should().ContainSingle().Which.Should().Be(Path.Combine(_dir, "Specs", "obj", "Specs.csproj.reqnroll-ide.targets"));
     }
 
     // ── TryRemoveLegacyImportAfterFile ───────────────────────────────────────

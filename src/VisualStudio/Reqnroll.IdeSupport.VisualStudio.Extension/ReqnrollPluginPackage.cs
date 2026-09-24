@@ -361,7 +361,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
             if (await GetServiceAsync(typeof(SVsSolution)) is IVsSolution solution)
-                _mtpProjectStubListener = MtpProjectStubSolutionListener.TryStart(solution, bundleTargetsPath, _logger);
+                _mtpProjectStubListener = MtpProjectStubSolutionListener.TryStart(solution, this, bundleTargetsPath, _logger);
         }
         catch (OperationCanceledException)
         {

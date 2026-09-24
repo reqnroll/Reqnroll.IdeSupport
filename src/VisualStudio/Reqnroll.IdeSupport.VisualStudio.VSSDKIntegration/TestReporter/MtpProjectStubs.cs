@@ -26,11 +26,19 @@ namespace Reqnroll.IdeSupport.VisualStudio.TestReporter;
 /// writes it again.
 /// </para>
 /// <para>
+/// <b>Reqnroll projects only.</b> A stub is written only for a project whose NuGet restore output
+/// (<c>project.assets.json</c>, in the same directory as the stub) lists a package or project whose
+/// name contains "Reqnroll" — the name rule the LSP server's <c>ReqnrollProjectDetector</c> uses, but
+/// over the whole restore graph, so a project that gets Reqnroll through an in-house meta-package
+/// qualifies too. A restored project that lists none has its stub removed; a project with no restore
+/// output yet is left alone until NuGet's restore-finished signal triggers another pass.
+/// </para>
+/// <para>
 /// <b>No MTP detection here.</b> The imported <c>.targets</c> gates itself at build time on the real,
-/// evaluated properties (language, test host, MTP opt-in, TFM, LangVersion, resolved
-/// Microsoft.Testing.Platform version) and adds nothing to a project that fails any gate, so a stub is
-/// written for every C# project in the solution. That replaces the ad hoc text scans that issue #722
-/// showed miss projects made MTP-capable through imported props.
+/// evaluated properties (a resolved <c>Reqnroll.dll</c> reference, language, test host, MTP opt-in, TFM,
+/// LangVersion, resolved Microsoft.Testing.Platform version) and adds nothing to a project that fails
+/// any gate. That replaces the ad hoc text scans that issue #722 showed miss projects made MTP-capable
+/// through imported props.
 /// </para>
 /// <para>
 /// <b>Known gap (issue #741 risk 4a)</b>: VS may keep using a project evaluation made before the stub
@@ -47,6 +55,17 @@ public static class MtpProjectStubs
     private static readonly Regex ExtensionsPathOverride = new(
         @"<\s*(BaseIntermediateOutputPath|MSBuildProjectExtensionsPath|UseArtifactsOutput|ArtifactsPath)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>NuGet's restore output, written to the same directory as the stub.</summary>
+    internal const string AssetsFileName = "project.assets.json";
+
+    /// <summary>The package-name marker the LSP server's <c>ReqnrollProjectDetector</c> also uses.</summary>
+    private const string ReqnrollNameMarker = "Reqnroll";
+
+    /// <summary>A <c>"Name/Version":</c> key of project.assets.json's <c>targets</c> and <c>libraries</c> sections.</summary>
+    private static readonly Regex AssetsLibraryKey = new(
+        @"""(?<name>[^""/\\]+)/\d[^""/]*""\s*:",
+        RegexOptions.CultureInvariant);
 
     private static readonly ConcurrentDictionary<string, string?> EvaluatedDirectories = new(StringComparer.OrdinalIgnoreCase);
 
@@ -148,12 +167,76 @@ public static class MtpProjectStubs
         }
     }
 
-    /// <summary>Writes stubs for every C# project in <paramref name="projectFiles"/>; returns how many are in place.</summary>
-    public static int WriteStubs(IEnumerable<string> projectFiles, string bundleTargetsPath, IIdeSupportLogger logger)
+    /// <summary>
+    /// Brings one project's stub in line with whether it uses Reqnroll (see the class remarks): written
+    /// or refreshed for a Reqnroll project, removed from a restored project that does not use Reqnroll,
+    /// untouched while the project has no restore output yet. Every failure is logged and swallowed.
+    /// </summary>
+    public static MtpStubSyncResult TrySyncStub(
+        string projectFile,
+        string bundleTargetsPath,
+        IIdeSupportLogger logger,
+        Func<string, string?>? readTextOrNull = null,
+        Func<string, string?>? evaluateProjectExtensionsPath = null)
+    {
+        try
+        {
+            if (!projectFile.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) || !File.Exists(projectFile))
+                return MtpStubSyncResult.Skipped;
+
+            readTextOrNull ??= ReadTextOrNull;
+            var directory = ResolveProjectExtensionsDirectory(
+                projectFile,
+                readTextOrNull,
+                evaluateProjectExtensionsPath ?? (p => EvaluatedDirectories.GetOrAdd(p, EvaluateProjectExtensionsPathViaDotnet)));
+            if (directory is null)
+                return MtpStubSyncResult.Skipped;
+
+            switch (DetectReqnrollUsage(readTextOrNull(Path.Combine(directory, AssetsFileName))))
+            {
+                case true:
+                    return TryWriteStub(projectFile, bundleTargetsPath, logger, readTextOrNull, _ => directory) is null
+                        ? MtpStubSyncResult.Skipped
+                        : MtpStubSyncResult.Written;
+                case false:
+                    var stub = Path.Combine(directory, Path.GetFileName(projectFile) + StubFileSuffix);
+                    if (File.Exists(stub))
+                    {
+                        File.Delete(stub);
+                        logger.LogVerbose($"{nameof(MtpProjectStubs)}: removed the MTP reporter stub {stub}; the project does not use Reqnroll.");
+                    }
+                    return MtpStubSyncResult.NotReqnroll;
+                default:
+                    return MtpStubSyncResult.NotRestored;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogException(ex, $"{nameof(MtpProjectStubs)}: could not update the MTP reporter stub for '{projectFile}'");
+            return MtpStubSyncResult.Skipped;
+        }
+    }
+
+    /// <summary>
+    /// Whether a project's <c>project.assets.json</c> text lists a package or project reference whose
+    /// name contains "Reqnroll" (case-insensitive) anywhere in its restore graph; null when there is
+    /// no restore output yet, so the answer is unknown.
+    /// </summary>
+    internal static bool? DetectReqnrollUsage(string? projectAssetsJson)
+    {
+        if (projectAssetsJson is null) return null;
+        foreach (Match match in AssetsLibraryKey.Matches(projectAssetsJson))
+            if (match.Groups["name"].Value.IndexOf(ReqnrollNameMarker, StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        return false;
+    }
+
+    /// <summary>Syncs the stub of every project in <paramref name="projectFiles"/> (<see cref="TrySyncStub"/>); returns how many have a stub in place.</summary>
+    public static int SyncStubs(IEnumerable<string> projectFiles, string bundleTargetsPath, IIdeSupportLogger logger)
     {
         var count = 0;
         foreach (var projectFile in projectFiles)
-            if (TryWriteStub(projectFile, bundleTargetsPath, logger) is not null)
+            if (TrySyncStub(projectFile, bundleTargetsPath, logger) == MtpStubSyncResult.Written)
                 count++;
         return count;
     }
@@ -230,4 +313,17 @@ public static class MtpProjectStubs
             return null;
         }
     }
+}
+
+/// <summary>What <see cref="MtpProjectStubs.TrySyncStub"/> did for one project.</summary>
+public enum MtpStubSyncResult
+{
+    /// <summary>Not a C# project, its obj\ location is unknown, or an error was logged.</summary>
+    Skipped,
+    /// <summary>A Reqnroll project: its stub is written and current.</summary>
+    Written,
+    /// <summary>A restored project that does not use Reqnroll: it has no stub (any earlier one was removed).</summary>
+    NotReqnroll,
+    /// <summary>No restore output yet, so Reqnroll use is unknown: left as it was.</summary>
+    NotRestored,
 }

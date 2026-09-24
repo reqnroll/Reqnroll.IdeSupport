@@ -11,8 +11,11 @@ public class SourceInjectionBuildTests
 {
     private const string LatestMsTest = "4.2.3";
 
-    /// <summary>An MTP-only MSTest project (no Microsoft.NET.Test.Sdk, so IsTestProject is never set) — the shape issue #741's spike found main's IsTestProject guard wrongly excluded.</summary>
-    private static string MsTestMtpProject(string msTestVersion = LatestMsTest, string extraProperties = "", string extraItems = "") => $"""
+    /// <summary>The runtime package alone: enough for the .targets file's Reqnroll gate (a resolved Reqnroll.dll) without Reqnroll's code generation.</summary>
+    private const string ReqnrollReference = """<PackageReference Include="Reqnroll" Version="3.3.4" />""";
+
+    /// <summary>An MTP-only MSTest project (no Microsoft.NET.Test.Sdk, so IsTestProject is never set) that references Reqnroll — the shape issue #741's spike found main's IsTestProject guard wrongly excluded.</summary>
+    private static string MsTestMtpProject(string msTestVersion = LatestMsTest, string extraProperties = "", string extraItems = "", bool reqnroll = true) => $"""
         <Project Sdk="Microsoft.NET.Sdk">
           <PropertyGroup>
             <TargetFramework>net10.0</TargetFramework>
@@ -25,6 +28,7 @@ public class SourceInjectionBuildTests
           <ItemGroup>
             <PackageReference Include="MSTest.TestAdapter" Version="{msTestVersion}" />
             <PackageReference Include="MSTest.TestFramework" Version="{msTestVersion}" />
+            {(reqnroll ? ReqnrollReference : "")}
             {extraItems}
           </ItemGroup>
         </Project>
@@ -149,6 +153,19 @@ public class SourceInjectionBuildTests
     // ---- T5: negative gating ---------------------------------------------------------------
 
     [Fact]
+    public void An_MTP_test_project_that_does_not_use_Reqnroll_gets_nothing_even_with_a_stub()
+    {
+        using var workspace = InjectionWorkspace.Create("PlainMtp.csproj", MsTestMtpProject(reqnroll: false));
+
+        var result = Build(workspace, "-v:d");
+
+        ShouldSucceed(result);
+        workspace.InjectedSources().Should().BeEmpty();
+        workspace.ReporterHookRegistered().Should().BeFalse();
+        result.Output.Should().Contain("it does not reference Reqnroll");
+    }
+
+    [Fact]
     public void A_VB_test_project_is_skipped()
     {
         using var workspace = InjectionWorkspace.Create("VbMtp.vbproj", MsTestMtpProject()
@@ -169,7 +186,10 @@ public class SourceInjectionBuildTests
         using var workspace = InjectionWorkspace.Create("Library.csproj", """
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
-              <ItemGroup><PackageReference Include="Microsoft.Testing.Platform" Version="2.2.3" /></ItemGroup>
+              <ItemGroup>
+                <PackageReference Include="Microsoft.Testing.Platform" Version="2.2.3" />
+                <PackageReference Include="Reqnroll" Version="3.3.4" />
+              </ItemGroup>
             </Project>
             """);
 

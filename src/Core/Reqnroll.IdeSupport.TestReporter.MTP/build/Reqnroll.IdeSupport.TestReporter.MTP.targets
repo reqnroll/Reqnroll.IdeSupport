@@ -8,7 +8,7 @@
     same mechanism NuGet's obj\<Project>.csproj.nuget.g.targets uses), so nothing here affects any other
     project, solution or user: no ImportAfter drop, no environment variable, no project-file edit.
 
-    What it does, for a project that passes every gate below: copies the reporter's sources (shipped
+    What it does, for a Reqnroll project (one that references Reqnroll.dll) that passes every gate below: copies the reporter's sources (shipped
     next to this file in ReporterSource\) into $(IntermediateOutputPath)ReqnrollIdeSupport\, compiles
     them into the project's own test assembly, and registers the reporter with MTP through a
     TestingPlatformBuilderHook item. Because the reporter is compiled from source against the
@@ -43,6 +43,8 @@
           Condition="'$(TargetFramework)' != ''">
 
     <ItemGroup>
+      <!-- Reqnroll.dll itself, however it arrived: a package (direct or transitive) or a project reference. -->
+      <_ReqnrollIdeMtpReqnrollReference Include="@(ReferencePath)" Condition="'%(Filename)' == 'Reqnroll'" />
       <_ReqnrollIdeMtpPlatformReference Include="@(ReferencePath->WithMetadataValue('NuGetPackageId', 'Microsoft.Testing.Platform'))" />
       <_ReqnrollIdeMtpPlatformVersionItem Include="@(_ReqnrollIdeMtpPlatformReference->'%(NuGetPackageVersion)'->Distinct())" />
     </ItemGroup>
@@ -54,6 +56,8 @@
 
       <_ReqnrollIdeMtpSkipReason />
       <_ReqnrollIdeMtpSkipReason Condition="'$(ReqnrollIdeSupportDisableMtpReporter)' == 'true'">ReqnrollIdeSupportDisableMtpReporter is true</_ReqnrollIdeMtpSkipReason>
+      <!-- The reporter reports Reqnroll scenarios only; any other project gets nothing from us, even if it has a stub. -->
+      <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '@(_ReqnrollIdeMtpReqnrollReference)' == ''">it does not reference Reqnroll</_ReqnrollIdeMtpSkipReason>
       <_ReqnrollIdeMtpSkipReason Condition="'$(_ReqnrollIdeMtpSkipReason)' == '' and '$(Language)' != 'C#'">the project language is '$(Language)', and the reporter sources are C#</_ReqnrollIdeMtpSkipReason>
       <!-- IsTestProject alone is not enough: only Microsoft.NET.Test.Sdk (VSTest-era) sets it, so an
            MTP-only project never has it. MTP test hosts are executables; a plain library that merely

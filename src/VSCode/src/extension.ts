@@ -143,7 +143,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
   appLogChannel.info('Reqnroll extension activated.');
 
   // Project-local MTP reporter stubs (issue #741): obj/<Project>.csproj.reqnroll-ide.targets for each
-  // MTP-capable project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
+  // MTP-capable Reqnroll project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
   // compiles the reporter in. Runs early, before any test run could plausibly start, and independent
   // of the LSP client, unlike `activateTestOutcomes` below. Awaited because its MTP-capability scan
   // can shell out to `dotnet msbuild` (issue #722).

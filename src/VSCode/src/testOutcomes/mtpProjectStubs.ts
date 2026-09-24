@@ -13,7 +13,8 @@ import {
  * Project-local MTP reporter stubs — issue #741, the VS Code counterpart of the Visual Studio
  * extension's `MtpProjectStubs.cs` and the Rider plugin's `MtpProjectStubs.kt`.
  *
- * For every MTP-capable C# project in the workspace, writes `obj/<Project>.csproj.reqnroll-ide.targets`,
+ * For every MTP-capable C# project in the workspace that uses Reqnroll (see {@link detectReqnrollUsage}),
+ * writes `obj/<Project>.csproj.reqnroll-ide.targets`,
  * a one-line `Import` of the bundled `Reqnroll.IdeSupport.TestReporter.MTP.targets`. MSBuild imports it
  * through `$(MSBuildProjectExtensionsPath)$(MSBuildProjectFile).*.targets` (the mechanism NuGet's own
  * `obj/<Project>.csproj.nuget.g.targets` uses), and the imported file compiles the reporter's sources
@@ -32,6 +33,12 @@ const EXTENSIONS_PATH_OVERRIDE =
   /<\s*(BaseIntermediateOutputPath|MSBuildProjectExtensionsPath|UseArtifactsOutput|ArtifactsPath)\b/i;
 
 const MSBUILD_EVAL_TIMEOUT_MS = 30_000;
+
+/** NuGet's restore output, written to the same directory as the stub. */
+export const ASSETS_FILE_NAME = 'project.assets.json';
+
+/** A `"Name/Version":` key of project.assets.json's `targets` and `libraries` sections. */
+const ASSETS_LIBRARY_KEY = /"([^"/\\]+)\/\d[^"/]*"\s*:/g;
 
 /**
  * Enumerates every `.csproj` under `root`, pruning build-output/VCS/editor/dependency directories.
@@ -194,11 +201,82 @@ export async function removeStub(
 }
 
 /**
- * Writes a stub for every MTP-capable C# project under `workspaceFolderPaths` (only those — no file is
- * written into a project that can't use it). Resolves to the number of stubs in place; never throws.
+ * Whether a project's `project.assets.json` text lists a package or project reference whose name
+ * contains "Reqnroll" (case-insensitive) anywhere in its restore graph — the name rule the LSP server's
+ * `ReqnrollProjectDetector` uses, over transitive references too, so a project that gets Reqnroll
+ * through an in-house meta-package qualifies. `undefined` when there is no restore output yet, so the
+ * answer is unknown. Mirrors `MtpProjectStubs.DetectReqnrollUsage` in the Visual Studio extension.
+ * Exported for testing.
  */
-export async function writeStubsForWorkspace(
-  workspaceFolderPaths: readonly string[],
+export function detectReqnrollUsage(projectAssetsJson: string | undefined): boolean | undefined {
+  if (projectAssetsJson === undefined) return undefined;
+  for (const match of projectAssetsJson.matchAll(ASSETS_LIBRARY_KEY)) {
+    if (match[1].toLowerCase().includes('reqnroll')) return true;
+  }
+  return false;
+}
+
+export type StubSyncResult =
+  'written' | 'notReqnroll' | 'notMtpCapable' | 'notRestored' | 'skipped';
+
+/**
+ * Brings one project's stub in line with whether it uses Reqnroll: written or refreshed for an
+ * MTP-capable Reqnroll project, removed from a restored project that does not use Reqnroll, untouched
+ * while the project has no restore output yet. The cheap Reqnroll check runs first, so `isCapable`
+ * (which can shell out to `dotnet msbuild`, issue #722) runs only for Reqnroll projects. Never throws.
+ * Exported for testing.
+ */
+export async function syncStub(
+  projectFile: string,
+  bundleTargetsPath: string,
+  isCapable: (projectFile: string) => Promise<boolean> = isMtpCapable,
+  readTextOrNull: (p: string) => string | undefined = readTextOrNullFs,
+  evaluate: (projectFile: string) => Promise<string | undefined> = evaluateViaMsBuild,
+): Promise<StubSyncResult> {
+  try {
+    if (!projectFile.toLowerCase().endsWith('.csproj')) return 'skipped';
+    const directory = await resolveProjectExtensionsDirectory(
+      projectFile,
+      readTextOrNull,
+      evaluate,
+    );
+    if (!directory) return 'skipped';
+
+    switch (detectReqnrollUsage(readTextOrNull(path.join(directory, ASSETS_FILE_NAME)))) {
+      case true:
+        if (!(await isCapable(projectFile))) return 'notMtpCapable';
+        return (await writeStub(projectFile, bundleTargetsPath, readTextOrNull, () =>
+          Promise.resolve(directory),
+        )) === undefined
+          ? 'skipped'
+          : 'written';
+      case false: {
+        const stub = stubPathFor(directory, projectFile);
+        if (fs.existsSync(stub)) {
+          fs.rmSync(stub, { force: true });
+          logInfo(
+            `testOutcomes: removed the MTP reporter stub ${stub}; the project does not use Reqnroll.`,
+          );
+        }
+        return 'notReqnroll';
+      }
+      default:
+        return 'notRestored';
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logWarn(`testOutcomes: could not update the MTP reporter stub for '${projectFile}' — ${msg}`);
+    return 'skipped';
+  }
+}
+
+/**
+ * Syncs the stub ({@link syncStub}) of every C# project among `projectFiles`: only a project that uses
+ * Reqnroll and can use the reporter gets a file of ours. Resolves to the number of stubs in place;
+ * never throws.
+ */
+export async function syncStubsForProjects(
+  projectFiles: readonly string[],
   bundleTargetsPath: string,
   isCapable: (projectFile: string) => Promise<boolean> = isMtpCapable,
 ): Promise<number> {
@@ -210,15 +288,12 @@ export async function writeStubsForWorkspace(
       return 0;
     }
 
-    const projectFiles = workspaceFolderPaths.flatMap((folder) => enumerateProjectFiles(folder));
-    const capable = await Promise.all(projectFiles.map((projectFile) => isCapable(projectFile)));
-    const targets = projectFiles.filter((_, i) => capable[i]);
-    const written = await Promise.all(
-      targets.map((projectFile) => writeStub(projectFile, bundleTargetsPath)),
+    const results = await Promise.all(
+      projectFiles.map((projectFile) => syncStub(projectFile, bundleTargetsPath, isCapable)),
     );
-    const count = written.filter((s) => s !== undefined).length;
+    const count = results.filter((r) => r === 'written').length;
     logInfo(
-      `testOutcomes: MTP reporter stubs in place for ${count} of ${targets.length} MTP-capable project(s).`,
+      `testOutcomes: MTP reporter stubs in place for ${count} MTP-capable Reqnroll project(s) of ${projectFiles.length} project(s).`,
     );
     return count;
   } catch (err: unknown) {
@@ -228,13 +303,44 @@ export async function writeStubsForWorkspace(
   }
 }
 
+/** {@link syncStubsForProjects} for every C# project under `workspaceFolderPaths`. */
+export function syncStubsForWorkspace(
+  workspaceFolderPaths: readonly string[],
+  bundleTargetsPath: string,
+  isCapable: (projectFile: string) => Promise<boolean> = isMtpCapable,
+): Promise<number> {
+  return syncStubsForProjects(
+    workspaceFolderPaths.flatMap((folder) => enumerateProjectFiles(folder)),
+    bundleTargetsPath,
+    isCapable,
+  );
+}
+
+/**
+ * The C# projects whose default `obj/` holds `assetsFile` — the projects in its parent's parent
+ * directory. Exported for testing.
+ */
+export function projectsForAssetsFile(assetsFile: string): string[] {
+  const projectDirectory = path.dirname(path.dirname(assetsFile));
+  try {
+    return fs
+      .readdirSync(projectDirectory, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.toLowerCase().endsWith('.csproj'))
+      .map((e) => path.join(projectDirectory, e.name));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Extension-activation entry point, gated on the same `reqnroll.testOutcomes.enabled` opt-in as
- * `activateTestOutcomes`. When enabled, writes the workspace's stubs; when disabled, removes any this
- * extension wrote earlier, so turning the feature off leaves no file of ours behind. Never throws.
+ * `activateTestOutcomes`. When enabled, syncs the workspace's stubs, then re-syncs a project each time
+ * NuGet writes its `obj/project.assets.json` — when a freshly cloned project is first restored (and
+ * its Reqnroll use becomes known), or a Reqnroll package is added or removed. When disabled, removes any
+ * stub this extension wrote earlier, so turning the feature off leaves no file of ours behind. Never throws.
  */
 export async function activateMtpProjectStubs(
-  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath'>,
+  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'subscriptions'>,
 ): Promise<void> {
   const workspaceFolderPaths = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
   if (workspaceFolderPaths.length === 0) return;
@@ -262,10 +368,18 @@ export async function activateMtpProjectStubs(
     return;
   }
 
-  await writeStubsForWorkspace(
-    workspaceFolderPaths,
-    path.join(reporterDirectory, MTP_REPORTER_BUNDLE_TARGETS_FILE_NAME),
-  );
+  const bundleTargetsPath = path.join(reporterDirectory, MTP_REPORTER_BUNDLE_TARGETS_FILE_NAME);
+  await syncStubsForWorkspace(workspaceFolderPaths, bundleTargetsPath);
+
+  // Best effort: a files.watcherExclude covering obj/ suppresses these events, and a project that
+  // moves its obj/ is not watched; either then gets its stub at the next activation.
+  const restoreWatcher = vscode.workspace.createFileSystemWatcher(`**/obj/${ASSETS_FILE_NAME}`);
+  const onRestored = (uri: vscode.Uri): void => {
+    void syncStubsForProjects(projectsForAssetsFile(uri.fsPath), bundleTargetsPath);
+  };
+  restoreWatcher.onDidCreate(onRestored);
+  restoreWatcher.onDidChange(onRestored);
+  context.subscriptions.push(restoreWatcher);
 }
 
 /** `dotnet msbuild <project> -getProperty:MSBuildProjectExtensionsPath` (a single property prints the bare value); `undefined` on any failure. */
