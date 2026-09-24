@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
@@ -62,12 +62,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             // classes each `new`'d their own SynchronousFileLogger (mostly defaulting to
             // TraceLevel.Warning, silently dropping LogInfo) while also taking a DI-injected
             // TraceSource that nothing ever attached a listener to. One IdeSupportCompositeLogger,
-            // registered once and consumed everywhere via ILogger<T>, replaces both.
-            var logger = new IdeSupportCompositeLogger()
-                .Add(new IdeSupportDebugLogger())
-                .Add(new SynchronousFileLogger("vs", "ext", TraceLevel.Warning))
-                .Add(new VsOutputPaneLogger());
-            serviceCollection.AddSingleton<IIdeSupportLogger>(logger);
+            // registered once and consumed everywhere via ILogger<T>, replaces both. It is the same
+            // process-wide instance the VSSDK/MEF side exports (issue #748), so both composition
+            // roots share one file logger and one "Reqnroll" Output Window pane.
+            serviceCollection.AddSingleton<IIdeSupportLogger>(ExtensionHostLogger.Instance);
             serviceCollection.AddSingleton<ILoggerFactory>(sp =>
                 new IdeSupportLoggerFactory(sp.GetRequiredService<IIdeSupportLogger>()));
             serviceCollection.AddSingleton(typeof(ILogger<>), typeof(Logger<>));

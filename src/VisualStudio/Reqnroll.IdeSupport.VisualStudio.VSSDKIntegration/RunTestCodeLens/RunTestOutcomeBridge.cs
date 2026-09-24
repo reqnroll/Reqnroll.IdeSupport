@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.Imaging;
 using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.TestWindow;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
@@ -54,7 +55,9 @@ internal enum RunTestOutcome
 /// </remarks>
 internal static class RunTestOutcomeBridge
 {
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+    // Runs only in the CodeLens ServiceHub host (its sole caller is RunTestCodeLensDataPoint), so
+    // it shares that host's logger instead of owning a second one for the same file (issue #748).
+    private static IIdeSupportLogger Logger => CodeLensHostLogger.Instance;
 
     // Stable per-process id for the (never-unsubscribed) implicit "subscription" GetTestOutcomeAsync
     // establishes server-side — reused across every call so a long session accumulates at most one,

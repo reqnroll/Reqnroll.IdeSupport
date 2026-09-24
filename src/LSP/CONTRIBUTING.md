@@ -198,6 +198,13 @@ that wrote it, resolved once at construction) makes concurrent instances (two VS
 server plus its Connector children) never collide on one file, and lets you match a specific run
 back to a specific process. The `-debug` segment only appears in DEBUG builds (`SynchronousFileLogger.GetLogFile`).
 
+The PID only separates *processes*. Within one process, create exactly one `SynchronousFileLogger`
+per `{ide, role}` and share it: each instance serializes writes only with its own lock, so two
+instances on the same file hit a sharing violation under concurrent writes, and the swallowed
+error silently drops the line (issue #748). The VS extension shares `ExtensionHostLogger.Instance`
+in `devenv.exe` and `CodeLensHostLogger.Instance` in the CodeLens ServiceHub host for this reason
+(see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md)).
+
 - `reqnroll-<ide>-server-[debug-]<date>-<pid>.log` — the server's own log output (parses,
   discovery, handler activity, stack traces on server-side failures), at the level set by
   `--log-level` (see below).

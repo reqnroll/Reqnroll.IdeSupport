@@ -4,12 +4,12 @@ using Reqnroll.IdeSupport.Common.Logging;
 namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 
 /// <summary>
-/// MEF export provider for the single, shared <see cref="IIdeSupportLogger"/> sink used by the
-/// legacy VSSDK/MEF composition root (issue #84): previously exported but never populated with
-/// child loggers, so every MEF import of this type was silently a no-op. Wires the same
-/// debug-output + synchronous-file-logger pair (at the same default level) used by the
-/// Extensibility-SDK side (see <c>ExtensionEntrypoint.InitializeServices</c>), so both composition
-/// roots share one consistent default instead of each having their own ad-hoc loggers.
+/// MEF export of the shared <see cref="IIdeSupportLogger"/> for the VSSDK/MEF composition root
+/// (issue #84: previously exported but never populated with child loggers, so every MEF import of
+/// this type was silently a no-op). Exports <see cref="ExtensionHostLogger.Instance"/>, the same
+/// instance <c>ExtensionEntrypoint.InitializeServices</c> registers with VS.Extensibility DI, so both
+/// composition roots write through one file logger and one "Reqnroll" Output Window pane
+/// (issue #748).
 /// </summary>
 /// <remarks>
 /// A property export (issue #626) rather than a subclass of
@@ -23,9 +23,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 /// </remarks>
 public class IdeSupportLoggerExportProvider
 {
-    /// <summary>The shared composite logger sink, composed once per MEF composition.</summary>
+    /// <summary>The process-wide extension logger; see <see cref="ExtensionHostLogger"/>.</summary>
     [Export(typeof(IIdeSupportLogger))]
-    public IIdeSupportLogger Logger { get; } = new IdeSupportCompositeLogger()
-        .Add(new IdeSupportDebugLogger())
-        .Add(new SynchronousFileLogger("vs", "ext", TraceLevel.Info));
+    public IIdeSupportLogger Logger => ExtensionHostLogger.Instance;
 }
