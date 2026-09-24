@@ -124,11 +124,29 @@ jobs:
       vscode: ${{ steps.filter.outputs.vscode }}
       rider: ${{ steps.filter.outputs.rider }}
       core_lsp: ${{ steps.filter.outputs.core_lsp }}
+      build_version: ${{ steps.version.outputs.build_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      # <ReqnrollMainVersion>.<run number> — the same version build/Version.props gives the .NET
+      # projects via BUILD_NUMBER_ARG, computed once here so the VS Code and Rider packages (which
+      # don't go through MSBuild) carry it too. Every IDE installs a package as an upgrade only when
+      # its version is higher than the installed one, so each CI build must carry its run number
+      # (issue #746).
+      - name: Compute build version
+        id: version
+        run: |
+          main_version=$(sed -n 's:.*<ReqnrollMainVersion>\(.*\)</ReqnrollMainVersion>.*:\1:p' build/Version.props)
+          # Numeric major.minor only: the VSIX manifest needs a plain System.Version (no suffix), and
+          # the result is spliced into later jobs' scripts, so reject anything else here.
+          if ! [[ "$main_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::ReqnrollMainVersion in build/Version.props must be <major>.<minor>, got '$main_version'"
+            exit 1
+          fi
+          echo "build_version=$main_version.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Filter changed paths
         id: filter
@@ -247,6 +265,27 @@ jobs:
 
       - name: Build VSIX (${{ env.CONFIGURATION }})
         run: dotnet build ${{ env.EXTENSION_PROJECT }} --no-restore --configuration ${{ env.CONFIGURATION }} -p:UseExternalLspServerBuild=true "-p:LspServerBuildDir=${{ github.workspace }}\lsp-server-win-x64\" ${{ env.BUILD_NUMBER_ARG }}
+
+      # VS installs a VSIX as an upgrade only when its manifest Identity Version is higher than the
+      # installed one (issue #746). The version comes from a GetVsixVersion token that silently
+      # stops tracking the build number if it's ever replaced by a literal, so check the package.
+      - name: Verify VSIX version
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $vsix = Get-Item "src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/${{ env.CONFIGURATION }}/net481/*.vsix"
+          $zip = [IO.Compression.ZipFile]::OpenRead($vsix.FullName)
+          try {
+            $reader = [IO.StreamReader]::new($zip.GetEntry('extension.vsixmanifest').Open())
+            try { $manifest = [xml]$reader.ReadToEnd() } finally { $reader.Dispose() }
+          } finally { $zip.Dispose() }
+          $actual = $manifest.PackageManifest.Metadata.Identity.Version
+          $expected = '${{ needs.changes.outputs.build_version }}'
+          if ($actual -ne $expected) {
+            Write-Error "VSIX Identity Version is '$actual', expected '$expected'"
+            exit 1
+          }
+          Write-Host "VSIX Identity Version: $actual"
 
       - name: Upload VSIX candidate artifact
         uses: actions/upload-artifact@v7
@@ -483,8 +522,25 @@ jobs:
         run: npm run format:check
         working-directory: ${{ env.VSCODE_DIR }}
 
+      # package.json's version is a placeholder; stamp the build version so VS Code treats each CI
+      # build as an upgrade of the last (issue #746). --no-git-tag-version: CI-only, nothing committed.
+      - name: Set extension version
+        run: npm version "${{ needs.changes.outputs.build_version }}" --no-git-tag-version
+        working-directory: ${{ env.VSCODE_DIR }}
+
       - name: Package VSIX
         run: npx @vscode/vsce package --out "reqnroll-ide-support-${{ github.sha }}.vsix"
+        working-directory: ${{ env.VSCODE_DIR }}
+
+      - name: Verify VSIX version
+        run: |
+          actual=$(unzip -p "reqnroll-ide-support-${{ github.sha }}.vsix" extension/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
+          expected="${{ needs.changes.outputs.build_version }}"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::VSIX version is '$actual', expected '$expected'"
+            exit 1
+          fi
+          echo "VSIX version: $actual"
         working-directory: ${{ env.VSCODE_DIR }}
 
       - name: Upload VSIX artifact
@@ -618,16 +674,34 @@ jobs:
           name: testlogger
           path: ${{ env.RIDER_DIR }}/downloaded-testlogger
 
+      # -PpluginVersion overrides gradle.properties' placeholder with the build version, so Rider
+      # treats each CI build as an upgrade of the last (issue #746).
       - name: Build plugin
         run: >-
           ./gradlew buildPlugin
+          -PpluginVersion="${{ needs.changes.outputs.build_version }}"
           -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
           -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
+        working-directory: ${{ env.RIDER_DIR }}
+
+      - name: Verify plugin version
+        run: |
+          expected="${{ needs.changes.outputs.build_version }}"
+          zip=$(ls build/distributions/*.zip)
+          jar=$(unzip -Z1 "$zip" | grep -E '^[^/]+/lib/reqnroll-ide-support-rider-[^/]*\.jar$' | grep -v -- '-searchableOptions\.jar$')
+          actual=$(unzip -p "$zip" "$jar" > plugin.jar && unzip -p plugin.jar META-INF/plugin.xml | sed -n 's:.*<version>\(.*\)</version>.*:\1:p' | head -1)
+          rm -f plugin.jar
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::plugin.xml version is '$actual', expected '$expected'"
+            exit 1
+          fi
+          echo "Plugin version: $actual"
         working-directory: ${{ env.RIDER_DIR }}
 
       - name: Verify plugin
         run: >-
           ./gradlew verifyPlugin
+          -PpluginVersion="${{ needs.changes.outputs.build_version }}"
           -PlspServerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-server"
           -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
         working-directory: ${{ env.RIDER_DIR }}

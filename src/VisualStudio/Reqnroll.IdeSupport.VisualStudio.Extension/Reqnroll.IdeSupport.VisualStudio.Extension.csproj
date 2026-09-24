@@ -168,4 +168,9 @@
     </ItemGroup>
   </Target>
 
+  <!-- Feeds the Identity Version token in source.extension.vsixmanifest. VS decides whether an
+       install is an upgrade from that version alone, so it must carry the build number (issue #746).
+       VersionPrefix, not Version: the manifest needs a plain System.Version, so no -alpha suffix. -->
+  <Target Name="GetVsixVersion" Returns="$(VersionPrefix)" />
+
 </Project>
