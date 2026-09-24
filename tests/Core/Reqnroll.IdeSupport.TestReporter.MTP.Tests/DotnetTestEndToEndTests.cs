@@ -87,8 +87,7 @@ public class DotnetTestEndToEndTests
         psi.ArgumentList.Add("test");
         psi.Environment[SessionsDirectory.OverrideEnvironmentVariable] = sessionsDir;
         // The outer test host is itself a testing-platform run; don't let its environment leak into the inner one.
-        foreach (var key in psi.Environment.Keys.Where(k => k.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase) || k.StartsWith("MSBUILD", StringComparison.OrdinalIgnoreCase) || k.Equals("DOTNET_HOST_PATH", StringComparison.OrdinalIgnoreCase)).ToList())
-            psi.Environment.Remove(key);
+        Injection.InjectionWorkspace.ScrubInheritedBuildEnvironment(psi.Environment);
 
         using var process = Process.Start(psi)!;
         var stdoutTask = process.StandardOutput.ReadToEndAsync();

@@ -114,14 +114,7 @@ internal sealed class InjectionWorkspace : IDisposable
             WorkingDirectory = ProjectDirectory,
         };
         foreach (var argument in arguments) psi.ArgumentList.Add(argument);
-        // The outer test host is itself a dotnet/MSBuild/testing-platform process; none of its
-        // environment may leak into the inner build or test run.
-        foreach (var key in psi.Environment.Keys.Where(k =>
-                     k.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase) ||
-                     k.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase) ||
-                     k.StartsWith("MSBUILD", StringComparison.OrdinalIgnoreCase) ||
-                     k.Equals("DOTNET_HOST_PATH", StringComparison.OrdinalIgnoreCase)).ToList())
-            psi.Environment.Remove(key);
+        ScrubInheritedBuildEnvironment(psi.Environment);
         foreach (var (key, value) in environment ?? new Dictionary<string, string>())
             psi.Environment[key] = value;
 
@@ -134,6 +127,24 @@ internal sealed class InjectionWorkspace : IDisposable
             throw new TimeoutException($"dotnet {string.Join(' ', arguments)} did not finish within 5 minutes in {ProjectDirectory}");
         }
         return new DotnetResult(process.ExitCode, stdout.Result + stderr.Result);
+    }
+
+    /// <summary>
+    /// Environment variables become MSBuild properties, and the outer test host is itself a
+    /// dotnet/MSBuild/testing-platform process started by CI. None of that may leak into an inner build
+    /// or test run: CI's job-level <c>CONFIGURATION: Release</c> once silently turned every inner build
+    /// into a Release build, so obj/Debug assertions looked in the wrong folder.
+    /// </summary>
+    public static void ScrubInheritedBuildEnvironment(IDictionary<string, string?> environment)
+    {
+        string[] buildProperties = ["Configuration", "Platform", "TargetFramework", "RuntimeIdentifier", "OutDir", "OutputPath", "BaseOutputPath", "BaseIntermediateOutputPath", "IntermediateOutputPath"];
+        foreach (var key in environment.Keys.Where(k =>
+                     k.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase) ||
+                     k.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase) ||
+                     k.StartsWith("MSBUILD", StringComparison.OrdinalIgnoreCase) ||
+                     k.Equals("DOTNET_HOST_PATH", StringComparison.OrdinalIgnoreCase) ||
+                     buildProperties.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList())
+            environment.Remove(key);
     }
 
     public void Dispose()
