@@ -73,6 +73,12 @@ Double-click the `.vsix` (or run it via `VSIXInstaller.exe`) to install it into 
 offers to update it in place. As with any manual VSIX install, uninstall via **Extensions → Manage
 Extensions** when you're done testing, and restart VS afterward.
 
+VSIX Installer only treats an install as an update when the new `.vsix` has a **higher** manifest
+version (`<ReqnrollMainVersion>.<ReqnrollBuildNumber>`, from `build/Version.props`). CI builds use the
+workflow run number; a local build defaults to `99999`, so it sorts above every CI build — once a
+local build is installed, uninstall it before installing a CI `.vsix`, or the installer will refuse
+it as a downgrade.
+
 ## Running and debugging in VS
 
 The extension deploys into VS's **experimental instance** (a separate hive, e.g.
