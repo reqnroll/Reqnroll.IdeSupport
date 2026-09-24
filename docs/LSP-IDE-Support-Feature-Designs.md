@@ -941,7 +941,7 @@ All three IDEs require a small amount of custom code to:
 
 | Direction | Method | Purpose |
 |-----------|--------|---------|
-| Client → Server | `workspace/executeCommand` (`reqnroll.toggleComment`) | Toggle comment on lines in range |
+| Client → Server | `workspace/executeCommand` (`reqnroll.toggleComment`, `[uri, startLine, endLine, mode?]`) | Toggle comment on lines in range. Optional `mode`: `"toggle"` (default — uncomment if every line is commented, else comment), `"comment"` (always add `#`) or `"uncomment"` (remove one `#` from each commented line) |
 | Server → Client | `workspace/applyEdit` | Text insertions/deletions for `#` |
 
 #### Sequence diagram
@@ -968,6 +968,18 @@ sequenceDiagram
 #### VS Code
 
 `package.json` `contributes.keybindings` binds `ctrl+/` (`cmd+/` on macOS) to `reqnroll.toggleComment`, scoped by `"when": "editorTextFocus && editorLangId == gherkin"` — VS Code's own comment-toggle keybinding does not fire for `gherkin`-language documents. The command (registered in [`extension.ts`](../src/VSCode/src/extension.ts)) delegates to `doToggleComment` in [`commentToggle.ts`](../src/VSCode/src/commands/commentToggle.ts), which normalizes the selection via `normalizeSelectionLines` ([`selectionUtils.ts`](../src/VSCode/src/util/selectionUtils.ts)) — trimming a trailing selected line when VS Code reports the selection ending at `(line, 0)`, i.e. the user dragged past the end of the previous line without selecting any character on the next one, so that line is not spuriously toggled — then sends `workspace/executeCommand` (`reqnroll.toggleComment`, `[uri, startLine, endLine]`) via `client.sendRequest(ExecuteCommandRequest.type, ...)` and lets the returned `WorkspaceEdit` apply through the standard LSP client machinery; failures surface via `vscode.window.showErrorMessage`. Also available via editor context menu (`editor/context`, group `1_modification`) and the command palette, both gated on `editorLangId == gherkin`.
+
+#### Visual Studio
+
+VS's out-of-process `LanguageServerProvider` model does not route the built-in comment commands to anything for `.feature` files, so a classic VSSDK `IOleCommandTarget` filter does it: [`CommentToggleCommandFilter`](../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/CommentToggleCommandFilter.cs), installed per editable `Gherkin` text view via an `IVsTextViewCreationListener`, consumes the three standard commands and sends `reqnroll.toggleComment` through the static `CommentToggleRedirect` bridge (populated by `ReqnrollLanguageClient` once the server connection is live, cleared on dispose). Because it hooks the commands rather than keystrokes, the user's own key bindings and the Edit menu work too. Each command keeps its usual VS meaning via the `mode` argument (issue #747):
+
+| VS command | Default binding | Command set : ID | `mode` |
+|---|---|---|---|
+| `Edit.CommentSelection` | Ctrl+K, Ctrl+C | VSStd2K : 136 `COMMENT_BLOCK` (legacy alias 98) | `comment` |
+| `Edit.UncommentSelection` | Ctrl+K, Ctrl+U | VSStd2K : 137 `UNCOMMENT_BLOCK` (legacy alias 99) | `uncomment` |
+| `Edit.ToggleLineComment` | Ctrl+/ | `{160961B3-909D-4B28-9353-A1BEF587B4A6}` : 48 | `toggle` |
+
+`Edit.ToggleLineComment` has no `VSConstants` entry; its ID comes from the `CommandBindings` of VS's `Microsoft.VisualStudio.Editor.Implementation.dll`. The filter originally matched hard-coded IDs 145–147, which are unrelated VSStd2K commands, so none of the shortcuts reached the server; `CommentToggleCommandFilter.TryGetCommentMode` is kept `ThreadHelper`-free so the IDs are unit tested. There is no Reqnroll-specific Comment/Uncomment context-menu command any more — it was a stop-gap for the broken key bindings. The server's `workspace/applyEdit` is applied by VS's LSP client natively.
 
 #### Rider
 

@@ -13,7 +13,7 @@ menu instead — see the linked feature page for the full how-to.
 |---|---|---|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | F12, or Ctrl+Click | — |
 | [Rename Step](editing-features/rename-step.md) | F2 (unambiguous binding) | Extensions → Reqnroll → Reqnroll: Rename Step (ambiguous binding, opens picker dialog) |
-| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ | Right-click → Comment/Uncomment |
+| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ (toggle), Ctrl+K, Ctrl+C (comment), Ctrl+K, Ctrl+U (uncomment) *(native VS defaults)* | Edit → Advanced → Toggle Line Comment / Comment Selection / Uncomment Selection |
 | [Format Document](editing-features/formatting.md) | Ctrl+K, Ctrl+D *(native VS default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Right-click → Find Step Usages, or Extensions → Reqnroll → Find Step Usages |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Extensions → Reqnroll → Find Unused Step Definitions |

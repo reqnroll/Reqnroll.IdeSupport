@@ -9,7 +9,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 
 /// <summary>
 /// Sends a <c>workspace/executeCommand</c> request for <c>reqnroll.toggleComment</c>
-/// to the LSP server (Comment/Uncomment toggle).
+/// to the LSP server (Comment/Uncomment toggle). Invoked only through
+/// <see cref="CommentToggleRedirect"/>, from the built-in comment commands' VSSDK command filter.
 /// </summary>
 /// <remarks>
 /// The server responds with an acknowledgement and as a side-effect sends a
@@ -32,19 +33,20 @@ internal sealed class CommentToggleService
 
     /// <summary>
     /// Sends a <c>workspace/executeCommand</c> request for <c>reqnroll.toggleComment</c>
-    /// to toggle <c>#</c> comments on the selected lines (0-based, inclusive).
+    /// to comment, uncomment or toggle <c>#</c> comments on the selected lines (0-based, inclusive).
     /// </summary>
     public async Task ToggleCommentAsync(
         string            fileUri,
         int               startLine,
         int               endLine,
+        CommentToggleMode mode,
         CancellationToken cancellationToken)
     {
-        var paramsJson = BuildParams(fileUri, startLine, endLine);
+        var paramsJson = BuildParams(fileUri, startLine, endLine, mode);
 
         _logger.LogDebug(
-            "CommentToggleService: sending workspace/executeCommand reqnroll.toggleComment uri={FileUri} lines[{StartLine}..{EndLine}]",
-            fileUri, startLine, endLine);
+            "CommentToggleService: sending workspace/executeCommand reqnroll.toggleComment uri={FileUri} lines[{StartLine}..{EndLine}] mode={Mode}",
+            fileUri, startLine, endLine, mode);
         _logger.LogTrace(
             "CommentToggleService: sending reqnroll.toggleComment params={ParamsJson}", paramsJson);
 
@@ -60,9 +62,19 @@ internal sealed class CommentToggleService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int startLine, int endLine) =>
+    // internal so Reqnroll.IdeSupport.VisualStudio.Tests can pin the wire format the server parses.
+    internal static string BuildParams(string fileUri, int startLine, int endLine, CommentToggleMode mode) =>
         new LspParamsBuilder()
             .AddString("command", "reqnroll.toggleComment")
-            .AddRaw("arguments", $"[{LspParamsBuilder.EscapeString(fileUri)},{startLine},{endLine}]")
+            .AddRaw("arguments",
+                $"[{LspParamsBuilder.EscapeString(fileUri)},{startLine},{endLine},{LspParamsBuilder.EscapeString(ToWireMode(mode))}]")
             .Build();
+
+    // Must match the mode strings CommentToggleHandler accepts on the server.
+    internal static string ToWireMode(CommentToggleMode mode) => mode switch
+    {
+        CommentToggleMode.Comment   => "comment",
+        CommentToggleMode.Uncomment => "uncomment",
+        _                           => "toggle",
+    };
 }

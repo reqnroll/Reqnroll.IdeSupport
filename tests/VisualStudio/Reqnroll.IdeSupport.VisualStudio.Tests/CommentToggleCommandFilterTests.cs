@@ -57,4 +57,49 @@ public class CommentToggleCommandFilterTests
 
         uri.Should().Be(string.Empty);
     }
+
+    // ── Command → mode mapping (issue #747) ──────────────────────────────
+    //
+    // The IDs are written out as literals rather than taken from VSConstants on purpose: the bug
+    // was a filter matching the wrong numbers, so the test pins the numbers VS actually dispatches.
+    // VSStd2K 136/137 (and legacy 98/99) = Edit.CommentSelection/UncommentSelection;
+    // {160961B3-...}:48 = Edit.ToggleLineComment (from VS's editor CommandBindings, not VSConstants).
+
+    private static readonly Guid VsStd2K = new("{1496A755-94DE-11D0-8C3F-00C04FC2AAE2}");
+    private static readonly Guid EditorCommands = new("{160961B3-909D-4B28-9353-A1BEF587B4A6}");
+
+    public static TheoryData<Guid, uint, CommentToggleMode> CommentCommands => new()
+    {
+        { VsStd2K, 136u, CommentToggleMode.Comment },        // COMMENT_BLOCK — Ctrl+K, Ctrl+C
+        { VsStd2K, 98u,  CommentToggleMode.Comment },        // COMMENTBLOCK (legacy)
+        { VsStd2K, 137u, CommentToggleMode.Uncomment },      // UNCOMMENT_BLOCK — Ctrl+K, Ctrl+U
+        { VsStd2K, 99u,  CommentToggleMode.Uncomment },      // UNCOMMENTBLOCK (legacy)
+        { EditorCommands, 48u, CommentToggleMode.Toggle },   // Edit.ToggleLineComment — Ctrl+/
+    };
+
+    [Theory]
+    [MemberData(nameof(CommentCommands))]
+    public void Maps_the_built_in_comment_commands_to_their_mode(Guid group, uint id, CommentToggleMode expected)
+    {
+        CommentToggleCommandFilter.TryGetCommentMode(group, id, out var mode).Should().BeTrue();
+        mode.Should().Be(expected);
+    }
+
+    public static TheoryData<Guid, uint> OtherCommands => new()
+    {
+        { VsStd2K, 145u },          // FINAL — one of the IDs the filter wrongly claimed before #747
+        { VsStd2K, 146u },          // ECMD_DECREASEFILTER — likewise
+        { VsStd2K, 147u },
+        { VsStd2K, 143u },          // FORMATDOCUMENT — owned by FormatDocumentCommandFilter
+        { EditorCommands, 49u },    // Edit.ToggleBlockComment — Gherkin has no block comments
+        { EditorCommands, 136u },   // right ID, wrong command set
+        { Guid.Empty, 48u },
+    };
+
+    [Theory]
+    [MemberData(nameof(OtherCommands))]
+    public void Ignores_every_other_command(Guid group, uint id)
+    {
+        CommentToggleCommandFilter.TryGetCommentMode(group, id, out _).Should().BeFalse();
+    }
 }

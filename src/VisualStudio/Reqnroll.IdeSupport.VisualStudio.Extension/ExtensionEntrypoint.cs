@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
@@ -80,7 +79,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             serviceCollection.AddSingleton<GoToHooksState>();
             serviceCollection.AddSingleton<GoToMatchingScenariosState>();
             serviceCollection.AddSingleton<StepCodeLensState>();
-            serviceCollection.AddSingleton<CommentToggleState>();
             serviceCollection.AddSingleton<RenameStepState>();
             serviceCollection.AddSingleton<FormatDocumentState>();
             // ExtensionPart subclasses are not auto-registered by the framework; must be explicit.
