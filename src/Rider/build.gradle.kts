@@ -272,9 +272,9 @@ val publishTestLogger by tasks.registering(Exec::class) {
 // ── Bundle the Reqnroll.IdeSupport.TestReporter.MTP (issue #715 phase 4) ──
 //
 // The MTP-side counterpart to the VSTest logger above. Issue #741: what ships is the reporter's
-// *source bundle* — Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource/*.cs, both Content
-// items of the reporter project, so `dotnet publish` copies them into mtpreporter/ (next to the
-// reporter's own DLLs, which nothing uses at run time). RunTestRunner writes each MTP project's
+// *source bundle* — Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource/*.cs — written into
+// mtpreporter/ by the reporter project's PublishReporterBundle target (not `dotnet publish`, which would
+// also copy the reporter's assemblies, which nothing uses at run time). RunTestRunner writes each MTP project's
 // project-local obj/<Project>.csproj.reqnroll-ide.targets stub (MtpProjectStubs) importing that
 // .targets file, which compiles the sources into the user's own test assembly;
 // ReqnrollMtpReporterPathResolver expects mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets and
@@ -287,7 +287,7 @@ val externalMtpReporterBuildDir = (findProperty("lspMtpReporterBuildDir") as Str
 
 val publishMtpReporter by tasks.registering(Exec::class) {
     group = "reqnroll"
-    description = "Publishes Reqnroll.IdeSupport.TestReporter.MTP into mtpreporter/. Skipped when -PlspMtpReporterBuildDir is set."
+    description = "Writes the Reqnroll.IdeSupport.TestReporter.MTP source bundle into mtpreporter/. Skipped when -PlspMtpReporterBuildDir is set."
     onlyIf { externalMtpReporterBuildDir == null }
 
     inputs.files(
@@ -297,10 +297,11 @@ val publishMtpReporter by tasks.registering(Exec::class) {
     outputs.dir(mtpReporterOutputDir)
 
     commandLine(
-        "dotnet", "publish", mtpReporterProject.toString(),
-        "--configuration", serverConfiguration,
-        "--nologo",
-        "--output", mtpReporterOutputDir.asFile.absolutePath,
+        "dotnet", "msbuild", mtpReporterProject.toString(),
+        "-t:PublishReporterBundle",
+        "-p:Configuration=$serverConfiguration",
+        "-p:ReporterBundleDir=${mtpReporterOutputDir.asFile.absolutePath}",
+        "-nologo",
     )
 }
 
@@ -347,6 +348,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
     if (externalMtpDir == null) {
         dependsOn(publishMtpReporter)
         from(mtpReporterOutputDir) {
+            exclude(".bundle-stamp") // PublishReporterBundle's staleness marker; not part of the bundle.
             into("${project.name}/mtpreporter")
         }
     } else {

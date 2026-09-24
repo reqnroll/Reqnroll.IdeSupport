@@ -189,4 +189,29 @@
     </ItemGroup>
   </Target>
 
+  <!-- ================================================================
+       Writes ONLY the source bundle — Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource\*.cs —
+       into $(ReporterBundleDir), replacing whatever was there. Used by the Rider plugin's Gradle build
+       and VS Code's publish scripts instead of `dotnet publish`, which would also copy this project's
+       assembly, its dependencies and deps.json into the bundle although no IDE uses them (issue #741:
+       the reporter is compiled into the user's test project from source). The VSIX gets the same
+       two items through ContentFilesProjectOutputGroup. Needs no restore and no compile:
+
+         dotnet msbuild <this csproj> -t:PublishReporterBundle -p:ReporterBundleDir=<dir> [-p:Configuration=Release]
+
+       Also touches <dir>\.bundle-stamp, a marker whose timestamp always moves on publish (the copied
+       files keep their source timestamps), for staleness checks such as VS Code's dev-publish script.
+       ================================================================ -->
+  <Target Name="PublishReporterBundle" DependsOnTargets="GenerateMtpReporterSourceBundle">
+    <Error Condition="'$(ReporterBundleDir)' == ''" Text="PublishReporterBundle: set -p:ReporterBundleDir=&lt;directory&gt;." />
+    <PropertyGroup>
+      <_ReporterBundleDirectory>$([MSBuild]::EnsureTrailingSlash('$([System.IO.Path]::GetFullPath('$(ReporterBundleDir)'))'))</_ReporterBundleDirectory>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_ReporterBundleDirectory)" />
+    <Copy SourceFiles="build\Reqnroll.IdeSupport.TestReporter.MTP.targets" DestinationFolder="$(_ReporterBundleDirectory)" />
+    <Copy SourceFiles="@(_MtpReporterSourceBundleFile)" DestinationFolder="$(_ReporterBundleDirectory)ReporterSource\" />
+    <Touch Files="$(_ReporterBundleDirectory).bundle-stamp" AlwaysCreate="true" />
+    <Message Importance="high" Text="Reqnroll.IdeSupport.TestReporter.MTP source bundle -> $(_ReporterBundleDirectory)" />
+  </Target>
+
 </Project>

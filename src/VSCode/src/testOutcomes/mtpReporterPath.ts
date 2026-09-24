@@ -13,8 +13,9 @@ export const MTP_REPORTER_SOURCE_DIRECTORY_NAME = 'ReporterSource';
  * `Reqnroll.IdeSupport.TestReporter.MTP.targets` plus `ReporterSource/` — the same bundle the
  * Visual Studio extension (`MtpReporter/`) and the Rider plugin (`mtpreporter/`) ship, packaged here
  * under `mtpreporter/` too. Mirrors {@link resolveTestLoggerDirectory}'s production/development split;
- * in development the reporter project's own `bin/Release/net8.0` output carries the bundle (both are
- * Content items of that project).
+ * in development it is the reporter project's `bin/Release/bundle/`, which
+ * `scripts/dev-publish-mtpreporter.mjs` writes with the same `PublishReporterBundle` target the release
+ * `publish-mtpreporter.sh` uses.
  *
  * Returns `undefined` (never throws) unless both the `.targets` file and `ReporterSource/` exist —
  * degrades to "no MTP reporter stubs this session," never a hard failure.
@@ -36,7 +37,7 @@ export function resolveMtpReporterDirectory(
         'Reqnroll.IdeSupport.TestReporter.MTP',
         'bin',
         'Release',
-        'net8.0',
+        'bundle',
       );
 
   return existsSync(path.join(candidate, MTP_REPORTER_BUNDLE_TARGETS_FILE_NAME)) &&

@@ -8,14 +8,14 @@
 #
 #   configuration Build configuration (default: Release)
 #
-# Like publish-testlogger.sh, there is no RID to select. What the extension uses from
-# the published output is the reporter's source bundle (issue #741) —
-# Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource/*.cs, Content items of
-# the reporter project — which a project-local obj/<Project>.csproj.reqnroll-ide.targets
-# stub imports to compile the reporter into the user's own test assembly (see
-# src/testOutcomes/mtpProjectStubs.ts).
+# Like publish-testlogger.sh, there is no RID to select. What ships is the reporter's
+# source bundle only (issue #741) — Reqnroll.IdeSupport.TestReporter.MTP.targets +
+# ReporterSource/*.cs, written by the reporter project's PublishReporterBundle target
+# (not `dotnet publish`, which would also copy assemblies nothing uses). A project-local
+# obj/<Project>.csproj.reqnroll-ide.targets stub imports that .targets file to compile
+# the reporter into the user's own test assembly (see src/testOutcomes/mtpProjectStubs.ts).
 #
-# The published output is written to:
+# The bundle is written to (replacing the directory's previous contents):
 #   src/VSCode/mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets
 #   src/VSCode/mtpreporter/ReporterSource/*.cs
 #
@@ -31,16 +31,16 @@ REPORTER_PROJECT="$REPO_ROOT/src/Core/Reqnroll.IdeSupport.TestReporter.MTP/Reqnr
 CONFIGURATION="${1:-Release}"
 OUTPUT_DIR="$REPO_ROOT/src/VSCode/mtpreporter"
 
-echo "==> Publishing TestReporter.MTP (Configuration=$CONFIGURATION)"
+echo "==> Writing the TestReporter.MTP source bundle (Configuration=$CONFIGURATION)"
 echo "    Project: $REPORTER_PROJECT"
 echo "    Output:  $OUTPUT_DIR/"
 
-dotnet publish "$REPORTER_PROJECT" \
-  --configuration "$CONFIGURATION" \
-  --nologo \
-  --output "$OUTPUT_DIR"
+dotnet msbuild "$REPORTER_PROJECT" \
+  -t:PublishReporterBundle \
+  -p:Configuration="$CONFIGURATION" \
+  -p:ReporterBundleDir="$OUTPUT_DIR" \
+  -nologo
 
 echo ""
-echo "==> TestReporter.MTP published successfully."
-echo "    Bundle:   $OUTPUT_DIR/Reqnroll.IdeSupport.TestReporter.MTP.targets"
+echo "==> TestReporter.MTP source bundle written."
 ls -lh "$OUTPUT_DIR/Reqnroll.IdeSupport.TestReporter.MTP.targets" "$OUTPUT_DIR/ReporterSource" 2>/dev/null || true

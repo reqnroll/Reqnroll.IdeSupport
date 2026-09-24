@@ -57,7 +57,7 @@ suite('resolveMtpReporterDirectory', () => {
       'Reqnroll.IdeSupport.TestReporter.MTP',
       'bin',
       'Release',
-      'net8.0',
+      'bundle',
     );
     const result = resolveMtpReporterDirectory(
       { extensionMode: vscode.ExtensionMode.Development, extensionPath },
