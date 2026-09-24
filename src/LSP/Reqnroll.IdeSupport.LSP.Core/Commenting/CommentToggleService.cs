@@ -2,20 +2,49 @@ namespace Reqnroll.IdeSupport.LSP.Core.Commenting;
 
 /// <summary>
 /// Toggles <c>#</c> comments on Gherkin feature file lines.
-/// If every line in the range is already commented, all are uncommented.
-/// Otherwise all are commented (regardless of per-line state).
+/// In <see cref="CommentToggleMode.Toggle"/> mode, if every line in the range is already
+/// commented, all are uncommented; otherwise all are commented (regardless of per-line state).
+/// <see cref="CommentToggleMode.Comment"/> and <see cref="CommentToggleMode.Uncomment"/> force
+/// the direction.
 /// </summary>
 public class CommentToggleService : ICommentToggleService
 {
     private const char CommentChar = '#';
 
-    /// <summary>Toggles line comments for the given line range: uncomments if every line is already commented, otherwise comments all lines.</summary>
+    /// <summary>Changes line comments for the given line range according to <paramref name="mode"/>.</summary>
     public GherkinCommentToggleResult ToggleComment(
         string documentText,
         int rangeStartLine,
-        int rangeEndLine)
+        int rangeEndLine,
+        CommentToggleMode mode = CommentToggleMode.Toggle)
     {
         var lines = SplitLines(documentText);
+
+        var uncomment = mode switch
+        {
+            CommentToggleMode.Comment   => false,
+            CommentToggleMode.Uncomment => true,
+            _                           => AreAllCommented(lines, rangeStartLine, rangeEndLine),
+        };
+
+        var edits = new List<GherkinCommentEdit>();
+        for (int i = rangeStartLine; i <= rangeEndLine && i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var newLine = uncomment ? UncommentLine(line) : CommentLine(line);
+
+            // An explicit Uncomment leaves uncommented lines alone; don't emit no-op edits for them.
+            if (mode == CommentToggleMode.Uncomment && newLine == line)
+                continue;
+
+            edits.Add(new GherkinCommentEdit(i, i, newLine));
+        }
+
+        return new GherkinCommentToggleResult(edits.AsReadOnly());
+    }
+
+    private static bool AreAllCommented(string[] lines, int rangeStartLine, int rangeEndLine)
+    {
         var allCommented = true;
 
         // Determine if ALL non-empty lines in range are commented.
@@ -35,15 +64,7 @@ public class CommentToggleService : ICommentToggleService
             }
         }
 
-        var edits = new List<GherkinCommentEdit>();
-        for (int i = rangeStartLine; i <= rangeEndLine && i < lines.Length; i++)
-        {
-            var line = lines[i];
-            var newLine = allCommented ? UncommentLine(line) : CommentLine(line);
-            edits.Add(new GherkinCommentEdit(i, i, newLine));
-        }
-
-        return new GherkinCommentToggleResult(edits.AsReadOnly());
+        return allCommented;
     }
 
     private static string CommentLine(string line)
