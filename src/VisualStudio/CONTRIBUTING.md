@@ -80,18 +80,20 @@ The extension deploys into VS's **experimental instance** (a separate hive, e.g.
 Launch it via **Debug → Start New Instance** (or F5) from the Extension project — this starts a
 second `devenv.exe` with the extension loaded, isolated from your main VS install/extensions.
 
-Runtime logs land in `%LocalAppData%\Reqnroll\`, one file per process (the PID in the filename is
+Runtime logs land in `%LocalAppData%\Reqnroll\logs\`, one file per process (the PID in the filename is
 the writing process's own — see [../LSP/CONTRIBUTING.md#debugging](../LSP/CONTRIBUTING.md#debugging)
 for the full naming/format convention shared across every log in this family):
 
-- `reqnroll-vs-ext-debug-<date>-<pid>.log` — the **extension's own** (client-side) log output.
-  **You will often see more than one of these for a single session with the same date** — this is
-  expected, not a bug. `Run CodeLens` (and the sibling Hook CodeLens) run out-of-process in VS's own
-  CodeLens ServiceHub host (`RunTestCodeLensDataPointProvider` and friends, issue #372), a different
-  PID than `devenv.exe`, and deliberately log to their own standalone file rather than the shared
-  `IIdeSupportLogger` sink, since they can't reach it across the process boundary. Match the PID in
-  the filename against `tasklist`/Task Manager (`ServiceHub.Host.*.exe` vs. `devenv.exe`) if you need
-  to tell them apart.
+- `reqnroll-vs-ext-debug-<date>-<pid>.log` — the **extension's own** (client-side, `devenv.exe`)
+  log output, at `Info` by default. Both of the extension's composition roots (VS.Extensibility DI
+  and VSSDK MEF) write through the one shared `ExtensionHostLogger.Instance`, which also feeds the
+  "Reqnroll" Output Window pane. Don't construct another `("vs", "ext")` `SynchronousFileLogger` in
+  `devenv.exe` — two instances on one file drop lines under concurrent writes (issue #748).
+- `reqnroll-vs-codelens-sh-debug-<date>-<pid>.log` — the Run CodeLens components that run
+  out-of-process in VS's own CodeLens ServiceHub host (`RunTestCodeLensDataPointProvider` and
+  friends, issue #372), a different PID than `devenv.exe`. They can't reach the extension's logger
+  across the process boundary, so they share `CodeLensHostLogger.Instance` (file only, `Verbose`)
+  instead.
 - `reqnroll-vs-server-debug-<date>-<pid>.log` — the **LSP server's own** log output (parses,
   discovery, handler activity), at the level set by `--log-level` (see below). Appended across
   server process launches sharing a day and PID is generally stable per VS session, but check the

@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
@@ -40,13 +41,14 @@ internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPoint
 
     private readonly ICodeLensCallbackService _callbackService;
 
-    // Standalone file logger (no MEF import needed) — this provider and its data points run
-    // out-of-process (ServiceHub.Host, confirmed live via tasklist for the sibling Hook lens
-    // provider), a different PID than devenv.exe, so they need their own log file rather than
-    // sharing the extension's IIdeSupportLogger instance. Added while investigating a live report
-    // of the Run CodeLens rendering but its Details popup never appearing on click — there was no
-    // prior instrumentation anywhere in this OOP data-point path.
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+    // The CodeLens host's shared file logger (no MEF import needed) — this provider and its data
+    // points run out-of-process (ServiceHub.Host, confirmed live via tasklist for the sibling Hook
+    // lens provider), a different PID than devenv.exe, so they can't share the extension's
+    // IIdeSupportLogger instance. Shared with RunTestOutcomeBridge rather than each owning a
+    // logger for the same file (issue #748). Added while investigating a live report of the Run
+    // CodeLens rendering but its Details popup never appearing on click — there was no prior
+    // instrumentation anywhere in this OOP data-point path.
+    private static IIdeSupportLogger Logger => CodeLensHostLogger.Instance;
 
     [ImportingConstructor]
     public RunTestCodeLensDataPointProvider(ICodeLensCallbackService callbackService)

@@ -10,7 +10,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.Common.Logging;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension.Logging;
+namespace Reqnroll.IdeSupport.VisualStudio.Logging;
 
 /// <summary>
 /// Dedicated "Reqnroll" VS Output Window pane sink (issue #651) — the LSP-based extension's
@@ -28,13 +28,22 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.Logging;
 /// going looking for them. Any failure to create or write to the pane (e.g. no VS host, as in
 /// unit tests) is swallowed the same way <see cref="SynchronousFileLogger"/> swallows write
 /// failures - a broken output pane must never take logging itself down.
+/// <para>
+/// Lives in VSSDKIntegration (not the Extension project) so the one shared instance in
+/// <see cref="ExtensionHostLogger"/> can serve both composition roots - VS.Extensibility DI and
+/// VSSDK MEF (issue #748). It must never be composed into the out-of-process CodeLens host's logger
+/// (<see cref="CodeLensHostLogger"/>): that process has no VS shell to write a pane to.
+/// </para>
 /// </remarks>
 internal sealed class VsOutputPaneLogger : IIdeSupportLogger
 {
     private const string PaneName = "Reqnroll";
     private static readonly Guid PaneGuid = Guid.NewGuid();
 
-    private readonly IServiceProvider _serviceProvider;
+    // Null means "use ServiceProvider.GlobalProvider", resolved lazily on the UI thread in
+    // GetOrCreatePane/WriteToPane rather than here: the shared instance may now be constructed
+    // from a MEF export on a background thread, where touching GlobalProvider is not safe.
+    private readonly IServiceProvider? _serviceProvider;
     private IVsOutputWindowPane? _pane;
     private bool _paneCreationAttempted;
     private bool _logPointerShown;
@@ -46,7 +55,16 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
     public VsOutputPaneLogger(TraceLevel level = TraceLevel.Info, IServiceProvider? serviceProvider = null)
     {
         Level = level;
-        _serviceProvider = serviceProvider ?? ServiceProvider.GlobalProvider;
+        _serviceProvider = serviceProvider;
+    }
+
+    private IServiceProvider ServiceProviderOnUIThread
+    {
+        get
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            return _serviceProvider ?? ServiceProvider.GlobalProvider;
+        }
     }
 
     /// <summary>Posts the message to the "Reqnroll" output pane on the UI thread, if within <see cref="Level"/>.</summary>
@@ -57,7 +75,12 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
         var line = FormatLine(message, ConsumeLogPointerIfNeeded(message.Exception != null));
         var activate = ShouldActivate(message.Level);
 
+        // Deliberately fire-and-forget: a log call must never block on the UI thread, and the body
+        // catches everything, so there is no fault to observe. (The Extension project, where this
+        // class lived before issue #748, suppresses VSSDK007 project-wide; VSSDKIntegration doesn't.)
+#pragma warning disable VSSDK007
         _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+#pragma warning restore VSSDK007
         {
             try
             {
@@ -148,7 +171,7 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
         if (!activate) return;
 
         pane.Activate();
-        if (_serviceProvider.GetService(typeof(DTE)) is DTE2 dte)
+        if (ServiceProviderOnUIThread.GetService(typeof(DTE)) is DTE2 dte)
             dte.ToolWindows.OutputWindow.Parent.Activate();
     }
 
@@ -162,7 +185,7 @@ internal sealed class VsOutputPaneLogger : IIdeSupportLogger
         if (_paneCreationAttempted) return null;
         _paneCreationAttempted = true;
 
-        if (_serviceProvider.GetService(typeof(SVsOutputWindow)) is not IVsOutputWindow outputWindow)
+        if (ServiceProviderOnUIThread.GetService(typeof(SVsOutputWindow)) is not IVsOutputWindow outputWindow)
             return null;
 
         var guid = PaneGuid;

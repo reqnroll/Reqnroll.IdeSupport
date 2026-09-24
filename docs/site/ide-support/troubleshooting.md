@@ -85,15 +85,18 @@ named `reqnroll-vs-<role>-<yyyyMMdd>-<pid>.log`:
 - `reqnroll-vs-server-*.log` — the LSP server's application log
 - `reqnroll-vs-protocol-*.log` — protocol/wire-level internals
 - `reqnroll-vs-ext-*.log` — the Visual Studio extension side
+- `reqnroll-vs-codelens-sh-*.log` — the Run CodeLens components, which run in
+  Visual Studio's separate CodeLens host process
 
 There's no Output window pane for these — check the files directly.
 
 **Changing the log level:** there's no in-product setting. A normal
-(released, VSIX-installed) build runs at `Warning` level by default. The
+(released, VSIX-installed) build logs the LSP server at `Warning` level and the
+extension side at `Info` by default. The
 `REQNROLLVS_DEBUG` environment variable (set it to `1`, `true`, or a
 [`TraceLevel`](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.tracelevel)
 name, e.g. `Verbose`) raises the verbosity of the **extension-side**
-(`reqnroll-vs-ext-*.log`) logger, but does not affect the LSP server's own
+(`reqnroll-vs-ext-*.log`, `reqnroll-vs-codelens-sh-*.log`) loggers, but does not affect the LSP server's own
 `reqnroll-vs-server-*.log`/`reqnroll-vs-protocol-*.log` verbosity — see the
 note below.
 ```

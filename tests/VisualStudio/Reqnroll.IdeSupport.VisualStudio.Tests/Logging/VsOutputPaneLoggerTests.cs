@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using AwesomeAssertions;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Xunit;
 
 namespace Reqnroll.VisualStudio.Tests.Logging;
