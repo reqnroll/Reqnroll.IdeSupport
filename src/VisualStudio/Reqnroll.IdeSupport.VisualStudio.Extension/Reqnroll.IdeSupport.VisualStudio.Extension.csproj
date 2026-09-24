@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net481</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -101,17 +101,19 @@
         <VSIXSubPath>TestLogger</VSIXSubPath>
         <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
     </ProjectReference>
-    <!-- MTP reporter bundled under MtpReporter\ (issue #715 phase 4) — never referenced by any
-         extension assembly, resolved at runtime by MtpReporterPathResolver and registered via
-         MtpBuildIntegration's user-global MSBuild ImportAfter file-drop, not runsettings.
-         ReferenceOutputAssembly=false + explicit output groups: same cross-TFM pattern already used
-         below for the net10.0 LSP server reference from this net481 project. -->
+    <!-- MTP reporter SOURCE bundle under MtpReporter\ (issue #741): Reqnroll.IdeSupport.TestReporter.MTP.targets
+         + ReporterSource\*.cs, both Content items of that project, hence ContentFilesProjectOutputGroup
+         only — no reporter assembly ships: MtpProjectStubs writes each C# project's project-local
+         obj\<Project>.csproj.reqnroll-ide.targets stub importing the .targets file, which compiles the
+         sources into the user's own test assembly. ReferenceOutputAssembly=false + explicit output
+         group: same cross-TFM pattern already used below for the net10.0 LSP server reference from
+         this net481 project. -->
     <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.TestReporter.MTP\Reqnroll.IdeSupport.TestReporter.MTP.csproj">
         <Name>Reqnroll.IdeSupport.TestReporter.MTP</Name>
         <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
         <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
         <VSIXSubPath>MtpReporter</VSIXSubPath>
-        <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
+        <IncludeOutputGroupsInVSIX>ContentFilesProjectOutputGroup%3b</IncludeOutputGroupsInVSIX>
     </ProjectReference>
   </ItemGroup>
 

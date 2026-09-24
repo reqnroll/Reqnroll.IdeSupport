@@ -3,24 +3,25 @@ using System.IO;
 namespace Reqnroll.IdeSupport.VisualStudio.TestReporter;
 
 /// <summary>
-/// Resolves the bundled <c>Reqnroll.IdeSupport.TestReporter.MTP.dll</c> (issue #715 phase 4) — the
-/// Microsoft.Testing.Platform (MTP) counterpart to <see cref="TestLogger.TestLoggerActivationRules"/>,
-/// packaged under <c>MtpReporter\</c> instead of <c>TestLogger\</c>.
+/// Resolves the bundled Microsoft.Testing.Platform (MTP) reporter <em>source bundle</em> (issue #741)
+/// — the MTP counterpart to <see cref="TestLogger.TestLoggerActivationRules"/>, packaged under
+/// <c>MtpReporter\</c>: <c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c> plus the
+/// <c>ReporterSource\*.cs</c> it compiles into a user's test project.
 /// </summary>
 /// <remarks>
-/// Unlike the VSTest logger (injected per-run via runsettings/<c>TestAdaptersPaths</c>, which needs a
-/// <em>directory</em>), this assembly is referenced via a <c>HintPath</c> inside the user-global
-/// MSBuild ImportAfter <c>.targets</c> file <see cref="MtpBuildIntegration"/> drops (plan §5.6), so
-/// callers need the DLL's own file path, not a containing directory.
+/// Callers need the <c>.targets</c> file's own path: <see cref="MtpProjectStubs"/> writes it into each
+/// project's <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub as an <c>Import</c>.
 /// </remarks>
 public static class MtpReporterPathResolver
 {
     internal const string ReporterSubdirectory = "MtpReporter";
-    internal const string ReporterAssemblyFileName = "Reqnroll.IdeSupport.TestReporter.MTP.dll";
+    internal const string BundleTargetsFileName = "Reqnroll.IdeSupport.TestReporter.MTP.targets";
+    internal const string SourceSubdirectory = "ReporterSource";
 
     /// <summary>
-    /// The VSIX places the reporter under <c>MtpReporter\</c> next to the extension assembly. Returns
-    /// null when it isn't there rather than pointing an injected reference at a non-existent file.
+    /// The VSIX places the bundle under <c>MtpReporter\</c> next to the extension assembly. Returns
+    /// null unless both the <c>.targets</c> file and its <c>ReporterSource\</c> directory are there,
+    /// rather than pointing a stub at an incomplete bundle.
     /// </summary>
     /// <param name="extensionAssemblyLocation">
     /// <c>typeof(ReqnrollPluginPackage).Assembly.Location</c> at the real call site; taken as a
@@ -32,7 +33,8 @@ public static class MtpReporterPathResolver
         var extensionDirectory = Path.GetDirectoryName(extensionAssemblyLocation);
         if (extensionDirectory is null) return null;
 
-        var path = Path.Combine(extensionDirectory, ReporterSubdirectory, ReporterAssemblyFileName);
-        return File.Exists(path) ? path : null;
+        var bundleDirectory = Path.Combine(extensionDirectory, ReporterSubdirectory);
+        var targets = Path.Combine(bundleDirectory, BundleTargetsFileName);
+        return File.Exists(targets) && Directory.Exists(Path.Combine(bundleDirectory, SourceSubdirectory)) ? targets : null;
     }
 }
