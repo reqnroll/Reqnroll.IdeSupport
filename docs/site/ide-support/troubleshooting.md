@@ -88,7 +88,12 @@ named `reqnroll-vs-<role>-<yyyyMMdd>-<pid>.log`:
 - `reqnroll-vs-codelens-sh-*.log` — the Run CodeLens components, which run in
   Visual Studio's separate CodeLens host process
 
-There's no Output window pane for these — check the files directly.
+The extension's own messages (Info and above) also appear in the **Reqnroll**
+Output window pane (**View → Output**, then pick **Reqnroll** from the
+dropdown), which comes to the front automatically on a warning or error. The
+pane shows a one-line summary of each message; the full details, including
+stack traces, are only in the log files above. The pane doesn't show the LSP
+server's logs — check those files directly.
 
 **Changing the log level:** there's no in-product setting. A normal
 (released, VSIX-installed) build logs the LSP server at `Warning` level and the
