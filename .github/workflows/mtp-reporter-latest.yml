@@ -1,0 +1,45 @@
+# ---------------------------------------------------------------------------
+# mtp-reporter-latest.yml — issue #741 T9 (carried over from #727 fix 4).
+#
+# The MTP reporter ships as SOURCE that is compiled into each user's test project against
+# whatever Microsoft.Testing.Platform version that project resolves. A new MSTest or
+# Microsoft.Testing.Platform release can therefore break the reporter at *compile* time in
+# user builds (the 2.1.0 AddTestSessionLifetimeHandle -> AddTestSessionLifetimeHandler rename is
+# the precedent), or move to a new major outside the supported range the injected .targets gates
+# on. This scheduled job builds a throwaway MTP project against the latest published MSTest and
+# Microsoft.Testing.Platform and fails when the reporter no longer compiles in, so we find out
+# before users do. Not part of ci.yml: its result depends on nuget.org, not on the commit.
+# ---------------------------------------------------------------------------
+name: MTP reporter vs. latest Microsoft.Testing.Platform
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  MTP_REPORTER_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.TestReporter.MTP.Tests/Reqnroll.IdeSupport.TestReporter.MTP.Tests.csproj
+
+jobs:
+  latest:
+    name: Build against latest MSTest + Microsoft.Testing.Platform
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Test the reporter against the latest published versions
+        env:
+          REQNROLL_MTP_TEST_LATEST: 'true'
+        run: dotnet test ${{ env.MTP_REPORTER_TESTS_PROJECT }} --configuration Release --filter "FullyQualifiedName~LatestPublished" --logger "console;verbosity=normal"

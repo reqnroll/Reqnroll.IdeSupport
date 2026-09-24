@@ -51,6 +51,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
     private DocumentInitializationMonitor? _documentInitializationMonitor;
+    private MtpProjectStubSolutionListener? _mtpProjectStubListener;
 
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
@@ -73,13 +74,10 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
 
-        // Issue #715 phase 4 (VS leg): a user-global MSBuild ImportAfter file-drop
-        // (MtpBuildIntegration), not solution-scoped and not tied to this devenv.exe session — no
-        // dependency on solution load, so it runs here rather than after WaitForSolutionLoadAsync
-        // below. (An earlier per-session CustomAfterMicrosoftCommonTargets environment-variable
-        // design was live-verified to never reach VS's actual build — see MtpBuildIntegration's
-        // remarks for why.)
-        TryEnableMtpBuildIntegration();
+        // Issue #741: MTP reporter registration is project-local now (obj\<Project>.csproj.reqnroll-ide.targets,
+        // written once the solution is loaded, below). Remove the per-user ImportAfter file earlier
+        // versions dropped, which affected every MSBuild build for this Windows user.
+        MtpProjectStubs.TryRemoveLegacyImportAfterFile(_logger);
 
         // Advise before the solution-load wait, not after: the restored .feature stubs we want to
         // observe are realized *during* restore, so a subscription taken afterwards would miss the
@@ -102,6 +100,8 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         // foreground tab is a .cs file and no feature file is open.
 
         _logger.LogInfo("Solution loaded.");
+
+        await StartMtpProjectStubsAsync(cancellationToken);
 
         // Show the Welcome (first install) or Upgrade (version change) dialog
         // if appropriate, after a short delay so VS can finish initializing.
@@ -342,28 +342,34 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     }
 
     /// <summary>
-    /// Issue #715 phase 4 (VS leg): resolves the bundled MTP reporter and defers to
-    /// <see cref="MtpBuildIntegration.TryEnable(string, IIdeSupportLogger)"/> for the actual
-    /// registration. No VS API needed (no solution, no main-thread switch) — the ImportAfter file
-    /// drop is entirely a filesystem operation. Best-effort — any failure here is logged and
-    /// otherwise ignored; this must never prevent the rest of package initialization from completing.
+    /// Issue #741: resolves the bundled MTP reporter source bundle and starts
+    /// <see cref="MtpProjectStubSolutionListener"/>, which writes each C# project's project-local
+    /// <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub now and on every later solution
+    /// open / project load. Best-effort — any failure here is logged and otherwise ignored; this must
+    /// never prevent the rest of package initialization from completing.
     /// </summary>
-    private void TryEnableMtpBuildIntegration()
+    private async Task StartMtpProjectStubsAsync(CancellationToken cancellationToken)
     {
         try
         {
-            var reporterDllPath = MtpReporterPathResolver.Resolve(typeof(ReqnrollPluginPackage).Assembly.Location);
-            if (reporterDllPath is null)
+            var bundleTargetsPath = MtpReporterPathResolver.Resolve(typeof(ReqnrollPluginPackage).Assembly.Location);
+            if (bundleTargetsPath is null)
             {
-                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; skipping MTP build integration.");
+                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; no MTP reporter stubs will be written.");
                 return;
             }
 
-            MtpBuildIntegration.TryEnable(reporterDllPath, _logger);
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            if (await GetServiceAsync(typeof(SVsSolution)) is IVsSolution solution)
+                _mtpProjectStubListener = MtpProjectStubSolutionListener.TryStart(solution, this, bundleTargetsPath, _logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogException(ex, "ReqnrollPluginPackage: TryEnableMtpBuildIntegration failed.");
+            _logger.LogException(ex, "ReqnrollPluginPackage: StartMtpProjectStubsAsync failed.");
         }
     }
 
@@ -373,6 +379,16 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         {
             _documentInitializationMonitor?.Dispose();
             _documentInitializationMonitor = null;
+
+            if (_mtpProjectStubListener is not null)
+            {
+                ThreadHelper.JoinableTaskFactory.Run(async () =>
+                {
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    _mtpProjectStubListener.Dispose();
+                });
+                _mtpProjectStubListener = null;
+            }
 
             if (_telemetryTransmitter is IAsyncDisposable d)
             {

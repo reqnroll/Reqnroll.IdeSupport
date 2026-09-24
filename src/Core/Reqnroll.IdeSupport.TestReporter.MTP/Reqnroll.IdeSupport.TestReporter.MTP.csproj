@@ -6,16 +6,21 @@
        so MTP-mode Reqnroll test projects get the same live per-row outcome pipeline. See
        docs/MTP-Test-Outcomes-Implementation-Plan.md §4-§5.
 
-       Loads inside the MTP test host process, which already provides Microsoft.Testing.Platform.dll —
-       ExcludeAssets="runtime" on that PackageReference keeps our own build output free of it, mirroring
-       Reqnroll.IdeSupport.TestLogger's Microsoft.TestPlatform.ObjectModel reference. net8.0 (not
-       netstandard2.0): MTP v2's minimum supported runtime, and this assembly never loads into a net48
-       process the way the VSTest logger does. -->
+       Issue #741: the IDEs no longer reference this assembly from a user's project. They ship the
+       *source bundle* this project produces (ReporterSource\*.cs + Reqnroll.IdeSupport.TestReporter.MTP.targets,
+       copied to the output/publish directory as Content) and write a project-local
+       obj\<Project>.csproj.reqnroll-ide.targets stub that imports that .targets file, which compiles
+       the sources into the user's own test assembly against the user's own Microsoft.Testing.Platform
+       version. This project stays the canonical source and is still built and unit-tested as an
+       assembly; the settings below (net8.0, C# 12, no implicit usings, the lowest supported MTP)
+       deliberately match the floor the injected sources must compile under.
+
+       ExcludeAssets="runtime": the MTP test host already provides Microsoft.Testing.Platform.dll. -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>12</LangVersion>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>Reqnroll.IdeSupport.TestReporter.MTP</RootNamespace>
     <AssemblyName>Reqnroll.IdeSupport.TestReporter.MTP</AssemblyName>
     <SignAssembly>true</SignAssembly>
@@ -27,13 +32,17 @@
          plain class library, never a real Microsoft.Testing.Platform test host; see the matching
          opt-out and explanation in Reqnroll.IdeSupport.TestReporter.MTP.Tests.csproj. -->
     <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+    <!-- Matches the 2.0.0 pin below; Reqnroll.IdeSupport.TestReporter.MTP.targets defines the same
+         symbol for a user project whose resolved Microsoft.Testing.Platform is older than 2.1.0. -->
+    <DefineConstants>$(DefineConstants);REQNROLL_IDE_MTP_BEFORE_2_1</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Pinned to what MSTest.TestAdapter 4.2.3 (the fixture's own MTP runner) itself depends on, so a
-         test project referencing both this assembly and MSTest doesn't hit an unresolvable assembly
-         version conflict (MSB3277) between two different Microsoft.Testing.Platform versions. -->
-    <PackageReference Include="Microsoft.Testing.Platform" Version="2.2.3" ExcludeAssets="runtime" PrivateAssets="all" />
+    <!-- Pinned to the LOWEST version the injected sources support (issue #741 I0, the same choice
+         Tyrrrz/GitHubActionsTestLogger makes "to avoid CS1705 errors in consuming projects"): building
+         against 2.0.0 proves every MTP API the sources use exists in the whole supported range
+         [2.0.0, 3.0.0) that Reqnroll.IdeSupport.TestReporter.MTP.targets gates on. -->
+    <PackageReference Include="Microsoft.Testing.Platform" Version="2.0.0" ExcludeAssets="runtime" PrivateAssets="all" />
     <ProjectReference Include="..\Reqnroll.IdeSupport.TestReporter.Common\Reqnroll.IdeSupport.TestReporter.Common.csproj" />
   </ItemGroup>
 
@@ -42,5 +51,169 @@
       <_Parameter1>Reqnroll.IdeSupport.TestReporter.MTP.Tests, PublicKey=002400000480000094000000060200000024000052534131000400000100010059bb085601a8b65a8a7b00f34e6d85df230f1e4913d3c0eaadcd13c1fd9cd15c3f01567c49d5f41f617dbda6f544ea3e2d5b5a042f307a7c8d21a079254509ba543efaefce96fac977abd0a76206b721abc33f84ee45ae5383cf50eeb8e234595656fd4af916e1dcde644ce20bb9a68bd72bc7957b759560524c63ca294585ca</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
+
+  <!-- ================================================================
+       Issue #741: the injectable source bundle.
+
+       Every top-level .cs file of this project and of Reqnroll.IdeSupport.TestReporter.Common is
+       rewritten by GenerateMtpReporterSources into obj\ReporterSource\ and shipped as Content under
+       ReporterSource\, next to build\Reqnroll.IdeSupport.TestReporter.MTP.targets. Content (not a
+       custom copy step) so it flows to this project's own output, to `dotnet publish` output (the
+       Rider/VS Code bundles), to ProjectReference consumers' output (the tests), and to the VSIX
+       (ContentFilesProjectOutputGroup) with no per-IDE packaging logic.
+       ================================================================ -->
+  <ItemGroup>
+    <MtpReporterTemplateSource Include="*.cs" />
+    <MtpReporterTemplateSource Include="..\Reqnroll.IdeSupport.TestReporter.Common\*.cs" />
+    <None Remove="build\**" />
+    <Content Include="build\Reqnroll.IdeSupport.TestReporter.MTP.targets"
+             Link="Reqnroll.IdeSupport.TestReporter.MTP.targets"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <UsingTask TaskName="GenerateMtpReporterSources"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+      <Version ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // Rewrites one canonical source file into a form that compiles, warning-free, inside an
+        // arbitrary user test project (issue #741 §2.2):
+        //  - an <auto-generated> header, explicit #nullable enable and a blanket #pragma warning disable
+        //    (a pragma removes a warning before TreatWarningsAsErrors/WarningsAsErrors can promote it);
+        //  - the file's using directives moved *inside* its file-scoped namespace and rooted at
+        //    global::, so they take precedence over the user project's own global usings (a user type
+        //    named Path, Task, OutcomeSink... can then never make one of our names ambiguous);
+        //  - every top-level public type made internal (nothing leaks into the user's public API, and
+        //    no clash with a type a referenced assembly exports), and every top-level class/struct/record
+        //    marked [GeneratedCode] + [ExcludeFromCodeCoverage] so it stays out of the user's coverage.
+        var typeDeclaration = new Regex(@"^(public|internal)(\s+(?:static|sealed|abstract|partial|readonly)\b)*\s+(class|struct|record|interface|enum)\b");
+        var usingDirective = new Regex(@"^using\s+([A-Za-z_][\w.]*)\s*;\s*$");
+        var fileScopedNamespace = new Regex(@"^namespace\s+[\w.]+\s*;\s*$");
+        var pragmaRestore = new Regex(@"^\s*#pragma\s+warning\s+restore\b");
+        Directory.CreateDirectory(OutputDirectory);
+
+        foreach (var source in Sources)
+        {
+            var path = source.GetMetadata("FullPath");
+            var lines = File.ReadAllLines(path);
+            var usings = new List<string>();
+            var body = new List<string>();
+            string namespaceLine = null;
+
+            foreach (var line in lines)
+            {
+                if (namespaceLine == null)
+                {
+                    var match = usingDirective.Match(line);
+                    if (match.Success) { usings.Add("using global::" + match.Groups[1].Value + ";"); continue; }
+                    if (fileScopedNamespace.IsMatch(line)) { namespaceLine = line.Trim(); continue; }
+                    if (line.Trim().Length == 0) continue;
+                    Log.LogError("GenerateMtpReporterSources: {0} has content before its file-scoped namespace declaration ('{1}'); the template rewriter only supports using directives there.", path, line);
+                    return false;
+                }
+
+                // The canonical sources suppress specific warnings in narrow regions; in the generated
+                // file the blanket "#pragma warning disable" above already covers them, and a
+                // "restore" would switch a warning back ON for the rest of that file.
+                if (pragmaRestore.IsMatch(line)) continue;
+
+                var declaration = typeDeclaration.Match(line);
+                if (declaration.Success)
+                {
+                    var kind = declaration.Groups[3].Value;
+                    if (kind == "class" || kind == "struct" || kind == "record")
+                    {
+                        body.Add("[global::System.CodeDom.Compiler.GeneratedCode(\"Reqnroll.IdeSupport.TestReporter.MTP\", \"" + Version + "\")]");
+                        body.Add("[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]");
+                    }
+                    body.Add(declaration.Groups[1].Value == "public" ? "internal" + line.Substring("public".Length) : line);
+                    continue;
+                }
+                body.Add(line);
+            }
+
+            if (namespaceLine == null)
+            {
+                Log.LogError("GenerateMtpReporterSources: {0} has no file-scoped namespace declaration.", path);
+                return false;
+            }
+
+            var output = new StringBuilder();
+            output.Append("// <auto-generated>\n");
+            output.Append("//     Reqnroll IDE Support: Microsoft.Testing.Platform test-outcome reporter (issue #741).\n");
+            output.Append("//     Compiled into this test project by the Reqnroll IDE extension through\n");
+            output.Append("//     obj/<Project>.csproj.reqnroll-ide.targets. Generated from " + Path.GetFileName(path) + "; do not edit.\n");
+            output.Append("//     To opt out, set <ReqnrollIdeSupportDisableMtpReporter>true</ReqnrollIdeSupportDisableMtpReporter>.\n");
+            output.Append("// </auto-generated>\n");
+            output.Append("#nullable enable\n");
+            output.Append("#pragma warning disable\n\n");
+            output.Append(namespaceLine).Append("\n\n");
+            foreach (var u in usings) output.Append(u).Append("\n");
+            if (usings.Count > 0) output.Append("\n");
+            foreach (var line in body) output.Append(line).Append("\n");
+
+            var destination = Path.Combine(OutputDirectory, Path.GetFileName(path));
+            var text = output.ToString();
+            if (!File.Exists(destination) || File.ReadAllText(destination) != text)
+                File.WriteAllText(destination, text, new UTF8Encoding(false));
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="GenerateMtpReporterSourceBundle" BeforeTargets="AssignTargetPaths">
+    <PropertyGroup>
+      <!-- Absolute and OS-normalized: GenerateMtpReporterSources hands this string to .NET file APIs
+           directly, which (unlike MSBuild's own tasks) treat a '\' as an ordinary character on Linux/macOS. -->
+      <_MtpReporterSourceBundleDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'ReporterSource'))</_MtpReporterSourceBundleDirectory>
+    </PropertyGroup>
+    <GenerateMtpReporterSources Sources="@(MtpReporterTemplateSource)"
+                                OutputDirectory="$(_MtpReporterSourceBundleDirectory)"
+                                Version="$(Version)" />
+    <ItemGroup>
+      <_MtpReporterSourceBundleFile Include="@(MtpReporterTemplateSource->'$(_MtpReporterSourceBundleDirectory)%(Filename)%(Extension)')" />
+      <Content Include="@(_MtpReporterSourceBundleFile)"
+               Link="ReporterSource\%(_MtpReporterSourceBundleFile.Filename)%(_MtpReporterSourceBundleFile.Extension)"
+               CopyToOutputDirectory="PreserveNewest"
+               CopyToPublishDirectory="PreserveNewest" />
+      <FileWrites Include="@(_MtpReporterSourceBundleFile)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- ================================================================
+       Writes ONLY the source bundle — Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource\*.cs —
+       into $(ReporterBundleDir), replacing whatever was there. Used by the Rider plugin's Gradle build
+       and VS Code's publish scripts instead of `dotnet publish`, which would also copy this project's
+       assembly, its dependencies and deps.json into the bundle although no IDE uses them (issue #741:
+       the reporter is compiled into the user's test project from source). The VSIX gets the same
+       two items through ContentFilesProjectOutputGroup. Needs no restore and no compile:
+
+         dotnet msbuild <this csproj> -t:PublishReporterBundle -p:ReporterBundleDir=<dir> [-p:Configuration=Release]
+
+       Also touches <dir>\.bundle-stamp, a marker whose timestamp always moves on publish (the copied
+       files keep their source timestamps), for staleness checks such as VS Code's dev-publish script.
+       ================================================================ -->
+  <Target Name="PublishReporterBundle" DependsOnTargets="GenerateMtpReporterSourceBundle">
+    <Error Condition="'$(ReporterBundleDir)' == ''" Text="PublishReporterBundle: set -p:ReporterBundleDir=&lt;directory&gt;." />
+    <PropertyGroup>
+      <_ReporterBundleDirectory>$([MSBuild]::EnsureTrailingSlash('$([System.IO.Path]::GetFullPath('$(ReporterBundleDir)'))'))</_ReporterBundleDirectory>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_ReporterBundleDirectory)" />
+    <Copy SourceFiles="build\Reqnroll.IdeSupport.TestReporter.MTP.targets" DestinationFolder="$(_ReporterBundleDirectory)" />
+    <Copy SourceFiles="@(_MtpReporterSourceBundleFile)" DestinationFolder="$(_ReporterBundleDirectory)ReporterSource\" />
+    <Touch Files="$(_ReporterBundleDirectory).bundle-stamp" AlwaysCreate="true" />
+    <Message Importance="high" Text="Reqnroll.IdeSupport.TestReporter.MTP source bundle -> $(_ReporterBundleDirectory)" />
+  </Target>
 
 </Project>

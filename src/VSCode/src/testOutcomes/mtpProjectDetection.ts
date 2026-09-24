@@ -21,7 +21,7 @@ import { execFile } from 'child_process';
  * `dotnet msbuild -getProperty` evaluation — mirroring the VS extension's own fix for the identical
  * gap (`MtpProjectDetection.EvaluateViaMsBuild`) and the Rider plugin's
  * `RunTestRunner.evaluateMtpPropertiesViaMsbuild`. Gating the subprocess on that literal "looks like
- * a test project" signal keeps a solution-wide scan (`mtpEphemeralInjection.ts` calls this once per
+ * a test project" signal keeps a solution-wide scan (`mtpProjectStubs.ts` calls this once per
  * `.csproj` in the workspace) from shelling out to `dotnet msbuild` for every ordinary non-test
  * project.
  *

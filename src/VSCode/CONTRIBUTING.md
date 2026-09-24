@@ -94,12 +94,13 @@ cd src/VSCode
 npm run build:mtpreporter
 ```
 
-This runs `scripts/publish-mtpreporter.sh`, which publishes `Reqnroll.IdeSupport.TestReporter.MTP`
-into `src/VSCode/mtpreporter/`. Like the TestLogger, there's no RID to choose. Unlike the
-TestLogger, this reporter is never referenced via `dotnet.unitTests.runSettingsPath` — it's
-injected ephemerally via a `CustomAfterMicrosoftCommonTargets` environment variable set at
-extension activation (see `mtpEphemeralInjection.ts`'s own doc comment for the mechanism and its
-unverified risk).
+This runs `scripts/publish-mtpreporter.sh`, which writes the reporter's *source bundle* (issue #741),
+`Reqnroll.IdeSupport.TestReporter.MTP.targets` plus `ReporterSource/*.cs`, into `src/VSCode/mtpreporter/`
+via the reporter project's `PublishReporterBundle` target. Like the TestLogger, there's no RID to choose,
+and no reporter assembly ships. At activation the extension writes a project-local
+`obj/<Project>.csproj.reqnroll-ide.targets` stub into each MTP-capable project, importing that
+`.targets` file, which compiles the reporter into the project's own test assembly (see
+`mtpProjectStubs.ts`'s doc comment). No environment variable and no global state is involved.
 
 ### 2. Install npm dependencies
 

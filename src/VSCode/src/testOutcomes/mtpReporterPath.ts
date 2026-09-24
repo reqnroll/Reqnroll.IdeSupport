@@ -2,19 +2,23 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-/** File name of the bundled MTP reporter, matching MtpReporterPathResolver.ReporterAssemblyFileName on the VS/Rider sides. */
-export const MTP_REPORTER_ASSEMBLY_FILE_NAME = 'Reqnroll.IdeSupport.TestReporter.MTP.dll';
+/** File name of the bundle's MSBuild entry point, matching MtpReporterPathResolver.BundleTargetsFileName on the VS/Rider sides. */
+export const MTP_REPORTER_BUNDLE_TARGETS_FILE_NAME = 'Reqnroll.IdeSupport.TestReporter.MTP.targets';
+
+/** Directory of reporter sources the `.targets` file compiles into a user's test project. */
+export const MTP_REPORTER_SOURCE_DIRECTORY_NAME = 'ReporterSource';
 
 /**
- * Resolves the directory containing the bundled `Reqnroll.IdeSupport.TestReporter.MTP.dll`
- * (LSP-server outcome pipeline, issue #715 phase 4) — the same MTP in-process reporter the
- * Visual Studio extension (`MtpReporter/`) and the Rider plugin (`mtpreporter/`) each bundle,
- * packaged here under `mtpreporter/` too. Mirrors {@link resolveTestLoggerDirectory} exactly;
- * see that function's own doc comment for the production/development split and the
- * injectable-`existsSync` testing rationale.
+ * Resolves the directory containing the bundled MTP reporter *source bundle* (issue #741) —
+ * `Reqnroll.IdeSupport.TestReporter.MTP.targets` plus `ReporterSource/` — the same bundle the
+ * Visual Studio extension (`MtpReporter/`) and the Rider plugin (`mtpreporter/`) ship, packaged here
+ * under `mtpreporter/` too. Mirrors {@link resolveTestLoggerDirectory}'s production/development split;
+ * in development it is the reporter project's `bin/Release/bundle/`, which
+ * `scripts/dev-publish-mtpreporter.mjs` writes with the same `PublishReporterBundle` target the release
+ * `publish-mtpreporter.sh` uses.
  *
- * Returns `undefined` (never throws) when the reporter isn't bundled — degrades to "no ephemeral
- * MTP injection this session," never a hard failure, same convention as the VSTest logger path.
+ * Returns `undefined` (never throws) unless both the `.targets` file and `ReporterSource/` exist —
+ * degrades to "no MTP reporter stubs this session," never a hard failure.
  */
 export function resolveMtpReporterDirectory(
   context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath'>,
@@ -33,8 +37,11 @@ export function resolveMtpReporterDirectory(
         'Reqnroll.IdeSupport.TestReporter.MTP',
         'bin',
         'Release',
-        'net8.0',
+        'bundle',
       );
 
-  return existsSync(path.join(candidate, MTP_REPORTER_ASSEMBLY_FILE_NAME)) ? candidate : undefined;
+  return existsSync(path.join(candidate, MTP_REPORTER_BUNDLE_TARGETS_FILE_NAME)) &&
+    existsSync(path.join(candidate, MTP_REPORTER_SOURCE_DIRECTORY_NAME))
+    ? candidate
+    : undefined;
 }

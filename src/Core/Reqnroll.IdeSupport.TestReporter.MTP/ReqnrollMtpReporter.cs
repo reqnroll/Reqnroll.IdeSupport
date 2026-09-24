@@ -1,4 +1,8 @@
+using System;
 using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Extensions.TestHost;
@@ -38,16 +42,32 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     internal const int MaxStdoutLength = 64 * 1024;
 
     private readonly OutcomeSink _sink = new();
+    private readonly Func<string?> _findEndpoint;
+    private bool _endpointResolved;
+    private string? _endpoint;
     private string _runId = string.Empty;
     private string _source = string.Empty;
     private int _results;
+
+    public ReqnrollMtpReporter() : this(FindSessionEndpoint) { }
+
+    /// <param name="findEndpoint">Breadcrumb discovery; injected for tests. Production uses <see cref="FindSessionEndpoint"/>.</param>
+    internal ReqnrollMtpReporter(Func<string?> findEndpoint) => _findEndpoint = findEndpoint;
 
     // ---- IExtension ----
     public string Uid => "Reqnroll.IdeSupport.TestReporter.MTP";
     public string Version => "1.0.0";
     public string DisplayName => "Reqnroll IDE Support (MTP)";
     public string Description => "Streams Microsoft.Testing.Platform test outcomes to the Reqnroll IDE Support LSP server.";
-    public Task<bool> IsEnabledAsync() => Task.FromResult(true);
+
+    /// <summary>
+    /// Issue #741 §2.4a: enabled only when an IDE session breadcrumb matches this test project's
+    /// workspace. With no IDE session there is nothing to report to, so MTP never activates this
+    /// extension at all (no data-consumer subscription, no session hooks) — the same "disable yourself
+    /// in IsEnabledAsync" pattern Tyrrrz/GitHubActionsTestLogger uses. Only the breadcrumb lookup
+    /// happens here; the TCP connect stays in <see cref="OnTestSessionStartingAsync"/>.
+    /// </summary>
+    public Task<bool> IsEnabledAsync() => Task.FromResult(ResolveEndpoint() is not null);
 
     // ---- IDataConsumer ----
     public Type[] DataTypesConsumed { get; } = [typeof(TestNodeUpdateMessage)];
@@ -112,23 +132,52 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
             .Field("canceled", canceled)
             .ToLine();
 
-    /// <summary>Breadcrumb discovery + connect-and-verify. Every failure is swallowed: discovery must never fail the test run.</summary>
+    /// <summary>Connect-and-verify to the endpoint <see cref="IsEnabledAsync"/> found. Every failure is swallowed: reporting must never fail the test run.</summary>
     private bool TryConnect()
+    {
+        try
+        {
+            var endpoint = ResolveEndpoint();
+            return endpoint is not null && _sink.TryConnect(endpoint);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Looks the endpoint up once per reporter instance — MTP asks <see cref="IsEnabledAsync"/> before the session starts, and the session must connect to the same endpoint it was enabled for.</summary>
+    private string? ResolveEndpoint()
+    {
+        if (!_endpointResolved)
+        {
+            _endpoint = _findEndpoint();
+            _endpointResolved = true;
+        }
+        return _endpoint;
+    }
+
+    /// <summary>
+    /// Breadcrumb discovery: resolve this assembly's own workspace root, read the LSP servers' session
+    /// breadcrumbs and pick the deepest match. When the reporter is compiled into the user's test
+    /// assembly (issue #741), "this assembly" is that test assembly, so the lookup starts from the test
+    /// project's own output directory. Every failure is swallowed and means "no session".
+    /// </summary>
+    internal static string? FindSessionEndpoint()
     {
         try
         {
             var assemblyDir = Path.GetDirectoryName(typeof(ReqnrollMtpReporter).Assembly.Location);
             if (string.IsNullOrEmpty(assemblyDir))
-                return false;
+                return null;
 
             var myWorkspaceRoot = WorkspaceRootLocator.FindNearestRoot(assemblyDir, WorkspaceRootLocator.LooksLikeRoot);
             var candidates = SessionBreadcrumbMatcher.ReadAll(SessionsDirectory.Resolve());
-            var best = SessionBreadcrumbMatcher.FindBestMatch(myWorkspaceRoot, candidates);
-            return best is not null && _sink.TryConnect(best.Endpoint);
+            return SessionBreadcrumbMatcher.FindBestMatch(myWorkspaceRoot, candidates)?.Endpoint;
         }
         catch (Exception)
         {
-            return false;
+            return null;
         }
     }
 
@@ -168,12 +217,15 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     /// <see cref="TestNodeUpdateMessage"/>. Maps onto the same outcome vocabulary
     /// <c>TrxUnitTestResult.Outcome</c> already uses (issue #715 plan §4): Error/Timeout both collapse
     /// to "Failed" — this codebase's IDE-facing <c>TestOutcomeKind</c> has no separate states for them,
-    /// same as the VSTest logger's own outcome mapping. <c>CancelledTestNodeStateProperty</c> is MTP0001
-    /// obsolete (frameworks now signal cancellation via <see cref="OperationCanceledException"/> instead)
-    /// so it is deliberately not matched here; in-progress/discovered states and any other unrecognized
-    /// state return a null outcome so the caller skips sending a "result" for a non-terminal update.
+    /// same as the VSTest logger's own outcome mapping. <c>CancelledTestNodeStateProperty</c> is
+    /// obsolete (frameworks now signal cancellation via <see cref="OperationCanceledException"/>), but
+    /// frameworks that still emit it would otherwise get no outcome at all, so it is mapped to
+    /// "Skipped" inside a narrow CS0618 suppression (issue #741 §2.2 — a pragma removes the warning
+    /// before TreatWarningsAsErrors/WarningsAsErrors can promote it, including in a user's project the
+    /// sources are compiled into); in-progress/discovered states and any other unrecognized state
+    /// return a null outcome so the caller skips sending a "result" for a non-terminal update.
     /// </summary>
-    private static (string? Outcome, string? ErrorMessage, string? ErrorStackTrace) ResolveOutcome(TestNode testNode)
+    internal static (string? Outcome, string? ErrorMessage, string? ErrorStackTrace) ResolveOutcome(TestNode testNode)
     {
         var state = testNode.Properties.SingleOrDefault<TestNodeStateProperty>();
         return state switch
@@ -183,13 +235,21 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
             FailedTestNodeStateProperty failed => ("Failed", failed.Exception?.Message ?? failed.Explanation, failed.Exception?.StackTrace),
             ErrorTestNodeStateProperty error => ("Failed", error.Exception?.Message ?? error.Explanation, error.Exception?.StackTrace),
             TimeoutTestNodeStateProperty timeout => ("Failed", timeout.Exception?.Message ?? timeout.Explanation, timeout.Exception?.StackTrace),
+#pragma warning disable CS0618 // CancelledTestNodeStateProperty is obsolete; still emitted by some frameworks.
+            CancelledTestNodeStateProperty => ("Skipped", null, null),
+#pragma warning restore CS0618
             _ => (null, null, null),
         };
     }
 
     private static (string? Text, bool Truncated) CollectStandardOutput(TestNode testNode)
     {
+        // StandardOutputProperty is [Experimental("TPEXP")] in Microsoft.Testing.Platform 2.0.x, which
+        // reports as an error unless suppressed, both here and in any project the injected sources
+        // are compiled into.
+#pragma warning disable TPEXP
         var output = testNode.Properties.SingleOrDefault<StandardOutputProperty>()?.StandardOutput;
+#pragma warning restore TPEXP
         if (string.IsNullOrEmpty(output)) return (null, false);
         if (output.Length <= MaxStdoutLength) return (output, false);
         return (output.Substring(0, MaxStdoutLength), true);

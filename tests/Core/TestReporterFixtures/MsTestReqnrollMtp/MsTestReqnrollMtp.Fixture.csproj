@@ -6,10 +6,9 @@
        project shape allows. Not part of the solution's normal build graph beyond housing this project;
        built on demand by the test.
 
-       The <TestingPlatformBuilderHook> item below is Phase 2's stand-in for the ephemeral MSBuild
-       injection mechanism Phase 4 will add (issue #715 plan §5.6/§6) — declaring it directly here is
-       explicitly sanctioned for this phase's own tests ("reference it directly ... no injection
-       mechanism yet"). -->
+       Deliberately has NO reference to the reporter: DotnetTestEndToEndTests copies this fixture to a
+       throwaway workspace and connects it to the reporter exactly the way the IDEs do (issue #741) —
+       a project-local obj/<Project>.csproj.reqnroll-ide.targets stub importing the source bundle. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -27,16 +26,5 @@
     <PackageReference Include="Reqnroll.MsTest" Version="3.3.4" />
     <PackageReference Include="MSTest.TestAdapter" Version="4.2.3" />
     <PackageReference Include="MSTest.TestFramework" Version="4.2.3" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\..\src\Core\Reqnroll.IdeSupport.TestReporter.MTP\Reqnroll.IdeSupport.TestReporter.MTP.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <TestingPlatformBuilderHook Include="a1d3c2f0-6b8e-4f2a-9c7d-3e5f8b1a4d6c">
-      <DisplayName>Reqnroll.IdeSupport.TestReporter.MTP</DisplayName>
-      <TypeFullName>Reqnroll.IdeSupport.TestReporter.MTP.TestingPlatformBuilderHook</TypeFullName>
-    </TestingPlatformBuilderHook>
   </ItemGroup>
 </Project>
