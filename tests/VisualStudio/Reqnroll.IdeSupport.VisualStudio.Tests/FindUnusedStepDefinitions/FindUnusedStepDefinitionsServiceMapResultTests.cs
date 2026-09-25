@@ -1,4 +1,4 @@
-using AwesomeAssertions;
+﻿using AwesomeAssertions;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Xunit;
@@ -20,6 +20,7 @@ public class FindUnusedStepDefinitionsServiceMapResultTests
         ["sourceFile"]        = @"c:\w\Steps.cs",
         ["sourceLine"]        = 7,
         ["sourceChar"]        = 4,
+        ["stepDefinitionType"] = "When",
     };
 
     [Fact]
@@ -52,6 +53,7 @@ public class FindUnusedStepDefinitionsServiceMapResultTests
         result.Items[0].ClassName.Should().Be("Steps");
         result.Items[0].SourceLine.Should().Be(7);
         result.Items[0].SourceChar.Should().Be(4);
+        result.Items[0].StepDefinitionType.Should().Be("When");
         result.Items[1].BindingExpression.Should().Be("the first number is (.*)");
     }
 
@@ -69,5 +71,6 @@ public class FindUnusedStepDefinitionsServiceMapResultTests
         result.Items[0].BindingExpression.Should().Be("bare");
         result.Items[0].ProjectName.Should().BeNull();
         result.Items[0].SourceLine.Should().Be(0);
+        result.Items[0].StepDefinitionType.Should().BeNull();
     }
 }

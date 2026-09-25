@@ -102,6 +102,16 @@ public class GoToStepDefinitionHandlerTests
     }
 
     [Fact]
+    public async Task Each_binding_reports_its_step_definition_type_Async()
+    {
+        StoreStep(Binding("Steps.AStep", new SourceLocation("/workspace/Steps.cs", 10, 5), "a step"));
+
+        var response = await CreateSut().HandleAsync(RequestAt(2, 10), CancellationToken.None);
+
+        response.Items.Single().StepDefinitionType.Should().Be("Given");
+    }
+
+    [Fact]
     public async Task A_binding_whose_source_is_not_on_this_machine_is_reported_as_unresolved_Async()
     {
         // Unlike textDocument/definition, which drops it: the client needs the row to say why it

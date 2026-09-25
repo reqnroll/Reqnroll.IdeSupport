@@ -31,6 +31,11 @@ internal sealed class StepDefinitionListItem
     public bool    IsResolved        { get; set; } = true;
     /// <summary>The path the compiled assembly records, when it differs from <see cref="SourceFile"/>.</summary>
     public string? RecordedSourceFile { get; set; }
+    /// <summary>
+    /// The binding's step keyword (<c>"Given"</c>/<c>"When"</c>/<c>"Then"</c>), shown as the
+    /// attribute name; null when unknown or from an older server (issue #757).
+    /// </summary>
+    public string? StepDefinitionType { get; set; }
 }
 
 /// <summary>Parsed result from a <c>reqnroll/findUnusedStepDefinitions</c> response.</summary>

@@ -1,6 +1,7 @@
 #nullable enable
 
 using Newtonsoft.Json;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
 
@@ -62,6 +63,19 @@ public sealed class StepDefinitionItem
     /// </remarks>
     [JsonProperty("recordedSourceFile")]
     public string? RecordedSourceFile { get; set; }
+
+    /// <summary>
+    /// The binding's step keyword — <c>"Given"</c>, <c>"When"</c> or <c>"Then"</c> — so a client can
+    /// show the attribute (e.g. <c>[Given("the sum is {int}")]</c>); <see langword="null"/> when
+    /// unknown. A <c>[StepDefinition]</c> attribute is registered as one binding per keyword, so it
+    /// reports whichever of the three this binding is (issue #757).
+    /// </summary>
+    [JsonProperty("stepDefinitionType")]
+    public string? StepDefinitionType { get; set; }
+
+    /// <summary>Maps a binding's <see cref="ScenarioBlock"/> to the <see cref="StepDefinitionType"/> wire value.</summary>
+    internal static string? ToWireType(ScenarioBlock block) =>
+        block == ScenarioBlock.Unknown ? null : block.ToString();
 
     /// <summary>0-based line of the binding method in <see cref="SourceFile"/>.</summary>
     [JsonProperty("sourceLine")]

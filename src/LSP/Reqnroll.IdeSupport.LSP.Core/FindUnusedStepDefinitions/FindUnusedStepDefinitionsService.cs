@@ -129,7 +129,8 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
                 RecordedSourceFile: loc.IsResolved
                                     && PathUtils.IsSamePath(loc.SourceFile, loc.RecordedSourceFile)
                     ? null
-                    : loc.RecordedSourceFile));
+                    : loc.RecordedSourceFile,
+                StepDefinitionType: sd.StepDefinitionType));
         }
 
         _logger.LogVerbose(

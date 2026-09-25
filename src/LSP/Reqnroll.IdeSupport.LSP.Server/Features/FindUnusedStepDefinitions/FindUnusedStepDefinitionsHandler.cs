@@ -60,6 +60,7 @@ public sealed class FindUnusedStepDefinitionsHandler
             SourceChar = u.SourceColumn - 1,   // 1-based → 0-based
             IsResolved = u.IsResolved,
             RecordedSourceFile = u.RecordedSourceFile,
+            StepDefinitionType = StepDefinitionItem.ToWireType(u.StepDefinitionType),
         }).ToList();
 
         _telemetryService?.SendEvent(TelemetryEvents.FindUnusedStepDefinitionsCommandExecuted, new()

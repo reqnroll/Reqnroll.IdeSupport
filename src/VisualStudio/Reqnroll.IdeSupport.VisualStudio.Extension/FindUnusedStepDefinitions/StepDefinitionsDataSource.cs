@@ -48,7 +48,7 @@ internal sealed class StepDefinitionsDataSource : ITableDataSource
         entry.TrySetValue(StandardTableKeyNames.Line,   item.SourceLine);  // 0-based
         entry.TrySetValue(StandardTableKeyNames.Column, item.SourceChar);  // 0-based
 
-        // Code column: "ClassName.MethodName  ·  BindingExpression"
+        // Code column: ClassName.MethodName - [Given("expression")]  (see BuildCodeText)
         //
         // Text feeds the window's fixed Code ("linetext") column. The "Project then Definition"
         // second-level grouping uses StandardTableKeyNames.Definition, whose value must be a
@@ -56,7 +56,7 @@ internal sealed class StepDefinitionsDataSource : ITableDataSource
         // ignored and shows "[Definition:Unknown]". We supply none, so ClassName is embedded in
         // the Code text instead, keeping all three pieces visible in the flat or "Project then
         // File" views.
-        var code = BuildCodeText(item.ClassName, item.MethodName, item.BindingExpression, item.IsResolved);
+        var code = BuildCodeText(item.ClassName, item.MethodName, item.StepDefinitionType, item.BindingExpression, item.IsResolved);
         entry.TrySetValue(StandardTableKeyNames.Text, code);
 
         if (item.ProjectName is { Length: > 0 })
@@ -65,13 +65,19 @@ internal sealed class StepDefinitionsDataSource : ITableDataSource
         return entry;
     }
 
-    private static string BuildCodeText(string? className, string? methodName, string? expression,
-        bool isResolved = true)
+    /// <summary>
+    /// Builds the Code-column text: <c>ClassName.MethodName - [Given("expression")]</c>, the attribute
+    /// written as it would appear on the method (issue #757). A method-name-style binding has no
+    /// expression and shows just <c>[Given]</c>; with no known keyword the expression is shown quoted
+    /// on its own. Missing class/method parts fall back gracefully.
+    /// </summary>
+    internal static string BuildCodeText(string? className, string? methodName, string? stepDefinitionType,
+        string? expression, bool isResolved = true)
     {
-        // "ClassName.MethodName  ·  expression"  or graceful fallback for missing parts
-        var cm = className  is { Length: > 0 } ? className  : null;
-        var mm = methodName is { Length: > 0 } ? methodName : null;
-        var ex = expression is { Length: > 0 } ? expression : null;
+        var cm = className          is { Length: > 0 } ? className          : null;
+        var mm = methodName         is { Length: > 0 } ? methodName         : null;
+        var kw = stepDefinitionType is { Length: > 0 } ? stepDefinitionType : null;
+        var ex = expression         is { Length: > 0 } ? expression         : null;
 
         var identifier = (cm, mm) switch
         {
@@ -81,12 +87,20 @@ internal sealed class StepDefinitionsDataSource : ITableDataSource
             _                    => "(unknown)",
         };
 
-        var text = ex is null ? identifier : $"{identifier}  ·  {ex}";
+        var attribute = (kw, ex) switch
+        {
+            (not null, not null) => $"[{kw}(\"{ex}\")]",
+            (not null, null)     => $"[{kw}]",
+            (null,     not null) => $"\"{ex}\"",
+            _                    => null,
+        };
+
+        var text = attribute is null ? identifier : $"{identifier} - {attribute}";
 
         // A row with no DocumentName has no File column and does nothing on double-click. Saying so
         // in the one content column VS gives us is the only place a user can find out why
         // (issue #540); the recorded path itself goes to the log, since it would swamp this column.
-        return isResolved ? text : $"{text}  ·  (source not on this machine — rebuild locally)";
+        return isResolved ? text : $"{text} - (source not on this machine — rebuild locally)";
     }
 
     private sealed class SinkRegistration : IDisposable

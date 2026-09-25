@@ -84,6 +84,7 @@ internal sealed class FindUnusedStepDefinitionsService
                 // to true there so the row stays navigable exactly as it was (issue #540).
                 IsResolved        = item["isResolved"]?.Value<bool>() ?? true,
                 RecordedSourceFile = item["recordedSourceFile"]?.Value<string>(),
+                StepDefinitionType = item["stepDefinitionType"]?.Value<string>(),
             });
         }
         return result;

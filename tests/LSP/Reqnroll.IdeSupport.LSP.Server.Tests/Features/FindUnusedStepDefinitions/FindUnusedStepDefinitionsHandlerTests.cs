@@ -1,6 +1,7 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -66,12 +67,14 @@ public class FindUnusedStepDefinitionsHandlerTests
                         BindingExpression: "the sum is {int}",
                         SourceFile: "/ws/MySteps.cs",
                         SourceLine: 10,
-                        SourceColumn: 5),
+                        SourceColumn: 5,
+                        StepDefinitionType: ScenarioBlock.Given),
                 });
 
         var result = await CreateSut().HandleAsync(CancellationToken.None);
 
         var item = result.Items.Single();
+        item.StepDefinitionType.Should().Be("Given");
         item.ProjectName.Should().Be("MyProject");
         item.ClassName.Should().Be("StepDefs");
         item.MethodName.Should().Be("GivenSomething");

@@ -95,6 +95,7 @@ public sealed class GoToStepDefinitionHandler
             ClassName          = className,
             MethodName         = methodName,
             BindingExpression  = binding.DisplayExpression,
+            StepDefinitionType = StepDefinitionItem.ToWireType(binding.StepDefinitionType),
             SourceFile         = loc.IsResolved ? loc.SourceFile : null,
             SourceLine         = loc.SourceFileLine - 1,     // 1-based → 0-based
             SourceChar         = loc.SourceFileColumn - 1,   // 1-based → 0-based

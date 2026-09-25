@@ -197,6 +197,22 @@ public class FindUnusedStepDefinitionsServiceTests
     }
 
     [Fact]
+    public void Reports_each_bindings_step_definition_type()
+    {
+        // Issue #757: the client shows the attribute, e.g. [When("second expression")], so two
+        // unused attributes on one method are told apart by keyword as well as expression.
+        var (first, second) = MakeTwoExpressionsOnSameMethod("/ws/Steps.cs");
+
+        var result = CreateSut().FindUnusedStepDefinitions(new[] { MakeEntry("A", first, second) });
+
+        result.Select(r => (r.BindingExpression, r.StepDefinitionType)).Should().BeEquivalentTo(new[]
+        {
+            ("first expression", ScenarioBlock.Given),
+            ("second expression", ScenarioBlock.When),
+        });
+    }
+
+    [Fact]
     public void Reports_source_file_from_source_location()
     {
         var binding = MakeBinding("/ws/MySteps.cs", line: 42);
