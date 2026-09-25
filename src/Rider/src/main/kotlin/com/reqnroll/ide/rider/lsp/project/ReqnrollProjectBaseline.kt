@@ -56,7 +56,7 @@ object ReqnrollProjectBaseline {
         // thread so the EDT is not blocked.
         thread(name = "reqnroll-baseline-walk") {
             runnableProjects.forEach { runnableProject ->
-                ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject.projectFilePath)
+                ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject)
             }
         }
     }
@@ -74,7 +74,7 @@ object ReqnrollProjectBaseline {
             projectFile = runnableProject.projectFilePath,
             projectFolder = projectFolder,
             outputAssemblyPath = output?.exePath ?: "",
-            targetFrameworkMoniker = output?.tfm?.let(::toClassicMoniker) ?: "",
+            targetFrameworkMoniker = targetFrameworkMoniker(runnableProject),
             // Not available from RunnableProject; server uses this only to derive namespaces for
             // scaffolded files, which isn't reachable from Rider yet anyway (no scaffolding UI).
             defaultNamespace = "",
@@ -85,27 +85,78 @@ object ReqnrollProjectBaseline {
         )
     }
 
-    /** Builds and sends the `reqnroll/projectFiles` baseline (kind=BASELINE) for a single project file. */
-    fun sendProjectFilesBaseline(project: Project, projectFile: String) {
-        val folder = File(projectFile).parent ?: return
-        val files = File(folder).walkTopDown()
-            .filter { it.isFile }
-            .mapNotNull { file ->
-                ProjectFileRole.classify(file.path)?.let { role -> ProjectFileEntry(file.path, role) }
-            }
-            .toList()
+    /**
+     * The TFM this plugin reports for [runnableProject], in both `reqnroll/projectLoaded` and
+     * `reqnroll/projectFiles`. The two must agree: the server keys a project's membership baseline on
+     * (project file, TFM), so a `projectFiles` sent with a different TFM than the project registered
+     * with is stored under a key the project never looks up — every per-project membership query then
+     * falls back to a folder-prefix scan, which never sees files outside the project folder such as a
+     * shared project's (issue #736). Before #736 `projectFiles` always sent `""`.
+     */
+    fun targetFrameworkMoniker(runnableProject: RunnableProject): String =
+        runnableProject.projectOutputs.firstOrNull()?.tfm?.let(::toClassicMoniker) ?: ""
+
+    /** Builds and sends the `reqnroll/projectFiles` baseline (kind=BASELINE) for a single project. */
+    fun sendProjectFilesBaseline(project: Project, runnableProject: RunnableProject) {
+        val projectFile = runnableProject.projectFilePath
+        val files = buildProjectFileEntries(projectFile) ?: return
 
         ReqnrollDebugLogger.verbose("projectFiles baseline: $projectFile (${files.size} file(s))")
         ReqnrollNotificationSender.sendProjectFiles(
             project,
             ReqnrollProjectFilesParams(
                 projectFile = projectFile,
-                targetFrameworkMoniker = "",
+                targetFrameworkMoniker = targetFrameworkMoniker(runnableProject),
                 kind = ProjectFilesKind.BASELINE,
                 files = files,
             ),
         )
     }
+
+    /**
+     * The feature/binding files of [projectFile]: everything under its folder, plus the files it
+     * compiles from the shared projects it imports (issue #736) — those live outside its folder by
+     * definition, so the walk alone never finds them. The walk skips the project's own `bin/` and
+     * `obj/` (see [isBuildOutput]). Null when [projectFile] has no parent folder. `internal` purely
+     * so it's unit-testable without a `Project` fixture.
+     */
+    internal fun buildProjectFileEntries(projectFile: String): List<ProjectFileEntry>? {
+        val folder = File(projectFile).parent ?: return null
+        val folderFiles = File(folder).walkTopDown()
+            .onEnter { dir -> !isBuildOutput(dir.path, folder) }
+            .filter { it.isFile }
+            .map { it.path }
+            .toList()
+        // A shared project can sit inside the importing project's folder; drop what the walk
+        // already found. Case-insensitive only here: a .projitems may spell a path in a different
+        // case than the disk, while the walk's own paths must stay distinct on case-sensitive
+        // filesystems.
+        val folderKeys = folderFiles.mapTo(HashSet()) { it.lowercase() }
+        val sharedFiles = SharedProjectItems.getImportedFiles(projectFile)
+            .filter { it.lowercase() !in folderKeys }
+        if (sharedFiles.isNotEmpty()) {
+            ReqnrollDebugLogger.verbose("projectFiles baseline: $projectFile imports ${sharedFiles.size} shared-project file(s)")
+        }
+
+        return (folderFiles + sharedFiles)
+            .mapNotNull { path -> ProjectFileRole.classify(path)?.let { role -> ProjectFileEntry(path, role) } }
+    }
+
+    /**
+     * Whether [path] is, or is inside, [projectFolder]'s `bin/` or `obj/` — MSBuild's default
+     * `BaseOutputPath`/`BaseIntermediateOutputPath`, which default item globs exclude and VS's DTE
+     * never lists. Without this Rider's membership included generated sources such as
+     * `obj/…/<Project>.AssemblyInfo.cs` and `<Project>.GlobalUsings.g.cs`, which the server then
+     * Roslyn-reconciled as binding files on every registry change for no result. Only the
+     * project-root `bin`/`obj` count: a `bin` folder deeper down is ordinary source.
+     * Case-insensitive, like the rest of this plugin's path matching (issue #328).
+     */
+    internal fun isBuildOutput(path: String, projectFolder: String): Boolean =
+        listOf("bin", "obj").any { name ->
+            val outputDir = projectFolder.trimEnd(File.separatorChar) + File.separator + name
+            path.equals(outputDir, ignoreCase = true) ||
+                path.startsWith(outputDir + File.separator, ignoreCase = true)
+        }
 
     /**
      * Builds the classic MSBuild target framework moniker (e.g. `.NETCoreApp,Version=v9.0`) the

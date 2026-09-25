@@ -49,11 +49,16 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         // AtomicReference, not a plain var: the `advise` callback (writer) and the
         // AsyncFileListener callback (reader) can run on different threads.
         val projectFolders = java.util.concurrent.atomic.AtomicReference<List<Pair<String, String>>>(emptyList())
+        // projectFile -> the TFM its projectLoaded was sent with; deltas must carry the same one
+        // (see ReqnrollProjectBaseline.targetFrameworkMoniker).
+        val projectTfms = java.util.concurrent.atomic.AtomicReference<Map<String, String>>(emptyMap())
         // Tracks which project file paths a baseline (a full disk walk — see
         // ReqnrollProjectBaseline.sendProjectFilesBaseline) has already been sent for, so a
         // same-content re-fire of `advise` (see ReqnrollRunnableProjectsListener's doc comment on
-        // why that happens repeatedly during solution load) doesn't re-walk and re-send it.
-        var previousProjectFiles = emptySet<String>()
+        // why that happens repeatedly during solution load) doesn't re-walk and re-send it. Keyed
+        // on the TFM too: a project whose outputs (and so TFM) arrive in a later snapshot must be
+        // re-sent, or its baseline stays filed under the stale TFM (issue #736).
+        var previousProjectFiles = emptyMap<String, String>()
 
         val lifetime = project.createLifetime()
 
@@ -68,8 +73,9 @@ class ReqnrollProjectFilesSync : ProjectActivity {
                         .map { (File(it.projectFilePath).parent ?: "") to it.projectFilePath }
                         .sortedByDescending { it.first.length }
                 )
+                val currentFiles = projects.associate { it.projectFilePath to ReqnrollProjectBaseline.targetFrameworkMoniker(it) }
+                projectTfms.set(currentFiles)
 
-                val currentFiles = projects.map { it.projectFilePath }.toSet()
                 if (currentFiles == previousProjectFiles) return@advise
                 previousProjectFiles = currentFiles
 
@@ -80,7 +86,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
                     // run on a background thread to avoid blocking the UI dispatcher.
                     thread(name = "reqnroll-baseline-walk") {
                         projects.forEach { runnableProject ->
-                            ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject.projectFilePath)
+                            ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject)
                         }
                     }
                 }
@@ -88,7 +94,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         }
 
         VirtualFileManager.getInstance().addAsyncFileListener(
-            { events -> prepareChange(project, events) { projectFolders.get() } },
+            { events -> prepareChange(project, events, { projectFolders.get() }, { projectTfms.get() }) },
             project,
         )
     }
@@ -97,6 +103,7 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         project: Project,
         events: List<VFileEvent>,
         folders: () -> List<Pair<String, String>>,
+        tfms: () -> Map<String, String>,
     ): AsyncFileListener.ChangeApplier? {
         val changes = events.flatMap { toChanges(it) }
         if (changes.isEmpty()) return null
@@ -107,14 +114,19 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         return object : AsyncFileListener.ChangeApplier {
             override fun afterVfsChange() {
                 changes.groupBy { change -> findOwningProject(change.path, folders()) }
-                    .forEach { (projectFile, group) ->
+                    .forEach { (projectFile, allInProject) ->
                         if (projectFile == null) return@forEach
+                        // Same bin/obj exclusion as the baseline walk, or a build's generated
+                        // sources would be added straight back as deltas.
+                        val folder = File(projectFile).parent ?: return@forEach
+                        val group = allInProject.filterNot { ReqnrollProjectBaseline.isBuildOutput(it.path, folder) }
+                        if (group.isEmpty()) return@forEach
                         ReqnrollDebugLogger.verbose("projectFiles delta: $projectFile (${group.size} change(s))")
                         ReqnrollNotificationSender.sendProjectFiles(
                             project,
                             ReqnrollProjectFilesParams(
                                 projectFile = projectFile,
-                                targetFrameworkMoniker = "",
+                                targetFrameworkMoniker = tfms()[projectFile].orEmpty(),
                                 kind = ProjectFilesKind.DELTA,
                                 files = group.map { ProjectFileEntry(it.path, it.role, it.added) },
                             ),
