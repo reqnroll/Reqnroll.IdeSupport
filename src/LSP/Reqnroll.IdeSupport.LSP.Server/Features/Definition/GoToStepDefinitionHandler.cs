@@ -35,6 +35,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 public sealed class GoToStepDefinitionHandler
 {
     private readonly StepAtPositionResolver     _resolver;
+    private readonly IIdeSupportLogger          _logger;
     private readonly IFileSystemForIDE          _fileSystem;
     private readonly ILspTelemetryService?      _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
@@ -50,6 +51,7 @@ public sealed class GoToStepDefinitionHandler
         IOperationDurationRecorder? recorder = null)
     {
         _resolver         = new StepAtPositionResolver(matchService, bufferService, scopeManager, logger, nameof(GoToStepDefinitionHandler));
+        _logger           = logger;
         _fileSystem       = fileSystem;
         _telemetryService = telemetryService;
         _recorder         = recorder ?? NullOperationDurationRecorder.Instance;
@@ -68,12 +70,19 @@ public sealed class GoToStepDefinitionHandler
             return Task.FromResult(new GoToStepDefinitionResponse());
 
         var items = _resolver.GetBindingsWithSource(step).Select(ToItem).ToList();
+        var resolvedCount = items.Count(i => i.IsResolved);
+
+        // Same shape as DefinitionHandler's/GoToHooksHandler's result line, so the server log alone
+        // answers "what did Go to Step Definition find" (Rider and VS log no client-side trace of it).
+        _logger.LogVerbose(
+            $"GoToStepDefinitionHandler: {items.Count} step definition(s) ({resolvedCount} navigable) for step at " +
+            $"{request.Position.Line}:{request.Position.Character} in {uri}");
 
         // Same event and property as textDocument/definition: this is the same user command, reached
         // through the request Visual Studio sends for it. LocationCount counts navigable rows.
         _telemetryService?.SendEvent(DefinitionHandler.TelemetryEventName, new()
         {
-            ["LocationCount"] = items.Count(i => i.IsResolved),
+            ["LocationCount"] = resolvedCount,
         });
 
         return Task.FromResult(new GoToStepDefinitionResponse { Items = items });

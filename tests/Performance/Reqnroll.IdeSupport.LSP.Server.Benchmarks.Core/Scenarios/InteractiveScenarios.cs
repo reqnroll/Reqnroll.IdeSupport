@@ -117,6 +117,19 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
+    /// <c>reqnroll/goToStepDefinition</c> (issue #757) at the same bound step position as
+    /// <see cref="DefinitionAsync"/> — same lookup, so the two numbers are directly comparable;
+    /// the difference is the per-binding detail (method parsing, identifier lookup) this adds.
+    /// </summary>
+    public async Task<LatencySummary> GoToStepDefinitionAsync()
+        => await RunAsync(PerfTargets.GoToStepDefinition.Operation, async i =>
+        {
+            var f = _features[i % _features.Count];
+            var (line, character) = f.StepPosition;
+            await _harness.RequestGoToStepDefinitionAsync(f.Uri, line, character).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+    /// <summary>
     /// Semantic tokens delta pull. The server doesn't maintain real delta state (see
     /// <c>SemanticTokensHandler</c> — it always returns the full token set wrapped in a
     /// <c>SemanticTokensFullOrDelta</c>), but this still exercises the delta wire shape and the

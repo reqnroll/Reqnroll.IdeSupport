@@ -108,7 +108,14 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
         ThreadHelper.ThrowIfNotOnUIThread();
 
         var redirect = GoToDefinitionRedirect.GoToDefinitionAsync;
-        if (commandGroup == CommandSet && commandId == CmdIdGoToDefinition && redirect is not null)
+        var isGoToDefinition = commandGroup == CommandSet && commandId == CmdIdGoToDefinition;
+
+        // Say why VS's own "'{word}' declarations" window may appear instead of ours (issue #757).
+        if (isGoToDefinition && redirect is null)
+            _logger.LogVerbose(
+                "GoToDefinitionCommandFilter: LSP server not initialized (no redirect set), forwarding Go To Definition to VS.");
+
+        if (isGoToDefinition && redirect is not null)
         {
             _wpfTextView ??= _editorAdapter.GetWpfTextView(_vsTextView);
             var fileUri = _wpfTextView is null ? string.Empty : GetTextBufferFileUri(_wpfTextView);

@@ -84,6 +84,7 @@ public static class BenchmarkRunner
             (PerfTargets.CompletionKeyword, await scenarios.KeywordCompletionAsync().ConfigureAwait(false)),
             (PerfTargets.CompletionStep, await scenarios.StepCompletionAsync().ConfigureAwait(false)),
             (PerfTargets.DefinitionCacheHit, await scenarios.DefinitionAsync().ConfigureAwait(false)),
+            (PerfTargets.GoToStepDefinition, await scenarios.GoToStepDefinitionAsync().ConfigureAwait(false)),
             (PerfTargets.StepPrepareRename, await scenarios.PrepareRenameAsync().ConfigureAwait(false)),
             (PerfTargets.RenameTargets, await scenarios.RenameTargetsAsync().ConfigureAwait(false)),
             (PerfTargets.FindStepUsages, await scenarios.FindStepUsagesAsync().ConfigureAwait(false)),
