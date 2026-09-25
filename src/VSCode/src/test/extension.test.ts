@@ -32,6 +32,7 @@ import './commands/hookCodeLens.test';
 import './commands/commentToggle.test';
 import './util/selectionUtils.test';
 import './util/navigationUtils.test';
+import './util/stepDefinitionItems.test';
 import './grammar.test';
 import './logging/logPaths.test';
 import './logging/generalFileLog.test';
