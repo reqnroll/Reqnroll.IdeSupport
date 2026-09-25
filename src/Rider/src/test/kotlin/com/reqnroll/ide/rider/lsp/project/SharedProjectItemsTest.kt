@@ -123,6 +123,20 @@ class SharedProjectItemsTest {
         return file.path
     }
 
+    @Test
+    fun `baseline skips the project's own bin and obj but not a nested bin folder`() {
+        val steps = touch("Tests/Steps.cs")
+        val nestedBin = touch("Tests/Features/bin/Deep.feature")
+        touch("Tests/obj/Debug/net8.0/Tests.AssemblyInfo.cs")
+        touch("Tests/obj/Debug/net8.0/Tests.GlobalUsings.g.cs")
+        touch("Tests/bin/Debug/net8.0/Leftover.cs")
+        val project = writeProject("Tests/Tests.csproj")
+
+        val entries = ReqnrollProjectBaseline.buildProjectFileEntries(project).orEmpty()
+
+        assertEquals(setOf(steps, nestedBin), entries.map { it.path }.toSet())
+    }
+
     // Imports/items are substituted *after* trimIndent(): interpolating several lines directly
     // leaves the extra lines at column 0, so trimIndent() strips nothing and the <?xml?>
     // declaration keeps its leading whitespace -- which the XML parser rejects.

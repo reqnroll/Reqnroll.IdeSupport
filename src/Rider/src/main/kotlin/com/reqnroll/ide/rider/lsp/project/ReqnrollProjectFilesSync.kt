@@ -114,8 +114,13 @@ class ReqnrollProjectFilesSync : ProjectActivity {
         return object : AsyncFileListener.ChangeApplier {
             override fun afterVfsChange() {
                 changes.groupBy { change -> findOwningProject(change.path, folders()) }
-                    .forEach { (projectFile, group) ->
+                    .forEach { (projectFile, allInProject) ->
                         if (projectFile == null) return@forEach
+                        // Same bin/obj exclusion as the baseline walk, or a build's generated
+                        // sources would be added straight back as deltas.
+                        val folder = File(projectFile).parent ?: return@forEach
+                        val group = allInProject.filterNot { ReqnrollProjectBaseline.isBuildOutput(it.path, folder) }
+                        if (group.isEmpty()) return@forEach
                         ReqnrollDebugLogger.verbose("projectFiles delta: $projectFile (${group.size} change(s))")
                         ReqnrollNotificationSender.sendProjectFiles(
                             project,
