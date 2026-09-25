@@ -14,8 +14,9 @@ import javax.xml.parsers.DocumentBuilderFactory
  * [ReqnrollProjectBaseline.sendProjectFilesBaseline]'s folder walk never finds them; this adds
  * them to the importing project's baseline, which is where they actually compile.
  *
- * A Kotlin port of `Reqnroll.IdeSupport.Common.ProjectSystem.SharedProjectItems` (used by the VS
- * extension) — keep the two in step. Deliberately a small reading of MSBuild, not an evaluation:
+ * Rider-only: VS Code's `dotnet msbuild -getItem` evaluation already expands the import, and VS's
+ * DTE `ProjectItems` already list shared items for the importing project (confirmed live on an
+ * SDK-style project). Deliberately a small reading of MSBuild, not an evaluation:
  * it resolves only `$(MSBuildThisFileDirectory)`, `$(MSBuildThisFileFullPath)` and
  * `$(MSBuildProjectDirectory)`, skips any path still naming another property, honours
  * `Include`/`Exclude`/`Remove` with `*`, `?` and `**` wildcards, and ignores `Condition`s. A file

@@ -56,7 +56,7 @@ object ReqnrollProjectBaseline {
         // thread so the EDT is not blocked.
         thread(name = "reqnroll-baseline-walk") {
             runnableProjects.forEach { runnableProject ->
-                ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject.projectFilePath)
+                ReqnrollProjectBaseline.sendProjectFilesBaseline(project, runnableProject)
             }
         }
     }
@@ -74,7 +74,7 @@ object ReqnrollProjectBaseline {
             projectFile = runnableProject.projectFilePath,
             projectFolder = projectFolder,
             outputAssemblyPath = output?.exePath ?: "",
-            targetFrameworkMoniker = output?.tfm?.let(::toClassicMoniker) ?: "",
+            targetFrameworkMoniker = targetFrameworkMoniker(runnableProject),
             // Not available from RunnableProject; server uses this only to derive namespaces for
             // scaffolded files, which isn't reachable from Rider yet anyway (no scaffolding UI).
             defaultNamespace = "",
@@ -85,8 +85,20 @@ object ReqnrollProjectBaseline {
         )
     }
 
-    /** Builds and sends the `reqnroll/projectFiles` baseline (kind=BASELINE) for a single project file. */
-    fun sendProjectFilesBaseline(project: Project, projectFile: String) {
+    /**
+     * The TFM this plugin reports for [runnableProject], in both `reqnroll/projectLoaded` and
+     * `reqnroll/projectFiles`. The two must agree: the server keys a project's membership baseline on
+     * (project file, TFM), so a `projectFiles` sent with a different TFM than the project registered
+     * with is stored under a key the project never looks up — every per-project membership query then
+     * falls back to a folder-prefix scan, which never sees files outside the project folder such as a
+     * shared project's (issue #736). Before #736 `projectFiles` always sent `""`.
+     */
+    fun targetFrameworkMoniker(runnableProject: RunnableProject): String =
+        runnableProject.projectOutputs.firstOrNull()?.tfm?.let(::toClassicMoniker) ?: ""
+
+    /** Builds and sends the `reqnroll/projectFiles` baseline (kind=BASELINE) for a single project. */
+    fun sendProjectFilesBaseline(project: Project, runnableProject: RunnableProject) {
+        val projectFile = runnableProject.projectFilePath
         val files = buildProjectFileEntries(projectFile) ?: return
 
         ReqnrollDebugLogger.verbose("projectFiles baseline: $projectFile (${files.size} file(s))")
@@ -94,7 +106,7 @@ object ReqnrollProjectBaseline {
             project,
             ReqnrollProjectFilesParams(
                 projectFile = projectFile,
-                targetFrameworkMoniker = "",
+                targetFrameworkMoniker = targetFrameworkMoniker(runnableProject),
                 kind = ProjectFilesKind.BASELINE,
                 files = files,
             ),
