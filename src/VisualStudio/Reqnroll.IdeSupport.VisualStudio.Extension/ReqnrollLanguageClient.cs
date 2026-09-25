@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
@@ -22,6 +23,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 #pragma warning disable VSEXTPREVIEW_LSP
@@ -48,6 +50,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly FormatDocumentState _formatDocumentState;
     private readonly LspServerConnectionService _connectionService;
     private CommentToggleService? _commentToggleService;
+    private GoToStepDefinitionPresenter? _goToStepDefinitionPresenter;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
     private ScenarioTestTargetService? _scenarioTestTargetService;
@@ -277,6 +280,17 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 _stepCodeLensState.FindUsagesService  = _findStepUsagesState.Service;
                 _stepCodeLensState.FindUsagesRenderer = _findStepUsagesState.Renderer;
 
+                // Go To Definition in a .feature file (issue #757): the VSSDK command filter takes the
+                // command over so several matching step definitions open the Find All References
+                // window titled after the step, not VS's "'{word}' declarations". Wired here, after
+                // the renderer it shares with Find Step Usages exists.
+                _goToStepDefinitionPresenter = new GoToStepDefinitionPresenter(
+                    new GoToStepDefinitionService(interceptingPipe, _loggerFactory.CreateLogger<GoToStepDefinitionService>()),
+                    _findStepUsagesState.Renderer,
+                    ExtensionHostLogger.Instance,
+                    _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>());
+                GoToDefinitionRedirect.GoToDefinitionAsync = _goToStepDefinitionPresenter.GoToDefinitionAsync;
+
                 // VS.Extensibility can call this method more than once per session (issue #156):
                 // a second activation must not leave the first ProjectMonitor's DTE event
                 // subscriptions (SolutionEvents/BuildEvents/WindowEvents/
@@ -334,6 +348,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _stepCodeLensState.FindUsagesRenderer = null;
             _commentToggleService = null;
             CommentToggleRedirect.ToggleCommentAsync = null;
+            _goToStepDefinitionPresenter = null;
+            GoToDefinitionRedirect.GoToDefinitionAsync = null;
             _renameStepState.Service = null;
             _formatDocumentState.Service = null;
             FormatDocumentRedirect.FormatDocumentAsync = null;
