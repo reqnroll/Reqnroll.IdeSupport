@@ -51,7 +51,9 @@ suite('stepNavigation', () => {
     });
 
     suiteTeardown(async () => {
-      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      // Revert first: the untitled document is dirty, and closing a dirty editor would raise a
+      // "Save changes?" prompt in the test host.
+      await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
     });
 
     test('sends reqnroll/goToStepDefinition and reports when there is no binding', async () => {

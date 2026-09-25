@@ -76,6 +76,23 @@ public class SourceLocationExtensionsTests : IDisposable
         result.SourceFileColumn.Should().Be("public void ".Length + 1); // 1-based: col 13
     }
 
+    [Fact]
+    public void WithIdentifierLocation_keeps_the_recorded_path_of_a_remapped_location()
+    {
+        // A binding built in a devcontainer whose path was remapped onto this machine: the
+        // recorded path is the only provenance a client can show, so moving to the identifier
+        // must not drop it (issue #757 — reqnroll/goToStepDefinition reports recordedSourceFile).
+        Write("[Given]\npublic void GivenAStep() {\n");
+        var loc = SourceLocation.Resolved(_tempFile, "/workspaces/host-solution/Steps.cs", 2, 1);
+
+        var result = loc.WithIdentifierLocation("Steps.GivenAStep", _fileSystem);
+
+        result.SourceFileColumn.Should().Be("public void ".Length + 1);
+        result.SourceFile.Should().Be(_tempFile);
+        result.RecordedSourceFile.Should().Be("/workspaces/host-solution/Steps.cs");
+        result.IsResolved.Should().BeTrue();
+    }
+
     // ── WithIdentifierLocation — method name found on line above ─────────────
 
     [Fact]

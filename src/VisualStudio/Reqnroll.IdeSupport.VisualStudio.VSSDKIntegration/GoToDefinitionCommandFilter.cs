@@ -111,9 +111,12 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
         if (commandGroup == CommandSet && commandId == CmdIdGoToDefinition && redirect is not null)
         {
             _wpfTextView ??= _editorAdapter.GetWpfTextView(_vsTextView);
-            if (_wpfTextView is not null)
+            var fileUri = _wpfTextView is null ? string.Empty : GetTextBufferFileUri(_wpfTextView);
+
+            // Without a file URI there is nothing to ask the server about; consuming the command
+            // anyway would make F12 silently do nothing, so let VS's own handler have it.
+            if (_wpfTextView is not null && fileUri.Length > 0)
             {
-                var fileUri  = GetTextBufferFileUri(_wpfTextView);
                 var caret    = _wpfTextView.Caret.Position.BufferPosition;
                 var line     = caret.GetContainingLine();
                 var lineText = line.GetText();
@@ -138,7 +141,7 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
                 return VSConstants.S_OK;
             }
 
-            _logger.LogInfo("GoToDefinitionCommandFilter: WPF view not available, forwarding Go To Definition.");
+            _logger.LogInfo("GoToDefinitionCommandFilter: no WPF view or file URI, forwarding Go To Definition.");
         }
 
         return _nextCommandTarget?.Exec(ref commandGroup, commandId, executeOptions, variantIn, variantOut)
