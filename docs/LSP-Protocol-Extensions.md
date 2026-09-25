@@ -36,6 +36,7 @@ these DTOs don't implement OmniSharp's `IRequest` marker interfaces).
 |---|---|---|---|
 | `reqnroll/findStepUsages` | standard `ReferenceParams` | `FindStepUsagesResponse` — isBinding, locations[] (uri, startLine/Char, endLine/Char, stepText?, keyword?, scenarioName?, projectName?, featureName?, ruleName?) | Distinct from `textDocument/references` because the server needs to return `null` (three-state result) and per-location `stepText` from the in-memory snapshot, which the standard method can't carry |
 | `reqnroll/goToHooks` | `GoToHooksParams : TextDocumentPositionParams` + `ownLevelOnly` | `GoToHooksResponse` — hooks[] (uri, startLine/Char, hookType, hookOrder, methodName) | |
+| `reqnroll/goToStepDefinition` | standard `TextDocumentPositionParams` | `GoToStepDefinitionResponse` — items[] (same item shape as `findUnusedStepDefinitions`; projectName always null) | Issue #757. Same bindings as `textDocument/definition`, plus class/method/expression and unresolved-source rows, for VS's multi-definition results list |
 | `reqnroll/goToMatchingScenarios` | standard `TextDocumentPositionParams` | `GoToMatchingScenariosResponse` — scenarios[] (uri, startLine/Char, scenarioName, isOutline) | |
 | `reqnroll/resolveTestTargets` | `ResolveTestTargetsParams` — textDocument, range | `ResolveTestTargetsResponse` — targets[] (declaringTypeFullName, methodName, isParameterized, rowArguments?, rowIndex?) | Issue #262 (test-runner integration) |
 | `reqnroll/findUnusedStepDefinitions` | empty params | `FindUnusedStepDefinitionsResponse` — items[] (projectName?, className?, methodName?, bindingExpression?, sourceFile?, isResolved, recordedSourceFile?, sourceLine, sourceChar) | |
@@ -64,9 +65,9 @@ these DTOs don't implement OmniSharp's `IRequest` marker interfaces).
 
 ### Not wire messages, despite the naming
 
-`"reqnroll/findReferences"` and `"reqnroll/unusedStepDefinitions"` in the VS extension
+`"reqnroll/findReferences"` and `"reqnroll/stepDefinitions"` in the VS extension
 ([`FeatureReferencesDataSource.cs`](../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/FindStepUsages/FeatureReferencesDataSource.cs),
-[`UnusedStepDefinitionsDataSource.cs`](../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/FindUnusedStepDefinitions/UnusedStepDefinitionsDataSource.cs))
+[`StepDefinitionsDataSource.cs`](../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/FindUnusedStepDefinitions/StepDefinitionsDataSource.cs))
 are `ITableDataSource.SourceTypeIdentifier` values for VS's Find Results window — internal VS
 plumbing, never serialized over LSP.
 

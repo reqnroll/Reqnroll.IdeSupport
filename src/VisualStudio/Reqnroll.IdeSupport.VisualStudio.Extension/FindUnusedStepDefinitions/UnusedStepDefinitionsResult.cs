@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>One unused step-definition binding, as parsed from the server response.</summary>
-internal sealed class UnusedStepLocation
+internal sealed class StepDefinitionListItem
 {
     /// <summary>Short project name derived from the owning .csproj file name.</summary>
     public string? ProjectName       { get; set; }
@@ -38,12 +38,12 @@ internal sealed class UnusedStepDefinitionsResult
 {
     /// <summary>Sentinel for a workspace with no unused step definitions.</summary>
     public static readonly UnusedStepDefinitionsResult Empty =
-        new(Array.Empty<UnusedStepLocation>());
+        new(Array.Empty<StepDefinitionListItem>());
 
     /// <summary>The unused step-definition locations.</summary>
-    public IReadOnlyList<UnusedStepLocation> Items { get; }
+    public IReadOnlyList<StepDefinitionListItem> Items { get; }
 
     /// <summary>Creates a result wrapping the given unused step-definition locations.</summary>
-    public UnusedStepDefinitionsResult(IReadOnlyList<UnusedStepLocation> items)
+    public UnusedStepDefinitionsResult(IReadOnlyList<StepDefinitionListItem> items)
         => Items = items;
 }

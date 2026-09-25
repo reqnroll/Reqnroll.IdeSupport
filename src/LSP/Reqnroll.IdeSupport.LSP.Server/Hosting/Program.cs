@@ -436,6 +436,9 @@ public class Program
                 extensionData["reqnrollGoToHooksProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToHooks });
 
+                extensionData["reqnrollGoToStepDefinitionProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToStepDefinition });
+
                 extensionData["reqnrollGoToMatchingScenariosProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToMatchingScenarios });
 

@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.FindUnusedStepDefinition
 
 /// <summary>
 /// Adapter-level tests for <see cref="FindUnusedStepDefinitionsHandler"/>: resolving registries,
-/// mapping <see cref="UnusedStepDefinition"/> to the wire <see cref="UnusedStepDefinitionItem"/>
+/// mapping <see cref="UnusedStepDefinition"/> to the wire <see cref="StepDefinitionItem"/>
 /// shape (incl. the 1-based → 0-based position conversion), and firing telemetry.
 /// The scan/dedupe/match algorithm itself is covered by
 /// <c>Reqnroll.IdeSupport.LSP.Core.Tests.FindUnusedStepDefinitions.FindUnusedStepDefinitionsServiceTests</c>.

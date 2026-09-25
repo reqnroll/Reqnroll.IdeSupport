@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 /// A single row in the Find All References table window, representing one unused
 /// step-definition binding.
 /// </summary>
-internal sealed class UnusedStepDefinitionTableEntry : ITableEntry
+internal sealed class StepDefinitionTableEntry : ITableEntry
 {
     private readonly Dictionary<string, object> _values = new Dictionary<string, object>();
 

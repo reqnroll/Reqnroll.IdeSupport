@@ -65,13 +65,13 @@ internal sealed class FindUnusedStepDefinitionsService
         return UnusedStepDefinitionsResult.Empty;
     }
 
-    private static IReadOnlyList<UnusedStepLocation> ParseItems(JArray array)
+    internal static IReadOnlyList<StepDefinitionListItem> ParseItems(JArray array)
     {
-        var result = new List<UnusedStepLocation>(array.Count);
+        var result = new List<StepDefinitionListItem>(array.Count);
         foreach (var token in array)
         {
             if (token is not JObject item) continue;
-            result.Add(new UnusedStepLocation
+            result.Add(new StepDefinitionListItem
             {
                 ProjectName       = item["projectName"]?.Value<string>(),
                 ClassName         = item["className"]?.Value<string>(),

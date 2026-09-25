@@ -49,7 +49,7 @@ public sealed class FindUnusedStepDefinitionsHandler
                 .Select(r => (r.ProjectName, Path.GetDirectoryName(r.Owner.ProjectFile) ?? string.Empty, r.Registry))
                 .ToList());
 
-        var items = unused.Select(u => new UnusedStepDefinitionItem
+        var items = unused.Select(u => new StepDefinitionItem
         {
             ProjectName = u.ProjectName,
             ClassName = u.ClassName,

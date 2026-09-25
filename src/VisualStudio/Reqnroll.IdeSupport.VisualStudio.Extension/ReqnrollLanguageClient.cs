@@ -274,7 +274,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     "ReqnrollLanguageClient: ITelemetryTransmitter resolved: {Resolved}",
                     _connectionService.TelemetryTransmitter is not null ? "yes" : "no");
                 _findStepUsagesState.Renderer            = new FindStepUsagesRenderer(serviceProvider, _loggerFactory.CreateLogger<FindStepUsagesRenderer>());
-                _findUnusedStepDefinitionsState.Renderer = new FindUnusedStepDefinitionsRenderer(serviceProvider, _loggerFactory.CreateLogger<FindUnusedStepDefinitionsRenderer>());
+                _findUnusedStepDefinitionsState.Renderer = new StepDefinitionsRenderer(serviceProvider, _loggerFactory.CreateLogger<StepDefinitionsRenderer>());
 
                 // Reuse the Find Step Definition Usages / Find All References components for the code-lens click action.
                 _stepCodeLensState.FindUsagesService  = _findStepUsagesState.Service;
@@ -283,10 +283,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 // Go To Definition in a .feature file (issue #757): the VSSDK command filter takes the
                 // command over so several matching step definitions open the Find All References
                 // window titled after the step, not VS's "'{word}' declarations". Wired here, after
-                // the renderer it shares with Find Step Usages exists.
+                // the step-definitions renderer it shares with Find Unused Step Definitions exists.
                 _goToStepDefinitionPresenter = new GoToStepDefinitionPresenter(
                     new GoToStepDefinitionService(interceptingPipe, _loggerFactory.CreateLogger<GoToStepDefinitionService>()),
-                    _findStepUsagesState.Renderer,
+                    _findUnusedStepDefinitionsState.Renderer,
                     ExtensionHostLogger.Instance,
                     _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>());
                 GoToDefinitionRedirect.GoToDefinitionAsync = _goToStepDefinitionPresenter.GoToDefinitionAsync;

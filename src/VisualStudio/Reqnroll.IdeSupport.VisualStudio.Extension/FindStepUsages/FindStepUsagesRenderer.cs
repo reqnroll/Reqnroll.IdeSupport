@@ -54,14 +54,15 @@ internal sealed class FindStepUsagesRenderer
             return;
         }
 
+        // Text is deliberately not declared: the window's fixed Code ("linetext") column already
+        // shows each entry's Text, and declaring it adds VS's separate wrapping "Description"
+        // column with the same content (issue #757; see StepDefinitionsRenderer).
         var dataSource = new FeatureReferencesDataSource(result.Locations);
         window.Manager.AddSource(dataSource,
             StandardTableKeyNames.DocumentName,
             StandardTableKeyNames.Line,
             StandardTableKeyNames.Column,
-            StandardTableKeyNames.Text,
-            StandardTableKeyNames.ProjectName,
-            "description");
+            StandardTableKeyNames.ProjectName);
 
         _logger.LogDebug(
             "FindStepUsagesRenderer: opened FAR window {Label} with {LocationCount} location(s)",

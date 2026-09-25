@@ -189,7 +189,7 @@ public sealed class FindUnusedStepDefinitionsService : IFindUnusedStepDefinition
     /// In both cases: strip params, split on <c>.</c>, last segment = MethodName,
     /// second-to-last = ClassName.
     /// </summary>
-    internal static (string ClassName, string MethodName) ParseMethod(string? method)
+    public static (string ClassName, string MethodName) ParseMethod(string? method)
     {
         if (string.IsNullOrEmpty(method) || method == "???")
             return ("(unknown)", "(unknown)");

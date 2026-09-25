@@ -18,6 +18,8 @@ public static class LspMethodNames
     public const string ReqnrollFindStepUsages = "reqnroll/findStepUsages";
     /// <summary>Method name for the <c>reqnroll/goToHooks</c> request.</summary>
     public const string ReqnrollGoToHooks = "reqnroll/goToHooks";
+    /// <summary>Method name for the <c>reqnroll/goToStepDefinition</c> request (issue #757).</summary>
+    public const string ReqnrollGoToStepDefinition = "reqnroll/goToStepDefinition";
     /// <summary>Method name for the <c>reqnroll/goToMatchingScenarios</c> request (issue #373).</summary>
     public const string ReqnrollGoToMatchingScenarios = "reqnroll/goToMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>

@@ -6,24 +6,25 @@ using Microsoft.VisualStudio.Shell.TableManager;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>
-/// Provides unused step-definition locations to the VS Find All References table window.
+/// Provides step-definition rows to the VS Find All References table window — the unused step
+/// definitions, or the step definitions matching a step (Go To Definition, issue #757).
 /// </summary>
-internal sealed class UnusedStepDefinitionsDataSource : ITableDataSource
+internal sealed class StepDefinitionsDataSource : ITableDataSource
 {
-    private readonly IReadOnlyList<UnusedStepLocation> _items;
+    private readonly IReadOnlyList<StepDefinitionListItem> _items;
 
-    /// <summary>Creates the data source over a snapshot of unused step-definition locations.</summary>
-    public UnusedStepDefinitionsDataSource(IReadOnlyList<UnusedStepLocation> items)
+    /// <summary>Creates the data source over a snapshot of step-definition rows.</summary>
+    public StepDefinitionsDataSource(IReadOnlyList<StepDefinitionListItem> items)
         => _items = items;
 
     // ── ITableDataSource ──────────────────────────────────────────────────────
 
     /// <inheritdoc />
-    public string SourceTypeIdentifier => "reqnroll/unusedStepDefinitions";
+    public string SourceTypeIdentifier => "reqnroll/stepDefinitions";
     /// <inheritdoc />
-    public string Identifier           => "reqnroll.unusedStepDefinitionSource";
+    public string Identifier           => "reqnroll.stepDefinitionSource";
     /// <inheritdoc />
-    public string DisplayName          => "Reqnroll Unused Step Definitions";
+    public string DisplayName          => "Reqnroll Step Definitions";
 
     /// <summary>Pushes all entries to <paramref name="sink"/> immediately so the window is populated synchronously on open.</summary>
     public IDisposable Subscribe(ITableDataSink sink)
@@ -35,9 +36,9 @@ internal sealed class UnusedStepDefinitionsDataSource : ITableDataSource
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static UnusedStepDefinitionTableEntry ToEntry(UnusedStepLocation item)
+    private static StepDefinitionTableEntry ToEntry(StepDefinitionListItem item)
     {
-        var entry = new UnusedStepDefinitionTableEntry();
+        var entry = new StepDefinitionTableEntry();
 
         // DocumentName drives the File column and double-click navigation.
         // SourceFile is already an absolute path (not a URI).
@@ -49,21 +50,17 @@ internal sealed class UnusedStepDefinitionsDataSource : ITableDataSource
 
         // Code column: "ClassName.MethodName  ·  BindingExpression"
         //
-        // The VS FAR window has a single content column (Text).  The "Project then Definition"
-        // second-level grouping uses StandardTableKeyNames.Definition, which VS type-checks
-        // for a Roslyn DefinitionBucket; plain strings are silently ignored and fall back to
-        // "[Definition:Unknown]".  Class-level grouping is therefore not achievable for custom
-        // non-Roslyn data sources.  Instead we embed ClassName in the Code column text so all
-        // three pieces of information are visible in the flat or "Project then File" views.
+        // Text feeds the window's fixed Code ("linetext") column. The "Project then Definition"
+        // second-level grouping uses StandardTableKeyNames.Definition, whose value must be a
+        // DefinitionBucket (Microsoft.VisualStudio.Shell.FindAllReferences); a plain string is
+        // ignored and shows "[Definition:Unknown]". We supply none, so ClassName is embedded in
+        // the Code text instead, keeping all three pieces visible in the flat or "Project then
+        // File" views.
         var code = BuildCodeText(item.ClassName, item.MethodName, item.BindingExpression, item.IsResolved);
         entry.TrySetValue(StandardTableKeyNames.Text, code);
 
         if (item.ProjectName is { Length: > 0 })
             entry.TrySetValue(StandardTableKeyNames.ProjectName, item.ProjectName);
-
-        // Suppress VS's auto-generated Description column — without this, VS duplicates the
-        // Code text with colour markup into a Description column (same as Find Step Definition Usages does).
-        entry.TrySetValue("description", "");
 
         return entry;
     }
