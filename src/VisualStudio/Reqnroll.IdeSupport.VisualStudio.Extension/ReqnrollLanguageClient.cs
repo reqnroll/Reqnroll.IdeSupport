@@ -44,10 +44,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly GoToHooksState _goToHooksState;
     private readonly GoToMatchingScenariosState _goToMatchingScenariosState;
     private readonly StepCodeLensState _stepCodeLensState;
-    private readonly CommentToggleState _commentToggleState;
     private readonly RenameStepState _renameStepState;
     private readonly FormatDocumentState _formatDocumentState;
     private readonly LspServerConnectionService _connectionService;
+    private CommentToggleService? _commentToggleService;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
     private ScenarioTestTargetService? _scenarioTestTargetService;
@@ -66,7 +66,6 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         GoToHooksState goToHooksState,
         GoToMatchingScenariosState goToMatchingScenariosState,
         StepCodeLensState stepCodeLensState,
-        CommentToggleState commentToggleState,
         RenameStepState renameStepState,
         FormatDocumentState formatDocumentState,
         LspServerConnectionService connectionService)
@@ -79,7 +78,6 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         _goToHooksState                 = goToHooksState;
         _goToMatchingScenariosState     = goToMatchingScenariosState;
         _stepCodeLensState              = stepCodeLensState;
-        _commentToggleState             = commentToggleState;
         _renameStepState                = renameStepState;
         _formatDocumentState            = formatDocumentState;
         // LspServerConnectionService is a singleton already resolved (and its eager server launch
@@ -185,16 +183,17 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _goToHooksState.Service                 = new GoToHooksService(interceptingPipe, _loggerFactory.CreateLogger<GoToHooksService>());
             _goToMatchingScenariosState.Service     = new GoToMatchingScenariosService(interceptingPipe, _loggerFactory.CreateLogger<GoToMatchingScenariosService>());
             _stepCodeLensState.Service              = new StepCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<StepCodeLensService>());
-            _commentToggleState.Service             = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
+            _commentToggleService                    = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
             _formatDocumentState.Service             = new FormatDocumentService(interceptingPipe, _loggerFactory.CreateLogger<FormatDocumentService>());
             _navigationBarSymbolService              = new GherkinNavigationBarSymbolService(interceptingPipe, _loggerFactory.CreateLogger<GherkinNavigationBarSymbolService>());
             _hookFeatureCodeLensService               = new HookFeatureCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<HookFeatureCodeLensService>());
             _scenarioTestTargetService                = new ScenarioTestTargetService(interceptingPipe, _loggerFactory.CreateLogger<ScenarioTestTargetService>());
 
-            // Set the VSSDK command filter redirect so the keyboard shortcut interception
-            // for Edit.CommentSelection/UncommentSelection/ToggleLineComment calls our service.
-            CommentToggleRedirect.ToggleCommentAsync = _commentToggleState.Service.ToggleCommentAsync;
+            // Set the VSSDK command filter redirect so Edit.CommentSelection/UncommentSelection/
+            // ToggleLineComment in a .feature file call our service (the only entry point — there
+            // is no Reqnroll-specific Comment/Uncomment command, issue #747).
+            CommentToggleRedirect.ToggleCommentAsync = _commentToggleService.ToggleCommentAsync;
 
             // Set the VSSDK drop-down bar client redirect so the
             // Navigation Bar can fetch the Feature/Scenario/Step symbol tree.
@@ -333,7 +332,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _stepCodeLensState.Service           = null;
             _stepCodeLensState.FindUsagesService  = null;
             _stepCodeLensState.FindUsagesRenderer = null;
-            _commentToggleState.Service = null;
+            _commentToggleService = null;
+            CommentToggleRedirect.ToggleCommentAsync = null;
             _renameStepState.Service = null;
             _formatDocumentState.Service = null;
             FormatDocumentRedirect.FormatDocumentAsync = null;

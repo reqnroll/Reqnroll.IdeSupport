@@ -18,7 +18,9 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Commenting;
 /// <summary>
 /// Handles <c>workspace/executeCommand</c> for <c>reqnroll.toggleComment</c> (Comment/Uncomment toggle).
 /// Toggles <c>#</c> comments on the selected line(s) of a <c>.feature</c> file.
-/// Arguments: <c>[uri, startLine, endLine]</c> (0-based, inclusive).
+/// Arguments: <c>[uri, startLine, endLine, mode?]</c> (lines 0-based, inclusive). The optional
+/// <c>mode</c> is <c>"toggle"</c> (default), <c>"comment"</c> or <c>"uncomment"</c> — see
+/// <see cref="CommentToggleMode"/>.
 /// Applies the resulting <see cref="WorkspaceEdit"/> via <c>workspace/applyEdit</c> request.
 /// </summary>
 public sealed class CommentToggleHandler : IExecuteCommandHandler
@@ -81,6 +83,13 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         var uriStr    = args[0].Value<string>();
         var startLine = args[1].Value<int>();
         var endLine   = args[2].Value<int>();
+        var modeArg   = args.Count > 3 ? args[3].Value<string>() : null;
+
+        if (!TryParseMode(modeArg, out var mode))
+        {
+            _logger.LogVerbose($"CommentToggleHandler: unknown mode '{modeArg}'");
+            return Unit.Value;
+        }
 
         if (uriStr is null)
         {
@@ -98,13 +107,17 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
 
         var text   = buffer.Text;
         var lines  = text.Replace("\r\n", "\n").Split('\n');
-        var result = _toggleService.ToggleComment(text, startLine, endLine);
+        var result = _toggleService.ToggleComment(text, startLine, endLine, mode);
 
         var edit = BuildWorkspaceEdit(uri, result, lines);
-        _logger.LogInfo($"Comment/Uncomment toggle reqnroll.toggleComment: {uri} lines [{startLine}..{endLine}] → {result.Edits.Count} change(s)");
+        _logger.LogInfo($"Comment/Uncomment toggle reqnroll.toggleComment: {uri} lines [{startLine}..{endLine}] mode={mode} → {result.Edits.Count} change(s)");
 
         // Telemetry
         _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new());
+
+        // Uncomment on lines that carry no comment yields nothing to change; skip the round-trip.
+        if (result.Edits.Count == 0)
+            return Unit.Value;
 
         await _languageServer.SendRequest(LspMethodNames.WorkspaceApplyEdit, edit)
             .Returning<ApplyWorkspaceEditResponse>(cancellationToken);
@@ -113,6 +126,27 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    // A missing or null mode means Toggle, so clients that predate the argument keep working.
+    private static bool TryParseMode(string? modeArg, out CommentToggleMode mode)
+    {
+        switch (modeArg)
+        {
+            case null:
+            case "toggle":
+                mode = CommentToggleMode.Toggle;
+                return true;
+            case "comment":
+                mode = CommentToggleMode.Comment;
+                return true;
+            case "uncomment":
+                mode = CommentToggleMode.Uncomment;
+                return true;
+            default:
+                mode = default;
+                return false;
+        }
+    }
 
     private static ApplyWorkspaceEditParams BuildWorkspaceEdit(
         DocumentUri uri,

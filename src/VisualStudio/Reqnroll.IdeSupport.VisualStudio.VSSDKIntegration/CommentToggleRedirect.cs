@@ -17,8 +17,8 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 public static class CommentToggleRedirect
 {
     /// <summary>
-    /// Delegate set by the Extension project: <c>(fileUri, startLine, endLine, ct) → Task</c>.
+    /// Delegate set by the Extension project: <c>(fileUri, startLine, endLine, mode, ct) → Task</c>.
     /// Null when the server has not yet initialized or has been disposed.
     /// </summary>
-    public static Func<string, int, int, CancellationToken, Task>? ToggleCommentAsync { get; set; }
+    public static Func<string, int, int, CommentToggleMode, CancellationToken, Task>? ToggleCommentAsync { get; set; }
 }

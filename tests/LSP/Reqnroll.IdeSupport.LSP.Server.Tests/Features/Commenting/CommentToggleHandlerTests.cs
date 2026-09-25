@@ -231,4 +231,70 @@ public class CommentToggleHandlerTests
 
         telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
     }
+
+    // ── Mode argument (issue #747) ────────────────────────────────────────
+
+    [Theory]
+    [InlineData("toggle",    CommentToggleMode.Toggle)]
+    [InlineData("comment",   CommentToggleMode.Comment)]
+    [InlineData("uncomment", CommentToggleMode.Uncomment)]
+    public async Task Mode_argument_is_passed_to_the_toggle_service_Async(string modeArg, CommentToggleMode expected)
+    {
+        SetupBuffer(FeatureUri, "Given a step\n");
+        SetupApplyEditRequest();
+        _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+
+        await CreateSut().Handle(
+            MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0, modeArg),
+            CancellationToken.None);
+
+        _toggleService.Received(1).ToggleComment("Given a step\n", 0, 0, expected);
+    }
+
+    [Fact]
+    public async Task Missing_mode_argument_defaults_to_toggle_Async()
+    {
+        SetupBuffer(FeatureUri, "Given a step\n");
+        SetupApplyEditRequest();
+        _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+
+        await CreateSut().Handle(
+            MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
+            CancellationToken.None);
+
+        _toggleService.Received(1).ToggleComment("Given a step\n", 0, 0, CommentToggleMode.Toggle);
+    }
+
+    [Fact]
+    public async Task Unknown_mode_argument_does_nothing_Async()
+    {
+        SetupBuffer(FeatureUri, "Given a step\n");
+        SetupApplyEditRequest();
+
+        await CreateSut().Handle(
+            MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0, "block"),
+            CancellationToken.None);
+
+        _toggleService.DidNotReceiveWithAnyArgs().ToggleComment(default!, default, default, default);
+        _languageServer.DidNotReceive().SendRequest(
+            Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>());
+    }
+
+    [Fact]
+    public async Task No_applyEdit_is_sent_when_there_is_nothing_to_change_Async()
+    {
+        SetupBuffer(FeatureUri, "Given a step\n");
+        SetupApplyEditRequest();
+        _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+
+        await CreateSut().Handle(
+            MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0, "uncomment"),
+            CancellationToken.None);
+
+        _languageServer.DidNotReceive().SendRequest(
+            Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>());
+    }
 }

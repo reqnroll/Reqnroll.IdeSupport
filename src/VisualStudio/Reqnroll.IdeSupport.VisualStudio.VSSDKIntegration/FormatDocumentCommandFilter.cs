@@ -127,7 +127,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                 var startLine  = selection.Start.Position.GetContainingLine().LineNumber;
                 var endLine    = selection.End.Position.GetContainingLine().LineNumber;
 
-                _logger.LogInfo(
+                _logger.LogVerbose(
                     $"FormatDocumentCommandFilter: redirecting command id={commandId} uri='{fileUri}' isSelection={isSelection} lines[{startLine}..{endLine}]");
 
                 _ = Task.Run(async () =>
