@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 /// </remarks>
 internal sealed class GoToStepDefinitionService
 {
-    private const string Method = "textDocument/definition";
+    private const string RequestMethod = "textDocument/definition";
 
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<GoToStepDefinitionService> _logger;
@@ -45,10 +45,10 @@ internal sealed class GoToStepDefinitionService
         var paramsJson = LspParamsBuilder.TextDocumentPosition(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "GoToStepDefinitionService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", Method, fileUri, line0, char0);
+            "GoToStepDefinitionService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", RequestMethod, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(Method, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(
