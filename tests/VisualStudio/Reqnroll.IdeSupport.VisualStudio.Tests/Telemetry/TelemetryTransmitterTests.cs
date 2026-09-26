@@ -159,13 +159,14 @@ public class TelemetryTransmitterTests
     public void Should_MirrorExceptionTelemetryToDebugLog()
     {
         var sut = CreateSut();
+        GivenTelemetryEnabled();
 
         sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
 
         var rec = _debugLog.Records.Should().ContainSingle().Which;
         rec.Source.Should().Be("host");
         rec.Event.Should().Contain("InvalidOperationException");
-        rec.Enabled.Should().BeNull();      // exception path is not gated by the opt-out checker
+        rec.Enabled.Should().BeTrue();
         rec.Transmitted.Should().BeTrue();
         rec.Error.Should().BeNull();
 
@@ -179,6 +180,7 @@ public class TelemetryTransmitterTests
     public void Should_MirrorException_WithError_WhenTransmissionFails()
     {
         var sut = CreateSut();
+        GivenTelemetryEnabled();
         _telemetryChannel.ThrowOnSend = true;
 
         sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
@@ -186,6 +188,31 @@ public class TelemetryTransmitterTests
         var rec = _debugLog.Records.Should().ContainSingle().Which;
         rec.Transmitted.Should().BeFalse();
         rec.Error.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Should_NotTrackException_WhenDisabled()
+    {
+        var sut = CreateSut();
+        GivenTelemetryDisabled();
+
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
+
+        _telemetryChannel.SentTelemtries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Should_MirrorExceptionToDebugLog_AsGated_WhenDisabled()
+    {
+        var sut = CreateSut();
+        GivenTelemetryDisabled();
+
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
+
+        var rec = _debugLog.Records.Should().ContainSingle().Which;
+        rec.Enabled.Should().BeFalse();
+        rec.Transmitted.Should().BeFalse();
+        rec.Error.Should().BeNull();
     }
 
     private sealed class CapturingDebugLog : ITelemetryDebugLog
