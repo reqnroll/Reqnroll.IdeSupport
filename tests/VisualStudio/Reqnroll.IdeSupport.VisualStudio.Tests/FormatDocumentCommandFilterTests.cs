@@ -57,4 +57,38 @@ public class FormatDocumentCommandFilterTests
 
         uri.Should().Be(string.Empty);
     }
+
+    // ── IsSnapshotStale (issue #766) ──────────────────────────────────────
+    //
+    // Format Document applies its edits onto whatever the buffer's current snapshot happens to
+    // be when the LSP round trip completes. If the user typed (or pressed Format again) while the
+    // request was in flight, that snapshot has moved on from the one the edits were computed
+    // against, and applying them would land on the wrong lines. IsSnapshotStale is the pure check
+    // Exec uses to detect that and drop the edits instead.
+
+    private static ITextSnapshot CreateSnapshot(int versionNumber)
+    {
+        var version = Substitute.For<ITextVersion>();
+        version.VersionNumber.Returns(versionNumber);
+        var snapshot = Substitute.For<ITextSnapshot>();
+        snapshot.Version.Returns(version);
+        return snapshot;
+    }
+
+    [Fact]
+    public void Is_not_stale_when_the_current_snapshot_matches_the_request_snapshot()
+    {
+        var requestSnapshot = CreateSnapshot(1);
+
+        FormatDocumentCommandFilter.IsSnapshotStale(requestSnapshot, requestSnapshot).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Is_stale_when_the_buffer_changed_during_the_round_trip()
+    {
+        var requestSnapshot = CreateSnapshot(1);
+        var currentSnapshot = CreateSnapshot(2);
+
+        FormatDocumentCommandFilter.IsSnapshotStale(requestSnapshot, currentSnapshot).Should().BeTrue();
+    }
 }
