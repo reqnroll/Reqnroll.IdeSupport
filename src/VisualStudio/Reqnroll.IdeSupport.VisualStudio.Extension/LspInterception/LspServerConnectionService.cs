@@ -437,6 +437,12 @@ internal sealed class LspServerConnectionService : IDisposable
             // editor classifier can colour .feature files with Reqnroll's custom classifications,
             // bypassing VS's fixed built-in token-type→classification table. One instance is shared
             // by both pipelines so it sees requests (VS→Server) and their responses (Server→VS).
+            // Drops didOpen/didChange/didClose for shadow documents under %TEMP% or a
+            // copilot-named path (issue #562) before any other interceptor — or the server
+            // itself — ever sees them.
+            var shadowDocumentFilterInterceptor = new ShadowDocumentFilterInterceptor(
+                _loggerFactory.CreateLogger<ShadowDocumentFilterInterceptor>());
+
             var semanticTokensInterceptor = new SemanticTokensClassificationInterceptor(
                 SemanticTokenClassificationStore.Instance, _loggerFactory.CreateLogger<SemanticTokensClassificationInterceptor>());
 
@@ -468,7 +474,7 @@ internal sealed class LspServerConnectionService : IDisposable
             _shutdownHandshakeInterceptor = new ShutdownHandshakeInterceptor(
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
-            // Send pipeline:   VS → [logger, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
+            // Send pipeline:   VS → [logger, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
             // Receive pipeline: Server → [logger, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
             // push. It used to sit on the send pipeline as well, watching .cs didChange to invalidate
@@ -477,7 +483,7 @@ internal sealed class LspServerConnectionService : IDisposable
             // shutdownHandshake is on both pipelines: send captures the outgoing shutdown request id;
             // receive watches for the matching response.
             var sendInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
+                { _inspectorLogger, shadowDocumentFilterInterceptor, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.

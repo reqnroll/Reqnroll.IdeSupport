@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
+using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 
@@ -90,6 +91,11 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
 
     private IOleCommandTarget? _nextCommandTarget;
 
+    // One in-flight comment toggle per view: a newer press supersedes (cancels) the previous one.
+    // Created on first use in Exec — VsShellUtilities.ShutdownToken needs a running VS shell, and
+    // the unit tests construct this filter without one.
+    private SupersedingCancellation? _inFlight;
+
     // internal rather than private so Reqnroll.IdeSupport.VisualStudio.Tests (an InternalsVisibleTo
     // friend assembly — see the VSSDKIntegration csproj) can construct this filter directly to unit
     // test GetTextBufferFileUri below, which needs no real VS host.
@@ -136,18 +142,39 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                 _logger.LogVerbose(
                     $"CommentToggleCommandFilter: redirecting command id={commandId} mode={mode} uri='{fileUri}' lines[{startLine}..{endLine}]");
 
-                _ = Task.Run(async () =>
+                // Same shape as GoToDefinitionCommandFilter (issue #766): a tracked, cancellable
+                // JoinableTask instead of a bare Task.Run, so a newer press supersedes this one,
+                // VS shutdown cancels it, and FileAndForget reports a failure as a VS fault
+                // instead of only logging it.
+                var inFlight  = _inFlight ??= new SupersedingCancellation(VsShellUtilities.ShutdownToken);
+                var operation = inFlight.Begin();
+                var ct        = operation.Token;
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+#pragma warning restore VSSDK007
                 {
                     try
                     {
-                        await redirect(fileUri, startLine, endLine, mode, CancellationToken.None)
-                            .ConfigureAwait(false);
+                        await TaskScheduler.Default;
+                        await redirect(fileUri, startLine, endLine, mode, ct).ConfigureAwait(false);
                     }
-                    catch (Exception ex)
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        _logger.LogVerbose(
+                            "CommentToggleCommandFilter: comment toggle superseded by a newer request or VS shutdown.");
+                    }
+                    finally
+                    {
+                        inFlight.End(operation);
+                    }
+                }).FileAndForget(
+                    "vs/Reqnroll/CommentToggleCommandFilter/Exec",
+                    "Comment/Uncomment toggle failed in a .feature file",
+                    ex =>
                     {
                         _logger.LogException(ex, "CommentToggleCommandFilter: redirect failed");
-                    }
-                });
+                        return true;
+                    });
             }
             else
             {

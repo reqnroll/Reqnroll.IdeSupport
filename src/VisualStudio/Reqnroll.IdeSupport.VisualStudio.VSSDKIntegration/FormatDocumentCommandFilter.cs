@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
+using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 
@@ -88,6 +89,11 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
 
     private IOleCommandTarget? _nextCommandTarget;
 
+    // One in-flight format request per view: a newer press supersedes (cancels) the previous one.
+    // Created on first use in Exec — VsShellUtilities.ShutdownToken needs a running VS shell, and
+    // the unit tests construct this filter without one.
+    private SupersedingCancellation? _inFlight;
+
     internal FormatDocumentCommandFilter(IVsTextView vsTextView, IVsEditorAdaptersFactoryService editorAdapter, IIdeSupportLogger logger)
     {
         _vsTextView    = vsTextView;
@@ -127,27 +133,60 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                 var startLine  = selection.Start.Position.GetContainingLine().LineNumber;
                 var endLine    = selection.End.Position.GetContainingLine().LineNumber;
 
+                // Captured now so the applied edits can be dropped if the buffer moves on (the
+                // user types, or presses Format again) before the round trip completes.
+                var requestSnapshot = wpfTextView.TextBuffer.CurrentSnapshot;
+
                 _logger.LogVerbose(
                     $"FormatDocumentCommandFilter: redirecting command id={commandId} uri='{fileUri}' isSelection={isSelection} lines[{startLine}..{endLine}]");
 
-                _ = Task.Run(async () =>
+                // Same shape as GoToDefinitionCommandFilter (issue #766): a tracked, cancellable
+                // JoinableTask instead of a bare Task.Run, so a newer press supersedes this one,
+                // VS shutdown cancels it, and FileAndForget reports a failure as a VS fault
+                // instead of only logging it.
+                var inFlight  = _inFlight ??= new SupersedingCancellation(VsShellUtilities.ShutdownToken);
+                var operation = inFlight.Begin();
+                var ct        = operation.Token;
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+#pragma warning restore VSSDK007
                 {
                     try
                     {
-                        var edits = await redirect(fileUri, isSelection, startLine, endLine, CancellationToken.None)
+                        var edits = await redirect(fileUri, isSelection, startLine, endLine, ct)
                             .ConfigureAwait(false);
 
                         if (edits is null || edits.Count == 0)
                             return;
 
-                        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(ct);
+
+                        if (IsSnapshotStale(requestSnapshot, wpfTextView.TextBuffer.CurrentSnapshot))
+                        {
+                            _logger.LogVerbose(
+                                "FormatDocumentCommandFilter: buffer changed while formatting was in flight, discarding stale edits.");
+                            return;
+                        }
+
                         ApplyEdits(wpfTextView.TextBuffer, edits);
                     }
-                    catch (Exception ex)
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        _logger.LogVerbose(
+                            "FormatDocumentCommandFilter: format superseded by a newer request or VS shutdown.");
+                    }
+                    finally
+                    {
+                        inFlight.End(operation);
+                    }
+                }).FileAndForget(
+                    "vs/Reqnroll/FormatDocumentCommandFilter/Exec",
+                    "Format Document/Format Selection failed in a .feature file",
+                    ex =>
                     {
                         _logger.LogException(ex, "FormatDocumentCommandFilter: format failed");
-                    }
-                });
+                        return true;
+                    });
             }
             else
             {
@@ -188,8 +227,11 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
     // ── Helpers ───────────────────────────────────────────────────────────
 
     // internal rather than private so Reqnroll.IdeSupport.VisualStudio.Tests (an InternalsVisibleTo
-    // friend assembly) can construct this filter directly to unit test ApplyEdits/GetTextBufferFileUri,
-    // which need no real VS host.
+    // friend assembly) can construct this filter directly to unit test ApplyEdits/IsSnapshotStale/
+    // GetTextBufferFileUri, which need no real VS host.
+    internal static bool IsSnapshotStale(ITextSnapshot requestSnapshot, ITextSnapshot currentSnapshot) =>
+        currentSnapshot.Version.VersionNumber != requestSnapshot.Version.VersionNumber;
+
     internal static void ApplyEdits(ITextBuffer textBuffer, IReadOnlyList<GherkinLineRangeEdit> edits)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
