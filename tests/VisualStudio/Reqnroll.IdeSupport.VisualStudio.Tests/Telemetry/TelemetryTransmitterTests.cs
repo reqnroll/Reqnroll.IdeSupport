@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
@@ -24,7 +25,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryDisabled();
 
-        sut.TransmitEvent(Substitute.For<ITelemetryEvent>());
+        sut.TransmitEvent(FakeTelemetryEvent());
 
         _enableTelemetryCheckerStub.Received(1).IsEnabled();
         _telemetryChannel.SentTelemtries.Should().BeEmpty();
@@ -36,7 +37,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryEnabled();
 
-        sut.TransmitEvent(Substitute.For<ITelemetryEvent>());
+        sut.TransmitEvent(FakeTelemetryEvent());
 
         _enableTelemetryCheckerStub.Received(1).IsEnabled();
         _telemetryChannel.SentTelemtries.Should().HaveCount(1);
@@ -77,9 +78,20 @@ public class TelemetryTransmitterTests
 
         _telemetryChannel.ThrowOnSend = true;
 
-        var exception = Record.Exception(() => sut.TransmitEvent(Substitute.For<ITelemetryEvent>()));
+        var exception = Record.Exception(() => sut.TransmitEvent(FakeTelemetryEvent()));
 
         Assert.Null(exception);
+    }
+
+    // NSubstitute doesn't auto-populate ImmutableDictionary-typed members with an empty
+    // instance the way it does for common collection interfaces, so a bare
+    // Substitute.For<ITelemetryEvent>() has a null Properties and blows up in the
+    // foreach inside TransmitEvent.
+    private static ITelemetryEvent FakeTelemetryEvent()
+    {
+        var telemetryEvent = Substitute.For<ITelemetryEvent>();
+        telemetryEvent.Properties.Returns(ImmutableDictionary<string, object>.Empty);
+        return telemetryEvent;
     }
 
     private void GivenTelemetryEnabled()
@@ -159,13 +171,14 @@ public class TelemetryTransmitterTests
     public void Should_MirrorExceptionTelemetryToDebugLog()
     {
         var sut = CreateSut();
+        GivenTelemetryEnabled();
 
         sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
 
         var rec = _debugLog.Records.Should().ContainSingle().Which;
         rec.Source.Should().Be("host");
         rec.Event.Should().Contain("InvalidOperationException");
-        rec.Enabled.Should().BeNull();      // exception path is not gated by the opt-out checker
+        rec.Enabled.Should().BeTrue();
         rec.Transmitted.Should().BeTrue();
         rec.Error.Should().BeNull();
 
@@ -179,6 +192,7 @@ public class TelemetryTransmitterTests
     public void Should_MirrorException_WithError_WhenTransmissionFails()
     {
         var sut = CreateSut();
+        GivenTelemetryEnabled();
         _telemetryChannel.ThrowOnSend = true;
 
         sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
@@ -186,6 +200,31 @@ public class TelemetryTransmitterTests
         var rec = _debugLog.Records.Should().ContainSingle().Which;
         rec.Transmitted.Should().BeFalse();
         rec.Error.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Should_NotTrackException_WhenDisabled()
+    {
+        var sut = CreateSut();
+        GivenTelemetryDisabled();
+
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
+
+        _telemetryChannel.SentTelemtries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Should_MirrorExceptionToDebugLog_AsGated_WhenDisabled()
+    {
+        var sut = CreateSut();
+        GivenTelemetryDisabled();
+
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
+
+        var rec = _debugLog.Records.Should().ContainSingle().Which;
+        rec.Enabled.Should().BeFalse();
+        rec.Transmitted.Should().BeFalse();
+        rec.Error.Should().BeNull();
     }
 
     private sealed class CapturingDebugLog : ITelemetryDebugLog

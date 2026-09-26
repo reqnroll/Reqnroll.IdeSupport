@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO.Pipelines;
 using System.Threading;
 using System.Threading.Tasks;
@@ -53,6 +54,19 @@ internal sealed class LspInterceptingPipe : IDisposable
     private readonly InterceptorPipeline          _sendInterceptors;
     private readonly InterceptorPipeline          _receiveInterceptors;
     private readonly ILogger<LspInterceptingPipe> _logger;
+    private readonly TimeSpan                     _ownedRequestTimeout;
+
+    /// <summary>
+    /// How long an injected request may wait for its response before it is abandoned and logged at
+    /// Warning (issue #764).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately generous: it exists to stop a hung server handler leaving a request pending
+    /// forever, not to police latency. It has to cover the slowest legitimate owned request — e.g.
+    /// one queued behind a cold-start solution load (~15s measured) or Find Unused Step Definitions
+    /// over a large solution.
+    /// </remarks>
+    public static readonly TimeSpan DefaultOwnedRequestTimeout = TimeSpan.FromSeconds(60);
 
     // ── Extracted collaborators (issue #587, step 2) ─────────────────────────
     // The write side of the server connection (its stdin writer, the lock serialising every write to
@@ -97,14 +111,20 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// Interceptors applied to messages travelling Server → VS.
     /// </param>
     /// <param name="logger">Logging sink for pump-level diagnostics.</param>
+    /// <param name="ownedRequestTimeout">
+    /// Upper bound on an injected request's round trip; defaults to
+    /// <see cref="DefaultOwnedRequestTimeout"/>. Exposed so tests need not wait that long.
+    /// </param>
     public LspInterceptingPipe(
         IDuplexPipe serverPipe,
         IReadOnlyList<ILspMessageInterceptor> sendInterceptors,
         IReadOnlyList<ILspMessageInterceptor> receiveInterceptors,
-        ILogger<LspInterceptingPipe> logger)
+        ILogger<LspInterceptingPipe> logger,
+        TimeSpan? ownedRequestTimeout = null)
     {
         _serverPipe          = serverPipe          ?? throw new ArgumentNullException(nameof(serverPipe));
         _logger              = logger              ?? throw new ArgumentNullException(nameof(logger));
+        _ownedRequestTimeout = ownedRequestTimeout ?? DefaultOwnedRequestTimeout;
         _sendInterceptors    = new InterceptorPipeline(
             sendInterceptors    ?? throw new ArgumentNullException(nameof(sendInterceptors)), logger);
         _receiveInterceptors = new InterceptorPipeline(
@@ -239,7 +259,9 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// <returns>
     /// The <c>result</c> field of the server's response as a <see cref="JToken"/> (may be a
     /// <see cref="JArray"/>, <see cref="JObject"/>, or primitive), or <c>null</c> if the server
-    /// returned a JSON-RPC error, the result was JSON null, or the operation was cancelled.
+    /// returned a JSON-RPC error (logged at Warning), the result was JSON null, the operation was
+    /// cancelled, or no response arrived within <see cref="DefaultOwnedRequestTimeout"/> (also
+    /// logged at Warning).
     /// </returns>
     public async Task<JToken?> SendRequestToServerAsync(
         string method,
@@ -259,7 +281,7 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// status-bar message) — every other caller's "null on error" contract is unchanged.
     /// </summary>
     /// <returns>
-    /// <c>Result</c>: the response's <c>result</c> field, or <c>null</c> on error/no-server/cancellation.
+    /// <c>Result</c>: the response's <c>result</c> field, or <c>null</c> on error/no-server/cancellation/timeout.
     /// <c>Error</c>: the response's <c>error</c> object, or <c>null</c> when the request succeeded
     /// (or no response was ever obtained at all).
     /// </returns>
@@ -270,7 +292,15 @@ internal sealed class LspInterceptingPipe : IDisposable
     {
         if (_disposed) return (null, null);
 
-        using var pending = _correlator.Begin(cancellationToken);
+        // Issue #764: bound every owned request, whatever token the caller passed — several pass
+        // CancellationToken.None (the VSSDK command-filter redirects, the shared CodeLens fetch), so
+        // a hung server handler would otherwise leave the request pending forever with no log line.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(_ownedRequestTimeout);
+        var requestToken = timeoutCts.Token;
+
+        using var pending = _correlator.Begin(requestToken);
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             var body = LspJsonRpc.BuildRequest(pending.Id, method, paramsJson);
@@ -278,7 +308,7 @@ internal sealed class LspInterceptingPipe : IDisposable
             // Issue #555: a request is the worse of the two injection cases — it would await a
             // response that can never arrive, so the caller blocks until its own token trips rather
             // than finding out immediately that there is no server.
-            if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, cancellationToken)
+            if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, requestToken)
                                      .ConfigureAwait(false))
                 return (null, null);
 
@@ -290,16 +320,41 @@ internal sealed class LspInterceptingPipe : IDisposable
             // parsing the body we just built cannot fail, so no try/catch is needed around it the
             // way the receive-side equivalent needs one around externally-sourced bytes.
             var injectedMessage = new LspMessage(LspMessageDirection.Send, JObject.Parse(body), DateTimeOffset.Now);
-            await _sendInterceptors.RunAsync(injectedMessage, cancellationToken).ConfigureAwait(false);
+            await _sendInterceptors.RunAsync(injectedMessage, requestToken).ConfigureAwait(false);
 
             var result = await pending.Response.ConfigureAwait(false);
             var error  = await pending.Error.ConfigureAwait(false);
+
+            _logger.LogDebug(
+                "LspInterceptingPipe: request {Method} id={Id} completed in {ElapsedMs} ms{Outcome}",
+                method, pending.Id, stopwatch.ElapsedMilliseconds, error is null ? string.Empty : " with a JSON-RPC error");
+
+            // Issue #764: the plain overload collapses an error to null, so without this a handler
+            // that threw reads to 13 of the 15 callers as "no result" and is only discoverable in
+            // the inspector log. Logged once, here, rather than in every caller.
+            if (error is not null)
+            {
+                _logger.LogWarning(
+                    "LspInterceptingPipe: request {Method} id={Id} failed on the server: code={Code} message={Message}",
+                    method, pending.Id, error["code"]?.ToString(), error["message"]?.ToString());
+            }
+
             return (result, error);
+        }
+        catch (OperationCanceledException) when (
+            timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "LspInterceptingPipe: request {Method} id={Id} timed out after {ElapsedMs} ms with no response " +
+                "from the server (limit {TimeoutMs} ms)",
+                method, pending.Id, stopwatch.ElapsedMilliseconds, (long)_ownedRequestTimeout.TotalMilliseconds);
+            return (null, null);
         }
         catch (OperationCanceledException)
         {
             _logger.LogDebug(
-                "LspInterceptingPipe: request {Method} id={Id} cancelled", method, pending.Id);
+                "LspInterceptingPipe: request {Method} id={Id} cancelled after {ElapsedMs} ms",
+                method, pending.Id, stopwatch.ElapsedMilliseconds);
             return (null, null);
         }
     }

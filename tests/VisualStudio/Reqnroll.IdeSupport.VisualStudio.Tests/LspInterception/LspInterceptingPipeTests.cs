@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -47,6 +48,32 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         {
             Calls++;
             throw new InvalidOperationException("interceptor blew up");
+        }
+    }
+
+    /// <summary>Captures every formatted log entry, for asserting the issue #764 diagnostics.</summary>
+    private sealed class RecordingLogger : ILogger<LspInterceptingPipe>
+    {
+        private readonly object _gate = new();
+        private readonly List<(LogLevel Level, string Message)> _entries = new();
+
+        public IReadOnlyList<(LogLevel Level, string Message)> Entries
+        {
+            get { lock (_gate) return _entries.ToArray(); }
+        }
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (_gate) _entries.Add((logLevel, formatter(state, exception)));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
         }
     }
 
@@ -207,6 +234,125 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         error!["code"]!.Value<int>().Should().Be(-32803);
         error["message"]!.Value<string>().Should().Be("Parameter count mismatch");
         error["data"]!.Value<string>().Should().Be("rename");
+    }
+
+    // ── Owned-request diagnostics and timeout (issue #764) ────────────────────────────────────
+
+    [Fact]
+    public async Task A_server_error_on_an_owned_request_is_logged_at_warning_while_the_plain_overload_still_returns_null()
+    {
+        // 13 of the 15 injecting services use the plain overload, which collapses an error to null —
+        // so e.g. Go to Step Definition reported "No step definition found" when the handler threw,
+        // and nothing reached the application log. The contract stays; the failure is now logged.
+        var logger = new RecordingLogger();
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(), logger);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var requestTask = _pipe.SendRequestToServerAsync("reqnroll/findStepDefinitions", "{}", CancellationToken.None);
+        var id = ExtractId(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+
+        await WriteFrameAsync(serverSide.ServerSideStdout,
+            $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"error\":{{\"code\":-32603,\"message\":\"handler blew up\"}}}}");
+
+        (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().BeNull();
+
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning)
+            .Which.Message.Should().Contain("reqnroll/findStepDefinitions")
+            .And.Contain(id)
+            .And.Contain("-32603")
+            .And.Contain("handler blew up");
+    }
+
+    [Fact]
+    public async Task A_successful_owned_request_logs_its_round_trip_at_debug_and_nothing_at_warning()
+    {
+        var logger = new RecordingLogger();
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(), logger);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var requestTask = _pipe.SendRequestToServerAsync("reqnroll/findStepUsages", "{}", CancellationToken.None);
+        var id = ExtractId(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":[]}}");
+
+        (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().NotBeNull();
+
+        logger.Entries.Should().Contain(e =>
+            e.Level == LogLevel.Debug && e.Message.Contains("reqnroll/findStepUsages") &&
+            e.Message.Contains(id) && e.Message.Contains(" ms"));
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task An_unanswered_owned_request_times_out_even_with_an_uncancellable_token_and_is_logged_at_warning()
+    {
+        // The VSSDK command-filter redirects pass CancellationToken.None, so before this fix a hung
+        // server handler left the request pending forever, with no log line.
+        var logger = new RecordingLogger();
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(), logger,
+            ownedRequestTimeout: TimeSpan.FromMilliseconds(200));
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var requestTask = _pipe.SendRequestToServerWithErrorAsync("workspace/executeCommand", "{}", CancellationToken.None);
+        var id = ExtractId(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+
+        // No response is ever written.
+        var (result, error) = await WithTimeoutAsync(requestTask, ShortTimeout);
+
+        result.Should().BeNull();
+        error.Should().BeNull();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning)
+            .Which.Message.Should().Contain("workspace/executeCommand").And.Contain(id).And.Contain("timed out");
+    }
+
+    [Fact]
+    public async Task A_late_response_after_a_timeout_is_still_consumed_not_forwarded_to_vs()
+    {
+        // The timeout removes the waiter exactly like caller cancellation does, so the #401
+        // guarantee — an owned id is never forwarded to VS — must hold for it too.
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance, ownedRequestTimeout: TimeSpan.FromMilliseconds(200));
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var session = _pipe.CreateFreshVsFacingPipe();
+
+        var requestTask = _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None);
+        var id = ExtractId(await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout));
+        (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().BeNull();
+
+        await WriteFrameAsync(serverSide.ServerSideStdout, $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":[]}}");
+
+        (await TryReadFrameAsync(session.Input, TimeSpan.FromMilliseconds(500))).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Caller_cancellation_is_not_reported_as_a_timeout()
+    {
+        // Callers cancel routinely (a superseded CodeLens fetch, a reconnect); that is not a server
+        // problem and must stay at Debug, or the Warning would drown the real timeouts.
+        var logger = new RecordingLogger();
+        var serverSide = new FakeServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(), logger);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        using var requestCts = new CancellationTokenSource();
+        var requestTask = _pipe.SendRequestToServerAsync("textDocument/codeLens", null, requestCts.Token);
+        await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout);
+
+        requestCts.Cancel();
+
+        (await WithTimeoutAsync(requestTask, ShortTimeout)).Should().BeNull();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+        logger.Entries.Should().Contain(e => e.Level == LogLevel.Debug && e.Message.Contains("cancelled"));
     }
 
     [Fact]
