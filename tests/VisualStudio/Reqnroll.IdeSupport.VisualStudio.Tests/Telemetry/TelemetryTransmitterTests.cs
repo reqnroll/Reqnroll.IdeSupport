@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
@@ -24,7 +25,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryDisabled();
 
-        sut.TransmitEvent(Substitute.For<ITelemetryEvent>());
+        sut.TransmitEvent(FakeTelemetryEvent());
 
         _enableTelemetryCheckerStub.Received(1).IsEnabled();
         _telemetryChannel.SentTelemtries.Should().BeEmpty();
@@ -36,7 +37,7 @@ public class TelemetryTransmitterTests
         var sut = CreateSut();
         GivenTelemetryEnabled();
 
-        sut.TransmitEvent(Substitute.For<ITelemetryEvent>());
+        sut.TransmitEvent(FakeTelemetryEvent());
 
         _enableTelemetryCheckerStub.Received(1).IsEnabled();
         _telemetryChannel.SentTelemtries.Should().HaveCount(1);
@@ -77,9 +78,20 @@ public class TelemetryTransmitterTests
 
         _telemetryChannel.ThrowOnSend = true;
 
-        var exception = Record.Exception(() => sut.TransmitEvent(Substitute.For<ITelemetryEvent>()));
+        var exception = Record.Exception(() => sut.TransmitEvent(FakeTelemetryEvent()));
 
         Assert.Null(exception);
+    }
+
+    // NSubstitute doesn't auto-populate ImmutableDictionary-typed members with an empty
+    // instance the way it does for common collection interfaces, so a bare
+    // Substitute.For<ITelemetryEvent>() has a null Properties and blows up in the
+    // foreach inside TransmitEvent.
+    private static ITelemetryEvent FakeTelemetryEvent()
+    {
+        var telemetryEvent = Substitute.For<ITelemetryEvent>();
+        telemetryEvent.Properties.Returns(ImmutableDictionary<string, object>.Empty);
+        return telemetryEvent;
     }
 
     private void GivenTelemetryEnabled()
