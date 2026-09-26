@@ -22,9 +22,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 /// C# code lenses, broken feature state). The provider activates the normal way: when VS realizes a
 /// restored feature tab, or the user opens a feature file. Moving this call any earlier (e.g. to
 /// mirror the eager server-startup work in <c>ExtensionEntrypoint.OnInitializedAsync</c>) would
-/// reintroduce that race — and now also risks handing out an already-consumed connection, since
-/// <c>LspServerConnectionService.GetConnectionAsync</c> returns the same cached pipe on a repeat
-/// <c>CreateServerConnectionAsync</c> call.
+/// reintroduce that race.
+/// </para>
+/// <para>
+/// The two-server bounce itself came from <c>LspServerConnectionService.GetConnectionAsync</c>
+/// returning the same pipe to a second <c>CreateServerConnectionAsync</c> call. Since issue #156 it
+/// returns a fresh pipe per call over one server process, so that failure no longer applies.
+/// <see cref="ScratchFileActivationTrigger"/> (issue #533) now recovers a missed activation, but
+/// it does so by opening a separate scratch file, never by touching the user's documents.
 /// </para>
 /// </remarks>
 internal static class VsStubFrameInitializer
