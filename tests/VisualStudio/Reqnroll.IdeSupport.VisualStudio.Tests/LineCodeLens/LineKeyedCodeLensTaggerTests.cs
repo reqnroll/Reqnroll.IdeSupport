@@ -310,6 +310,10 @@ public class LineKeyedCodeLensTaggerTests
         registry.InvalidateFile("file:///a.feature");
 
         fetchCount.Should().Be(2);
+
+        // The registry holds taggers weakly and `sut` is otherwise unread after construction, so in
+        // Release the JIT may treat it as dead and a GC before InvalidateFile would collect it (#713).
+        GC.KeepAlive(sut);
     }
 
     [Fact]
