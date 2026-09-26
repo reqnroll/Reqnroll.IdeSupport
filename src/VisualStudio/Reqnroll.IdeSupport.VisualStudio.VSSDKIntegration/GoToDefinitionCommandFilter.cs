@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
+using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 
@@ -82,6 +83,11 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
     private readonly IVsEditorAdaptersFactoryService _editorAdapter;
     private readonly IIdeSupportLogger _logger;
 
+    // One in-flight Go To Definition per view: a newer press supersedes (cancels) the previous one.
+    // Created on first use in Exec — VsShellUtilities.ShutdownToken needs a running VS shell, and the
+    // unit tests construct this filter without one.
+    private SupersedingCancellation? _inFlight;
+
     // Resolved on first Exec call; null until then.
     private IWpfTextView? _wpfTextView;
 
@@ -133,17 +139,46 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
                 _logger.LogVerbose(
                     $"GoToDefinitionCommandFilter: redirecting Go To Definition uri='{fileUri}' at {line0}:{char0}");
 
-                _ = Task.Run(async () =>
+                // Return to VS at once (Exec runs on the UI thread; blocking it on a server round
+                // trip would freeze the IDE) and finish asynchronously — the same shape as VS's own
+                // GotoDefinitionCommandHandlerBase: a JoinableTask, not a bare Task.Run, so the
+                // presenter's switches back to the UI thread are covered by JTF's deadlock
+                // avoidance, and FileAndForget so a failure is also reported as a VS fault. A newer
+                // press cancels this one, and VS shutdown cancels both.
+                //
+                // VSSDK007 wants fire-and-forget work tracked so IDE exit waits for it. Waiting is
+                // the wrong trade for a navigation request: it is cancelled on shutdown instead
+                // (VsShellUtilities.ShutdownToken, via _inFlight), and this MEF part has no
+                // AsyncPackage JoinableTaskFactory to use — same reasoning as VsOutputPaneLogger.
+                var inFlight  = _inFlight ??= new SupersedingCancellation(VsShellUtilities.ShutdownToken);
+                var operation = inFlight.Begin();
+                var ct        = operation.Token;
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+#pragma warning restore VSSDK007
                 {
                     try
                     {
-                        await redirect(fileUri, line0, char0, lineText, CancellationToken.None).ConfigureAwait(false);
+                        await TaskScheduler.Default;
+                        await redirect(fileUri, line0, char0, lineText, ct).ConfigureAwait(false);
                     }
-                    catch (Exception ex)
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        _logger.LogVerbose(
+                            "GoToDefinitionCommandFilter: Go To Definition superseded by a newer request or VS shutdown.");
+                    }
+                    finally
+                    {
+                        inFlight.End(operation);
+                    }
+                }).FileAndForget(
+                    "vs/Reqnroll/GoToDefinitionCommandFilter/Exec",
+                    "Go To Definition failed in a .feature file",
+                    ex =>
                     {
                         _logger.LogException(ex, "GoToDefinitionCommandFilter: Go To Definition failed");
-                    }
-                });
+                        return true;
+                    });
 
                 return VSConstants.S_OK;
             }

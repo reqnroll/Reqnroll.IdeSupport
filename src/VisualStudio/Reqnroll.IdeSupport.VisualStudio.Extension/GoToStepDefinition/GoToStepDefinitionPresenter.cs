@@ -48,6 +48,11 @@ internal sealed class GoToStepDefinitionPresenter
             .GetDefinitionsAsync(fileUri, line0, char0, cancellationToken)
             .ConfigureAwait(false);
 
+        // A cancelled request comes back as "no result" (the pipe returns null on cancellation);
+        // presenting it would tell the user "No step definition found" for a press that a newer one
+        // superseded. The caller (GoToDefinitionCommandFilter) treats this as a quiet cancellation.
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (items.Count == 0)
         {
             _logger.LogInformation(
