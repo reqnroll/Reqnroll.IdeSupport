@@ -12,7 +12,9 @@ namespace Reqnroll.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// <see cref="ShadowDocumentFilterInterceptor"/> drops didOpen/didChange/didClose for documents
-/// under the system temp directory or a copilot-named path (issue #562).
+/// under a <c>CopilotBaseline</c> folder inside the system temp directory (issue #562). Both
+/// conditions — under temp, and the specific <c>CopilotBaseline</c> folder name — are required,
+/// so a user's own file under temp, or a "copilot"-named path outside temp, is left alone.
 /// </summary>
 public class ShadowDocumentFilterInterceptorTests
 {
@@ -45,14 +47,25 @@ public class ShadowDocumentFilterInterceptorTests
     }
 
     [Fact]
-    public async Task Drops_a_copilot_named_path_outside_the_system_temp_directory()
+    public async Task Passes_through_a_copilot_named_path_outside_the_system_temp_directory()
     {
-        var shadowPath = @"C:\w\.copilot\scratch\~languagesupport.feature";
+        var path = @"C:\w\.copilot\scratch\~languagesupport.feature";
 
         var result = await Create().InterceptAsync(
-            Send(TextDocumentMessage("textDocument/didOpen", ToFileUri(shadowPath))), CancellationToken.None);
+            Send(TextDocumentMessage("textDocument/didOpen", ToFileUri(path))), CancellationToken.None);
 
-        result.Should().Be(LspInterceptorResult.Consume);
+        result.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    [Fact]
+    public async Task Passes_through_the_users_own_file_under_temp_with_no_copilot_baseline_folder()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "MyScratch", "Calculator.feature");
+
+        var result = await Create().InterceptAsync(
+            Send(TextDocumentMessage("textDocument/didOpen", ToFileUri(path))), CancellationToken.None);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
     }
 
     [Fact]
@@ -75,12 +88,19 @@ public class ShadowDocumentFilterInterceptorTests
         result.Should().Be(LspInterceptorResult.PassThrough);
     }
 
-    [Theory]
-    [InlineData(@"C:\Windows\Temp\CopilotBaseline\x\a.feature", true)]
-    [InlineData(@"C:\w\.copilot\a.feature", true)]
-    [InlineData(@"C:\w\Calculator.feature", false)]
-    public void IsShadowDocumentPath_matches_temp_and_copilot_paths(string path, bool expected)
+    [Fact]
+    public void IsShadowDocumentPath_requires_both_temp_and_the_exact_copilotbaseline_segment()
     {
-        ShadowDocumentFilterInterceptor.IsShadowDocumentPath(path).Should().Be(expected);
+        var underTempWithBaseline    = Path.Combine(Path.GetTempPath(), "CopilotBaseline", "x", "a.feature");
+        var underTempWithoutBaseline = Path.Combine(Path.GetTempPath(), "MyScratch", "a.feature");
+        var copilotNamedOutsideTemp  = @"C:\w\.copilot\a.feature";
+        var looseCopilotWordUnderTemp = Path.Combine(Path.GetTempPath(), "my-copilot-notes", "a.feature");
+        var ordinaryWorkspaceFile    = @"C:\w\Calculator.feature";
+
+        ShadowDocumentFilterInterceptor.IsShadowDocumentPath(underTempWithBaseline).Should().BeTrue();
+        ShadowDocumentFilterInterceptor.IsShadowDocumentPath(underTempWithoutBaseline).Should().BeFalse();
+        ShadowDocumentFilterInterceptor.IsShadowDocumentPath(copilotNamedOutsideTemp).Should().BeFalse();
+        ShadowDocumentFilterInterceptor.IsShadowDocumentPath(looseCopilotWordUnderTemp).Should().BeFalse();
+        ShadowDocumentFilterInterceptor.IsShadowDocumentPath(ordinaryWorkspaceFile).Should().BeFalse();
     }
 }

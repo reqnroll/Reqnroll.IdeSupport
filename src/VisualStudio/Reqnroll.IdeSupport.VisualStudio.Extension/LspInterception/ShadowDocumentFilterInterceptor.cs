@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 /// <summary>
 /// Drops <c>textDocument/didOpen</c>, <c>didChange</c> and <c>didClose</c> notifications for
-/// documents that live under the system temp directory or in a path containing "copilot"
+/// documents that live under the system temp directory in a <c>CopilotBaseline</c> folder
 /// (issue #562).
 /// </summary>
 /// <remarks>
@@ -60,20 +60,25 @@ internal sealed class ShadowDocumentFilterInterceptor : ILspMessageInterceptor
     }
 
     /// <summary>
-    /// True when <paramref name="path"/> sits under the system temp directory or has a path
-    /// segment containing "copilot" — a shadow/scratch copy we never want our server to track.
+    /// True when <paramref name="path"/> sits under the system temp directory <em>and</em> has a
+    /// path segment named exactly <c>CopilotBaseline</c> — the specific artifact Copilot's
+    /// comparison-copy mechanism creates. Requiring both conditions (rather than either alone)
+    /// avoids misclassifying a user's own file that merely lives under temp, or one that merely
+    /// has "copilot" somewhere in its path outside of temp.
     /// </summary>
     internal static bool IsShadowDocumentPath(string path)
     {
         var fullPath = Path.GetFullPath(path);
 
-        if (fullPath.StartsWith(TempDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-            fullPath.StartsWith(TempDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            return true;
+        var underTemp =
+            fullPath.StartsWith(TempDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+            fullPath.StartsWith(TempDirectory + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        if (!underTemp)
+            return false;
 
         foreach (var segment in fullPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
         {
-            if (segment.IndexOf("copilot", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (string.Equals(segment, "CopilotBaseline", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
