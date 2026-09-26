@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 
 /// <summary>
-/// Sends <c>reqnroll/goToStepDefinition</c> for a <c>.feature</c> caret position over the owned
+/// Sends <c>reqnroll/findStepDefinitions</c> for a <c>.feature</c> caret position over the owned
 /// <see cref="LspInterceptingPipe"/> and maps the result to step-definition rows (issue #757).
 /// </summary>
 /// <remarks>
@@ -19,13 +19,13 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 /// method and binding expression, so the results list can show why a step is ambiguous — straight
 /// from the server's live view of the bindings, not a line read back from a possibly unsaved file.
 /// </remarks>
-internal sealed class GoToStepDefinitionService
+internal sealed class FindStepDefinitionsService
 {
     private readonly LspInterceptingPipe _pipe;
-    private readonly ILogger<GoToStepDefinitionService> _logger;
+    private readonly ILogger<FindStepDefinitionsService> _logger;
 
     /// <summary>Creates the service over the given LSP transport pipe.</summary>
-    public GoToStepDefinitionService(LspInterceptingPipe pipe, ILogger<GoToStepDefinitionService> logger)
+    public FindStepDefinitionsService(LspInterceptingPipe pipe, ILogger<FindStepDefinitionsService> logger)
     {
         _pipe   = pipe;
         _logger = logger;
@@ -44,23 +44,23 @@ internal sealed class GoToStepDefinitionService
         var paramsJson = LspParamsBuilder.TextDocumentPosition(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "GoToStepDefinitionService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}",
-            ReqnrollMethodNames.GoToStepDefinition, fileUri, line0, char0);
+            "FindStepDefinitionsService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}",
+            ReqnrollMethodNames.FindStepDefinitions, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.GoToStepDefinition, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(ReqnrollMethodNames.FindStepDefinitions, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(
-            "GoToStepDefinitionService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
+            "FindStepDefinitionsService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
 
         var items = MapResult(result);
-        _logger.LogDebug("GoToStepDefinitionService: {ItemCount} step definition(s) returned", items.Count);
+        _logger.LogDebug("FindStepDefinitionsService: {ItemCount} step definition(s) returned", items.Count);
         return items;
     }
 
     /// <summary>
-    /// Pure mapping from a raw <c>reqnroll/goToStepDefinition</c> JSON result to step-definition
+    /// Pure mapping from a raw <c>reqnroll/findStepDefinitions</c> JSON result to step-definition
     /// rows, using the same item parser as Find Unused Step Definitions (the wire shape is shared).
     /// A <c>null</c> or non-object result yields no rows. Rows for the same method are collapsed:
     /// one method carrying two attributes that both match the step is returned once per binding,

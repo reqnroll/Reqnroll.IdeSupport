@@ -38,9 +38,9 @@ public class BenchmarkHarnessSmokeTests
     }
 
     [Fact]
-    public async Task GoToStepDefinition_scenario_measures_a_real_binding_lookup()
+    public async Task FindStepDefinitions_scenario_measures_a_real_binding_lookup()
     {
-        // Issue #757: reqnroll/goToStepDefinition is field-instrumented, so it has synthetic coverage
+        // Issue #757: reqnroll/findStepDefinitions is field-instrumented, so it has synthetic coverage
         // too (the #495 lesson) — and that coverage must hit a bound step, not time an empty result.
         var corpusRoot = CorpusLocator.FindCorpusRoot();
 
@@ -59,7 +59,7 @@ public class BenchmarkHarnessSmokeTests
             .BeTrue("the benchmark's step position must be a bound step once discovery settles");
 
         var scenarios = new InteractiveScenarios(harness, features, warmup: 1, measured: 3);
-        var summary = await scenarios.GoToStepDefinitionAsync();
+        var summary = await scenarios.FindStepDefinitionsAsync();
 
         summary.SampleCount.Should().Be(3);
     }
@@ -70,7 +70,7 @@ public class BenchmarkHarnessSmokeTests
         var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         while (DateTime.UtcNow < deadline)
         {
-            var response = await harness.RequestGoToStepDefinitionAsync(uri, line, character);
+            var response = await harness.RequestFindStepDefinitionsAsync(uri, line, character);
             if (response is { Items.Count: > 0 }) return true;
             await Task.Delay(50);
         }

@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// <summary>
 /// Resolves the step, and the step-definition bindings it matched, at a caret position in a
 /// <c>.feature</c> file. Shared by <see cref="DefinitionHandler"/> (<c>textDocument/definition</c>)
-/// and <see cref="GoToStepDefinitionHandler"/> (<c>reqnroll/goToStepDefinition</c>, issue #757) so the
+/// and <see cref="FindStepDefinitionsHandler"/> (<c>reqnroll/findStepDefinitions</c>, issue #757) so the
 /// two can never disagree about which bindings a step has.
 /// </summary>
 internal sealed class StepAtPositionResolver

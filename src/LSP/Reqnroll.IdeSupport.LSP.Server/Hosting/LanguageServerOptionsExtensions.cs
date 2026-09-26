@@ -181,9 +181,9 @@ public static class LanguageServerOptionsExtensions
 
         // Go to Step Definition with per-binding detail for the VS extension's results list (issue
         // #757) — textDocument/definition only carries Locations. Same bindings as DefinitionHandler.
-        options.OnRequest<TextDocumentPositionParams, GoToStepDefinitionResponse>(
-            LspMethodNames.ReqnrollGoToStepDefinition,
-            (request, ct) => resolver!.Get<GoToStepDefinitionHandler>().HandleAsync(request, ct));
+        options.OnRequest<TextDocumentPositionParams, FindStepDefinitionsResponse>(
+            LspMethodNames.ReqnrollFindStepDefinitions,
+            (request, ct) => resolver!.Get<FindStepDefinitionsHandler>().HandleAsync(request, ct));
 
         options.OnRequest<TextDocumentPositionParams, GoToMatchingScenariosResponse>(
             LspMethodNames.ReqnrollGoToMatchingScenarios,

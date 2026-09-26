@@ -17,7 +17,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/goToStepDefinition</c> request (issue #757): the step-definition
+/// Handles the custom <c>reqnroll/findStepDefinitions</c> request (issue #757): the step-definition
 /// bindings matching the step at a <c>.feature</c> caret position, with the per-binding detail a
 /// results list needs — class, method, binding expression and whether the source is on this machine.
 /// </summary>
@@ -32,7 +32,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// cannot be navigated rather than silently leaving it out (issue #540).
 /// </para>
 /// </remarks>
-public sealed class GoToStepDefinitionHandler
+public sealed class FindStepDefinitionsHandler
 {
     private readonly StepAtPositionResolver     _resolver;
     private readonly IIdeSupportLogger          _logger;
@@ -40,8 +40,8 @@ public sealed class GoToStepDefinitionHandler
     private readonly ILspTelemetryService?      _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
 
-    /// <summary>Initializes a new instance of the <see cref="GoToStepDefinitionHandler"/> class.</summary>
-    public GoToStepDefinitionHandler(
+    /// <summary>Initializes a new instance of the <see cref="FindStepDefinitionsHandler"/> class.</summary>
+    public FindStepDefinitionsHandler(
         IBindingMatchService        matchService,
         IDocumentBufferService      bufferService,
         ILspWorkspaceScopeManager   scopeManager,
@@ -50,24 +50,24 @@ public sealed class GoToStepDefinitionHandler
         ILspTelemetryService?       telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
-        _resolver         = new StepAtPositionResolver(matchService, bufferService, scopeManager, logger, nameof(GoToStepDefinitionHandler));
+        _resolver         = new StepAtPositionResolver(matchService, bufferService, scopeManager, logger, nameof(FindStepDefinitionsHandler));
         _logger           = logger;
         _fileSystem       = fileSystem;
         _telemetryService = telemetryService;
         _recorder         = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
-    /// <summary>Handles a <c>reqnroll/goToStepDefinition</c> request.</summary>
-    public Task<GoToStepDefinitionResponse> HandleAsync(
+    /// <summary>Handles a <c>reqnroll/findStepDefinitions</c> request.</summary>
+    public Task<FindStepDefinitionsResponse> HandleAsync(
         TextDocumentPositionParams request,
         CancellationToken          cancellationToken)
     {
         var uri = request.TextDocument.Uri;
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollGoToStepDefinition, uri);
+        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindStepDefinitions, uri);
 
         var step = _resolver.FindStep(uri, request.Position);
         if (step is null)
-            return Task.FromResult(new GoToStepDefinitionResponse());
+            return Task.FromResult(new FindStepDefinitionsResponse());
 
         var items = _resolver.GetBindingsWithSource(step).Select(ToItem).ToList();
         var resolvedCount = items.Count(i => i.IsResolved);
@@ -75,7 +75,7 @@ public sealed class GoToStepDefinitionHandler
         // Same shape as DefinitionHandler's/GoToHooksHandler's result line, so the server log alone
         // answers "what did Go to Step Definition find" (Rider and VS log no client-side trace of it).
         _logger.LogVerbose(
-            $"GoToStepDefinitionHandler: {items.Count} step definition(s) ({resolvedCount} navigable) for step at " +
+            $"FindStepDefinitionsHandler: {items.Count} step definition(s) ({resolvedCount} navigable) for step at " +
             $"{request.Position.Line}:{request.Position.Character} in {uri}");
 
         // Same event and property as textDocument/definition: this is the same user command, reached
@@ -85,7 +85,7 @@ public sealed class GoToStepDefinitionHandler
             ["LocationCount"] = resolvedCount,
         });
 
-        return Task.FromResult(new GoToStepDefinitionResponse { Items = items });
+        return Task.FromResult(new FindStepDefinitionsResponse { Items = items });
     }
 
     private StepDefinitionItem ToItem(ProjectStepDefinitionBinding binding)

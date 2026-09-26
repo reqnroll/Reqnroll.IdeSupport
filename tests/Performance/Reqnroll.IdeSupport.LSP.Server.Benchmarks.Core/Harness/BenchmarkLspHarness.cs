@@ -351,12 +351,12 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
-    /// <c>reqnroll/goToStepDefinition</c> (issue #757) — the step-definition bindings of the step at a
+    /// <c>reqnroll/findStepDefinitions</c> (issue #757) — the step-definition bindings of the step at a
     /// <c>.feature</c> position, with class/method/expression detail.
     /// </summary>
-    public Task<GoToStepDefinitionResponse?> RequestGoToStepDefinitionAsync(
+    public Task<FindStepDefinitionsResponse?> RequestFindStepDefinitionsAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<GoToStepDefinitionResponse?>(LspMethodNames.ReqnrollGoToStepDefinition,
+        RequestAsync<FindStepDefinitionsResponse?>(LspMethodNames.ReqnrollFindStepDefinitions,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },

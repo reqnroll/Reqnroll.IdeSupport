@@ -35,8 +35,8 @@ internal static class ReqnrollMethodNames
     public const string FindStepUsages = "reqnroll/findStepUsages";
     /// <summary>Method name for the <c>reqnroll/goToHooks</c> request.</summary>
     public const string GoToHooks = "reqnroll/goToHooks";
-    /// <summary>Method name for the <c>reqnroll/goToStepDefinition</c> request (issue #757).</summary>
-    public const string GoToStepDefinition = "reqnroll/goToStepDefinition";
+    /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
+    public const string FindStepDefinitions = "reqnroll/findStepDefinitions";
     /// <summary>Method name for the <c>reqnroll/goToMatchingScenarios</c> request (issue #373).</summary>
     public const string GoToMatchingScenarios = "reqnroll/goToMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>

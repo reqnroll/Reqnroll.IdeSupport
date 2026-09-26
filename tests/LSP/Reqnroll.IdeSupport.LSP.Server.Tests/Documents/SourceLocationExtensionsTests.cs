@@ -81,7 +81,7 @@ public class SourceLocationExtensionsTests : IDisposable
     {
         // A binding built in a devcontainer whose path was remapped onto this machine: the
         // recorded path is the only provenance a client can show, so moving to the identifier
-        // must not drop it (issue #757 — reqnroll/goToStepDefinition reports recordedSourceFile).
+        // must not drop it (issue #757 — reqnroll/findStepDefinitions reports recordedSourceFile).
         Write("[Given]\npublic void GivenAStep() {\n");
         var loc = SourceLocation.Resolved(_tempFile, "/workspaces/host-solution/Steps.cs", 2, 1);
 

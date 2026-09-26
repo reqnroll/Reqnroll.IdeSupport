@@ -11,12 +11,12 @@ import {
   warnSourceNotOnThisMachine,
 } from '../util/stepDefinitionItems';
 
-interface GoToStepDefinitionResponse {
+interface FindStepDefinitionsResponse {
   items: StepDefinitionItem[];
 }
 
 /**
- * Implements Go to Step Definition using the custom `reqnroll/goToStepDefinition` request — the
+ * Implements Go to Step Definition using the custom `reqnroll/findStepDefinitions` request — the
  * same bindings as `textDocument/definition` (both go through the server's
  * `StepAtPositionResolver`), plus the class, method and binding attribute of each (issue #757).
  * Navigates directly if there's exactly one binding, or shows a `QuickPick` of
@@ -29,10 +29,10 @@ export async function doGoToStepDefinition(client: LanguageClient): Promise<void
   if (!editor) return;
 
   const pos = editor.selection.active;
-  let response: GoToStepDefinitionResponse | null;
+  let response: FindStepDefinitionsResponse | null;
   try {
-    response = await client.sendRequest<GoToStepDefinitionResponse | null>(
-      ReqnrollMethods.goToStepDefinition,
+    response = await client.sendRequest<FindStepDefinitionsResponse | null>(
+      ReqnrollMethods.findStepDefinitions,
       {
         textDocument: { uri: editor.document.uri.toString() },
         position: { line: pos.line, character: pos.character },

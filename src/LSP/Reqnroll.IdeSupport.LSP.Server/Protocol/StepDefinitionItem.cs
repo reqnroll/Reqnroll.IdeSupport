@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 /// <summary>
 /// One step-definition binding, as reported by <c>reqnroll/findUnusedStepDefinitions</c> (a binding
-/// with zero matching steps across the workspace) and <c>reqnroll/goToStepDefinition</c> (a binding
+/// with zero matching steps across the workspace) and <c>reqnroll/findStepDefinitions</c> (a binding
 /// matching the step at the caret, issue #757).
 /// </summary>
 public sealed class StepDefinitionItem

@@ -28,7 +28,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 public sealed class DefinitionHandler : IDefinitionHandler
 {
     /// <summary>
-    /// Telemetry event for Go to Step Definition. Also sent by <see cref="GoToStepDefinitionHandler"/>,
+    /// Telemetry event for Go to Step Definition. Also sent by <see cref="FindStepDefinitionsHandler"/>,
     /// which Visual Studio uses for the same command (issue #757).
     /// </summary>
     internal const string TelemetryEventName = "GoToStepDefinition command executed";

@@ -37,7 +37,7 @@ async function withStubbedWindow<T>(
 // so these tests exercise vscode.Uri#fsPath's actual, platform-specific separator convention --
 // this suite runs in the real Extension Host, on Linux CI runners as well as Windows.
 suite('stepNavigation', () => {
-  // ── doGoToStepDefinition (reqnroll/goToStepDefinition, issue #757) ──────────
+  // ── doGoToStepDefinition (reqnroll/findStepDefinitions, issue #757) ──────────
 
   suite('doGoToStepDefinition', () => {
     const stepsFile = path.join(path.parse(process.cwd()).root, 'work', 'Steps.cs');
@@ -56,7 +56,7 @@ suite('stepNavigation', () => {
       await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
     });
 
-    test('sends reqnroll/goToStepDefinition and reports when there is no binding', async () => {
+    test('sends reqnroll/findStepDefinitions and reports when there is no binding', async () => {
       let sentMethod: string | undefined;
       const client = {
         sendRequest: (method: string) => {
@@ -76,7 +76,7 @@ suite('stepNavigation', () => {
         () => doGoToStepDefinition(client),
       );
 
-      assert.strictEqual(sentMethod, 'reqnroll/goToStepDefinition');
+      assert.strictEqual(sentMethod, 'reqnroll/findStepDefinitions');
       assert.match(info ?? '', /No step definition found/);
     });
 

@@ -2,7 +2,7 @@ import { showWarn } from '../logging/appNotify';
 
 /**
  * One step-definition binding as the server reports it in `reqnroll/findUnusedStepDefinitions`
- * and `reqnroll/goToStepDefinition` (the two share this item shape — `StepDefinitionItem.cs`).
+ * and `reqnroll/findStepDefinitions` (the two share this item shape — `StepDefinitionItem.cs`).
  */
 export interface StepDefinitionItem {
   projectName?: string;

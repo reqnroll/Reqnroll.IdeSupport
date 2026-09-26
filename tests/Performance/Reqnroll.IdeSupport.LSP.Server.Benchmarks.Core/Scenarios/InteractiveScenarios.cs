@@ -117,16 +117,16 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
-    /// <c>reqnroll/goToStepDefinition</c> (issue #757) at the same bound step position as
+    /// <c>reqnroll/findStepDefinitions</c> (issue #757) at the same bound step position as
     /// <see cref="DefinitionAsync"/> — same lookup, so the two numbers are directly comparable;
     /// the difference is the per-binding detail (method parsing, identifier lookup) this adds.
     /// </summary>
-    public async Task<LatencySummary> GoToStepDefinitionAsync()
-        => await RunAsync(PerfTargets.GoToStepDefinition.Operation, async i =>
+    public async Task<LatencySummary> FindStepDefinitionsAsync()
+        => await RunAsync(PerfTargets.FindStepDefinitions.Operation, async i =>
         {
             var f = _features[i % _features.Count];
             var (line, character) = f.StepPosition;
-            await _harness.RequestGoToStepDefinitionAsync(f.Uri, line, character).ConfigureAwait(false);
+            await _harness.RequestFindStepDefinitionsAsync(f.Uri, line, character).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
     /// <summary>

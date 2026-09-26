@@ -18,14 +18,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 /// </summary>
 internal sealed class GoToStepDefinitionPresenter
 {
-    private readonly GoToStepDefinitionService _service;
+    private readonly FindStepDefinitionsService _service;
     private readonly StepDefinitionsRenderer _renderer;
     private readonly IIdeSupportLogger _navigationLogger;
     private readonly ILogger<GoToStepDefinitionPresenter> _logger;
 
     /// <summary>Creates the presenter over the definition service and the shared step-definitions renderer.</summary>
     public GoToStepDefinitionPresenter(
-        GoToStepDefinitionService service,
+        FindStepDefinitionsService service,
         StepDefinitionsRenderer renderer,
         IIdeSupportLogger navigationLogger,
         ILogger<GoToStepDefinitionPresenter> logger)

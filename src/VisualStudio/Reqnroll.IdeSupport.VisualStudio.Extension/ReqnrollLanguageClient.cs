@@ -285,7 +285,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 // window titled after the step, not VS's "'{word}' declarations". Wired here, after
                 // the step-definitions renderer it shares with Find Unused Step Definitions exists.
                 _goToStepDefinitionPresenter = new GoToStepDefinitionPresenter(
-                    new GoToStepDefinitionService(interceptingPipe, _loggerFactory.CreateLogger<GoToStepDefinitionService>()),
+                    new FindStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindStepDefinitionsService>()),
                     _findUnusedStepDefinitionsState.Renderer,
                     ExtensionHostLogger.Instance,
                     _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>());

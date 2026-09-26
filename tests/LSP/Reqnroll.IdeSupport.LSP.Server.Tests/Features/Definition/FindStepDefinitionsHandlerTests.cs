@@ -16,11 +16,11 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 
 /// <summary>
-/// <c>reqnroll/goToStepDefinition</c> (issue #757): the bindings of the step at the caret, with the
+/// <c>reqnroll/findStepDefinitions</c> (issue #757): the bindings of the step at the caret, with the
 /// class/method/expression detail Visual Studio's results list shows. Step resolution itself is
 /// shared with <see cref="DefinitionHandler"/> and covered by <see cref="DefinitionHandlerTests"/>.
 /// </summary>
-public class GoToStepDefinitionHandlerTests
+public class FindStepDefinitionsHandlerTests
 {
     private readonly BindingMatchService       _matchService  = new();
     private readonly IDocumentBufferService    _bufferService = Substitute.For<IDocumentBufferService>();
@@ -32,7 +32,7 @@ public class GoToStepDefinitionHandlerTests
 
     private static readonly DocumentUri FeatureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
 
-    public GoToStepDefinitionHandlerTests()
+    public FindStepDefinitionsHandlerTests()
     {
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>()).Returns((LspReqnrollProject?)null);
 
@@ -41,7 +41,7 @@ public class GoToStepDefinitionHandlerTests
         _bufferService.TryGet(FeatureUri, out ignored).Returns(x => { x[1] = buf; return true; });
     }
 
-    private GoToStepDefinitionHandler CreateSut(ILspTelemetryService? telemetry = null) =>
+    private FindStepDefinitionsHandler CreateSut(ILspTelemetryService? telemetry = null) =>
         new(_matchService, _bufferService, _scopeManager, _logger, new FileSystemForIDE(), telemetry);
 
     private static TextDocumentPositionParams RequestAt(int line, int character) => new()
