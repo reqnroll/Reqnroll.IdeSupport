@@ -70,10 +70,8 @@ internal sealed class FeatureReferencesDataSource : ITableDataSource
         entry.TrySetValue(StandardTableKeyNames.DocumentName, filePath);
         entry.TrySetValue(StandardTableKeyNames.Line,         loc.StartLine);  // 0-based
         entry.TrySetValue(StandardTableKeyNames.Column,       loc.StartChar);  // 0-based
-        // Text is the "Code" column.
+        // Text feeds the window's fixed "Code" (linetext) column.
         entry.TrySetValue(StandardTableKeyNames.Text,         codeText);
-        // Suppress the VS-generated Description column (it duplicates Code with colour markup).
-        entry.TrySetValue("description", "");
         // Project column.
         if (loc.ProjectName is { Length: > 0 })
             entry.TrySetValue(StandardTableKeyNames.ProjectName, loc.ProjectName);

@@ -65,13 +65,13 @@ internal sealed class FindUnusedStepDefinitionsService
         return UnusedStepDefinitionsResult.Empty;
     }
 
-    private static IReadOnlyList<UnusedStepLocation> ParseItems(JArray array)
+    internal static IReadOnlyList<StepDefinitionListItem> ParseItems(JArray array)
     {
-        var result = new List<UnusedStepLocation>(array.Count);
+        var result = new List<StepDefinitionListItem>(array.Count);
         foreach (var token in array)
         {
             if (token is not JObject item) continue;
-            result.Add(new UnusedStepLocation
+            result.Add(new StepDefinitionListItem
             {
                 ProjectName       = item["projectName"]?.Value<string>(),
                 ClassName         = item["className"]?.Value<string>(),
@@ -84,6 +84,7 @@ internal sealed class FindUnusedStepDefinitionsService
                 // to true there so the row stays navigable exactly as it was (issue #540).
                 IsResolved        = item["isResolved"]?.Value<bool>() ?? true,
                 RecordedSourceFile = item["recordedSourceFile"]?.Value<string>(),
+                StepDefinitionType = item["stepDefinitionType"]?.Value<string>(),
             });
         }
         return result;

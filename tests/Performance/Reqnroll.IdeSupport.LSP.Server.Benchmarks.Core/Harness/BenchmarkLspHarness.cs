@@ -351,6 +351,19 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
+    /// <c>reqnroll/findStepDefinitions</c> (issue #757) — the step-definition bindings of the step at a
+    /// <c>.feature</c> position, with class/method/expression detail.
+    /// </summary>
+    public Task<FindStepDefinitionsResponse?> RequestFindStepDefinitionsAsync(
+        DocumentUri uri, int line, int character, CancellationToken ct = default) =>
+        RequestAsync<FindStepDefinitionsResponse?>(LspMethodNames.ReqnrollFindStepDefinitions,
+            new TextDocumentPositionParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = uri },
+                Position = new Position(line, character),
+            }, ct);
+
+    /// <summary>
     /// <c>reqnroll/goToMatchingScenarios</c> (issue #373) — the inverse of
     /// <see cref="RequestGoToHooksAsync"/>: given a `.cs` position pinned to a hook-binding
     /// attribute, returns every scenario its scope matches. <paramref name="line"/>/

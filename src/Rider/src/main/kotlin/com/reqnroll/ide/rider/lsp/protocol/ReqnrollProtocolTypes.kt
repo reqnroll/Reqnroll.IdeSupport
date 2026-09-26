@@ -109,6 +109,12 @@ data class UnusedStepDefinitionItem(
     val sourceChar: Int = 0,
     val isResolved: Boolean = true,
     val recordedSourceFile: String? = null,
+    /**
+     * The binding's step keyword — `Given`, `When` or `Then` — shown as the attribute name
+     * (issue #757). Null when unknown or from an older server. A `[StepDefinition]` attribute is
+     * registered as one binding per keyword, so it reports whichever of the three this one is.
+     */
+    val stepDefinitionType: String? = null,
 )
 
 /**

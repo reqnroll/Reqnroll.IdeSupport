@@ -479,6 +479,9 @@ Pressing **Go to Definition** (F12 / Ctrl+Click) on a step in a `.feature` file 
 |-----------|--------|---------|
 | Client → Server | `textDocument/definition` | Request location of step definition |
 | Server → Client | `Location` / `Location[]` response | C# file URI + range |
+| Client → Server | `reqnroll/findStepDefinitions` | Same bindings (shared `StepAtPositionResolver`), plus class/method/binding attribute and unresolved-source rows — VS's Go To Definition command and VS Code's "Go to Step Definition" picker |
+
+**As-built (issue #757)**: with several matching bindings, VS's own LSP client titled its results window after the single word under the caret (`'50' declarations`) and listed bare declaration lines. VS now handles Edit.GoToDefinition itself (`GoToDefinitionCommandFilter` → `GoToStepDefinitionPresenter`) using `reqnroll/findStepDefinitions`, opening Find All References titled `Reqnroll: N step definitions for '<step>'` with rows like `Steps.GivenX - [Given("the first number is {int}")]`. VS Code's command picker uses the same request and row format. F12/Peek in VS Code, Ctrl+Click in VS (#761) and Rider still use `textDocument/definition`.
 
 #### Sequence diagram
 

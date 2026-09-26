@@ -76,6 +76,7 @@ suite('findUnusedStepDefinitions', () => {
               className: 'MySteps',
               methodName: 'GivenSomething',
               bindingExpression: 'I have something',
+              stepDefinitionType: 'Given',
               projectName: 'MyProject',
               sourceLine: 3,
               sourceChar: 0,
@@ -97,7 +98,8 @@ suite('findUnusedStepDefinitions', () => {
 
       assert.strictEqual(quickPickItems?.length, 1);
       assert.match(quickPickItems[0].label, /MySteps\.GivenSomething/);
-      assert.strictEqual(quickPickItems[0].description, 'I have something');
+      // The binding attribute as written on the method (issue #757).
+      assert.strictEqual(quickPickItems[0].description, '[Given("I have something")]');
     });
 
     // ── Unresolvable source paths (issue #540) ──────────────────────────────

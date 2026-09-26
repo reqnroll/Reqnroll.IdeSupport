@@ -49,7 +49,7 @@ public sealed class FindUnusedStepDefinitionsHandler
                 .Select(r => (r.ProjectName, Path.GetDirectoryName(r.Owner.ProjectFile) ?? string.Empty, r.Registry))
                 .ToList());
 
-        var items = unused.Select(u => new UnusedStepDefinitionItem
+        var items = unused.Select(u => new StepDefinitionItem
         {
             ProjectName = u.ProjectName,
             ClassName = u.ClassName,
@@ -60,6 +60,7 @@ public sealed class FindUnusedStepDefinitionsHandler
             SourceChar = u.SourceColumn - 1,   // 1-based → 0-based
             IsResolved = u.IsResolved,
             RecordedSourceFile = u.RecordedSourceFile,
+            StepDefinitionType = StepDefinitionItem.ToWireType(u.StepDefinitionType),
         }).ToList();
 
         _telemetryService?.SendEvent(TelemetryEvents.FindUnusedStepDefinitionsCommandExecuted, new()

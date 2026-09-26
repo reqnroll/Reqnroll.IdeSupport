@@ -12,5 +12,5 @@ internal sealed class FindUnusedStepDefinitionsState
     public FindUnusedStepDefinitionsService? Service { get; set; }
 
     /// <summary>Set once the server has initialised; null before that and after dispose.</summary>
-    public FindUnusedStepDefinitionsRenderer? Renderer { get; set; }
+    public StepDefinitionsRenderer? Renderer { get; set; }
 }

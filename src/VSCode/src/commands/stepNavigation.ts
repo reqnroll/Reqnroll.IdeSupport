@@ -1,99 +1,102 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import {
-  DefinitionRequest,
-  LanguageClient,
-  Location,
-  LocationLink,
-} from 'vscode-languageclient/node';
+import { LanguageClient } from 'vscode-languageclient/node';
+import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
+import {
+  StepDefinitionItem,
+  formatBindingAttribute,
+  formatMethodName,
+  warnSourceNotOnThisMachine,
+} from '../util/stepDefinitionItems';
 
-interface ResolvedLocation {
-  uri: string;
-  line: number;
-  char: number;
+interface FindStepDefinitionsResponse {
+  items: StepDefinitionItem[];
 }
 
 /**
- * Implements Go to Step Definition using the standard `textDocument/definition` request (the
- * same one VS/Rider's generic LSP clients use — see `DefinitionHandler` server-side). Navigates
- * directly if there's exactly one location, or shows a `QuickPick` built from each candidate's
- * own source line (mirroring what VS's built-in multi-definition results window shows: source
- * text + filename + line number) when there's more than one.
+ * Implements Go to Step Definition using the custom `reqnroll/findStepDefinitions` request — the
+ * same bindings as `textDocument/definition` (both go through the server's
+ * `StepAtPositionResolver`), plus the class, method and binding attribute of each (issue #757).
+ * Navigates directly if there's exactly one binding, or shows a `QuickPick` of
+ * `Class.Method` / `[Given("expression")]` / file:line — the same rows Visual Studio and Rider list,
+ * which show why a step is ambiguous. A binding whose source isn't on this machine is listed and
+ * explained rather than left out (issue #540). F12 / Peek Definition still use the standard request.
  */
 export async function doGoToStepDefinition(client: LanguageClient): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
 
   const pos = editor.selection.active;
-  let result: Location | Location[] | LocationLink[] | null;
+  let response: FindStepDefinitionsResponse | null;
   try {
-    result = await client.sendRequest(DefinitionRequest.type, {
-      textDocument: { uri: editor.document.uri.toString() },
-      position: { line: pos.line, character: pos.character },
-    });
+    response = await client.sendRequest<FindStepDefinitionsResponse | null>(
+      ReqnrollMethods.findStepDefinitions,
+      {
+        textDocument: { uri: editor.document.uri.toString() },
+        position: { line: pos.line, character: pos.character },
+      },
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     void showError(`Reqnroll: Go to Step Definition failed — ${msg}`);
     return;
   }
 
-  const locations = normalizeLocations(result);
-  if (locations.length === 0) {
+  const bindings = distinctByPosition(response?.items ?? []);
+  if (bindings.length === 0) {
     void showInfo('Reqnroll: No step definition found at this position.');
     return;
   }
 
-  if (locations.length === 1) {
-    await navigateTo(locations[0]);
+  if (bindings.length === 1) {
+    await navigateTo(bindings[0]);
     return;
   }
 
-  const items = await Promise.all(
-    locations.map(async (loc) => ({
-      label: await getSourceLineText(loc),
-      description: `${uriToRelativePath(loc.uri)}:${loc.line + 1}`,
-      loc,
-    })),
-  );
+  const items = bindings.map((item) => {
+    // An entry whose source isn't on this machine can't be navigated to, so it gets a different
+    // icon and says so in the row rather than looking identical and then doing nothing on click.
+    const sourceFile = (item.isResolved ?? true) ? item.sourceFile : undefined;
+    return {
+      label: `${sourceFile ? '$(symbol-method)' : '$(error)'} ${formatMethodName(item)}`,
+      description: formatBindingAttribute(item),
+      detail: sourceFile
+        ? `${uriToRelativePath(vscode.Uri.file(sourceFile).toString())}:${item.sourceLine + 1}`
+        : 'source not on this machine',
+      item,
+    };
+  });
 
   const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: `${locations.length} step definitions found — select to navigate`,
+    placeHolder: `${bindings.length} step definitions found — select to navigate`,
+    matchOnDescription: true,
   });
   if (!picked) return;
-  await navigateTo(picked.loc);
+  await navigateTo(picked.item);
 }
 
-/** Collapses the three shapes `textDocument/definition` can return into a flat location list. */
-function normalizeLocations(
-  result: Location | Location[] | LocationLink[] | null,
-): ResolvedLocation[] {
-  if (!result) return [];
-  const items = Array.isArray(result) ? result : [result];
-  return items.map((item) =>
-    'targetUri' in item
-      ? {
-          uri: item.targetUri,
-          line: item.targetRange.start.line,
-          char: item.targetRange.start.character,
-        }
-      : { uri: item.uri, line: item.range.start.line, char: item.range.start.character },
-  );
+/**
+ * Collapses bindings at the same source position: one method carrying two attributes that both
+ * match the step is reported once per binding, but is a single place to navigate to.
+ */
+export function distinctByPosition(items: readonly StepDefinitionItem[]): StepDefinitionItem[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.sourceFile ?? item.recordedSourceFile}|${item.sourceLine}|${item.sourceChar}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-async function navigateTo(loc: ResolvedLocation): Promise<void> {
-  await openAndReveal(vscode.Uri.parse(loc.uri), loc.line, loc.char);
-}
-
-/** Reads the trimmed source text of `loc`'s line, e.g. `public void AddNumbers(int a, int b)`. */
-async function getSourceLineText(loc: ResolvedLocation): Promise<string> {
-  try {
-    const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(loc.uri));
-    return doc.lineAt(loc.line).text.trim();
-  } catch {
-    return path.basename(vscode.Uri.parse(loc.uri).fsPath);
+async function navigateTo(item: StepDefinitionItem): Promise<void> {
+  if (!item.sourceFile || !(item.isResolved ?? true)) {
+    warnSourceNotOnThisMachine(item);
+    return;
   }
+  await openAndReveal(vscode.Uri.file(item.sourceFile), item.sourceLine, item.sourceChar);
 }
 
 /**

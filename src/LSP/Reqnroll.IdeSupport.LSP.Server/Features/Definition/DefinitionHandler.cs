@@ -27,9 +27,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// </summary>
 public sealed class DefinitionHandler : IDefinitionHandler
 {
-    private readonly IBindingMatchService      _matchService;
-    private readonly IDocumentBufferService    _bufferService;
-    private readonly ILspWorkspaceScopeManager _scopeManager;
+    /// <summary>
+    /// Telemetry event for Go to Step Definition. Also sent by <see cref="FindStepDefinitionsHandler"/>,
+    /// which Visual Studio uses for the same command (issue #757).
+    /// </summary>
+    internal const string TelemetryEventName = "GoToStepDefinition command executed";
+
+    private readonly StepAtPositionResolver    _resolver;
     private readonly IIdeSupportLogger           _logger;
     private readonly ILspTelemetryService?      _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
@@ -45,9 +49,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
-        _matchService  = matchService;
-        _bufferService = bufferService;
-        _scopeManager  = scopeManager;
+        _resolver      = new StepAtPositionResolver(matchService, bufferService, scopeManager, logger, nameof(DefinitionHandler));
         _logger        = logger;
         _fileSystem    = fileSystem;
         _telemetryService = telemetryService;
@@ -74,58 +76,17 @@ public sealed class DefinitionHandler : IDefinitionHandler
         // Performance Verification (Layer 4): time the cache-hit definition round-trip (the handler's own work).
         using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDefinition, uri);
 
-        if (!IsFeatureFile(uri))
-        {
-            _logger.LogVerbose($"DefinitionHandler: ignoring non-.feature URI {uri}");
-            return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
-        }
-
-        if (!_bufferService.TryGet(uri, out var buffer) || buffer is null)
-        {
-            _logger.LogVerbose($"DefinitionHandler: no document buffer for {uri}");
-            return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
-        }
-
-        var snapshot = buffer.ToGherkinTextSnapshot();
-        var offset   = snapshot.ToOffset(request.Position.Line, request.Position.Character);
-
-        // Resolve the primary owner; fall back to Unknown for pre-baseline startup.
-        var primaryOwner = _scopeManager.ResolvePrimaryOwner(uri);
-        var owner = primaryOwner is not null
-            ? new ProjectOwner(primaryOwner.ProjectFullName, primaryOwner.TargetFrameworkMoniker)
-            : ProjectOwner.Unknown;
-
-        var docId = uri.ToString();
-        if (!_matchService.TryGet(new MatchSetKey(docId, owner), out var matchSet) || matchSet is null)
-        {
-            _logger.LogVerbose($"DefinitionHandler: no match set cached for {uri}");
-            return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
-        }
-
-        var step = matchSet.FindAt(offset);
+        var step = _resolver.FindStep(uri, request.Position);
         if (step is null)
-        {
-            _logger.LogVerbose($"DefinitionHandler: no step at offset {offset} in {uri}");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
-        }
-
-        var candidates = step.Result.Items
-            .Select(item => item.MatchedStepDefinition?.Implementation)
-            .Where(impl => impl?.SourceLocation?.SourceFile is not (null or ""))
-            .ToArray();
 
         // A binding whose source file could not be found on this machine has no navigation target
         // here, and emitting one anyway is the issue #540 incident: the URI is well-formed, the IDE
-        // accepts it, and Go To Definition silently does nothing. Drop it and say why.
-        foreach (var impl in candidates.Where(i => i!.SourceLocation!.IsResolved == false))
-            _logger.LogInfo(
-                $"DefinitionHandler: no local file for '{impl!.Method}' — the compiled assembly records it at " +
-                $"'{impl.SourceLocation!.RecordedSourceFile}', which does not exist on this machine. " +
-                "Rebuild the project locally to restore navigation for this binding.");
-
-        var locations = candidates
-            .Where(impl => impl!.SourceLocation!.IsResolved)
-            .Select(impl => impl!.SourceLocation!.WithIdentifierLocation(impl.Method, _fileSystem))
+        // accepts it, and Go To Definition silently does nothing. Drop it (the resolver logs why).
+        var locations = _resolver.GetBindingsWithSource(step)
+            .Select(sd => sd.Implementation)
+            .Where(impl => impl.SourceLocation!.IsResolved)
+            .Select(impl => impl.SourceLocation!.WithIdentifierLocation(impl.Method, _fileSystem))
             .Select(loc => new LocationOrLocationLink(loc.ToLspLocation()))
             .ToArray();
 
@@ -133,7 +94,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         // of FindStepUsagesHandler's "is a binding" gate) -- LocationCount is 0 for the
         // undefined/ambiguous/unresolved cases below, matching the Erroneous-style signal other
         // handlers use, rather than a separate boolean.
-        _telemetryService?.SendEvent("GoToStepDefinition command executed", new()
+        _telemetryService?.SendEvent(TelemetryEventName, new()
         {
             ["LocationCount"] = locations.Length,
         });
@@ -141,18 +102,13 @@ public sealed class DefinitionHandler : IDefinitionHandler
         if (locations.Length == 0)
         {
             _logger.LogVerbose(
-                $"DefinitionHandler: step at offset {offset} in {uri} has no binding locations (undefined/ambiguous/unresolved)");
+                $"DefinitionHandler: step at {request.Position.Line}:{request.Position.Character} in {uri} has no binding locations (undefined/ambiguous/unresolved)");
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks());
         }
 
         _logger.LogVerbose(
-            $"DefinitionHandler: {locations.Length} location(s) for step at offset {offset} in {uri}");
+            $"DefinitionHandler: {locations.Length} location(s) for step at {request.Position.Line}:{request.Position.Character} in {uri}");
 
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(locations));
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static bool IsFeatureFile(DocumentUri uri) =>
-        uri.Path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase);
 }

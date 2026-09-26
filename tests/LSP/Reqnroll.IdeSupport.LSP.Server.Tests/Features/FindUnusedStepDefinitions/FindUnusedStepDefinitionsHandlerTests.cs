@@ -1,6 +1,7 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -9,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.FindUnusedStepDefinition
 
 /// <summary>
 /// Adapter-level tests for <see cref="FindUnusedStepDefinitionsHandler"/>: resolving registries,
-/// mapping <see cref="UnusedStepDefinition"/> to the wire <see cref="UnusedStepDefinitionItem"/>
+/// mapping <see cref="UnusedStepDefinition"/> to the wire <see cref="StepDefinitionItem"/>
 /// shape (incl. the 1-based → 0-based position conversion), and firing telemetry.
 /// The scan/dedupe/match algorithm itself is covered by
 /// <c>Reqnroll.IdeSupport.LSP.Core.Tests.FindUnusedStepDefinitions.FindUnusedStepDefinitionsServiceTests</c>.
@@ -66,12 +67,14 @@ public class FindUnusedStepDefinitionsHandlerTests
                         BindingExpression: "the sum is {int}",
                         SourceFile: "/ws/MySteps.cs",
                         SourceLine: 10,
-                        SourceColumn: 5),
+                        SourceColumn: 5,
+                        StepDefinitionType: ScenarioBlock.Given),
                 });
 
         var result = await CreateSut().HandleAsync(CancellationToken.None);
 
         var item = result.Items.Single();
+        item.StepDefinitionType.Should().Be("Given");
         item.ProjectName.Should().Be("MyProject");
         item.ClassName.Should().Be("StepDefs");
         item.MethodName.Should().Be("GivenSomething");

@@ -86,12 +86,29 @@ class FindUnusedStepDefinitionsAction : AnAction() {
         /** Pulled out to `internal` (rather than a private member function) purely so it's unit-testable without an AnAction/platform fixture. */
         internal fun renderLabel(item: UnusedStepDefinitionItem): String {
             val name = listOfNotNull(item.className, item.methodName).joinToString(".")
-            val expression = item.bindingExpression?.let { " — $it" } ?: ""
+            val attribute = renderAttribute(item)?.let { " - $it" } ?: ""
             val project = item.projectName?.let { " [$it]" } ?: ""
             // Marks a row that cannot be navigated to, so the popup doesn't present it as
             // identical to the rest and then do nothing when it's chosen (issue #540).
             val unresolved = if (item.isResolved) "" else " (source not on this machine)"
-            return "$name$expression$project$unresolved"
+            return "$name$attribute$project$unresolved"
+        }
+
+        /**
+         * The binding attribute as it would appear on the method (issue #757) — `[Given("the sum is {int}")]`,
+         * or `[Given]` for a method-name-style binding with no expression. With no known keyword the
+         * expression is shown quoted on its own; with neither, null. Matches the Visual Studio and
+         * VS Code step-definition lists.
+         */
+        internal fun renderAttribute(item: UnusedStepDefinitionItem): String? {
+            val keyword = item.stepDefinitionType?.takeIf { it.isNotEmpty() }
+            val expression = item.bindingExpression?.takeIf { it.isNotEmpty() }
+            return when {
+                keyword != null && expression != null -> "[$keyword(\"$expression\")]"
+                keyword != null -> "[$keyword]"
+                expression != null -> "\"$expression\""
+                else -> null
+            }
         }
     }
 }

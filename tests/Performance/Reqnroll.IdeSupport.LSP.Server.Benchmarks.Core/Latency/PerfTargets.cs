@@ -109,6 +109,13 @@ public static class PerfTargets
     public static readonly PerfTarget GoToHooks =
         new("reqnroll/goToHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
 
+    // Issue #757: the same step lookup as textDocument/definition (shared StepAtPositionResolver),
+    // plus per-binding detail — field-instrumented in FindStepDefinitionsHandler, so it gets synthetic
+    // coverage too (the #495 lesson). Load-only: no published threshold of its own.
+    public static readonly PerfTarget FindStepDefinitions =
+        new("reqnroll/findStepDefinitions", 0, PerfTargetKind.InteractiveP95,
+            "Go to step definition with binding detail (VS results window, VS Code picker, #757)");
+
     public static readonly PerfTarget StepCodeLens =
         new("textDocument/codeLens", 0, PerfTargetKind.InteractiveP95, "Step code lens on a .cs binding file (F18)");
 

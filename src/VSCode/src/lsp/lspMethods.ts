@@ -12,6 +12,7 @@ export const ReqnrollMethods = {
   goToMatchingScenarios: 'reqnroll/goToMatchingScenarios',
   findStepUsages: 'reqnroll/findStepUsages',
   findUnusedStepDefinitions: 'reqnroll/findUnusedStepDefinitions',
+  findStepDefinitions: 'reqnroll/findStepDefinitions',
   projectLoaded: 'reqnroll/projectLoaded',
   projectUnloaded: 'reqnroll/projectUnloaded',
   projectFiles: 'reqnroll/projectFiles',
