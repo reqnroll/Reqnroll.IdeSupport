@@ -143,33 +143,38 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     private void TransmitException(Exception exception, IEnumerable<KeyValuePair<string, object>> additionalProps)
     {
         var additionalPropsArray = additionalProps.ToArray();
+        var enabled = _enableTelemetryChecker.IsEnabled();
         var transmitted = false;
         string? transmitError = null;
-        try
-        {
-            DumpTelemetryException(exception, additionalPropsArray);
 
-            var exceptionTelemetry = new ExceptionTelemetry(exception) { Timestamp = DateTime.UtcNow };
-            foreach (var prop in additionalPropsArray)
+        DumpTelemetryException(exception, additionalPropsArray);
+
+        if (enabled)
+        {
+            try
             {
-                exceptionTelemetry.Properties.Add(prop.Key, prop.Value?.ToString() ?? string.Empty);
+                var exceptionTelemetry = new ExceptionTelemetry(exception) { Timestamp = DateTime.UtcNow };
+                foreach (var prop in additionalPropsArray)
+                {
+                    exceptionTelemetry.Properties.Add(prop.Key, prop.Value?.ToString() ?? string.Empty);
+                }
+                _telemetryClient.TrackException(exceptionTelemetry);
+                transmitted = true;
             }
-            _telemetryClient.TrackException(exceptionTelemetry);
-            transmitted = true;
-        }
-        catch (Exception ex)
-        {
-            // catch all exceptions since we do not want to break the whole extension simply because data transmission failed
-            transmitError = ex.Message;
-            Debug.WriteLine(ex, "Error during transmitting analytics event.");
+            catch (Exception ex)
+            {
+                // catch all exceptions since we do not want to break the whole extension simply because data transmission failed
+                transmitError = ex.Message;
+                Debug.WriteLine(ex, "Error during transmitting analytics event.");
+            }
         }
 
-        // Mirror the exception telemetry for debugging. The exception path is not gated by the
-        // opt-out checker (hence enabled: null). `error` is a *transmission* failure, distinct from
+        // Mirror the exception telemetry for debugging, recording whether the opt-out gated it,
+        // consistent with TransmitEvent. `error` is a *transmission* failure, distinct from
         // the reported exception's own message, which is carried in props.
         _debugLog.Record("host", $"(exception) {exception.GetType().Name}",
             BuildExceptionProps(exception, additionalPropsArray),
-            enabled: null, transmitted: transmitted, error: transmitError);
+            enabled: enabled, transmitted: transmitted, error: transmitError);
     }
 
     private static Dictionary<string, object?> BuildExceptionProps(

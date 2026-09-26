@@ -55,6 +55,52 @@ async function withStubbedSendTelemetryEvent(
 
 suite('telemetry', () => {
   suite('registerTelemetry', () => {
+    const originalEnv = process.env.REQNROLL_TELEMETRY_ENABLED;
+
+    teardown(() => {
+      if (originalEnv === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
+      else process.env.REQNROLL_TELEMETRY_ENABLED = originalEnv;
+    });
+
+    test('does not forward events when REQNROLL_TELEMETRY_ENABLED is "0"', async () => {
+      process.env.REQNROLL_TELEMETRY_ENABLED = '0';
+      const { client, fire } = fakeClient();
+      const context = fakeContext();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        fire({ eventName: 'reqnroll/stepDefined' });
+
+        assert.strictEqual(calls.length, 0);
+      });
+    });
+
+    test('forwards events when REQNROLL_TELEMETRY_ENABLED is "1"', async () => {
+      process.env.REQNROLL_TELEMETRY_ENABLED = '1';
+      const { client, fire } = fakeClient();
+      const context = fakeContext();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        fire({ eventName: 'reqnroll/stepDefined' });
+
+        assert.strictEqual(calls.length, 1);
+      });
+    });
+
+    test('forwards events when REQNROLL_TELEMETRY_ENABLED is unset', async () => {
+      delete process.env.REQNROLL_TELEMETRY_ENABLED;
+      const { client, fire } = fakeClient();
+      const context = fakeContext();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        fire({ eventName: 'reqnroll/stepDefined' });
+
+        assert.strictEqual(calls.length, 1);
+      });
+    });
+
     test('forwards a telemetry/event notification to the reporter with stringified properties', async () => {
       const { client, fire } = fakeClient();
       const context = fakeContext();

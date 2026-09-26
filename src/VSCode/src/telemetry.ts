@@ -15,13 +15,27 @@ interface TelemetryEventParams {
 }
 
 /**
+ * REQNROLL_TELEMETRY_ENABLED is the cross-IDE kill switch (unset or "1" = enabled, anything
+ * else = disabled) also honoured by Rider's RiderTelemetryTransmitter and VS's
+ * TelemetryTransmitter. VS Code's own `telemetry.telemetryLevel` opt-out is enforced separately
+ * by TelemetryReporter itself.
+ */
+function isTelemetryEnabledByEnv(): boolean {
+  const value = process.env.REQNROLL_TELEMETRY_ENABLED;
+  return value === undefined || value === '1';
+}
+
+/**
  * Forwards the server's `telemetry/event` notifications (see ILspTelemetryService /
  * LspTelemetryService.cs) to Application Insights, mirroring what VS's
  * TelemetryEventInterceptor.cs does for the Visual Studio client. TelemetryReporter routes
  * through vscode.env's telemetry logger internally, so this automatically honours the user's
- * global telemetry opt-out (`telemetry.telemetryLevel`) — no separate check needed here.
+ * global telemetry opt-out (`telemetry.telemetryLevel`) in addition to the env-var kill switch
+ * checked here.
  */
 export function registerTelemetry(client: LanguageClient, context: vscode.ExtensionContext): void {
+  if (!isTelemetryEnabledByEnv()) return;
+
   const reporter = new TelemetryReporter(CONNECTION_STRING);
   context.subscriptions.push(reporter);
 
