@@ -93,6 +93,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         // same as before this change. See ExtensionEntrypoint.OnInitializedAsync's remarks for the
         // corrected mechanism and the log evidence.
         _connectionService   = connectionService;
+
+        // Tells ReqnrollPluginPackage's scratch-file trigger that VS did activate this provider (issue #533).
+        LanguageServerActivationSignal.Shared.MarkActivated();
+
         _logger.LogInformation(
             "ReqnrollLanguageClient: instance created. VS extension loaded. Assembly: {AssemblyLocation}",
             typeof(ReqnrollLanguageClient).Assembly.Location);
