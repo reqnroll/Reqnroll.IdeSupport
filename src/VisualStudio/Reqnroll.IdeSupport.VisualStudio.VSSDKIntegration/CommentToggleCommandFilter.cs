@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 /// </summary>
 /// <remarks>
 /// This is a MEF component registered via <c>[Export(typeof(IVsTextViewCreationListener))]</c>
-/// with a <c>[ContentType("Gherkin")]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
+/// with a <c>[ContentType(VsWellKnownIds.GherkinContentType)]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
 /// constraint so it only intercepts editable .feature file text views.
 ///
 /// When the user presses <c>Ctrl+K, Ctrl+C</c> (Comment Selection), <c>Ctrl+K, Ctrl+U</c>
@@ -36,7 +36,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     /// <see cref="IVsTextView"/> whose content type is <c>Gherkin</c>.
     /// </summary>
     [Export(typeof(IVsTextViewCreationListener))]
-    [ContentType("Gherkin")]
+    [ContentType(VsWellKnownIds.GherkinContentType)]
     [TextViewRole(PredefinedTextViewRoles.Editable)]
     internal sealed class TextViewCreationListener : IVsTextViewCreationListener
     {
@@ -76,11 +76,10 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     // ── Instance ──────────────────────────────────────────────────────────
 
     // Edit.ToggleLineComment is not in VSStd2K and has no VSConstants entry: it belongs to the
-    // editor's own command set. Found in the CommandBindings of VS's
-    // Microsoft.VisualStudio.Editor.Implementation.dll, which maps
-    // {160961B3-909D-4B28-9353-A1BEF587B4A6}:48 to ToggleLineCommentCommandArgs (issue #747).
-    internal static readonly Guid EditorCommandSet = new("{160961B3-909D-4B28-9353-A1BEF587B4A6}");
-    internal const uint CmdIdToggleLineComment = 48;
+    // editor's own command set (issue #747). See VsWellKnownIds for provenance; the pair is checked
+    // against the running VS at package load by VsWellKnownIdsSelfCheck.
+    internal static readonly Guid EditorCommandSet = VsWellKnownIds.EditorCommandSet;
+    internal const uint CmdIdToggleLineComment = VsWellKnownIds.CmdIdToggleLineComment;
 
     private readonly IVsTextView                     _vsTextView;
     private readonly IVsEditorAdaptersFactoryService _editorAdapter;

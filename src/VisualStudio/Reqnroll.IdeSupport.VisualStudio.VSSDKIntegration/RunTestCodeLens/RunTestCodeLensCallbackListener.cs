@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 /// bridge alone can't reach across the OOP ServiceHub process boundary.
 /// </summary>
 [Export(typeof(ICodeLensCallbackListener))]
-[ContentType("Gherkin")]
+[ContentType(VsWellKnownIds.GherkinContentType)]
 public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
 {
     /// <summary>Resolves exactly one line's Run target(s), instead of the whole file (issue #495).</summary>

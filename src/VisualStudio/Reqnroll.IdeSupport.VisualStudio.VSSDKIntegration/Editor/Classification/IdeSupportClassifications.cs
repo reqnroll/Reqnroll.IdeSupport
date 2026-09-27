@@ -1,6 +1,7 @@
 #nullable disable
 using System.ComponentModel.Composition;
 using System.Windows.Media;
+using Microsoft.VisualStudio.Language.StandardClassification;
 using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Classification;
@@ -47,7 +48,7 @@ internal static class IdeSupportClassifications
     // This disables "The field is never used" compiler's warning. Justification: the field is used by MEF.
 #pragma warning disable 169
 
-    [Export] [Name(Keyword)] [BaseDefinition("keyword")]
+    [Export] [Name(Keyword)] [BaseDefinition(PredefinedClassificationTypeNames.Keyword)]
     private static ClassificationTypeDefinition _keywordClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -64,7 +65,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(Tag)] [BaseDefinition("type")]
+    [Export] [Name(Tag)] [BaseDefinition(PredefinedClassificationTypeNames.Type)]
     private static ClassificationTypeDefinition _tagClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -81,7 +82,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(Description)] [BaseDefinition("excluded code")]
+    [Export] [Name(Description)] [BaseDefinition(PredefinedClassificationTypeNames.ExcludedCode)]
     private static ClassificationTypeDefinition _descriptionClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -99,7 +100,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(DocString)] [BaseDefinition("string")]
+    [Export] [Name(DocString)] [BaseDefinition(PredefinedClassificationTypeNames.String)]
     private static ClassificationTypeDefinition _docStringClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -116,7 +117,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(DataTable)] [BaseDefinition("string")]
+    [Export] [Name(DataTable)] [BaseDefinition(PredefinedClassificationTypeNames.String)]
     private static ClassificationTypeDefinition _dataTableClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -151,7 +152,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(Comment)] [BaseDefinition("comment")]
+    [Export] [Name(Comment)] [BaseDefinition(PredefinedClassificationTypeNames.Comment)]
     private static ClassificationTypeDefinition _commentClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -204,7 +205,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(StepParameter)] [BaseDefinition("string")]
+    [Export] [Name(StepParameter)] [BaseDefinition(PredefinedClassificationTypeNames.String)]
     private static ClassificationTypeDefinition _stepParameterClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]
@@ -221,7 +222,7 @@ internal static class IdeSupportClassifications
     }
 
 
-    [Export] [Name(ScenarioOutlinePlaceholder)] [BaseDefinition("number")]
+    [Export] [Name(ScenarioOutlinePlaceholder)] [BaseDefinition(PredefinedClassificationTypeNames.Number)]
     private static ClassificationTypeDefinition _scenarioOutlinePlaceholderClassificationTypeDefinition;
 
     [Export(typeof(EditorFormatDefinition))]

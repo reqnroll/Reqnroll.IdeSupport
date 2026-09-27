@@ -182,6 +182,15 @@ those scenarios test behavior that now lives server-side and is already covered 
 - **Gate every VS-specific workaround behind `ClientIdeContext.IsVisualStudio`** (or the
   equivalent flag), even in server-side code that happens to be triggered from here — a fix for a
   VS quirk should never silently change behavior for VS Code/Rider.
+- **Never hand-type a Visual Studio identifier** (GUID, command ID, property ID, content-type or
+  classification name). Use the SDK constant (`VSConstants`, `VsMenus`, `__VSPROPID`,
+  `PredefinedClassificationTypeNames`, ...) whenever one exists: a hand-typed value compiles fine
+  and can silently name the wrong thing (issues #747 and #774). When no SDK constant exists, add the value to
+  `VsWellKnownIds` with where it came from, and either a header check in
+  `VsSdkHeaderConstantsTests` (for values defined in a VS SDK header) or an entry in
+  `VsWellKnownIdsSelfCheck` (for undocumented command IDs, checked against the running VS at
+  package load; look for `VsWellKnownIdsSelfCheck` in the `ext` log after a VS update).
+  `MagicValueSourceGuardTests` fails on new GUID or content-type literals outside the allow-list.
 - **VS.Extensibility contribution classes are not documented as injectable into each other.**
   If one `[VisualStudioContribution]` class needs data another one owns, register a small mutable
   "state holder" singleton in `ExtensionEntrypoint.InitializeServices` and inject that into both,

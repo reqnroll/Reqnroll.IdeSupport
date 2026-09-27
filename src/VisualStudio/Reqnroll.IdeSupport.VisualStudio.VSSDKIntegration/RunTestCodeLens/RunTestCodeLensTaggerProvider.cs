@@ -22,7 +22,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 /// near-identical to <c>HookCodeLensTaggerProvider</c>'s).
 /// </summary>
 [Export(typeof(ITaggerProvider))]
-[ContentType("Gherkin")]
+[ContentType(VsWellKnownIds.GherkinContentType)]
 [TagType(typeof(ICodeLensTag))]
 internal sealed class RunTestCodeLensTaggerProvider : ITaggerProvider
 {

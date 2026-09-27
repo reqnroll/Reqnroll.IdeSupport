@@ -39,7 +39,7 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
     /// <see cref="IVsTextView"/> whose content type is <c>Gherkin</c>.
     /// </summary>
     [Export(typeof(IVsTextViewCreationListener))]
-    [ContentType("Gherkin")]
+    [ContentType(VsWellKnownIds.GherkinContentType)]
     [TextViewRole(PredefinedTextViewRoles.Editable)]
     internal sealed class TextViewCreationListener : IVsTextViewCreationListener
     {
