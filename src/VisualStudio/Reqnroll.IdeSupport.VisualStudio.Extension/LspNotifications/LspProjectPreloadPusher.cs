@@ -82,6 +82,15 @@ internal static class LspProjectPreloadPusher
             logger.LogInformation("LspProjectPreloadPusher: pushed initial project state to preload pipe.");
         }
         catch (OperationCanceledException) { /* extension shutting down or pipe never appeared in time */ }
+        catch (IOException ex)
+        {
+            // The server closes the preload pipe once VS's real initialize handshake completes, and
+            // with the language server now activated at restore time (issue #78) that can happen
+            // mid-push. Expected, and harmless: the same baseline goes over the LSP channel.
+            logger.LogDebug(
+                "LspProjectPreloadPusher: preload pipe closed before the push finished ({Message}); the LSP channel delivers the project baseline instead.",
+                ex.Message);
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "LspProjectPreloadPusher: failed to push preload data.");

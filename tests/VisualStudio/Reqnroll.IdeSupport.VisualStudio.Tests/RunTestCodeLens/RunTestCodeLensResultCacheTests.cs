@@ -160,6 +160,100 @@ public class RunTestCodeLensResultCacheTests
     }
 
     [Fact]
+    public async Task A_caller_whose_computation_is_invalidated_mid_flight_gets_the_recomputed_result()
+    {
+        // Regression coverage (issue #78, seen live at startup): reqnroll/refreshCodeLens arrived
+        // while the first Run lens request was still resolving. The invalidation cancelled the shared
+        // computation, the waiting caller failed, and since the lens's element description had not
+        // changed VS never asked again, so the Run lens stayed empty for the session.
+        var release = new TaskCompletionSource<bool>();
+        var resolver = new CountingResolver(release);
+        var sut = CreateSut(resolver);
+
+        var call = sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+        sut.InvalidateFile("file:///Test.feature");
+        release.SetResult(true);
+
+        var result = await call;
+
+        result.Should().BeEquivalentTo(SampleEntries);
+        resolver.CallCount.Should().Be(2, "the invalidated computation is replaced by a fresh one");
+    }
+
+    [Fact]
+    public async Task A_result_from_an_invalidated_computation_is_discarded_even_when_cancellation_was_swallowed()
+    {
+        // Seen live (issue #78): the symbol request below the cache turned the invalidation's
+        // cancellation into an empty answer, so the computation "completed" with 0 entries and the
+        // Run lens for a real scenario line stayed blank.
+        var release = new TaskCompletionSource<bool>();
+        var callCount = 0;
+        async Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref callCount) == 1)
+            {
+                await release.Task.ConfigureAwait(false);
+                return System.Array.Empty<RunTestTargetEntry>(); // cancellation swallowed
+            }
+            return SampleEntries;
+        }
+
+        var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
+        var call = sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+        sut.InvalidateFile("file:///Test.feature");
+        release.SetResult(true);
+
+        var result = await call;
+
+        result.Should().BeEquivalentTo(SampleEntries);
+        callCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_computation_that_times_out_is_not_restarted()
+    {
+        // Only an invalidation means "recompute"; the computation's own safety-net timeout must
+        // still end the call, or a runaway resolution would be retried forever.
+        var release = new TaskCompletionSource<bool>();
+        var resolver = new CountingResolver(release);
+        var sut = CreateSut(resolver, computationTimeout: System.TimeSpan.FromMilliseconds(50));
+
+        var call = sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+        await Task.Delay(200);
+        release.SetResult(true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
+        resolver.CallCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Restarts_after_invalidation_are_bounded()
+    {
+        var callCount = 0;
+        async Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct)
+        {
+            Interlocked.Increment(ref callCount);
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+            return SampleEntries;
+        }
+
+        var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
+        var call = sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+
+        // Invalidate every computation as soon as it starts, more times than the budget allows.
+        for (var i = 0; i <= RunTestCodeLensResultCache.MaxInvalidationRestarts; i++)
+        {
+            var started = i + 1;
+            while (Volatile.Read(ref callCount) < started)
+                await Task.Delay(5);
+            sut.InvalidateFile("file:///Test.feature");
+        }
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
+        callCount.Should().Be(RunTestCodeLensResultCache.MaxInvalidationRestarts + 1);
+    }
+
+    [Fact]
     public async Task A_faulted_computation_is_not_reused_by_a_later_caller()
     {
         var callCount = 0;

@@ -98,6 +98,12 @@ internal sealed class GherkinNavigationBarSymbolService
         var (result, error) = await SendWithContentModifiedRetryAsync(paramsJson, fileUri, cancellationToken)
             .ConfigureAwait(false);
 
+        // A cancelled request comes back from the pipe as an empty result, not an exception. Mapping
+        // that to "no symbols" made the Run CodeLens cache a genuine-looking empty answer for a
+        // scenario line when its computation was cancelled by an invalidation (issue #78): the
+        // lens then stayed blank for the session. Cancellation must surface as cancellation.
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (error != null)
         {
             _logger.LogDebug(
