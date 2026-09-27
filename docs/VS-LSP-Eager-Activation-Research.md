@@ -85,6 +85,14 @@ It runs at most once per session. `REQNROLL_IDE_DISABLE_ACTIVATION_TRIGGER` turn
 `.feature` documents count for step 2, so the trigger never opens a Reqnroll file in a solution
 that is not using Reqnroll.
 
+**#774 (fixed):** the 5 s grace period in step 1 is measured from "solution loaded", which the
+package derives from an `IVsSolution` polling loop. That loop read a `VSPROPID` value
+(`0x0000000B`) that does not exist, so it always failed and ran to its ~10 s cap before reporting
+the solution loaded — pushing this trigger's earliest possible fire time out by roughly that much
+on every launch, not just the first one after install/update. `SolutionOpenState` now reads
+`__VSPROPID.VSPROPID_IsSolutionOpen` instead, so the wait returns as soon as the solution is
+actually open.
+
 ---
 
 ## 1. Where the delay actually comes from — **REFUTED, see §0**

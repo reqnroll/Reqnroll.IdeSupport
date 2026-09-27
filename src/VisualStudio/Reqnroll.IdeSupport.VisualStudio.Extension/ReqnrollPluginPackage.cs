@@ -335,9 +335,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         const int maxAttempts = 40; // ~10 seconds
         for (int i = 0; i < maxAttempts; i++)
         {
-            // The VSPSROPID_IsOpen value is 0x0000000B per the VS SDK headers.
-            solution.GetProperty(0x0000000B, out var isOpen);
-            if (isOpen is true)
+            if (SolutionOpenState.IsOpen(solution))
                 return;
 
             await Task.Delay(250, cancellationToken).ConfigureAwait(false);
