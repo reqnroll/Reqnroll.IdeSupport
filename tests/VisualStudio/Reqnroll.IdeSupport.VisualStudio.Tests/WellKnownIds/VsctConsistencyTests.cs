@@ -52,12 +52,19 @@ public class VsctConsistencyTests
     [Fact]
     public void Navigate_to_hook_canonical_name_matches_the_runtime_self_check()
     {
-        var canonicalName = LoadVsct().Descendants(Ns + "Button")
+        var vsct = LoadVsct();
+        var canonicalName = vsct.Descendants(Ns + "Button")
             .Single(b => (string)b.Attribute("id") == "cmdidNavigateToHook")
             .Descendants(Ns + "CanonicalName").Single().Value;
+        var groupParent = vsct.Descendants(Ns + "Group")
+            .Single(g => (string)g.Attribute("id") == "HookCodeLensMenuGroup")
+            .Element(Ns + "Parent")!;
 
+        // VS names a command after its top-level menu plus its <CanonicalName> (confirmed live:
+        // "Tools.Reqnroll.NavigateToHook"), so the expected name follows the group's parent menu.
+        ((string)groupParent.Attribute("id")).Should().Be("IDM_VS_MENU_TOOLS");
         VsWellKnownIdsSelfCheck.ExpectedCommands
             .Single(c => c.Group == HookCodeLensCommandIds.CommandSet && c.Id == HookCodeLensCommandIds.NavigateToHookCommandId)
-            .ExpectedName.Should().Be(canonicalName);
+            .ExpectedName.Should().Be("Tools." + canonicalName);
     }
 }

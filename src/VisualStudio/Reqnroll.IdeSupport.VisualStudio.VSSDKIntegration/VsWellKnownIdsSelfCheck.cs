@@ -21,10 +21,9 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 /// (issue #747 was one of these, and so was the wrong property ID in #774), plus this extension's
 /// own <c>.vsct</c> registration as VS actually loaded it. It never changes behaviour: every pair is
 /// logged, so a VS update that moves a command shows up in the first log after the update instead of
-/// as a feature that silently stopped working. Problems are logged at Info, not Warning: a warning
-/// auto-activates the Reqnroll Output pane, and the expected Test Explorer names were recorded from
-/// decompiled code and have not yet been confirmed live. Raise them to Warning once a live log shows
-/// every entry resolving.
+/// as a feature that silently stopped working. Problems are logged as warnings (which also brings up
+/// the Reqnroll Output pane). Every entry below was confirmed to resolve in a live VS 18.0 session
+/// (PR #777), so a warning means VS changed, not that an expected name is a guess.
 /// </remarks>
 public static class VsWellKnownIdsSelfCheck
 {
@@ -55,8 +54,10 @@ public static class VsWellKnownIdsSelfCheck
             "TestExplorer.DebugTestsFromCodeLens", nameof(TestExplorerCommandIds)),
         new ExpectedCommand(TestExplorerCommandIds.CommandSet, TestExplorerCommandIds.SyncCommandId,
             "TestExplorer.SyncTestFromCodeLens", nameof(TestExplorerCommandIds)),
+        // VS puts the command's top-level menu in front of its .vsct <CanonicalName>
+        // ("Reqnroll.NavigateToHook"): the command's group is parented to IDM_VS_MENU_TOOLS.
         new ExpectedCommand(HookCodeLensCommandIds.CommandSet, (uint)HookCodeLensCommandIds.NavigateToHookCommandId,
-            "Reqnroll.NavigateToHook", "HookCodeLensCommands.vsct"),
+            "Tools.Reqnroll.NavigateToHook", "HookCodeLensCommands.vsct"),
     };
 
     /// <summary>
@@ -88,7 +89,7 @@ public static class VsWellKnownIdsSelfCheck
                 }
 
                 problems++;
-                logger.LogInfo(outcome == Outcome.NotFound
+                logger.LogWarning(outcome == Outcome.NotFound
                     ? $"VsWellKnownIdsSelfCheck: {{{expected.Group}}}:{expected.Id} is not a command in this VS (hr=0x{hr:X8}); expected {expected.ExpectedName}, used by {expected.Owner}. The hard-coded ID is probably wrong for this VS version."
                     : $"VsWellKnownIdsSelfCheck: {{{expected.Group}}}:{expected.Id} resolves to '{actualName}', expected {expected.ExpectedName}, used by {expected.Owner}.");
             }
@@ -97,7 +98,7 @@ public static class VsWellKnownIdsSelfCheck
             if (problems == 0)
                 logger.LogVerbose(summary);
             else
-                logger.LogInfo(summary);
+                logger.LogWarning(summary);
         }
         catch (Exception ex)
         {
@@ -108,8 +109,8 @@ public static class VsWellKnownIdsSelfCheck
     /// <summary>
     /// Decision rule for one <c>IVsCmdNameMapping.MapGUIDIDToName</c> result, split out so it can be
     /// tested without a running VS. Names compare case-insensitively, ignoring a leading dot: the
-    /// Test Explorer names were recorded in that form (<c>.TestExplorer.RunTestsFromCodeLens</c>) and
-    /// it is not yet known which form <c>MapGUIDIDToName</c> returns.
+    /// Test Explorer names were recorded from decompiled code in that form
+    /// (<c>.TestExplorer.RunTestsFromCodeLens</c>). VS 18.0 returns them without the dot.
     /// </summary>
     internal static Outcome Evaluate(string expectedName, int hr, string? actualName)
     {
