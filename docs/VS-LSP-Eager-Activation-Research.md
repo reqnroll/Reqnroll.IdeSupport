@@ -58,9 +58,32 @@ itself is measured.)
 | **T3** — `LoadedWhen` | Implemented, measured, **reverted**. It changed nothing. (It was briefly also blamed for regressing cold starts; that charge was withdrawn when a build without it failed the same way.) |
 | **T4** — RDT event sink | Implemented and kept as `DocumentInitializationMonitor`. Every conclusion here rests on it. |
 | **T5** — server prewarm | Not built. Still the only idea that would help the cold case, and only by shortening it. |
-| **T6** — upstream ask | **Now the main lever.** VisualStudio.Extensibility has no equivalent of `ILanguageClientBroker.LoadAsync`, so an extension cannot recover from a missed activation edge. §2.1 and §2.2 below are still accurate and are the substance of that report. |
+| **T6** — upstream ask | Still worth filing. VisualStudio.Extensibility has no equivalent of `ILanguageClientBroker.LoadAsync`, so an extension cannot recover from a missed activation edge *directly*. §2.1 and §2.2 below are still accurate and are the substance of that report. The scratch-file trigger below works around it locally. |
 
 The market survey in §2 stands unchanged — it was never about the mechanism.
+
+### As built: the scratch-file trigger (#767)
+
+Activation applies to the whole provider, not one document. Opening a second, unrelated `.feature`
+file by hand on a failed cold start activated the provider, and VS then sent `didOpen` for **both**
+files, including the dead restored tab (validated 2026-08-31). So a missed edge can be recovered
+by supplying a *different* document open. The user's own document does not need to be closed and
+reopened.
+
+`ScratchFileActivationTrigger`, started by `ReqnrollPluginPackage` after solution load:
+
+1. Waits up to 5 s for VS to activate the provider on its own.
+2. Checks that a `.feature` document is open. It scans the RDT through
+   `IVsRunningDocumentTable4`, which does not load stubs.
+3. Checks that `ReqnrollLanguageClient` was never constructed. The constructor sets
+   `LanguageServerActivationSignal`, which lives in AppDomain data because the package and the
+   VS.Extensibility side may load separate copies of the assembly.
+4. Opens and shows `%TEMP%\Reqnroll\ReqnrollActivation.feature`, waits up to 10 s for activation,
+   and closes it with `NoSave`.
+
+It runs at most once per session. `REQNROLL_IDE_DISABLE_ACTIVATION_TRIGGER` turns it off. Only
+`.feature` documents count for step 2, so the trigger never opens a Reqnroll file in a solution
+that is not using Reqnroll.
 
 ---
 

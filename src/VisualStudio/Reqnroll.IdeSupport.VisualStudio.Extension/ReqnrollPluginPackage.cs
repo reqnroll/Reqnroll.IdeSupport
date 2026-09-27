@@ -101,6 +101,12 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         _logger.LogInfo("Solution loaded.");
 
+        // Issue #533: if VS restored a .feature tab but never activated the language server
+        // provider, open and close a scratch .feature file to activate it. Not awaited: it waits
+        // out a grace period first, and package initialization must not wait for that.
+        _ = JoinableTaskFactory.RunAsync(() => ScratchFileActivationTrigger.RunAsync(
+            this, LanguageServerActivationSignal.Shared, _logger, DisposalToken));
+
         await StartMtpProjectStubsAsync(cancellationToken);
 
         // Show the Welcome (first install) or Upgrade (version change) dialog

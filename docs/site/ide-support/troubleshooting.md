@@ -42,6 +42,23 @@ If bindings differ between the two projects, expect Code Lens, [Hook Navigation]
 and diagnostics on the shared file to reflect the home project's bindings only, even when the
 file is viewed "from" the other project.
 
+## Visual Studio: a `ReqnrollActivation.feature` tab opens and closes at startup
+
+Visual Studio starts the Reqnroll language server when a `.feature` file is *opened*. It does not
+check files that are already open. On the first launch after the extension is installed or
+updated, Visual Studio can restore your `.feature` tabs before it has registered the extension.
+Those tabs would then get no Reqnroll features for the whole session.
+
+To recover, the extension waits a few seconds after the solution loads. If a `.feature` file is
+open and the language server has still not started, it briefly opens and closes a scratch file,
+`%TEMP%\Reqnroll\ReqnrollActivation.feature`. That starts the language server, and your own
+`.feature` tabs get their features. Your files are not closed or reloaded. On a normal start the
+language server is already running, and nothing is opened.
+
+To turn this off, set the environment variable `REQNROLL_IDE_DISABLE_ACTIVATION_TRIGGER` to any
+value other than empty, `0` or `false` before starting Visual Studio. If a restored `.feature` tab
+then has no Reqnroll features, close and reopen it.
+
 ## Visual Studio: GitHub Copilot suggestions compete with `.feature` file editing
 
 Visual Studio does not offer a per-file-type or per-content-type way to turn off GitHub Copilot
