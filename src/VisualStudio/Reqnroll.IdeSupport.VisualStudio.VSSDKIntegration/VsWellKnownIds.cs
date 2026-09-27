@@ -57,4 +57,12 @@ public static class VsWellKnownIds
 
     /// <summary>Canonical VS command name of <see cref="CmdIdToggleLineComment"/>.</summary>
     public const string ToggleLineCommentCommandName = "Edit.ToggleLineComment";
+
+    /// <summary>
+    /// MEF <c>[Name(...)]</c> of VS's own <c>INavigableSymbolSourceProvider</c> for Ctrl+Click/Ctrl+hover
+    /// (<c>NavigableSymbolSourceProvider</c> in <c>Microsoft.VisualStudio.LanguageServer.Client.Implementation.dll</c>,
+    /// confirmed by decompiling that assembly, issue #761). No SDK constant exists for it. Used as the
+    /// <c>[Order(Before = ...)]</c> target of our own provider so ours runs first for Gherkin views.
+    /// </summary>
+    public const string LspNavigableSymbolSourceProviderName = "LSP NavigableSymbolSourceProvider";
 }
