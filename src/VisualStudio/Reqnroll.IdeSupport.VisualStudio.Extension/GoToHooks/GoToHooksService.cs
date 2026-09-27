@@ -49,6 +49,15 @@ internal sealed class GoToHooksService
     /// (classic-CodeLens bridge, issue #372) so its Details popup shows exactly the hooks the lens
     /// counted, matching what <c>reqnroll.goToHooks</c>-invoking clients already do.
     /// </summary>
+    /// <remarks>
+    /// This overload's only caller is <c>ReqnrollLanguageClient</c>'s
+    /// <c>HookCodeLensRedirect.GetHookDetailsAsync</c> bridge — the classic VS CodeLens's
+    /// Details-popup prefetch (<c>HookCodeLensDataPoint.GetDataAsync</c>), which runs on every lens
+    /// render, not just a click. It therefore always sends <c>isCodeLensPrefetch: true</c> so the
+    /// server's telemetry/log entries don't misattribute a render as a user navigating (issue #698);
+    /// the 4-arg overload above (without <paramref name="ownLevelOnly"/>) is what real navigation
+    /// commands use, and it never sets that flag.
+    /// </remarks>
     public async Task<GoToHooksResult> GoToHooksAsync(
         string            fileUri,
         int               line0,
@@ -56,7 +65,7 @@ internal sealed class GoToHooksService
         bool              ownLevelOnly,
         CancellationToken cancellationToken)
     {
-        var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly);
+        var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly, isCodeLensPrefetch: true);
 
         _logger.LogDebug(
             "GoToHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.GoToHooks, fileUri, line0, char0);
@@ -97,11 +106,17 @@ internal sealed class GoToHooksService
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly) =>
+    /// <summary>
+    /// Builds the <c>reqnroll/goToHooks</c> request params. Internal rather than private so the
+    /// <c>isCodeLensPrefetch</c> wiring (issue #698) can be unit-tested without a live pipe, matching
+    /// <see cref="MapResult"/> and the other client-side mapping seams.
+    /// </summary>
+    internal static string BuildParams(string fileUri, int line0, int char0, bool ownLevelOnly, bool isCodeLensPrefetch = false) =>
         new LspParamsBuilder()
             .AddTextDocument(fileUri)
             .AddPosition(line0, char0)
             .AddBool("ownLevelOnly", ownLevelOnly)
+            .AddBool("isCodeLensPrefetch", isCodeLensPrefetch)
             .Build();
 
     private static IReadOnlyList<HookLocation> ParseHooks(JArray array)

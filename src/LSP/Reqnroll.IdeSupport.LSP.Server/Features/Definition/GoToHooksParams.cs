@@ -21,4 +21,18 @@ public sealed record GoToHooksParams : TextDocumentPositionParams
     /// </summary>
     [JsonProperty("ownLevelOnly")]
     public bool OwnLevelOnly { get; set; }
+
+    /// <summary>
+    /// When <see langword="true"/>, marks this request as the classic Visual Studio hook-match-count
+    /// CodeLens's Details-popup prefetch (see <c>HookCodeLensDataPoint.GetDataAsync</c> in the VS
+    /// extension project) rather than a user-initiated "Go to Hooks" navigation (issue #698). That
+    /// data point re-uses this same request/handler to populate its popup on every CodeLens render —
+    /// not only on a click — so without this flag every lens render logged/transmitted the same
+    /// <c>"GoToHook command executed"</c> entry a real navigation does, making it look like the user
+    /// was repeatedly invoking "Go to Hooks". Defaults to <see langword="false"/>: every other known
+    /// caller (the context-menu/keybinding command, and the <c>reqnroll.goToHooks</c> client command
+    /// VS Code/Rider invoke when a lens is actually clicked) is a genuine navigation and omits it.
+    /// </summary>
+    [JsonProperty("isCodeLensPrefetch")]
+    public bool IsCodeLensPrefetch { get; set; }
 }

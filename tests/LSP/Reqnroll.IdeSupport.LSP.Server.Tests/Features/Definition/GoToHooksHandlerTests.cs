@@ -70,12 +70,14 @@ public class GoToHooksHandlerTests
     private GoToHooksHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_bufferService, _registryLookup, _logger, telemetry);
 
-    private static GoToHooksParams RequestAt(DocumentUri uri, int line, int character, bool ownLevelOnly = false) =>
+    private static GoToHooksParams RequestAt(
+        DocumentUri uri, int line, int character, bool ownLevelOnly = false, bool isCodeLensPrefetch = false) =>
         new()
         {
-            TextDocument  = new TextDocumentIdentifier { Uri = uri },
-            Position      = new Position(line, character),
-            OwnLevelOnly  = ownLevelOnly,
+            TextDocument       = new TextDocumentIdentifier { Uri = uri },
+            Position           = new Position(line, character),
+            OwnLevelOnly       = ownLevelOnly,
+            IsCodeLensPrefetch = isCodeLensPrefetch,
         };
 
     private void SetupBuffer(
@@ -511,5 +513,37 @@ public class GoToHooksHandlerTests
             RequestAt(FeatureUri, 1, 4), CancellationToken.None);
 
         telemetry.Received(1).SendEvent("GoToHook command executed", Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_codeLens_prefetch_emits_a_distinct_event_not_the_navigation_one()
+    {
+        // Issue #698: the classic VS hook-match-count CodeLens's Details-popup prefetch reuses
+        // this handler on every lens render, not just a click — it must not be misattributed as
+        // a user navigating via "Go to Hooks".
+        SetupBuffer(FeatureUri, FeatureText, AllTags);
+        _registryLookup.GetRegistryForUri(FeatureUri)
+            .Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var result = await CreateSutWithTelemetry(telemetry).HandleAsync(
+            RequestAt(FeatureUri, 1, 4, isCodeLensPrefetch: true), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent("HookDetailsCodeLens rendered", Arg.Any<Dictionary<string, object?>>());
+        telemetry.DidNotReceive().SendEvent("GoToHook command executed", Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_navigation_request_never_emits_the_codeLens_prefetch_event()
+    {
+        SetupBuffer(FeatureUri, FeatureText, AllTags);
+        _registryLookup.GetRegistryForUri(FeatureUri)
+            .Returns(RegistryWith(MakeHook(HookType.BeforeScenario)));
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        await CreateSutWithTelemetry(telemetry).HandleAsync(
+            RequestAt(FeatureUri, 1, 4, isCodeLensPrefetch: false), CancellationToken.None);
+
+        telemetry.DidNotReceive().SendEvent("HookDetailsCodeLens rendered", Arg.Any<Dictionary<string, object?>>());
     }
 }

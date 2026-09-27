@@ -66,4 +66,25 @@ public class GoToHooksServiceMapResultTests
         result.Hooks.Should().ContainSingle();
         result.Hooks[0].MethodName.Should().Be("M");
     }
+
+    // ── Request params — isCodeLensPrefetch (issue #698) ─────────────────────
+
+    [Fact]
+    public void A_codeLens_prefetch_request_marks_isCodeLensPrefetch_true()
+    {
+        var json = GoToHooksService.BuildParams("file:///c:/w/f.feature", 1, 4, ownLevelOnly: true, isCodeLensPrefetch: true);
+
+        json.Should().Contain("\"isCodeLensPrefetch\":true");
+    }
+
+    [Fact]
+    public void A_default_request_marks_isCodeLensPrefetch_false()
+    {
+        // The overload real "Go to Hooks" navigation commands use never passes isCodeLensPrefetch,
+        // so it must default to false — otherwise every navigation would be misattributed as a
+        // CodeLens render (issue #698's inverse failure mode).
+        var json = GoToHooksService.BuildParams("file:///c:/w/f.feature", 1, 4, ownLevelOnly: false);
+
+        json.Should().Contain("\"isCodeLensPrefetch\":false");
+    }
 }

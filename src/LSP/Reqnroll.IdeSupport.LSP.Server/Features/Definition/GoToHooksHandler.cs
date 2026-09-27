@@ -95,7 +95,8 @@ public sealed class GoToHooksHandler
 
         var hooks = HookMatching.ResolveMatchingHooks(registry, level, contextTag, request.OwnLevelOnly);
 
-        _logger.LogVerbose($"GoToHooksHandler: {hooks.Count} hook(s) at offset {offset} in {uri}");
+        var origin = request.IsCodeLensPrefetch ? "CodeLens prefetch" : "navigation";
+        _logger.LogVerbose($"GoToHooksHandler: {hooks.Count} hook(s) at offset {offset} in {uri} ({origin})");
 
         var locations = new List<GoToHookLocation>(hooks.Count);
         foreach (var hook in hooks)
@@ -117,8 +118,14 @@ public sealed class GoToHooksHandler
                 locations.Add(loc);
         }
 
-        // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.GoToHookCommandExecuted, new());
+        // Telemetry — a CodeLens Details-popup prefetch (issue #698) is not a user navigating,
+        // so it gets its own event name rather than being misattributed as "GoToHook command
+        // executed".
+        _telemetryService?.SendEvent(
+            request.IsCodeLensPrefetch
+                ? TelemetryEvents.HookDetailsCodeLensRendered
+                : TelemetryEvents.GoToHookCommandExecuted,
+            new());
 
         return Task.FromResult(new GoToHooksResponse { Hooks = locations });
     }

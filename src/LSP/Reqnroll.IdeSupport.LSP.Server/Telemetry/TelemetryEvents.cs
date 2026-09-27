@@ -44,8 +44,11 @@ public static class TelemetryEvents
     /// <summary>Sent by <see cref="Features.TestTargets.ResolveTestTargetsHandler"/> after resolving test targets for a Run request.</summary>
     public const string ResolveTestTargetsCommandExecuted = "ResolveTestTargets command executed";
 
-    /// <summary>Sent by <see cref="Features.Definition.GoToHooksHandler"/> after handling a Go To Hooks request.</summary>
+    /// <summary>Sent by <see cref="Features.Definition.GoToHooksHandler"/> after handling a genuine, user-initiated Go To Hooks navigation (<see cref="Features.Definition.GoToHooksParams.IsCodeLensPrefetch"/> is <see langword="false"/>).</summary>
     public const string GoToHookCommandExecuted = "GoToHook command executed";
+
+    /// <summary>Sent by <see cref="Features.Definition.GoToHooksHandler"/> instead of <see cref="GoToHookCommandExecuted"/> when the request is the classic VS hook-match-count CodeLens's Details-popup prefetch, not a user navigating (issue #698) — <see cref="Features.Definition.GoToHooksParams.IsCodeLensPrefetch"/> is <see langword="true"/>.</summary>
+    public const string HookDetailsCodeLensRendered = "HookDetailsCodeLens rendered";
 
     /// <summary>Sent by <see cref="Features.CodeActions.CodeActionHandler"/> when the "Define step" quick fix is offered.</summary>
     public const string DefineStepsCommandOffered = "DefineSteps command offered";
