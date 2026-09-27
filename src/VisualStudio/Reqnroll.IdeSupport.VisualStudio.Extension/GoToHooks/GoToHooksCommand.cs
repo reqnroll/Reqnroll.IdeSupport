@@ -26,13 +26,6 @@ internal sealed class GoToHooksCommand : Command
     // shared DI-registered singleton sink for that one call rather than a second ad hoc logger.
     private readonly IIdeSupportLogger _fileLogger;
 
-    // guidSHLMainMenu (vsshlids.h) — the VS shell's built-in command set.
-    private static readonly Guid GuidSHLMainMenu = new("{D309F791-903F-11D0-9EFC-00A0C911004F}");
-
-    // IDG_VS_CODEWIN_NAVIGATETOLOCATION (vsshlids.h) — navigation group in the code-editor
-    // context menu (IDM_VS_CTXT_CODEWIN) that hosts "Go To Definition" / "Find All References".
-    private const int IDG_VS_CODEWIN_NAVIGATETOLOCATION = 0x02B1;
-
     /// <summary>Creates the command over the shared runtime state holder.</summary>
     public GoToHooksCommand(GoToHooksState state, ILogger<GoToHooksCommand> logger, IIdeSupportLogger fileLogger)
     {
@@ -47,13 +40,13 @@ internal sealed class GoToHooksCommand : Command
         Icon        = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a .feature file editor is active; invisible in all other editors.
-        VisibleWhen = ActivationConstraint.EditorContentType("Gherkin"),
+        VisibleWhen = ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType),
 
         // Placed in the navigation group of the code-editor context menu alongside
         // "Go To Definition" and "Find All References".
         Placements  =
         [
-            CommandPlacement.VsctParent(GuidSHLMainMenu, IDG_VS_CODEWIN_NAVIGATETOLOCATION, 0x0200),
+            CommandPlacement.VsctParent(ShellMenuIds.GuidSHLMainMenu, ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, 0x0200),
         ],
     };
 

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
@@ -99,7 +100,7 @@ internal static class VsStubFrameInitializer
                 // After initialization, ensure the document has a real project hierarchy
                 // (not the miscellaneous-files bucket).  If it doesn't, reopen via DTE
                 // which registers the document with the owning project's IVsHierarchy.
-                if (hier == null || IsMiscellaneousFilesProject(hier))
+                if (hier == null || IsMiscellaneousFilesProject(hier, serviceProvider, logger))
                 {
                     try
                     {
@@ -123,19 +124,56 @@ internal static class VsStubFrameInitializer
         return anyFound;
     }
 
-    private static readonly Guid MiscellaneousFilesProjectGuid = new("{A2FE74E1-B743-11d0-AE1A-00A0C90FFFC3}");
-
-    private static bool IsMiscellaneousFilesProject(IVsHierarchy hier)
+    private static bool IsMiscellaneousFilesProject(
+        IVsHierarchy hier, IServiceProvider serviceProvider, ILogger logger)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            hier.GetGuidProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out var guid);
-            return guid == MiscellaneousFilesProjectGuid;
+            var projectIdHr = hier.GetGuidProperty(
+                VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out var projectId);
+            var typeGuidHr = hier.GetGuidProperty(
+                VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_TypeGuid, out var typeGuid);
+
+            var match = MiscellaneousFilesProject.MatchByGuid(projectIdHr, projectId, typeGuidHr, typeGuid);
+            if (match == MiscellaneousFilesMatch.None && IsExternalFilesProject(hier, serviceProvider))
+                match = MiscellaneousFilesMatch.ExternalFilesProjectIdentity;
+
+            // Which signal matched is logged so a live session shows what VS actually reports for
+            // the Misc Files hierarchy — the GUID comparison alone was never verified against VS.
+            logger.LogDebug(
+                "VsStubFrameInitializer: Misc Files check = {Match} (ProjectIDGuid {ProjectIdHr:X8} {ProjectId}, TypeGuid {TypeGuidHr:X8} {TypeGuid}).",
+                match, projectIdHr, projectId, typeGuidHr, typeGuid);
+            return match != MiscellaneousFilesMatch.None;
         }
         catch
         {
             return true;
+        }
+    }
+
+    /// <summary>
+    /// <see langword="true"/> when <paramref name="hier"/> is the same COM object as the shell's
+    /// Miscellaneous Files project, obtained from the documented <c>SVsExternalFilesManager</c>.
+    /// </summary>
+    private static bool IsExternalFilesProject(IVsHierarchy hier, IServiceProvider serviceProvider)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (serviceProvider.GetService(typeof(SVsExternalFilesManager)) is not IVsExternalFilesManager manager
+            || ErrorHandler.Failed(manager.GetExternalFilesProject(out var externalFilesProject))
+            || externalFilesProject is null)
+            return false;
+
+        var left = Marshal.GetIUnknownForObject(hier);
+        var right = Marshal.GetIUnknownForObject(externalFilesProject);
+        try
+        {
+            return left == right;
+        }
+        finally
+        {
+            Marshal.Release(left);
+            Marshal.Release(right);
         }
     }
 }

@@ -33,16 +33,6 @@ internal sealed class FindStepUsagesCommand : Command
         _logger = logger;
     }
 
-    // guidSHLMainMenu — the Visual Studio shell's built-in command set (vsshlids.h).
-    // VisualStudio.Extensibility's VsctParent can target groups defined by the shell directly,
-    // so no custom .vsct / VSSDK command-table registration is required.
-    private static readonly Guid GuidSHLMainMenu = new("{D309F791-903F-11D0-9EFC-00A0C911004F}");
-
-    // IDG_VS_CODEWIN_NAVIGATETOLOCATION (vsshlids.h) — the built-in group inside the C# code-editor
-    // context menu (IDM_VS_CTXT_CODEWIN) that hosts "Go To Definition" / "Find All References".
-    // Parenting here places "Find Step Usages" alongside those navigation commands.
-    private const int IDG_VS_CODEWIN_NAVIGATETOLOCATION = 0x02B1;
-
     /// <inheritdoc />
     public override CommandConfiguration CommandConfiguration => new("Find Step Usages")
     {
@@ -59,9 +49,10 @@ internal sealed class FindStepUsagesCommand : Command
             // Surface 1 — child of the Reqnroll submenu in the Extensions menu (ReqnrollMenu.cs).
 
             // Surface 2 — C# editor context menu, in the built-in navigation group next to
-            // "Find All References".  Targets a shell-defined group, so it needs no .vsct file.
+            // "Find All References".  VisualStudio.Extensibility's VsctParent can target groups
+            // defined by the shell directly, so it needs no .vsct file.
             CommandPlacement.VsctParent(
-                GuidSHLMainMenu, id: IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
+                ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
         ],
     };
 

@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 /// </summary>
 /// <remarks>
 /// This is a MEF component registered via <c>[Export(typeof(IVsTextViewCreationListener))]</c>
-/// with a <c>[ContentType("Gherkin")]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
+/// with a <c>[ContentType(VsWellKnownIds.GherkinContentType)]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
 /// constraint so it only intercepts editable .feature file text views.
 ///
 /// VS's out-of-process <c>LanguageServerProvider</c> model does not route the native
@@ -37,7 +37,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
     /// <see cref="IVsTextView"/> whose content type is <c>Gherkin</c>.
     /// </summary>
     [Export(typeof(IVsTextViewCreationListener))]
-    [ContentType("Gherkin")]
+    [ContentType(VsWellKnownIds.GherkinContentType)]
     [TextViewRole(PredefinedTextViewRoles.Editable)]
     internal sealed class TextViewCreationListener : IVsTextViewCreationListener
     {
@@ -73,9 +73,8 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
 
     // ── Instance ──────────────────────────────────────────────────────────
 
-    // Command set GUID for the standard editor commands.
-    // VSConstants.GUID_VSStd2K = {1496A755-94DE-11D0-8C3F-00C04FC2AAE2}
-    private static readonly Guid CommandSet = new("{1496A755-94DE-11D0-8C3F-00C04FC2AAE2}");
+    // Command set GUID for the standard editor commands (GUID_VSStd2K).
+    private static readonly Guid CommandSet = VSConstants.VSStd2K;
 
     private const uint CmdIdFormatDocument  = (uint)VSConstants.VSStd2KCmdID.FORMATDOCUMENT;
     private const uint CmdIdFormatSelection = (uint)VSConstants.VSStd2KCmdID.FORMATSELECTION;

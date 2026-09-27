@@ -1,5 +1,6 @@
 ﻿#nullable disable
 using EnvDTE;
+using EnvDTE80;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Composition;
@@ -13,8 +14,7 @@ using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
 using NuGet.VisualStudio.Contracts;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.VisualStudio.Interop;
-using System.Reflection;
+using Microsoft.VisualStudio.Setup.Configuration;
 using System.Windows.Media;
 using IOleServiceProvider = Microsoft.VisualStudio.OLE.Interop.IServiceProvider;
 using IServiceProvider = System.IServiceProvider;
@@ -60,8 +60,6 @@ public static class VsUtils
     //    {
     //        // Get the IVsTextView from the windowFrame.
     //        IVsTextView textView = VsShellUtilities.GetTextView(windowFrame);
-    //        if (!IsInitialized(textView))
-    //            return null;
 
     //        return editorAdaptersFactoryService.GetWpfTextView(textView);
     //    }
@@ -98,22 +96,6 @@ public static class VsUtils
 
         VsShellUtilities.OpenDocument(serviceProvider, filePath, Guid.Empty,
             out _, out _, out _);
-    }
-
-    /// <summary>
-    ///     IVsEditorAdaptersFactoryService.GetWpfTextView brings the text view into an inconsistent state when it is not fully
-    ///     initialized (open project with files opened but not activated yet)
-    /// </summary>
-    private static bool IsInitialized(IVsTextView textView)
-    {
-        if (textView == null)
-            return false;
-        var propertyInfo = textView.GetType()
-            .GetProperty("CurrentInitializationState", BindingFlags.Instance | BindingFlags.Public);
-        if (propertyInfo == null)
-            return true; // actually we don't know
-        var value = propertyInfo.GetValue(textView).ToString();
-        return value == "TextViewAvailable";
     }
 
     /// <summary>Returns the containing <see cref="Project"/> of <paramref name="projectItem"/>, or <see langword="null"/> on failure.</summary>
@@ -656,9 +638,6 @@ public static class VsUtils
         }
     }
 
-    /// <summary>The well-known DTE project kind GUID for a solution folder (<c>vsProjectKindSolutionFolder</c>).</summary>
-    private const string SolutionFolderKind = "{66A26720-8FB5-11D2-AA7E-00C04F688DDE}";
-
     /// <summary>
     /// Best-effort read of a solution folder's nested sub-projects.
     /// <para>
@@ -723,7 +702,7 @@ public static class VsUtils
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            return string.Equals(project.Kind, SolutionFolderKind, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(project.Kind, ProjectKinds.vsProjectKindSolutionFolder, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {
@@ -749,18 +728,30 @@ public static class VsUtils
         }
     }
 
-    // https://stackoverflow.com/a/55039958
-    /// <summary>Returns the VS product display version (e.g. "17.9.1") via <see cref="IVsAppId"/>, falling back to <see cref="GetVsMainVersion"/> on failure.</summary>
+    /// <summary>
+    /// The running instance's setup-catalog property holding the product display version — the same
+    /// value <c>vswhere</c> reports as <c>catalog_productDisplayVersion</c>.
+    /// </summary>
+    private const string ProductDisplayVersionCatalogProperty = "productDisplayVersion";
+
+    /// <summary>
+    /// Returns the VS product display version (e.g. "17.14.5") from the running instance's setup
+    /// catalog, falling back to <see cref="GetVsMainVersion"/> on failure.
+    /// </summary>
+    /// <remarks>
+    /// Uses the supported Setup Configuration API. This replaced a hand-written COM interop for the
+    /// shell's app-id service, whose interface layout and property IDs appear in no published SDK
+    /// header and so could not be checked.
+    /// </remarks>
     public static string GetVsProductDisplayVersionSafe(IServiceProvider serviceProvider)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            var vsAppId = serviceProvider.GetService<IVsAppId>(typeof(SVsAppId));
-            vsAppId.GetProperty((int) VSAPropID.VSAPROPID_ProductDisplayVersion, out var productDisplayVersion);
-
-            var displayVersion = productDisplayVersion as string;
-            return displayVersion ?? GetVsMainVersion(serviceProvider);
+            var instance = new SetupConfiguration().GetInstanceForCurrentProcess();
+            var catalog = (instance as ISetupInstanceCatalog)?.GetCatalogInfo();
+            var displayVersion = catalog?.GetValue(ProductDisplayVersionCatalogProperty) as string;
+            return string.IsNullOrEmpty(displayVersion) ? GetVsMainVersion(serviceProvider) : displayVersion;
         }
         catch (Exception ex)
         {

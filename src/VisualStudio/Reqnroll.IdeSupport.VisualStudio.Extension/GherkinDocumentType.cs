@@ -9,7 +9,7 @@ internal static class GherkinDocumentType
 {
     /// <summary>Document type configuration mapping the <c>.feature</c> extension to the LSP-backed Gherkin document type.</summary>
     [VisualStudioContribution]
-    internal static DocumentTypeConfiguration GherkinDocument => new("Gherkin")
+    internal static DocumentTypeConfiguration GherkinDocument => new(VsWellKnownIds.GherkinContentType)
     {
         FileExtensions = new[] { ".feature" },
         BaseDocumentType = LanguageServerProvider.LanguageServerBaseDocumentType,

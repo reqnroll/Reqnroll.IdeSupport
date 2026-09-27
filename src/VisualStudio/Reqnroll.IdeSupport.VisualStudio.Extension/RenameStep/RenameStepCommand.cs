@@ -27,9 +27,6 @@ internal sealed class RenameStepCommand : Command
     private readonly RenameStepState _state;
     private readonly ILogger<RenameStepCommand> _logger;
 
-    private static readonly Guid GuidSHLMainMenu = new("{D309F791-903F-11D0-9EFC-00A0C911004F}");
-    private const int IDG_VS_CODEWIN_NAVIGATETOLOCATION = 0x02B1;
-
     /// <summary>Creates the command over the shared runtime state holder.</summary>
     public RenameStepCommand(RenameStepState state, ILogger<RenameStepCommand> logger)
     {
@@ -43,10 +40,10 @@ internal sealed class RenameStepCommand : Command
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
             ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
-            ActivationConstraint.EditorContentType("Gherkin")),
+            ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType)),
         Placements =
         [
-            CommandPlacement.VsctParent(GuidSHLMainMenu, id: IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
+            CommandPlacement.VsctParent(ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
         ],
     };
 

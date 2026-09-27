@@ -74,6 +74,11 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
 
+        // Log whether the undocumented VS command IDs this extension hard-codes still resolve to
+        // the commands they are meant to (see VsWellKnownIds). Diagnostic only.
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        VsWellKnownIdsSelfCheck.Run(this, _logger);
+
         // Issue #741: MTP reporter registration is project-local now (obj\<Project>.csproj.reqnroll-ide.targets,
         // written once the solution is loaded, below). Remove the per-user ImportAfter file earlier
         // versions dropped, which affected every MSBuild build for this Windows user.
