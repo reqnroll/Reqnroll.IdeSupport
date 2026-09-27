@@ -20,9 +20,11 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 /// This covers the values no build-time test can: undocumented IDs copied out of VS assemblies
 /// (issue #747 was one of these, and so was the wrong property ID in #774), plus this extension's
 /// own <c>.vsct</c> registration as VS actually loaded it. It never changes behaviour: every pair is
-/// logged — a warning when it no longer resolves to the expected command, so a VS update that moves
-/// a command shows up in the first log after the update instead of as a feature that silently
-/// stopped working.
+/// logged, so a VS update that moves a command shows up in the first log after the update instead of
+/// as a feature that silently stopped working. Problems are logged at Info, not Warning: a warning
+/// auto-activates the Reqnroll Output pane, and the expected Test Explorer names were recorded from
+/// decompiled code and have not yet been confirmed live. Raise them to Warning once a live log shows
+/// every entry resolving.
 /// </remarks>
 public static class VsWellKnownIdsSelfCheck
 {
@@ -68,7 +70,7 @@ public static class VsWellKnownIdsSelfCheck
         {
             if (serviceProvider.GetService(typeof(SVsCmdNameMapping)) is not IVsCmdNameMapping mapping)
             {
-                logger.LogWarning("VsWellKnownIdsSelfCheck: SVsCmdNameMapping is unavailable; command IDs not checked.");
+                logger.LogInfo("VsWellKnownIdsSelfCheck: SVsCmdNameMapping is unavailable; command IDs not checked.");
                 return;
             }
 
@@ -86,13 +88,16 @@ public static class VsWellKnownIdsSelfCheck
                 }
 
                 problems++;
-                logger.LogWarning(outcome == Outcome.NotFound
+                logger.LogInfo(outcome == Outcome.NotFound
                     ? $"VsWellKnownIdsSelfCheck: {{{expected.Group}}}:{expected.Id} is not a command in this VS (hr=0x{hr:X8}); expected {expected.ExpectedName}, used by {expected.Owner}. The hard-coded ID is probably wrong for this VS version."
                     : $"VsWellKnownIdsSelfCheck: {{{expected.Group}}}:{expected.Id} resolves to '{actualName}', expected {expected.ExpectedName}, used by {expected.Owner}.");
             }
 
-            logger.LogInfo(
-                $"VsWellKnownIdsSelfCheck: checked {ExpectedCommands.Count} command IDs, {problems} problem(s).");
+            var summary = $"VsWellKnownIdsSelfCheck: checked {ExpectedCommands.Count} command IDs, {problems} problem(s).";
+            if (problems == 0)
+                logger.LogVerbose(summary);
+            else
+                logger.LogInfo(summary);
         }
         catch (Exception ex)
         {
@@ -102,8 +107,9 @@ public static class VsWellKnownIdsSelfCheck
 
     /// <summary>
     /// Decision rule for one <c>IVsCmdNameMapping.MapGUIDIDToName</c> result, split out so it can be
-    /// tested without a running VS. Names compare case-insensitively, ignoring a leading dot (the
-    /// form some VS command tables use for commands hidden from the Command Window).
+    /// tested without a running VS. Names compare case-insensitively, ignoring a leading dot: the
+    /// Test Explorer names were recorded in that form (<c>.TestExplorer.RunTestsFromCodeLens</c>) and
+    /// it is not yet known which form <c>MapGUIDIDToName</c> returns.
     /// </summary>
     internal static Outcome Evaluate(string expectedName, int hr, string? actualName)
     {

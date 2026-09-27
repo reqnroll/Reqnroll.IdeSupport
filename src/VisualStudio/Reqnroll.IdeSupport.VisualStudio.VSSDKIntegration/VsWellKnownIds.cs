@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 ///   <c>Microsoft.VSSDK.BuildTools</c> NuGet package (no VS install needed).</item>
 ///   <item>Undocumented values copied out of VS assemblies can only be checked against a running VS:
 ///   <c>VsWellKnownIdsSelfCheck</c> resolves their canonical command names at package load and logs
-///   a warning on any mismatch.</item>
+///   the result, flagging any mismatch.</item>
 ///   <item><c>MagicValueSourceGuardTests</c> fails the build when a new GUID or content-type literal
 ///   appears outside this file and the small allow-list of files that own their own identifiers.</item>
 /// </list>

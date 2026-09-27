@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 /// VisualStudio.Extensibility evaluates each <c>CommandConfiguration</c> at build time and cannot load
 /// <c>Microsoft.VisualStudio.Shell.15.0</c> ("has references outside of netstandard2.0"), so the SDK
 /// constant <c>VsMenus.guidSHLMainMenu</c> cannot be referenced from a command configuration directly.
-/// This copy is asserted equal to it by <c>ShellMenuIdsTests</c>.
+/// This copy is asserted equal to it, and to <c>vsshlids.h</c>, by <c>VsSdkHeaderConstantsTests</c>.
 /// </remarks>
 internal static class ShellMenuIds
 {

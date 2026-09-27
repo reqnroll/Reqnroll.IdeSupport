@@ -139,12 +139,24 @@ internal static class VsStubFrameInitializer
             if (match == MiscellaneousFilesMatch.None && IsExternalFilesProject(hier, serviceProvider))
                 match = MiscellaneousFilesMatch.ExternalFilesProjectIdentity;
 
-            // Which signal matched is logged so a live session shows what VS actually reports for
-            // the Misc Files hierarchy — the GUID comparison alone was never verified against VS.
-            logger.LogDebug(
-                "VsStubFrameInitializer: Misc Files check = {Match} (ProjectIDGuid {ProjectIdHr:X8} {ProjectId}, TypeGuid {TypeGuidHr:X8} {TypeGuid}).",
-                match, projectIdHr, projectId, typeGuidHr, typeGuid);
-            return match != MiscellaneousFilesMatch.None;
+            // The decision still rests on the ProjectIDGuid comparison alone, as it always has. It
+            // was never verified against a running VS, but acting on the other signals would newly
+            // reopen (and activate) loose .feature tabs through DTE, so they are only logged until a
+            // live session shows which signal VS actually reports for the Misc Files hierarchy.
+            if (match is not MiscellaneousFilesMatch.None and not MiscellaneousFilesMatch.ProjectIdGuid)
+            {
+                logger.LogInformation(
+                    "VsStubFrameInitializer: hierarchy is Misc Files by {Match} but not by ProjectIDGuid ({ProjectIdHr:X8} {ProjectId}); not reopening.",
+                    match, projectIdHr, projectId);
+            }
+            else
+            {
+                logger.LogDebug(
+                    "VsStubFrameInitializer: Misc Files check = {Match} (ProjectIDGuid {ProjectIdHr:X8} {ProjectId}, TypeGuid {TypeGuidHr:X8} {TypeGuid}).",
+                    match, projectIdHr, projectId, typeGuidHr, typeGuid);
+            }
+
+            return match == MiscellaneousFilesMatch.ProjectIdGuid;
         }
         catch
         {

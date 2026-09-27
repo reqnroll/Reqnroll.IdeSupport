@@ -26,11 +26,13 @@ internal enum MiscellaneousFilesMatch
 /// can be tested without the UI thread or a live hierarchy.
 /// </summary>
 /// <remarks>
-/// <c>CLSID_MiscellaneousFilesProject</c> (<c>vsshell.h</c>) is the project's <i>class</i> ID. The
-/// code used to compare it only with the per-instance <c>VSHPROPID_ProjectIDGuid</c>, which was never
-/// verified against a running VS. The type GUID is checked too. Only when neither GUID matches does
-/// the caller fall back to comparing COM identity with the documented
-/// <c>SVsExternalFilesManager</c> service (<see cref="MiscellaneousFilesMatch.ExternalFilesProjectIdentity"/>).
+/// <c>CLSID_MiscellaneousFilesProject</c> (<c>vsshell.h</c>) is the project's <i>class</i> ID, yet the
+/// code compares it with the per-instance <c>VSHPROPID_ProjectIDGuid</c>, which has never been verified
+/// against a running VS. The type GUID is checked too, and when neither GUID matches the caller compares
+/// COM identity with the documented <c>SVsExternalFilesManager</c> service
+/// (<see cref="MiscellaneousFilesMatch.ExternalFilesProjectIdentity"/>). For now only
+/// <see cref="MiscellaneousFilesMatch.ProjectIdGuid"/> drives behaviour; the other signals are logged
+/// so a live session can show which one is right before behaviour changes.
 /// </remarks>
 internal static class MiscellaneousFilesProject
 {
