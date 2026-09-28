@@ -38,10 +38,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 /// </remarks>
 internal sealed class GherkinNavigationBarSymbolService
 {
-    // The LSP spec's ContentModified code (-32801). Not exposed as a named constant by any LSP
-    // client library this project depends on client-side, so it is defined here.
-    private const int ContentModifiedErrorCode = -32801;
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<GherkinNavigationBarSymbolService> _logger;
 
@@ -77,9 +73,11 @@ internal sealed class GherkinNavigationBarSymbolService
     /// cancellation has already been processed (it was Serial-dispatched and this call awaits the
     /// first attempt's full round trip first), so the retry is racing only whatever the user typed
     /// in that gap — a bounded, one-shot mitigation rather than a retry storm under sustained
-    /// typing. A second collision is left to resolve itself the same way any other stale read
-    /// would: the next natural trigger for this request (the next CodeLens refresh, the next
-    /// Navigation Bar update) picks up the current state.
+    /// typing. A second collision throws <see cref="LspContentModifiedException"/> rather than
+    /// returning no symbols, so no caller mistakes it for a real empty answer (issue #800
+    /// follow-up; seen live at startup, when the extension's own project notifications collided
+    /// twice). The Run CodeLens cache restarts its computation, and the Navigation Bar schedules
+    /// another refresh.
     /// </para>
     /// <para>
     /// The proper fix — not retrying around a scheduling defect — is OmniSharp's global,
@@ -103,6 +101,12 @@ internal sealed class GherkinNavigationBarSymbolService
         // scenario line when its computation was cancelled by an invalidation (issue #78): the
         // lens then stayed blank for the session. Cancellation must surface as cancellation.
         cancellationToken.ThrowIfCancellationRequested();
+
+        // The same failure mode for ContentModified that survived the one retry: "no symbols"
+        // would be cached as a real answer (issue #800 follow-up). Callers treat this exception
+        // as "ask again later".
+        if (IsContentModified(error))
+            throw new LspContentModifiedException(ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
 
         if (error != null)
         {
@@ -141,7 +145,7 @@ internal sealed class GherkinNavigationBarSymbolService
 
     /// <summary><see langword="internal"/> so the retry decision is unit-testable without a live <see cref="LspInterceptingPipe"/>.</summary>
     internal static bool IsContentModified(JObject? error) =>
-        error?["code"]?.Value<int>() == ContentModifiedErrorCode;
+        error?["code"]?.Value<int>() == LspContentModifiedException.ErrorCode;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
