@@ -153,8 +153,16 @@ class ReqnrollLspServerDescriptor(project: Project) :
     }
 
     companion object {
-        /** Pure/parameterized so it's testable without mutating the real System property — see ReqnrollServerPathResolver's identical rationale. */
-        internal fun resolveLogLevel(isDevSandbox: Boolean): String =
-            if (isDevSandbox) "Verbose" else "Warning"
-    }
+            /** Pure/parameterized so it's testable without mutating the real System property — see ReqnrollServerPathResolver's identical rationale. */
+            internal fun resolveLogLevel(isDevSandbox: Boolean): String =
+                when {
+                    isDevSandbox -> "Verbose"
+                    // REQNROLLVS_DEBUG matches how the LSP server itself reads this environment variable
+                    // (see Program.cs): "1" / "true" / a TraceLevel name all raise to Verbose.
+                    System.getenv("REQNROLLVS_DEBUG")?.let { v ->
+                        v.uppercase().let { u -> u == "1" || u == "TRUE" || u == "VERBOSE" }
+                    } == true -> "Verbose"
+                    else -> "Warning"
+                }
+        }
 }

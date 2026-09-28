@@ -51,6 +51,27 @@ object ReqnrollDebugLogger {
     private val logFile: File by lazy { resolveLogFile() }
     private val consoleSinks = CopyOnWriteArrayList<ReqnrollConsoleSink>()
 
+    /** The effective log level for file writes, sourced from the `REQNROLLVS_DEBUG` environment variable. */
+    private val fileLogLevel: String by lazy {
+        val env = System.getenv("REQNROLLVS_DEBUG")?.uppercase() ?: ""
+        when {
+            env == "1" || env == "TRUE" || env == "VERBOSE" -> "Verbose"
+            env == "INFO" -> "Info"
+            env == "WARNING" || env == "WARN" -> "Warning"
+            env == "ERROR" -> "Error"
+            env == "OFF" -> "Off"
+            else -> "Verbose" // default: write every level (matches pre-#793 behaviour)
+        }
+    }
+
+    /** Priority ordering: Error (4) > Warning (3) > Info (2) > Verbose (1) > Off (0). */
+    private fun levelPriority(level: String): Int = when (level) {
+        "Error" -> 4; "Warning" -> 3; "Info" -> 2; "Verbose" -> 1; else -> 0
+    }
+
+    private fun shouldLog(level: String): Boolean =
+        levelPriority(level) <= levelPriority(fileLogLevel)
+
     fun info(message: String) = log("Info", message, null)
     fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
     fun error(message: String, throwable: Throwable? = null) = log("Error", message, throwable)
@@ -85,8 +106,9 @@ object ReqnrollDebugLogger {
         "${formatTimestamp(instant)} [${level.padEnd(LEVEL_FIELD_WIDTH)}] $message"
 
     @Synchronized
-    private fun log(level: String, message: String, throwable: Throwable?) {
-        try {
+        private fun log(level: String, message: String, throwable: Throwable?) {
+            if (!shouldLog(level)) return
+            try {
             logFile.parentFile?.mkdirs()
             val line = buildString {
                 append(formatLine(Instant.now(), level, message))
