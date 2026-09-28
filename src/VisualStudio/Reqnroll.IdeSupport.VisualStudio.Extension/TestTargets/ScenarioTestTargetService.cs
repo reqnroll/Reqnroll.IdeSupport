@@ -70,7 +70,7 @@ internal sealed class ScenarioTestTargetService
     /// <see cref="ScenarioTestTarget"/>. Separated from transport so it can be unit-tested. A
     /// <c>null</c>, non-object, or missing-<c>targets</c> result yields an empty list. Entries
     /// missing <c>declaringTypeFullName</c>/<c>methodName</c> are skipped rather than throwing —
-    /// same defensive shape as <c>GoToHooksService.ParseHooks</c>.
+    /// same defensive shape as <c>FindHooksService.ParseHooks</c>.
     /// </summary>
     internal static IReadOnlyList<ScenarioTestTarget> MapResult(JObject? result)
     {

@@ -35,7 +35,7 @@ public static class TelemetryEvents
     /// <summary>Sent by <see cref="Features.Commenting.CommentToggleHandler"/> after handling a comment/uncomment request.</summary>
     public const string CommentUncommentCommandExecuted = "CommentUncomment command executed";
 
-    /// <summary>Sent by <see cref="Features.Definition.GoToMatchingScenariosHandler"/> after handling a Go To Matching Scenarios request.</summary>
+    /// <summary>Sent by <see cref="Features.Definition.FindMatchingScenariosHandler"/> after handling a Go To Matching Scenarios request.</summary>
     public const string GoToMatchingScenariosCommandExecuted = "GoToMatchingScenarios command executed";
 
     /// <summary>Sent by <see cref="Features.Formatting.FormattingHandler"/> after handling a document/on-type formatting request.</summary>
@@ -44,7 +44,7 @@ public static class TelemetryEvents
     /// <summary>Sent by <see cref="Features.TestTargets.ResolveTestTargetsHandler"/> after resolving test targets for a Run request.</summary>
     public const string ResolveTestTargetsCommandExecuted = "ResolveTestTargets command executed";
 
-    /// <summary>Sent by <see cref="Features.Definition.GoToHooksHandler"/> after handling a Go To Hooks request.</summary>
+    /// <summary>Sent by <see cref="Features.Definition.FindHooksHandler"/> after handling a Go To Hooks request.</summary>
     public const string GoToHookCommandExecuted = "GoToHook command executed";
 
     /// <summary>Sent by <see cref="Features.CodeActions.CodeActionHandler"/> when the "Define step" quick fix is offered.</summary>

@@ -189,7 +189,7 @@ internal static class LspFrameCodec
         // Deliberately the parameterless overload: JToken.ToString(Formatting) resolves to a
         // MissingMethodException in the VS host process — some Newtonsoft.Json assembly loaded
         // there doesn't carry that overload. The parameterless one is used successfully
-        // elsewhere in this codebase (e.g. GoToHooksService). Formatting (indented vs. compact)
+        // elsewhere in this codebase (e.g. FindHooksService). Formatting (indented vs. compact)
         // doesn't affect wire correctness, only payload size.
         var bodyBytes   = Utf8NoBom.GetBytes(body.ToString());
         var headerText  = $"Content-Length: {bodyBytes.Length}\r\n\r\n";

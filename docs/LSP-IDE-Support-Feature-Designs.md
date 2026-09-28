@@ -1362,9 +1362,9 @@ All results are filtered by the tags in scope at the cursor position matched aga
 
 "Go to Hooks" does not map onto any standard IDE command (unlike Go to Definition, which has a universal F12 keybinding). Each IDE client requires custom plugin code to expose the feature.
 
-Using `textDocument/definition` for this feature is not viable: F5 already uses that message to navigate to the step binding on step lines, so the server would have no way to distinguish "find step definition" from "find hooks" when the cursor is on a step line. Step-level hooks (`[BeforeStep]`/`[AfterStep]`) would be unreachable. Instead, the plugin sends a dedicated custom request `reqnroll/goToHooks`, which the server handles independently of the standard definition pipeline.
+Using `textDocument/definition` for this feature is not viable: F5 already uses that message to navigate to the step binding on step lines, so the server would have no way to distinguish "find step definition" from "find hooks" when the cursor is on a step line. Step-level hooks (`[BeforeStep]`/`[AfterStep]`) would be unreachable. Instead, the plugin sends a dedicated custom request `reqnroll/findHooks`, which the server handles independently of the standard definition pipeline.
 
-**Rider note (as-built)**: Unlike F5 (generic LSP Go to Definition, no Rider-specific code needed), hook navigation has no standard IDE gesture to piggyback on, so it uses the separate `reqnroll/goToHooks` custom request via a request-sender pattern — not a PSI bridge. See the `#### Rider` subsection below and [Architecture §6.3](LSP-IDE-Support-Architecture.md#63-rider).
+**Rider note (as-built)**: Unlike F5 (generic LSP Go to Definition, no Rider-specific code needed), hook navigation has no standard IDE gesture to piggyback on, so it uses the separate `reqnroll/findHooks` custom request via a request-sender pattern — not a PSI bridge. See the `#### Rider` subsection below and [Architecture §6.3](LSP-IDE-Support-Architecture.md#63-rider).
 
 #### Visual Studio — surface and UX details
 
@@ -1380,8 +1380,8 @@ The picker logic is encapsulated in a shared `NavigationPickerHelper` (static he
 
 | Direction | Method | Purpose |
 |-----------|--------|---------|
-| Client → Server | `reqnroll/goToHooks` (uri, position) | Request hook locations for context |
-| Server → Client | `GoToHooksResponse` (`hooks[]`) | C# hook method locations + metadata |
+| Client → Server | `reqnroll/findHooks` (uri, position) | Request hook locations for context |
+| Server → Client | `FindHooksResponse` (`hooks[]`) | C# hook method locations + metadata |
 
 #### Sequence diagram
 
@@ -1391,19 +1391,19 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant HH as GoToHooksHandler
+        participant HH as FindHooksHandler
         participant DB as Document Buffer
         participant BR as Binding Registry
     end
 
     User->>IDE: Right-click → "Go to Hooks" in .feature editor
-    IDE->>HH: reqnroll/goToHooks (uri, position)
+    IDE->>HH: reqnroll/findHooks (uri, position)
     HH->>DB: Retrieve AST + tags by URI
     DB-->>HH: Gherkin AST + IdeSupportTags
     HH->>HH: Determine position context (Feature/Scenario/Step level)\nand collect tags in scope
     HH->>BR: Filter Hooks by context level + scope expressions
-    BR-->>HH: GoToHooksResponse { hooks[] }
-    HH-->>IDE: GoToHooksResponse
+    BR-->>HH: FindHooksResponse { hooks[] }
+    HH-->>IDE: FindHooksResponse
     alt single result
         IDE-->>User: Navigate directly to hook method
     else multiple results
@@ -1415,11 +1415,11 @@ sequenceDiagram
 
 #### VS Code
 
-`reqnroll.goToHooks` is available via editor context menu (`editor/context`, group `navigation@90`, `when: editorLangId == gherkin`) and the command palette, with no default keybinding. `doGoToHooks` ([`goToHooks.ts`](../src/VSCode/src/commands/goToHooks.ts)) reads the active editor's cursor position and sends the custom `reqnroll/goToHooks` request with `{textDocument, position}`. A single hook navigates directly via `openAndReveal`; multiple hooks show a `vscode.window.showQuickPick` with one entry per hook (`$(symbol-event) HookType`, method name as description, `Order: N` as detail when `hookOrder !== 0`) — the VS Code-idiomatic equivalent of the VS `NavigationPickerDialog` modal described above. `navigateToHook` opens the target `.cs` file and reveals the hook method's location via the shared `openAndReveal` helper (also used by F14 and F15).
+`reqnroll.goToHooks` is available via editor context menu (`editor/context`, group `navigation@90`, `when: editorLangId == gherkin`) and the command palette, with no default keybinding. `doGoToHooks` ([`goToHooks.ts`](../src/VSCode/src/commands/goToHooks.ts)) reads the active editor's cursor position and sends the custom `reqnroll/findHooks` request with `{textDocument, position}`. A single hook navigates directly via `openAndReveal`; multiple hooks show a `vscode.window.showQuickPick` with one entry per hook (`$(symbol-event) HookType`, method name as description, `Order: N` as detail when `hookOrder !== 0`) — the VS Code-idiomatic equivalent of the VS `NavigationPickerDialog` modal described above. `navigateToHook` opens the target `.cs` file and reveals the hook method's location via the shared `openAndReveal` helper (also used by F14 and F15).
 
 #### Rider
 
-F17 (issue #158) mirrors the F15/F16 request-sender pattern rather than a PSI bridge handler: `ReqnrollLanguageServer.goToHooks` (`ReqnrollLanguageServer.kt`), a `@JsonRequest("reqnroll/goToHooks")` taking the standard LSP4J `TextDocumentPositionParams`, is called via `ReqnrollRequestSender.goToHooks(project, uri, line, character)`, following the `findStepUsages`/`findUnusedStepDefinitions` pattern of `sendRequestSync` from a `Task.Backgroundable`. `Reqnroll.GoToHooks` (`GoToHooksAction.kt`) is enabled only when the caret is in a `.feature` file editor (mirroring `FindStepUsagesAction`'s `.cs`-only gating) and is registered in the `Reqnroll.ActionGroup` Tools-menu group and in `EditorPopupMenu`. `GoToHooksRunner` navigates directly via `ReqnrollResultPopup.navigateToUri` for a single hook; multiple hooks show `ReqnrollResultPopup`'s chooser popup (the same `JBPopupFactory` list used by Find Step Usages / Find Unused Step Definitions), each entry rendered as `[HookType] MethodName (filename:line)`.
+F17 (issue #158) mirrors the F15/F16 request-sender pattern rather than a PSI bridge handler: `ReqnrollLanguageServer.findHooks` (`ReqnrollLanguageServer.kt`), a `@JsonRequest("reqnroll/findHooks")` taking the standard LSP4J `TextDocumentPositionParams`, is called via `ReqnrollRequestSender.findHooks(project, uri, line, character)`, following the `findStepUsages`/`findUnusedStepDefinitions` pattern of `sendRequestSync` from a `Task.Backgroundable`. `Reqnroll.GoToHooks` (`GoToHooksAction.kt`) is enabled only when the caret is in a `.feature` file editor (mirroring `FindStepUsagesAction`'s `.cs`-only gating) and is registered in the `Reqnroll.ActionGroup` Tools-menu group and in `EditorPopupMenu`. `GoToHooksRunner` navigates directly via `ReqnrollResultPopup.navigateToUri` for a single hook; multiple hooks show `ReqnrollResultPopup`'s chooser popup (the same `JBPopupFactory` list used by Find Step Usages / Find Unused Step Definitions), each entry rendered as `[HookType] MethodName (filename:line)`.
 
 ---
 
@@ -1613,11 +1613,11 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 |-----------|--------|---------|
 | Client → Server | `textDocument/codeLens` | Request code lens items for a `.feature` document |
 | Server → Client | `CodeLens[]` response | Hook-count annotations, one per own-level tag block plus one step-hooks lens per scenario |
-| Client → Server | `reqnroll.goToHooks` (via `workspace/executeCommand`, reusing [F17](#f17--hook-navigation)'s `reqnroll/goToHooks`) | Lens click, with `ownLevelOnly` and (for the step-hooks lens) an extra flag distinguishing it from the own-level lens |
+| Client → Server | `reqnroll.goToHooks` (via `workspace/executeCommand`, reusing [F17](#f17--hook-navigation)'s `reqnroll/findHooks`) | Lens click, with `ownLevelOnly` and (for the step-hooks lens) an extra flag distinguishing it from the own-level lens |
 
 #### Implementation notes
 
-`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `GoToHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`). This server-side piece is unchanged by the Visual Studio work below — it was already shipped for VS Code/Rider.
+`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `FindHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`). This server-side piece is unchanged by the Visual Studio work below — it was already shipped for VS Code/Rider.
 
 **VS Code**: `registerHookCodeLens` (`src/VSCode/src/commands/hookCodeLens.ts`) calls `vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider)` directly (same pattern as F18's `stepCodeLens.ts`), sending the raw `textDocument/codeLens` request. Clicks are handled by `doGoToHooks` (`src/VSCode/src/commands/goToHooks.ts`), which gates auto-navigate on `!position?.alwaysShowPicker` — set only for CodeLens-sourced clicks, so a lens click always opens the QuickPick while a manual "Go to Hooks" invocation from the cursor still auto-navigates on a single match.
 
@@ -1643,9 +1643,9 @@ The classic `Microsoft.VisualStudio.Language.CodeLens` API (`ITagger<ICodeLensTa
 | `HookCodeLensCallbackListener` | `devenv.exe` (in-process MEF part) | `ICodeLensCallbackListener` — the devenv-side JSON-RPC target the OOP data point calls back into (`ICodeLensCallbackService.InvokeAsync`), over the *same* duplex stream the ServiceHub connection already uses. Delegates to `HookCodeLensRedirect`, same as the tagger. Must carry `[ContentType("Gherkin")]` metadata — VS's devenv-side `CodeLensHubClient` filters callback listeners by content type before wiring them onto the RPC target list at all; without it, the listener composes as a valid MEF part but is never actually reachable, and every callback fails with `RemoteMethodNotFoundException`. |
 | `HookCodeLensRedirect` | `devenv.exe` (in-process, `static`) | The actual LSP bridge, mirroring `CommentToggleRedirect`/`NavigationBarRedirect`. Populated by `ReqnrollLanguageClient` once the LSP connection is live. Used directly by the in-process tagger, and indirectly (via the callback listener) on behalf of the out-of-process data point. |
 | `HookFeatureCodeLensService` | `devenv.exe` (in-process) | Sends `textDocument/codeLens` over `LspInterceptingPipe` and parses the response into `HookFeatureLensEntry[]`. |
-| `GoToHooksService` (`ownLevelOnly` overload) | `devenv.exe` (in-process) | Sends `reqnroll/goToHooks` for the Details popup — reused from [F17](#f17--hook-navigation) so a lens's Details popup always matches what a manual "Go to Hooks" invocation with the same `ownLevelOnly` would return. |
+| `FindHooksService` (`ownLevelOnly` overload) | `devenv.exe` (in-process) | Sends `reqnroll/findHooks` for the Details popup — reused from [F17](#f17--hook-navigation) so a lens's Details popup always matches what a manual "Go to Hooks" invocation with the same `ownLevelOnly` would return. |
 | `ReqnrollPluginPackage` (`IOleCommandTarget`) / `HookCodeLensCommands.vsct` / `HookCodeLensCommandIds` | `devenv.exe` (in-process) | Routes the Details popup's navigate-to-hook command. `CodeLensDetailEntryCommand` only supports a `CommandSet`+`CommandId` pair on Windows, not a VS.Extensibility command, so this mirrors Microsoft's own `CodeLensOopSample` sample rather than the VS.Extensibility command pattern used elsewhere in this repo. |
-| `HookCodeLensHandler` / `GoToHooksHandler` | LSP Server | Pre-existing (#269 / F17); unchanged by this work. |
+| `HookCodeLensHandler` / `FindHooksHandler` | LSP Server | Pre-existing (#269 / F17); unchanged by this work. |
 
 **Platform requirements found only by live debugging** (none apparent from the classic CodeLens SDK docs, which describe an older/simpler model this VS build has partially superseded):
 
@@ -1671,7 +1671,7 @@ sequenceDiagram
 
     box LightBlue LSP Server
         participant HCH as HookCodeLensHandler
-        participant GTH as GoToHooksHandler
+        participant GTH as FindHooksHandler
     end
 
     User->>IDE: Opens / scrolls a .feature file
@@ -1701,8 +1701,8 @@ sequenceDiagram
     else
         Note over DP,IDE: GetDataAsync also eagerly fetches and caches the Details-popup content here (requirement 5 above)
         DP->>IDE: ICodeLensCallbackService.InvokeAsync GetHookDetails(fileUri, navLine, navChar, ownLevelOnly) - nav args from the resolved entry
-        IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to GoToHooksService
-        IDE->>GTH: reqnroll/goToHooks (ownLevelOnly)
+        IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to FindHooksService
+        IDE->>GTH: reqnroll/findHooks (ownLevelOnly)
         GTH-->>IDE: matching hooks
         IDE-->>DP: HookDetailEntry list, cached on the data point instance
 
@@ -1748,7 +1748,7 @@ sequenceDiagram
 
 The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): each hook-binding C# method (`[BeforeScenario]`/`[AfterScenario]`/`[BeforeStep]`/`[AfterStep]`/etc.) shows a CodeLens with the count of features/scenarios that hook currently matches, given its scope/tag expression — conceptually the same shape as [F18](#f18--code-lens-step-usage-counts)'s step-usage lens, but for hooks. `[BeforeTestRun]`/`[AfterTestRun]` hooks are excluded (not scenario-countable — they run once per test run, not per feature/scenario). Unlike F18 and F24, a hook with **zero** matches still renders "0 scenarios matched" rather than being suppressed — deliberate, since a zero-match hook (e.g. a stale tag scope that no longer matches anything) is often exactly what the user needs to notice. Clicking the lens always shows a picker/results list of the matching scenarios, never auto-navigating directly even for a single match.
 
-**Unscoped hooks (issue #403).** A hook with no `[Scope]` at all matches every scenario in the project — an actual count here would be unbounded and uninformative (and expensive to compute for no benefit), so the lens renders the static label "all scenarios" instead of "N scenarios matched" and skips the scenario-corpus walk entirely for that hook. The click action is unaffected — `reqnroll/goToMatchingScenarios` still resolves and returns the full scenario list on demand, same as any other hook. VS's `HookMatchCountCodeLensProvider` (which aggregates multiple hook lenses in a method's attribute window by parsing the numeric prefix off each lens's title) special-cases the "all scenarios" label so it isn't misread as a zero count when aggregated alongside scoped hooks in the same window.
+**Unscoped hooks (issue #403).** A hook with no `[Scope]` at all matches every scenario in the project — an actual count here would be unbounded and uninformative (and expensive to compute for no benefit), so the lens renders the static label "all scenarios" instead of "N scenarios matched" and skips the scenario-corpus walk entirely for that hook. The click action is unaffected — `reqnroll/findMatchingScenarios` still resolves and returns the full scenario list on demand, same as any other hook. VS's `HookMatchCountCodeLensProvider` (which aggregates multiple hook lenses in a method's attribute window by parsing the numeric prefix off each lens's title) special-cases the "all scenarios" label so it isn't misread as a zero count when aggregated alongside scoped hooks in the same window.
 
 #### IDE support matrix
 
@@ -1763,8 +1763,8 @@ The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): e
 | Direction | Method | Purpose |
 |-----------|--------|---------|
 | Client → Server | `textDocument/codeLens` | `.cs` file — combined in the same response as F18's step-usage lenses |
-| Client → Server | `reqnroll/goToMatchingScenarios` (uri, line, character) | Lens click — request matching feature/scenario locations |
-| Server → Client | `GoToMatchingScenariosResponse` (`scenarios[]`) | Matching feature/scenario locations for the picker/results list |
+| Client → Server | `reqnroll/findMatchingScenarios` (uri, line, character) | Lens click — request matching feature/scenario locations |
+| Server → Client | `FindMatchingScenariosResponse` (`scenarios[]`) | Matching feature/scenario locations for the picker/results list |
 
 #### Implementation notes
 
@@ -1772,7 +1772,7 @@ The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): e
 
 **VS Code**: click handling in `doGoToMatchingScenarios` (`src/VSCode/src/commands/goToMatchingScenarios.ts`); the lens provider shares the same `.cs` `CodeLensProvider` registration as F18's `stepCodeLens.ts`.
 
-**Rider**: `GoToMatchingScenariosRunner` (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/actions/GoToMatchingScenariosRunner.kt`) drives navigation via `ReqnrollRequestSender.goToMatchingScenarios`; dispatch from the lens click lives in `StepUsagesCodeVisionProvider` (see Coexistence above).
+**Rider**: `GoToMatchingScenariosRunner` (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/actions/GoToMatchingScenariosRunner.kt`) drives navigation via `ReqnrollRequestSender.findMatchingScenarios`; dispatch from the lens click lives in `StepUsagesCodeVisionProvider` (see Coexistence above).
 
 **Visual Studio**: `HookMatchCountCodeLensProvider` (`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/HookMatchCountCodeLens/HookMatchCountCodeLensProvider.cs`), a second `ICodeLensProvider`. Its `ExecuteAsync` reuses the Find-Usages results-window renderer (the same one [F14](#f14--find-step-definition-usages) uses) to present matches, rather than the `NavigationPickerDialog` modal F17/F24 use.
 

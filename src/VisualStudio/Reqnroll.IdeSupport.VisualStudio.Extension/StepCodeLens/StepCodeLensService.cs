@@ -106,7 +106,7 @@ internal sealed class StepCodeLensService
             var commandName = command?["command"]?.Value<string>() ?? string.Empty;
 
             // Arguments from the server: [fileUri, attrLine0, attrChar0] — the attribute's exact
-            // position, needed verbatim by position-sensitive lookups like goToMatchingScenarios.
+            // position, needed verbatim by position-sensitive lookups like findMatchingScenarios.
             var args         = command?["arguments"] as JArray;
             var argLine      = args?.Count >= 2 ? args[1].Value<int>() : rangeLine;
             var argChar      = args?.Count >= 3 ? args[2].Value<int>() : 0;

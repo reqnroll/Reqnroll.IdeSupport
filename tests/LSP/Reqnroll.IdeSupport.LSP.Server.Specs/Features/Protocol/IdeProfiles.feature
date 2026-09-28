@@ -126,9 +126,9 @@ Scenario Outline: All clients receive the custom protocol capability manifest
 		| reqnrollWorkspaceLifecycleProvider           | projectUnloadedMethod     | reqnroll/projectUnloaded                  |
 		| reqnrollWorkspaceLifecycleProvider           | projectFilesMethod        | reqnroll/projectFiles                     |
 		| reqnrollFindStepUsagesProvider               | method                    | reqnroll/findStepUsages                   |
-		| reqnrollGoToHooksProvider                    | method                    | reqnroll/goToHooks                        |
+		| reqnrollFindHooksProvider                    | method                    | reqnroll/findHooks                        |
 		| reqnrollFindStepDefinitionsProvider          | method                    | reqnroll/findStepDefinitions              |
-		| reqnrollGoToMatchingScenariosProvider        | method                    | reqnroll/goToMatchingScenarios            |
+		| reqnrollFindMatchingScenariosProvider        | method                    | reqnroll/findMatchingScenarios            |
 		| reqnrollResolveTestTargetsProvider           | method                    | reqnroll/resolveTestTargets               |
 		| reqnrollFindUnusedStepDefinitionsProvider    | method                    | reqnroll/findUnusedStepDefinitions        |
 		| reqnrollStepRenameProvider                   | renameTargetsMethod       | reqnroll/renameTargets                    |

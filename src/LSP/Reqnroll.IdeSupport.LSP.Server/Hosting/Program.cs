@@ -433,14 +433,14 @@ public class Program
                 extensionData["reqnrollFindStepUsagesProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepUsages });
 
-                extensionData["reqnrollGoToHooksProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToHooks });
+                extensionData["reqnrollFindHooksProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindHooks });
 
                 extensionData["reqnrollFindStepDefinitionsProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepDefinitions });
 
-                extensionData["reqnrollGoToMatchingScenariosProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToMatchingScenarios });
+                extensionData["reqnrollFindMatchingScenariosProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindMatchingScenarios });
 
                 extensionData["reqnrollResolveTestTargetsProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollResolveTestTargets });

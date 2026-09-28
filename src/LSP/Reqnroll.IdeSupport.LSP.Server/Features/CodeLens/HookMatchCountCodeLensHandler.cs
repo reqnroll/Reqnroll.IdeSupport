@@ -42,7 +42,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// An unscoped hook (no <c>[Scope]</c> at all) matches every scenario in the project — a count
 /// here would be technically correct but unbounded and uninformative, so the lens shows the
 /// static label "all scenarios" instead and skips the corpus walk entirely (issue #403). The
-/// click action is unaffected: <c>reqnroll/goToMatchingScenarios</c> still resolves and returns
+/// click action is unaffected: <c>reqnroll/findMatchingScenarios</c> still resolves and returns
 /// the full scenario list on demand.
 /// </para>
 /// <para>

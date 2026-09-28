@@ -6,12 +6,12 @@ using Newtonsoft.Json;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Response DTO for the custom <c>reqnroll/goToMatchingScenarios</c> request (issue #373's
+/// Response DTO for the custom <c>reqnroll/findMatchingScenarios</c> request (issue #373's
 /// hook-match-count CodeLens click action). Contains every scenario the queried hook binding's
 /// scope matches, across the whole owning project(s) -- the inverse of
-/// <c>reqnroll/goToHooks</c>'s <see cref="GoToHooksResponse"/>.
+/// <c>reqnroll/findHooks</c>'s <see cref="FindHooksResponse"/>.
 /// </summary>
-public sealed class GoToMatchingScenariosResponse
+public sealed class FindMatchingScenariosResponse
 {
     /// <summary>Gets or sets the matching scenarios.</summary>
     [JsonProperty("scenarios")]

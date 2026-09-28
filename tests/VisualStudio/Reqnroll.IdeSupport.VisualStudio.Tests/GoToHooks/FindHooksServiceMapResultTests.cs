@@ -6,10 +6,10 @@ using Xunit;
 namespace Reqnroll.VisualStudio.Tests.GoToHooks;
 
 /// <summary>
-/// Client-side mapping of a <c>reqnroll/goToHooks</c> result into a
-/// <see cref="GoToHooksResult"/> (<see cref="GoToHooksService.MapResult"/>).
+/// Client-side mapping of a <c>reqnroll/findHooks</c> result into a
+/// <see cref="FindHooksResult"/> (<see cref="FindHooksService.MapResult"/>).
 /// </summary>
-public class GoToHooksServiceMapResultTests
+public class FindHooksServiceMapResultTests
 {
     private static JObject Hook(string hookType, int order, string methodName) => new()
     {
@@ -24,21 +24,21 @@ public class GoToHooksServiceMapResultTests
     [Fact]
     public void A_null_or_non_object_result_is_empty()
     {
-        GoToHooksService.MapResult(null).Hooks.Should().BeEmpty();
-        GoToHooksService.MapResult(JValue.CreateNull()).Hooks.Should().BeEmpty();
-        GoToHooksService.MapResult(new JArray()).Hooks.Should().BeEmpty();
+        FindHooksService.MapResult(null).Hooks.Should().BeEmpty();
+        FindHooksService.MapResult(JValue.CreateNull()).Hooks.Should().BeEmpty();
+        FindHooksService.MapResult(new JArray()).Hooks.Should().BeEmpty();
     }
 
     [Fact]
     public void A_result_without_hooks_is_empty()
     {
-        GoToHooksService.MapResult(new JObject()).Hooks.Should().BeEmpty();
+        FindHooksService.MapResult(new JObject()).Hooks.Should().BeEmpty();
     }
 
     [Fact]
     public void Hooks_are_parsed_with_type_order_and_method()
     {
-        var result = GoToHooksService.MapResult(new JObject
+        var result = FindHooksService.MapResult(new JObject
         {
             ["hooks"] = new JArray(
                 Hook("BeforeScenario", 10, "SetUp"),
@@ -56,7 +56,7 @@ public class GoToHooksServiceMapResultTests
     [Fact]
     public void A_hook_without_a_uri_is_skipped()
     {
-        var result = GoToHooksService.MapResult(new JObject
+        var result = FindHooksService.MapResult(new JObject
         {
             ["hooks"] = new JArray(
                 new JObject { ["hookType"] = "BeforeStep" }, // no uri

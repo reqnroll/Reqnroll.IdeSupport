@@ -126,16 +126,16 @@ public static class LspClientExtensions
                 })
             .Returning<ResolveTestTargetsResponse?>(CancellationToken.None);
 
-    /// <summary>Sends <c>reqnroll/goToMatchingScenarios</c> (F24 — Hook Match CodeLens navigation).</summary>
-    public static Task<GoToMatchingScenariosResponse?> RequestGoToMatchingScenariosAsync(
+    /// <summary>Sends <c>reqnroll/findMatchingScenarios</c> (F24 — Hook Match CodeLens navigation).</summary>
+    public static Task<FindMatchingScenariosResponse?> RequestFindMatchingScenariosAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character)
-        => client.SendRequest("reqnroll/goToMatchingScenarios",
+        => client.SendRequest("reqnroll/findMatchingScenarios",
                 new TextDocumentPositionParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
                     Position     = new Position(line, character)
                 })
-            .Returning<GoToMatchingScenariosResponse?>(CancellationToken.None);
+            .Returning<FindMatchingScenariosResponse?>(CancellationToken.None);
 
     /// <summary>
     /// Sends a <c>reqnroll/findStepUsages</c> request.
@@ -152,16 +152,16 @@ public static class LspClientExtensions
                 })
             .Returning<FindStepUsagesResponse?>(ct);
 
-    /// <summary>Sends a <c>reqnroll/goToHooks</c> request (F17 — Hook Navigation).</summary>
-    public static Task<GoToHooksResponse?> RequestGoToHooksAsync(
+    /// <summary>Sends a <c>reqnroll/findHooks</c> request (F17 — Hook Navigation).</summary>
+    public static Task<FindHooksResponse?> RequestFindHooksAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)
-        => client.SendRequest("reqnroll/goToHooks",
+        => client.SendRequest("reqnroll/findHooks",
                 new TextDocumentPositionParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
                     Position     = new Position(line, character),
                 })
-            .Returning<GoToHooksResponse?>(ct);
+            .Returning<FindHooksResponse?>(ct);
 
     /// <summary>
     /// Sends a <c>textDocument/codeLens</c> request (F18 — Step Code Lens).

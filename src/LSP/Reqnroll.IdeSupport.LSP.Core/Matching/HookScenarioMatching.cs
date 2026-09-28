@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Matching;
 /// <summary>
 /// Resolves which project scenarios a given hook binding's scope matches -- the inverse of
 /// <c>HookMatching</c> (issue #269, "given a position, which hooks apply"). Backs the
-/// hook-match-count CodeLens and <c>reqnroll/goToMatchingScenarios</c> request (issue #373).
+/// hook-match-count CodeLens and <c>reqnroll/findMatchingScenarios</c> request (issue #373).
 /// </summary>
 public static class HookScenarioMatching
 {
