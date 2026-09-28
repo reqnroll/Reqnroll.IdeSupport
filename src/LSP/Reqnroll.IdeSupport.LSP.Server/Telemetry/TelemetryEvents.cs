@@ -44,8 +44,20 @@ public static class TelemetryEvents
     /// <summary>Sent by <see cref="Features.TestTargets.ResolveTestTargetsHandler"/> after resolving test targets for a Run request.</summary>
     public const string ResolveTestTargetsCommandExecuted = "ResolveTestTargets command executed";
 
-    /// <summary>Sent by <see cref="Features.Definition.FindHooksHandler"/> after handling a Go To Hooks request.</summary>
-    public const string GoToHookCommandExecuted = "GoToHook command executed";
+    /// <summary>
+    /// Sent unconditionally by <see cref="Features.Definition.FindHooksHandler"/> after handling any
+    /// <c>reqnroll/findHooks</c> request — including the classic VS CodeLens's Details-popup prefetch,
+    /// which calls the same handler on every lens render, not just on a click.
+    /// </summary>
+    /// <remarks>
+    /// Renamed from <c>"GoToHook command executed"</c> (issue #698): that name implied every request
+    /// was a genuine user navigation, which the CodeLens prefetch call is not — this event now reports
+    /// only that a findHooks lookup ran, honestly matching what the server can actually observe. Real
+    /// "the user navigated to a hook" telemetry is instead originated client-side, at each IDE's own
+    /// navigation-command call site (see <c>GoToHooksCommand</c> in the VS extension), since only the
+    /// client knows whether a given call is a genuine navigation or a CodeLens data-fetch.
+    /// </remarks>
+    public const string FindHooksCommandExecuted = "FindHooks command executed";
 
     /// <summary>Sent by <see cref="Features.CodeActions.CodeActionHandler"/> when the "Define step" quick fix is offered.</summary>
     public const string DefineStepsCommandOffered = "DefineSteps command offered";

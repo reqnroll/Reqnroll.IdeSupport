@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
@@ -19,7 +21,18 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 [VisualStudioContribution]
 internal sealed class GoToHooksCommand : Command
 {
+    /// <summary>
+    /// Telemetry event name for a genuine "Go to Hooks" navigation (issue #698). Originated here,
+    /// client-side, rather than by the LSP server's <c>reqnroll/findHooks</c> handler: that handler
+    /// also backs the classic VS CodeLens's Details-popup prefetch (every lens render, not just a
+    /// click), so it cannot honestly claim every request is a navigation — only this command's own
+    /// invocation genuinely is one. The server instead reports <c>TelemetryEvents.FindHooksCommandExecuted</c>
+    /// for every request, prefetch or not.
+    /// </summary>
+    private const string GoToHookCommandExecutedEventName = "GoToHook command executed";
+
     private readonly FindHooksState  _state;
+    private readonly LspServerConnectionService _connectionService;
     private readonly ILogger<GoToHooksCommand> _logger;
     // NavigationPickerHelper (shared with FindStepUsages/RenameStep-adjacent navigation code,
     // out of scope for the ILogger<T> migration) still takes IIdeSupportLogger — resolve the
@@ -27,11 +40,16 @@ internal sealed class GoToHooksCommand : Command
     private readonly IIdeSupportLogger _fileLogger;
 
     /// <summary>Creates the command over the shared runtime state holder.</summary>
-    public GoToHooksCommand(FindHooksState state, ILogger<GoToHooksCommand> logger, IIdeSupportLogger fileLogger)
+    public GoToHooksCommand(
+        FindHooksState              state,
+        LspServerConnectionService  connectionService,
+        ILogger<GoToHooksCommand>   logger,
+        IIdeSupportLogger           fileLogger)
     {
-        _state      = state;
-        _logger     = logger;
-        _fileLogger = fileLogger;
+        _state             = state;
+        _connectionService = connectionService;
+        _logger            = logger;
+        _fileLogger        = fileLogger;
     }
 
     /// <inheritdoc />
@@ -63,6 +81,12 @@ internal sealed class GoToHooksCommand : Command
                 _logger.LogWarning("GoToHooksCommand: LSP server not yet initialized.");
                 return;
             }
+
+            // A genuine navigation, as opposed to the classic CodeLens's Details-popup prefetch
+            // (which never runs through this command) — emit here, not from the server's
+            // reqnroll/findHooks handler, which cannot tell the two apart (issue #698).
+            _connectionService.TelemetryTransmitter?.TransmitEvent(
+                new GenericEvent(GoToHookCommandExecutedEventName, []));
 
             var textView = await context.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
             if (textView is null)

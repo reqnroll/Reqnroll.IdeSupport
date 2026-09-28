@@ -510,6 +510,6 @@ public class FindHooksHandlerTests
         var result = await CreateSutWithTelemetry(telemetry).HandleAsync(
             RequestAt(FeatureUri, 1, 4), CancellationToken.None);
 
-        telemetry.Received(1).SendEvent("GoToHook command executed", Arg.Any<Dictionary<string, object?>>());
+        telemetry.Received(1).SendEvent("FindHooks command executed", Arg.Any<Dictionary<string, object?>>());
     }
 }

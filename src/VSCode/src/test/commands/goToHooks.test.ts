@@ -1,7 +1,9 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
+import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { doGoToHooks } from '../../commands/goToHooks';
+import { registerTelemetry } from '../../telemetry';
 
 /** Minimal stand-in for LanguageClient's sendRequest surface used by doGoToHooks. */
 function fakeClient(sendRequest: () => Promise<unknown>): LanguageClient {
@@ -221,6 +223,33 @@ suite('goToHooks', () => {
       });
 
       assert.strictEqual((sentParams as { ownLevelOnly?: boolean })?.ownLevelOnly, true);
+    });
+
+    test('sends "GoToHook command executed" telemetry directly on a genuine invocation (issue #698)', async () => {
+      const client = {
+        sendRequest: () => Promise.resolve({ hooks: [] }),
+        onNotification: () => ({ dispose: () => undefined }),
+      } as unknown as LanguageClient;
+      const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
+
+      const proto = TelemetryReporter.prototype as unknown as {
+        sendTelemetryEvent: (eventName: string) => void;
+      };
+      const original = proto.sendTelemetryEvent;
+      const sentEventNames: string[] = [];
+      proto.sendTelemetryEvent = (eventName: string) => {
+        sentEventNames.push(eventName);
+      };
+
+      try {
+        registerTelemetry(client, telemetryContext);
+        await doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 });
+
+        assert.deepStrictEqual(sentEventNames, ['GoToHook command executed']);
+      } finally {
+        proto.sendTelemetryEvent = original;
+        for (const sub of telemetryContext.subscriptions) sub.dispose();
+      }
     });
   });
 });

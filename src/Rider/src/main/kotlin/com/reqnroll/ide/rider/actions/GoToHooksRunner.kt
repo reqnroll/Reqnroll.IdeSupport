@@ -9,6 +9,7 @@ import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.FindHookLocation
 import com.reqnroll.ide.rider.lsp.protocol.FindHooksResponse
+import com.reqnroll.ide.rider.telemetry.RiderTelemetryTransmitter
 
 /**
  * Shared "run `reqnroll/findHooks` then navigate" logic for [GoToHooksAction] — the Rider-side
@@ -31,6 +32,13 @@ object GoToHooksRunner {
         ownLevelOnly: Boolean = false, alwaysShowPicker: Boolean = false,
     ) {
         ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character")
+
+        // A genuine navigation -- GoToHooksAction is this function's only caller, and Rider's own
+        // hook-count CodeVision lens resolves its counts without ever calling reqnroll/findHooks,
+        // so unlike VS's classic CodeLens there's no prefetch call through here to mislabel
+        // (issue #698).
+        RiderTelemetryTransmitter.transmit("GoToHook command executed", emptyMap())
+
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
             override fun run(indicator: ProgressIndicator) {
