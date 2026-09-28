@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
+import { sendTelemetryEvent } from '../telemetry';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface FindHooksResponse {
@@ -47,6 +48,11 @@ export async function doGoToHooks(
   const line = position?.line ?? editor?.selection.active.line;
   const character = position?.character ?? editor?.selection.active.character;
   if (uri === undefined || line === undefined || character === undefined) return;
+
+  // A genuine navigation -- unlike VS's classic CodeLens, VS Code's hook-count CodeLens resolves
+  // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
+  // caller and every invocation (palette, keybinding, or a lens click) really is one (issue #698).
+  sendTelemetryEvent('GoToHook command executed');
 
   let response: FindHooksResponse;
   try {
