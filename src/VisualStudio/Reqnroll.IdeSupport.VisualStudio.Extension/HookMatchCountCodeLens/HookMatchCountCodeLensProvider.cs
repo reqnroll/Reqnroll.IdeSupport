@@ -42,21 +42,21 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensProvider
 {
     private readonly StepCodeLensState _state;
-    private readonly FindMatchingScenariosState _goToState;
+    private readonly FindMatchingScenariosState _findMatchingScenariosState;
     private readonly ILogger<HookMatchCountCodeLensProvider> _logger;
     private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>Creates the provider over the shared runtime state holders.</summary>
     public HookMatchCountCodeLensProvider(
         StepCodeLensState                        state,
-        FindMatchingScenariosState               goToState,
+        FindMatchingScenariosState               findMatchingScenariosState,
         ILogger<HookMatchCountCodeLensProvider>  logger,
         ILoggerFactory                            loggerFactory)
     {
-        _state         = state;
-        _goToState     = goToState;
-        _logger        = logger;
-        _loggerFactory = loggerFactory;
+        _state                      = state;
+        _findMatchingScenariosState = findMatchingScenariosState;
+        _logger                     = logger;
+        _loggerFactory              = loggerFactory;
     }
 
     // Apply to C# files only.
@@ -86,7 +86,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
         var startLine = context.Range.Start.GetContainingLine().LineNumber;
 
         var lens = new HookMatchCountCodeLens(
-            _state, _goToState, _loggerFactory.CreateLogger<HookMatchCountCodeLens>(), fileUri, startLine);
+            _state, _findMatchingScenariosState, _loggerFactory.CreateLogger<HookMatchCountCodeLens>(), fileUri, startLine);
         return Task.FromResult<CodeLens?>(lens);
     }
 }
@@ -99,7 +99,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
 internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatableLens
 {
     private readonly StepCodeLensState _state;
-    private readonly FindMatchingScenariosState _goToState;
+    private readonly FindMatchingScenariosState _findMatchingScenariosState;
     private readonly ILogger<HookMatchCountCodeLens> _logger;
     private readonly Uri _fileUri;
     private readonly int _methodStartLine;
@@ -113,16 +113,16 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
     /// <summary>Creates the lens for a specific method and registers it with the shared state for later invalidation.</summary>
     public HookMatchCountCodeLens(
         StepCodeLensState                state,
-        FindMatchingScenariosState       goToState,
+        FindMatchingScenariosState       findMatchingScenariosState,
         ILogger<HookMatchCountCodeLens>  logger,
         Uri                              fileUri,
         int                              methodStartLine)
     {
-        _state           = state;
-        _goToState       = goToState;
-        _logger          = logger;
-        _fileUri         = fileUri;
-        _methodStartLine = methodStartLine;
+        _state                      = state;
+        _findMatchingScenariosState = findMatchingScenariosState;
+        _logger                     = logger;
+        _fileUri                    = fileUri;
+        _methodStartLine            = methodStartLine;
         _state.RegisterLens(this, fileUri.ToString());
     }
 
@@ -201,8 +201,8 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
         IClientContext     clientContext,
         CancellationToken  cancellationToken)
     {
-        var goToService = _goToState.Service;
-        if (goToService is null)
+        var findMatchingScenariosService = _findMatchingScenariosState.Service;
+        if (findMatchingScenariosService is null)
         {
             _logger.LogWarning(
                 "HookMatchCountCodeLens.ExecuteAsync: LSP server not yet initialized — cannot go to matching scenarios.");
@@ -238,7 +238,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
                 "HookMatchCountCodeLens.ExecuteAsync: invoking go-to-matching-scenarios at {FileUri}:{ArgLine}:{ArgChar}",
                 _fileUri, firstHook.ArgLine, firstHook.ArgChar);
 
-            var result = await goToService
+            var result = await findMatchingScenariosService
                 .FindMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, firstHook.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
