@@ -25,9 +25,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Editor.Classification;
 /// <para>
 /// This is the "VSSDK side" of the new extension: the LSP coloring pipeline replaces the legacy
 /// classifier/tagger, but the classification <i>definitions</i> and their default formats are
-/// carried forward verbatim for continuity.  The <c>.feature</c> content type itself is now
-/// registered via VisualStudio.Extensibility, so the legacy content-type / file-extension
-/// exports are intentionally not duplicated here.
+/// carried forward verbatim for continuity.  The <c>.feature</c> content type itself is
+/// registered both via VisualStudio.Extensibility and statically in
+/// <see cref="GherkinContentTypeDefinition"/> (issue #78).
 /// </para>
 /// </remarks>
 internal static class IdeSupportClassifications
