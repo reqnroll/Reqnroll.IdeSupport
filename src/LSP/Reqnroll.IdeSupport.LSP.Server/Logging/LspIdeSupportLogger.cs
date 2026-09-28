@@ -22,11 +22,12 @@ public sealed class LspIdeSupportLogger : IIdeSupportLogger
     public LspIdeSupportLogger(ClientIdeContext clientIdeContext)
     {
         var idePrefix = clientIdeContext.Ide switch
-        {
-            "visualstudio" => "vs",
-            "vscode"       => "vscode",
-            _              => "lsp"   // unknown or absent --ide; avoid misattributing to a known IDE
-        };
+                {
+                    "visualstudio" => "vs",
+                    "vscode"       => "vscode",
+                    "rider"        => "rider",
+                    _              => "lsp"   // unknown or absent --ide; avoid misattributing to a known IDE
+                };
         _inner = new IdeSupportCompositeLogger()
             .Add(new IdeSupportDebugLogger())
             .Add(new SynchronousFileLogger(idePrefix, "server", clientIdeContext.LogLevel));

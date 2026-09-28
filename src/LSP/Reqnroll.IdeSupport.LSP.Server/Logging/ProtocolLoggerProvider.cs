@@ -39,11 +39,12 @@ public sealed class ProtocolLoggerProvider : ILoggerProvider
     private static IIdeSupportLogger BuildDefaultLogger(string? clientIde, TraceLevel protocolLogLevel)
     {
         var idePrefix = clientIde switch
-        {
-            "visualstudio" => "vs",
-            "vscode"       => "vscode",
-            _              => "lsp"
-        };
+                {
+                    "visualstudio" => "vs",
+                    "vscode"       => "vscode",
+                    "rider"        => "rider",
+                    _              => "lsp"
+                };
         return new IdeSupportCompositeLogger()
             .Add(new IdeSupportDebugLogger())
             .Add(new SynchronousFileLogger(idePrefix, "protocol", protocolLogLevel));
