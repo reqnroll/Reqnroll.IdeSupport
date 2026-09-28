@@ -234,8 +234,8 @@ public class Program
         options.OnInitialized((languageServer, request, response, ct) =>
         {
             // Each capability is configured by its own named local function below rather than
-            // inline, so a mistake in one (e.g. the VS-specific branch in
-            // ApplyTextDocumentSyncCapability) can't silently bleed into an unrelated capability
+            // inline, so a mistake in one (e.g. an IDE-specific branch in
+            // ApplySemanticTokensCapability) can't silently bleed into an unrelated capability
             // assignment sharing the same block.
             ApplyInitialTraceLevel();
             ApplySemanticTokensCapability();
@@ -343,19 +343,19 @@ public class Program
                 };
             }
 
-            // vscode-languageclient v10 (used by VS Code and Rider) does not wire its
-            // DidChangeTextDocumentFeature when textDocumentSync is absent from the static
-            // capabilities — dynamic client/registerCapability for textDocument/didChange is
-            // silently ignored and the client never sends content-change notifications.
-            // VS's LSP client handles dynamic-only registration correctly, so this static
-            // entry is only needed for non-VS clients.
+            // Advertised statically to every client:
+            // - vscode-languageclient v10 (VS Code, Rider) does not wire its
+            //   DidChangeTextDocumentFeature when textDocumentSync is absent from the static
+            //   capabilities: a dynamic-only registration is silently ignored.
+            // - Visual Studio (issue #800) handles dynamic registration, but only for documents it
+            //   attaches after the client/registerCapability arrives (~100 ms after `initialized`).
+            //   A document it attached before that (a restored tab, or the open file after a
+            //   solution switch) never got didOpen or didChange for the whole session. VS used to
+            //   be excluded here on the assumption that dynamic-only was enough.
             // Fine-grained selector filtering (*.feature + *.cs) still comes from OmniSharp's
             // dynamic registration once the feature infrastructure is activated.
             void ApplyTextDocumentSyncCapability()
             {
-                if (string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase))
-                    return;
-
                 response.Capabilities.TextDocumentSync = new TextDocumentSyncOptions
                 {
                     Change = TextDocumentSyncKind.Full,
@@ -433,14 +433,14 @@ public class Program
                 extensionData["reqnrollFindStepUsagesProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepUsages });
 
-                extensionData["reqnrollGoToHooksProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToHooks });
+                extensionData["reqnrollFindHooksProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindHooks });
 
                 extensionData["reqnrollFindStepDefinitionsProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepDefinitions });
 
-                extensionData["reqnrollGoToMatchingScenariosProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToMatchingScenarios });
+                extensionData["reqnrollFindMatchingScenariosProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindMatchingScenarios });
 
                 extensionData["reqnrollResolveTestTargetsProvider"] = JObject.FromObject(
                     new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollResolveTestTargets });

@@ -19,8 +19,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 /// </remarks>
 internal sealed class CommentToggleService
 {
-    private const string ExecuteCommandMethod = "workspace/executeCommand";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<CommentToggleService> _logger;
 
@@ -51,7 +49,7 @@ internal sealed class CommentToggleService
             "CommentToggleService: sending reqnroll.toggleComment params={ParamsJson}", paramsJson);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ExecuteCommandMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(LspStandardMethodNames.WorkspaceExecuteCommand, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

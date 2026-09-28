@@ -10,8 +10,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// Minimal hand-rolled JSON object builder for the outbound request params every LSP-calling
 /// service in this project sends over <see cref="LspInterceptingPipe"/>. Replaces the near-identical
 /// <c>BuildParams</c> string-concatenation method that had been duplicated across
-/// <c>CommentToggleService</c>, <c>FindStepUsagesService</c>, <c>GoToHooksService</c>,
-/// <c>GoToMatchingScenariosService</c>, <c>HookFeatureCodeLensService</c>,
+/// <c>CommentToggleService</c>, <c>FindStepUsagesService</c>, <c>FindHooksService</c>,
+/// <c>FindMatchingScenariosService</c>, <c>HookFeatureCodeLensService</c>,
 /// <c>GherkinNavigationBarSymbolService</c>, and <c>StepCodeLensService</c> (issue #447).
 /// </summary>
 /// <remarks>

@@ -42,20 +42,21 @@ Examples:
 # "Reqnroll: Rename Step" command remains available alongside it for the multi-attribute
 # disambiguation case standard LSP rename has no protocol-level way to prompt for.
 
-Scenario Outline: Non-VS clients receive static textDocumentSync capability
+Scenario Outline: All clients receive static textDocumentSync capability
 	Given the LSP server is started for IDE "<ide>"
 	Then the server statically advertises textDocumentSync with full sync and openClose
 
 Examples:
-	| ide     |
-	| vscode  |
-	| rider   |
+	| ide          |
+	| vscode       |
+	| rider        |
+	| visualstudio |
 
-# Note: a matching "VS client does not receive textDocumentSync" scenario is intentionally omitted.
-# The in-process OmniSharp spec client merges dynamic client/registerCapability into ServerSettings,
-# making static vs. dynamic textDocumentSync indistinguishable from the client side. The VS inspector
-# logs confirm the static entry is absent in the real wire protocol. The behavioral coverage for VS
-# textDocument/didChange is provided by the Handshake + DocumentLifecycle specs.
+# Issue #800: Visual Studio needs the static entry too. With dynamic-only registration, VS never sends
+# didOpen for a document it attached before the client/registerCapability arrived (~100 ms after
+# `initialized`), e.g. a restored tab or the open file after a solution switch. The step reads a snapshot
+# of the raw initialize response: OmniSharp's spec client merges dynamic registrations into
+# ServerSettings, which previously made static and dynamic indistinguishable.
 
 Scenario Outline: All clients receive static renameProvider capability
 	Given the LSP server is started for IDE "<ide>"
@@ -126,9 +127,9 @@ Scenario Outline: All clients receive the custom protocol capability manifest
 		| reqnrollWorkspaceLifecycleProvider           | projectUnloadedMethod     | reqnroll/projectUnloaded                  |
 		| reqnrollWorkspaceLifecycleProvider           | projectFilesMethod        | reqnroll/projectFiles                     |
 		| reqnrollFindStepUsagesProvider               | method                    | reqnroll/findStepUsages                   |
-		| reqnrollGoToHooksProvider                    | method                    | reqnroll/goToHooks                        |
+		| reqnrollFindHooksProvider                    | method                    | reqnroll/findHooks                        |
 		| reqnrollFindStepDefinitionsProvider          | method                    | reqnroll/findStepDefinitions              |
-		| reqnrollGoToMatchingScenariosProvider        | method                    | reqnroll/goToMatchingScenarios            |
+		| reqnrollFindMatchingScenariosProvider        | method                    | reqnroll/findMatchingScenarios            |
 		| reqnrollResolveTestTargetsProvider           | method                    | reqnroll/resolveTestTargets               |
 		| reqnrollFindUnusedStepDefinitionsProvider    | method                    | reqnroll/findUnusedStepDefinitions        |
 		| reqnrollStepRenameProvider                   | renameTargetsMethod       | reqnroll/renameTargets                    |

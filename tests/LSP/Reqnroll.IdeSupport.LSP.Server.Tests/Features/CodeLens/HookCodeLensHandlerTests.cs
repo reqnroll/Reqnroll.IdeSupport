@@ -18,7 +18,7 @@ public class HookCodeLensHandlerTests
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
     private readonly IIdeSupportLogger               _logger         = Substitute.For<IIdeSupportLogger>();
 
-    // Feature text layout (same fixture shape as GoToHooksHandlerTests):
+    // Feature text layout (same fixture shape as FindHooksHandlerTests):
     //   Line 0 (offset  0): "Feature: F\n"        (11 chars)
     //   Line 1 (offset 11): "Scenario: S\n"       (12 chars)
     //   Line 2 (offset 23): "    Given a step\n"  (17 chars)

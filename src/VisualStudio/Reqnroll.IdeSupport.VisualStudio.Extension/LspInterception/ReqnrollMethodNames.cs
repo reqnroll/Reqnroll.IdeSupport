@@ -7,7 +7,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// VS Code's <c>ReqnrollMethods</c> (<c>src/VSCode/src/lsp/lspMethods.ts</c>), and Rider's
 /// <c>@JsonRequest</c>/<c>@JsonNotification</c>-annotated <c>ReqnrollLanguageServer</c> interface.
 /// Standard LSP methods (<c>textDocument/*</c>, <c>workspace/*</c>, etc.) are out of scope here --
-/// this file is custom Reqnroll extensions only.
+/// this file is custom Reqnroll extensions only. See <see cref="LspStandardMethodNames"/> for the
+/// standard methods the extension uses.
 /// </summary>
 /// <remarks>
 /// Every server-defined <c>reqnroll/*</c> method has a constant here except
@@ -33,12 +34,12 @@ internal static class ReqnrollMethodNames
     public const string ProjectFiles = "reqnroll/projectFiles";
     /// <summary>Method name for the <c>reqnroll/findStepUsages</c> request.</summary>
     public const string FindStepUsages = "reqnroll/findStepUsages";
-    /// <summary>Method name for the <c>reqnroll/goToHooks</c> request.</summary>
-    public const string GoToHooks = "reqnroll/goToHooks";
+    /// <summary>Method name for the <c>reqnroll/findHooks</c> request.</summary>
+    public const string FindHooks = "reqnroll/findHooks";
     /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
     public const string FindStepDefinitions = "reqnroll/findStepDefinitions";
-    /// <summary>Method name for the <c>reqnroll/goToMatchingScenarios</c> request (issue #373).</summary>
-    public const string GoToMatchingScenarios = "reqnroll/goToMatchingScenarios";
+    /// <summary>Method name for the <c>reqnroll/findMatchingScenarios</c> request (issue #373).</summary>
+    public const string FindMatchingScenarios = "reqnroll/findMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
     public const string ResolveTestTargets = "reqnroll/resolveTestTargets";
     /// <summary>Method name for the <c>reqnroll/resolveContainerTestTargets</c> request — resolves every scenario/Outline under a <c>Feature:</c> or <c>Rule:</c> block in one call (issue #744, "Run scenarios").</summary>

@@ -106,8 +106,8 @@ public static class PerfTargets
     public static readonly PerfTarget StepReferences =
         new("textDocument/references", 0, PerfTargetKind.InteractiveP95, "Find references from a .feature step");
 
-    public static readonly PerfTarget GoToHooks =
-        new("reqnroll/goToHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
+    public static readonly PerfTarget FindHooks =
+        new("reqnroll/findHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
 
     // Issue #757: the same step lookup as textDocument/definition (shared StepAtPositionResolver),
     // plus per-binding detail — field-instrumented in FindStepDefinitionsHandler, so it gets synthetic
@@ -121,7 +121,7 @@ public static class PerfTargets
 
     // Hook-facing CodeLens/navigation (issues #269/#372/#373): the operation label carries a
     // "#..." suffix (same convention as the completion variants above) because all three share the
-    // raw "textDocument/codeLens"/"reqnroll/goToHooks" wire method with an existing target above —
+    // raw "textDocument/codeLens"/"reqnroll/findHooks" wire method with an existing target above —
     // without it they'd collide in the report and overwrite each other.
     public static readonly PerfTarget FeatureHookCodeLens =
         new("textDocument/codeLens#feature-hooks", 0, PerfTargetKind.InteractiveP95,
@@ -131,8 +131,8 @@ public static class PerfTargets
         new("textDocument/codeLens#hook-match-count", 0, PerfTargetKind.InteractiveP95,
             "Scenario-match-count code lens on a .cs hook binding (F18/#373)");
 
-    public static readonly PerfTarget GoToMatchingScenarios =
-        new("reqnroll/goToMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
+    public static readonly PerfTarget FindMatchingScenarios =
+        new("reqnroll/findMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
             "Go to matching scenarios from a .cs hook binding (#373)");
 
     // Issue #495: the one reqnroll/* operation the Run CodeLens bridge depends on had neither a

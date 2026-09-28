@@ -5,18 +5,18 @@ using System.Collections.Generic;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 
 /// <summary>
-/// Parsed result of a <c>reqnroll/goToHooks</c> response.
+/// Parsed result of a <c>reqnroll/findHooks</c> response.
 /// </summary>
-internal sealed class GoToHooksResult
+internal sealed class FindHooksResult
 {
     /// <summary>Sentinel for a position with no applicable hooks.</summary>
-    public static readonly GoToHooksResult Empty = new(new List<HookLocation>());
+    public static readonly FindHooksResult Empty = new(new List<HookLocation>());
 
     /// <summary>The applicable hook locations, in server-returned order.</summary>
     public IReadOnlyList<HookLocation> Hooks { get; }
 
     /// <summary>Creates a result wrapping the given hook locations.</summary>
-    public GoToHooksResult(IReadOnlyList<HookLocation> hooks)
+    public FindHooksResult(IReadOnlyList<HookLocation> hooks)
     {
         Hooks = hooks;
     }

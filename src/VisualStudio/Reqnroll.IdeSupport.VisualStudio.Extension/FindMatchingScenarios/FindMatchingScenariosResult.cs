@@ -2,22 +2,22 @@
 
 using System.Collections.Generic;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 
 /// <summary>
-/// Parsed result of a <c>reqnroll/goToMatchingScenarios</c> response (issue #373) — the inverse
-/// of <see cref="GoToHooks.GoToHooksResult"/>.
+/// Parsed result of a <c>reqnroll/findMatchingScenarios</c> response (issue #373) — the inverse
+/// of <see cref="FindHooks.FindHooksResult"/>.
 /// </summary>
-internal sealed class GoToMatchingScenariosResult
+internal sealed class FindMatchingScenariosResult
 {
     /// <summary>Sentinel for a hook binding with no matching scenarios.</summary>
-    public static readonly GoToMatchingScenariosResult Empty = new(new List<MatchingScenarioLocation>());
+    public static readonly FindMatchingScenariosResult Empty = new(new List<MatchingScenarioLocation>());
 
     /// <summary>The matching scenario locations, in server-returned order.</summary>
     public IReadOnlyList<MatchingScenarioLocation> Scenarios { get; }
 
     /// <summary>Creates a result wrapping the given scenario locations.</summary>
-    public GoToMatchingScenariosResult(IReadOnlyList<MatchingScenarioLocation> scenarios)
+    public FindMatchingScenariosResult(IReadOnlyList<MatchingScenarioLocation> scenarios)
     {
         Scenarios = scenarios;
     }

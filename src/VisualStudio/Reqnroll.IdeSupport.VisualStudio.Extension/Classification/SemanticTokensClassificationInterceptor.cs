@@ -117,9 +117,9 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
     }
 
     private static bool IsSemanticTokensMethod(string? method) =>
-        method is "textDocument/semanticTokens/full"
-               or "textDocument/semanticTokens/full/delta"
-               or "textDocument/semanticTokens/range";
+        method is LspStandardMethodNames.TextDocumentSemanticTokensFull
+               or LspStandardMethodNames.TextDocumentSemanticTokensFullDelta
+               or LspStandardMethodNames.TextDocumentSemanticTokensRange;
 
     /// <summary>Decodes the LSP 5-int relative encoding into absolute <see cref="ClassifiedToken"/>s.</summary>
     private static IReadOnlyList<ClassifiedToken> Decode(JArray data, string[] legend)

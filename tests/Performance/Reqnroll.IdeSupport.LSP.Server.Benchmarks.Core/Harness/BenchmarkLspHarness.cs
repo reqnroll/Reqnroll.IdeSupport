@@ -341,9 +341,9 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 Context = new ReferenceContext { IncludeDeclaration = true },
             }, ct);
 
-    public Task<GoToHooksResponse?> RequestGoToHooksAsync(
+    public Task<FindHooksResponse?> RequestFindHooksAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<GoToHooksResponse?>(LspMethodNames.ReqnrollGoToHooks,
+        RequestAsync<FindHooksResponse?>(LspMethodNames.ReqnrollFindHooks,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -364,17 +364,17 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
-    /// <c>reqnroll/goToMatchingScenarios</c> (issue #373) — the inverse of
-    /// <see cref="RequestGoToHooksAsync"/>: given a `.cs` position pinned to a hook-binding
+    /// <c>reqnroll/findMatchingScenarios</c> (issue #373) — the inverse of
+    /// <see cref="RequestFindHooksAsync"/>: given a `.cs` position pinned to a hook-binding
     /// attribute, returns every scenario its scope matches. <paramref name="line"/>/
     /// <paramref name="character"/> must be the attribute's exact position (0-based), same as a
     /// real client round-trips verbatim from a <see cref="RequestCodeLensAsync"/> hook lens's own
-    /// click arguments — not a proximity search like <see cref="RequestGoToHooksAsync"/>'s cursor
+    /// click arguments — not a proximity search like <see cref="RequestFindHooksAsync"/>'s cursor
     /// resolution.
     /// </summary>
-    public Task<GoToMatchingScenariosResponse?> RequestGoToMatchingScenariosAsync(
+    public Task<FindMatchingScenariosResponse?> RequestFindMatchingScenariosAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<GoToMatchingScenariosResponse?>(LspMethodNames.ReqnrollGoToMatchingScenarios,
+        RequestAsync<FindMatchingScenariosResponse?>(LspMethodNames.ReqnrollFindMatchingScenarios,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -384,7 +384,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// <summary>
     /// <c>reqnroll/resolveTestTargets</c> (issue #262/#495) — resolves the generated test method(s)
     /// for the scenario/Outline/example-row header at <paramref name="range"/> in <paramref name="uri"/>.
-    /// Backs the Run CodeLens bridge on all three IDE clients; unlike <see cref="RequestGoToHooksAsync"/>
+    /// Backs the Run CodeLens bridge on all three IDE clients; unlike <see cref="RequestFindHooksAsync"/>
     /// (cursor position), this takes an explicit range the same way a real client's per-line
     /// resolution does (VS's <c>RunTestCodeLensDataPoint</c>, VS Code's <c>resolveCodeLens</c>,
     /// Rider's <c>RunLensSupport</c> — see issue #495's per-client split).

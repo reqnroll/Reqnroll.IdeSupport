@@ -9,7 +9,7 @@ namespace Reqnroll.VisualStudio.Tests.HookCodeLens;
 /// Client-side mapping of the server's <c>textDocument/codeLens</c> response for a <c>.feature</c>
 /// file into <c>HookFeatureLensEntry</c> records
 /// (<see cref="HookFeatureCodeLensService.ParseItems"/>) — the same seam-and-test shape as
-/// <c>GoToHooksService.MapResult</c>.
+/// <c>FindHooksService.MapResult</c>.
 /// </summary>
 /// <remarks>
 /// The 5th command argument (<c>alwaysShowPicker</c>) is the only thing distinguishing the two lens

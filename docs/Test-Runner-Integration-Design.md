@@ -359,8 +359,8 @@ every row, distinguished by `RowIndex`/`RowArguments`; in individual-methods mod
 ## 4. New LSP message
 
 Following the existing custom-request pattern ([F17](LSP-IDE-Support-Feature-Designs.md#f17--hook-navigation)'s
-`reqnroll/goToHooks`, [F25](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings)'s
-`reqnroll/goToMatchingScenarios`), named after the message per [[protocol-handler-naming]]:
+`reqnroll/findHooks`, [F25](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings)'s
+`reqnroll/findMatchingScenarios`), named after the message per [[protocol-handler-naming]]:
 
 | Direction | Method | Purpose |
 |-----------|--------|---------|

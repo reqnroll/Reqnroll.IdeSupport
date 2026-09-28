@@ -6,6 +6,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client;             // ILangu
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;// SemanticTokensWorkspaceCapability
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;           // OnPublishDiagnostics
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;             // InitializeResult
+using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities; // TextDocumentSyncOptions
 using OmniSharp.Extensions.LanguageServer.Server;                      // LanguageServer factory
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 
@@ -39,6 +40,17 @@ public sealed class LspServerHarness : IAsyncDisposable
 
     /// <summary>The InitializeResult returned by the server (capabilities, server info).</summary>
     public InitializeResult ServerInitializeResult => Client.ServerSettings;
+
+    /// <summary>
+    /// <c>textDocumentSync</c> exactly as the server's <c>initialize</c> response carried it,
+    /// captured before any dynamic <c>client/registerCapability</c> is processed. Unlike
+    /// <see cref="ServerInitializeResult"/>, which OmniSharp's client updates with dynamic
+    /// registrations, this tells a static entry apart from a dynamic one (issue #800).
+    /// </summary>
+    public TextDocumentSyncOptions? StaticTextDocumentSync { get; private set; }
+
+    /// <summary>True once the client has seen the <c>initialize</c> response.</summary>
+    public bool InitializeResponseSeen { get; private set; }
 
     /// <summary>Number of workspace/semanticTokens/refresh requests received so far.</summary>
     public int RefreshCount { get { lock (_refreshLock) return _refreshCount; } }
@@ -92,11 +104,28 @@ public sealed class LspServerHarness : IAsyncDisposable
         {
             options.WithInput(clientStream).WithOutput(clientStream);
             options.WithRootUri(DocumentUri.FromFileSystemPath(workspaceFolder));
+
+            // Snapshot the static textDocumentSync before the server's dynamic registration
+            // (sent after `initialized`) can be merged into ServerSettings (issue #800).
+            options.OnInitialized((_, _, response, _) =>
+            {
+                var sync = response.Capabilities.TextDocumentSync;
+                StaticTextDocumentSync = sync?.HasOptions == true
+                    ? new TextDocumentSyncOptions { OpenClose = sync.Options!.OpenClose, Change = sync.Options.Change }
+                    : null;
+                InitializeResponseSeen = true;
+                return Task.CompletedTask;
+            });
             options.WithWorkspaceFolder(DocumentUri.FromFileSystemPath(workspaceFolder), "test-workspace");
 
             // Advertise refresh support — the server's SemanticTokensRefreshHandler skips the
             // request unless workspace.semanticTokens.refreshSupport is true.
             options.WithCapability(new SemanticTokensWorkspaceCapability { RefreshSupport = true });
+
+            // Declare dynamic registration for text sync, as Visual Studio and vscode-languageclient
+            // both do. Without it OmniSharp's server fills textDocumentSync statically for every
+            // client, which hid issue #800 (VS got no static entry) from the specs.
+            options.WithCapability(new TextSynchronizationCapability { DynamicRegistration = true, DidSave = true });
 
             // Issue #70: opt-in only (defaults to false) so every other spec keeps negotiating
             // the legacy WorkspaceEdit.Changes shape unchanged — only scenarios that explicitly
