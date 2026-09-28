@@ -67,7 +67,7 @@ class SilentLspTraceChannel implements vscode.LogOutputChannel {
     return this._onDidChangeLogLevel.event;
   }
 
-  trace(message: string, ...args: unknown[]): void {
+  trace(message: string, ..._args: unknown[]): void {
     this._writeLspEntry(message);
   }
 
