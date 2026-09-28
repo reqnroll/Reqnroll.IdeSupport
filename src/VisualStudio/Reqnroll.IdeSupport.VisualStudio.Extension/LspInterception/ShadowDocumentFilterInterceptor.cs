@@ -46,7 +46,9 @@ internal sealed class ShadowDocumentFilterInterceptor : ILspMessageInterceptor
     /// <inheritdoc />
     public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken)
     {
-        if (message.Method is not ("textDocument/didOpen" or "textDocument/didChange" or "textDocument/didClose"))
+        if (message.Method is not (LspStandardMethodNames.TextDocumentDidOpen
+                                 or LspStandardMethodNames.TextDocumentDidChange
+                                 or LspStandardMethodNames.TextDocumentDidClose))
             return Task.FromResult(LspInterceptorResult.PassThrough);
 
         var path = UriToLocalPath(message);

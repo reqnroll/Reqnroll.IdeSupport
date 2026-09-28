@@ -100,7 +100,7 @@ internal sealed class ScaffoldTrackingInterceptor : ILspMessageInterceptor
         LspMessage        message,
         CancellationToken ct)
     {
-        if (message.Method != "textDocument/didOpen")
+        if (message.Method != LspStandardMethodNames.TextDocumentDidOpen)
             return;
 
         var uri = message.Body["params"]?["textDocument"]?["uri"]?.Value<string>();

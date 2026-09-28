@@ -44,7 +44,7 @@ internal sealed class FormatDocumentService
         int               endLine,
         CancellationToken cancellationToken)
     {
-        var method     = isSelection ? "textDocument/rangeFormatting" : "textDocument/formatting";
+        var method     = isSelection ? LspStandardMethodNames.TextDocumentRangeFormatting : LspStandardMethodNames.TextDocumentFormatting;
         var paramsJson = BuildParams(fileUri, isSelection, startLine, endLine);
 
         _logger.LogDebug(

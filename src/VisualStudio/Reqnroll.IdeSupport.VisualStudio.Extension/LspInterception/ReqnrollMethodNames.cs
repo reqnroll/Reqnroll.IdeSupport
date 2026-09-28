@@ -7,7 +7,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// VS Code's <c>ReqnrollMethods</c> (<c>src/VSCode/src/lsp/lspMethods.ts</c>), and Rider's
 /// <c>@JsonRequest</c>/<c>@JsonNotification</c>-annotated <c>ReqnrollLanguageServer</c> interface.
 /// Standard LSP methods (<c>textDocument/*</c>, <c>workspace/*</c>, etc.) are out of scope here --
-/// this file is custom Reqnroll extensions only.
+/// this file is custom Reqnroll extensions only. See <see cref="LspStandardMethodNames"/> for the
+/// standard methods the extension uses.
 /// </summary>
 /// <remarks>
 /// Every server-defined <c>reqnroll/*</c> method has a constant here except

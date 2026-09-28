@@ -27,8 +27,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 /// </remarks>
 internal sealed class StepCodeLensService
 {
-    private const string RequestMethod = "textDocument/codeLens";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<StepCodeLensService> _logger;
     private readonly StepCodeLensResultCache _cache;
@@ -61,10 +59,10 @@ internal sealed class StepCodeLensService
     {
         var paramsJson = BuildParams(fileUri);
 
-        _logger.LogDebug("StepCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
+        _logger.LogDebug("StepCodeLensService: requesting {RequestMethod} for {FileUri}", LspStandardMethodNames.TextDocumentCodeLens, fileUri);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

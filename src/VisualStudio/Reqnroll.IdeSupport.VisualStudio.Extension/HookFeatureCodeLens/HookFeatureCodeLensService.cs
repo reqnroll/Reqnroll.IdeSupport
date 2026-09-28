@@ -20,8 +20,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 /// </summary>
 internal sealed class HookFeatureCodeLensService
 {
-    private const string RequestMethod = "textDocument/codeLens";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<HookFeatureCodeLensService> _logger;
 
@@ -43,10 +41,10 @@ internal sealed class HookFeatureCodeLensService
     {
         var paramsJson = BuildParams(fileUri);
 
-        _logger.LogDebug("HookFeatureCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
+        _logger.LogDebug("HookFeatureCodeLensService: requesting {RequestMethod} for {FileUri}", LspStandardMethodNames.TextDocumentCodeLens, fileUri);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (result is null || result.Type == JTokenType.Null)
