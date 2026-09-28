@@ -210,6 +210,44 @@ public class RunTestCodeLensResultCacheTests
     }
 
     [Fact]
+    public async Task A_lookup_that_hits_ContentModified_is_restarted_instead_of_failing()
+    {
+        // Issue #800 follow-up: the symbol request below the cache now throws when ContentModified
+        // survives its own retry, instead of answering "no symbols". The cache must recompute.
+        var callCount = 0;
+        Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct) =>
+            Interlocked.Increment(ref callCount) == 1
+                ? Task.FromException<IReadOnlyList<RunTestTargetEntry>>(
+                    new Reqnroll.IdeSupport.VisualStudio.LspContentModifiedException("reqnroll/documentSymbolHierarchical", uri))
+                : Task.FromResult<IReadOnlyList<RunTestTargetEntry>>(SampleEntries);
+
+        var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
+
+        var result = await sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None);
+
+        result.Should().BeEquivalentTo(SampleEntries);
+        callCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Restarts_after_ContentModified_are_bounded()
+    {
+        var callCount = 0;
+        Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct)
+        {
+            Interlocked.Increment(ref callCount);
+            return Task.FromException<IReadOnlyList<RunTestTargetEntry>>(
+                new Reqnroll.IdeSupport.VisualStudio.LspContentModifiedException("reqnroll/documentSymbolHierarchical", uri));
+        }
+
+        var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
+
+        await Assert.ThrowsAsync<Reqnroll.IdeSupport.VisualStudio.LspContentModifiedException>(
+            () => sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None));
+        callCount.Should().Be(RunTestCodeLensResultCache.MaxInvalidationRestarts + 1);
+    }
+
+    [Fact]
     public async Task A_computation_that_times_out_is_not_restarted()
     {
         // Only an invalidation means "recompute"; the computation's own safety-net timeout must

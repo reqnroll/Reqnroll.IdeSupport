@@ -286,7 +286,12 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
         }
         catch (Exception ex)
         {
-            _logger.LogWarning($"GherkinDropdownBarClient: refresh failed for '{_fileUri}': {ex}");
+            // ContentModified (the server's state changed under the request) is routine at
+            // startup and retried below; only a real failure is worth a warning.
+            if (ex is LspContentModifiedException)
+                _logger.LogVerbose($"GherkinDropdownBarClient: refresh for '{_fileUri}' hit ContentModified; retrying.");
+            else
+                _logger.LogWarning($"GherkinDropdownBarClient: refresh failed for '{_fileUri}': {ex}");
 
             // Transient (e.g. server mid-restart) — retry rather than leaving stale/empty combos.
             // The exception may have surfaced before the SwitchToMainThreadAsync above ran, so

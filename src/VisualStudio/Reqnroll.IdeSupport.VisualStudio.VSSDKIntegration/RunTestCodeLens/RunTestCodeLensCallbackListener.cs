@@ -67,6 +67,13 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
             _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync cancelled by the caller for {fileUri}:{line}");
             throw;
         }
+        catch (LspContentModifiedException)
+        {
+            // The document kept changing through every restart: transient, not an error. The next
+            // CodeLens refresh asks again.
+            _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync for {fileUri}:{line} kept hitting ContentModified; giving up this request.");
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsForLineAsync threw for {fileUri}:{line}");

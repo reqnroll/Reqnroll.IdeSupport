@@ -97,6 +97,9 @@ internal sealed class RunTestCodeLensResultCache
     /// </summary>
     internal const int MaxInvalidationRestarts = 3;
 
+    /// <summary>Pause before restarting after <see cref="LspContentModifiedException"/>.</summary>
+    internal static readonly TimeSpan ContentModifiedRestartDelay = TimeSpan.FromMilliseconds(100);
+
     private readonly Func<string, int, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> _inner;
     private readonly ILogger<RunTestCodeLensResultCache> _logger;
     private readonly JoinableTaskFactory _joinableTaskFactory;
@@ -183,6 +186,17 @@ internal sealed class RunTestCodeLensResultCache
                 _logger.LogDebug(
                     "RunTestCodeLensResultCache: computation for {FileUri}:{Line} was invalidated mid-flight; restarting.",
                     fileUri, line);
+            }
+            catch (LspContentModifiedException) when (
+                !callerToken.IsCancellationRequested && restarts < MaxInvalidationRestarts)
+            {
+                // The server's state changed under the lookup (issue #800 follow-up). The faulted
+                // entry is not reused (IsUsable), so the next pass starts a fresh computation. A
+                // short pause lets the burst of notifications that caused it finish first.
+                _logger.LogDebug(
+                    "RunTestCodeLensResultCache: lookup for {FileUri}:{Line} hit ContentModified; restarting.",
+                    fileUri, line);
+                await Task.Delay(ContentModifiedRestartDelay, callerToken).ConfigureAwait(false);
             }
         }
     }
