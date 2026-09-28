@@ -43,6 +43,7 @@ import './testOutcomes/testOutcomeCodeLens.test';
 import './testOutcomes/mtpProjectDetection.test';
 import './testOutcomes/mtpReporterPath.test';
 import './testOutcomes/mtpProjectStubs.test';
+import './testOutcomes/testOutcomesService.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

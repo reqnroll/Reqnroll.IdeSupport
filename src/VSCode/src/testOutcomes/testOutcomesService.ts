@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -48,6 +49,23 @@ import { resolveTestLoggerDirectory } from './testLoggerPath';
  * generated file this module points the setting at — see `runSettingsInjector.ts` — but the
  * setting *value* itself does change, which is enough of a visible side effect on shared state to
  * warrant requiring explicit opt-in rather than defaulting to on.
+ *
+ * **Opt-out cleanup and per-workspace file naming (issue #749).** Turning the feature off used to
+ * leave the setting pointing at the generated file forever — there was no record of what the
+ * setting held before this module first took it over, so there was nothing to restore it to, and
+ * the file itself was shared by every open workspace (one fixed name under
+ * `resolveApplicationDirectory()`), so two windows on different workspaces stomped on each other's
+ * registration (whichever activated last "won", and the other's VSTest runs silently reported into
+ * the wrong window). Both are fixed together: the generated file's name is now keyed by a hash of
+ * the first workspace folder's path (`generatedFileName` below), so each
+ * workspace gets its own file and windows on different workspaces stop colliding, and the setting's
+ * value *before* this module ever wrote to it — including "it was unset" as a distinct state from
+ * "it held path X" — is recorded once in `context.workspaceState` (`PRIOR_SETTING_STATE_KEY`) and
+ * replayed back when the feature is next found disabled at activation, after which the recorded
+ * state is cleared so a later re-enable records a fresh baseline. (Two windows on the exact same
+ * workspace folder still share one `.vscode/settings.json` and therefore one generated file — that
+ * is inherent to workspace-scoped settings, not something a filename change can fix, and is no
+ * worse than any other workspace-scoped setting two windows on the same folder both try to own.)
  */
 
 const RUNSETTINGS_CONFIG_SECTION = 'dotnet';
@@ -57,7 +75,43 @@ const RUNSETTINGS_CONFIG_KEY = 'unitTests.runSettingsPath';
 // `dotnet.unitTests.runSettingsPath` setting points at, not a log, and its name starting with
 // "reqnroll-" would otherwise make it eligible for pruneOldLogs' 10-day sweep if it ever sat in
 // that directory.
-const GENERATED_FILE_NAME = 'reqnroll-vscode-test-outcomes.runsettings';
+const GENERATED_FILE_NAME_PREFIX = 'reqnroll-vscode-test-outcomes';
+const GENERATED_FILE_NAME_SUFFIX = '.runsettings';
+// Fallback seed for the (unusual) case of no open workspace folder — still keeps this module's
+// file distinct from a real workspace's, though multiple no-folder windows will still collide;
+// there is no folder identity to key on in that case.
+const NO_WORKSPACE_FOLDER_SEED = 'no-workspace-folder';
+
+/** `workspaceState` key: the `dotnet.unitTests.runSettingsPath` value from before this module first took it over. */
+const PRIOR_SETTING_STATE_KEY = 'reqnroll.testOutcomes.priorRunSettingsPath';
+
+/** Distinguishes "the setting was unset" from "the setting held an empty/falsy value" — `undefined` alone can't. */
+interface PriorSettingState {
+  wasSet: boolean;
+  value?: string;
+}
+
+/**
+ * Reads/writes `dotnet.unitTests.runSettingsPath`, injected so `recordPriorSettingIfNeeded` and
+ * `cleanupRunSettingsOnOptOut` are testable without a real `dotnet.*` configuration contribution
+ * present — that key is contributed by C# Dev Kit, not this extension, and does not exist at all
+ * in a bare Extension Development Host that has it disabled (`workspace.getConfiguration(...)
+ * .update(...)` throws "not a registered configuration" there). Mirrors the injected
+ * `readTextOrNull`/`evaluate` parameters `mtpProjectStubs.ts` uses for the same reason.
+ */
+export interface RunSettingsConfigAccessor {
+  get(): string | undefined;
+  update(value: string | undefined): Thenable<void>;
+}
+
+function defaultRunSettingsConfigAccessor(): RunSettingsConfigAccessor {
+  const config = vscode.workspace.getConfiguration(RUNSETTINGS_CONFIG_SECTION);
+  return {
+    get: () => config.get<string>(RUNSETTINGS_CONFIG_KEY),
+    update: (value) =>
+      config.update(RUNSETTINGS_CONFIG_KEY, value, vscode.ConfigurationTarget.Workspace),
+  };
+}
 
 interface RegisterTestRunResponse {
   success: boolean;
@@ -72,15 +126,28 @@ interface RegisterTestRunResponse {
  * to "no server-sourced outcomes this session," logged but not surfaced as an error popup, since
  * this runs unprompted at activation and a popup would be disproportionate to a background,
  * opt-in convenience feature.
+ *
+ * When the feature is disabled, this now also undoes a prior opt-in (issue #749): if the setting
+ * still points at our generated file, the value recorded before this module first took it over is
+ * restored (or the key is cleared entirely if it was unset back then), and the generated file is
+ * removed. See {@link cleanupRunSettingsOnOptOut}.
  */
 export async function activateTestOutcomes(
-  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath'>,
+  context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'workspaceState'>,
   client: LanguageClient,
 ): Promise<void> {
   const enabled = vscode.workspace
     .getConfiguration('reqnroll')
     .get<boolean>('testOutcomes.enabled', false);
-  if (!enabled) return;
+  if (!enabled) {
+    try {
+      await cleanupRunSettingsOnOptOut(context.workspaceState);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logWarn(`testOutcomes: opt-out cleanup failed — ${msg}`);
+    }
+    return;
+  }
 
   const loggerDirectory = resolveTestLoggerDirectory(context);
   if (!loggerDirectory) {
@@ -108,7 +175,7 @@ export async function activateTestOutcomes(
   }
 
   try {
-    await mergeRunSettings(registration, loggerDirectory, process.pid);
+    await mergeRunSettings(context.workspaceState, registration, loggerDirectory, process.pid);
     logInfo(
       `testOutcomes: registered run ${registration.runId} and merged the logger into '${RUNSETTINGS_CONFIG_KEY}'.`,
     );
@@ -122,16 +189,21 @@ export async function activateTestOutcomes(
  * Resolves the effective input runsettings (the user's own file if the setting already points
  * somewhere else; our own previously-generated file if it already points there; nothing if unset),
  * merges the logger in, writes the result to our managed file, and points the setting at it.
+ * Records the setting's pre-takeover value in `workspaceState` the first time this runs for a
+ * workspace that isn't already pointed at our file (issue #749), so a later opt-out can restore it.
  * `internal` shape kept as a plain function (not a class) — no state to hold beyond one call.
  */
 async function mergeRunSettings(
+  workspaceState: vscode.Memento,
   registration: RegisterTestRunResponse,
   loggerDirectory: string,
   ideProcessId: number,
+  config: RunSettingsConfigAccessor = defaultRunSettingsConfigAccessor(),
 ): Promise<void> {
-  const generatedPath = path.join(resolveApplicationDirectory(), GENERATED_FILE_NAME);
-  const config = vscode.workspace.getConfiguration(RUNSETTINGS_CONFIG_SECTION);
-  const currentSetting = config.get<string>(RUNSETTINGS_CONFIG_KEY);
+  const generatedPath = resolveGeneratedRunSettingsPath();
+  const currentSetting = config.get();
+
+  await recordPriorSettingIfNeeded(workspaceState, currentSetting, generatedPath);
 
   const inputXml = readInputRunSettings(currentSetting);
 
@@ -145,12 +217,84 @@ async function mergeRunSettings(
   fs.writeFileSync(generatedPath, merged, 'utf8');
 
   if (!currentSetting || !isSamePath(currentSetting, generatedPath)) {
-    await config.update(
-      RUNSETTINGS_CONFIG_KEY,
-      generatedPath,
-      vscode.ConfigurationTarget.Workspace,
-    );
+    await config.update(generatedPath);
   }
+}
+
+/**
+ * Records `currentSetting` into `workspaceState` as the value to restore on opt-out — but only the
+ * *first* time this module takes the setting over for this workspace. A `currentSetting` that
+ * already matches our generated file means either a re-activation in the same session or an
+ * earlier session that already recorded the true original value; either way, the existing record
+ * (if any) must not be clobbered with our own prior value. Exported for testing.
+ */
+export async function recordPriorSettingIfNeeded(
+  workspaceState: vscode.Memento,
+  currentSetting: string | undefined,
+  generatedPath: string,
+): Promise<void> {
+  const alreadyOurs = currentSetting !== undefined && isSamePath(currentSetting, generatedPath);
+  if (alreadyOurs) return;
+
+  const recorded = workspaceState.get<PriorSettingState>(PRIOR_SETTING_STATE_KEY);
+  if (recorded) return;
+
+  const toRecord: PriorSettingState =
+    currentSetting === undefined ? { wasSet: false } : { wasSet: true, value: currentSetting };
+  await workspaceState.update(PRIOR_SETTING_STATE_KEY, toRecord);
+}
+
+/**
+ * Undoes a prior opt-in (issue #749): if `dotnet.unitTests.runSettingsPath` still points at our
+ * generated file, restores the value recorded before this module first took it over (or clears the
+ * key entirely if it was unset back then), then clears the recorded state so a later re-enable
+ * records a fresh baseline. Always attempts to delete the generated file afterwards, regardless of
+ * whether the setting needed restoring — a stale file left on disk still gets picked up if the
+ * setting is ever pointed at it again by hand. Never throws; the caller logs failures. Exported for
+ * testing.
+ */
+export async function cleanupRunSettingsOnOptOut(
+  workspaceState: vscode.Memento,
+  config: RunSettingsConfigAccessor = defaultRunSettingsConfigAccessor(),
+): Promise<void> {
+  const generatedPath = resolveGeneratedRunSettingsPath();
+  const currentSetting = config.get();
+
+  if (currentSetting !== undefined && isSamePath(currentSetting, generatedPath)) {
+    const recorded = workspaceState.get<PriorSettingState>(PRIOR_SETTING_STATE_KEY);
+    const restoreValue = recorded?.wasSet ? recorded.value : undefined;
+    await config.update(restoreValue);
+  }
+
+  await workspaceState.update(PRIOR_SETTING_STATE_KEY, undefined);
+
+  try {
+    if (fs.existsSync(generatedPath)) fs.rmSync(generatedPath, { force: true });
+  } catch {
+    // Best-effort — a locked/unreadable file shouldn't turn opt-out cleanup into a hard failure.
+  }
+}
+
+/**
+ * The per-workspace generated runsettings file name (issue #749): a short hash of the first
+ * workspace folder's path, so two windows on different workspaces never share a file and stomp on
+ * each other's registration (endpoint/run id/IDE process id). Exported for testing.
+ */
+export function generatedFileName(workspaceFolderPath: string | undefined): string {
+  const seed = workspaceFolderPath ?? NO_WORKSPACE_FOLDER_SEED;
+  const hash = crypto.createHash('sha256').update(seed).digest('hex').slice(0, 12);
+  return `${GENERATED_FILE_NAME_PREFIX}-${hash}${GENERATED_FILE_NAME_SUFFIX}`;
+}
+
+/**
+ * {@link generatedFileName} resolved against the real current workspace and application
+ * directory — what `mergeRunSettings`/`cleanupRunSettingsOnOptOut` compare `dotnet.unitTests
+ * .runSettingsPath` against to decide "is this our file". Exported for testing, so a test seeding
+ * a fake `RunSettingsConfigAccessor` can match it exactly.
+ */
+export function resolveGeneratedRunSettingsPath(): string {
+  const workspaceFolderPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  return path.join(resolveApplicationDirectory(), generatedFileName(workspaceFolderPath));
 }
 
 /**
