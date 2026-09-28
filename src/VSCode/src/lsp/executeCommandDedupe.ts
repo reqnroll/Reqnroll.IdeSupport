@@ -1,4 +1,9 @@
-import { CancellationToken, ExecuteCommandRequest, Middleware, RegistrationParams } from 'vscode-languageclient/node';
+import {
+  CancellationToken,
+  ExecuteCommandRequest,
+  Middleware,
+  RegistrationParams,
+} from 'vscode-languageclient/node';
 
 /**
  * Middleware that drops `workspace/executeCommand` entries from an incoming
