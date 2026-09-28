@@ -70,7 +70,7 @@ object ReqnrollDebugLogger {
     }
 
     private fun shouldLog(level: String): Boolean =
-        levelPriority(level) <= levelPriority(fileLogLevel)
+            levelPriority(level) >= levelPriority(fileLogLevel)
 
     fun info(message: String) = log("Info", message, null)
     fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
