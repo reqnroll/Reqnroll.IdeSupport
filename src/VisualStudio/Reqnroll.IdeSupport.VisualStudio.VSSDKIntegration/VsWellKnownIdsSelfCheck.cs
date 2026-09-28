@@ -6,8 +6,10 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 
 namespace Reqnroll.IdeSupport.VisualStudio;
 
@@ -64,7 +66,7 @@ public static class VsWellKnownIdsSelfCheck
     /// Resolves every <see cref="ExpectedCommands"/> entry and logs the result. Must be called on the
     /// UI thread. Never throws.
     /// </summary>
-    public static void Run(IServiceProvider serviceProvider, IIdeSupportLogger logger)
+    public static void Run(IServiceProvider serviceProvider, IIdeSupportLogger logger, ITelemetryTransmitter? telemetryTransmitter = null)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
@@ -98,7 +100,19 @@ public static class VsWellKnownIdsSelfCheck
             if (problems == 0)
                 logger.LogVerbose(summary);
             else
+            {
                 logger.LogWarning(summary);
+                if (telemetryTransmitter != null)
+                {
+                    var props = new Dictionary<string, object>
+                    {
+                        ["ProblemCount"] = problems,
+                        ["ExpectedCount"] = ExpectedCommands.Count,
+                    };
+                    telemetryTransmitter.TransmitEvent(
+                        new VsGenericEvent("VsWellKnownIdsSelfCheckMismatch", props));
+                }
+            }
         }
         catch (Exception ex)
         {
