@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 
@@ -126,10 +127,10 @@ internal sealed class RenameStepService
         var paramsJson = BuildRenameParams(fileUri, line0, char0, newName);
         _logger.LogDebug(
             "RenameStepService: sending {RenameMethod} at {FileUri}:{Line0}:{Char0}",
-            LspInterception.LspStandardMethodNames.TextDocumentRename, fileUri, line0, char0);
+            LspStandardMethodNames.TextDocumentRename, fileUri, line0, char0);
 
         var (_, error) = await _pipe
-            .SendRequestToServerWithErrorAsync(LspInterception.LspStandardMethodNames.TextDocumentRename, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(LspStandardMethodNames.TextDocumentRename, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (error is not null)
@@ -137,11 +138,11 @@ internal sealed class RenameStepService
             var message = error["message"]?.Value<string>() ?? "Rename failed.";
             _logger.LogDebug(
                 "RenameStepService: {RenameMethod} rejected by server: {Message}",
-                LspInterception.LspStandardMethodNames.TextDocumentRename, message);
+                LspStandardMethodNames.TextDocumentRename, message);
             throw new RenameFailedException(message);
         }
 
-        _logger.LogDebug("RenameStepService: {RenameMethod} accepted by server", LspInterception.LspStandardMethodNames.TextDocumentRename);
+        _logger.LogDebug("RenameStepService: {RenameMethod} accepted by server", LspStandardMethodNames.TextDocumentRename);
     }
 
     private static string BuildPositionParams(string fileUri, int line0, int char0)

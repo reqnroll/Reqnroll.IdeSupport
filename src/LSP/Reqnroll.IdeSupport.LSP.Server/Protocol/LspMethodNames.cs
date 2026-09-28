@@ -50,68 +50,70 @@ public static class LspMethodNames
     public const string ReqnrollTestOutcomesChanged = "reqnroll/testOutcomes/changed";
 
     // ── Standard LSP Methods ────────────────────────────────────────────────
-    /// <summary>Method name for the <c>textDocument/semanticTokens/full</c> request.</summary>
-    public const string TextDocumentSemanticTokensFull = "textDocument/semanticTokens/full";
-    /// <summary>Method name for the <c>textDocument/semanticTokens/full/delta</c> request.</summary>
-    public const string TextDocumentSemanticTokensFullDelta = "textDocument/semanticTokens/full/delta";
-    /// <summary>Method name for the <c>textDocument/semanticTokens/range</c> request.</summary>
-    public const string TextDocumentSemanticTokensRange = "textDocument/semanticTokens/range";
-    /// <summary>Method name for the <c>textDocument/completion</c> request.</summary>
-    public const string TextDocumentCompletion = "textDocument/completion";
-    /// <summary>Method name for the <c>textDocument/definition</c> request.</summary>
-    public const string TextDocumentDefinition = "textDocument/definition";
-    /// <summary>Method name for the <c>textDocument/references</c> request.</summary>
-    public const string TextDocumentReferences = "textDocument/references";
-    /// <summary>Method name for the <c>textDocument/codeLens</c> request.</summary>
-    public const string TextDocumentCodeLens = "textDocument/codeLens";
-    /// <summary>Method name for the <c>codeLens/resolve</c> request.</summary>
-    public const string CodeLensResolve = "codeLens/resolve";
-    /// <summary>Method name for the <c>textDocument/inlayHint</c> request.</summary>
-    public const string TextDocumentInlayHint = "textDocument/inlayHint";
-    /// <summary>Method name for the <c>textDocument/foldingRange</c> request.</summary>
-    public const string TextDocumentFoldingRange = "textDocument/foldingRange";
-    /// <summary>Method name for the <c>textDocument/prepareRename</c> request.</summary>
-    public const string TextDocumentPrepareRename = "textDocument/prepareRename";
-    /// <summary>Method name for the <c>textDocument/rename</c> request.</summary>
-    public const string TextDocumentRename = "textDocument/rename";
-    /// <summary>Method name for the <c>textDocument/publishDiagnostics</c> notification.</summary>
-    public const string TextDocumentPublishDiagnostics = "textDocument/publishDiagnostics";
-    /// <summary>Method name for the <c>textDocument/formatting</c> request.</summary>
-    public const string TextDocumentFormatting = "textDocument/formatting";
-    /// <summary>Method name for the <c>textDocument/rangeFormatting</c> request.</summary>
-    public const string TextDocumentRangeFormatting = "textDocument/rangeFormatting";
-    /// <summary>Method name for the <c>textDocument/onTypeFormatting</c> request.</summary>
-    public const string TextDocumentOnTypeFormatting = "textDocument/onTypeFormatting";
-    /// <summary>Method name for the <c>textDocument/codeAction</c> request.</summary>
-    public const string TextDocumentCodeAction = "textDocument/codeAction";
-    /// <summary>Method name for the <c>textDocument/documentSymbol</c> request.</summary>
-    public const string TextDocumentDocumentSymbol = "textDocument/documentSymbol";
-    /// <summary>Method name for the <c>textDocument/didOpen</c> notification.</summary>
-    public const string TextDocumentDidOpen = "textDocument/didOpen";
-    /// <summary>Method name for the <c>textDocument/didChange</c> notification.</summary>
-    public const string TextDocumentDidChange = "textDocument/didChange";
-    /// <summary>Method name for the <c>textDocument/didClose</c> notification.</summary>
-    public const string TextDocumentDidClose = "textDocument/didClose";
+        // These constants delegate to Reqnroll.IdeSupport.Common.Lsp.LspStandardMethodNames
+        // so there is a single source of truth shared with the VS extension.
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentSemanticTokensFull"/>
+        public const string TextDocumentSemanticTokensFull = Common.Lsp.LspStandardMethodNames.TextDocumentSemanticTokensFull;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentSemanticTokensFullDelta"/>
+        public const string TextDocumentSemanticTokensFullDelta = Common.Lsp.LspStandardMethodNames.TextDocumentSemanticTokensFullDelta;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentSemanticTokensRange"/>
+        public const string TextDocumentSemanticTokensRange = Common.Lsp.LspStandardMethodNames.TextDocumentSemanticTokensRange;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentCompletion"/>
+        public const string TextDocumentCompletion = Common.Lsp.LspStandardMethodNames.TextDocumentCompletion;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentDefinition"/>
+        public const string TextDocumentDefinition = Common.Lsp.LspStandardMethodNames.TextDocumentDefinition;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentReferences"/>
+        public const string TextDocumentReferences = Common.Lsp.LspStandardMethodNames.TextDocumentReferences;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentCodeLens"/>
+        public const string TextDocumentCodeLens = Common.Lsp.LspStandardMethodNames.TextDocumentCodeLens;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.CodeLensResolve"/>
+        public const string CodeLensResolve = Common.Lsp.LspStandardMethodNames.CodeLensResolve;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentInlayHint"/>
+        public const string TextDocumentInlayHint = Common.Lsp.LspStandardMethodNames.TextDocumentInlayHint;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentFoldingRange"/>
+        public const string TextDocumentFoldingRange = Common.Lsp.LspStandardMethodNames.TextDocumentFoldingRange;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentPrepareRename"/>
+        public const string TextDocumentPrepareRename = Common.Lsp.LspStandardMethodNames.TextDocumentPrepareRename;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentRename"/>
+        public const string TextDocumentRename = Common.Lsp.LspStandardMethodNames.TextDocumentRename;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentPublishDiagnostics"/>
+        public const string TextDocumentPublishDiagnostics = Common.Lsp.LspStandardMethodNames.TextDocumentPublishDiagnostics;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentFormatting"/>
+        public const string TextDocumentFormatting = Common.Lsp.LspStandardMethodNames.TextDocumentFormatting;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentRangeFormatting"/>
+        public const string TextDocumentRangeFormatting = Common.Lsp.LspStandardMethodNames.TextDocumentRangeFormatting;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentOnTypeFormatting"/>
+        public const string TextDocumentOnTypeFormatting = Common.Lsp.LspStandardMethodNames.TextDocumentOnTypeFormatting;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentCodeAction"/>
+        public const string TextDocumentCodeAction = Common.Lsp.LspStandardMethodNames.TextDocumentCodeAction;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentDocumentSymbol"/>
+        public const string TextDocumentDocumentSymbol = Common.Lsp.LspStandardMethodNames.TextDocumentDocumentSymbol;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentDidOpen"/>
+        public const string TextDocumentDidOpen = Common.Lsp.LspStandardMethodNames.TextDocumentDidOpen;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentDidChange"/>
+        public const string TextDocumentDidChange = Common.Lsp.LspStandardMethodNames.TextDocumentDidChange;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TextDocumentDidClose"/>
+        public const string TextDocumentDidClose = Common.Lsp.LspStandardMethodNames.TextDocumentDidClose;
 
-    // ── Workspace Methods ───────────────────────────────────────────────────
-    /// <summary>Method name for the <c>workspace/applyEdit</c> request.</summary>
-    public const string WorkspaceApplyEdit = "workspace/applyEdit";
-    /// <summary>Method name for the <c>workspace/codeLens/refresh</c> request.</summary>
-    public const string WorkspaceCodeLensRefresh = "workspace/codeLens/refresh";
-    /// <summary>Method name for the <c>workspace/didChangeWatchedFiles</c> notification.</summary>
-    public const string WorkspaceDidChangeWatchedFiles = "workspace/didChangeWatchedFiles";
-    /// <summary>Method name for the <c>workspace/executeCommand</c> request.</summary>
-    public const string WorkspaceExecuteCommand = "workspace/executeCommand";
-    /// <summary>Method name for the <c>workspace/didChangeWorkspaceFolders</c> notification.</summary>
-    public const string WorkspaceDidChangeWorkspaceFolders = "workspace/didChangeWorkspaceFolders";
-    /// <summary>Method name for the <c>workspace/semanticTokens/refresh</c> request.</summary>
-    public const string WorkspaceSemanticTokensRefresh = "workspace/semanticTokens/refresh";
-    /// <summary>Method name for the <c>workspace/inlayHint/refresh</c> request.</summary>
-    public const string WorkspaceInlayHintRefresh = "workspace/inlayHint/refresh";
+        // ── Workspace Methods ───────────────────────────────────────────────────
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceApplyEdit"/>
+        public const string WorkspaceApplyEdit = Common.Lsp.LspStandardMethodNames.WorkspaceApplyEdit;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceCodeLensRefresh"/>
+        public const string WorkspaceCodeLensRefresh = Common.Lsp.LspStandardMethodNames.WorkspaceCodeLensRefresh;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceDidChangeWatchedFiles"/>
+        public const string WorkspaceDidChangeWatchedFiles = Common.Lsp.LspStandardMethodNames.WorkspaceDidChangeWatchedFiles;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceExecuteCommand"/>
+        public const string WorkspaceExecuteCommand = Common.Lsp.LspStandardMethodNames.WorkspaceExecuteCommand;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceDidChangeWorkspaceFolders"/>
+        public const string WorkspaceDidChangeWorkspaceFolders = Common.Lsp.LspStandardMethodNames.WorkspaceDidChangeWorkspaceFolders;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceSemanticTokensRefresh"/>
+        public const string WorkspaceSemanticTokensRefresh = Common.Lsp.LspStandardMethodNames.WorkspaceSemanticTokensRefresh;
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.WorkspaceInlayHintRefresh"/>
+        public const string WorkspaceInlayHintRefresh = Common.Lsp.LspStandardMethodNames.WorkspaceInlayHintRefresh;
 
-    // ── Telemetry ───────────────────────────────────────────────────────────
-    /// <summary>Method name for the <c>telemetry/event</c> notification.</summary>
-    public const string TelemetryEvent = "telemetry/event";
+        // ── Telemetry ───────────────────────────────────────────────────────────
+        /// <inheritdoc cref="Common.Lsp.LspStandardMethodNames.TelemetryEvent"/>
+        public const string TelemetryEvent = Common.Lsp.LspStandardMethodNames.TelemetryEvent;
 
     // ── Internal Pipeline Operations (not on the wire; perf-recorder labels only) ──
     /// <summary>Internal perf-recorder label for binding-registry reconciliation after a connector update.</summary>
