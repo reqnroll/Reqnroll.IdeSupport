@@ -37,9 +37,59 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         GherkinRange scenarioRange,
         string? projectFolder = null)
     {
+        var context = BuildContext(featureUri, tags, projectFolder);
+        if (context is null)
+            return Array.Empty<ScenarioTestTarget>();
+
+        var scenarioTag = FindScenarioTag(tags, scenarioRange);
+        var scenarioName = GetScenarioName(scenarioTag?.Data);
+        if (scenarioName is null)
+            return Array.Empty<ScenarioTestTarget>();
+
+        var selectedRow = FindSelectedExamplesRow(tags, scenarioRange);
+        return ResolveScenarioTag(context.Value.ClassDecl, context.Value.DeclaringTypeFullName, scenarioTag!, selectedRow);
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<ScenarioTestTarget> ResolveAll(
+        Uri featureUri,
+        IReadOnlyCollection<IdeSupportTag> tags,
+        GherkinRange containerRange,
+        string? projectFolder = null)
+    {
+        var context = BuildContext(featureUri, tags, projectFolder);
+        if (context is null)
+            return Array.Empty<ScenarioTestTarget>();
+
+        // Background: blocks share IdeSupportTagTypes.ScenarioDefinitionBlock with real
+        // scenarios/Outlines (see DocumentSymbolService.BuildScenarioSymbol's type switch) but
+        // GetScenarioName only recognizes Scenario/ScenarioOutline data, so they're excluded here
+        // the same way FindScenarioTag's single-scenario callers already are.
+        var scenarioTags = tags
+            .Where(t => t.Type == IdeSupportTagTypes.ScenarioDefinitionBlock)
+            .Where(t => GetScenarioName(t.Data) is not null)
+            .Where(t => IsContainedWithin(t.Range, containerRange))
+            .ToList();
+
+        var results = new List<ScenarioTestTarget>();
+        foreach (var scenarioTag in scenarioTags)
+            results.AddRange(ResolveScenarioTag(context.Value.ClassDecl, context.Value.DeclaringTypeFullName, scenarioTag, selectedRow: null));
+
+        return results;
+    }
+
+    /// <summary>
+    /// Locates the generated class declaration shared by every scenario in the feature — the
+    /// container-independent prefix of both <see cref="Resolve"/> and <see cref="ResolveAll"/>.
+    /// Returns <see langword="null"/> when the project isn't built yet, or the generated class
+    /// can't be found, matching each original early-return case.
+    /// </summary>
+    private (ClassDeclarationSyntax ClassDecl, string DeclaringTypeFullName)? BuildContext(
+        Uri featureUri, IReadOnlyCollection<IdeSupportTag> tags, string? projectFolder)
+    {
         var generatedFilePath = GetGeneratedFilePath(featureUri, projectFolder);
         if (generatedFilePath is null)
-            return Array.Empty<ScenarioTestTarget>(); // not built yet — see design doc §3's trade-off table
+            return null; // not built yet — see design doc §3's trade-off table
 
         // Cached across calls within the same resolution pass (issue #491): resolving every
         // scenario/row in a large .feature file used to re-read and re-parse this same,
@@ -49,31 +99,33 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         // project doesn't pay for that work on every scenario in the file.
         var root = _syntaxTreeCache.GetOrParseFromDisk(generatedFilePath, _fileSystem);
         if (root is null)
-            return Array.Empty<ScenarioTestTarget>(); // not built yet — see design doc §3's trade-off table
+            return null; // not built yet — see design doc §3's trade-off table
 
         if (tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.FeatureBlock)?.Data is not Feature feature)
-            return Array.Empty<ScenarioTestTarget>();
-
-        var scenarioTag = FindScenarioTag(tags, scenarioRange);
-        var scenarioName = GetScenarioName(scenarioTag?.Data);
-        if (scenarioName is null)
-            return Array.Empty<ScenarioTestTarget>();
+            return null;
 
         var expectedClassName = ReqnrollIdentifierNaming.ToIdentifier(feature.Name) + "Feature";
         var classDecl = root.DescendantNodes().OfType<ClassDeclarationSyntax>()
             .FirstOrDefault(c => c.Identifier.Text == expectedClassName);
         if (classDecl is null)
-            return Array.Empty<ScenarioTestTarget>();
+            return null;
 
-        var declaringTypeFullName = GetFullTypeName(classDecl);
+        return (classDecl, GetFullTypeName(classDecl));
+    }
+
+    /// <summary>Resolves one scenario/Outline tag's own target(s) against the already-located generated class. Shared by <see cref="Resolve"/> and <see cref="ResolveAll"/>.</summary>
+    private static IReadOnlyList<ScenarioTestTarget> ResolveScenarioTag(
+        ClassDeclarationSyntax classDecl, string declaringTypeFullName, IdeSupportTag scenarioTag,
+        (Examples Examples, TableRow Row)? selectedRow)
+    {
+        var scenarioName = GetScenarioName(scenarioTag.Data)!;
         var expectedMethodName = ReqnrollIdentifierNaming.ToIdentifier(scenarioName);
-        var selectedRow = FindSelectedExamplesRow(tags, scenarioRange);
 
         var exactMethod = classDecl.Members.OfType<MethodDeclarationSyntax>()
             .FirstOrDefault(m => m.Identifier.Text == expectedMethodName);
         if (exactMethod is not null)
             return ResolveExactMethod(exactMethod, declaringTypeFullName, expectedMethodName,
-                scenarioTag!.Data, selectedRow);
+                scenarioTag.Data, selectedRow);
 
         var prefix = expectedMethodName + "_";
         var candidateMethods = classDecl.Members.OfType<MethodDeclarationSyntax>()
@@ -82,9 +134,13 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         if (candidateMethods.Count == 0)
             return Array.Empty<ScenarioTestTarget>(); // naming-rule mismatch or generator-version drift
 
-        return ResolveIndividualMethods(candidateMethods, declaringTypeFullName, scenarioTag!.Data,
+        return ResolveIndividualMethods(candidateMethods, declaringTypeFullName, scenarioTag.Data,
             expectedMethodName, selectedRow);
     }
+
+    /// <summary>Determines whether <paramref name="inner"/> falls entirely within <paramref name="outer"/> (both offsets, no snapshot-identity requirement — unlike <see cref="GherkinRange.IntersectsWith"/>).</summary>
+    private static bool IsContainedWithin(GherkinRange inner, GherkinRange outer) =>
+        inner.Start >= outer.Start && inner.End <= outer.End;
 
     // ── Tier 1: locate the generated companion file / class / exact-name method ────────────────
 

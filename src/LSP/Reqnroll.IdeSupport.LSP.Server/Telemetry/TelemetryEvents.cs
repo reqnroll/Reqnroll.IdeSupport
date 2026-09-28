@@ -44,6 +44,9 @@ public static class TelemetryEvents
     /// <summary>Sent by <see cref="Features.TestTargets.ResolveTestTargetsHandler"/> after resolving test targets for a Run request.</summary>
     public const string ResolveTestTargetsCommandExecuted = "ResolveTestTargets command executed";
 
+    /// <summary>Sent by <see cref="Features.TestTargets.ResolveContainerTestTargetsHandler"/> after resolving test targets for a "Run scenarios" (Feature/Rule) request.</summary>
+    public const string ResolveContainerTestTargetsCommandExecuted = "ResolveContainerTestTargets command executed";
+
     /// <summary>Sent by <see cref="Features.Definition.GoToHooksHandler"/> after handling a Go To Hooks request.</summary>
     public const string GoToHookCommandExecuted = "GoToHook command executed";
 

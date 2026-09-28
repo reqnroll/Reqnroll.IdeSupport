@@ -41,6 +41,8 @@ internal static class ReqnrollMethodNames
     public const string GoToMatchingScenarios = "reqnroll/goToMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
     public const string ResolveTestTargets = "reqnroll/resolveTestTargets";
+    /// <summary>Method name for the <c>reqnroll/resolveContainerTestTargets</c> request — resolves every scenario/Outline under a <c>Feature:</c> or <c>Rule:</c> block in one call (issue #744, "Run scenarios").</summary>
+    public const string ResolveContainerTestTargets = "reqnroll/resolveContainerTestTargets";
     /// <summary>Method name for the <c>reqnroll/findUnusedStepDefinitions</c> request.</summary>
     public const string FindUnusedStepDefinitions = "reqnroll/findUnusedStepDefinitions";
     /// <summary>Method name for the <c>reqnroll/renameTargets</c> request.</summary>
