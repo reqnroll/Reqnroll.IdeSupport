@@ -34,4 +34,28 @@ public interface IScenarioTestTargetResolver
         IReadOnlyCollection<IdeSupportTag> tags,
         GherkinRange scenarioRange,
         string? projectFolder = null);
+
+    /// <summary>
+    /// Resolves the test target(s) for every Scenario/Scenario Outline fully contained within
+    /// <paramref name="containerRange"/> — the "Run scenarios" case for a <c>Feature:</c> or
+    /// <c>Rule:</c> block (issue #744), as opposed to <see cref="Resolve"/>'s single-scenario
+    /// resolution. Each contained scenario/Outline contributes every one of its own targets (e.g.
+    /// every Outline row), exactly as if <see cref="Resolve"/> had been called on it individually —
+    /// this method only broadens which scenarios are considered, it does not change how any one
+    /// scenario resolves. <c>Background:</c> blocks and any other non-runnable content in the range
+    /// are ignored.
+    /// </summary>
+    /// <param name="featureUri">The <c>.feature</c> file's URI — used to locate its generated <c>.feature.cs</c> companion.</param>
+    /// <param name="tags">The <c>.feature</c> file's already-parsed Gherkin tag tree (e.g. <c>buffer.Tags</c>).</param>
+    /// <param name="containerRange">
+    /// The Feature's or Rule's own range (its full body, not just its header line) — every
+    /// Scenario/Scenario Outline tag whose own range falls entirely within this range is resolved.
+    /// </param>
+    /// <param name="projectFolder">See <see cref="Resolve"/>.</param>
+    /// <returns>The concatenation of every contained scenario's own resolved target(s), in document order. Never <see langword="null"/>.</returns>
+    IReadOnlyList<ScenarioTestTarget> ResolveAll(
+        Uri featureUri,
+        IReadOnlyCollection<IdeSupportTag> tags,
+        GherkinRange containerRange,
+        string? projectFolder = null);
 }

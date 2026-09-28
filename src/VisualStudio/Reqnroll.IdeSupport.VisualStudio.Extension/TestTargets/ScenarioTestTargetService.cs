@@ -55,6 +55,34 @@ internal sealed class ScenarioTestTargetService
         return mapped;
     }
 
+    /// <summary>
+    /// Queries the LSP server for the generated test method(s) of every scenario/Outline contained
+    /// in the Feature or Rule whose full body is <paramref name="containerRange"/> (issue #744, "Run
+    /// scenarios") — the container-scoped counterpart to <see cref="ResolveTestTargetsAsync"/>. Pass
+    /// the container symbol's own <c>Range</c> (its whole body), not its <c>SelectionRange</c>
+    /// (header line only) — the server resolves every scenario/Outline tag fully contained within
+    /// the range given, so a header-only range would resolve nothing.
+    /// </summary>
+    public async Task<IReadOnlyList<ScenarioTestTarget>> ResolveContainerTestTargetsAsync(
+        string fileUri, GherkinSymbolRange containerRange, CancellationToken cancellationToken)
+    {
+        var paramsJson = BuildParams(fileUri, containerRange);
+
+        _logger.LogDebug(
+            "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}-{EndLine}",
+            ReqnrollMethodNames.ResolveContainerTestTargets, fileUri, containerRange.Start.Line, containerRange.End.Line);
+
+        var result = await _pipe
+            .SendRequestToServerAsync(ReqnrollMethodNames.ResolveContainerTestTargets, paramsJson, cancellationToken)
+            .ConfigureAwait(false);
+
+        var mapped = MapResult(result as JObject);
+        _logger.LogDebug(
+            "ScenarioTestTargetService: {TargetCount} target(s) returned for container {FileUri}:{StartLine}-{EndLine}",
+            mapped.Count, fileUri, containerRange.Start.Line, containerRange.End.Line);
+        return mapped;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static string BuildParams(string fileUri, GherkinSymbolRange range) =>

@@ -193,6 +193,10 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollResolveTestTargets,
             (request, ct) => resolver!.Get<ResolveTestTargetsHandler>().HandleAsync(request, ct));
 
+        options.OnRequest<ResolveContainerTestTargetsParams, ResolveContainerTestTargetsResponse>(
+            LspMethodNames.ReqnrollResolveContainerTestTargets,
+            (request, ct) => resolver!.Get<ResolveContainerTestTargetsHandler>().HandleAsync(request, ct));
+
         // LSP-server outcome pipeline (VSTest logger → server → every connected IDE): the run
         // registration and outcome lookup that used to be an in-proc, VS-only pair
         // (TestOutcomeListener/RunTestCodeLensCallbackListener) are now custom requests any IDE's

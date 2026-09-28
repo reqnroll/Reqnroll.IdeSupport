@@ -24,6 +24,8 @@ public static class LspMethodNames
     public const string ReqnrollFindMatchingScenarios = "reqnroll/findMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
     public const string ReqnrollResolveTestTargets = "reqnroll/resolveTestTargets";
+    /// <summary>Method name for the <c>reqnroll/resolveContainerTestTargets</c> request — resolves every scenario/Outline under a <c>Feature:</c> or <c>Rule:</c> block in one call (issue #744, "Run scenarios").</summary>
+    public const string ReqnrollResolveContainerTestTargets = "reqnroll/resolveContainerTestTargets";
     /// <summary>Method name for the <c>reqnroll/findUnusedStepDefinitions</c> request.</summary>
     public const string ReqnrollFindUnusedStepDefinitions = "reqnroll/findUnusedStepDefinitions";
     /// <summary>Method name for the <c>reqnroll/renameTargets</c> request.</summary>

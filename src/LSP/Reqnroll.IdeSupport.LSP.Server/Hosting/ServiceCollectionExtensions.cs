@@ -218,6 +218,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<FindStepDefinitionsHandler>()
             .AddSingleton<FindMatchingScenariosHandler>()
             .AddSingleton<ResolveTestTargetsHandler>()
+            .AddSingleton<ResolveContainerTestTargetsHandler>()
             .AddSingleton<StepCodeLensHandler>()
             .AddSingleton<HookCodeLensHandler>()
             .AddSingleton<HookMatchCountCodeLensHandler>()

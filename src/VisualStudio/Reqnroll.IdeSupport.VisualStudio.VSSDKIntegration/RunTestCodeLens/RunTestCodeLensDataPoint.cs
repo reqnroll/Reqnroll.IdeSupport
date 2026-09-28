@@ -112,44 +112,29 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
 
         // Pass/fail glyph. Source of truth is the LSP server's TestOutcomeStore, fed by the bundled
         // VSTest logger (implementation plan §4.2) — it sees every result of an IDE-triggered run, including
-        // each Scenario Outline row (issue #702). Only when the store has never heard of this method
+        // each Scenario Outline row (issue #702). Only when the store has never heard of a given method
         // (no run yet this session, or a project the logger can't reach — e.g. Microsoft.Testing.Platform)
         // do we fall back to RunTestOutcomeBridge's reflection into VS's own TestStore, which degrades
-        // to "no glyph" on any failure. Only the first target's outcome is used — good enough for the
-        // common single-method case; a mixed-outcome multi-target Outline (allowRowTests = false) just
-        // shows the first target's state, not an aggregate.
-        ImageId? imageId = null;
-        string outcomeSource;
-        var primary = _cachedMethods[0];
-        _cachedOutcome = await TryGetStoredOutcomeAsync(primary, token).ConfigureAwait(false);
-        if (_cachedOutcome is { IsRunning: true })
+        // to "no glyph" on any failure. Every cached method is resolved and combined via
+        // AggregateOutcomes — issue #789 live testing found a Feature/Rule "Run Scenarios" lens (issue
+        // #744) always rendered green because only _cachedMethods[0] was ever consulted, so a later
+        // scenario's failure never reached the glyph.
+        var perMethodOutcomes = new List<RunTestOutcomeEntry?>(_cachedMethods.Count);
+        foreach (var method in _cachedMethods)
+            perMethodOutcomes.Add(await ResolveMethodOutcomeAsync(method, token).ConfigureAwait(false));
+
+        _cachedOutcome = AggregateOutcomes(perMethodOutcomes);
+
+        ImageId? imageId = _cachedOutcome switch
         {
-            // A run naming this method is in flight: VS's own lens shows a spinner here.
-            imageId = ToImageId(KnownMonikers.StatusRunning);
-            outcomeSource = "store:running";
-        }
-        else if (_cachedOutcome is { IsStale: true })
-        {
-            // Recorded before the container was last rebuilt, or just too old to keep trusting (see
-            // RunTestCodeLensCallbackListener.IsStale's remarks) — say nothing rather than something
-            // outdated, and don't ask the bridge either: VS's TestStore would just repeat the stale
-            // value. Also clear the cache itself, not just the glyph: a details-pane click must not
-            // render this stale entry's row table as if it were current (fresh-eyes review finding).
-            outcomeSource = $"store:stale({_cachedOutcome.Aggregate})";
-            _cachedOutcome = null;
-        }
-        else if (_cachedOutcome is not null && RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } storedOutcome)
-        {
-            imageId = RunTestOutcomeBridge.ToImageId(storedOutcome);
-            outcomeSource = $"store:{_cachedOutcome.Aggregate}";
-        }
-        else
-        {
-            var bridged = await RunTestOutcomeBridge.TryGetOutcomeAsync(primary, token).ConfigureAwait(false);
-            if (bridged is { } resolvedOutcome)
-                imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
-            outcomeSource = $"bridge:{bridged?.ToString() ?? "(none)"}";
-        }
+            // A run naming one of these methods is in flight: VS's own lens shows a spinner here.
+            { IsRunning: true } => ToImageId(KnownMonikers.StatusRunning),
+            not null when RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } resolved => RunTestOutcomeBridge.ToImageId(resolved),
+            _ => null,
+        };
+        var outcomeSource = _cachedOutcome is null
+            ? "(none)"
+            : _cachedOutcome.IsRunning ? "running" : _cachedOutcome.Aggregate;
 
         _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcomeSource}");
 
@@ -285,6 +270,61 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             _logger.LogException(ex, $"RunTestCodeLensDataPoint: {RunTestCodeLensCallbackListener.GetOutcomeMethod} failed for {method.ManagedType}.{method.ManagedMethod}; falling back to the bridge");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Resolves one method's outcome: the store first, falling back to <see cref="RunTestOutcomeBridge"/>
+    /// exactly as the pre-#789-fix single-method path did. A stale store entry (see
+    /// <c>RunTestCodeLensCallbackListener.IsStale</c>'s remarks) returns <see langword="null"/> — say
+    /// nothing rather than something outdated — without consulting the bridge, which would just repeat
+    /// VS's own possibly-stale TestStore value.
+    /// </summary>
+    private async Task<RunTestOutcomeEntry?> ResolveMethodOutcomeAsync(TestMethodIdentifier method, CancellationToken token)
+    {
+        var stored = await TryGetStoredOutcomeAsync(method, token).ConfigureAwait(false);
+        if (stored is { IsRunning: true })
+            return stored;
+        if (stored is { IsStale: true })
+            return null;
+        if (stored is not null)
+            return stored;
+
+        var bridged = await RunTestOutcomeBridge.TryGetOutcomeAsync(method, token).ConfigureAwait(false);
+        return bridged is { } resolvedOutcome
+            ? new RunTestOutcomeEntry(resolvedOutcome.ToString(), Array.Empty<RunTestOutcomeRow>(), DateTime.UtcNow)
+            : null;
+    }
+
+    /// <summary>
+    /// Combines every cached method's outcome the same worst-wins way Test Explorer aggregates a
+    /// hierarchical (Feature/Rule/class) node: a run in flight always wins (spinner); otherwise any
+    /// failure wins (red); otherwise an unresolved method (not yet run, or stale) means say nothing
+    /// rather than a false green; otherwise Skipped beats Passed; Passed only when every method agrees.
+    /// Fixes issue #789 live testing — the Feature/Rule "Run Scenarios" lens (issue #744) previously
+    /// only ever consulted <c>_cachedMethods[0]</c>, so a later scenario's failure never reached the
+    /// glyph and it rendered green regardless.
+    /// </summary>
+    internal static RunTestOutcomeEntry? AggregateOutcomes(IReadOnlyList<RunTestOutcomeEntry?> outcomes)
+    {
+        if (outcomes.Count == 0)
+            return null;
+
+        var running = outcomes.FirstOrDefault(o => o is { IsRunning: true });
+        if (running is not null)
+            return running;
+
+        if (outcomes.Any(o => o is null))
+            return null;
+
+        var aggregate =
+            outcomes.Any(o => string.Equals(o!.Aggregate, "Failed", StringComparison.OrdinalIgnoreCase)) ? "Failed" :
+            outcomes.All(o => string.Equals(o!.Aggregate, "Passed", StringComparison.OrdinalIgnoreCase)) ? "Passed" :
+            outcomes.Any(o => string.Equals(o!.Aggregate, "Skipped", StringComparison.OrdinalIgnoreCase)) ? "Skipped" :
+            "None";
+
+        var rows = outcomes.SelectMany(o => o!.Rows).ToList();
+        var lastUpdatedUtc = outcomes.Max(o => o!.LastUpdatedUtc);
+        return new RunTestOutcomeEntry(aggregate, rows, lastUpdatedUtc);
     }
 
     private static CodeLensDetailPaneCommand BuildCommand(string displayName, int commandId, IReadOnlyList<TestMethodIdentifier> methods) =>

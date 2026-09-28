@@ -92,4 +92,72 @@ public class TestOutcomeDetailsTests
 
         RunTestCodeLensDataPoint.BuildTooltip(entry).Should().Be("Passed");
     }
+
+    // ── AggregateOutcomes: the Feature/Rule "Run Scenarios" glyph (issue #744) combines every
+    // scenario's own outcome the same worst-wins way Test Explorer aggregates a hierarchical node —
+    // regression coverage for issue #789 live testing, where only the first scenario's outcome ever
+    // reached the glyph and a failing later scenario still rendered green ──
+
+    private static RunTestOutcomeEntry Outcome(string aggregate) => new(aggregate, Array.Empty<RunTestOutcomeRow>(), DateTime.UtcNow);
+
+    [Fact]
+    public void Aggregate_is_failed_when_any_scenario_failed_even_if_the_first_one_passed()
+    {
+        var result = RunTestCodeLensDataPoint.AggregateOutcomes(new[] { Outcome("Passed"), Outcome("Failed"), Outcome("Passed") });
+
+        result!.Aggregate.Should().Be("Failed");
+    }
+
+    [Fact]
+    public void Aggregate_is_passed_only_when_every_scenario_passed()
+    {
+        var result = RunTestCodeLensDataPoint.AggregateOutcomes(new[] { Outcome("Passed"), Outcome("Passed") });
+
+        result!.Aggregate.Should().Be("Passed");
+    }
+
+    [Fact]
+    public void Aggregate_is_skipped_when_no_scenario_failed_but_at_least_one_was_skipped()
+    {
+        var result = RunTestCodeLensDataPoint.AggregateOutcomes(new[] { Outcome("Passed"), Outcome("Skipped") });
+
+        result!.Aggregate.Should().Be("Skipped");
+    }
+
+    [Fact]
+    public void Aggregate_is_null_when_any_scenario_has_no_resolved_outcome_yet()
+    {
+        // A scenario that hasn't run this session (or whose store entry was stale) resolves to null —
+        // the glyph should say nothing rather than report a false green or red on partial data.
+        var result = RunTestCodeLensDataPoint.AggregateOutcomes(new[] { Outcome("Passed"), null });
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Aggregate_prefers_a_running_entry_over_any_completed_outcome()
+    {
+        var running = new RunTestOutcomeEntry("None", Array.Empty<RunTestOutcomeRow>(), DateTime.UtcNow, IsRunning: true);
+
+        var result = RunTestCodeLensDataPoint.AggregateOutcomes(new[] { Outcome("Failed"), running });
+
+        result.Should().BeSameAs(running);
+    }
+
+    [Fact]
+    public void Aggregate_is_null_for_an_empty_method_list()
+    {
+        RunTestCodeLensDataPoint.AggregateOutcomes(Array.Empty<RunTestOutcomeEntry?>()).Should().BeNull();
+    }
+
+    [Fact]
+    public void Aggregate_combines_rows_from_every_method()
+    {
+        var first = new RunTestOutcomeEntry("Passed", new[] { new RunTestOutcomeRow("Scenario A", "Passed", 10, null) }, DateTime.UtcNow);
+        var second = new RunTestOutcomeEntry("Failed", new[] { new RunTestOutcomeRow("Scenario B", "Failed", 20, "boom") }, DateTime.UtcNow);
+
+        var result = RunTestCodeLensDataPoint.AggregateOutcomes(new[] { first, second });
+
+        result!.Rows.Select(r => r.DisplayName).Should().Equal("Scenario A", "Scenario B");
+    }
 }
