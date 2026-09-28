@@ -71,7 +71,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
         LspMessage        message,
         CancellationToken cancellationToken)
     {
-        if (message.Method == "textDocument/didClose")
+        if (message.Method == LspStandardMethodNames.TextDocumentDidClose)
         {
             if (UriToFeatureFilePath(message) is { } closedPath)
             {
@@ -83,7 +83,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             return LspInterceptorResult.PassThrough;
         }
 
-        if (message.Method != "textDocument/didOpen")
+        if (message.Method != LspStandardMethodNames.TextDocumentDidOpen)
             return LspInterceptorResult.PassThrough;
 
         if (UriToFeatureFilePath(message) is not { } path)
@@ -129,7 +129,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
         lock (_selfForwardedLock) { _selfForwardedPaths.Add(path); }
         try
         {
-            await pipe.SendNotificationToServerAsync("textDocument/didOpen", paramsJson, cancellationToken)
+            await pipe.SendNotificationToServerAsync(LspStandardMethodNames.TextDocumentDidOpen, paramsJson, cancellationToken)
                       .ConfigureAwait(false);
         }
         finally
