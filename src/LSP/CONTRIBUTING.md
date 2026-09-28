@@ -172,6 +172,47 @@ Each IDE's glue component sets its own defaults for these three flags when spawn
 see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md) and
 [../VSCode/CONTRIBUTING.md](../VSCode/CONTRIBUTING.md) for what each one passes.
 
+## Server IDE identity (`--ide`) and its `ClientInfo` fallback
+
+`--ide <identifier>` (`visualstudio` / `vscode` / `rider`) is the fourth startup argument, and the
+only one that isn't about verbosity. It is parsed in `Program.Main` and handed to
+`ClientIdeContext`, the singleton every per-IDE branch reads (`IsVisualStudio`, `IsVSCode`,
+`SupportsCodeLensResolve`). Read the class's own remarks before adding another per-IDE branch.
+
+It has **two** sources, resolved in this order (issue #709):
+
+1. **`--ide`** — the primary source, and the only one available before the client connects. That
+   matters: the log-file prefix (`LspIdeSupportLogger` reads it in its constructor) and the
+   `initialize`-time capability decisions in `Program.ConfigureServer` both depend on it, so a
+   client that fails to pass it would otherwise stay unidentified for the whole session.
+2. **`InitializeParams.ClientInfo`** — the LSP-standard `{name, version}` the client self-reports
+   in the `initialize` request. It arrives *after* the DI container was built, so
+   `ClientIdeContext.ApplyClientInfo` (called from `OnInitialized`) fills the identity in only when
+   `--ide` was absent. `ClientInfo.Name` is a free-form product name ("Visual Studio Code"), not an
+   identifier, so it is mapped by an ordered, case-insensitive **substring** table in
+   `MapClientInfoNameToIde` — order is load-bearing there ("visual studio code" must be tested
+   before "visual studio", or every VS Code client would be handed Visual Studio's push-based
+   semantic-token path). An unrecognized name resolves to nothing rather than being guessed at.
+
+`--ide` always wins, so this changes behaviour only for a client that omits the flag; every shipped
+client still passes it, and no client's capability negotiation moves.
+
+Because the identity is only fully known at `initialize`, the server logs it there, at Info:
+
+```
+2026-09-28T11:02:14.517Z [Info   ] Program+<>c.ApplyClientIdentity (tid=1): Client identity: --ide=visualstudio, clientInfo=Visual Studio (17.14.0), effective ide=visualstudio
+```
+
+`--ide=<none>` with a resolved `effective ide=…  (resolved from ClientInfo)` is the fallback firing;
+`clientInfo=<none>` means the client sent no `ClientInfo` at all. The line is suppressed at the
+default `--log-level Warning` — raise it to `Info` to see it.
+
+One known limitation: `LspIdeSupportLogger` derives its file prefix from the identity present when
+it is constructed, which is before the client connects. A client that omits `--ide` and is
+identified only via `ClientInfo` therefore still gets the neutral `reqnroll-lsp-server-*.log`
+prefix, while everything else (capabilities, handlers, telemetry `IDEClient`) uses the resolved
+identity.
+
 ## Debugging
 
 Runtime logs land in `%LocalAppData%\Reqnroll\logs\` (Windows) / `~/.local/share/Reqnroll/logs/`

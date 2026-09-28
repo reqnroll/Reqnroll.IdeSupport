@@ -93,7 +93,9 @@ Two adjacent things that are **not** protocol extensions, despite looking like c
 - `--ide <identifier>` (e.g. `visualstudio`) is a process command-line argument read in
   [`Program.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/Program.cs), not an
   `initializationOptions` field. No client in this repo populates `initializationOptions` or an
-  `experimental` capabilities block.
+  `experimental` capabilities block. Its fallback, `InitializeParams.ClientInfo` (issue #709), is a
+  standard LSP field rather than an extension — the server reads it, it adds nothing to the wire, and
+  it is consulted only when no `--ide` was passed.
 - VS's `DocumentActivationTrackingInterceptor` re-sends `textDocument/didOpen` verbatim before
   sending `reqnroll/documentActivated` — it reorders delivery, it doesn't add fields to the
   standard notification.

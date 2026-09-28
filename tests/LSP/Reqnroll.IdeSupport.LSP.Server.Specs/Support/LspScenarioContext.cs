@@ -193,10 +193,14 @@ public sealed class LspScenarioContext
         string TargetFrameworkMoniker,
         IReadOnlyList<string> PackageIds);
 
-    public async Task EnsureStartedAsync(string? ideId = null, bool supportsChangeAnnotations = false)
+    public async Task EnsureStartedAsync(
+        string? ideId = null,
+        bool supportsChangeAnnotations = false,
+        ClientInfo? clientInfo = null)
     {
         if (Started) return;
-        await Harness.StartAsync(WorkspaceFolder, ideId, supportsChangeAnnotations).ConfigureAwait(false);
+        await Harness.StartAsync(WorkspaceFolder, ideId, supportsChangeAnnotations, clientInfo)
+            .ConfigureAwait(false);
         Started = true;
     }
 
