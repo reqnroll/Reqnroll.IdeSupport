@@ -46,6 +46,12 @@ public static class LspMethodNames
     public const string ReqnrollGetTestOutcome = "reqnroll/testOutcomes/getOutcome";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/changed</c> push notification (LSP-server outcome pipeline).</summary>
     public const string ReqnrollTestOutcomesChanged = "reqnroll/testOutcomes/changed";
+    /// <summary>
+    /// Not a wire method — the <see cref="Performance.IOperationDurationRecorder"/> operation label
+    /// for <see cref="Features.TestOutcomes.TestOutcomeTcpListener"/>'s NDJSON ingestion hot path,
+    /// timed from connection hello to <c>runComplete</c> (issue #722).
+    /// </summary>
+    public const string ReqnrollTestOutcomesIngestRun = "reqnroll/testOutcomes/ingestRun";
 
     // ── Standard LSP Methods ────────────────────────────────────────────────
     /// <summary>Method name for the <c>textDocument/semanticTokens/full</c> request.</summary>

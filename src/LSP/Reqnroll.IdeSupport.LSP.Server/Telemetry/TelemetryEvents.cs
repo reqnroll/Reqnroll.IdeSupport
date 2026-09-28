@@ -58,4 +58,13 @@ public static class TelemetryEvents
 
     /// <summary>Sent by <see cref="Features.References.FindStepUsagesHandler"/> after handling a Find Step Usages request.</summary>
     public const string FindStepDefinitionUsagesCommandExecuted = "FindStepDefinitionUsages command executed";
+
+    /// <summary>
+    /// Sent by <see cref="Features.TestOutcomes.TestOutcomeTcpListener"/> when a test run's
+    /// <c>runComplete</c> line is received. Carries only counts/flags (result count, aborted,
+    /// canceled, and which reporter — VSTest logger or MTP — sent the run) matching
+    /// <see cref="Performance.OperationDurationRecorder.PerfSampleEventName"/>'s privacy posture:
+    /// no paths, no test names, no content (issue #722).
+    /// </summary>
+    public const string TestOutcomesRunCompleted = "TestOutcomesRunCompleted";
 }
