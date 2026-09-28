@@ -187,7 +187,7 @@ Code to activate it, and uninstall from the Extensions view when you're done tes
 
 ## Output channels
 
-The extension writes to three Output panel channels, each with a distinct purpose:
+The extension writes to two Output panel channels, each with a distinct purpose:
 
 - **Reqnroll** — the curated app-status channel (issue #661): extension activation, LSP client
   start/connect/stop, and each command's one-line result (mirroring the popup notification you
@@ -196,17 +196,20 @@ The extension writes to three Output panel channels, each with a distinct purpos
   directly. Also teed to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
 - **Reqnroll LSP** — `vscode-languageclient`'s own general client channel: connection-level
   diagnostics. Also teed to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
-- **Reqnroll LSP Trace** — the raw JSON-RPC wire trace, described below.
+
+The per-message JSON-RPC wire trace (used to exist as a visible "Reqnroll LSP Trace" Output
+pane) was removed in issue #792 — the log file is the only trace artifact now.
 
 ## LSP tracing
 
-To see raw JSON-RPC traffic, open VS Code Settings and set:
+To see raw JSON-RPC traffic, set `reqnroll.trace.server` to `"verbose"` in
+VS Code Settings. A timestamped trace file is written to
+`%LOCALAPPDATA%\Reqnroll\logs\` (Windows) or
+`~/.local/share/Reqnroll/logs/` (macOS/Linux):
+`reqnroll-vscode-inspector-<timestamp>.log`.
 
-```
-reqnroll.trace.server: verbose
-```
-
-Traffic appears in the **Output** panel under **Reqnroll LSP Trace**. When set to `verbose`, a timestamped log file is also written to `%LOCALAPPDATA%\Reqnroll\logs\` (Windows) or `~/.local/share/Reqnroll/logs/` (macOS/Linux).
+There is no visible Output panel for the wire trace — the log file is the
+intended artifact for debugging and support (issue #792).
 
 Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--trace` or
 `--protocol-log-level` — `reqnroll.trace.server` is the one setting that drives both sides:
@@ -235,16 +238,7 @@ fails. See
 [../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
 for the full mechanism.
 
-**The Output panel can appear empty even with tracing on.** `reqnroll.trace.server: verbose`
-correctly drives `vscode-languageclient` to trace (`InitializeParams.Trace`/`$/setTrace` as
-above), but the **Reqnroll LSP Trace** channel is a `vscode.LogOutputChannel`, which has its own
-independent display-level filter — set only by the user, via that channel's own dropdown in the
-Output panel (or Command Palette → "Developer: Set Log Level…" → pick the channel). Nothing in
-`reqnroll.trace.server`, or anywhere else in the extension, can raise that filter programmatically,
-so a channel left at its default level will silently show nothing even while tracing is fully
-active. If the panel looks empty, check the timestamped file log under `%LOCALAPPDATA%\Reqnroll\logs\`
-(or the platform equivalent above) instead — it's written directly to disk and isn't subject to
-this filter, so it's the more reliable place to look.
+**The log file is the reliable place to look.** The SilentLspTraceChannel writes directly to disk and is the only artifact for debugging and support — the visible Output panel for the wire trace was removed in issue #792.
 
 ## CI
 

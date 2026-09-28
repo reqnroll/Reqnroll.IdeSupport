@@ -31,7 +31,7 @@ suite('traceServerToLogLevel', () => {
 });
 
 // The channel's logLevel is what vscode-languageclient reads to decide the InitializeParams.Trace
-// value it sends the server (see the TeeLogOutputChannel doc comment) — it must track the
+// value it sends the server (see the SilentLspTraceChannel doc comment) — it must track the
 // `reqnroll.trace.server` setting rather than always claiming Trace, or the server ends up
 // tracing regardless of what the user actually asked for.
 suite('createTraceChannel logLevel', () => {
