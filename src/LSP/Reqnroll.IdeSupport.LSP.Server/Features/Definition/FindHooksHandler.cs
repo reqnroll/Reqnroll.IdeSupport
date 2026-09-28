@@ -117,8 +117,10 @@ public sealed class FindHooksHandler
                 locations.Add(loc);
         }
 
-        // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.GoToHookCommandExecuted, new());
+        // Telemetry: reports that a findHooks lookup ran, not that the user navigated (issue #698) —
+        // this handler also backs the classic VS CodeLens's Details-popup prefetch, which calls it on
+        // every lens render. Genuine navigation telemetry is originated client-side instead.
+        _telemetryService?.SendEvent(TelemetryEvents.FindHooksCommandExecuted, new());
 
         return Task.FromResult(new FindHooksResponse { Hooks = locations });
     }
