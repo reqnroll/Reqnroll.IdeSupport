@@ -16,12 +16,12 @@ public static class LspMethodNames
     public const string ReqnrollProjectFiles = "reqnroll/projectFiles";
     /// <summary>Method name for the <c>reqnroll/findStepUsages</c> request.</summary>
     public const string ReqnrollFindStepUsages = "reqnroll/findStepUsages";
-    /// <summary>Method name for the <c>reqnroll/goToHooks</c> request.</summary>
-    public const string ReqnrollGoToHooks = "reqnroll/goToHooks";
+    /// <summary>Method name for the <c>reqnroll/findHooks</c> request.</summary>
+    public const string ReqnrollFindHooks = "reqnroll/findHooks";
     /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
     public const string ReqnrollFindStepDefinitions = "reqnroll/findStepDefinitions";
-    /// <summary>Method name for the <c>reqnroll/goToMatchingScenarios</c> request (issue #373).</summary>
-    public const string ReqnrollGoToMatchingScenarios = "reqnroll/goToMatchingScenarios";
+    /// <summary>Method name for the <c>reqnroll/findMatchingScenarios</c> request (issue #373).</summary>
+    public const string ReqnrollFindMatchingScenarios = "reqnroll/findMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
     public const string ReqnrollResolveTestTargets = "reqnroll/resolveTestTargets";
     /// <summary>Method name for the <c>reqnroll/findUnusedStepDefinitions</c> request.</summary>

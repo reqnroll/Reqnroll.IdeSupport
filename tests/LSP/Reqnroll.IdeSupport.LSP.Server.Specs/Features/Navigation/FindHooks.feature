@@ -1,6 +1,6 @@
 Feature: Go to Hooks
 
-Sending reqnroll/goToHooks from a cursor in a .feature file returns the hook bindings
+Sending reqnroll/findHooks from a cursor in a .feature file returns the hook bindings
 applicable at that position, filtered by context level (design doc F17).
 
 # Shared setup: announce the project, open a binding file that contains three hook types

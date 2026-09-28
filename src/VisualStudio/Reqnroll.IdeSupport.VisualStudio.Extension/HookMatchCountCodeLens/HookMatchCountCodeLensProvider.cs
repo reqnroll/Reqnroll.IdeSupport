@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
-using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
@@ -42,14 +42,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensProvider
 {
     private readonly StepCodeLensState _state;
-    private readonly GoToMatchingScenariosState _goToState;
+    private readonly FindMatchingScenariosState _goToState;
     private readonly ILogger<HookMatchCountCodeLensProvider> _logger;
     private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>Creates the provider over the shared runtime state holders.</summary>
     public HookMatchCountCodeLensProvider(
         StepCodeLensState                        state,
-        GoToMatchingScenariosState               goToState,
+        FindMatchingScenariosState               goToState,
         ILogger<HookMatchCountCodeLensProvider>  logger,
         ILoggerFactory                            loggerFactory)
     {
@@ -99,7 +99,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
 internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatableLens
 {
     private readonly StepCodeLensState _state;
-    private readonly GoToMatchingScenariosState _goToState;
+    private readonly FindMatchingScenariosState _goToState;
     private readonly ILogger<HookMatchCountCodeLens> _logger;
     private readonly Uri _fileUri;
     private readonly int _methodStartLine;
@@ -113,7 +113,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
     /// <summary>Creates the lens for a specific method and registers it with the shared state for later invalidation.</summary>
     public HookMatchCountCodeLens(
         StepCodeLensState                state,
-        GoToMatchingScenariosState       goToState,
+        FindMatchingScenariosState       goToState,
         ILogger<HookMatchCountCodeLens>  logger,
         Uri                              fileUri,
         int                              methodStartLine)
@@ -239,7 +239,7 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
                 _fileUri, firstHook.ArgLine, firstHook.ArgChar);
 
             var result = await goToService
-                .GoToMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, firstHook.ArgChar, cancellationToken)
+                .FindMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, firstHook.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
             if (result.Scenarios.Count == 0)

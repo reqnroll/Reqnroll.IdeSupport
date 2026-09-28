@@ -8,7 +8,7 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.io.URLUtil
 
 /**
- * Go to Hooks — the Rider-side surface for the position-based `reqnroll/goToHooks` request
+ * Go to Hooks — the Rider-side surface for the position-based `reqnroll/findHooks` request
  * (issue #158). Mirrors VS's GoToHooksCommand and VS Code's `doGoToHooks`: only enabled with the
  * caret in a `.feature` file editor, sends the current caret position, and navigates directly to
  * the single applicable hook or shows a chooser popup when there are several. The actual

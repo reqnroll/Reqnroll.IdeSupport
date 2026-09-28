@@ -19,7 +19,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 [VisualStudioContribution]
 internal sealed class GoToHooksCommand : Command
 {
-    private readonly GoToHooksState  _state;
+    private readonly FindHooksState  _state;
     private readonly ILogger<GoToHooksCommand> _logger;
     // NavigationPickerHelper (shared with FindStepUsages/RenameStep-adjacent navigation code,
     // out of scope for the ILogger<T> migration) still takes IIdeSupportLogger — resolve the
@@ -27,7 +27,7 @@ internal sealed class GoToHooksCommand : Command
     private readonly IIdeSupportLogger _fileLogger;
 
     /// <summary>Creates the command over the shared runtime state holder.</summary>
-    public GoToHooksCommand(GoToHooksState state, ILogger<GoToHooksCommand> logger, IIdeSupportLogger fileLogger)
+    public GoToHooksCommand(FindHooksState state, ILogger<GoToHooksCommand> logger, IIdeSupportLogger fileLogger)
     {
         _state      = state;
         _logger     = logger;
@@ -81,7 +81,7 @@ internal sealed class GoToHooksCommand : Command
                 "GoToHooksCommand: uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             var result = await service
-                .GoToHooksAsync(fileUri, lineNum, charNum, cancellationToken)
+                .FindHooksAsync(fileUri, lineNum, charNum, cancellationToken)
                 .ConfigureAwait(false);
 
             if (result.Hooks.Count == 0)

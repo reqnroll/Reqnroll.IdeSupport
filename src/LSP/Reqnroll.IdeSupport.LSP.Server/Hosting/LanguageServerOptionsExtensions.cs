@@ -175,9 +175,9 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollDocumentSymbolHierarchical,
             (request, ct) => resolver!.Get<DocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
 
-        options.OnRequest<GoToHooksParams, GoToHooksResponse>(
-            LspMethodNames.ReqnrollGoToHooks,
-            (request, ct) => resolver!.Get<GoToHooksHandler>().HandleAsync(request, ct));
+        options.OnRequest<FindHooksParams, FindHooksResponse>(
+            LspMethodNames.ReqnrollFindHooks,
+            (request, ct) => resolver!.Get<FindHooksHandler>().HandleAsync(request, ct));
 
         // Go to Step Definition with per-binding detail for the VS extension's results list (issue
         // #757) — textDocument/definition only carries Locations. Same bindings as DefinitionHandler.
@@ -185,9 +185,9 @@ public static class LanguageServerOptionsExtensions
             LspMethodNames.ReqnrollFindStepDefinitions,
             (request, ct) => resolver!.Get<FindStepDefinitionsHandler>().HandleAsync(request, ct));
 
-        options.OnRequest<TextDocumentPositionParams, GoToMatchingScenariosResponse>(
-            LspMethodNames.ReqnrollGoToMatchingScenarios,
-            (request, ct) => resolver!.Get<GoToMatchingScenariosHandler>().HandleAsync(request, ct));
+        options.OnRequest<TextDocumentPositionParams, FindMatchingScenariosResponse>(
+            LspMethodNames.ReqnrollFindMatchingScenarios,
+            (request, ct) => resolver!.Get<FindMatchingScenariosHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ResolveTestTargetsParams, ResolveTestTargetsResponse>(
             LspMethodNames.ReqnrollResolveTestTargets,

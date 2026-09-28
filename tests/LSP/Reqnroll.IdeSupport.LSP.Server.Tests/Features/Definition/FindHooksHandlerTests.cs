@@ -15,7 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 
-public class GoToHooksHandlerTests
+public class FindHooksHandlerTests
 {
     private readonly IDocumentBufferService        _bufferService  = Substitute.For<IDocumentBufferService>();
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
@@ -55,7 +55,7 @@ public class GoToHooksHandlerTests
     private static readonly IReadOnlyList<IdeSupportTag> AllTags =
         new[] { FeatureBlockTag, ScenarioDefTag, StepBlockTag };
 
-    public GoToHooksHandlerTests()
+    public FindHooksHandlerTests()
     {
         // Default: Invalid registry
         _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
@@ -64,13 +64,13 @@ public class GoToHooksHandlerTests
         SetupBuffer(FeatureUri, FeatureText, AllTags);
     }
 
-    private GoToHooksHandler CreateSut() =>
+    private FindHooksHandler CreateSut() =>
         new(_bufferService, _registryLookup, _logger);
 
-    private GoToHooksHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
+    private FindHooksHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_bufferService, _registryLookup, _logger, telemetry);
 
-    private static GoToHooksParams RequestAt(DocumentUri uri, int line, int character, bool ownLevelOnly = false) =>
+    private static FindHooksParams RequestAt(DocumentUri uri, int line, int character, bool ownLevelOnly = false) =>
         new()
         {
             TextDocument  = new TextDocumentIdentifier { Uri = uri },

@@ -15,7 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Definition;
 
-public class GoToMatchingScenariosHandlerTests
+public class FindMatchingScenariosHandlerTests
 {
     private readonly IBindingMatchService          _matchService   = Substitute.For<IBindingMatchService>();
     private readonly ILspWorkspaceScopeManager     _scopeManager   = Substitute.For<ILspWorkspaceScopeManager>();
@@ -29,7 +29,7 @@ public class GoToMatchingScenariosHandlerTests
     private readonly ITelemetryService _parserTelemetry = Substitute.For<ITelemetryService>();
     private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
-    public GoToMatchingScenariosHandlerTests()
+    public FindMatchingScenariosHandlerTests()
     {
         _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
         _scopeManager.ResolveOwners(Arg.Any<DocumentUri>()).Returns(Array.Empty<LspReqnrollProject>());
@@ -37,7 +37,7 @@ public class GoToMatchingScenariosHandlerTests
         _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(Array.Empty<FeatureBindingMatchSet>());
     }
 
-    private GoToMatchingScenariosHandler CreateSut() =>
+    private FindMatchingScenariosHandler CreateSut() =>
         new(_matchService, _scopeManager, _registryLookup, _logger);
 
     private static TextDocumentPositionParams RequestAt(DocumentUri uri, int line, int character) =>

@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
 /// <summary>
 /// Steps for the four feature-level requests driven from a document rather than from the binding
 /// registry alone: <c>textDocument/definition</c> (F5), <c>textDocument/inlayHint</c> (F23),
-/// <c>reqnroll/resolveTestTargets</c> (F26) and <c>reqnroll/goToMatchingScenarios</c> (F24).
+/// <c>reqnroll/resolveTestTargets</c> (F26) and <c>reqnroll/findMatchingScenarios</c> (F24).
 /// </summary>
 [Binding]
 public sealed class FeatureNavigationSteps
@@ -134,12 +134,12 @@ public sealed class FeatureNavigationSteps
         _ctx.LastTestTargets!.Targets.Should().OnlyContain(t => t.IsParameterized);
     }
 
-    // ── F24 · reqnroll/goToMatchingScenarios ────────────────────────────────────
+    // ── F24 · reqnroll/findMatchingScenarios ────────────────────────────────────
 
     [When(@"matching scenarios are requested at line (\d+) column (\d+) in ""([^""]*)""")]
     public async Task WhenMatchingScenariosAreRequested(int line, int column, string fileName)
         => _ctx.LastMatchingScenarios = await _ctx.Harness.Client
-            .RequestGoToMatchingScenariosAsync(_ctx.UriFor(fileName), line, column)
+            .RequestFindMatchingScenariosAsync(_ctx.UriFor(fileName), line, column)
             .ConfigureAwait(false);
 
     [Then(@"(\d+) matching scenario(?:s are|s is| is| are) returned")]

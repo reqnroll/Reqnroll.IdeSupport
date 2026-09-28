@@ -47,7 +47,7 @@ public sealed class LspScenarioContext
     public SemanticTokens? LastTokens { get; set; }
     public LocationOrLocationLinks? LastReferences { get; set; }
     public FindStepUsagesResponse? LastFindStepUsages { get; set; }
-    public GoToHooksResponse? LastGoToHooks { get; set; }
+    public FindHooksResponse? LastFindHooks { get; set; }
     public CodeLens[]? LastCodeLens { get; set; }
     public CompletionList? LastCompletions { get; set; }
     public TextEdit[]? LastFormattingEdits { get; set; }
@@ -79,7 +79,7 @@ public sealed class LspScenarioContext
     public Reqnroll.IdeSupport.LSP.Server.Features.TestTargets.ResolveTestTargetsResponse? LastTestTargets { get; set; }
 
     // F24 — Hook Match CodeLens navigation
-    public GoToMatchingScenariosResponse? LastMatchingScenarios { get; set; }
+    public FindMatchingScenariosResponse? LastMatchingScenarios { get; set; }
 
     // F6 — Define Steps (code actions)
     public CommandOrCodeActionContainer? LastCodeActions { get; set; }

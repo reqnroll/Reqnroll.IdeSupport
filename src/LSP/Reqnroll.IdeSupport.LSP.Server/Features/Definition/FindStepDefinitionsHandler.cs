@@ -72,7 +72,7 @@ public sealed class FindStepDefinitionsHandler
         var items = _resolver.GetBindingsWithSource(step).Select(ToItem).ToList();
         var resolvedCount = items.Count(i => i.IsResolved);
 
-        // Same shape as DefinitionHandler's/GoToHooksHandler's result line, so the server log alone
+        // Same shape as DefinitionHandler's/FindHooksHandler's result line, so the server log alone
         // answers "what did Go to Step Definition find" (Rider and VS log no client-side trace of it).
         _logger.LogVerbose(
             $"FindStepDefinitionsHandler: {items.Count} step definition(s) ({resolvedCount} navigable) for step at " +

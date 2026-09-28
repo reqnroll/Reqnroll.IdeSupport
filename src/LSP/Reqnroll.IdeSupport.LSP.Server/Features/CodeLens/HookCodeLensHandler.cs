@@ -30,7 +30,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// </summary>
 /// <remarks>
 /// Applicability/matching is delegated entirely to <see cref="HookMatching"/> — the same helper
-/// <c>GoToHooksHandler</c> uses — so each lens's count can never disagree with what clicking it
+/// <c>FindHooksHandler</c> uses — so each lens's count can never disagree with what clicking it
 /// actually shows (both use <see cref="HookMatching.GetOwnLevelHookTypes"/> for CodeLens-sourced
 /// requests, vs. the cumulative set for a manual "Go to Hooks" invocation from the cursor).
 /// </remarks>
@@ -119,7 +119,7 @@ public sealed class HookCodeLensHandler
     /// Adds a lens displayed at <paramref name="displayTag"/>'s line, counting only hooks native
     /// to <paramref name="level"/> (see <see cref="HookMatching.GetOwnLevelHookTypes"/>). The
     /// click target (<paramref name="clickTargetTag"/>) resolves to the same level so
-    /// <c>GoToHooksHandler</c>, given <c>ownLevelOnly</c>, shows exactly this count.
+    /// <c>FindHooksHandler</c>, given <c>ownLevelOnly</c>, shows exactly this count.
     /// </summary>
     private static void AddOwnLevelLens(
         List<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens> lenses,
