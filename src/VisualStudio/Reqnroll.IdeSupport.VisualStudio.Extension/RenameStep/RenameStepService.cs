@@ -37,10 +37,10 @@ internal sealed class RenameStepService
         var paramsJson = BuildPositionParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.RenameTargets, fileUri, line0, char0);
+            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollRenameTargets, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.RenameTargets, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollRenameTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         try
@@ -100,10 +100,10 @@ internal sealed class RenameStepService
             $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}," +
             $"\"position\":{{\"line\":{line},\"character\":{character}}}}}";
         _logger.LogDebug(
-            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", ReqnrollMethodNames.SelectRenameTarget, attributeIndex);
+            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", CustomLspMethodNames.ReqnrollSelectRenameTarget, attributeIndex);
 
         await _pipe
-            .SendNotificationToServerAsync(ReqnrollMethodNames.SelectRenameTarget, paramsJson, cancellationToken)
+            .SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollSelectRenameTarget, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 

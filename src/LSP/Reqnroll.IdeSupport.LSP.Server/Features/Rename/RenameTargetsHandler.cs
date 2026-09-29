@@ -1,8 +1,8 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -45,7 +45,7 @@ public sealed class RenameTargetsHandler
         var path = uri.GetFileSystemPath();
 
         // Performance Verification (Layer 4): time the rename-targets picker resolution.
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollRenameTargets, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollRenameTargets, uri);
 
         if (string.IsNullOrEmpty(path))
             return null;

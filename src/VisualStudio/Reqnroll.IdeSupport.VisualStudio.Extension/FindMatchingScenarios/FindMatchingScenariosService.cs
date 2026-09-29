@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
@@ -40,10 +41,10 @@ internal sealed class FindMatchingScenariosService
         var paramsJson = BuildParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "FindMatchingScenariosService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.FindMatchingScenarios, fileUri, line0, char0);
+            "FindMatchingScenariosService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollFindMatchingScenarios, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.FindMatchingScenarios, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindMatchingScenarios, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

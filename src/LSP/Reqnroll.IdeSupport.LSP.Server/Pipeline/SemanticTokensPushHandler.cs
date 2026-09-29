@@ -1,11 +1,10 @@
 ﻿using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
-
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
@@ -53,7 +52,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
             return;
         }
 
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollSemanticTokens, notification.Uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollSemanticTokens, notification.Uri);
 
         var tokens = await _tokenService
             .GetSemanticTokensAsync(notification.Uri, notification.Version, cancellationToken)
@@ -62,7 +61,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
             return;
 
         var data = tokens.Data.ToArray();
-        _languageServer.SendNotification(LspMethodNames.ReqnrollSemanticTokens, new PublishSemanticTokensParams
+        _languageServer.SendNotification(CustomLspMethodNames.ReqnrollSemanticTokens, new PublishSemanticTokensParams
         {
             Uri = notification.Uri.ToString(),
             Version = notification.Version,

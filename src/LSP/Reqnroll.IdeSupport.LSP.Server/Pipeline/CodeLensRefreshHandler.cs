@@ -1,11 +1,11 @@
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
@@ -63,7 +63,7 @@ public class CodeLensRefreshHandler : INotificationHandler<MatchCacheChangedNoti
 
     private async Task SendRefreshAsync(CancellationToken cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.WorkspaceCodeLensRefresh);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.WorkspaceCodeLensRefresh);
         await CodeLensRefreshRequester
             .RequestRefreshAsync(
                 _languageServer, _clientIde, _logger, projectName: string.Empty, isFullReplacement: false,

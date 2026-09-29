@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
@@ -30,13 +31,13 @@ internal sealed class FindUnusedStepDefinitionsService
     /// <summary>Queries the LSP server for the workspace-wide set of unused step definitions.</summary>
     public async Task<UnusedStepDefinitionsResult> FindUnusedAsync(CancellationToken cancellationToken)
     {
-        _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", ReqnrollMethodNames.FindUnusedStepDefinitions);
+        _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions);
 
         // Empty params object — the server ignores the body.
         const string emptyParams = "{}";
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.FindUnusedStepDefinitions, emptyParams, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, emptyParams, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

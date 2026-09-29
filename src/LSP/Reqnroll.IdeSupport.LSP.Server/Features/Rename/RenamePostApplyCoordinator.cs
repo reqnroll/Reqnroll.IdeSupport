@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -182,7 +183,7 @@ internal sealed class RenamePostApplyCoordinator
         // commit it confirms. Without this it would simply disappear from the PERF log for VS,
         // leaving a future "rename got slow" report with nothing to look at. The other clients'
         // equivalent is measured as reqnroll/renameApplied.
-        using var _perf = _recorder.Measure(LspMethodNames.InternalRenamePostResponseApply, renameUri);
+        using var _perf = _recorder.Measure(InternalLspMethodNames.InternalRenamePostResponseApply, renameUri);
 
         // CancellationToken.None, not the request's token: by the time this runs the request has
         // completed and OmniSharp has cancelled its token, which would abort the push immediately.
@@ -225,7 +226,7 @@ internal sealed class RenamePostApplyCoordinator
             }
         };
 
-        var response = await _languageServer.SendRequest(LspMethodNames.WorkspaceApplyEdit, pushParams)
+        var response = await _languageServer.SendRequest(LspStandardMethodNames.WorkspaceApplyEdit, pushParams)
             .Returning<ApplyWorkspaceEditResponse>(cancellationToken);
 
         if (response is not { Applied: true })

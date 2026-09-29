@@ -1,9 +1,9 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.InlayHints;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -55,7 +55,7 @@ public sealed class InlayHintHandler
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): fires per visible range on scroll — frequent, was uninstrumented.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentInlayHint, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentInlayHint, uri);
 
         var primaryOwner = _scopeManager.ResolvePrimaryOwner(uri);
         var matchKey = primaryOwner is not null

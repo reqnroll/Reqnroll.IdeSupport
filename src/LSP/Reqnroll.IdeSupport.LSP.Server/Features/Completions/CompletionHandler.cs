@@ -5,6 +5,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 
 
@@ -18,7 +19,6 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -46,8 +46,8 @@ public sealed class CompletionHandler : ICompletionHandler
 
     // Performance Verification (Layer 4) op labels. Keyword completion (<50ms) and step completion
     // (<150ms) have distinct targets, so they are recorded under distinct operation names.
-    private const string KeywordCompletionOp = LspMethodNames.TextDocumentCompletion + "#keyword";
-    private const string StepCompletionOp    = LspMethodNames.TextDocumentCompletion + "#step";
+    private const string KeywordCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#keyword";
+    private const string StepCompletionOp    = LspStandardMethodNames.TextDocumentCompletion + "#step";
 
     /// <summary>Initializes a new instance of the <see cref="CompletionHandler"/> class.</summary>
     public CompletionHandler(
@@ -120,7 +120,7 @@ public sealed class CompletionHandler : ICompletionHandler
         {
             StepCompletionContext    s => (StepCompletionOp,    HandleStep(s,    uri, cursorLine, snapshot)),
             KeywordCompletionContext k => (KeywordCompletionOp, HandleKeyword(k, cursorLine, cursorChar, snapshot)),
-            _                          => (LspMethodNames.TextDocumentCompletion, new CompletionList())
+            _                          => (LspStandardMethodNames.TextDocumentCompletion, new CompletionList())
         };
         _recorder.Record(op, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds, uri);
 

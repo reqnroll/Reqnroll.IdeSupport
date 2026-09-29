@@ -2,12 +2,12 @@ using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.Support;
@@ -182,7 +182,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<CodeLens?> RequestCodeLensResolveAsync(
         this ILanguageClient client, CodeLens lens, CancellationToken ct = default)
-        => client.SendRequest(LspMethodNames.CodeLensResolve, lens).Returning<CodeLens?>(ct);
+        => client.SendRequest(LspStandardMethodNames.CodeLensResolve, lens).Returning<CodeLens?>(ct);
 
     /// <summary>
     /// Sends a <c>textDocument/formatting</c> request (F11 — Document Auto-formatting).
@@ -190,7 +190,7 @@ public static class LspClientExtensions
     public static Task<TextEdit[]?> RequestFormattingAsync(
         this ILanguageClient client, DocumentUri uri,
         int tabSize = 4, bool insertSpaces = true, CancellationToken ct = default)
-        => client.SendRequest("textDocument/formatting",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentFormatting,
                 new DocumentFormattingParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -205,7 +205,7 @@ public static class LspClientExtensions
         this ILanguageClient client, DocumentUri uri,
         int startLine, int endLine,
         int tabSize = 4, bool insertSpaces = true, CancellationToken ct = default)
-        => client.SendRequest("textDocument/rangeFormatting",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentRangeFormatting,
                 new DocumentRangeFormattingParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -222,7 +222,7 @@ public static class LspClientExtensions
         this ILanguageClient client, DocumentUri uri,
         int line, int character, string triggerCharacter,
         int tabSize = 4, bool insertSpaces = true, CancellationToken ct = default)
-        => client.SendRequest("textDocument/onTypeFormatting",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentOnTypeFormatting,
                 new DocumentOnTypeFormattingParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -238,7 +238,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<SymbolInformationOrDocumentSymbolContainer?> RequestDocumentSymbolAsync(
         this ILanguageClient client, DocumentUri uri, CancellationToken ct = default)
-        => client.SendRequest("textDocument/documentSymbol",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentDocumentSymbol,
                 new DocumentSymbolParams { TextDocument = new TextDocumentIdentifier { Uri = uri } })
             .Returning<SymbolInformationOrDocumentSymbolContainer?>(ct);
 
@@ -248,7 +248,7 @@ public static class LspClientExtensions
     public static Task<CompletionList?> RequestCompletionAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character,
         CancellationToken ct = default)
-        => client.SendRequest("textDocument/completion",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentCompletion,
                 new CompletionParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -262,7 +262,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<Container<FoldingRange>?> RequestFoldingRangeAsync(
         this ILanguageClient client, DocumentUri uri, CancellationToken ct = default)
-        => client.SendRequest("textDocument/foldingRange",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentFoldingRange,
                 new FoldingRangeRequestParam { TextDocument = new TextDocumentIdentifier { Uri = uri } })
             .Returning<Container<FoldingRange>?>(ct);
 
@@ -271,7 +271,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task RequestCommandAsync(
         this ILanguageClient client, ExecuteCommandParams commandParams, CancellationToken ct = default)
-        => client.SendRequest("workspace/executeCommand", commandParams)
+        => client.SendRequest(LspStandardMethodNames.WorkspaceExecuteCommand, commandParams)
             .Returning<Unit>(ct);
 
     /// <summary>
@@ -281,7 +281,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<CommandOrCodeActionContainer?> RequestCodeActionsAsync(
         this ILanguageClient client, DocumentUri uri, LspRange range, CancellationToken ct = default)
-        => client.SendRequest("textDocument/codeAction",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentCodeAction,
                 new CodeActionParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -296,7 +296,7 @@ public static class LspClientExtensions
     /// file is removed from disk.
     /// </summary>
     public static void NotifyCsFileDeleted(this ILanguageClient client, DocumentUri uri)
-        => client.SendNotification("workspace/didChangeWatchedFiles", new DidChangeWatchedFilesParams
+        => client.SendNotification(LspStandardMethodNames.WorkspaceDidChangeWatchedFiles, new DidChangeWatchedFilesParams
         {
             Changes = new Container<FileEvent>(
                 new FileEvent { Uri = uri, Type = FileChangeType.Deleted })
@@ -308,7 +308,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<FindUnusedStepDefinitionsResponse?> RequestFindUnusedStepDefinitionsAsync(
         this ILanguageClient client, CancellationToken ct = default)
-        => client.SendRequest("reqnroll/findUnusedStepDefinitions",
+        => client.SendRequest(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions,
                 new FindUnusedStepDefinitionsParams())
             .Returning<FindUnusedStepDefinitionsResponse?>(ct);
 
@@ -321,7 +321,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<RangeOrPlaceholderRange?> RequestPrepareRenameAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)
-        => client.SendRequest("textDocument/prepareRename",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentPrepareRename,
                 new PrepareRenameParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -336,7 +336,7 @@ public static class LspClientExtensions
     public static Task<WorkspaceEdit?> RequestRenameAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character, string newName,
         CancellationToken ct = default)
-        => client.SendRequest("textDocument/rename",
+        => client.SendRequest(LspStandardMethodNames.TextDocumentRename,
                 new RenameParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -351,7 +351,7 @@ public static class LspClientExtensions
     /// </summary>
     public static Task<RenameTargetsResponse?> RequestRenameTargetsAsync(
         this ILanguageClient client, DocumentUri uri, int line, int character, CancellationToken ct = default)
-        => client.SendRequest("reqnroll/renameTargets",
+        => client.SendRequest(CustomLspMethodNames.ReqnrollRenameTargets,
                 new TextDocumentPositionParams
                 {
                     TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -365,6 +365,6 @@ public static class LspClientExtensions
     /// </summary>
     public static void SendSelectRenameTarget(
         this ILanguageClient client, string uri, int version, int attributeIndex)
-        => client.SendNotification("reqnroll/selectRenameTarget",
+        => client.SendNotification(CustomLspMethodNames.ReqnrollSelectRenameTarget,
                 new SelectRenameTargetParams { Uri = uri, Version = version, AttributeIndex = attributeIndex });
 }

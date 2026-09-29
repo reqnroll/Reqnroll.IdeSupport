@@ -3,8 +3,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -33,7 +33,7 @@ public class WorkspaceFoldersHandler : IDidChangeWorkspaceFoldersHandler
     /// <summary>Handles <c>workspace/didChangeWorkspaceFolders</c> by opening a scope for each added folder and closing the scope for each removed folder.</summary>
     public Task<Unit> Handle(DidChangeWorkspaceFoldersParams request, CancellationToken cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.WorkspaceDidChangeWorkspaceFolders);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.WorkspaceDidChangeWorkspaceFolders);
 
         if (request.Event?.Added is not null)
         {

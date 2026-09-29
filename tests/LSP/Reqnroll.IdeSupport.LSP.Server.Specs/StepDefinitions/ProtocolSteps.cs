@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
@@ -345,9 +345,9 @@ public sealed class ProtocolSteps
         extensionData!.Should().ContainKey("reqnrollTestOutcomesProvider");
 
         var provider = extensionData["reqnrollTestOutcomesProvider"];
-        provider.Value<string>("registerRunMethod").Should().Be(LspMethodNames.ReqnrollRegisterTestRun);
-        provider.Value<string>("getOutcomeMethod").Should().Be(LspMethodNames.ReqnrollGetTestOutcome);
-        provider.Value<string>("changedNotification").Should().Be(LspMethodNames.ReqnrollTestOutcomesChanged);
+        provider.Value<string>("registerRunMethod").Should().Be(CustomLspMethodNames.ReqnrollRegisterTestRun);
+        provider.Value<string>("getOutcomeMethod").Should().Be(CustomLspMethodNames.ReqnrollGetTestOutcome);
+        provider.Value<string>("changedNotification").Should().Be(CustomLspMethodNames.ReqnrollTestOutcomesChanged);
     }
 
     // Asserted via ExtensionData, not a typed sibling property: OmniSharp's InitializeResult.

@@ -1,4 +1,5 @@
 ﻿using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -47,7 +48,7 @@ public sealed class FeatureRescanDebouncer : IFeatureRescanDebouncer, IDisposabl
 
             // Performance Verification (Layer 4): time the debounced rescan that actually runs —
             // distinguishing "slow" from "wrong" the next time a cross-project binding issue is reported.
-            using var _perf = _recorder.Measure(LspMethodNames.InternalFeatureRescan);
+            using var _perf = _recorder.Measure(InternalLspMethodNames.InternalFeatureRescan);
             await rescanAsync(cts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
