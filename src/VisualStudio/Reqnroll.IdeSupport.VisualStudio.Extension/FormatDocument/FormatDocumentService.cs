@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio; // GherkinLineRangeEdit
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
@@ -44,7 +45,7 @@ internal sealed class FormatDocumentService
         int               endLine,
         CancellationToken cancellationToken)
     {
-        var method     = isSelection ? "textDocument/rangeFormatting" : "textDocument/formatting";
+        var method     = isSelection ? LspStandardMethodNames.TextDocumentRangeFormatting : LspStandardMethodNames.TextDocumentFormatting;
         var paramsJson = BuildParams(fileUri, isSelection, startLine, endLine);
 
         _logger.LogDebug(

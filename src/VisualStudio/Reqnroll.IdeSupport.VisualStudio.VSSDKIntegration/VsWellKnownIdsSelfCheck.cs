@@ -6,8 +6,10 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 
 namespace Reqnroll.IdeSupport.VisualStudio;
 
@@ -64,7 +66,7 @@ public static class VsWellKnownIdsSelfCheck
     /// Resolves every <see cref="ExpectedCommands"/> entry and logs the result. Must be called on the
     /// UI thread. Never throws.
     /// </summary>
-    public static void Run(IServiceProvider serviceProvider, IIdeSupportLogger logger)
+    public static void Run(IServiceProvider serviceProvider, IIdeSupportLogger logger, ITelemetryTransmitter? telemetryTransmitter)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
@@ -75,7 +77,7 @@ public static class VsWellKnownIdsSelfCheck
                 return;
             }
 
-            var problems = 0;
+            var problems = new List<string>();
             foreach (var expected in ExpectedCommands)
             {
                 var group = expected.Group;
@@ -88,22 +90,47 @@ public static class VsWellKnownIdsSelfCheck
                     continue;
                 }
 
-                problems++;
+                problems.Add($"{expected.Owner}: {expected.ExpectedName} ({outcome})");
                 logger.LogWarning(outcome == Outcome.NotFound
                     ? $"VsWellKnownIdsSelfCheck: {{{expected.Group}}}:{expected.Id} is not a command in this VS (hr=0x{hr:X8}); expected {expected.ExpectedName}, used by {expected.Owner}. The hard-coded ID is probably wrong for this VS version."
                     : $"VsWellKnownIdsSelfCheck: {{{expected.Group}}}:{expected.Id} resolves to '{actualName}', expected {expected.ExpectedName}, used by {expected.Owner}.");
             }
 
-            var summary = $"VsWellKnownIdsSelfCheck: checked {ExpectedCommands.Count} command IDs, {problems} problem(s).";
-            if (problems == 0)
+            var summary = $"VsWellKnownIdsSelfCheck: checked {ExpectedCommands.Count} command IDs, {problems.Count} problem(s).";
+            if (problems.Count == 0)
                 logger.LogVerbose(summary);
             else
+            {
                 logger.LogWarning(summary);
+                telemetryTransmitter?.TransmitEvent(CreateMismatchEvent(ExpectedCommands.Count, problems));
+            }
         }
         catch (Exception ex)
         {
             logger.LogException(ex, "VsWellKnownIdsSelfCheck: failed.");
         }
+    }
+
+    /// <summary>Longest <c>Problems</c> value sent, so an all-commands failure can't produce an oversized property.</summary>
+    internal const int MaxProblemsLength = 512;
+
+    /// <summary>
+    /// Builds the telemetry alert for a failed check, split out so it can be tested without a running VS.
+    /// <c>Problems</c> names each failing command (owner, expected name, outcome) so drift can be
+    /// diagnosed from the alert alone.
+    /// </summary>
+    internal static VsGenericEvent CreateMismatchEvent(int expectedCount, IReadOnlyList<string> problems)
+    {
+        var joined = string.Join("; ", problems);
+        if (joined.Length > MaxProblemsLength)
+            joined = joined.Substring(0, MaxProblemsLength);
+
+        return new VsGenericEvent("VsWellKnownIdsSelfCheckMismatch", new Dictionary<string, object>
+        {
+            ["ProblemCount"] = problems.Count,
+            ["ExpectedCount"] = expectedCount,
+            ["Problems"] = joined,
+        });
     }
 
     /// <summary>

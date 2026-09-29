@@ -6,7 +6,7 @@ namespace Reqnroll.VisualStudio.Tests.FormatDocument;
 /// <summary>
 /// Client-side mapping of a <c>textDocument/formatting</c>/<c>rangeFormatting</c> result (an LSP
 /// <c>TextEdit[]</c>) into <see cref="GherkinLineRangeEdit"/>s (<see cref="FormatDocumentService.MapResult"/>).
-/// Mirrors <see cref="GoToHooks.GoToHooksServiceMapResultTests"/>, which covers the analogous mapping
+/// Mirrors <see cref="FindHooks.FindHooksServiceMapResultTests"/>, which covers the analogous mapping
 /// for the sibling Go to Hooks service.
 /// </summary>
 public class FormatDocumentServiceMapResultTests

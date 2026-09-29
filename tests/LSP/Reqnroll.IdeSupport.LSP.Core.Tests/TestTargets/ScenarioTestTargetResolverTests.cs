@@ -528,6 +528,121 @@ public class ScenarioTestTargetResolverTests : IDisposable
         result[0].MethodName.Should().Be("AddTwoNumbers");
     }
 
+    // ── ResolveAll ("Run scenarios" on a Feature/Rule block — issue #744) ──────────
+
+    private static GherkinRange RangeOfTag(IReadOnlyCollection<IdeSupportTag> tags, string type) =>
+        tags.First(t => t.Type == type).Range;
+
+    [Fact]
+    public void ResolveAll_over_the_whole_feature_resolves_every_scenario()
+    {
+        var text = """
+            Feature: F
+            Scenario: First
+                Given a step
+
+            Scenario: Second
+                Given a step
+
+            """;
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixture("""
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    public void First() { }
+                    public void Second() { }
+                }
+            }
+            """);
+
+        var result = CreateSut().ResolveAll(uri, tags, RangeOfTag(tags, IdeSupportTagTypes.FeatureBlock));
+
+        result.Select(t => t.MethodName).Should().BeEquivalentTo(new[] { "First", "Second" });
+    }
+
+    [Fact]
+    public void ResolveAll_excludes_Background()
+    {
+        var text = """
+            Feature: F
+            Background:
+                Given a shared step
+
+            Scenario: Only one
+                Given a step
+
+            """;
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixture("""
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    public void OnlyOne() { }
+                }
+            }
+            """);
+
+        var result = CreateSut().ResolveAll(uri, tags, RangeOfTag(tags, IdeSupportTagTypes.FeatureBlock));
+
+        result.Should().ContainSingle(t => t.MethodName == "OnlyOne");
+    }
+
+    [Fact]
+    public void ResolveAll_over_a_Rule_only_resolves_scenarios_inside_that_Rule()
+    {
+        var text = """
+            Feature: F
+            Scenario: Outside the rule
+                Given a step
+
+            Rule: R
+            Scenario: Inside the rule
+                Given a step
+
+            """;
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixture("""
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    public void OutsideTheRule() { }
+                    public void InsideTheRule() { }
+                }
+            }
+            """);
+
+        var result = CreateSut().ResolveAll(uri, tags, RangeOfTag(tags, IdeSupportTagTypes.RuleBlock));
+
+        result.Should().ContainSingle(t => t.MethodName == "InsideTheRule");
+    }
+
+    [Fact]
+    public void ResolveAll_includes_every_row_of_a_contained_row_tests_Outline()
+    {
+        var tags = ParseTags(RowTestsFeatureText);
+        var uri = WriteGeneratedFixture(RowTestsGeneratedCs);
+
+        var result = CreateSut().ResolveAll(uri, tags, RangeOfTag(tags, IdeSupportTagTypes.FeatureBlock));
+
+        result.Should().HaveCount(3);
+        result.Should().OnlyContain(t => t.MethodName == "AddNumbers" && t.IsParameterized);
+    }
+
+    [Fact]
+    public void ResolveAll_with_missing_generated_file_returns_empty_without_throwing()
+    {
+        var tags = ParseTags("Feature: F\nScenario: S\n    Given a step\n");
+        var uri = new Uri(Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.feature"));
+
+        var result = CreateSut().ResolveAll(uri, tags, RangeOfTag(tags, IdeSupportTagTypes.FeatureBlock));
+
+        result.Should().BeEmpty();
+    }
+
     // ── ReqnrollIdentifierNaming ─────────────────────────────────────────────────
 
     [Theory]

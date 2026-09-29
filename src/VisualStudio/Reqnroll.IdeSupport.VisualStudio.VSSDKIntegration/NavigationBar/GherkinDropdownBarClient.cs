@@ -10,6 +10,49 @@ using Reqnroll.IdeSupport.Common.Logging;
 
 namespace Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
+/// <summary>What <see cref="GherkinDropdownBarClient"/> does after a failed attach attempt.</summary>
+internal enum DropdownBarAttachOutcome
+{
+    /// <summary>Try again on the next debounce tick.</summary>
+    Retry,
+
+    /// <summary>The view closed before the bar could attach: stop for good.</summary>
+    StopViewClosed,
+
+    /// <summary>The attempt budget is spent: stop for good.</summary>
+    StopBudgetExhausted,
+}
+
+/// <summary>
+/// Decides whether an unattached <see cref="GherkinDropdownBarClient"/> keeps retrying. Split out
+/// so the rule is testable without a live editor.
+/// </summary>
+/// <remarks>
+/// Issue #78: a client whose view closed before it attached retried every ~300ms until VS shut
+/// down, because the <c>Closed</c> handler was only hooked on a successful attach. The scratch
+/// <c>.feature</c> file of <c>ScratchFileActivationTrigger</c> produced one such zombie on every
+/// launch where it fired (143 retries in one 45-second session).
+/// </remarks>
+internal static class DropdownBarAttachRetryPolicy
+{
+    /// <summary>
+    /// Attach attempts before giving up — about a minute at the 300ms debounce, far longer than any
+    /// measured restore-time delay in resolving the code window.
+    /// </summary>
+    public const int MaxAttachAttempts = 200;
+
+    /// <summary>Decides the next step after attempt number <paramref name="failedAttempts"/> failed.</summary>
+    public static DropdownBarAttachOutcome AfterFailedAttempt(bool viewClosed, int failedAttempts)
+    {
+        if (viewClosed)
+            return DropdownBarAttachOutcome.StopViewClosed;
+
+        return failedAttempts >= MaxAttachAttempts
+            ? DropdownBarAttachOutcome.StopBudgetExhausted
+            : DropdownBarAttachOutcome.Retry;
+    }
+}
+
 /// <summary>
 /// Navigation Bar drop-down client for <c>.feature</c> files: a single
 /// combo listing Feature/Rule/Background/Scenario/ScenarioOutline titles (Steps/Examples omitted —
@@ -40,9 +83,11 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
     private IVsDropdownBarManager? _dropdownBarManager;
     private IVsDropdownBar?        _dropdownBar;
     private IWpfTextView?          _wpfView;
+    private IWpfTextView?          _closeWatchedView;
     private string?                _fileUri;
     private bool                   _eventsHooked;
     private bool                   _disposed;
+    private int                    _failedAttachAttempts;
 
     private IReadOnlyList<GherkinSymbolNode> _roots            = Array.Empty<GherkinSymbolNode>();
     private IReadOnlyList<GherkinSymbolNode> _structureEntries = Array.Empty<GherkinSymbolNode>();
@@ -86,6 +131,7 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
         };
         _refreshTimer.Tick += OnRefreshTimerTick;
 
+        WatchForViewClose();
         ScheduleRefresh();
     }
 
@@ -102,13 +148,35 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
         {
             _wpfView.TextBuffer.Changed    -= OnBufferChanged;
             _wpfView.Caret.PositionChanged -= OnCaretPositionChanged;
-            _wpfView.Closed                -= OnViewClosed;
         }
+
+        if (_closeWatchedView is not null)
+            _closeWatchedView.Closed -= OnViewClosed;
     }
 
     // ── Refresh scheduling ───────────────────────────────────────────────
 
     private void OnViewClosed(object? sender, EventArgs e) => Dispose();
+
+    /// <summary>
+    /// Hooks the view's <c>Closed</c> event as soon as the WPF view resolves — from construction on,
+    /// not only after a successful attach, so a view closed before the bar attached still disposes
+    /// this client (issue #78). Idempotent; safe to call on every tick.
+    /// </summary>
+    private void WatchForViewClose()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (_closeWatchedView is not null || _disposed)
+            return;
+
+        var wpfView = _editorAdapter.GetWpfTextView(_vsTextView);
+        if (wpfView is null)
+            return;
+
+        _closeWatchedView = wpfView;
+        wpfView.Closed += OnViewClosed;
+    }
 
     private void OnBufferChanged(object? sender, TextContentChangedEventArgs e)
     {
@@ -149,9 +217,30 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
 
         if (_dropdownBarManager is null && !TryAttach())
         {
-            if (!_disposed)
-                ScheduleRefresh();
-            return;
+            if (_disposed)
+                return;
+
+            WatchForViewClose();
+            var outcome = DropdownBarAttachRetryPolicy.AfterFailedAttempt(
+                _closeWatchedView?.IsClosed == true, ++_failedAttachAttempts);
+
+            switch (outcome)
+            {
+                case DropdownBarAttachOutcome.StopViewClosed:
+                    _logger.LogVerbose("GherkinDropdownBarClient: view closed before the drop-down bar attached; stopping.");
+                    Dispose();
+                    return;
+
+                case DropdownBarAttachOutcome.StopBudgetExhausted:
+                    _logger.LogWarning(
+                        $"GherkinDropdownBarClient: drop-down bar not attached after {_failedAttachAttempts} attempts; giving up.");
+                    Dispose();
+                    return;
+
+                default:
+                    ScheduleRefresh();
+                    return;
+            }
         }
 
         var fetch = NavigationBarRedirect.FetchDocumentSymbolsAsync;
@@ -197,7 +286,12 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
         }
         catch (Exception ex)
         {
-            _logger.LogWarning($"GherkinDropdownBarClient: refresh failed for '{_fileUri}': {ex}");
+            // ContentModified (the server's state changed under the request) is routine at
+            // startup and retried below; only a real failure is worth a warning.
+            if (ex is LspContentModifiedException)
+                _logger.LogVerbose($"GherkinDropdownBarClient: refresh for '{_fileUri}' hit ContentModified; retrying.");
+            else
+                _logger.LogWarning($"GherkinDropdownBarClient: refresh failed for '{_fileUri}': {ex}");
 
             // Transient (e.g. server mid-restart) — retry rather than leaving stale/empty combos.
             // The exception may have surfaced before the SwitchToMainThreadAsync above ran, so
@@ -272,8 +366,8 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
 
         _wpfView.TextBuffer.Changed    += OnBufferChanged;
         _wpfView.Caret.PositionChanged += OnCaretPositionChanged;
-        _wpfView.Closed                += OnViewClosed;
         _eventsHooked = true;
+        WatchForViewClose();
 
         _logger.LogInfo($"GherkinDropdownBarClient: drop-down bar attached successfully for '{fileUri}'.");
         return true;

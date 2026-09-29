@@ -1,4 +1,5 @@
-﻿using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
+﻿using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -38,7 +39,7 @@ public sealed class FindUnusedStepDefinitionsHandler
     {
         // Performance Verification (Layer 4): time the full-workspace unused-step-definitions scan —
         // the operation shape most likely to regress silently on large solutions.
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindUnusedStepDefinitions);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions);
 
         var allRegistries = _registryLookup.GetAllRegistries();
 

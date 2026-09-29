@@ -50,21 +50,21 @@ interface ReqnrollLanguageServer : LanguageServer {
     /**
      * Hook Navigation ("Go to Hooks") — returns the hook bindings applicable at a `.feature`
      * file position (context level Feature/Scenario/Step, tag/scope-filtered — see
-     * GoToHooksHandler.cs). A separate custom message from `textDocument/definition` because
+     * FindHooksHandler.cs). A separate custom message from `textDocument/definition` because
      * that message is already used by Go to Step Definition on step lines. Takes
-     * [GoToHooksRequestParams] rather than the standard [TextDocumentPositionParams] so the
+     * [FindHooksRequestParams] rather than the standard [TextDocumentPositionParams] so the
      * hook-count CodeVision lens (HookCodeVisionProvider) can set `ownLevelOnly`.
      */
-    @JsonRequest("reqnroll/goToHooks")
-    fun goToHooks(params: GoToHooksRequestParams): CompletableFuture<GoToHooksResponse>
+    @JsonRequest("reqnroll/findHooks")
+    fun findHooks(params: FindHooksRequestParams): CompletableFuture<FindHooksResponse>
 
     /**
-     * Hook-match-count CodeLens click action (issue #373) — the inverse of [goToHooks]: returns
+     * Hook-match-count CodeLens click action (issue #373) — the inverse of [findHooks]: returns
      * every scenario, across the whole owning project(s), that the hook binding at a `.cs` file
-     * position matches (see GoToMatchingScenariosHandler.cs).
+     * position matches (see FindMatchingScenariosHandler.cs).
      */
-    @JsonRequest("reqnroll/goToMatchingScenarios")
-    fun goToMatchingScenarios(params: TextDocumentPositionParams): CompletableFuture<GoToMatchingScenariosResponse>
+    @JsonRequest("reqnroll/findMatchingScenarios")
+    fun findMatchingScenarios(params: TextDocumentPositionParams): CompletableFuture<FindMatchingScenariosResponse>
 
     /**
      * Step Rename disambiguation (issue #160) — returns every candidate binding attribute

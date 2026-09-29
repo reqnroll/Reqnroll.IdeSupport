@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -37,7 +38,7 @@ internal sealed class TestOutcomesChangedInterceptor : ILspMessageInterceptor
             return Task.FromResult(LspInterceptorResult.PassThrough);
 
         var method = message.Body?["method"]?.Value<string>();
-        if (string.Equals(method, ReqnrollMethodNames.TestOutcomesChanged, System.StringComparison.Ordinal))
+        if (string.Equals(method, CustomLspMethodNames.ReqnrollTestOutcomesChanged, System.StringComparison.Ordinal))
         {
             _logger.LogDebug("TestOutcomesChangedInterceptor: outcomes changed; notifying Run CodeLens.");
             RunTestCodeLensRedirect.NotifyOutcomesChanged();

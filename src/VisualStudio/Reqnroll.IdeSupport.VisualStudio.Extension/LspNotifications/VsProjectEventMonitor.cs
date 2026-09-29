@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Newtonsoft.Json;
 using NuGet.VisualStudio;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.VisualStudio;
@@ -174,7 +175,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
                 files                  = new[] { new { path = filePath, role = 1, added = true } }
             };
             var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
-            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectFiles, paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollProjectFiles, paramsJson, ct)
                        .ConfigureAwait(false);
 
             _logger.LogDebug(
@@ -204,7 +205,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         _logger.LogDebug(
             "VsProjectEventMonitor: sending documentActivated for {FileName}", Path.GetFileName(filePath));
 
-        return _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.DocumentActivated, paramsJson, ct);
+        return _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollDocumentActivated, paramsJson, ct);
     }
 
     private Project? FindProjectContaining(string filePath)
@@ -402,7 +403,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
 
             var payload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
                 project, GetSolutionFolder(), _serviceProvider, _logger);
-            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectLoaded, payload.Json, ct)
+            await _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollProjectLoaded, payload.Json, ct)
                        .ConfigureAwait(false);
 
             _logger.LogDebug(
@@ -438,7 +439,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             var paramsObj = new { projectFile = project.FullName };
             var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
 
-            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectUnloaded, paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollProjectUnloaded, paramsJson, ct)
                        .ConfigureAwait(false);
 
             _logger.LogDebug(
@@ -460,7 +461,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
                 return;
 
             var paramsJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, _logger);
-            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectFiles, paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollProjectFiles, paramsJson, ct)
                        .ConfigureAwait(false);
 
             _logger.LogDebug(
@@ -596,7 +597,7 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
                 files                  = entries,
             };
             var paramsJson = JsonConvert.SerializeObject(paramsObj, Formatting.None);
-            await _pipe.SendNotificationToServerAsync(ReqnrollMethodNames.ProjectFiles, paramsJson, ct)
+            await _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollProjectFiles, paramsJson, ct)
                        .ConfigureAwait(false);
 
             _logger.LogDebug(

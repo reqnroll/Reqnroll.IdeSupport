@@ -13,6 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
@@ -114,12 +115,7 @@ public class Program
                 // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
                 // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
                 // with no PID and a raw ex.ToString() dump.
-                var idePrefix = ideId switch
-                {
-                    "visualstudio" => "vs",
-                    "vscode"       => "vscode",
-                    _              => "lsp",
-                };
+                var idePrefix = IdeLogPrefix.From(ideId);
                 new SynchronousFileLogger(idePrefix, "crash", TraceLevel.Error)
                     .LogException(ex, "Unhandled exception - LSP server terminating");
             }
@@ -234,8 +230,8 @@ public class Program
         options.OnInitialized((languageServer, request, response, ct) =>
         {
             // Each capability is configured by its own named local function below rather than
-            // inline, so a mistake in one (e.g. the VS-specific branch in
-            // ApplyTextDocumentSyncCapability) can't silently bleed into an unrelated capability
+            // inline, so a mistake in one (e.g. an IDE-specific branch in
+            // ApplySemanticTokensCapability) can't silently bleed into an unrelated capability
             // assignment sharing the same block.
             ApplyInitialTraceLevel();
             ApplySemanticTokensCapability();
@@ -343,19 +339,19 @@ public class Program
                 };
             }
 
-            // vscode-languageclient v10 (used by VS Code and Rider) does not wire its
-            // DidChangeTextDocumentFeature when textDocumentSync is absent from the static
-            // capabilities — dynamic client/registerCapability for textDocument/didChange is
-            // silently ignored and the client never sends content-change notifications.
-            // VS's LSP client handles dynamic-only registration correctly, so this static
-            // entry is only needed for non-VS clients.
+            // Advertised statically to every client:
+            // - vscode-languageclient v10 (VS Code, Rider) does not wire its
+            //   DidChangeTextDocumentFeature when textDocumentSync is absent from the static
+            //   capabilities: a dynamic-only registration is silently ignored.
+            // - Visual Studio (issue #800) handles dynamic registration, but only for documents it
+            //   attaches after the client/registerCapability arrives (~100 ms after `initialized`).
+            //   A document it attached before that (a restored tab, or the open file after a
+            //   solution switch) never got didOpen or didChange for the whole session. VS used to
+            //   be excluded here on the assumption that dynamic-only was enough.
             // Fine-grained selector filtering (*.feature + *.cs) still comes from OmniSharp's
             // dynamic registration once the feature infrastructure is activated.
             void ApplyTextDocumentSyncCapability()
             {
-                if (string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase))
-                    return;
-
                 response.Capabilities.TextDocumentSync = new TextDocumentSyncOptions
                 {
                     Change = TextDocumentSyncKind.Full,
@@ -403,9 +399,9 @@ public class Program
                 response.Capabilities.ExtensionData["reqnrollTestOutcomesProvider"] = JObject.FromObject(
                     new ReqnrollTestOutcomesOptions
                     {
-                        RegisterRunMethod = LspMethodNames.ReqnrollRegisterTestRun,
-                        GetOutcomeMethod = LspMethodNames.ReqnrollGetTestOutcome,
-                        ChangedNotification = LspMethodNames.ReqnrollTestOutcomesChanged,
+                        RegisterRunMethod = CustomLspMethodNames.ReqnrollRegisterTestRun,
+                        GetOutcomeMethod = CustomLspMethodNames.ReqnrollGetTestOutcome,
+                        ChangedNotification = CustomLspMethodNames.ReqnrollTestOutcomesChanged,
                     });
             }
 
@@ -425,47 +421,47 @@ public class Program
 
                 extensionData["reqnrollWorkspaceLifecycleProvider"] = JObject.FromObject(new ReqnrollWorkspaceLifecycleOptions
                 {
-                    ProjectLoadedMethod = LspMethodNames.ReqnrollProjectLoaded,
-                    ProjectUnloadedMethod = LspMethodNames.ReqnrollProjectUnloaded,
-                    ProjectFilesMethod = LspMethodNames.ReqnrollProjectFiles,
+                    ProjectLoadedMethod = CustomLspMethodNames.ReqnrollProjectLoaded,
+                    ProjectUnloadedMethod = CustomLspMethodNames.ReqnrollProjectUnloaded,
+                    ProjectFilesMethod = CustomLspMethodNames.ReqnrollProjectFiles,
                 });
 
                 extensionData["reqnrollFindStepUsagesProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepUsages });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindStepUsages });
 
-                extensionData["reqnrollGoToHooksProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToHooks });
+                extensionData["reqnrollFindHooksProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindHooks });
 
                 extensionData["reqnrollFindStepDefinitionsProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepDefinitions });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindStepDefinitions });
 
-                extensionData["reqnrollGoToMatchingScenariosProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollGoToMatchingScenarios });
+                extensionData["reqnrollFindMatchingScenariosProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindMatchingScenarios });
 
                 extensionData["reqnrollResolveTestTargetsProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollResolveTestTargets });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollResolveTestTargets });
 
                 extensionData["reqnrollFindUnusedStepDefinitionsProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindUnusedStepDefinitions });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions });
 
                 extensionData["reqnrollStepRenameProvider"] = JObject.FromObject(new ReqnrollStepRenameOptions
                 {
-                    RenameTargetsMethod = LspMethodNames.ReqnrollRenameTargets,
-                    SelectRenameTargetMethod = LspMethodNames.ReqnrollSelectRenameTarget,
-                    RenameAppliedMethod = LspMethodNames.ReqnrollRenameApplied,
+                    RenameTargetsMethod = CustomLspMethodNames.ReqnrollRenameTargets,
+                    SelectRenameTargetMethod = CustomLspMethodNames.ReqnrollSelectRenameTarget,
+                    RenameAppliedMethod = CustomLspMethodNames.ReqnrollRenameApplied,
                 });
 
                 extensionData["reqnrollRefreshCodeLensProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollRefreshCodeLens });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollRefreshCodeLens });
 
                 extensionData["reqnrollSemanticTokensPushProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollSemanticTokens });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollSemanticTokens });
 
                 extensionData["reqnrollDocumentSymbolHierarchicalProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollDocumentSymbolHierarchical });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical });
 
                 extensionData["reqnrollDocumentActivatedProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollDocumentActivated });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollDocumentActivated });
             }
         });
     }

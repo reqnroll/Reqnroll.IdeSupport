@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
@@ -283,16 +284,19 @@ public sealed class ProtocolSteps
     [Then("the server statically advertises textDocumentSync with full sync and openClose")]
     public void ThenTheServerStaticallyAdvertisesTextDocumentSync()
     {
-        var ts = _ctx.Harness.ServerInitializeResult.Capabilities.TextDocumentSync;
+        // Read from the snapshot of the raw initialize response, not ServerSettings: OmniSharp's
+        // client merges the later dynamic client/registerCapability into ServerSettings, which
+        // made a missing static entry look present (issue #800).
+        _ctx.Harness.InitializeResponseSeen.Should().BeTrue();
+        var ts = _ctx.Harness.StaticTextDocumentSync;
         ts.Should().NotBeNull(
-            "non-VS clients need a static textDocumentSync entry to bootstrap their " +
-            "DidChangeTextDocument infrastructure; without it, dynamic registration is silently ignored");
-        ts!.HasOptions.Should().BeTrue(
-            "the static entry must be TextDocumentSyncOptions (not just a kind enum) so that " +
-            "vscode-languageclient v10 recognises it and wires up its DidChangeTextDocument feature");
-        ts.Options!.OpenClose.Should().BeTrue(
-            "OpenClose=true is set explicitly in the static response — its presence in " +
-            "ServerSettings confirms the static entry was included in the InitializeResult");
+            "every client needs a static textDocumentSync entry: vscode-languageclient ignores a " +
+            "dynamic-only one, and Visual Studio never sends didOpen for a document it attached " +
+            "before the dynamic registration arrived (issue #800). It must also be " +
+            "TextDocumentSyncOptions, not just a kind enum (the snapshot is null otherwise), so " +
+            "vscode-languageclient v10 wires up its DidChangeTextDocument feature");
+        ts!.OpenClose.Should().BeTrue("didOpen/didClose must be enabled statically");
+        ts.Change.Should().Be(TextDocumentSyncKind.Full, "the server expects full-document didChange");
     }
 
     [Then("the server advertises renameProvider with prepareProvider")]
@@ -341,9 +345,9 @@ public sealed class ProtocolSteps
         extensionData!.Should().ContainKey("reqnrollTestOutcomesProvider");
 
         var provider = extensionData["reqnrollTestOutcomesProvider"];
-        provider.Value<string>("registerRunMethod").Should().Be(LspMethodNames.ReqnrollRegisterTestRun);
-        provider.Value<string>("getOutcomeMethod").Should().Be(LspMethodNames.ReqnrollGetTestOutcome);
-        provider.Value<string>("changedNotification").Should().Be(LspMethodNames.ReqnrollTestOutcomesChanged);
+        provider.Value<string>("registerRunMethod").Should().Be(CustomLspMethodNames.ReqnrollRegisterTestRun);
+        provider.Value<string>("getOutcomeMethod").Should().Be(CustomLspMethodNames.ReqnrollGetTestOutcome);
+        provider.Value<string>("changedNotification").Should().Be(CustomLspMethodNames.ReqnrollTestOutcomesChanged);
     }
 
     // Asserted via ExtensionData, not a typed sibling property: OmniSharp's InitializeResult.

@@ -4,7 +4,7 @@ import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
 
-interface GoToMatchingScenariosResponse {
+interface FindMatchingScenariosResponse {
   scenarios: MatchingScenarioLocation[];
 }
 
@@ -33,10 +33,10 @@ export async function doGoToMatchingScenarios(
   line: number,
   character: number,
 ): Promise<void> {
-  let response: GoToMatchingScenariosResponse;
+  let response: FindMatchingScenariosResponse;
   try {
-    response = await client.sendRequest<GoToMatchingScenariosResponse>(
-      ReqnrollMethods.goToMatchingScenarios,
+    response = await client.sendRequest<FindMatchingScenariosResponse>(
+      ReqnrollMethods.findMatchingScenarios,
       {
         textDocument: { uri },
         position: { line, character },

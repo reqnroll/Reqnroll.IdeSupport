@@ -4,6 +4,7 @@ import {
   LanguageClient,
   Middleware,
   PrepareRenameSignature,
+  RenameRequest,
   ResponseError,
   WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
@@ -313,7 +314,7 @@ export async function renameStepFromCSharp(
 
   let result: LspWorkspaceEdit | null;
   try {
-    result = await client.sendRequest<LspWorkspaceEdit | null>('textDocument/rename', {
+    result = await client.sendRequest(RenameRequest.type, {
       textDocument: { uri: uriStr },
       position: { line: position.line, character: position.character },
       newName: newStepText,

@@ -53,14 +53,30 @@ internal sealed class RunTestCodeLensService
     public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsForLineAsync(string fileUri, int line, CancellationToken cancellationToken)
     {
         var symbols = await _symbolService.FetchSymbolsAsync(fileUri, cancellationToken).ConfigureAwait(false);
-        var node = CollectMethodNodes(symbols).FirstOrDefault(n => n.SelectionRange.Start.Line == line);
-        if (node is null)
-        {
-            _logger.LogDebug(
-                "RunTestCodeLensService: no scenario/Outline node starts on line {Line} in {FileUri}.", line, fileUri);
-            return Array.Empty<RunTestTargetEntry>();
-        }
 
+        var methodNode = CollectMethodNodes(symbols).FirstOrDefault(n => n.SelectionRange.Start.Line == line);
+        if (methodNode is not null)
+            return await ResolveScenarioTargetsAsync(fileUri, line, methodNode, cancellationToken).ConfigureAwait(false);
+
+        // No Scenario/Outline starts here — check whether it's a Feature/Rule header line instead
+        // (issue #744, "Run scenarios"). Every Method-kind node is checked first since it's the
+        // overwhelmingly common case and CollectContainerNodes walks the same tree again.
+        var containerNode = CollectContainerNodes(symbols).FirstOrDefault(n => n.SelectionRange.Start.Line == line);
+        if (containerNode is not null)
+            return await ResolveContainerTargetsAsync(fileUri, line, containerNode, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogDebug(
+            "RunTestCodeLensService: no scenario/Outline/Feature/Rule node starts on line {Line} in {FileUri}.", line, fileUri);
+        return Array.Empty<RunTestTargetEntry>();
+    }
+
+    /// <summary>
+    /// Resolves the single Run-able scenario/Outline target at <paramref name="node"/> — the
+    /// original issue #495 behavior, unchanged by issue #744's container support.
+    /// </summary>
+    private async Task<IReadOnlyList<RunTestTargetEntry>> ResolveScenarioTargetsAsync(
+        string fileUri, int line, GherkinSymbolNode node, CancellationToken cancellationToken)
+    {
         var outputAssemblyPath = await ResolveOutputAssemblyPathAsync(fileUri, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrEmpty(outputAssemblyPath))
         {
@@ -96,6 +112,46 @@ internal sealed class RunTestCodeLensService
     }
 
     /// <summary>
+    /// Resolves every Run-able target under a Feature/Rule <paramref name="node"/> in one
+    /// <c>reqnroll/resolveContainerTestTargets</c> call (issue #744, "Run scenarios") — reuses the
+    /// exact same <see cref="RunTestTargetEntry"/> shape and the same downstream
+    /// <c>RunTestCodeLensDataPoint</c>/Test Explorer execution path as a single scenario's Run,
+    /// just with a broader target set. <see cref="RunTestTargetEntry.IsScenarioOutline"/> is set
+    /// <see langword="true"/> for every entry so the CodeLens label reads "Run Scenarios" (plural),
+    /// matching the existing row-tests-Outline wording rather than introducing a third label.
+    /// </summary>
+    private async Task<IReadOnlyList<RunTestTargetEntry>> ResolveContainerTargetsAsync(
+        string fileUri, int line, GherkinSymbolNode node, CancellationToken cancellationToken)
+    {
+        var outputAssemblyPath = await ResolveOutputAssemblyPathAsync(fileUri, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(outputAssemblyPath))
+        {
+            _logger.LogDebug(
+                "RunTestCodeLensService: could not resolve an output assembly path for {FileUri}; no Run lens will render.", fileUri);
+            return Array.Empty<RunTestTargetEntry>();
+        }
+
+        // node.Range (the container's full body), not node.SelectionRange (its header line alone) —
+        // the server resolves every scenario/Outline tag fully contained within the range given.
+        var targets = await _targetService
+            .ResolveContainerTestTargetsAsync(fileUri, node.Range, cancellationToken)
+            .ConfigureAwait(false);
+
+        var result = targets
+            .Select(target => new RunTestTargetEntry(line, outputAssemblyPath!, target.DeclaringTypeFullName, target.MethodName, IsScenarioOutline: true))
+            .ToList();
+
+        foreach (var entry in result.Distinct())
+        {
+            _logger.LogDebug(
+                "RunTestCodeLensService: container RunTestTargetEntry line={Line} assembly={OutputAssemblyPath} type={DeclaringTypeFullName} method={MethodName}",
+                entry.Line, entry.OutputAssemblyPath, entry.DeclaringTypeFullName, entry.MethodName);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Fetches every Run-lens tag placement for <paramref name="fileUri"/> (issue #495): the
     /// symbol-tree walk alone, with no <c>reqnroll/resolveTestTargets</c> calls at all. Used by
     /// <c>RunTestCodeLensTaggerProvider</c>, which only needs to know which lines get a tag and a
@@ -108,9 +164,16 @@ internal sealed class RunTestCodeLensService
     public async Task<IReadOnlyList<RunTestLensLocation>> GetTagLocationsAsync(string fileUri, CancellationToken cancellationToken)
     {
         var symbols = await _symbolService.FetchSymbolsAsync(fileUri, cancellationToken).ConfigureAwait(false);
-        return CollectMethodNodes(symbols)
-            .Select(node => new RunTestLensLocation(node.SelectionRange.Start.Line, BuildLensKey(node)))
-            .ToList();
+
+        var methodLocations = CollectMethodNodes(symbols)
+            .Select(node => new RunTestLensLocation(node.SelectionRange.Start.Line, BuildLensKey(node)));
+
+        // Feature/Rule header lines get their own "Run scenarios" lens too (issue #744) — always a
+        // distinct line from any Scenario/Outline header, so no key collision with methodLocations.
+        var containerLocations = CollectContainerNodes(symbols)
+            .Select(node => new RunTestLensLocation(node.SelectionRange.Start.Line, BuildContainerLensKey(node)));
+
+        return methodLocations.Concat(containerLocations).ToList();
     }
 
     /// <summary>
@@ -119,6 +182,9 @@ internal sealed class RunTestCodeLensService
     /// CodeLens engine needs to decide whether to recreate the line's data point.
     /// </summary>
     private static string BuildLensKey(GherkinSymbolNode node) => $"{node.Detail}|{node.Name}";
+
+    /// <summary>Opaque per-node key for a Feature/Rule "Run scenarios" lens (issue #744) — Kind stands in for Detail, which server-side Feature/Rule symbols never set.</summary>
+    private static string BuildContainerLensKey(GherkinSymbolNode node) => $"container:{node.Kind}|{node.Name}";
 
     /// <summary>
     /// Recursively collects Method-kind (Scenario/Scenario Outline) nodes at any nesting depth —
@@ -134,6 +200,28 @@ internal sealed class RunTestCodeLensService
                 result.Add(node);
             if (node.Children.Count > 0)
                 result.AddRange(CollectMethodNodes(node.Children));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Recursively collects Feature (root) and Rule (nested) nodes at any depth — the "Run
+    /// scenarios" containers (issue #744). Mirrors <see cref="CollectMethodNodes"/>'s shape;
+    /// Feature maps to LSP <c>SymbolKind.Module</c> and Rule to <c>SymbolKind.Namespace</c>
+    /// (<c>DocumentSymbolHandler.ToSymbolKind</c>) since both collapse Feature/Rule to those
+    /// standard kinds rather than a custom one.
+    /// </summary>
+    internal static List<GherkinSymbolNode> CollectContainerNodes(IReadOnlyList<GherkinSymbolNode> symbols)
+    {
+        const int moduleKind = 2;    // LSP SymbolKind.Module — Feature
+        const int namespaceKind = 3; // LSP SymbolKind.Namespace — Rule
+        var result = new List<GherkinSymbolNode>();
+        foreach (var node in symbols)
+        {
+            if (node.Kind == moduleKind || node.Kind == namespaceKind)
+                result.Add(node);
+            if (node.Children.Count > 0)
+                result.AddRange(CollectContainerNodes(node.Children));
         }
         return result;
     }

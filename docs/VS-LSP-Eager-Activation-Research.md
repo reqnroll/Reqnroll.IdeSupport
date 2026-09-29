@@ -93,6 +93,44 @@ on every launch, not just the first one after install/update. `SolutionOpenState
 `__VSPROPID.VSPROPID_IsSolutionOpen` instead, so the wait returns as soon as the solution is
 actually open.
 
+### As built: the restored tab's content type (#78) — the actual root cause
+
+The trigger above was not enough. User logs and a screen recording (2026-09-27) showed it did start
+the server, and VS did send `didOpen` for the restored tab, but the tab stayed plain text with no
+CodeLens and no navigation bar until it was closed and reopened. The Gherkin-scoped navigation-bar
+listener fired for the scratch file's view but never for the restored one, and VS sent no
+`didClose` when the restored tab was closed.
+
+Cause: the `Gherkin` content type existed only as a VisualStudio.Extensibility `DocumentTypeConfiguration`.
+VS's `ExtensionContentTypeSectionTracker` (`Microsoft.VisualStudio.Editor.Implementation.dll`,
+decompiled) registers those asynchronously, fire-and-forget. A tab restored before that finishes
+keeps the generic type `.feature` had at that moment for its whole life, so nothing keyed on
+`[ContentType("Gherkin")]` attaches to it: not our classifier, CodeLens taggers or navigation
+bar, and not the LSP client's view features. This also explains the original "missed activation
+edge": the restored document never opened *as a Gherkin document*.
+
+Fix:
+
+1. `GherkinContentTypeDefinition` (VSSDKIntegration) registers `Gherkin` (base
+   `code-languageserver-preview`, the same base as the document type) and the `.feature` mapping
+   as static MEF exports, which are in the component cache at restore time. The tracker reuses an
+   existing content type of the same name and keeps a mapping that already `IsOfType` it, so the
+   two registrations coexist.
+2. `FeatureBufferContentTypeGuard` (Extension) logs the content type of every `.feature` buffer
+   before changing anything, and re-types any plain-text `.feature` buffer to `Gherkin` with
+   `ITextBuffer.ChangeContentType` — the approach HLSL-LSP uses (§2.1). Re-typing reaches taggers
+   and classifiers but not `IVsTextViewCreationListener`s of existing views, so (1) is the primary fix.
+
+Live result (warm start, experimental instance): VS activates the provider at restore time,
+before the package loads; the restored tab is colored, gets its navigation bar and Run CodeLens
+without being touched, and the scratch trigger logs "provider already activated; nothing to do".
+The trigger stays as a fallback until a cold first-launch-after-install run confirms the same.
+
+The earlier start exposed a Run CodeLens race: a `reqnroll/refreshCodeLens` invalidation
+cancelling an in-flight target lookup, whose cancellation the symbol request turned into an empty
+answer, cached as "no scenario on this line". `GherkinNavigationBarSymbolService` now surfaces
+cancellation, and `RunTestCodeLensResultCache` restarts callers whose computation was invalidated.
+
 ---
 
 ## 1. Where the delay actually comes from — **REFUTED, see §0**

@@ -5,22 +5,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 
 /// <summary>
-/// Sends a custom <c>reqnroll/goToMatchingScenarios</c> request to the LSP server and maps the
-/// result to a <see cref="GoToMatchingScenariosResult"/> (issue #373's hook-match-count CodeLens
-/// click action) — the inverse of <see cref="GoToHooks.GoToHooksService"/>.
+/// Sends a custom <c>reqnroll/findMatchingScenarios</c> request to the LSP server and maps the
+/// result to a <see cref="FindMatchingScenariosResult"/> (issue #373's hook-match-count CodeLens
+/// click action) — the inverse of <see cref="FindHooks.FindHooksService"/>.
 /// </summary>
-internal sealed class GoToMatchingScenariosService
+internal sealed class FindMatchingScenariosService
 {
     private readonly LspInterceptingPipe _pipe;
-    private readonly ILogger<GoToMatchingScenariosService> _logger;
+    private readonly ILogger<FindMatchingScenariosService> _logger;
 
     /// <summary>Creates the service over the given LSP transport pipe.</summary>
-    public GoToMatchingScenariosService(LspInterceptingPipe pipe, ILogger<GoToMatchingScenariosService> logger)
+    public FindMatchingScenariosService(LspInterceptingPipe pipe, ILogger<FindMatchingScenariosService> logger)
     {
         _pipe = pipe;
         _logger = logger;
@@ -31,7 +32,7 @@ internal sealed class GoToMatchingScenariosService
     /// <paramref name="line0"/> / <paramref name="char0"/> in <paramref name="fileUri"/> (all
     /// 0-based) — the exact attribute location the lens was rendered at.
     /// </summary>
-    public async Task<GoToMatchingScenariosResult> GoToMatchingScenariosAsync(
+    public async Task<FindMatchingScenariosResult> FindMatchingScenariosAsync(
         string            fileUri,
         int               line0,
         int               char0,
@@ -40,38 +41,38 @@ internal sealed class GoToMatchingScenariosService
         var paramsJson = BuildParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "GoToMatchingScenariosService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.GoToMatchingScenarios, fileUri, line0, char0);
+            "FindMatchingScenariosService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollFindMatchingScenarios, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.GoToMatchingScenarios, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindMatchingScenarios, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(
-            "GoToMatchingScenariosService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
+            "FindMatchingScenariosService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
 
         var mapped = MapResult(result);
-        _logger.LogDebug("GoToMatchingScenariosService: {ScenarioCount} scenario(s) returned", mapped.Scenarios.Count);
+        _logger.LogDebug("FindMatchingScenariosService: {ScenarioCount} scenario(s) returned", mapped.Scenarios.Count);
         return mapped;
     }
 
     /// <summary>
-    /// Pure mapping from a raw <c>reqnroll/goToMatchingScenarios</c> JSON result to a
-    /// <see cref="GoToMatchingScenariosResult"/>. Separated from transport so it can be
+    /// Pure mapping from a raw <c>reqnroll/findMatchingScenarios</c> JSON result to a
+    /// <see cref="FindMatchingScenariosResult"/>. Separated from transport so it can be
     /// unit-tested. A <c>null</c>, non-object, or missing-<c>scenarios</c> result yields
-    /// <see cref="GoToMatchingScenariosResult.Empty"/>.
+    /// <see cref="FindMatchingScenariosResult.Empty"/>.
     /// </summary>
-    internal static GoToMatchingScenariosResult MapResult(JToken? result)
+    internal static FindMatchingScenariosResult MapResult(JToken? result)
     {
         if (result is null || result.Type == JTokenType.Null)
-            return GoToMatchingScenariosResult.Empty;
+            return FindMatchingScenariosResult.Empty;
 
         if (result is JObject obj)
         {
             var scenariosArray = obj["scenarios"] as JArray ?? new JArray();
-            return new GoToMatchingScenariosResult(ParseScenarios(scenariosArray));
+            return new FindMatchingScenariosResult(ParseScenarios(scenariosArray));
         }
 
-        return GoToMatchingScenariosResult.Empty;
+        return FindMatchingScenariosResult.Empty;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

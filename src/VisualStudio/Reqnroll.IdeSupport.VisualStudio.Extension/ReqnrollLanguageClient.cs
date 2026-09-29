@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
-using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -43,8 +43,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly ILoggerFactory _loggerFactory;
     private readonly FindStepUsagesState _findStepUsagesState;
     private readonly FindUnusedStepDefinitionsState _findUnusedStepDefinitionsState;
-    private readonly GoToHooksState _goToHooksState;
-    private readonly GoToMatchingScenariosState _goToMatchingScenariosState;
+    private readonly FindHooksState _goToHooksState;
+    private readonly FindMatchingScenariosState _goToMatchingScenariosState;
     private readonly StepCodeLensState _stepCodeLensState;
     private readonly RenameStepState _renameStepState;
     private readonly FormatDocumentState _formatDocumentState;
@@ -66,8 +66,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         ILoggerFactory loggerFactory,
         FindStepUsagesState findStepUsagesState,
         FindUnusedStepDefinitionsState findUnusedStepDefinitionsState,
-        GoToHooksState goToHooksState,
-        GoToMatchingScenariosState goToMatchingScenariosState,
+        FindHooksState goToHooksState,
+        FindMatchingScenariosState goToMatchingScenariosState,
         StepCodeLensState stepCodeLensState,
         RenameStepState renameStepState,
         FormatDocumentState formatDocumentState,
@@ -187,8 +187,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         {
             _findStepUsagesState.Service            = new FindStepUsagesService(interceptingPipe, _loggerFactory.CreateLogger<FindStepUsagesService>());
             _findUnusedStepDefinitionsState.Service = new FindUnusedStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindUnusedStepDefinitionsService>());
-            _goToHooksState.Service                 = new GoToHooksService(interceptingPipe, _loggerFactory.CreateLogger<GoToHooksService>());
-            _goToMatchingScenariosState.Service     = new GoToMatchingScenariosService(interceptingPipe, _loggerFactory.CreateLogger<GoToMatchingScenariosService>());
+            _goToHooksState.Service                 = new FindHooksService(interceptingPipe, _loggerFactory.CreateLogger<FindHooksService>());
+            _goToMatchingScenariosState.Service     = new FindMatchingScenariosService(interceptingPipe, _loggerFactory.CreateLogger<FindMatchingScenariosService>());
             _stepCodeLensState.Service              = new StepCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<StepCodeLensService>());
             _commentToggleService                    = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
@@ -211,7 +211,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             FormatDocumentRedirect.FormatDocumentAsync = _formatDocumentState.Service.FormatDocumentAsync;
 
             // Set the classic hook-match-count CodeLens bridge (issue #372, unblocking #269 for
-            // Visual Studio) — GetHookDetailsAsync reuses the same GoToHooksService the
+            // Visual Studio) — GetHookDetailsAsync reuses the same FindHooksService the
             // reqnroll.goToHooks command uses, so a lens's Details popup always matches what a
             // manual "Go to Hooks" invocation with ownLevelOnly would return.
             HookCodeLensRedirect.GetLensesAsync      = _hookFeatureCodeLensService.GetLensesAsync;
@@ -224,7 +224,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     return Array.Empty<HookDetailEntry>();
 
                 var result = await service
-                    .GoToHooksAsync(fileUri, line, ch, ownLevelOnly, ct)
+                    .FindHooksAsync(fileUri, line, ch, ownLevelOnly, ct)
                     .ConfigureAwait(false);
                 return result.Hooks
                     .Select(h => new HookDetailEntry(h.HookType, h.MethodName, h.HookOrder, h.Uri, h.StartLine, h.StartChar))

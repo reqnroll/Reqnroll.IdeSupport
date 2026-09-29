@@ -1,53 +1,18 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
+namespace Reqnroll.IdeSupport.Common.Lsp;
 
 /// <summary>
-/// Centralizes all LSP method names (both standard and custom Reqnroll extensions)
-/// used by the language server. This prevents magic strings scattered across the codebase
-/// and makes refactoring or auditing registered endpoints much easier.
+/// Centralizes the standard LSP <c>textDocument/*</c>, <c>workspace/*</c>, <c>codeLens/*</c>
+/// and <c>telemetry/*</c> method names shared by <c>Reqnroll.IdeSupport.LSP.Server</c>
+/// and all IDE client extensions.
 /// </summary>
-public static class LspMethodNames
+/// <remarks>
+/// Custom <c>reqnroll/*</c> method names are kept in each project's own class
+/// (<c>LspMethodNames</c> in the server, <c>ReqnrollMethodNames</c> in the VS extension,
+/// <c>ReqnrollMethods</c> in the VS Code extension, LSP4J interfaces in Rider) since
+/// those are per-project by necessity and have no cross-project reuse benefit.
+/// </remarks>
+public static class LspStandardMethodNames
 {
-    // ── Custom Reqnroll Extensions ───────────────────────────────────────────
-    /// <summary>Method name for the <c>reqnroll/projectLoaded</c> notification.</summary>
-    public const string ReqnrollProjectLoaded = "reqnroll/projectLoaded";
-    /// <summary>Method name for the <c>reqnroll/projectUnloaded</c> notification.</summary>
-    public const string ReqnrollProjectUnloaded = "reqnroll/projectUnloaded";
-    /// <summary>Method name for the <c>reqnroll/projectFiles</c> notification.</summary>
-    public const string ReqnrollProjectFiles = "reqnroll/projectFiles";
-    /// <summary>Method name for the <c>reqnroll/findStepUsages</c> request.</summary>
-    public const string ReqnrollFindStepUsages = "reqnroll/findStepUsages";
-    /// <summary>Method name for the <c>reqnroll/goToHooks</c> request.</summary>
-    public const string ReqnrollGoToHooks = "reqnroll/goToHooks";
-    /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
-    public const string ReqnrollFindStepDefinitions = "reqnroll/findStepDefinitions";
-    /// <summary>Method name for the <c>reqnroll/goToMatchingScenarios</c> request (issue #373).</summary>
-    public const string ReqnrollGoToMatchingScenarios = "reqnroll/goToMatchingScenarios";
-    /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
-    public const string ReqnrollResolveTestTargets = "reqnroll/resolveTestTargets";
-    /// <summary>Method name for the <c>reqnroll/findUnusedStepDefinitions</c> request.</summary>
-    public const string ReqnrollFindUnusedStepDefinitions = "reqnroll/findUnusedStepDefinitions";
-    /// <summary>Method name for the <c>reqnroll/renameTargets</c> request.</summary>
-    public const string ReqnrollRenameTargets = "reqnroll/renameTargets";
-    /// <summary>Method name for the <c>reqnroll/selectRenameTarget</c> notification.</summary>
-    public const string ReqnrollSelectRenameTarget = "reqnroll/selectRenameTarget";
-    /// <summary>Method name for the <c>reqnroll/renameApplied</c> notification.</summary>
-    public const string ReqnrollRenameApplied = "reqnroll/renameApplied";
-    /// <summary>Method name for the <c>reqnroll/refreshCodeLens</c> notification.</summary>
-    public const string ReqnrollRefreshCodeLens = "reqnroll/refreshCodeLens";
-    /// <summary>Method name for the <c>reqnroll/semanticTokens</c> push notification.</summary>
-    public const string ReqnrollSemanticTokens = "reqnroll/semanticTokens";
-    /// <summary>Method name for the <c>reqnroll/documentSymbolHierarchical</c> request.</summary>
-    public const string ReqnrollDocumentSymbolHierarchical = "reqnroll/documentSymbolHierarchical";
-    /// <summary>Method name for the <c>reqnroll/documentActivated</c> notification.</summary>
-    public const string ReqnrollDocumentActivated = "reqnroll/documentActivated";
-    /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
-    public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
-    /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>
-    public const string ReqnrollGetTestOutcome = "reqnroll/testOutcomes/getOutcome";
-    /// <summary>Method name for the <c>reqnroll/testOutcomes/changed</c> push notification (LSP-server outcome pipeline).</summary>
-    public const string ReqnrollTestOutcomesChanged = "reqnroll/testOutcomes/changed";
-
-    // ── Standard LSP Methods ────────────────────────────────────────────────
     /// <summary>Method name for the <c>textDocument/semanticTokens/full</c> request.</summary>
     public const string TextDocumentSemanticTokensFull = "textDocument/semanticTokens/full";
     /// <summary>Method name for the <c>textDocument/semanticTokens/full/delta</c> request.</summary>
@@ -110,19 +75,4 @@ public static class LspMethodNames
     // ── Telemetry ───────────────────────────────────────────────────────────
     /// <summary>Method name for the <c>telemetry/event</c> notification.</summary>
     public const string TelemetryEvent = "telemetry/event";
-
-    // ── Internal Pipeline Operations (not on the wire; perf-recorder labels only) ──
-    /// <summary>Internal perf-recorder label for binding-registry reconciliation after a connector update.</summary>
-    public const string InternalBindingRegistryReconcile = "internal/bindingRegistryReconcile";
-    /// <summary>Internal perf-recorder label for reconciliation triggered by a <c>reqnroll.json</c> change.</summary>
-    public const string InternalReqnrollConfigReconcile = "internal/reqnrollConfigReconcile";
-    /// <summary>Internal perf-recorder label for a debounced feature-file rescan.</summary>
-    public const string InternalFeatureRescan = "internal/featureRescan";
-    /// <summary>
-    /// Internal perf-recorder label for a rename's post-response apply: the Visual Studio
-    /// <c>workspace/applyEdit</c> round trip plus the cache commit it confirms. This work used to
-    /// sit inside the measured <c>textDocument/rename</c> request; since issue #671 (R1) it runs
-    /// after that response, so without its own label its cost would not appear anywhere.
-    /// </summary>
-    public const string InternalRenamePostResponseApply = "internal/renamePostResponseApply";
 }

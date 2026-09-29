@@ -1,12 +1,12 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -14,7 +14,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/goToMatchingScenarios</c> request (issue #373's hook-match-count
+/// Handles the custom <c>reqnroll/findMatchingScenarios</c> request (issue #373's hook-match-count
 /// CodeLens click action).
 /// <para>
 /// Given a position in a <c>.cs</c> file pointing at a hook-binding method (the exact attribute
@@ -23,13 +23,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// returns every scenario, across the whole owning project(s), that its scope matches.
 /// </para>
 /// <para>
-/// The inverse of <see cref="GoToHooksHandler"/> ("given a <c>.feature</c> position, which hooks
+/// The inverse of <see cref="FindHooksHandler"/> ("given a <c>.feature</c> position, which hooks
 /// apply") — both delegate their actual scope-matching to shared <c>LSP.Core.Matching</c> helpers
 /// (<see cref="HookScenarioMatching"/> here, <c>HookMatching</c> there) so the two directions can
 /// never disagree about what "applicable"/"matches" means.
 /// </para>
 /// </summary>
-public sealed class GoToMatchingScenariosHandler
+public sealed class FindMatchingScenariosHandler
 {
     private readonly IBindingMatchService          _matchService;
     private readonly ILspWorkspaceScopeManager     _scopeManager;
@@ -38,8 +38,8 @@ public sealed class GoToMatchingScenariosHandler
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
 
-    /// <summary>Initializes a new instance of the <see cref="GoToMatchingScenariosHandler"/> class.</summary>
-    public GoToMatchingScenariosHandler(
+    /// <summary>Initializes a new instance of the <see cref="FindMatchingScenariosHandler"/> class.</summary>
+    public FindMatchingScenariosHandler(
         IBindingMatchService          matchService,
         ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
@@ -55,37 +55,37 @@ public sealed class GoToMatchingScenariosHandler
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
-    /// <summary>Handles a <c>reqnroll/goToMatchingScenarios</c> request.</summary>
-    public Task<GoToMatchingScenariosResponse> HandleAsync(
+    /// <summary>Handles a <c>reqnroll/findMatchingScenarios</c> request.</summary>
+    public Task<FindMatchingScenariosResponse> HandleAsync(
         TextDocumentPositionParams request,
         CancellationToken          cancellationToken)
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollGoToMatchingScenarios, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindMatchingScenarios, uri);
 
         if (!IsCSharp(uri))
         {
-            _logger.LogVerbose($"GoToMatchingScenariosHandler: ignoring non-.cs URI {uri}");
-            return Task.FromResult(new GoToMatchingScenariosResponse());
+            _logger.LogVerbose($"FindMatchingScenariosHandler: ignoring non-.cs URI {uri}");
+            return Task.FromResult(new FindMatchingScenariosResponse());
         }
 
         var filePath = uri.GetFileSystemPath();
         if (string.IsNullOrEmpty(filePath))
-            return Task.FromResult(new GoToMatchingScenariosResponse());
+            return Task.FromResult(new FindMatchingScenariosResponse());
 
         var registry = _registryLookup.GetRegistryForUri(uri);
         if (ReferenceEquals(registry, ProjectBindingRegistry.Invalid))
         {
-            _logger.LogVerbose($"GoToMatchingScenariosHandler: no binding registry available for {uri}");
-            return Task.FromResult(new GoToMatchingScenariosResponse());
+            _logger.LogVerbose($"FindMatchingScenariosHandler: no binding registry available for {uri}");
+            return Task.FromResult(new FindMatchingScenariosResponse());
         }
 
         // LSP positions are 0-based; SourceLocation is 1-based.
         var line = request.Position.Line + 1;
         var col  = request.Position.Character + 1;
 
-        // Exact match, not a lookback/proximity search like GoToHooksHandler's cursor resolution:
+        // Exact match, not a lookback/proximity search like FindHooksHandler's cursor resolution:
         // the position we're given is always the lens's own attribute location, round-tripped
         // verbatim from HookMatchCountCodeLensHandler's response arguments.
         var hook = registry.Hooks.FirstOrDefault(h =>
@@ -97,8 +97,8 @@ public sealed class GoToMatchingScenariosHandler
 
         if (hook is null)
         {
-            _logger.LogVerbose($"GoToMatchingScenariosHandler: no hook binding at {filePath}:{line}:{col}");
-            return Task.FromResult(new GoToMatchingScenariosResponse());
+            _logger.LogVerbose($"FindMatchingScenariosHandler: no hook binding at {filePath}:{line}:{col}");
+            return Task.FromResult(new FindMatchingScenariosResponse());
         }
 
         var owners = _scopeManager.ResolveOwners(uri);
@@ -111,13 +111,13 @@ public sealed class GoToMatchingScenariosHandler
         var scenarios = HookScenarioMatching.ResolveMatchingScenarios(matchSets, hook);
 
         _logger.LogVerbose(
-            $"GoToMatchingScenariosHandler: {scenarios.Count} scenario(s) for hook at {filePath}:{line}:{col}");
+            $"FindMatchingScenariosHandler: {scenarios.Count} scenario(s) for hook at {filePath}:{line}:{col}");
 
         var locations = scenarios.Select(ToLocation).ToList();
 
         _telemetryService?.SendEvent(TelemetryEvents.GoToMatchingScenariosCommandExecuted, new());
 
-        return Task.FromResult(new GoToMatchingScenariosResponse { Scenarios = locations });
+        return Task.FromResult(new FindMatchingScenariosResponse { Scenarios = locations });
     }
 
     private static MatchingScenarioLocation ToLocation(FeatureScenarioInfo scenario)

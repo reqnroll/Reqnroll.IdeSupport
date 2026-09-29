@@ -144,24 +144,24 @@ data class FindStepUsageItem(
 )
 
 /**
- * Params for `reqnroll/goToHooks` — mirrors GoToHooksParams.cs field-for-field. `ownLevelOnly`
+ * Params for `reqnroll/findHooks` — mirrors FindHooksParams.cs field-for-field. `ownLevelOnly`
  * is set only by CodeLens-sourced invocations (HookCodeVisionProvider, forwarding the
  * server-supplied `command.arguments` flag) so the response matches exactly what the lens
  * counted, rather than the fuller cumulative list a manual "Go to Hooks" invocation returns.
  */
-data class GoToHooksRequestParams(
+data class FindHooksRequestParams(
     val textDocument: TextDocumentIdentifier,
     val position: Position,
     val ownLevelOnly: Boolean = false,
 )
 
-/** Response for `reqnroll/goToHooks` — mirrors GoToHooksResponse.cs field-for-field. */
-data class GoToHooksResponse(
-    val hooks: List<GoToHookLocation> = emptyList(),
+/** Response for `reqnroll/findHooks` — mirrors FindHooksResponse.cs field-for-field. */
+data class FindHooksResponse(
+    val hooks: List<FindHookLocation> = emptyList(),
 )
 
 /** One hook binding applicable at the queried `.feature` file position. */
-data class GoToHookLocation(
+data class FindHookLocation(
     val uri: String = "",
     val startLine: Int = 0,
     val startChar: Int = 0,
@@ -170,8 +170,8 @@ data class GoToHookLocation(
     val methodName: String = "",
 )
 
-/** Response for `reqnroll/goToMatchingScenarios` (issue #373) — mirrors GoToMatchingScenariosResponse.cs field-for-field. */
-data class GoToMatchingScenariosResponse(
+/** Response for `reqnroll/findMatchingScenarios` (issue #373) — mirrors FindMatchingScenariosResponse.cs field-for-field. */
+data class FindMatchingScenariosResponse(
     val scenarios: List<MatchingScenarioLocation> = emptyList(),
 )
 

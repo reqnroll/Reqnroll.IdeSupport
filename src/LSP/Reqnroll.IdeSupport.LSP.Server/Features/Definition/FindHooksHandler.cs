@@ -1,10 +1,10 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -12,7 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/goToHooks</c> request (Hook Navigation — "Go to Hooks").
+/// Handles the custom <c>reqnroll/findHooks</c> request (Hook Navigation — "Go to Hooks").
 /// <para>
 /// Given a cursor position in a <c>.feature</c> file, returns all hook bindings that are
 /// applicable at that position, filtered by context level (Feature / Scenario / Step) and
@@ -25,7 +25,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// (<c>[BeforeStep]</c> / <c>[AfterStep]</c>) would be unreachable.
 /// </para>
 /// </summary>
-public sealed class GoToHooksHandler
+public sealed class FindHooksHandler
 {
     private readonly IDocumentBufferService        _bufferService;
     private readonly IProjectBindingRegistryLookup _registryLookup;
@@ -33,8 +33,8 @@ public sealed class GoToHooksHandler
     private readonly ILspTelemetryService?          _telemetryService;
     private readonly IOperationDurationRecorder     _recorder;
 
-    /// <summary>Initializes a new instance of the <see cref="GoToHooksHandler"/> class.</summary>
-    public GoToHooksHandler(
+    /// <summary>Initializes a new instance of the <see cref="FindHooksHandler"/> class.</summary>
+    public FindHooksHandler(
         IDocumentBufferService        bufferService,
         IProjectBindingRegistryLookup registryLookup,
         IIdeSupportLogger               logger,
@@ -48,32 +48,32 @@ public sealed class GoToHooksHandler
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
-    /// <summary>Handles a <c>reqnroll/goToHooks</c> request for hook navigation.</summary>
-    public Task<GoToHooksResponse> HandleAsync(
-        GoToHooksParams    request,
+    /// <summary>Handles a <c>reqnroll/findHooks</c> request for hook navigation.</summary>
+    public Task<FindHooksResponse> HandleAsync(
+        FindHooksParams    request,
         CancellationToken  cancellationToken)
     {
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): same latency class as textDocument/definition.
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollGoToHooks, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindHooks, uri);
 
         if (!IsFeatureFile(uri))
         {
-            _logger.LogVerbose($"GoToHooksHandler: ignoring non-.feature URI {uri}");
-            return Task.FromResult(new GoToHooksResponse());
+            _logger.LogVerbose($"FindHooksHandler: ignoring non-.feature URI {uri}");
+            return Task.FromResult(new FindHooksResponse());
         }
 
         if (!_bufferService.TryGet(uri, out var buffer) || buffer is null)
         {
-            _logger.LogVerbose($"GoToHooksHandler: no document buffer for {uri}");
-            return Task.FromResult(new GoToHooksResponse());
+            _logger.LogVerbose($"FindHooksHandler: no document buffer for {uri}");
+            return Task.FromResult(new FindHooksResponse());
         }
 
         if (buffer.Tags is null || buffer.Tags.Count == 0)
         {
-            _logger.LogVerbose($"GoToHooksHandler: tags not yet computed for {uri}");
-            return Task.FromResult(new GoToHooksResponse());
+            _logger.LogVerbose($"FindHooksHandler: tags not yet computed for {uri}");
+            return Task.FromResult(new FindHooksResponse());
         }
 
         var snapshot = buffer.ToGherkinTextSnapshot();
@@ -82,22 +82,22 @@ public sealed class GoToHooksHandler
         var (level, contextTag) = HookMatching.ResolveContext(buffer.Tags, offset);
         if (level == HookContextLevel.None)
         {
-            _logger.LogVerbose($"GoToHooksHandler: no Gherkin context at offset {offset} in {uri}");
-            return Task.FromResult(new GoToHooksResponse());
+            _logger.LogVerbose($"FindHooksHandler: no Gherkin context at offset {offset} in {uri}");
+            return Task.FromResult(new FindHooksResponse());
         }
 
         var registry = _registryLookup.GetRegistryForUri(uri);
         if (ReferenceEquals(registry, ProjectBindingRegistry.Invalid))
         {
-            _logger.LogVerbose($"GoToHooksHandler: no binding registry available for {uri}");
-            return Task.FromResult(new GoToHooksResponse());
+            _logger.LogVerbose($"FindHooksHandler: no binding registry available for {uri}");
+            return Task.FromResult(new FindHooksResponse());
         }
 
         var hooks = HookMatching.ResolveMatchingHooks(registry, level, contextTag, request.OwnLevelOnly);
 
-        _logger.LogVerbose($"GoToHooksHandler: {hooks.Count} hook(s) at offset {offset} in {uri}");
+        _logger.LogVerbose($"FindHooksHandler: {hooks.Count} hook(s) at offset {offset} in {uri}");
 
-        var locations = new List<GoToHookLocation>(hooks.Count);
+        var locations = new List<FindHookLocation>(hooks.Count);
         foreach (var hook in hooks)
         {
             // Same rule as DefinitionHandler: no local file, no navigation target. Hooks were the
@@ -106,7 +106,7 @@ public sealed class GoToHooksHandler
             if (src is not null && !src.IsResolved)
             {
                 _logger.LogInfo(
-                    $"GoToHooksHandler: no local file for hook '{hook.Implementation!.Method}' — the compiled " +
+                    $"FindHooksHandler: no local file for hook '{hook.Implementation!.Method}' — the compiled " +
                     $"assembly records it at '{src.RecordedSourceFile}', which does not exist on this machine. " +
                     "Rebuild the project locally to restore navigation for this hook.");
                 continue;
@@ -117,22 +117,24 @@ public sealed class GoToHooksHandler
                 locations.Add(loc);
         }
 
-        // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.GoToHookCommandExecuted, new());
+        // Telemetry: reports that a findHooks lookup ran, not that the user navigated (issue #698) —
+        // this handler also backs the classic VS CodeLens's Details-popup prefetch, which calls it on
+        // every lens render. Genuine navigation telemetry is originated client-side instead.
+        _telemetryService?.SendEvent(TelemetryEvents.FindHooksCommandExecuted, new());
 
-        return Task.FromResult(new GoToHooksResponse { Hooks = locations });
+        return Task.FromResult(new FindHooksResponse { Hooks = locations });
     }
 
     // ── Location conversion ───────────────────────────────────────────────────
 
-    private static GoToHookLocation? ToLocation(ProjectHookBinding hook)
+    private static FindHookLocation? ToLocation(ProjectHookBinding hook)
     {
         var src = hook.Implementation?.SourceLocation;
         if (src is null || string.IsNullOrEmpty(src.SourceFile))
             return null;
 
         // SourceLocation is 1-based; response uses 0-based (LSP convention).
-        return new GoToHookLocation
+        return new FindHookLocation
         {
             Uri        = DocumentUri.FromFileSystemPath(src.SourceFile).ToString(),
             StartLine  = src.SourceFileLine   - 1,

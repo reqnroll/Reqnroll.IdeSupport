@@ -1,11 +1,11 @@
 using MediatR;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
@@ -63,7 +63,7 @@ public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigC
         // measures only the (near-instant) scheduling of each reparse, not the reparses
         // themselves -- mirrors BindingRegistryChangedHandler.ReparseOpenFilesAsync's equivalent
         // note, since the actual parse work now runs after this method returns.
-        using var _perf = _recorder.Measure(LspMethodNames.InternalReqnrollConfigReconcile);
+        using var _perf = _recorder.Measure(InternalLspMethodNames.InternalReqnrollConfigReconcile);
 
         var affectedBuffers = _documentBufferService.All
             .Where(b => IsUnderWorkspaceRoot(b.Uri, notification.WorkspaceRootPath))

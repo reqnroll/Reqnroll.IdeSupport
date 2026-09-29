@@ -58,7 +58,7 @@ The server already covered the high-value Gherkin features well:
 | `$/setTrace` / `$/logTrace` | `SetTraceNotificationHandler` |
 
 Plus custom `reqnroll/*` extensions for: project lifecycle, findStepUsages, goToStepDefinitions,
-goToHooks, findUnusedStepDefinitions, renameTargets, selectRenameTarget, refreshCodeLens,
+findHooks, findUnusedStepDefinitions, renameTargets, selectRenameTarget, refreshCodeLens,
 documentSymbolHierarchical, documentActivated. See [LSP-Protocol-Extensions.md](LSP-Protocol-Extensions.md).
 
 ---

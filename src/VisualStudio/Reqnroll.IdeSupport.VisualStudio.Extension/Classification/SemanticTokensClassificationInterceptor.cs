@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 
@@ -43,7 +44,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
     {
         try
         {
-            if (message.IsNotification && message.Method == ReqnrollMethodNames.SemanticTokens)
+            if (message.IsNotification && message.Method == CustomLspMethodNames.ReqnrollSemanticTokens)
             {
                 // Primary path: the server proactively pushes tokens for the VS client (which does
                 // not reliably pull them). The notification is passed through; VS ignores it.
@@ -117,9 +118,9 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
     }
 
     private static bool IsSemanticTokensMethod(string? method) =>
-        method is "textDocument/semanticTokens/full"
-               or "textDocument/semanticTokens/full/delta"
-               or "textDocument/semanticTokens/range";
+        method is LspStandardMethodNames.TextDocumentSemanticTokensFull
+               or LspStandardMethodNames.TextDocumentSemanticTokensFullDelta
+               or LspStandardMethodNames.TextDocumentSemanticTokensRange;
 
     /// <summary>Decodes the LSP 5-int relative encoding into absolute <see cref="ClassifiedToken"/>s.</summary>
     private static IReadOnlyList<ClassifiedToken> Decode(JArray data, string[] legend)

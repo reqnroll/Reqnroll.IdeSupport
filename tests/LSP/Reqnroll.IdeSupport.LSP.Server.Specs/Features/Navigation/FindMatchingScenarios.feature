@@ -1,6 +1,6 @@
 Feature: Go to matching scenarios
 
-reqnroll/goToMatchingScenarios answers, for a hook binding in a C# file, which scenarios that
+reqnroll/findMatchingScenarios answers, for a hook binding in a C# file, which scenarios that
 hook actually runs for (design doc F24). It backs the hook-match CodeLens: the lens reports the
 count, and clicking it sends this request to get the destinations.
 

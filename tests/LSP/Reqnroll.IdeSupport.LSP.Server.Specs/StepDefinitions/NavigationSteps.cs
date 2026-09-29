@@ -99,29 +99,29 @@ public sealed class NavigationSteps
             "at least one location should carry step text extracted from the in-memory snapshot");
     }
 
-    // ── reqnroll/goToHooks (F17 — Hook Navigation) ────────────────────────────
+    // ── reqnroll/findHooks (F17 — Hook Navigation) ────────────────────────────
 
     [When(@"go to hooks is requested at line (\d+) column (\d+) in ""(.*)""")]
-    public async Task WhenGoToHooksIsRequestedAt(int line, int column, string fileName)
+    public async Task WhenFindHooksIsRequestedAt(int line, int column, string fileName)
     {
         var uri = _ctx.UriFor(fileName);
-        _ctx.LastGoToHooks = await _ctx.Harness.Client
-            .RequestGoToHooksAsync(uri, line, column)
+        _ctx.LastFindHooks = await _ctx.Harness.Client
+            .RequestFindHooksAsync(uri, line, column)
             .ConfigureAwait(false);
     }
 
     [Then(@"(\d+) hook result(?:s are|s is| is| are) returned")]
     public void ThenNHookResultsAreReturned(int expected)
     {
-        _ctx.LastGoToHooks.Should().NotBeNull("the server should return a GoToHooksResponse");
-        _ctx.LastGoToHooks!.Hooks.Should().HaveCount(expected);
+        _ctx.LastFindHooks.Should().NotBeNull("the server should return a FindHooksResponse");
+        _ctx.LastFindHooks!.Hooks.Should().HaveCount(expected);
     }
 
     [Then(@"the hook results include a ""(.*)"" hook")]
     public void ThenHookResultsIncludeHookType(string hookType)
     {
-        _ctx.LastGoToHooks.Should().NotBeNull();
-        _ctx.LastGoToHooks!.Hooks.Should().Contain(
+        _ctx.LastFindHooks.Should().NotBeNull();
+        _ctx.LastFindHooks!.Hooks.Should().Contain(
             h => h.HookType == hookType,
             $"a '{hookType}' hook should be present in the results");
     }
@@ -129,8 +129,8 @@ public sealed class NavigationSteps
     [Then(@"the hook results include a location in ""(.*)""")]
     public void ThenHookResultsIncludeLocationIn(string fileName)
     {
-        _ctx.LastGoToHooks.Should().NotBeNull();
-        _ctx.LastGoToHooks!.Hooks.Should().Contain(
+        _ctx.LastFindHooks.Should().NotBeNull();
+        _ctx.LastFindHooks!.Hooks.Should().Contain(
             h => h.Uri.EndsWith(fileName, StringComparison.OrdinalIgnoreCase),
             $"a hook with a location in '{fileName}' should be present");
     }
