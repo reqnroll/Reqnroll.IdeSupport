@@ -146,16 +146,20 @@ up the updated environment; an already-running one won't).
 
 Two Output channels (**View → Output**, then pick from the dropdown):
 
-- **Reqnroll LSP** — the standard client/server log
-- **Reqnroll LSP Trace** — LSP wire trace (only populated when tracing is
-  enabled, see below)
+- **Reqnroll** — a one-line summary of extension activation, LSP client
+  start/connect/stop, and each command's outcome, auto-revealing on a warning
+  or error. Also written to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
+- **Reqnroll LSP** — the language client's own connection-level diagnostics.
+  Also written to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
+
+The LSP wire trace has no Output channel; it goes only to the trace file
+described below.
 
 **Changing the log level:** set `"reqnroll.trace.server"` in
 `settings.json` to `"off"`, `"messages"`, or `"verbose"`. This maps onto the
 LSP server's own `--log-level` (`"off"`/`"messages"`/`"verbose"` →
-`Warning`/`Info`/`Verbose`), so it raises the server's file-log verbosity too,
-not just the **Reqnroll LSP Trace** Output channel. Setting it to
-`"verbose"` also writes a timestamped trace file under
+`Warning`/`Info`/`Verbose`), so it raises the server's file-log verbosity.
+Setting it to `"verbose"` also writes a timestamped trace file under
 `%LOCALAPPDATA%\Reqnroll\logs\` (Windows), `~/Library/Logs/Reqnroll/logs/` (macOS),
 or `~/.local/share/Reqnroll/logs/` (Linux):
 `reqnroll-vscode-inspector-<timestamp>.log`. **Reload the window** after

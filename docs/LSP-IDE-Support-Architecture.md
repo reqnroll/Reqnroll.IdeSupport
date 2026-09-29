@@ -533,12 +533,10 @@ VS Code has no native MSBuild project system. The extension bridges this with a 
 
 #### LSP inspector logging
 
-When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspectorLogger.ts` module creates a `TeeLogOutputChannel` that:
-- Shows trace in the **Reqnroll LSP Trace** Output panel (via the standard `traceOutputChannel` mechanism)
-- Writes each entry to a timestamped file:
-  - Windows: `%LOCALAPPDATA%\Reqnroll\reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
-  - macOS: `~/Library/Logs/Reqnroll/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
-  - Linux: `~/.local/share/Reqnroll/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
+When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspectorLogger.ts` module creates a `FileLspTraceChannel` -- a file-only `LogOutputChannel` handed to `vscode-languageclient` as its `traceOutputChannel` (the client's only trace hook, which insists on that type). It shows nothing in the Output panel (the visible "Reqnroll LSP Trace" pane was removed in issue #792) and writes each entry, in lsp-viewer format, to a timestamped file:
+  - Windows: `%LOCALAPPDATA%\Reqnroll\logs\reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
+  - macOS: `~/Library/Logs/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
+  - Linux: `~/.local/share/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
 
 #### Packaging and distribution
 
