@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
+namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 
 public static class InternalLspMethodNames
 {
