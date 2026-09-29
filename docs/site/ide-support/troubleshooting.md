@@ -207,12 +207,13 @@ Log files are written to a per-OS Reqnroll `logs` directory — Windows
 
 These are not written to Rider's own `idea.log` or a dedicated tool window.
 
-**Changing the log level:** there's no in-product setting or documented
-environment variable for the plugin's own `ext` log — it always writes every
-level to the file regardless (only the "Reqnroll" console tool window is
-filtered), so there's nothing to raise there. A development sandbox instance
-(`runIde`) always starts the LSP server at `Verbose`; a normal installed
-build starts it at `Warning`.
+**Changing the log level:** the `REQNROLLVS_DEBUG` environment variable (see
+the Visual Studio tab for accepted values) also controls the plugin's own `ext`
+log. Unset, the `ext` log writes every level to the file (only the "Reqnroll"
+console tool window is filtered). Set it to `Info`, `Warning` or `Error` to
+raise the file's threshold, or `Off` to stop writing it; `1`, `true` or
+`Verbose` keep every level. Unrecognized values are ignored. Restart Rider
+after changing it.
 
 The **LSP server's** own log level *can* be changed, though, the same way as
 for the other two IDEs: the `REQNROLLVS_DEBUG` environment variable (see the

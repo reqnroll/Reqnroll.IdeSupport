@@ -4,6 +4,8 @@ import java.io.File
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ReqnrollDebugLoggerTest {
     @Test
@@ -146,5 +148,44 @@ class ReqnrollDebugLoggerTest {
         ReqnrollDebugLogger.error("too late")
 
         assertEquals(emptyList(), sink.entries)
+    }
+
+    @Test
+    fun `resolveFileLogThreshold defaults to Verbose when unset or unrecognized`() {
+        assertEquals("Verbose", ReqnrollDebugLogger.resolveFileLogThreshold(null))
+        assertEquals("Verbose", ReqnrollDebugLogger.resolveFileLogThreshold(""))
+        assertEquals("Verbose", ReqnrollDebugLogger.resolveFileLogThreshold("not-a-level"))
+    }
+
+    @Test
+    fun `resolveFileLogThreshold treats 1 and true as Verbose`() {
+        assertEquals("Verbose", ReqnrollDebugLogger.resolveFileLogThreshold("1"))
+        assertEquals("Verbose", ReqnrollDebugLogger.resolveFileLogThreshold("TRUE"))
+    }
+
+    @Test
+    fun `resolveFileLogThreshold accepts level names case-insensitively`() {
+        assertEquals("Off", ReqnrollDebugLogger.resolveFileLogThreshold("off"))
+        assertEquals("Error", ReqnrollDebugLogger.resolveFileLogThreshold("ERROR"))
+        assertEquals("Warning", ReqnrollDebugLogger.resolveFileLogThreshold("Warning"))
+        assertEquals("Info", ReqnrollDebugLogger.resolveFileLogThreshold("info"))
+        assertEquals("Verbose", ReqnrollDebugLogger.resolveFileLogThreshold("verbose"))
+    }
+
+    @Test
+    fun `shouldLog filters by threshold`() {
+        assertTrue(ReqnrollDebugLogger.shouldLog("Verbose", "Verbose"))
+        assertFalse(ReqnrollDebugLogger.shouldLog("Verbose", "Info"))
+        assertTrue(ReqnrollDebugLogger.shouldLog("Info", "Info"))
+        assertFalse(ReqnrollDebugLogger.shouldLog("Info", "Warning"))
+        assertTrue(ReqnrollDebugLogger.shouldLog("Error", "Warning"))
+        assertFalse(ReqnrollDebugLogger.shouldLog("Warning", "Error"))
+    }
+
+    @Test
+    fun `shouldLog with an Off threshold suppresses every level`() {
+        for (level in listOf("Verbose", "Info", "Warning", "Error")) {
+            assertFalse(ReqnrollDebugLogger.shouldLog(level, "Off"), level)
+        }
     }
 }
