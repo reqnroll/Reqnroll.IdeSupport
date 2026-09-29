@@ -189,13 +189,9 @@ Log files are written to a per-OS Reqnroll `logs` directory — Windows
 
 - `reqnroll-rider-ext-<yyyyMMdd>-<pid>.log` — the plugin's own client-side
   glue log (lifecycle/diagnostics, not LSP wire traffic).
-- `reqnroll-lsp-server-<yyyyMMdd>-<pid>.log` /
-  `reqnroll-lsp-protocol-<yyyyMMdd>-<pid>.log` — the LSP server's application
-  log and protocol/wire-level internals. These use an `lsp` prefix rather
-  than `rider`, unlike the plugin's own `ext` log above — the server names
-  its log files after the `--ide` value it was started with, and today it
-  only recognizes `visualstudio` and `vscode` specially, so `rider` falls
-  back to the generic `lsp` prefix.
+- `reqnroll-rider-server-<yyyyMMdd>-<pid>.log` /
+  `reqnroll-rider-protocol-<yyyyMMdd>-<pid>.log` — the LSP server's application
+  log and protocol/wire-level internals.
 
 These are not written to Rider's own `idea.log` or a dedicated tool window.
 

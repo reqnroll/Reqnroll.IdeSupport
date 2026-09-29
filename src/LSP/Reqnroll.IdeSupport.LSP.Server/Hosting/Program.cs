@@ -115,12 +115,7 @@ public class Program
                 // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
                 // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
                 // with no PID and a raw ex.ToString() dump.
-                var idePrefix = ideId switch
-                {
-                    "visualstudio" => "vs",
-                    "vscode"       => "vscode",
-                    _              => "lsp",
-                };
+                var idePrefix = IdeLogPrefix.From(ideId);
                 new SynchronousFileLogger(idePrefix, "crash", TraceLevel.Error)
                     .LogException(ex, "Unhandled exception - LSP server terminating");
             }
