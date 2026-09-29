@@ -146,3 +146,25 @@ Examples:
 	| vscode       |
 	| rider        |
 	| unknown-ide  |
+
+# ── ClientInfo as a fallback identity source (issue #709) ──────────────────────
+#
+# InitializeParams.ClientInfo is the LSP-standard identity a client self-reports in the initialize
+# request itself. It arrives after the --ide argument has already seeded ClientIdeContext, so --ide
+# always wins and ClientInfo only fills the gap when no argument was passed. These scenarios prove
+# the fallback reaches a real capability decision on the wire rather than merely being recorded: the
+# server withholds semantic-token pull support for a client that reports Visual Studio, exactly as
+# it does for an explicit --ide visualstudio, because ApplySemanticTokensCapability resolves the
+# identity through ClientIdeContext instead of reading the raw argument.
+
+Scenario: A client with no --ide argument that reports Visual Studio is treated as Visual Studio
+	Given the LSP server is started for a client identifying itself as "Visual Studio" with no IDE argument
+	Then the server does not advertise pull support for semantic tokens
+
+Scenario: A client with no --ide argument that reports VS Code keeps the full pull flow
+	Given the LSP server is started for a client identifying itself as "Visual Studio Code" with no IDE argument
+	Then the server advertises range support for semantic tokens
+
+Scenario: An explicit --ide argument wins over a contradicting ClientInfo
+	Given the LSP server is started for IDE "vscode" with the client identifying itself as "Visual Studio"
+	Then the server advertises range support for semantic tokens

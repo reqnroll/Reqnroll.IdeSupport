@@ -87,7 +87,17 @@ public sealed class LspServerHarness : IAsyncDisposable
             return _diagnostics.TryGetValue(uri.ToString(), out var p) ? p : null;
     }
 
-    public async Task StartAsync(string workspaceFolder, string? ideId = null, bool supportsChangeAnnotations = false)
+    /// <param name="clientInfo">
+    /// Issue #709: the <c>InitializeParams.ClientInfo</c> the simulated client self-reports. Null
+    /// leaves OmniSharp's default (an empty <see cref="ClientInfo"/>, i.e. no name), which is what
+    /// every scenario predating the ClientInfo fallback wants — the server only reads a name that is
+    /// actually present.
+    /// </param>
+    public async Task StartAsync(
+        string workspaceFolder,
+        string? ideId = null,
+        bool supportsChangeAnnotations = false,
+        ClientInfo? clientInfo = null)
     {
         var (serverStream, clientStream) = FullDuplexStream.CreatePair();
 
@@ -104,6 +114,12 @@ public sealed class LspServerHarness : IAsyncDisposable
         {
             options.WithInput(clientStream).WithOutput(clientStream);
             options.WithRootUri(DocumentUri.FromFileSystemPath(workspaceFolder));
+
+            // Issue #709: what the client claims to be, sent in the initialize request itself.
+            // Deliberately not set by default so the specs that exercise --ide alone keep sending the
+            // same handshake they always did.
+            if (clientInfo is not null)
+                options.WithClientInfo(clientInfo);
 
             // Snapshot the static textDocumentSync before the server's dynamic registration
             // (sent after `initialized`) can be merged into ServerSettings (issue #800).

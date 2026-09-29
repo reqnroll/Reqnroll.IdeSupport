@@ -95,8 +95,8 @@ public class Program
 
             using var preloadCts = new CancellationTokenSource();
             var scopeManager = server.Services.GetRequiredService<ILspWorkspaceScopeManager>();
-            var logger       = server.Services.GetRequiredService<IIdeSupportLogger>();
-            var preloadTask  = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
+            var logger = server.Services.GetRequiredService<IIdeSupportLogger>();
+            var preloadTask = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
 
             await server.Initialize(CancellationToken.None).ConfigureAwait(false);
 
@@ -133,8 +133,14 @@ public class Program
     /// </summary>
     /// <param name="clientIde">
     /// The <c>--ide</c> identifier of the connecting client (e.g. <c>"visualstudio"</c>), or
-    /// <see langword="null"/> when absent.  Currently unused by the semantic-token pipeline
-    /// (the legend is shared across IDEs); retained for features that may vary behaviour per IDE.
+    /// <see langword="null"/> when absent.  Seeds the DI-registered
+    /// <see cref="ClientIdeContext"/> singleton that every per-IDE branch reads, and is therefore
+    /// the server's primary identity source.  It is not the only one: when it is absent,
+    /// <c>OnInitialized</c> falls back to the <c>InitializeParams.ClientInfo</c> the client
+    /// self-reports over the wire (issue #709) — see <see cref="ApplyClientInfo"/>.
+    /// <see cref="ApplySemanticTokensCapability"/> resolves VS-ness through that context rather than
+    /// from this argument directly, so the advertised capability and the handler that later pushes
+    /// tokens can never disagree about which client is connected.
     /// </param>
     /// <param name="logLevel">
     /// The <c>--log-level</c> verbosity requested by the client, defaulting to
@@ -234,6 +240,7 @@ public class Program
             // ApplySemanticTokensCapability) can't silently bleed into an unrelated capability
             // assignment sharing the same block.
             ApplyInitialTraceLevel();
+            ApplyClientIdentity();
             ApplySemanticTokensCapability();
             ApplyStaticInlayHintCapability();
             ApplyStaticFoldingCapability();
@@ -255,6 +262,36 @@ public class Program
                 traceService.Level = ResolveInitialTrace(traceService.Level, request.Trace);
             }
 
+            // Issue #709: record the identity the client self-reports over the wire, and let it fill
+            // in the IDE when --ide was absent. ClientInfo is the only identity signal that travels
+            // in the protocol itself; it arrives here, long after the DI container (and the
+            // ClientIdeContext that --ide seeded) was built, which is why ClientIdeContext has to be
+            // mutable at this one point rather than resolved from the argument alone.
+            //
+            // Ordered first among the Apply* calls: ApplySemanticTokensCapability resolves VS-ness
+            // through ClientIdeContext (see its note), and the identity log line below is most useful
+            // when it precedes the capability decisions it explains. Nothing else here depends on it,
+            // because every other per-IDE branch in the server reads ClientIdeContext lazily, per
+            // request, which is always after this point.
+            void ApplyClientIdentity()
+            {
+                var ideContext = languageServer.Services.GetRequiredService<ClientIdeContext>();
+                ideContext.ApplyClientInfo(request.ClientInfo);
+
+                // Logged at Info: at the default --log-level Warning this line is suppressed, which is
+                // deliberate (a normal session shouldn't grow a log line it never needs), so diagnosing
+                // a misidentified client means re-running with --log-level Info. See CONTRIBUTING.md's
+                // "Server logging and trace verbosity".
+                languageServer.Services.GetRequiredService<IIdeSupportLogger>().LogInfo(
+                    $"Client identity: --ide={Describe(ideContext.IdeArgument)}, "
+                    + $"clientInfo={Describe(ideContext.ClientName)}"
+                    + (ideContext.ClientVersion is null ? string.Empty : $" ({ideContext.ClientVersion})")
+                    + $", effective ide={Describe(ideContext.Ide)}"
+                    + (ideContext.IdeResolvedFromClientInfo ? " (resolved from ClientInfo)" : string.Empty));
+
+                static string Describe(string? value) => string.IsNullOrEmpty(value) ? "<none>" : value;
+            }
+
             void ApplySemanticTokensCapability()
             {
                 // Visual Studio's built-in LSP client can't map our custom token types to a
@@ -273,7 +310,15 @@ public class Program
                 // version/data), so SemanticTokensClassificationInterceptor.CaptureLegendIfPresent
                 // reads it out of this same initialize response -- omitting the whole capability
                 // for VS would silently break token decoding for the push path too.
-                var isVisualStudio = string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase);
+                //
+                // Resolved through ClientIdeContext rather than the raw clientIde argument (issue
+                // #709) so this agrees with every other per-IDE branch in the server: the push
+                // handler, CodeActionHandler, CompletionHandler, RenameHandler and
+                // CodeLensRefreshRequester all read ClientIdeContext, and it is the only one of the
+                // two that knows the identity resolved from ClientInfo when --ide was absent.
+                // ApplyClientIdentity runs first, above, so the fallback is already applied here.
+                var isVisualStudio = languageServer.Services
+                    .GetRequiredService<ClientIdeContext>().IsVisualStudio;
 
                 var tokenService = languageServer.Services.GetRequiredService<ISemanticTokensService>();
 
