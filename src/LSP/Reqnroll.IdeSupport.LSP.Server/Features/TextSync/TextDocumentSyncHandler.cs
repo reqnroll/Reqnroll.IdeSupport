@@ -6,13 +6,13 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
@@ -103,7 +103,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             // duration (Layer 4) rather than the now near-instant synchronous handler body.
             _parseCoordinator.Schedule(uri, ct =>
             {
-                using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
+                using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDidOpen, uri);
                 return _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, true, ct);
             });
             return Task.FromResult(Unit.Value);
@@ -122,7 +122,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // would (see IParseCoordinator's remarks).
         _parseCoordinator.Schedule(uri, async ct =>
         {
-            using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidOpen, uri);
+            using var _perf = _recorder.Measure(LspStandardMethodNames  .TextDocumentDidOpen, uri);
             await _reparser.ReparseOpenDocumentAsync(uri, version, ct).ConfigureAwait(false);
         });
         return Task.FromResult(Unit.Value);
@@ -144,7 +144,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
             _parseCoordinator.Schedule(uri, ct =>
             {
-                using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
+                using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDidChange, uri);
                 return _csharpDiscoveryService.UpdateFromSourceAsync(uri, text, false, ct);
             });
             return Task.FromResult(Unit.Value);
@@ -156,7 +156,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // Off the shared Serial dispatch lane (issue #471) -- see the matching didOpen comment.
         _parseCoordinator.Schedule(uri, async ct =>
         {
-            using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidChange, uri);
+            using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDidChange, uri);
             await _reparser.ReparseOpenDocumentAsync(uri, version, ct).ConfigureAwait(false);
         });
         return Task.FromResult(Unit.Value);
@@ -176,7 +176,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDidClose, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDidClose, uri);
 
         // .cs files are not tracked in the Gherkin document buffer; their last-discovered bindings
         // are intentionally retained after close (a rebuild, not a close, supersedes them). Their
@@ -190,7 +190,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             // Clear any squiggles pushed for this file (issue #514) — same clear-on-close
             // convention as the .feature path below.
             _languageServer.SendNotification(
-                LspMethodNames.TextDocumentPublishDiagnostics,
+                LspStandardMethodNames.TextDocumentPublishDiagnostics,
                 new PublishDiagnosticsParams
                 {
                     Uri = uri,
@@ -215,7 +215,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         // LSP spec: sending an empty diagnostics list for a URI clears all previously
         // pushed diagnostics for that URI on the client.
         _languageServer.SendNotification(
-            LspMethodNames.TextDocumentPublishDiagnostics,
+            LspStandardMethodNames.TextDocumentPublishDiagnostics,
             new PublishDiagnosticsParams
             {
                 Uri         = uri,

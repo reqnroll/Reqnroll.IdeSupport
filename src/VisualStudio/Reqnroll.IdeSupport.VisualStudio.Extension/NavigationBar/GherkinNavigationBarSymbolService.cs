@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
@@ -91,7 +92,7 @@ internal sealed class GherkinNavigationBarSymbolService
         var paramsJson = BuildParams(fileUri);
 
         _logger.LogDebug(
-            "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
+            "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);
 
         var (result, error) = await SendWithContentModifiedRetryAsync(paramsJson, fileUri, cancellationToken)
             .ConfigureAwait(false);
@@ -106,13 +107,13 @@ internal sealed class GherkinNavigationBarSymbolService
         // would be cached as a real answer (issue #800 follow-up). Callers treat this exception
         // as "ask again later".
         if (IsContentModified(error))
-            throw new LspContentModifiedException(ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
+            throw new LspContentModifiedException(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);
 
         if (error != null)
         {
             _logger.LogDebug(
                 "GherkinNavigationBarSymbolService: {RequestMethod} for {FileUri} returned error {Error}; treating as no symbols.",
-                ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri, error);
+                CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri, error);
         }
 
         var mapped = MapResult(result as JArray);
@@ -128,7 +129,7 @@ internal sealed class GherkinNavigationBarSymbolService
         string paramsJson, string fileUri, CancellationToken cancellationToken)
     {
         var attempt = await _pipe
-            .SendRequestToServerWithErrorAsync(ReqnrollMethodNames.DocumentSymbolHierarchical, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (!IsContentModified(attempt.Error))
@@ -136,10 +137,10 @@ internal sealed class GherkinNavigationBarSymbolService
 
         _logger.LogDebug(
             "GherkinNavigationBarSymbolService: {RequestMethod} for {FileUri} was cancelled with ContentModified " +
-            "(a concurrent edit raced this request); retrying once.", ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
+            "(a concurrent edit raced this request); retrying once.", CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);
 
         return await _pipe
-            .SendRequestToServerWithErrorAsync(ReqnrollMethodNames.DocumentSymbolHierarchical, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 

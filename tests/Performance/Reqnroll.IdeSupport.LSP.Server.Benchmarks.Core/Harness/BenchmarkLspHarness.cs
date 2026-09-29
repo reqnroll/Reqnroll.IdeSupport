@@ -14,13 +14,13 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Server;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using LspCodeLens = OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Harness;
@@ -142,12 +142,12 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
             // Both refresh requests carry no params and expect a void/null result (server sends them
             // via .ReturningVoid(...)) — just timestamp arrival and acknowledge.
-            options.OnRequest(LspMethodNames.WorkspaceSemanticTokensRefresh, (CancellationToken _) =>
+            options.OnRequest(LspStandardMethodNames.WorkspaceSemanticTokensRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastSemanticTokensRefreshTimestamp = Stopwatch.GetTimestamp();
                 return Task.CompletedTask;
             });
-            options.OnRequest(LspMethodNames.WorkspaceInlayHintRefresh, (CancellationToken _) =>
+            options.OnRequest(LspStandardMethodNames.WorkspaceInlayHintRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastInlayHintRefreshTimestamp = Stopwatch.GetTimestamp();
                 return Task.CompletedTask;
@@ -155,7 +155,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             // Unlike the two above, workspace/codeLens/refresh is not capability-gated — the server
             // sends it unconditionally (see BindingRegistryChangedHandler.RequestCodeLensRefreshAsync),
             // so no ClientCapabilities.Workspace.CodeLens advertisement is needed for this to fire.
-            options.OnRequest(LspMethodNames.WorkspaceCodeLensRefresh, (CancellationToken _) =>
+            options.OnRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastCodeLensRefreshTimestamp = Stopwatch.GetTimestamp();
                 return Task.CompletedTask;
@@ -263,7 +263,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<SemanticTokensFullOrDelta?> RequestSemanticTokensDeltaAsync(
         DocumentUri uri, string previousResultId, CancellationToken ct = default) =>
-        RequestAsync<SemanticTokensFullOrDelta?>(LspMethodNames.TextDocumentSemanticTokensFullDelta,
+        RequestAsync<SemanticTokensFullOrDelta?>(LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
             new SemanticTokensDeltaParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -274,7 +274,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<RangeOrPlaceholderRange?> RequestPrepareRenameAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<RangeOrPlaceholderRange?>(LspMethodNames.TextDocumentPrepareRename,
+        RequestAsync<RangeOrPlaceholderRange?>(LspStandardMethodNames.TextDocumentPrepareRename,
             new PrepareRenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -283,7 +283,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<WorkspaceEdit?> RequestRenameAsync(
         DocumentUri uri, int line, int character, string newName, CancellationToken ct = default) =>
-        RequestAsync<WorkspaceEdit?>(LspMethodNames.TextDocumentRename,
+        RequestAsync<WorkspaceEdit?>(LspStandardMethodNames.TextDocumentRename,
             new RenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -301,12 +301,12 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// diagnostics for.
     /// </summary>
     public void SendRenameApplied(DocumentUri uri, bool applied) =>
-        Client.SendNotification(LspMethodNames.ReqnrollRenameApplied,
+        Client.SendNotification(CustomLspMethodNames.ReqnrollRenameApplied,
             new RenameAppliedParams { Uri = uri, Applied = applied });
 
     public Task<RenameTargetsResponse?> RequestRenameTargetsAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<RenameTargetsResponse?>(LspMethodNames.ReqnrollRenameTargets,
+        RequestAsync<RenameTargetsResponse?>(CustomLspMethodNames.ReqnrollRenameTargets,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -317,13 +317,13 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<FindUnusedStepDefinitionsResponse?> RequestFindUnusedStepDefinitionsAsync(CancellationToken ct = default) =>
         RequestAsync<FindUnusedStepDefinitionsResponse?>(
-            LspMethodNames.ReqnrollFindUnusedStepDefinitions, new FindUnusedStepDefinitionsParams(), ct);
+            CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, new FindUnusedStepDefinitionsParams(), ct);
 
     // ── References / go-to (F5/F17) ─────────────────────────────────────────────
 
     public Task<FindStepUsagesResponse?> RequestFindStepUsagesAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<FindStepUsagesResponse?>(LspMethodNames.ReqnrollFindStepUsages,
+        RequestAsync<FindStepUsagesResponse?>(CustomLspMethodNames.ReqnrollFindStepUsages,
             new ReferenceParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -333,7 +333,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<LocationOrLocationLinks?> RequestStepReferencesAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<LocationOrLocationLinks?>(LspMethodNames.TextDocumentReferences,
+        RequestAsync<LocationOrLocationLinks?>( LspStandardMethodNames.TextDocumentReferences,
             new ReferenceParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -343,7 +343,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<FindHooksResponse?> RequestFindHooksAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<FindHooksResponse?>(LspMethodNames.ReqnrollFindHooks,
+        RequestAsync<FindHooksResponse?>(CustomLspMethodNames.ReqnrollFindHooks,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -356,7 +356,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// </summary>
     public Task<FindStepDefinitionsResponse?> RequestFindStepDefinitionsAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<FindStepDefinitionsResponse?>(LspMethodNames.ReqnrollFindStepDefinitions,
+        RequestAsync<FindStepDefinitionsResponse?>(CustomLspMethodNames.ReqnrollFindStepDefinitions,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -374,7 +374,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// </summary>
     public Task<FindMatchingScenariosResponse?> RequestFindMatchingScenariosAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<FindMatchingScenariosResponse?>(LspMethodNames.ReqnrollFindMatchingScenarios,
+        RequestAsync<FindMatchingScenariosResponse?>(CustomLspMethodNames.ReqnrollFindMatchingScenarios,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -391,7 +391,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// </summary>
     public Task<ResolveTestTargetsResponse?> RequestResolveTestTargetsAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<ResolveTestTargetsResponse?>(LspMethodNames.ReqnrollResolveTestTargets,
+        RequestAsync<ResolveTestTargetsResponse?>(CustomLspMethodNames.ReqnrollResolveTestTargets,
             new ResolveTestTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -401,17 +401,17 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────
 
     public Task<LspCodeLens[]?> RequestCodeLensAsync(DocumentUri uri, CancellationToken ct = default) =>
-        RequestAsync<LspCodeLens[]?>(LspMethodNames.TextDocumentCodeLens,
+        RequestAsync<LspCodeLens[]?>(LspStandardMethodNames.TextDocumentCodeLens,
             new CodeLensParams { TextDocument = new TextDocumentIdentifier { Uri = uri } }, ct);
 
     public Task<InlayHintContainer?> RequestInlayHintAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<InlayHintContainer?>(LspMethodNames.TextDocumentInlayHint,
+        RequestAsync<InlayHintContainer?>(LspStandardMethodNames.TextDocumentInlayHint,
             new InlayHintParams { TextDocument = new TextDocumentIdentifier { Uri = uri }, Range = range }, ct);
 
     public Task<CommandOrCodeActionContainer?> RequestCodeActionAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<CommandOrCodeActionContainer?>(LspMethodNames.TextDocumentCodeAction,
+        RequestAsync<CommandOrCodeActionContainer?>(LspStandardMethodNames.TextDocumentCodeAction,
             new CodeActionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -424,7 +424,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     private static readonly FormattingOptions DefaultFormattingOptions = new() { TabSize = 2, InsertSpaces = true };
 
     public Task<TextEditContainer?> RequestDocumentFormattingAsync(DocumentUri uri, CancellationToken ct = default) =>
-        RequestAsync<TextEditContainer?>(LspMethodNames.TextDocumentFormatting,
+        RequestAsync<TextEditContainer?>(LspStandardMethodNames.TextDocumentFormatting,
             new DocumentFormattingParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -433,7 +433,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<TextEditContainer?> RequestRangeFormattingAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<TextEditContainer?>(LspMethodNames.TextDocumentRangeFormatting,
+        RequestAsync<TextEditContainer?>(LspStandardMethodNames.TextDocumentRangeFormatting,
             new DocumentRangeFormattingParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -443,7 +443,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<TextEditContainer?> RequestOnTypeFormattingAsync(
         DocumentUri uri, int line, int character, string triggerCharacter, CancellationToken ct = default) =>
-        RequestAsync<TextEditContainer?>(LspMethodNames.TextDocumentOnTypeFormatting,
+        RequestAsync<TextEditContainer?>(LspStandardMethodNames.TextDocumentOnTypeFormatting,
             new DocumentOnTypeFormattingParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -460,7 +460,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// and forget, like every other <c>workspace/didChangeWatchedFiles</c> notification.
     /// </summary>
     public void SendConfigFileChanged(DocumentUri reqnrollJsonUri) =>
-        Client.SendNotification(LspMethodNames.WorkspaceDidChangeWatchedFiles, new DidChangeWatchedFilesParams
+        Client.SendNotification(LspStandardMethodNames.WorkspaceDidChangeWatchedFiles, new DidChangeWatchedFilesParams
         {
             Changes = new Container<FileEvent>(new FileEvent { Uri = reqnrollJsonUri, Type = FileChangeType.Changed }),
         });

@@ -5,6 +5,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -14,7 +15,6 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -111,7 +111,7 @@ public sealed class RenameHandler
         var path = uri.GetFileSystemPath();
 
         // Performance Verification (Layer 4): time the prepareRename cursor-validation round-trip.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentPrepareRename, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentPrepareRename, uri);
 
         if (string.IsNullOrEmpty(path))
             return null;
@@ -289,7 +289,7 @@ public sealed class RenameHandler
 
         // Performance Verification (Layer 4): time the full rename — the highest-blast-radius,
         // most complex operation in the server (workspace-wide applyEdit).
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentRename, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentRename, uri);
 
         if (string.IsNullOrEmpty(path))
         {
@@ -636,7 +636,7 @@ public sealed class RenameHandler
         SelectRenameTargetParams request,
         CancellationToken        cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollSelectRenameTarget, request.Uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollSelectRenameTarget, request.Uri);
         _sessionManager.SetSession(
             request.Uri.ToString(), request.Version, ResolveSessionTarget(request));
         return Task.CompletedTask;
@@ -696,7 +696,7 @@ public sealed class RenameHandler
         RenameAppliedParams request,
         CancellationToken   cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollRenameApplied, request.Uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollRenameApplied, request.Uri);
         _logger.LogVerbose($"RenameHandler: client reported renameApplied={request.Applied} for '{request.Uri}'");
         return _postApplyCoordinator.CompletePendingCommitAsync(request.Uri, request.Applied, cancellationToken);
     }

@@ -4,6 +4,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Completions;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -103,7 +104,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentCodeAction, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeAction, uri);
 
         if (!IsFeatureFile(uri))
         {

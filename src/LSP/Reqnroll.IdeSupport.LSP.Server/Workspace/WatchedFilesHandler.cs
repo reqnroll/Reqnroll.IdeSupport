@@ -9,9 +9,9 @@ using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -96,7 +96,7 @@ public class WatchedFilesHandler : IDidChangeWatchedFilesHandler
         DidChangeWatchedFilesParams request,
         CancellationToken cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.WorkspaceDidChangeWatchedFiles);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.WorkspaceDidChangeWatchedFiles);
 
         foreach (var fileEvent in request.Changes)
         {

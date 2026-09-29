@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 
@@ -43,7 +44,7 @@ internal sealed class SemanticTokensClassificationInterceptor : ILspMessageInter
     {
         try
         {
-            if (message.IsNotification && message.Method == ReqnrollMethodNames.SemanticTokens)
+            if (message.IsNotification && message.Method == CustomLspMethodNames.ReqnrollSemanticTokens)
             {
                 // Primary path: the server proactively pushes tokens for the VS client (which does
                 // not reliably pull them). The notification is passed through; VS ignores it.

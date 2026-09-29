@@ -8,9 +8,9 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
@@ -91,7 +91,7 @@ public sealed class HookMatchCountCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentCodeLens, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
 
         if (!IsCSharp(uri))
         {

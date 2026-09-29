@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 

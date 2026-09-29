@@ -1,12 +1,12 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -62,7 +62,7 @@ public sealed class FindMatchingScenariosHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindMatchingScenarios, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindMatchingScenarios, uri);
 
         if (!IsCSharp(uri))
         {

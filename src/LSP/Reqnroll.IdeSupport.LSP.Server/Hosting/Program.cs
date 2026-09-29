@@ -13,6 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
@@ -403,9 +404,9 @@ public class Program
                 response.Capabilities.ExtensionData["reqnrollTestOutcomesProvider"] = JObject.FromObject(
                     new ReqnrollTestOutcomesOptions
                     {
-                        RegisterRunMethod = LspMethodNames.ReqnrollRegisterTestRun,
-                        GetOutcomeMethod = LspMethodNames.ReqnrollGetTestOutcome,
-                        ChangedNotification = LspMethodNames.ReqnrollTestOutcomesChanged,
+                        RegisterRunMethod = CustomLspMethodNames.ReqnrollRegisterTestRun,
+                        GetOutcomeMethod = CustomLspMethodNames.ReqnrollGetTestOutcome,
+                        ChangedNotification = CustomLspMethodNames.ReqnrollTestOutcomesChanged,
                     });
             }
 
@@ -425,47 +426,47 @@ public class Program
 
                 extensionData["reqnrollWorkspaceLifecycleProvider"] = JObject.FromObject(new ReqnrollWorkspaceLifecycleOptions
                 {
-                    ProjectLoadedMethod = LspMethodNames.ReqnrollProjectLoaded,
-                    ProjectUnloadedMethod = LspMethodNames.ReqnrollProjectUnloaded,
-                    ProjectFilesMethod = LspMethodNames.ReqnrollProjectFiles,
+                    ProjectLoadedMethod = CustomLspMethodNames.ReqnrollProjectLoaded,
+                    ProjectUnloadedMethod = CustomLspMethodNames.ReqnrollProjectUnloaded,
+                    ProjectFilesMethod = CustomLspMethodNames.ReqnrollProjectFiles,
                 });
 
                 extensionData["reqnrollFindStepUsagesProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepUsages });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindStepUsages });
 
                 extensionData["reqnrollFindHooksProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindHooks });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindHooks });
 
                 extensionData["reqnrollFindStepDefinitionsProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindStepDefinitions });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindStepDefinitions });
 
                 extensionData["reqnrollFindMatchingScenariosProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindMatchingScenarios });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindMatchingScenarios });
 
                 extensionData["reqnrollResolveTestTargetsProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollResolveTestTargets });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollResolveTestTargets });
 
                 extensionData["reqnrollFindUnusedStepDefinitionsProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollFindUnusedStepDefinitions });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions });
 
                 extensionData["reqnrollStepRenameProvider"] = JObject.FromObject(new ReqnrollStepRenameOptions
                 {
-                    RenameTargetsMethod = LspMethodNames.ReqnrollRenameTargets,
-                    SelectRenameTargetMethod = LspMethodNames.ReqnrollSelectRenameTarget,
-                    RenameAppliedMethod = LspMethodNames.ReqnrollRenameApplied,
+                    RenameTargetsMethod = CustomLspMethodNames.ReqnrollRenameTargets,
+                    SelectRenameTargetMethod = CustomLspMethodNames.ReqnrollSelectRenameTarget,
+                    RenameAppliedMethod = CustomLspMethodNames.ReqnrollRenameApplied,
                 });
 
                 extensionData["reqnrollRefreshCodeLensProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollRefreshCodeLens });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollRefreshCodeLens });
 
                 extensionData["reqnrollSemanticTokensPushProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollSemanticTokens });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollSemanticTokens });
 
                 extensionData["reqnrollDocumentSymbolHierarchicalProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollDocumentSymbolHierarchical });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical });
 
                 extensionData["reqnrollDocumentActivatedProvider"] = JObject.FromObject(
-                    new ReqnrollMethodProvider { Method = LspMethodNames.ReqnrollDocumentActivated });
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollDocumentActivated });
             }
         });
     }
