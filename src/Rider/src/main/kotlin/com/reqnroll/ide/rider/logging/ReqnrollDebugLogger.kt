@@ -51,26 +51,30 @@ object ReqnrollDebugLogger {
     private val logFile: File by lazy { resolveLogFile() }
     private val consoleSinks = CopyOnWriteArrayList<ReqnrollConsoleSink>()
 
-    /** The effective log level for file writes, sourced from the `REQNROLLVS_DEBUG` environment variable. */
-    private val fileLogLevel: String by lazy {
-        val env = System.getenv("REQNROLLVS_DEBUG")?.uppercase() ?: ""
-        when {
-            env == "1" || env == "TRUE" || env == "VERBOSE" -> "Verbose"
-            env == "INFO" -> "Info"
-            env == "WARNING" || env == "WARN" -> "Warning"
-            env == "ERROR" -> "Error"
-            env == "OFF" -> "Off"
-            else -> "Verbose" // default: write every level (matches pre-#793 behaviour)
-        }
+    /** The effective file-log threshold, sourced from the `REQNROLLVS_DEBUG` environment variable. */
+    private val fileLogThreshold: String by lazy { resolveFileLogThreshold(System.getenv("REQNROLLVS_DEBUG")) }
+
+    /**
+     * Maps `REQNROLLVS_DEBUG` onto a file-log threshold using the same rules as the LSP server's
+     * `SynchronousFileLogger.ApplyDebugEnvironmentOverride`: `1`/`true` mean `Verbose`, otherwise a
+     * `Off`/`Error`/`Warning`/`Info`/`Verbose` name (case-insensitive). Unset or unrecognized keeps this
+     * log's historical default of writing every level (`Verbose`). Exposed for testing.
+     */
+    internal fun resolveFileLogThreshold(env: String?): String {
+        val value = env?.trim() ?: return "Verbose"
+        if (value == "1" || value.equals("true", ignoreCase = true)) return "Verbose"
+        return listOf("Off", "Error", "Warning", "Info", "Verbose")
+            .firstOrNull { it.equals(value, ignoreCase = true) } ?: "Verbose"
     }
 
-    /** Priority ordering: Error (4) > Warning (3) > Info (2) > Verbose (1) > Off (0). */
-    private fun levelPriority(level: String): Int = when (level) {
-        "Error" -> 4; "Warning" -> 3; "Info" -> 2; "Verbose" -> 1; else -> 0
+    /** Severity rank: Verbose (1) < Info (2) < Warning (3) < Error (4) < Off (5, above every real level). */
+    private fun levelRank(level: String): Int = when (level) {
+        "Verbose" -> 1; "Info" -> 2; "Warning" -> 3; "Error" -> 4; else -> 5
     }
 
-    private fun shouldLog(level: String): Boolean =
-            levelPriority(level) >= levelPriority(fileLogLevel)
+    /** True when an entry at [level] should be written under [threshold]; `Off` suppresses every level. Exposed for testing. */
+    internal fun shouldLog(level: String, threshold: String): Boolean =
+        levelRank(level) >= levelRank(threshold)
 
     fun info(message: String) = log("Info", message, null)
     fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
@@ -106,9 +110,9 @@ object ReqnrollDebugLogger {
         "${formatTimestamp(instant)} [${level.padEnd(LEVEL_FIELD_WIDTH)}] $message"
 
     @Synchronized
-        private fun log(level: String, message: String, throwable: Throwable?) {
-            if (!shouldLog(level)) return
-            try {
+    private fun log(level: String, message: String, throwable: Throwable?) {
+        if (!shouldLog(level, fileLogThreshold)) return
+        try {
             logFile.parentFile?.mkdirs()
             val line = buildString {
                 append(formatLine(Instant.now(), level, message))
