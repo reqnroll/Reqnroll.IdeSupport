@@ -21,13 +21,7 @@ public sealed class LspIdeSupportLogger : IIdeSupportLogger
     /// <summary>Creates the composite logger for the current client IDE and logs a session-start banner.</summary>
     public LspIdeSupportLogger(ClientIdeContext clientIdeContext)
     {
-        var idePrefix = clientIdeContext.Ide switch
-                {
-                    "visualstudio" => "vs",
-                    "vscode"       => "vscode",
-                    "rider"        => "rider",
-                    _              => "lsp"   // unknown or absent --ide; avoid misattributing to a known IDE
-                };
+        var idePrefix = IdeLogPrefix.From(clientIdeContext.Ide);
         _inner = new IdeSupportCompositeLogger()
             .Add(new IdeSupportDebugLogger())
             .Add(new SynchronousFileLogger(idePrefix, "server", clientIdeContext.LogLevel));
