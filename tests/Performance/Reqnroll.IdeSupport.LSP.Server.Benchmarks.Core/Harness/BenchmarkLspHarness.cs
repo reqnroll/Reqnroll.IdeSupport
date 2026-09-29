@@ -170,7 +170,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             // Run lenses" signal. A notification, not a request — nothing to send back, just a
             // timestamp and a counter so an ingest can be timed against the push it caused
             // (issue #714, harness plumbing F).
-            options.OnNotification(LspMethodNames.ReqnrollTestOutcomesChanged, (TestOutcomesChangedParams _) =>
+            options.OnNotification(CustomLspMethodNames.ReqnrollTestOutcomesChanged, (TestOutcomesChangedParams _) =>
             {
                 lock (_testOutcomesLock)
                 {
@@ -426,7 +426,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// may call it whenever it needs an endpoint to post synthetic results at.
     /// </summary>
     public Task<RegisterTestRunResponse?> RequestRegisterTestRunAsync(CancellationToken ct = default) =>
-        RequestAsync<RegisterTestRunResponse?>(LspMethodNames.ReqnrollRegisterTestRun, new RegisterTestRunParams(), ct);
+        RequestAsync<RegisterTestRunResponse?>(CustomLspMethodNames.ReqnrollRegisterTestRun, new RegisterTestRunParams(), ct);
 
     /// <summary>
     /// <c>reqnroll/testOutcomes/getOutcome</c> — the Run CodeLens's outcome lookup.
@@ -436,7 +436,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// </summary>
     public Task<GetTestOutcomeResponse?> RequestGetTestOutcomeAsync(
         string assemblyPath, string typeFullName, string methodName, CancellationToken ct = default) =>
-        RequestAsync<GetTestOutcomeResponse?>(LspMethodNames.ReqnrollGetTestOutcome,
+        RequestAsync<GetTestOutcomeResponse?>(CustomLspMethodNames.ReqnrollGetTestOutcome,
             new GetTestOutcomeParams
             {
                 AssemblyPath = assemblyPath,
