@@ -1,6 +1,7 @@
 /**
  * Centralizes the custom `reqnroll/*` LSP method names used by this extension, mirroring
- * `LspMethodNames.cs` on the server (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol`).
+ * `CustomLspMethodNames.cs` in the shared `Reqnroll.IdeSupport.Common` project
+ * (`src/Core/Reqnroll.IdeSupport.Common/Lsp/CustomLspMethodNames.cs`).
  * Keep the two lists in sync when adding a new custom message.
  *
  * Standard LSP methods (`textDocument/codeLens`, `workspace/executeCommand`,

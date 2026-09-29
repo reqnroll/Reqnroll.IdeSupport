@@ -53,7 +53,7 @@ async function withStub<TNamespace extends object, TKey extends keyof TNamespace
 suite('renameStep', () => {
   suite('ReqnrollMethods', () => {
     test('defines the rename LSP method names the server implements', () => {
-      // Mirrors LspMethodNames.cs — a mismatch here means the client and server drift apart.
+      // Mirrors CustomLspMethodNames.cs — a mismatch here means the client and server drift apart.
       assert.strictEqual(ReqnrollMethods.renameTargets, 'reqnroll/renameTargets');
       assert.strictEqual(ReqnrollMethods.selectRenameTarget, 'reqnroll/selectRenameTarget');
     });
