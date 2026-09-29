@@ -90,7 +90,7 @@ suite('createTraceChannel file output', () => {
     await config.update('trace.server', 'verbose', vscode.ConfigurationTarget.Global);
     channel = createTraceChannel();
 
-    channel.trace("Sending request 'textDocument/hover - (7)'.\nParams: {\"x\":1}");
+    channel.trace('Sending request \'textDocument/hover - (7)\'.\nParams: {"x":1}');
     channel.dispose();
     channel = undefined;
 
