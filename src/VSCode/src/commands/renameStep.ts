@@ -314,7 +314,7 @@ export async function renameStepFromCSharp(
 
   let result: LspWorkspaceEdit | null;
   try {
-    result = await client.sendRequest<LspWorkspaceEdit | null>(RenameRequest.type.method, {
+    result = await client.sendRequest(RenameRequest.type, {
       textDocument: { uri: uriStr },
       position: { line: position.line, character: position.character },
       newName: newStepText,
