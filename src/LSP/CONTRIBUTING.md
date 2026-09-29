@@ -120,6 +120,24 @@ configurable fraction cancelled mid-flight to exercise `$/cancelRequest`. It mea
 *under load*, so its numbers will be ≥ the isolated `run` numbers by design; it's report-only
 (no `--assert`), meant to catch load-dependent regressions the isolated numbers can't see.
 
+The suite also covers the LSP-server test-outcome pipeline (#700/#702, benchmarked by #714): the
+outcome store, the loopback NDJSON ingest path, the throttled `reqnroll/testOutcomes/changed` push
+and persistence. The scenarios drive the listener directly over a loopback socket the way the bundled
+VSTest logger does, instead of shelling out to `vstest` — that is what keeps them hermetic and
+reproducible. Two things to know before extending them:
+
+- **The outcome store is redirected for the whole run.** Both `run` and `session` point the server at
+  a per-run temp file via `REQNROLL_TEST_OUTCOMES_PATH` before the first server starts
+  (`TestOutcomePersistence.FilePathEnvironmentVariable` — the same seam `REQNROLL_MTP_SESSIONS_DIR`
+  and `REQNROLL_TESTLOGGER_FILE` give their own state files). Without it, any
+  `getOutcome`/`registerRun` scenario would measure *and overwrite* your real 30-day
+  `%LOCALAPPDATA%\Reqnroll\test-outcomes.json`. The variable is unset in every normal session, and the
+  redirect covers `--out-of-process` too, since the spawned exe inherits the benchmark's environment.
+- **The persistence-scale scenario deliberately writes ~10k methods**, across containers that are
+  missing, rebuilt-since and fresh, because that mix is what a real 30-day history looks like. Its
+  `testOutcomes/persistence#load` and `#save` numbers are therefore dominated by JSON parsing and
+  container stats — do not read them as the lookup's own cost; that is `getOutcome#found`.
+
 **Regenerating the corpus** (only when you deliberately want to change its size/shape — e.g. you
 changed the generator's feature/pattern counts):
 

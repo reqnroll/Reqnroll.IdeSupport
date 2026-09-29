@@ -38,6 +38,11 @@ public static class BenchmarkRunner
         var serverExe = StringArg(args, "--server-exe") ?? (outOfProcess ? ServerExeLocator.Find() : null);
         var gate = ReferenceMachine.FromEnvironment(args);
 
+        // Issue #714's hermeticity prerequisite, benchmark side: the outcome store must never read or
+        // write the developer's real %LOCALAPPDATA%\Reqnroll\test-outcomes.json. Set before the first
+        // server starts — the path is resolved once, when the store's persistence is constructed.
+        using var outcomes = TestOutcomePersistenceRedirect.Begin();
+
         var corpusRoot = CorpusLocator.FindCorpusRoot();
         var manifest = CorpusManifest.Load(CorpusLocator.ManifestPath(corpusRoot));
 
@@ -104,6 +109,29 @@ public static class BenchmarkRunner
             (PerfTargets.CSharpDiagnosticsPush, await scenarios.CSharpDiagnosticsPushAsync(corpusRoot).ConfigureAwait(false)),
         };
 
+        // ── The LSP-server test-outcome pipeline (issue #714) ────────────────────
+        // registerRun runs first on purpose: its very first call on a server is what binds the
+        // loopback listener, and the scenario reports that one-off bind cost separately, so it must
+        // not be a call the seeding below has already made.
+        summaries.Add((PerfTargets.RegisterTestRun,
+            await scenarios.RegisterTestRunAsync().ConfigureAwait(false)));
+
+        // Seed the store through the listener (no vstest needed) so the lookups have something real to
+        // find. Gated on the corpus assembly because its path is the seeded result's container, and a
+        // container that exists on disk is what makes the outcome fresh rather than a stale artefact.
+        SeededTestOutcome? seededOutcome = null;
+        if (corpusAssembly is not null)
+        {
+            Console.WriteLine("Seeding the outcome store (registerRun -> loopback NDJSON)...");
+            seededOutcome = await TestOutcomeScenarios.SeedAsync(harness, corpusAssembly).ConfigureAwait(false);
+            summaries.Add((PerfTargets.GetTestOutcome,
+                await scenarios.GetTestOutcomeAsync(seededOutcome).ConfigureAwait(false)));
+            summaries.Add((PerfTargets.GetTestOutcomeFound,
+                await scenarios.GetTestOutcomeFoundAsync(seededOutcome).ConfigureAwait(false)));
+        }
+        summaries.Add((PerfTargets.GetTestOutcomeNotFound,
+            await scenarios.GetTestOutcomeNotFoundAsync().ConfigureAwait(false)));
+
         // Batch scenarios (coarse wall-clock). Cold start spins up fresh servers, so it is opt-out
         // via --no-batch for quick interactive-only runs.
         List<(double initMs, double parseMs)>? coldStartPhases = null;
@@ -130,7 +158,49 @@ public static class BenchmarkRunner
         // Binding-discovery batch scenarios: only measurable once a built corpus bindings assembly
         // is available (see Reqnroll.IdeSupport.LSP.Server.Benchmarks.Corpus). Otherwise reported as
         // skipped rather than measured against an empty registry.
-        var skipped = BatchScenarios.UnavailableDiscoveryScenarios(corpusAssembly);
+        var skipped = BatchScenarios.UnavailableDiscoveryScenarios(corpusAssembly).ToList();
+        if (seededOutcome is null)
+            skipped.AddRange(TestOutcomeScenarios.UnavailableScenarios(corpusAssembly));
+
+        // Test-outcome pipeline batch scenarios (issue #714, scenarios B/E + the changed push).
+        if (includeBatch)
+        {
+            Console.WriteLine("Running test-outcome pipeline scenarios (ingest burst, changed push, persistence scale)...");
+
+            // One result per corpus test case for the realistic scale, then the issue's 2,000-scenario
+            // stress size — both reported under the one label, with the per-scale breakdown printed.
+            var outcomeProbeSource = corpusAssembly ?? TestOutcomeScenarios.UnseededAssemblyPath;
+            var ingestScales = new (int ResultCount, int Repetitions)[]
+            {
+                (manifest.Fingerprint.ScenarioCount + manifest.Fingerprint.ScenarioOutlineCount, 3),
+                (2_000, 1),
+            };
+            summaries.Add((PerfTargets.TestOutcomesIngestBurst,
+                await TestOutcomeScenarios.IngestBurstAsync(
+                    harness, outcomes.FilePath, outcomeProbeSource, ingestScales).ConfigureAwait(false)));
+
+            summaries.Add((PerfTargets.TestOutcomesChanged,
+                await TestOutcomeScenarios.ChangedPushAsync(harness, outcomeProbeSource).ConfigureAwait(false)));
+
+            // The persistence-scale scenarios own a deliberately large fixture file, so they run under
+            // their own redirected store path (see TestOutcomePersistenceRedirect.UseStore): sharing the
+            // run's own file would let a listener Save — which can fire at any moment, whenever a
+            // connection closes — overwrite the fixture between writing it and reading it back.
+            var scaleStorePath = outcomes.ForFile("persistence-scale.json");
+            var scaleContainerDirectory = Path.Combine(outcomes.ContainerDirectory, "scale");
+            using (outcomes.UseStore(scaleStorePath))
+            {
+                summaries.Add((PerfTargets.TestOutcomesPersistenceLoad,
+                    await TestOutcomeScenarios.PersistenceLoadAsync(
+                        corpusRoot, scaleStorePath, scaleContainerDirectory).ConfigureAwait(false)));
+
+                // Save runs after the load: it rewrites the very file the load scenario reads, so running
+                // them in this order keeps each measurement's fixture intact.
+                summaries.Add((PerfTargets.TestOutcomesPersistenceSave,
+                    await TestOutcomeScenarios.PersistenceSaveAsync(
+                        corpusRoot, scaleStorePath, scaleContainerDirectory).ConfigureAwait(false)));
+            }
+        }
 
         // Unlike the corpusAssembly-gated group above, this needs no compiled assembly — it opens
         // its own throwaway, syntax-discovered .cs/.feature pair per repetition (issue #671, R3
@@ -195,6 +265,16 @@ public static class BenchmarkRunner
             contentionChecks.Add(await new RenameSerialLaneContentionScenario(
                 harness, restoredFiles, probe, new RenameSerialLaneContentionOptions())
                 .RunAsync().ConfigureAwait(false));
+
+            if (seededOutcome is not null)
+            {
+                Console.WriteLine("Running dispatch-fairness scenario (test-outcome fan-out: a streaming run's " +
+                                   "changed pushes racing concurrent Run CodeLens recomputes, issue #714)...");
+                var outcomeFanOut = await TestOutcomesContentionScenario.CreateAsync(
+                    harness, corpusRoot, probe, seededOutcome, new TestOutcomesContentionOptions())
+                    .ConfigureAwait(false);
+                contentionChecks.Add(await outcomeFanOut.RunAsync().ConfigureAwait(false));
+            }
         }
 
         var results = summaries.Select(s => new OperationResult(s.Target, s.Summary)).ToList();
