@@ -805,6 +805,17 @@ The following latency targets apply at **P95** (the 95th-percentile: 95% of requ
 
 > **Note**: These are design targets, not contractual SLAs. Benchmarks should be established in Phase 1 (against the F1 integration spec) and revisited as the feature set grows.
 
+> **Measured, no published threshold.** Several operations are field-instrumented (Layer 4) and
+> benchmarked (Layer 2) but carry no target in the table above, so their `PerfTargets` entries report
+> `—` and are never asserted (the #119 convention). The LSP-server test-outcome pipeline
+> (#700/#702, benchmarked by #714) added the largest batch: `reqnroll/testOutcomes/getOutcome` (bare,
+> plus its `#found`/`#not-found` variants), `reqnroll/testOutcomes/registerRun`,
+> `testOutcomes/ingest#results-burst`, `reqnroll/testOutcomes/changed`, and
+> `testOutcomes/persistence#load`/`#save`. The bare `getOutcome` row is what keeps the Layer 4 field
+> label and its synthetic counterpart aligned 1:1 — the variants exist because a cache hit and a miss
+> are genuinely different costs, not to replace it. They stay `—` until a threshold is proposed from
+> reference-machine data; their presence means "measured", not "expected to hit a number".
+
 ### Performance Verification
 
 The latency targets above are only meaningful if there is a defined mechanism to confirm them. Two distinct shapes of target need different verification:

@@ -19,6 +19,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using LspCodeLens = OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens;
@@ -52,6 +53,10 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     private long? _lastSemanticTokensRefreshTimestamp;
     private long? _lastInlayHintRefreshTimestamp;
     private long? _lastCodeLensRefreshTimestamp;
+
+    private readonly object _testOutcomesLock = new();
+    private long _lastTestOutcomesChangedTimestamp; // Stopwatch timestamp, 0 = none received yet
+    private int _testOutcomesChangedCount;
 
     public ILanguageClient Client =>
         _client ?? throw new InvalidOperationException("Harness not started.");
@@ -158,6 +163,20 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             options.OnRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastCodeLensRefreshTimestamp = Stopwatch.GetTimestamp();
+                return Task.CompletedTask;
+            });
+
+            // reqnroll/testOutcomes/changed: the outcome listener's throttled (250ms) "re-pull your
+            // Run lenses" signal. A notification, not a request — nothing to send back, just a
+            // timestamp and a counter so an ingest can be timed against the push it caused
+            // (issue #714, harness plumbing F).
+            options.OnNotification(CustomLspMethodNames.ReqnrollTestOutcomesChanged, (TestOutcomesChangedParams _) =>
+            {
+                lock (_testOutcomesLock)
+                {
+                    _lastTestOutcomesChangedTimestamp = Stopwatch.GetTimestamp();
+                    _testOutcomesChangedCount++;
+                }
                 return Task.CompletedTask;
             });
         }).ConfigureAwait(false);
@@ -398,6 +417,33 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 Range = range,
             }, ct);
 
+    // ── Test outcomes (issues #700/#714) ────────────────────────────────────────
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/registerRun</c> — the IDE's runsettings-injection service's call,
+    /// once per Test Explorer execution request. Idempotent from the client's point of view (the
+    /// listener is started lazily on the first call and lives for the server process), so a scenario
+    /// may call it whenever it needs an endpoint to post synthetic results at.
+    /// </summary>
+    public Task<RegisterTestRunResponse?> RequestRegisterTestRunAsync(CancellationToken ct = default) =>
+        RequestAsync<RegisterTestRunResponse?>(CustomLspMethodNames.ReqnrollRegisterTestRun, new RegisterTestRunParams(), ct);
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/getOutcome</c> — the Run CodeLens's outcome lookup.
+    /// <paramref name="assemblyPath"/> is the generated test container (<c>TestOutcomeKey.Source</c>),
+    /// <paramref name="typeFullName"/> the generated feature class and <paramref name="methodName"/>
+    /// the generated method name without its parameter signature.
+    /// </summary>
+    public Task<GetTestOutcomeResponse?> RequestGetTestOutcomeAsync(
+        string assemblyPath, string typeFullName, string methodName, CancellationToken ct = default) =>
+        RequestAsync<GetTestOutcomeResponse?>(CustomLspMethodNames.ReqnrollGetTestOutcome,
+            new GetTestOutcomeParams
+            {
+                AssemblyPath = assemblyPath,
+                TypeFullName = typeFullName,
+                MethodName = methodName,
+            }, ct);
+
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────
 
     public Task<LspCodeLens[]?> RequestCodeLensAsync(DocumentUri uri, CancellationToken ct = default) =>
@@ -480,7 +526,46 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     // the same way — triggered by BindingRegistryChangedHandler's incremental-Roslyn-patch path,
     // not by a plain .feature edit, so callers must edit a .cs binding file to exercise this one.
     public Task<double?> WaitForCodeLensRefreshAsync(long sinceTimestamp, int timeoutMs = 3000) =>
-        WaitForRefreshAsync(() => _lastCodeLensRefreshTimestamp, sinceTimestamp, timeoutMs);
+            WaitForRefreshAsync(() => _lastCodeLensRefreshTimestamp, sinceTimestamp, timeoutMs);
+
+    /// <summary>
+    /// Waits for the next <c>reqnroll/testOutcomes/changed</c> push after <paramref name="sinceTimestamp"/>
+    /// and returns the elapsed milliseconds from that origin, or null on timeout. The listener
+    /// throttles (rather than debounces) at 250ms, so a caller that posts a result should expect
+    /// roughly that fixed delay before the push — which is why that target carries
+    /// <c>IncludesFixedDelay</c>.
+    /// </summary>
+    public Task<double?> WaitForTestOutcomesChangedAsync(long sinceTimestamp, int timeoutMs = 3000) =>
+        WaitForRefreshAsync(() =>
+        {
+            lock (_testOutcomesLock)
+                return _lastTestOutcomesChangedTimestamp == 0 ? null : _lastTestOutcomesChangedTimestamp;
+        }, sinceTimestamp, timeoutMs);
+
+    /// <summary>How many <c>reqnroll/testOutcomes/changed</c> pushes this client has received so far.</summary>
+    public int TestOutcomesChangedCount { get { lock (_testOutcomesLock) return _testOutcomesChangedCount; } }
+
+    /// <summary>
+    /// Waits until <paramref name="path"/> has been written since <paramref name="sinceUtc"/> — the
+    /// observable signal for the outcome listener's one non-LSP side effect, its trailing
+    /// <c>TestOutcomePersistence.Save</c>, which nothing on the wire announces. Returns false on
+    /// timeout. The poll interval is the only imprecision, so a caller folding this into its own
+    /// measured window carries up to one poll interval of slack.
+    /// </summary>
+    public static async Task<bool> WaitForFileWriteAsync(string path, DateTime sinceUtc, int timeoutMs = 5000, int pollMs = 5)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                if (File.Exists(path) && File.GetLastWriteTimeUtc(path) > sinceUtc) return true;
+            }
+            catch (Exception) { }
+            await Task.Delay(pollMs).ConfigureAwait(false);
+        }
+        return false;
+    }
 
     private async Task<double?> WaitForRefreshAsync(Func<long?> readTimestamp, long sinceTimestamp, int timeoutMs)
     {
