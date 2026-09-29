@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.Telemetry;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -15,11 +16,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// </remarks>
 internal sealed class TelemetryEventInterceptor : ILspMessageInterceptor
 {
-    // Local constant rather than LspMethodNames.TelemetryEvent because the VS Extension
-    // references LSP.Server with <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-    // and therefore cannot consume its types at compile time.
-    private const string TelemetryEventMethod = "telemetry/event";
-
     private readonly Func<ITelemetryTransmitter?> _getTransmitter;
     private readonly ILogger<TelemetryEventInterceptor> _logger;
 
@@ -41,7 +37,7 @@ internal sealed class TelemetryEventInterceptor : ILspMessageInterceptor
         if (message.Direction != LspMessageDirection.Receive)
             return Task.FromResult(LspInterceptorResult.PassThrough);
 
-        if (message.Method != TelemetryEventMethod)
+        if (message.Method != LspStandardMethodNames.TelemetryEvent)
             return Task.FromResult(LspInterceptorResult.PassThrough);
 
         var transmitter = _getTransmitter();

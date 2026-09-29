@@ -6,10 +6,8 @@ namespace Reqnroll.IdeSupport.Common.Lsp;
 /// and all IDE client extensions.
 /// </summary>
 /// <remarks>
-/// Custom <c>reqnroll/*</c> method names are kept in each project's own class
-/// (<c>LspMethodNames</c> in the server, <c>ReqnrollMethodNames</c> in the VS extension,
-/// <c>ReqnrollMethods</c> in the VS Code extension, LSP4J interfaces in Rider) since
-/// those are per-project by necessity and have no cross-project reuse benefit.
+/// Custom <c>reqnroll/*</c> method names live in <see cref="CustomLspMethodNames"/> (same
+/// namespace, shared by the server and the VS extension) rather than this class.
 /// </remarks>
 public static class LspStandardMethodNames
 {

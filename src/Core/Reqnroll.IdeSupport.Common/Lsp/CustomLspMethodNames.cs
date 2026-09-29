@@ -1,10 +1,10 @@
 namespace Reqnroll.IdeSupport.Common.Lsp;
 
 /// <summary>
-/// Centralizes the custom <c>reqnroll/*</c> LSP method names the Visual Studio extension sends or
-/// receives (issue #682) -- the VS-side counterpart to the server's own
-/// <c>LspMethodNames</c> (<c>src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/LspMethodNames.cs</c>),
-/// VS Code's <c>ReqnrollMethods</c> (<c>src/VSCode/src/lsp/lspMethods.ts</c>), and Rider's
+/// Centralizes the custom <c>reqnroll/*</c> LSP method names shared by the LSP server and the
+/// Visual Studio extension (issue #682) -- the counterpart to
+/// <see cref="Common.Lsp.LspStandardMethodNames"/> for standard methods, VS Code's
+/// <c>ReqnrollMethods</c> (<c>src/VSCode/src/lsp/lspMethods.ts</c>), and Rider's
 /// <c>@JsonRequest</c>/<c>@JsonNotification</c>-annotated <c>ReqnrollLanguageServer</c> interface.
 /// Standard LSP methods (<c>textDocument/*</c>, <c>workspace/*</c>, etc.) are out of scope here --
 /// this file is custom Reqnroll extensions only. See <see cref="Common.Lsp.LspStandardMethodNames"/> for the

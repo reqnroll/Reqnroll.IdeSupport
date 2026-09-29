@@ -271,7 +271,7 @@ Reqnroll.IdeSupport/
 │   │   │   └── globalUsings.cs
 │   │   │
 │   │   ├── Reqnroll.IdeSupport.LSP.Server/      # OmniSharp LSP host (net10.0, exe)
-│   │   │   ├── Protocol/                        # LspMethodNames constants; Documents/ = document extension helpers
+│   │   │   ├── Protocol/                        # wire DTOs; method names live in Reqnroll.IdeSupport.Common/Lsp; Documents/ = document extension helpers
 │   │   │   ├── Features/                        # OmniSharp handler classes (LSP messages), one folder per capability (e.g. Features/Completions, Features/Formatting, Features/SemanticTokens)
 │   │   │   ├── Pipeline/                        # MediatR notification handlers (internal events)
 │   │   │   ├── Hosting/                         # Program.cs, LanguageServerOptionsExtensions (capability + reqnroll/* registration), ClientIdeContext, ResilientMediator, ServiceCollectionExtensions
@@ -447,7 +447,7 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `FoldingRangeHandler` | `textDocument/foldingRange` |
 | `InlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
 | `FormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
-| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspMethodNames` like every other method) |
+| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspStandardMethodNames` like every other method) |
 | `ReferencesHandler` | `textDocument/references` (from `.cs` cursors; two-state) |
 | `FindStepUsagesHandler` | `reqnroll/findStepUsages` (custom; three-state: isBinding false / 0 usages / locations) |
 | `RenameHandler` | `textDocument/prepareRename`, `textDocument/rename`, `reqnroll/selectRenameTarget` (retains the session state for a picked disambiguation target between requests) |
