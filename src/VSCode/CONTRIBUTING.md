@@ -238,7 +238,10 @@ fails. See
 [../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
 for the full mechanism.
 
-**The log file is the reliable place to look.** The SilentLspTraceChannel writes directly to disk and is the only artifact for debugging and support — the visible Output panel for the wire trace was removed in issue #792.
+**The log file is the only place to look.** `FileLspTraceChannel` (in `lspInspectorLogger.ts`) is a
+file-only `LogOutputChannel` passed to `vscode-languageclient` as its `traceOutputChannel` — the
+client's sole trace hook, and one that requires that type. Its display members are deliberate
+no-ops, so no Output panel exists for the wire trace (removed in issue #792).
 
 ## CI
 

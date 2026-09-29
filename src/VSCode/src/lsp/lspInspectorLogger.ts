@@ -4,13 +4,19 @@ import * as vscode from 'vscode';
 import { resolveLogDirectory } from '../logging/logPaths';
 
 /**
- * A VS Code LogOutputChannel that writes LSP trace messages to a timestamped
- * log file in lsp-viewer format, without surfacing a user-visible Output panel.
+ * A file-only sink for the LSP wire trace, shaped as a `vscode.LogOutputChannel` so it can be
+ * handed to vscode-languageclient as its `traceOutputChannel`.
  *
- * vscode-languageclient expects a LogOutputChannel as its traceOutputChannel
- * to read logLevel (whether tracing is enabled) and to receive trace()
- * calls for each JSON-RPC message.  The per-message log file is adequate for
- * debugging and support; a visible output pane serves no purpose for end users.
+ * Why this class exists at all (issue #792 removed the visible "Reqnroll LSP Trace" Output pane,
+ * not the trace): `traceOutputChannel` is vscode-languageclient's only hook for receiving the
+ * per-message trace, and it insists on a `LogOutputChannel` — there is no "write the trace to this
+ * file" option. Passing nothing would make the client create its own visible "... Trace" pane
+ * (which is what #792 removed), and passing a plain object would not type-check. So this class
+ * implements that interface, keeps the one method the client feeds (`trace()`) and the level
+ * plumbing it reads (`logLevel`/`onDidChangeLogLevel`), and turns every display-oriented member
+ * (`append`, `show`, `info`, ...) into a deliberate no-op. Nothing is ever shown in the Output
+ * panel; the timestamped log file is the only artifact, and it is adequate for debugging and
+ * support.
  *
  * Why LogOutputChannel (not plain OutputChannel):
  *   vscode-languageclient v10 types traceOutputChannel as LogOutputChannel and
@@ -33,13 +39,12 @@ import { resolveLogDirectory } from '../logging/logPaths';
  *   so we parse it and reconstruct the JSON-RPC envelope ourselves.
  *
  * File path convention:
- *   Windows : %LOCALAPPDATA%\Reqnroll
-eqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
- *   macOS   : ~/Library/Logs/Reqnroll/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
- *   Linux   : ~/.local/share/Reqnroll/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
+ *   Windows : %LOCALAPPDATA%\Reqnroll\logs\reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
+ *   macOS   : ~/Library/Logs/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
+ *   Linux   : ~/.local/share/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log
  */
-class SilentLspTraceChannel implements vscode.LogOutputChannel {
-  readonly name = 'Reqnroll LSP Trace';
+class FileLspTraceChannel implements vscode.LogOutputChannel {
+  readonly name = 'Reqnroll LSP Trace (file only)';
   private _stream: fs.WriteStream | undefined;
   private readonly _onDidChangeLogLevel = new vscode.EventEmitter<vscode.LogLevel>();
   private readonly _configListener: vscode.Disposable;
@@ -178,7 +183,7 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
  */
 // Exported for lspInspectorFormatConformance.test.ts (issue #628) - not used outside this module
 // in production, but the cross-language wire-format check needs direct access to the parsed
-// envelope rather than going through the full TeeLogOutputChannel/file-write path.
+// envelope rather than going through the full FileLspTraceChannel/file-write path.
 export function parseLspTraceMessage(text: string): LspEntry | undefined {
   const nl = text.indexOf('\n');
   const firstLine = nl >= 0 ? text.slice(0, nl) : text;
@@ -267,13 +272,13 @@ export function traceServerToLogLevel(): 'Warning' | 'Info' | 'Verbose' {
  * is persisted in lsp-viewer format.
  *
  * No user-visible Output panel is created â€” the log file is the only trace
- * artifact.  The "Reqnroll LSP Trace" channel was removed per issue #792.
+ * artifact.  The "Reqnroll LSP Trace" pane was removed per issue #792.
  */
 export function createTraceChannel(): vscode.LogOutputChannel {
   const level = vscode.workspace.getConfiguration('reqnroll').get<string>('trace.server', 'off');
 
   if (level === 'off') {
-    return new SilentLspTraceChannel(undefined);
+    return new FileLspTraceChannel(undefined);
   }
 
   let stream: fs.WriteStream | undefined;
@@ -288,5 +293,5 @@ export function createTraceChannel(): vscode.LogOutputChannel {
     // File logging unavailable; no fallback needed (no panel to write to).
   }
 
-  return new SilentLspTraceChannel(stream);
+  return new FileLspTraceChannel(stream);
 }
