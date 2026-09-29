@@ -1,7 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
 /// <summary>
@@ -34,7 +34,7 @@ internal static class CodeLensRefreshRequester
             try
             {
                 languageServer.SendNotification(
-                    LspMethodNames.ReqnrollRefreshCodeLens,
+                    CustomLspMethodNames.ReqnrollRefreshCodeLens,
                     new RefreshCodeLensParams { ProjectName = projectName, IsFullReplacement = isFullReplacement });
             }
             catch (Exception ex)
@@ -48,7 +48,7 @@ internal static class CodeLensRefreshRequester
         try
         {
             await languageServer.Client
-                .SendRequest(LspMethodNames.WorkspaceCodeLensRefresh)
+                .SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh)
                 .ReturningVoid(cancellationToken)
                 .ConfigureAwait(false);
         }

@@ -1,5 +1,24 @@
 # Troubleshooting / FAQ
 
+## How do I report a bug?
+
+File an issue on the
+[Reqnroll.IdeSupport repository](https://github.com/reqnroll/Reqnroll.IdeSupport/issues),
+including your IDE and version, the extension version, and — if possible —
+the relevant log file (see [Where are the logs](#where-are-the-logs-and-how-do-i-change-the-log-level)
+below).
+
+## Known per-IDE limitations
+
+* **Visual Studio** — the native Document Outline window does not show
+  `.feature` file structure. See [Document Outline](editing-features/document-outline.md).
+* **Visual Studio** — native "Find All References" (Shift+F12) does not
+  route to Reqnroll step bindings; use the dedicated entry point instead.
+  See [Find Step Definition Usages](navigation-features/find-usages.md).
+* **VS Code** — Rename doesn't yet support disambiguating a step bound to
+  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
+  for the workaround (Rider and Visual Studio both handle this case).
+
 ## Can I have both extensions installed at once?
 
 Both **can** be installed side by side — installing one doesn't remove the
@@ -12,17 +31,6 @@ If you have both installed, disable one: **Extensions → Manage
 Extensions**, select the extension you're not using, and click
 **Disable**. See [Installation](installation/index.md) (Visual Studio tab)
 for how to tell the two listings apart in the Marketplace.
-
-## Known per-IDE limitations
-
-* **Visual Studio** — the native Document Outline window does not show
-  `.feature` file structure. See [Document Outline](editing-features/document-outline.md).
-* **Visual Studio** — native "Find All References" (Shift+F12) does not
-  route to Reqnroll step bindings; use the dedicated entry point instead.
-  See [Find Step Definition Usages](navigation-features/find-usages.md).
-* **VS Code** — Rename doesn't yet support disambiguating a step bound to
-  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
-  for the workaround (Rider and Visual Studio both handle this case).
 
 ## A shared `.feature` file shows hooks, diagnostics, or highlighting from the "wrong" project
 
@@ -146,16 +154,20 @@ up the updated environment; an already-running one won't).
 
 Two Output channels (**View → Output**, then pick from the dropdown):
 
-- **Reqnroll LSP** — the standard client/server log
-- **Reqnroll LSP Trace** — LSP wire trace (only populated when tracing is
-  enabled, see below)
+- **Reqnroll** — a one-line summary of extension activation, LSP client
+  start/connect/stop, and each command's outcome, auto-revealing on a warning
+  or error. Also written to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
+- **Reqnroll LSP** — the language client's own connection-level diagnostics.
+  Also written to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
+
+The LSP wire trace has no Output channel; it goes only to the trace file
+described below.
 
 **Changing the log level:** set `"reqnroll.trace.server"` in
 `settings.json` to `"off"`, `"messages"`, or `"verbose"`. This maps onto the
 LSP server's own `--log-level` (`"off"`/`"messages"`/`"verbose"` →
-`Warning`/`Info`/`Verbose`), so it raises the server's file-log verbosity too,
-not just the **Reqnroll LSP Trace** Output channel. Setting it to
-`"verbose"` also writes a timestamped trace file under
+`Warning`/`Info`/`Verbose`), so it raises the server's file-log verbosity.
+Setting it to `"verbose"` also writes a timestamped trace file under
 `%LOCALAPPDATA%\Reqnroll\logs\` (Windows), `~/Library/Logs/Reqnroll/logs/` (macOS),
 or `~/.local/share/Reqnroll/logs/` (Linux):
 `reqnroll-vscode-inspector-<timestamp>.log`. **Reload the window** after
@@ -189,13 +201,9 @@ Log files are written to a per-OS Reqnroll `logs` directory — Windows
 
 - `reqnroll-rider-ext-<yyyyMMdd>-<pid>.log` — the plugin's own client-side
   glue log (lifecycle/diagnostics, not LSP wire traffic).
-- `reqnroll-lsp-server-<yyyyMMdd>-<pid>.log` /
-  `reqnroll-lsp-protocol-<yyyyMMdd>-<pid>.log` — the LSP server's application
-  log and protocol/wire-level internals. These use an `lsp` prefix rather
-  than `rider`, unlike the plugin's own `ext` log above — the server names
-  its log files after the `--ide` value it was started with, and today it
-  only recognizes `visualstudio` and `vscode` specially, so `rider` falls
-  back to the generic `lsp` prefix.
+- `reqnroll-rider-server-<yyyyMMdd>-<pid>.log` /
+  `reqnroll-rider-protocol-<yyyyMMdd>-<pid>.log` — the LSP server's application
+  log and protocol/wire-level internals.
 
 These are not written to Rider's own `idea.log` or a dedicated tool window.
 
@@ -243,14 +251,6 @@ your IDE doesn't currently support raising the level from its own settings,
 say so on that issue (or on your bug report) — it's useful signal for
 prioritizing it.
 ```
-
-## How do I report a bug?
-
-File an issue on the
-[Reqnroll.IdeSupport repository](https://github.com/reqnroll/Reqnroll.IdeSupport/issues),
-including your IDE and version, the extension version, and — if possible —
-the relevant log file (see [Where are the logs](#where-are-the-logs-and-how-do-i-change-the-log-level)
-above).
 
 ## Where does telemetry data go?
 

@@ -12,8 +12,8 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
@@ -392,11 +392,11 @@ internal static class TestOutcomesChangedRequester
     {
         try
         {
-            languageServer.SendNotification(LspMethodNames.ReqnrollTestOutcomesChanged, new TestOutcomesChangedParams());
+            languageServer.SendNotification(CustomLspMethodNames.ReqnrollTestOutcomesChanged, new TestOutcomesChangedParams());
         }
         catch (Exception ex)
         {
-            logger.LogWarning($"{LspMethodNames.ReqnrollTestOutcomesChanged} failed: {ex.Message}");
+            logger.LogWarning($"{CustomLspMethodNames.ReqnrollTestOutcomesChanged} failed: {ex.Message}");
         }
     }
 }

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
@@ -59,12 +60,12 @@ internal sealed class FindHooksService
         var paramsJson = BuildParams(fileUri, line0, char0, ownLevelOnly);
 
         _logger.LogDebug(
-            "FindHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.FindHooks, fileUri, line0, char0);
+            "FindHooksService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollFindHooks, fileUri, line0, char0);
         _logger.LogTrace(
-            "FindHooksService: sending {RequestMethod} params={ParamsJson}", ReqnrollMethodNames.FindHooks, paramsJson);
+            "FindHooksService: sending {RequestMethod} params={ParamsJson}", CustomLspMethodNames.ReqnrollFindHooks, paramsJson);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.FindHooks, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindHooks, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

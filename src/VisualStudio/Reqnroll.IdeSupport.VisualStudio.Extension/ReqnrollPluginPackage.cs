@@ -110,7 +110,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         // the commands they are meant to (see VsWellKnownIds). Diagnostic only. WaitForSolutionLoadAsync
         // already returns on the UI thread; the switch just makes that explicit.
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-        VsWellKnownIdsSelfCheck.Run(this, _logger);
+        VsWellKnownIdsSelfCheck.Run(this, _logger, _telemetryTransmitter);
 
         // Issue #533: if VS restored a .feature tab but never activated the language server
         // provider, open and close a scratch .feature file to activate it. Not awaited: it waits

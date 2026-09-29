@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -142,7 +143,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             Path.GetFileName(path));
 
         var activatedParamsJson = $"{{\"uri\":{Newtonsoft.Json.JsonConvert.ToString(docUri)}}}";
-        await pipe.SendNotificationToServerAsync(ReqnrollMethodNames.DocumentActivated, activatedParamsJson, cancellationToken)
+        await pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollDocumentActivated, activatedParamsJson, cancellationToken)
                   .ConfigureAwait(false);
 
         return LspInterceptorResult.Consume;

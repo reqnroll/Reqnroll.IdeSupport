@@ -3,6 +3,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
@@ -63,7 +64,7 @@ public sealed class FindStepDefinitionsHandler
         CancellationToken          cancellationToken)
     {
         var uri = request.TextDocument.Uri;
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindStepDefinitions, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindStepDefinitions, uri);
 
         var step = _resolver.FindStep(uri, request.Position);
         if (step is null)

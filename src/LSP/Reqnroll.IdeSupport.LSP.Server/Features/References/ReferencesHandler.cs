@@ -3,10 +3,10 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -60,7 +60,7 @@ public sealed class ReferencesHandler
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): time the workspace-wide references search.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentReferences, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentReferences, uri);
 
         if (!IsCSharp(uri))
         {

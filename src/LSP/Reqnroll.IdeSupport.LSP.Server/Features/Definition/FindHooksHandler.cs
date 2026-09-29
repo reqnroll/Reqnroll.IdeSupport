@@ -1,10 +1,10 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -56,7 +56,7 @@ public sealed class FindHooksHandler
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): same latency class as textDocument/definition.
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindHooks, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindHooks, uri);
 
         if (!IsFeatureFile(uri))
         {

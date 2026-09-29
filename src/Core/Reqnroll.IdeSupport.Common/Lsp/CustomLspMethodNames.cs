@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+namespace Reqnroll.IdeSupport.Common.Lsp;
 
 /// <summary>
 /// Centralizes the custom <c>reqnroll/*</c> LSP method names the Visual Studio extension sends or
@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// VS Code's <c>ReqnrollMethods</c> (<c>src/VSCode/src/lsp/lspMethods.ts</c>), and Rider's
 /// <c>@JsonRequest</c>/<c>@JsonNotification</c>-annotated <c>ReqnrollLanguageServer</c> interface.
 /// Standard LSP methods (<c>textDocument/*</c>, <c>workspace/*</c>, etc.) are out of scope here --
-/// this file is custom Reqnroll extensions only. See <see cref="LspStandardMethodNames"/> for the
+/// this file is custom Reqnroll extensions only. See <see cref="Common.Lsp.LspStandardMethodNames"/> for the
 /// standard methods the extension uses.
 /// </summary>
 /// <remarks>
@@ -24,44 +24,48 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 /// convention. Do not fold them into this registry.
 /// </para>
 /// </remarks>
-internal static class ReqnrollMethodNames
+public static class CustomLspMethodNames
 {
+    // ── Custom Reqnroll Extensions ───────────────────────────────────────────
     /// <summary>Method name for the <c>reqnroll/projectLoaded</c> notification.</summary>
-    public const string ProjectLoaded = "reqnroll/projectLoaded";
+    public const string ReqnrollProjectLoaded = "reqnroll/projectLoaded";
     /// <summary>Method name for the <c>reqnroll/projectUnloaded</c> notification.</summary>
-    public const string ProjectUnloaded = "reqnroll/projectUnloaded";
+    public const string ReqnrollProjectUnloaded = "reqnroll/projectUnloaded";
     /// <summary>Method name for the <c>reqnroll/projectFiles</c> notification.</summary>
-    public const string ProjectFiles = "reqnroll/projectFiles";
+    public const string ReqnrollProjectFiles = "reqnroll/projectFiles";
     /// <summary>Method name for the <c>reqnroll/findStepUsages</c> request.</summary>
-    public const string FindStepUsages = "reqnroll/findStepUsages";
+    public const string ReqnrollFindStepUsages = "reqnroll/findStepUsages";
     /// <summary>Method name for the <c>reqnroll/findHooks</c> request.</summary>
-    public const string FindHooks = "reqnroll/findHooks";
+    public const string ReqnrollFindHooks = "reqnroll/findHooks";
     /// <summary>Method name for the <c>reqnroll/findStepDefinitions</c> request (issue #757).</summary>
-    public const string FindStepDefinitions = "reqnroll/findStepDefinitions";
+    public const string ReqnrollFindStepDefinitions = "reqnroll/findStepDefinitions";
     /// <summary>Method name for the <c>reqnroll/findMatchingScenarios</c> request (issue #373).</summary>
-    public const string FindMatchingScenarios = "reqnroll/findMatchingScenarios";
+    public const string ReqnrollFindMatchingScenarios = "reqnroll/findMatchingScenarios";
     /// <summary>Method name for the <c>reqnroll/resolveTestTargets</c> request (issue #262).</summary>
-    public const string ResolveTestTargets = "reqnroll/resolveTestTargets";
+    public const string ReqnrollResolveTestTargets = "reqnroll/resolveTestTargets";
     /// <summary>Method name for the <c>reqnroll/resolveContainerTestTargets</c> request — resolves every scenario/Outline under a <c>Feature:</c> or <c>Rule:</c> block in one call (issue #744, "Run scenarios").</summary>
-    public const string ResolveContainerTestTargets = "reqnroll/resolveContainerTestTargets";
+    public const string ReqnrollResolveContainerTestTargets = "reqnroll/resolveContainerTestTargets";
     /// <summary>Method name for the <c>reqnroll/findUnusedStepDefinitions</c> request.</summary>
-    public const string FindUnusedStepDefinitions = "reqnroll/findUnusedStepDefinitions";
+    public const string ReqnrollFindUnusedStepDefinitions = "reqnroll/findUnusedStepDefinitions";
     /// <summary>Method name for the <c>reqnroll/renameTargets</c> request.</summary>
-    public const string RenameTargets = "reqnroll/renameTargets";
+    public const string ReqnrollRenameTargets = "reqnroll/renameTargets";
     /// <summary>Method name for the <c>reqnroll/selectRenameTarget</c> notification.</summary>
-    public const string SelectRenameTarget = "reqnroll/selectRenameTarget";
+    public const string ReqnrollSelectRenameTarget = "reqnroll/selectRenameTarget";
+    /// <summary>Method name for the <c>reqnroll/renameApplied</c> notification.</summary>
+    public const string ReqnrollRenameApplied = "reqnroll/renameApplied";
     /// <summary>Method name for the <c>reqnroll/refreshCodeLens</c> notification.</summary>
-    public const string RefreshCodeLens = "reqnroll/refreshCodeLens";
+    public const string ReqnrollRefreshCodeLens = "reqnroll/refreshCodeLens";
     /// <summary>Method name for the <c>reqnroll/semanticTokens</c> push notification.</summary>
-    public const string SemanticTokens = "reqnroll/semanticTokens";
+    public const string ReqnrollSemanticTokens = "reqnroll/semanticTokens";
     /// <summary>Method name for the <c>reqnroll/documentSymbolHierarchical</c> request.</summary>
-    public const string DocumentSymbolHierarchical = "reqnroll/documentSymbolHierarchical";
+    public const string ReqnrollDocumentSymbolHierarchical = "reqnroll/documentSymbolHierarchical";
     /// <summary>Method name for the <c>reqnroll/documentActivated</c> notification.</summary>
-    public const string DocumentActivated = "reqnroll/documentActivated";
+    public const string ReqnrollDocumentActivated = "reqnroll/documentActivated";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/registerRun</c> request (LSP-server outcome pipeline).</summary>
-    public const string RegisterTestRun = "reqnroll/testOutcomes/registerRun";
+    public const string ReqnrollRegisterTestRun = "reqnroll/testOutcomes/registerRun";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/getOutcome</c> request (LSP-server outcome pipeline).</summary>
-    public const string GetTestOutcome = "reqnroll/testOutcomes/getOutcome";
+    public const string ReqnrollGetTestOutcome = "reqnroll/testOutcomes/getOutcome";
     /// <summary>Method name for the <c>reqnroll/testOutcomes/changed</c> push notification (LSP-server outcome pipeline).</summary>
-    public const string TestOutcomesChanged = "reqnroll/testOutcomes/changed";
+    public const string ReqnrollTestOutcomesChanged = "reqnroll/testOutcomes/changed";
+
 }

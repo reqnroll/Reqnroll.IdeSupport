@@ -2,9 +2,9 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
@@ -73,7 +73,7 @@ public class SemanticTokensRefreshHandler : INotificationHandler<MatchCacheChang
     {
         try
         {
-            using var _perf = _recorder.Measure(LspMethodNames.WorkspaceSemanticTokensRefresh);
+            using var _perf = _recorder.Measure(LspStandardMethodNames.WorkspaceSemanticTokensRefresh);
 
             _logger.LogVerbose("SemanticTokensRefreshHandler: sending workspace/semanticTokens/refresh");
             await _languageServer.Client

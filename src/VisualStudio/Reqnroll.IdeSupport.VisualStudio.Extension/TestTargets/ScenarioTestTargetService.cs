@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
@@ -42,10 +43,10 @@ internal sealed class ScenarioTestTargetService
 
         _logger.LogDebug(
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}",
-            ReqnrollMethodNames.ResolveTestTargets, fileUri, range.Start.Line);
+            CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, range.Start.Line);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.ResolveTestTargets, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         var mapped = MapResult(result as JObject);
@@ -70,10 +71,10 @@ internal sealed class ScenarioTestTargetService
 
         _logger.LogDebug(
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}-{EndLine}",
-            ReqnrollMethodNames.ResolveContainerTestTargets, fileUri, containerRange.Start.Line, containerRange.End.Line);
+            CustomLspMethodNames.ReqnrollResolveContainerTestTargets, fileUri, containerRange.Start.Line, containerRange.End.Line);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.ResolveContainerTestTargets, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         var mapped = MapResult(result as JObject);

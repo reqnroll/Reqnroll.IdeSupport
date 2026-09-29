@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
@@ -51,13 +52,13 @@ internal sealed class FindStepUsagesService
         var paramsJson = BuildParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.FindStepUsages, fileUri, line0, char0);
+            "FindStepUsagesService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollFindStepUsages, fileUri, line0, char0);
 
         _logger.LogTrace(
-            "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", ReqnrollMethodNames.FindStepUsages, paramsJson);
+            "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", CustomLspMethodNames.ReqnrollFindStepUsages, paramsJson);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.FindStepUsages, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindStepUsages, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         // NOTE: use the parameterless JToken.ToString() — the overload that takes

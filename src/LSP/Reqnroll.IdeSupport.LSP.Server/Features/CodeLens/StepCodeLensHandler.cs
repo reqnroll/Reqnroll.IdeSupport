@@ -9,8 +9,8 @@ using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
@@ -65,7 +65,7 @@ public sealed class StepCodeLensHandler
         // lets a climbing-duration pattern be confirmed/quantified from the PERF log directly.
         var (cacheDocs, cacheSteps) = _matchService.GetCacheStats();
         using var _perf = _recorder.Measure(
-            LspMethodNames.TextDocumentCodeLens, uri, detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps}");
+            LspStandardMethodNames.TextDocumentCodeLens, uri, detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps}");
 
         if (!IsCSharp(uri))
         {
