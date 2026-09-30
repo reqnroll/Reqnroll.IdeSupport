@@ -70,8 +70,13 @@ Scenario: Repeated edits to one .cs replace its bindings rather than accumulatin
 			When I press subtract
 		"""
 	# Wait for connector discovery to land before touching the .cs, so the assertions below are
-	# about the merge rule and not about which source happened to finish first.
-	Then the feature step "I press add" is reported as bound within 30 seconds
+	# about the merge rule and not about which source happened to finish first. The fixture
+	# defines "I press add" but not "I press subtract", so "I press subtract" being reported as
+	# unbound is a positive signal that the connector's registry has actually landed — with an
+	# empty registry no step is classified undefined, so the old "reported as bound within N
+	# seconds" step passed vacuously before the connector had run (issue #817).
+	Then the feature step "I press subtract" is reported as unbound
+	And the feature step "I press add" is reported as bound
 	When the C# step definition file "Extra.cs" is opened with
 		"""
 		using Reqnroll;
