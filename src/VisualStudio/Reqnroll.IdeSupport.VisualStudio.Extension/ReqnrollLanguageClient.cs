@@ -284,6 +284,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 _stepCodeLensState.FindUsagesService  = _findStepUsagesState.Service;
                 _stepCodeLensState.FindUsagesRenderer = _findStepUsagesState.Renderer;
 
+                // Reuse the same FAR-window renderer for Go To Hooks: several applicable hooks are
+                // shown there instead of the NavigationPickerDialog modal popup (issue #315).
+                _goToHooksState.Renderer = _findStepUsagesState.Renderer;
+
                 // Go To Definition in a .feature file (issue #757): the VSSDK command filter takes the
                 // command over so several matching step definitions open the Find All References
                 // window titled after the step, not VS's "'{word}' declarations". Wired here, after
@@ -346,6 +350,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _findUnusedStepDefinitionsState.Service  = null;
             _findUnusedStepDefinitionsState.Renderer = null;
             _goToHooksState.Service                  = null;
+            _goToHooksState.Renderer                 = null;
             _goToMatchingScenariosState.Service      = null;
             _stepCodeLensState.Service           = null;
             _stepCodeLensState.FindUsagesService  = null;
