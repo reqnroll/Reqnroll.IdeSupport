@@ -7,11 +7,12 @@ import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
-import com.reqnroll.ide.rider.lsp.protocol.GoToHookLocation
-import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
+import com.reqnroll.ide.rider.lsp.protocol.FindHookLocation
+import com.reqnroll.ide.rider.lsp.protocol.FindHooksResponse
+import com.reqnroll.ide.rider.telemetry.RiderTelemetryTransmitter
 
 /**
- * Shared "run `reqnroll/goToHooks` then navigate" logic for [GoToHooksAction] — the Rider-side
+ * Shared "run `reqnroll/findHooks` then navigate" logic for [GoToHooksAction] — the Rider-side
  * surface for Hook Navigation. Mirrors VS Code's `doGoToHooks` (src/VSCode/src/commands/goToHooks.ts):
  * a single applicable hook navigates directly, multiple hooks show a chooser popup — unless
  * [runAndShow]'s [alwaysShowPicker] is set, in which case even a single hook shows the popup.
@@ -31,10 +32,17 @@ object GoToHooksRunner {
         ownLevelOnly: Boolean = false, alwaysShowPicker: Boolean = false,
     ) {
         ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character")
+
+        // A genuine navigation -- GoToHooksAction is this function's only caller, and Rider's own
+        // hook-count CodeVision lens resolves its counts without ever calling reqnroll/findHooks,
+        // so unlike VS's classic CodeLens there's no prefetch call through here to mislabel
+        // (issue #698).
+        RiderTelemetryTransmitter.transmit("GoToHook command executed", emptyMap())
+
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.goToHooks(project, uri, line, character, ownLevelOnly)
+                val response = ReqnrollRequestSender.findHooks(project, uri, line, character, ownLevelOnly)
                 ReqnrollDebugLogger.info(
                     "GoToHooksRunner: ${response?.hooks?.size ?: "null"} hook(s) returned")
                 ApplicationManager.getApplication().invokeLater {
@@ -45,7 +53,7 @@ object GoToHooksRunner {
         })
     }
 
-    private fun showResult(project: Project, response: GoToHooksResponse?, alwaysShowPicker: Boolean) {
+    private fun showResult(project: Project, response: FindHooksResponse?, alwaysShowPicker: Boolean) {
         if (response == null) {
             ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.", "Go to Hooks")
@@ -71,11 +79,11 @@ object GoToHooksRunner {
         )
     }
 
-    private fun navigate(project: Project, item: GoToHookLocation) =
+    private fun navigate(project: Project, item: FindHookLocation) =
         ReqnrollResultPopup.navigateToUri(project, item.uri, item.startLine, item.startChar)
 
     /** `internal` (rather than private) purely so it's unit-testable without an AnAction/platform fixture. */
-    internal fun renderLabel(item: GoToHookLocation): String {
+    internal fun renderLabel(item: FindHookLocation): String {
         val fileName = item.uri.substringAfterLast('/')
         return "[${item.hookType}] ${item.methodName} ($fileName:${item.startLine + 1})"
     }

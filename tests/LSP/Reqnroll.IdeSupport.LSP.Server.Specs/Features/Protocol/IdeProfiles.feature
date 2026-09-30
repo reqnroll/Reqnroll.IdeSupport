@@ -42,20 +42,21 @@ Examples:
 # "Reqnroll: Rename Step" command remains available alongside it for the multi-attribute
 # disambiguation case standard LSP rename has no protocol-level way to prompt for.
 
-Scenario Outline: Non-VS clients receive static textDocumentSync capability
+Scenario Outline: All clients receive static textDocumentSync capability
 	Given the LSP server is started for IDE "<ide>"
 	Then the server statically advertises textDocumentSync with full sync and openClose
 
 Examples:
-	| ide     |
-	| vscode  |
-	| rider   |
+	| ide          |
+	| vscode       |
+	| rider        |
+	| visualstudio |
 
-# Note: a matching "VS client does not receive textDocumentSync" scenario is intentionally omitted.
-# The in-process OmniSharp spec client merges dynamic client/registerCapability into ServerSettings,
-# making static vs. dynamic textDocumentSync indistinguishable from the client side. The VS inspector
-# logs confirm the static entry is absent in the real wire protocol. The behavioral coverage for VS
-# textDocument/didChange is provided by the Handshake + DocumentLifecycle specs.
+# Issue #800: Visual Studio needs the static entry too. With dynamic-only registration, VS never sends
+# didOpen for a document it attached before the client/registerCapability arrived (~100 ms after
+# `initialized`), e.g. a restored tab or the open file after a solution switch. The step reads a snapshot
+# of the raw initialize response: OmniSharp's spec client merges dynamic registrations into
+# ServerSettings, which previously made static and dynamic indistinguishable.
 
 Scenario Outline: All clients receive static renameProvider capability
 	Given the LSP server is started for IDE "<ide>"
@@ -126,9 +127,9 @@ Scenario Outline: All clients receive the custom protocol capability manifest
 		| reqnrollWorkspaceLifecycleProvider           | projectUnloadedMethod     | reqnroll/projectUnloaded                  |
 		| reqnrollWorkspaceLifecycleProvider           | projectFilesMethod        | reqnroll/projectFiles                     |
 		| reqnrollFindStepUsagesProvider               | method                    | reqnroll/findStepUsages                   |
-		| reqnrollGoToHooksProvider                    | method                    | reqnroll/goToHooks                        |
+		| reqnrollFindHooksProvider                    | method                    | reqnroll/findHooks                        |
 		| reqnrollFindStepDefinitionsProvider          | method                    | reqnroll/findStepDefinitions              |
-		| reqnrollGoToMatchingScenariosProvider        | method                    | reqnroll/goToMatchingScenarios            |
+		| reqnrollFindMatchingScenariosProvider        | method                    | reqnroll/findMatchingScenarios            |
 		| reqnrollResolveTestTargetsProvider           | method                    | reqnroll/resolveTestTargets               |
 		| reqnrollFindUnusedStepDefinitionsProvider    | method                    | reqnroll/findUnusedStepDefinitions        |
 		| reqnrollStepRenameProvider                   | renameTargetsMethod       | reqnroll/renameTargets                    |
@@ -145,3 +146,25 @@ Examples:
 	| vscode       |
 	| rider        |
 	| unknown-ide  |
+
+# ── ClientInfo as a fallback identity source (issue #709) ──────────────────────
+#
+# InitializeParams.ClientInfo is the LSP-standard identity a client self-reports in the initialize
+# request itself. It arrives after the --ide argument has already seeded ClientIdeContext, so --ide
+# always wins and ClientInfo only fills the gap when no argument was passed. These scenarios prove
+# the fallback reaches a real capability decision on the wire rather than merely being recorded: the
+# server withholds semantic-token pull support for a client that reports Visual Studio, exactly as
+# it does for an explicit --ide visualstudio, because ApplySemanticTokensCapability resolves the
+# identity through ClientIdeContext instead of reading the raw argument.
+
+Scenario: A client with no --ide argument that reports Visual Studio is treated as Visual Studio
+	Given the LSP server is started for a client identifying itself as "Visual Studio" with no IDE argument
+	Then the server does not advertise pull support for semantic tokens
+
+Scenario: A client with no --ide argument that reports VS Code keeps the full pull flow
+	Given the LSP server is started for a client identifying itself as "Visual Studio Code" with no IDE argument
+	Then the server advertises range support for semantic tokens
+
+Scenario: An explicit --ide argument wins over a contradicting ClientInfo
+	Given the LSP server is started for IDE "vscode" with the client identifying itself as "Visual Studio"
+	Then the server advertises range support for semantic tokens

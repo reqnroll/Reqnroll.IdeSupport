@@ -3,8 +3,8 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
@@ -29,7 +29,7 @@ public sealed class RegisterTestRunHandler
     /// <summary>Handles a <c>reqnroll/testOutcomes/registerRun</c> request.</summary>
     public Task<RegisterTestRunResponse> HandleAsync(RegisterTestRunParams request, CancellationToken cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollRegisterTestRun);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollRegisterTestRun);
 
         var registration = _listener.RegisterRun();
         if (registration is null)

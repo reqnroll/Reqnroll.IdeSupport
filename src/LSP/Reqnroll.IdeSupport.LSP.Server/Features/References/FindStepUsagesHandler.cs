@@ -1,10 +1,10 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -70,7 +70,7 @@ public sealed class FindStepUsagesHandler
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): time the workspace-wide step-usages search.
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindStepUsages, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindStepUsages, uri);
 
         if (!IsCSharp(uri))
         {

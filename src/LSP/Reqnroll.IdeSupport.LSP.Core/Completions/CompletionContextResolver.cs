@@ -70,6 +70,26 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
             }
         }
 
+        // ── No completion once past a Feature/Rule/Scenario/Examples keyword ───
+        // A Feature/Rule/Scenario(Outline)/Background/Examples line carries a
+        // DefinitionLineKeyword tag spanning just the keyword and its colon (e.g. "Scenario:").
+        // Once the cursor is at or past that span it's editing the block's free-text title, not
+        // composing the keyword -- offering keyword completion there would suggest replacing the
+        // keyword and title with a new keyword, deleting both (issue #818). Mirrors the step case
+        // above, which stops offering keyword completion at the equivalent boundary
+        // (stepTextStart) for the same reason.
+        var definitionKeywordTag = tags.FirstOrDefault(t =>
+            t.Type == IdeSupportTagTypes.DefinitionLineKeyword &&
+            t.Range.StartLinePosition.Line == cursorLine);
+
+        if (definitionKeywordTag is not null)
+        {
+            var snapshotLine = snapshot.GetLineFromLineNumber(cursorLine);
+            var cursorOffset = snapshotLine.Start + cursorChar;
+            if (cursorOffset >= definitionKeywordTag.Range.End)
+                return null;
+        }
+
         // ── Gherkin keyword completion ──────────────────────────────────────────
         var tokens = gherkinDoc?.GetExpectedTokens(cursorLine, _telemetryService)
                      ?? Array.Empty<TokenType>();

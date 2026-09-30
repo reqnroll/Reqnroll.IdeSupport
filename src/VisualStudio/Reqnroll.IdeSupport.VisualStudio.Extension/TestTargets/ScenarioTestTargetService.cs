@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
@@ -42,16 +43,44 @@ internal sealed class ScenarioTestTargetService
 
         _logger.LogDebug(
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}",
-            ReqnrollMethodNames.ResolveTestTargets, fileUri, range.Start.Line);
+            CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, range.Start.Line);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.ResolveTestTargets, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         var mapped = MapResult(result as JObject);
         _logger.LogDebug(
             "ScenarioTestTargetService: {TargetCount} target(s) returned for {FileUri}:{StartLine}",
             mapped.Count, fileUri, range.Start.Line);
+        return mapped;
+    }
+
+    /// <summary>
+    /// Queries the LSP server for the generated test method(s) of every scenario/Outline contained
+    /// in the Feature or Rule whose full body is <paramref name="containerRange"/> (issue #744, "Run
+    /// scenarios") — the container-scoped counterpart to <see cref="ResolveTestTargetsAsync"/>. Pass
+    /// the container symbol's own <c>Range</c> (its whole body), not its <c>SelectionRange</c>
+    /// (header line only) — the server resolves every scenario/Outline tag fully contained within
+    /// the range given, so a header-only range would resolve nothing.
+    /// </summary>
+    public async Task<IReadOnlyList<ScenarioTestTarget>> ResolveContainerTestTargetsAsync(
+        string fileUri, GherkinSymbolRange containerRange, CancellationToken cancellationToken)
+    {
+        var paramsJson = BuildParams(fileUri, containerRange);
+
+        _logger.LogDebug(
+            "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}-{EndLine}",
+            CustomLspMethodNames.ReqnrollResolveContainerTestTargets, fileUri, containerRange.Start.Line, containerRange.End.Line);
+
+        var result = await _pipe
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, paramsJson, cancellationToken)
+            .ConfigureAwait(false);
+
+        var mapped = MapResult(result as JObject);
+        _logger.LogDebug(
+            "ScenarioTestTargetService: {TargetCount} target(s) returned for container {FileUri}:{StartLine}-{EndLine}",
+            mapped.Count, fileUri, containerRange.Start.Line, containerRange.End.Line);
         return mapped;
     }
 
@@ -70,7 +99,7 @@ internal sealed class ScenarioTestTargetService
     /// <see cref="ScenarioTestTarget"/>. Separated from transport so it can be unit-tested. A
     /// <c>null</c>, non-object, or missing-<c>targets</c> result yields an empty list. Entries
     /// missing <c>declaringTypeFullName</c>/<c>methodName</c> are skipped rather than throwing —
-    /// same defensive shape as <c>GoToHooksService.ParseHooks</c>.
+    /// same defensive shape as <c>FindHooksService.ParseHooks</c>.
     /// </summary>
     internal static IReadOnlyList<ScenarioTestTarget> MapResult(JObject? result)
     {

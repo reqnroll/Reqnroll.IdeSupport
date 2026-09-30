@@ -12,9 +12,9 @@ import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeParams
 import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
-import com.reqnroll.ide.rider.lsp.protocol.GoToHooksRequestParams
-import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
-import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
+import com.reqnroll.ide.rider.lsp.protocol.FindHooksRequestParams
+import com.reqnroll.ide.rider.lsp.protocol.FindHooksResponse
+import com.reqnroll.ide.rider.lsp.protocol.FindMatchingScenariosResponse
 import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
@@ -63,8 +63,8 @@ object ReqnrollRequestSender {
     private const val INLAY_HINT_TIMEOUT_MS = 10_000
     private const val ON_TYPE_FORMATTING_TIMEOUT_MS = 10_000
     private const val FOLDING_RANGE_TIMEOUT_MS = 10_000
-    private const val GO_TO_HOOKS_TIMEOUT_MS = 10_000
-    private const val GO_TO_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
+    private const val FIND_HOOKS_TIMEOUT_MS = 10_000
+    private const val FIND_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
     private const val TOGGLE_COMMENT_TIMEOUT_MS = 10_000
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
@@ -196,41 +196,41 @@ object ReqnrollRequestSender {
     }
 
     /**
-     * Runs `reqnroll/goToHooks` for the position (uri, line, character) in a `.feature` file.
+     * Runs `reqnroll/findHooks` for the position (uri, line, character) in a `.feature` file.
      * [ownLevelOnly] is forwarded from the hook-count CodeVision lens's `command.arguments`
      * (see HookCodeVisionProvider) so the response matches exactly what the lens counted; manual
      * invocations (GoToHooksAction) leave it at the default `false` (cumulative). Returns null if
      * no Reqnroll LSP server is running, or on failure.
      */
-    fun goToHooks(
+    fun findHooks(
         project: Project, uri: String, line: Int, character: Int, ownLevelOnly: Boolean = false,
-    ): GoToHooksResponse? {
+    ): FindHooksResponse? {
         val server = firstRunningServer(project) ?: return null
-        val params = GoToHooksRequestParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), ownLevelOnly)
+        val params = FindHooksRequestParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), ownLevelOnly)
         return try {
-            server.sendRequestSync(GO_TO_HOOKS_TIMEOUT_MS) { languageServer ->
-                (languageServer as ReqnrollLanguageServer).goToHooks(params)
+            server.sendRequestSync(FIND_HOOKS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).findHooks(params)
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("goToHooks: request failed", ex)
+            ReqnrollDebugLogger.warn("findHooks: request failed", ex)
             null
         }
     }
 
-    /** Runs `reqnroll/goToMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file (issue #373). Returns null if no Reqnroll LSP server is running, or on failure. */
-    fun goToMatchingScenarios(project: Project, uri: String, line: Int, character: Int): GoToMatchingScenariosResponse? {
+    /** Runs `reqnroll/findMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file (issue #373). Returns null if no Reqnroll LSP server is running, or on failure. */
+    fun findMatchingScenarios(project: Project, uri: String, line: Int, character: Int): FindMatchingScenariosResponse? {
         val server = firstRunningServer(project) ?: return null
         val params = TextDocumentPositionParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character))
         return try {
-            server.sendRequestSync(GO_TO_MATCHING_SCENARIOS_TIMEOUT_MS) { languageServer ->
-                (languageServer as ReqnrollLanguageServer).goToMatchingScenarios(params)
+            server.sendRequestSync(FIND_MATCHING_SCENARIOS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).findMatchingScenarios(params)
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("goToMatchingScenarios: request failed", ex)
+            ReqnrollDebugLogger.warn("findMatchingScenarios: request failed", ex)
             null
         }
     }
@@ -238,7 +238,7 @@ object ReqnrollRequestSender {
     /**
      * Runs the *standard* `workspace/executeCommand` request for `reqnroll.toggleComment`
      * (Comment/Uncomment toggle — see CommentToggleHandler.cs). There is no dedicated,
-     * reqnroll-prefixed custom method for this feature, unlike findStepUsages/goToHooks — the server responds
+     * reqnroll-prefixed custom method for this feature, unlike findStepUsages/findHooks — the server responds
      * by sending a `workspace/applyEdit` *request back to the client*, which Rider's platform
      * `Lsp4jClient.applyEdit` already applies natively (confirmed by decompiling — it's a `final`
      * method on the base class, not something [ReqnrollLspServerDescriptor.createLsp4jClient]'s

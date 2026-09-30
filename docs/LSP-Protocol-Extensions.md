@@ -7,8 +7,10 @@
 > it blindly for anything load-bearing.
 > **Audience:** Core team contributors, especially anyone adding a new IDE client or a new
 > server-side feature that needs to reach a client.
-> **Canonical source of truth:** [`LspMethodNames.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/LspMethodNames.cs)
-> on the server; [`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts) (VS Code) and
+> **Canonical source of truth:** [`CustomLspMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/CustomLspMethodNames.cs)
+> (custom `reqnroll/*` names) and [`LspStandardMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/LspStandardMethodNames.cs)
+> (standard names) in `Reqnroll.IdeSupport.Common`, shared by the LSP server and the Visual Studio
+> extension; [`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts) (VS Code) and
 > [`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/protocol/ReqnrollLanguageServer.kt)
 > (Rider) on the clients. This doc summarizes those; when they disagree, they win.
 
@@ -35,9 +37,9 @@ these DTOs don't implement OmniSharp's `IRequest` marker interfaces).
 | Method | Params | Response | Notes |
 |---|---|---|---|
 | `reqnroll/findStepUsages` | standard `ReferenceParams` | `FindStepUsagesResponse` — isBinding, locations[] (uri, startLine/Char, endLine/Char, stepText?, keyword?, scenarioName?, projectName?, featureName?, ruleName?) | Distinct from `textDocument/references` because the server needs to return `null` (three-state result) and per-location `stepText` from the in-memory snapshot, which the standard method can't carry |
-| `reqnroll/goToHooks` | `GoToHooksParams : TextDocumentPositionParams` + `ownLevelOnly` | `GoToHooksResponse` — hooks[] (uri, startLine/Char, hookType, hookOrder, methodName) | |
+| `reqnroll/findHooks` | `FindHooksParams : TextDocumentPositionParams` + `ownLevelOnly` | `FindHooksResponse` — hooks[] (uri, startLine/Char, hookType, hookOrder, methodName) | |
 | `reqnroll/findStepDefinitions` | standard `TextDocumentPositionParams` | `FindStepDefinitionsResponse` — items[] (same item shape as `findUnusedStepDefinitions`; projectName always null) | Issue #757. Same bindings as `textDocument/definition`, plus class/method/expression and unresolved-source rows, for the Visual Studio results window and the VS Code "Go to Step Definition" QuickPick |
-| `reqnroll/goToMatchingScenarios` | standard `TextDocumentPositionParams` | `GoToMatchingScenariosResponse` — scenarios[] (uri, startLine/Char, scenarioName, isOutline) | |
+| `reqnroll/findMatchingScenarios` | standard `TextDocumentPositionParams` | `FindMatchingScenariosResponse` — scenarios[] (uri, startLine/Char, scenarioName, isOutline) | |
 | `reqnroll/resolveTestTargets` | `ResolveTestTargetsParams` — textDocument, range | `ResolveTestTargetsResponse` — targets[] (declaringTypeFullName, methodName, isParameterized, rowArguments?, rowIndex?) | Issue #262 (test-runner integration) |
 | `reqnroll/findUnusedStepDefinitions` | empty params | `FindUnusedStepDefinitionsResponse` — items[] (projectName?, className?, methodName?, bindingExpression?, stepDefinitionType?, sourceFile?, isResolved, recordedSourceFile?, sourceLine, sourceChar) | |
 | `reqnroll/renameTargets` | `RenameTargetsParams : TextDocumentPositionParams` + `requireAttributeLine` (VS Code only in practice — see §3) | `RenameTargetsResponse` — targets[] (label, expression, attributeIndex, startLine/Char, endLine/Char) | |
@@ -93,7 +95,9 @@ Two adjacent things that are **not** protocol extensions, despite looking like c
 - `--ide <identifier>` (e.g. `visualstudio`) is a process command-line argument read in
   [`Program.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/Program.cs), not an
   `initializationOptions` field. No client in this repo populates `initializationOptions` or an
-  `experimental` capabilities block.
+  `experimental` capabilities block. Its fallback, `InitializeParams.ClientInfo` (issue #709), is a
+  standard LSP field rather than an extension — the server reads it, it adds nothing to the wire, and
+  it is consulted only when no `--ide` was passed.
 - VS's `DocumentActivationTrackingInterceptor` re-sends `textDocument/didOpen` verbatim before
   sending `reqnroll/documentActivated` — it reorders delivery, it doesn't add fields to the
   standard notification.
@@ -155,7 +159,7 @@ F2-hijacking concern, but it means "extends `TextDocumentPositionParams` with
 
 When adding a `reqnroll/*` method:
 
-1. Add the constant to [`LspMethodNames.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/LspMethodNames.cs)
+1. Add the constant to [`CustomLspMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/CustomLspMethodNames.cs)
    under the "Custom Reqnroll Extensions" section, with an XML-doc `<c>...</c>` reference to the
    literal (existing entries follow this pattern).
 2. Register it in [`LanguageServerOptionsExtensions.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/LanguageServerOptionsExtensions.cs)

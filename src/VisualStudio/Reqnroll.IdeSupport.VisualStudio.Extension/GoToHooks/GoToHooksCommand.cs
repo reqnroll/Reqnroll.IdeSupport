@@ -3,6 +3,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
@@ -13,13 +16,27 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 /// </summary>
 /// <remarks>
 /// When invoked, queries the LSP server for hook bindings applicable at the caret position.
-/// A single result navigates directly; multiple results show a picker via
-/// <see cref="NavigationPickerHelper.PickAndNavigateAsync"/>.
+/// A single result navigates directly. Several results are shown in the Find All References
+/// window (issue #315) instead of the <see cref="NavigationPickerHelper"/>'s modal picker —
+/// consistent with the other Go To Hooks entry points (code lens click, scenario-title context
+/// menu) and with Go To Definition's ambiguous-step handling
+/// (<c>GoToStepDefinitionPresenter</c>), both of which already use the FAR window for this case.
 /// </remarks>
 [VisualStudioContribution]
 internal sealed class GoToHooksCommand : Command
 {
-    private readonly GoToHooksState  _state;
+    /// <summary>
+    /// Telemetry event name for a genuine "Go to Hooks" navigation (issue #698). Originated here,
+    /// client-side, rather than by the LSP server's <c>reqnroll/findHooks</c> handler: that handler
+    /// also backs the classic VS CodeLens's Details-popup prefetch (every lens render, not just a
+    /// click), so it cannot honestly claim every request is a navigation — only this command's own
+    /// invocation genuinely is one. The server instead reports <c>TelemetryEvents.FindHooksCommandExecuted</c>
+    /// for every request, prefetch or not.
+    /// </summary>
+    private const string GoToHookCommandExecutedEventName = "GoToHook command executed";
+
+    private readonly FindHooksState  _state;
+    private readonly LspServerConnectionService _connectionService;
     private readonly ILogger<GoToHooksCommand> _logger;
     // NavigationPickerHelper (shared with FindStepUsages/RenameStep-adjacent navigation code,
     // out of scope for the ILogger<T> migration) still takes IIdeSupportLogger — resolve the
@@ -27,11 +44,16 @@ internal sealed class GoToHooksCommand : Command
     private readonly IIdeSupportLogger _fileLogger;
 
     /// <summary>Creates the command over the shared runtime state holder.</summary>
-    public GoToHooksCommand(GoToHooksState state, ILogger<GoToHooksCommand> logger, IIdeSupportLogger fileLogger)
+    public GoToHooksCommand(
+        FindHooksState              state,
+        LspServerConnectionService  connectionService,
+        ILogger<GoToHooksCommand>   logger,
+        IIdeSupportLogger           fileLogger)
     {
-        _state      = state;
-        _logger     = logger;
-        _fileLogger = fileLogger;
+        _state             = state;
+        _connectionService = connectionService;
+        _logger            = logger;
+        _fileLogger        = fileLogger;
     }
 
     /// <inheritdoc />
@@ -64,6 +86,12 @@ internal sealed class GoToHooksCommand : Command
                 return;
             }
 
+            // A genuine navigation, as opposed to the classic CodeLens's Details-popup prefetch
+            // (which never runs through this command) — emit here, not from the server's
+            // reqnroll/findHooks handler, which cannot tell the two apart (issue #698).
+            _connectionService.TelemetryTransmitter?.TransmitEvent(
+                new GenericEvent(GoToHookCommandExecutedEventName, []));
+
             var textView = await context.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
             if (textView is null)
             {
@@ -81,7 +109,7 @@ internal sealed class GoToHooksCommand : Command
                 "GoToHooksCommand: uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             var result = await service
-                .GoToHooksAsync(fileUri, lineNum, charNum, cancellationToken)
+                .FindHooksAsync(fileUri, lineNum, charNum, cancellationToken)
                 .ConfigureAwait(false);
 
             if (result.Hooks.Count == 0)
@@ -92,12 +120,30 @@ internal sealed class GoToHooksCommand : Command
 
             _logger.LogInformation("GoToHooksCommand: {HookCount} hook(s) found.", result.Hooks.Count);
 
-            var targets = BuildTargets(result.Hooks);
-            await NavigationPickerHelper.PickAndNavigateAsync(
-                    targets,
-                    _fileLogger,
-                    promptTitle: "Go to Hooks",
-                    cancellationToken)
+            if (result.Hooks.Count == 1)
+            {
+                var targets = BuildTargets(result.Hooks);
+                await NavigationPickerHelper.PickAndNavigateAsync(
+                        targets,
+                        _fileLogger,
+                        promptTitle: "Go to Hooks",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            // Several applicable hooks: show them in the Find All References window rather than
+            // NavigationPickerHelper's NavigationPickerDialog modal popup (issue #315).
+            var renderer = _state.Renderer;
+            if (renderer is null)
+            {
+                _logger.LogWarning("GoToHooksCommand: FindStepUsagesRenderer not available.");
+                return;
+            }
+
+            var locations = HookLocationsMapper.BuildLocations(result.Hooks);
+            var label     = $"Reqnroll: {locations.Count} hooks";
+            await renderer.RenderAsync(label, new StepUsagesResult(locations), cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -123,5 +169,37 @@ internal sealed class GoToHooksCommand : Command
             targets.Add(new NavigationTarget(displayText, filePath, h.StartLine, h.StartChar));
         }
         return targets;
+    }
+}
+
+/// <summary>
+/// Maps applicable hooks onto <see cref="StepUsageLocation"/>, the Find All References window's
+/// row type from Find Step Definition Usages — the same pipeline <c>HookMatchCountCodeLens</c>
+/// already reuses for matching scenarios (issue #315). <c>StepText</c> is supplied explicitly so
+/// the Code column shows the hook's type and method name instead of falling back to reading the
+/// source line from disk.
+/// </summary>
+/// <remarks>
+/// Kept on a plain static class (not on <see cref="GoToHooksCommand"/> itself) so it can be
+/// unit-tested without pulling in a reference to the VS/COM <c>Command</c> base type — same
+/// rationale as <c>RenameStepLabelParser</c>.
+/// </remarks>
+internal static class HookLocationsMapper
+{
+    public static IReadOnlyList<StepUsageLocation> BuildLocations(IReadOnlyList<HookLocation> hooks)
+    {
+        var locations = new List<StepUsageLocation>(hooks.Count);
+        foreach (var h in hooks)
+        {
+            var stepText = $"[{h.HookType}] {h.MethodName}";
+            locations.Add(new StepUsageLocation(
+                fileUri:   h.Uri,
+                startLine: h.StartLine,
+                startChar: h.StartChar,
+                endLine:   h.StartLine,
+                endChar:   h.StartChar,
+                stepText:  stepText));
+        }
+        return locations;
     }
 }

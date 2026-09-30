@@ -8,9 +8,9 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 
@@ -42,7 +42,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// An unscoped hook (no <c>[Scope]</c> at all) matches every scenario in the project — a count
 /// here would be technically correct but unbounded and uninformative, so the lens shows the
 /// static label "all scenarios" instead and skips the corpus walk entirely (issue #403). The
-/// click action is unaffected: <c>reqnroll/goToMatchingScenarios</c> still resolves and returns
+/// click action is unaffected: <c>reqnroll/findMatchingScenarios</c> still resolves and returns
 /// the full scenario list on demand.
 /// </para>
 /// <para>
@@ -91,7 +91,7 @@ public sealed class HookMatchCountCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentCodeLens, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
 
         if (!IsCSharp(uri))
         {

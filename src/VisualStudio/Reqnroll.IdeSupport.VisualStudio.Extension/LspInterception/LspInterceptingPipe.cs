@@ -274,6 +274,17 @@ internal sealed class LspInterceptingPipe : IDisposable
     }
 
     /// <summary>
+    /// The level a server-rejected request is logged at. <c>ContentModified</c> is Debug: the
+    /// server raises it for every in-flight request whenever it processes a Serial notification
+    /// (e.g. the startup project baseline), and callers retry it, so at Warning it only put
+    /// false alarms in the Output pane (issue #800 follow-up). Every other error stays Warning.
+    /// </summary>
+    internal static LogLevel ServerErrorLogLevel(JObject error) =>
+        error["code"]?.Type == JTokenType.Integer && error["code"]!.Value<int>() == LspContentModifiedException.ErrorCode
+            ? LogLevel.Debug
+            : LogLevel.Warning;
+
+    /// <summary>
     /// Like <see cref="SendRequestToServerAsync"/>, but also surfaces the JSON-RPC <c>error</c>
     /// object when the server rejected the request (issue #650), instead of collapsing it to
     /// <c>null</c> indistinguishably from "no result". Use this over the plain overload only when
@@ -334,7 +345,8 @@ internal sealed class LspInterceptingPipe : IDisposable
             // the inspector log. Logged once, here, rather than in every caller.
             if (error is not null)
             {
-                _logger.LogWarning(
+                _logger.Log(
+                    ServerErrorLogLevel(error),
                     "LspInterceptingPipe: request {Method} id={Id} failed on the server: code={Code} message={Message}",
                     method, pending.Id, error["code"]?.ToString(), error["message"]?.ToString());
             }

@@ -202,6 +202,27 @@ public class DiagnosticsAggregatorTests
     }
 
     [Fact]
+    public void Ambiguous_step_hover_message_starts_with_a_user_friendly_header()
+    {
+        // Issue #775: the hover header should read as an instruction to the user, not a bare label.
+        var b1 = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
+            new Regex("^ambiguous step$"), null,
+            new ProjectBindingImplementation("Method1", null, new SourceLocation("A.cs", 1, 1)));
+        var b2 = new ProjectStepDefinitionBinding(ScenarioBlock.Given,
+            new Regex("^ambiguous step$"), null,
+            new ProjectBindingImplementation("Method2", null, new SourceLocation("B.cs", 1, 1)));
+        var registry = RegistryWith(b1, b2);
+
+        const string feature = "Feature: F\nScenario: S\n  Given ambiguous step\n";
+        var matchSet = MatchSetFor(feature, registry);
+
+        var result = CreateSut().Aggregate(Array.Empty<IdeSupportTag>(), matchSet);
+
+        result.Should().ContainSingle();
+        result[0].Message.Should().StartWith("Ambiguous steps (use Go To Definition to navigate):");
+    }
+
+    [Fact]
     public void Multiple_ambiguous_steps_each_produce_an_Error_diagnostic()
     {
         var b1 = new ProjectStepDefinitionBinding(ScenarioBlock.Given,

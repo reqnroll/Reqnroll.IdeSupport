@@ -51,6 +51,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
     private DocumentInitializationMonitor? _documentInitializationMonitor;
+    private FeatureBufferContentTypeGuard? _featureBufferContentTypeGuard;
     private MtpProjectStubSolutionListener? _mtpProjectStubListener;
 
     /// <inheritdoc />
@@ -85,6 +86,10 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         // forces a document to initialize.
         await AdviseDocumentInitializationMonitorAsync(cancellationToken);
 
+        // Issue #78: before the solution-load wait, for the same reason — restored .feature tabs
+        // exist by now, and one without the Gherkin content type stays inert for its whole life.
+        await StartFeatureBufferContentTypeGuardAsync(cancellationToken);
+
         _logger.LogInfo("Waiting for solution load...");
 
         await WaitForSolutionLoadAsync(cancellationToken);
@@ -105,11 +110,12 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         // the commands they are meant to (see VsWellKnownIds). Diagnostic only. WaitForSolutionLoadAsync
         // already returns on the UI thread; the switch just makes that explicit.
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-        VsWellKnownIdsSelfCheck.Run(this, _logger);
+        VsWellKnownIdsSelfCheck.Run(this, _logger, _telemetryTransmitter);
 
         // Issue #533: if VS restored a .feature tab but never activated the language server
         // provider, open and close a scratch .feature file to activate it. Not awaited: it waits
-        // out a grace period first, and package initialization must not wait for that.
+        // out a grace period first, and package initialization must not wait for that. A fallback
+        // since issue #78 fixed the restored tab's content type; see the trigger's remarks.
         _ = JoinableTaskFactory.RunAsync(() => ScratchFileActivationTrigger.RunAsync(
             this, LanguageServerActivationSignal.Shared, _logger, DisposalToken));
 
@@ -327,6 +333,31 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         }
     }
 
+    /// <summary>
+    /// Starts <see cref="FeatureBufferContentTypeGuard"/>, which logs the content type VS gave each
+    /// <c>.feature</c> buffer and re-types any that are not <c>Gherkin</c> (issue #78).
+    /// Best-effort: a failure here must not abort package initialization.
+    /// </summary>
+    private async Task StartFeatureBufferContentTypeGuardAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            var componentModel = await GetServiceAsync(typeof(SComponentModel)) as IComponentModel;
+            var rdt = await GetServiceAsync(typeof(SVsRunningDocumentTable)) as IVsRunningDocumentTable;
+            _featureBufferContentTypeGuard = FeatureBufferContentTypeGuard.TryStart(componentModel, rdt, _logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: could not start the feature buffer content-type guard.");
+        }
+    }
+
     private async Task WaitForSolutionLoadAsync(CancellationToken cancellationToken)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
@@ -389,6 +420,9 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         {
             _documentInitializationMonitor?.Dispose();
             _documentInitializationMonitor = null;
+
+            _featureBufferContentTypeGuard?.Dispose();
+            _featureBufferContentTypeGuard = null;
 
             if (_mtpProjectStubListener is not null)
             {

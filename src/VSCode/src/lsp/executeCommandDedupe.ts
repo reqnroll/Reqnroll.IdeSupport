@@ -1,4 +1,9 @@
-import { CancellationToken, Middleware, RegistrationParams } from 'vscode-languageclient/node';
+import {
+  CancellationToken,
+  ExecuteCommandRequest,
+  Middleware,
+  RegistrationParams,
+} from 'vscode-languageclient/node';
 
 /**
  * Middleware that drops `workspace/executeCommand` entries from an incoming
@@ -32,7 +37,7 @@ export function createExecuteCommandDedupeMiddleware(
     handleRegisterCapability: (params, next) => {
       const filtered: RegistrationParams = {
         registrations: params.registrations.filter((registration) => {
-          if (registration.method !== 'workspace/executeCommand') return true;
+          if (registration.method !== ExecuteCommandRequest.type.method) return true;
           const commands: unknown = (
             registration.registerOptions as { commands?: unknown } | undefined
           )?.commands;

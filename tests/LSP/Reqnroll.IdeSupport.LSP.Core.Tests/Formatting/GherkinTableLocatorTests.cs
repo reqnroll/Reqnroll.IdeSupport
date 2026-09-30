@@ -161,4 +161,41 @@ public class GherkinTableLocatorTests
 
         GherkinTableLocator.FindTableAtLine(doc, 2).Should().BeNull();
     }
+
+    [Fact]
+    public void FindTableAtLine_returns_Examples_table_when_only_header_row_remains()
+    {
+        // Deleting the body rows of an Examples table (as in the bug report) leaves a
+        // header-only block; locating its header row must not throw (issue #827).
+        var lines = new[]
+        {
+            "Feature: foo",
+            "Scenario Outline: bar",
+            "    Given <x>",
+            "    Examples:",
+            "    | x |",
+            ""
+        };
+        var doc = ParseDocument(lines);
+
+        var result = GherkinTableLocator.FindTableAtLine(doc, 4); // line index 4 = "| x |"
+
+        result.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void FindTableAtLine_returns_null_without_crashing_when_examples_block_has_no_table()
+    {
+        var lines = new[]
+        {
+            "Feature: foo",
+            "Scenario Outline: bar",
+            "    Given <x>",
+            "    Examples:",
+            ""
+        };
+        var doc = ParseDocument(lines);
+
+        GherkinTableLocator.FindTableAtLine(doc, 2).Should().BeNull();
+    }
 }

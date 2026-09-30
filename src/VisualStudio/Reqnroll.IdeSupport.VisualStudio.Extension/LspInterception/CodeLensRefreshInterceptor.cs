@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -106,7 +107,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
         // because lenses for an already-open .cs file were rendered before the server had counts.
         if (message.Direction == LspMessageDirection.Receive)
         {
-            if (string.Equals(method, ReqnrollMethodNames.RefreshCodeLens, StringComparison.Ordinal))
+            if (string.Equals(method, CustomLspMethodNames.ReqnrollRefreshCodeLens, StringComparison.Ordinal))
             {
                 var isFullReplacement = body["params"]?["isFullReplacement"]?.Value<bool>() ?? false;
 

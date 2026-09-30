@@ -2,11 +2,11 @@ using System.Net.Sockets;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
@@ -421,7 +421,7 @@ public class TestOutcomeTcpListenerTests : IDisposable
         await SendAsync(registration.Endpoint, Hello(registration.RunId), Result("Add", "Add(1,2)", "Passed", registration.RunId), RunComplete(registration.RunId));
 
         (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
-        recorder.Received(1).Record(LspMethodNames.ReqnrollTestOutcomesIngestRun, Arg.Any<double>(), Arg.Any<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri?>(), Arg.Any<string?>());
+        recorder.Received(1).Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, Arg.Any<double>(), Arg.Any<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri?>(), Arg.Any<string?>());
     }
 
     [Fact]

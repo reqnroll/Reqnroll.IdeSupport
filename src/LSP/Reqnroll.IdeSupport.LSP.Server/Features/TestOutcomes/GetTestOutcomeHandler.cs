@@ -5,10 +5,10 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
@@ -47,7 +47,7 @@ public sealed class GetTestOutcomeHandler
     /// <summary>Handles a <c>reqnroll/testOutcomes/getOutcome</c> request.</summary>
     public Task<GetTestOutcomeResponse> HandleAsync(GetTestOutcomeParams request, CancellationToken cancellationToken)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollGetTestOutcome);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollGetTestOutcome);
 
         try
         {

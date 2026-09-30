@@ -13,9 +13,9 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
@@ -141,7 +141,7 @@ public class BindingRegistryChangedHandler :
         finally
         {
             _recorder.Record(
-                LspMethodNames.InternalBindingRegistryReconcile,
+                InternalLspMethodNames.InternalBindingRegistryReconcile,
                 Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
                 detail: $"scannedFiles={scannedFileCount} reparsedFiles={reparsedFileCount}");
         }
@@ -181,7 +181,7 @@ public class BindingRegistryChangedHandler :
         finally
         {
             _recorder.Record(
-                LspMethodNames.InternalBindingRegistryReconcile,
+                InternalLspMethodNames.InternalBindingRegistryReconcile,
                 Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
                 detail: $"reparsedFiles={reparsedFileCount}");
         }
@@ -204,7 +204,7 @@ public class BindingRegistryChangedHandler :
         finally
         {
             _recorder.Record(
-                LspMethodNames.InternalBindingRegistryReconcile,
+                InternalLspMethodNames.InternalBindingRegistryReconcile,
                 Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds,
                 detail: $"removedFiles={notification.Paths.Count}");
         }

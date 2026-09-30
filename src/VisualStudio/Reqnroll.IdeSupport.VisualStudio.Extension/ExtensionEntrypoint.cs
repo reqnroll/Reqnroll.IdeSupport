@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
-using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -76,8 +76,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             // another.
             serviceCollection.AddSingleton<FindStepUsagesState>();
             serviceCollection.AddSingleton<FindUnusedStepDefinitionsState>();
-            serviceCollection.AddSingleton<GoToHooksState>();
-            serviceCollection.AddSingleton<GoToMatchingScenariosState>();
+            serviceCollection.AddSingleton<FindHooksState>();
+            serviceCollection.AddSingleton<FindMatchingScenariosState>();
             serviceCollection.AddSingleton<StepCodeLensState>();
             serviceCollection.AddSingleton<RenameStepState>();
             serviceCollection.AddSingleton<FormatDocumentState>();

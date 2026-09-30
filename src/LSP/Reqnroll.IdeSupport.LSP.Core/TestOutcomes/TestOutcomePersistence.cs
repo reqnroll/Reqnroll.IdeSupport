@@ -38,6 +38,16 @@ public sealed class TestOutcomePersistence
     internal const int FormatVersion = 1;
     internal static readonly TimeSpan MaxAge = TimeSpan.FromDays(30);
 
+    /// <summary>
+    /// Overrides the resolved file path outright when set, mirroring
+    /// <c>SessionsDirectory.OverrideEnvironmentVariable</c> (<c>REQNROLL_MTP_SESSIONS_DIR</c>) and
+    /// <c>REQNROLL_TESTLOGGER_FILE</c>'s role for their own state files. Unset in every normal
+    /// session, so a user always gets <see cref="ResolveDefaultFilePath"/> — this exists so the
+    /// performance benchmark suite can point the server at a per-run temp file and never read or
+    /// write the developer's real 30-day outcome history (issue #714).
+    /// </summary>
+    public const string FilePathEnvironmentVariable = "REQNROLL_TEST_OUTCOMES_PATH";
+
     private readonly string _filePath;
     private readonly Func<string, DateTime?> _sourceLastWriteUtc;
     private readonly IIdeSupportLogger _logger;
@@ -45,8 +55,22 @@ public sealed class TestOutcomePersistence
 
     /// <summary>DI entry point.</summary>
     public TestOutcomePersistence(IIdeSupportLogger logger)
-        : this(ResolveDefaultFilePath(logger), TestOutcomeFreshness.DefaultSourceLastWriteUtc, logger)
+        : this(ResolveFilePath(logger), TestOutcomeFreshness.DefaultSourceLastWriteUtc, logger)
     {
+    }
+
+    /// <summary>
+    /// Resolves the persistence file path, honouring <see cref="FilePathEnvironmentVariable"/> first.
+    /// Separated from <see cref="ResolveDefaultFilePath"/> so the env-var branch is directly testable
+    /// without the environment-dependent path resolution underneath it.
+    /// </summary>
+    internal static string ResolveFilePath(IIdeSupportLogger logger)
+    {
+        var overridePath = Environment.GetEnvironmentVariable(FilePathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(overridePath))
+            return overridePath;
+
+        return ResolveDefaultFilePath(logger);
     }
 
     /// <summary>Test seam: explicit file and container-timestamp lookup.</summary>

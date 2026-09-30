@@ -3,12 +3,12 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Formatting;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
@@ -66,7 +66,7 @@ public sealed class FormattingHandler
     /// <summary>Handles a <c>textDocument/formatting</c> request for Gherkin document formatting.</summary>
     public async Task<TextEditContainer?> Handle(DocumentFormattingParams request, CancellationToken ct)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentFormatting, request.TextDocument.Uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentFormatting, request.TextDocument.Uri);
         var filePath = request.TextDocument.Uri.GetFileSystemPath();
         _logger.LogInfo($"Document auto-formatting textDocument/formatting: {request.TextDocument.Uri}");
         var result = await FormatDocumentAsync(request.TextDocument.Uri, filePath, request.Options,
@@ -91,7 +91,7 @@ public sealed class FormattingHandler
     /// <summary>Handles a <c>textDocument/range-formatting</c> request for Gherkin document formatting.</summary>
     public async Task<TextEditContainer> Handle(DocumentRangeFormattingParams request, CancellationToken ct)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentRangeFormatting, request.TextDocument.Uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentRangeFormatting, request.TextDocument.Uri);
         var filePath = request.TextDocument.Uri.GetFileSystemPath();
         _logger.LogInfo($"Document auto-formatting textDocument/rangeFormatting: {request.TextDocument.Uri}");
         var result = await FormatDocumentAsync(
@@ -124,7 +124,7 @@ public sealed class FormattingHandler
     /// <summary>Handles a <c>textDocument/on-type-formatting</c> request for Gherkin document formatting.</summary>
     public Task<TextEditContainer?> Handle(DocumentOnTypeFormattingParams request, CancellationToken ct)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentOnTypeFormatting, request.TextDocument.Uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentOnTypeFormatting, request.TextDocument.Uri);
         var filePath = request.TextDocument.Uri.GetFileSystemPath();
         _logger.LogInfo($"textDocument/onTypeFormatting: trigger='{request.Character}' {request.TextDocument.Uri}");
 

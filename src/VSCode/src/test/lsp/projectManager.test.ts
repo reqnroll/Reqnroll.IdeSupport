@@ -7,7 +7,7 @@ import { ReqnrollMethods } from '../../lsp/lspMethods';
 suite('ProjectManager', () => {
   test('ReqnrollMethods defines the LSP method names ProjectManager sends', () => {
     // Exercises the real constants module, not a local copy — a rename in lspMethods.ts
-    // (or a mismatch with LspMethodNames.cs) would fail this test.
+    // (or a mismatch with CustomLspMethodNames.cs) would fail this test.
     assert.strictEqual(ReqnrollMethods.projectLoaded, 'reqnroll/projectLoaded');
     assert.strictEqual(ReqnrollMethods.projectUnloaded, 'reqnroll/projectUnloaded');
     assert.strictEqual(ReqnrollMethods.projectFiles, 'reqnroll/projectFiles');

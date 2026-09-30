@@ -10,9 +10,9 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
@@ -74,7 +74,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         var uri = request.TextDocument.Uri;
 
         // Performance Verification (Layer 4): time the cache-hit definition round-trip (the handler's own work).
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDefinition, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDefinition, uri);
 
         var step = _resolver.FindStep(uri, request.Position);
         if (step is null)

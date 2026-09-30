@@ -74,4 +74,25 @@ public class VsWellKnownIdsSelfCheckTests
         CommentToggleCommandFilter.EditorCommandSet.Should().Be(VsWellKnownIds.EditorCommandSet);
         CommentToggleCommandFilter.CmdIdToggleLineComment.Should().Be(VsWellKnownIds.CmdIdToggleLineComment);
     }
+
+    [Fact]
+    public void Mismatch_event_carries_counts_and_the_failing_commands()
+    {
+        var evt = VsWellKnownIdsSelfCheck.CreateMismatchEvent(5, new[] { "OwnerA: Cmd.A (NotFound)", "OwnerB: Cmd.B (NameMismatch)" });
+
+        evt.EventName.Should().Be("VsWellKnownIdsSelfCheckMismatch");
+        var props = evt.Properties.ToDictionary(p => p.Key, p => p.Value);
+        props["ProblemCount"].Should().Be(2);
+        props["ExpectedCount"].Should().Be(5);
+        props["Problems"].Should().Be("OwnerA: Cmd.A (NotFound); OwnerB: Cmd.B (NameMismatch)");
+    }
+
+    [Fact]
+    public void Mismatch_event_truncates_an_oversized_problem_list()
+    {
+        var evt = VsWellKnownIdsSelfCheck.CreateMismatchEvent(1, new[] { new string('x', 2000) });
+
+        ((string)evt.Properties.First(p => p.Key == "Problems").Value).Length
+            .Should().Be(VsWellKnownIdsSelfCheck.MaxProblemsLength);
+    }
 }

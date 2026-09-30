@@ -81,7 +81,14 @@ A standard LSP client *pulls* semantic tokens by sending `textDocument/semanticT
 
 The workaround is a **server-push + client-classifier** path that bypasses VS's native token pull entirely. When launched with `--ide visualstudio`, the server pushes encoded tokens to the VS client via a custom `reqnroll/semanticTokens` notification every time step binding matches change [ `MatchCacheChangedNotification`]. The VS extension captures this notification, decodes the token data, and caches it in a process-wide `SemanticTokenClassificationStore`. A classic MEF `IClassifierProvider` / `GherkinSemanticClassifier` then reads those cached tokens and emits `ClassificationSpan`s using the existing `IdeSupportClassifications` entries — the same classification names the existing VS extension uses, so users see no change in behavior of coloring (compared to the existing extension). VS Code and Rider are unaffected and use the standard pull flow.
 
-The `--ide` flag is the only place where the server behaves differently per IDE at the protocol level; the rest of the server is client-agnostic.
+The `--ide` flag is the server's primary per-IDE signal, and the only identity it has before the
+client connects, so it is the only place where the server behaves differently per IDE at the
+protocol level; the rest of the server is client-agnostic. It has a fallback (issue #709): when a
+client omits the flag, `InitializeParams.ClientInfo` — the LSP-standard `{name, version}` the client
+self-reports in the `initialize` request — is mapped onto the same identifier vocabulary. The flag
+always wins, so no shipped client's behaviour changes; see
+[Per-IDE capability registration via `--ide` flag](#per-ide-capability-registration-via---ide-flag)
+below for how the two sources are resolved.
 
 Full detail is in [F1 · Client-side token-type mapping](LSP-IDE-Support-Feature-Designs.md#client-side-token-type-mapping).
 
@@ -98,6 +105,13 @@ The trade-off is that the call graph is less linear: a `textDocument/didChange` 
 OmniSharp's handler base classes (e.g. `SemanticTokenHandlerBase`) register capabilities dynamically by default. Visual Studio requires static registration for semantic tokens and certain other capabilities — it cannot handle `client/registerCapability` reliably for these.
 
 Rather than encoding per-IDE logic inside each handler class, the server accepts a `--ide <ide>` flag at startup and uses it to decide, once during `initialize`, whether to register each capability statically or dynamically. This keeps all IDE-specific registration logic in one place (the startup path) while leaving handler implementations client-agnostic.
+
+**Identity resolution (issue #709).** The flag is the primary source, but it is not the only one. `InitializeParams.ClientInfo` — the LSP-standard `{name, version}` every client self-reports in the `initialize` request — is recorded by `ClientIdeContext.ApplyClientInfo` from `OnInitialized` and fills the identity in **only when no `--ide` was passed**. Two constraints shape this:
+
+- **The flag must keep winning.** It is available before the client connects, which is what lets `LspIdeSupportLogger` name its file and `ApplySemanticTokensCapability` decide VS's pull support. `ClientInfo` arrives later — after the DI container, and therefore `ClientIdeContext` itself, was built — which is exactly why the fallback is a mutation at `initialize` rather than a constructor input.
+- **`ClientInfo.Name` is not an identifier.** A client sends a product name ("Visual Studio Code"), not `vscode`, so the mapping in `MapClientInfoNameToIde` is an ordered, case-insensitive substring table. The order is load-bearing: "Visual Studio Code" contains "Visual Studio", so the VS Code tokens must be tested first — otherwise every VS Code client would resolve to Visual Studio and be handed the push-based semantic-token path above. A name matching nothing resolves to no identity rather than a guess, which preserves the "unknown IDE behaves like a non-VS client" default.
+
+Every per-IDE branch except the two `initialize`-time capability decisions reads `ClientIdeContext` lazily, per request (`SemanticTokensPushHandler`, `CodeActionHandler`, `CompletionHandler`, `RenameHandler`, `CodeLensRefreshRequester`), so the fallback reaches them for free. `ApplySemanticTokensCapability` resolves VS-ness through the same context rather than the raw argument, so the capability it advertises agrees with the handler that later pushes tokens. The resolved identity is logged at `initialize` (Info level) with both raw sources, which is what makes a disagreeing `ClientInfo` visible instead of silent.
 
 ### Custom `reqnroll/*` notifications for project-system information
 
@@ -257,7 +271,7 @@ Reqnroll.IdeSupport/
 │   │   │   └── globalUsings.cs
 │   │   │
 │   │   ├── Reqnroll.IdeSupport.LSP.Server/      # OmniSharp LSP host (net10.0, exe)
-│   │   │   ├── Protocol/                        # LspMethodNames constants; Documents/ = document extension helpers
+│   │   │   ├── Protocol/                        # wire DTOs; method names live in Reqnroll.IdeSupport.Common/Lsp; Documents/ = document extension helpers
 │   │   │   ├── Features/                        # OmniSharp handler classes (LSP messages), one folder per capability (e.g. Features/Completions, Features/Formatting, Features/SemanticTokens)
 │   │   │   ├── Pipeline/                        # MediatR notification handlers (internal events)
 │   │   │   ├── Hosting/                         # Program.cs, LanguageServerOptionsExtensions (capability + reqnroll/* registration), ClientIdeContext, ResilientMediator, ServiceCollectionExtensions
@@ -314,7 +328,7 @@ The server is a self-contained executable built on `OmniSharp.Extensions.Languag
 
 OmniSharp supports both static (declared in `initialize` response) and dynamic (via `client/registerCapability`) registration. Visual Studio has known issues with dynamic registration for some capabilities (see per-feature notes).
 
-The server accepts a `--ide <ide>` command-line flag at startup (e.g., `--ide visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic.
+The server accepts a `--ide <ide>` command-line flag at startup (e.g., `--ide visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic. When the flag is absent the identity is resolved instead from `InitializeParams.ClientInfo` — see [Per-IDE capability registration via `--ide` flag](#per-ide-capability-registration-via---ide-flag).
 
 **OmniSharp implementation note (as-built)**: OmniSharp's handler base classes (e.g., `SemanticTokenHandlerBase`) use dynamic registration by default. Rather than building alternate base classes or patching OmniSharp's registration internals, capabilities needing static registration are wired manually via `options.OnRequest<>` in `LanguageServerOptionsExtensions.cs` (semantic tokens, references, document symbol, code lens/`codeLens/resolve`, inlay hint, folding range, prepare-rename/rename, rename targets), alongside `AddHandler<>` dynamic registration for the rest.
 
@@ -433,7 +447,7 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `FoldingRangeHandler` | `textDocument/foldingRange` |
 | `InlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
 | `FormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
-| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspMethodNames` like every other method) |
+| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspStandardMethodNames` like every other method) |
 | `ReferencesHandler` | `textDocument/references` (from `.cs` cursors; two-state) |
 | `FindStepUsagesHandler` | `reqnroll/findStepUsages` (custom; three-state: isBinding false / 0 usages / locations) |
 | `RenameHandler` | `textDocument/prepareRename`, `textDocument/rename`, `reqnroll/selectRenameTarget` (retains the session state for a picked disambiguation target between requests) |
@@ -446,8 +460,8 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `RenamePostApplyCoordinator` | (not a handler) — post-`WorkspaceEdit` steps: pushes a genuine `workspace/applyEdit` to VS only (its rename pipe swallows the handler's return value) and invalidates the match cache for closed `.feature` files the rename touched |
 | `StepCodeLensHandler` | `textDocument/codeLens` |
 | `CodeLensResolveHandler` | `codeLens/resolve` — dispatches to whichever handler produced the lens, based on the `kind` discriminator embedded in `CodeLens.Data` (issue #471) |
-| `HookCodeLensHandler` | `textDocument/codeLens` (`.feature` files only — [F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) hook-match CodeLens; click reuses F17's `reqnroll/goToHooks`) |
-| `HookMatchCountCodeLensHandler` | `textDocument/codeLens` (`.cs` files — [F25](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings) hook-binding match-count CodeLens; coexists with `StepCodeLensHandler` in the same response, `reqnroll/goToMatchingScenarios` on click) |
+| `HookCodeLensHandler` | `textDocument/codeLens` (`.feature` files only — [F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) hook-match CodeLens; click reuses F17's `reqnroll/findHooks`) |
+| `HookMatchCountCodeLensHandler` | `textDocument/codeLens` (`.cs` files — [F25](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings) hook-binding match-count CodeLens; coexists with `StepCodeLensHandler` in the same response, `reqnroll/findMatchingScenarios` on click) |
 
 The rename pipeline's `WorkspaceEdit` response is built by `WorkspaceEditBuilder` (`Features/Rename/`, used by both `RenameHandler` and `RenameTargetsHandler`), which negotiates per-request whether the client advertised LSP 3.16 change-annotation support (`documentChanges` + `changeAnnotationSupport` in `ClientSettings.Capabilities.Workspace.WorkspaceEdit`) and emits either an annotated `DocumentChanges` edit (grouped/labelled preview — VS Code) or the legacy `Changes` map (VS, which never advertises `changeAnnotationSupport`). `RenameChangeAnnotations` holds the two annotation-id constants (`reqnroll.rename.feature`, `reqnroll.rename.binding`) that label the edit groups. `RenamePostApplyCoordinator` handles what happens after the edit is built: it pushes the edit to VS via a genuine `workspace/applyEdit` (VS's rename pipe swallows the handler's return value, so VS needs a real push rather than relying on its client to apply the response), and invalidates the match cache for closed `.feature` files the edit touched. See [Feature Designs — Rename change annotations](LSP-IDE-Support-Feature-Designs.md#rename-change-annotations---as-built) for the full negotiation and known limitations.
 
@@ -533,12 +547,10 @@ VS Code has no native MSBuild project system. The extension bridges this with a 
 
 #### LSP inspector logging
 
-When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspectorLogger.ts` module creates a `TeeLogOutputChannel` that:
-- Shows trace in the **Reqnroll LSP Trace** Output panel (via the standard `traceOutputChannel` mechanism)
-- Writes each entry to a timestamped file:
-  - Windows: `%LOCALAPPDATA%\Reqnroll\reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
-  - macOS: `~/Library/Logs/Reqnroll/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
-  - Linux: `~/.local/share/Reqnroll/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
+When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspectorLogger.ts` module creates a `FileLspTraceChannel` -- a file-only `LogOutputChannel` handed to `vscode-languageclient` as its `traceOutputChannel` (the client's only trace hook, which insists on that type). It shows nothing in the Output panel (the visible "Reqnroll LSP Trace" pane was removed in issue #792) and writes each entry, in lsp-viewer format, to a timestamped file:
+  - Windows: `%LOCALAPPDATA%\Reqnroll\logs\reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
+  - macOS: `~/Library/Logs/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
+  - Linux: `~/.local/share/Reqnroll/logs/reqnroll-vscode-inspector-YYYYMMdd-HHmmss.log`
 
 #### Packaging and distribution
 
@@ -620,7 +632,7 @@ Rider's declared module dependencies are `com.intellij.modules.rider` and `com.i
 |---|---|
 | `ReqnrollLspServerDescriptor` | Central configuration point: launch command line, supported files (`.feature`/`.cs`), `lspGoToDefinitionSupport`, `lspSemanticTokensSupport`, `lspFormattingSupport`, the custom `lsp4jServerClass` (adds `reqnroll/*` methods on top of standard `LanguageServer`), and `clientCapabilities` overrides advertising refresh/dynamic-registration support the platform default doesn't (see §6.4) |
 | `ReqnrollLspServerSupportProvider` | Registers `ReqnrollLspServerDescriptor` with Rider's generic LSP client |
-| `ReqnrollRequestSender` | Sends the custom `reqnroll/findStepUsages`/`reqnroll/findUnusedStepDefinitions`/`reqnroll/goToHooks` requests, the *standard* `textDocument/codeLens`/`inlayHint`/`onTypeFormatting`/`foldingRange` requests that Rider's generic client has no rendering-side consumer for, and the *standard* `workspace/executeCommand` request for `reqnroll.toggleComment` (F13) |
+| `ReqnrollRequestSender` | Sends the custom `reqnroll/findStepUsages`/`reqnroll/findUnusedStepDefinitions`/`reqnroll/findHooks` requests, the *standard* `textDocument/codeLens`/`inlayHint`/`onTypeFormatting`/`foldingRange` requests that Rider's generic client has no rendering-side consumer for, and the *standard* `workspace/executeCommand` request for `reqnroll.toggleComment` (F13) |
 | `ReqnrollNotificationSender` | Sends `reqnroll/projectLoaded`/`projectUnloaded`/`projectFiles`/`documentActivated` |
 | `ReqnrollCodeLensRefreshInterceptor` / `ReqnrollInlayHintRefreshInterceptor` | Wrap the platform's `LspServerNotificationsHandler` so `workspace/codeLens/refresh`/`workspace/inlayHint/refresh` also refresh the CodeVision lens / inlay hints — the generic handling has no consumer to notify otherwise |
 | `ReqnrollSemanticTokensSupport` | Custom `TextAttributesKey` per `reqnroll.*` legend name, since Rider's default `getTextAttributesKey` only maps the ~23 standard LSP token-type names |
@@ -690,10 +702,10 @@ For every shipped feature, each IDE's **client-side implementation** falls into 
 | F14 · Find Step Usages | Custom — `reqnroll/findStepUsages` + `QuickPick` | Custom — same message + `NavigationPickerDialog` | Custom — same message + `StepUsagesCodeVisionProvider`/`FindStepUsagesAction` | No |
 | F15 · Find Unused Step Definitions | Custom — `reqnroll/findUnusedStepDefinitions` | Custom — same message | Custom — same message + `FindUnusedStepDefinitionsAction` | No |
 | F16 · Step Rename Refactoring | Custom — `renameStep.ts` (`reqnroll/renameTargets` + `reqnroll/selectRenameTarget`) atop standard `textDocument/rename` | Custom — same messages + `RenameStep/*` | **Custom** — `RenameFeatureStepAction`/`RenameCSharpStepAction` + `RenameStepRunner`/`RenameWorkspaceEditApplier`, same `reqnroll/renameTargets` + `reqnroll/selectRenameTarget` messages as VS Code/VS. Implemented, #160 | **Yes** — `RenamePostApplyCoordinator` branches on `IsVisualStudio` for post-apply handling |
-| F17 · Go to Hooks | Custom — `reqnroll/goToHooks` + `QuickPick` | Custom — same message + `NavigationPickerDialog` | Custom — same message + `GoToHooksAction`/`GoToHooksRunner`, reusing `ReqnrollResultPopup` (F14/F15's chooser popup) (#158) | No |
+| F17 · Go to Hooks | Custom — `reqnroll/findHooks` + `QuickPick` | Custom — same message + `NavigationPickerDialog` | Custom — same message + `GoToHooksAction`/`GoToHooksRunner`, reusing `ReqnrollResultPopup` (F14/F15's chooser popup) (#158) | No |
 | F18 · Code Lens (step usage counts) | OOB — native `CodeLensProvider` via `vscode-languageclient`; click actions reuse F14's custom message | **Custom** — `StepCodeLensService` talks to `LspInterceptingPipe` directly, bypassing VS's built-in LSP code-lens infrastructure entirely; refresh uses the custom `reqnroll/refreshCodeLens` notification, acted on for both full and incremental signals behind a debounce + rate guard ([#343](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/343); `CodeLens.Invalidate()` provokes the [#156](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/156) client reconnect, now survivable rather than fatal) | Glue — standard `textDocument/codeLens` called directly via `ReqnrollRequestSender`, rendered through IntelliJ's native `CodeVisionProvider`, since Rider's generic client has no rendering-side consumer for it either | **Yes** — refresh notification differs: custom `reqnroll/refreshCodeLens` for VS vs. standard `workspace/codeLens/refresh` for everyone else |
 | F23 · Inlay Hints (step binding info) | OOB (`textDocument/inlayHint`, native rendering) | OOB | Glue — `ReqnrollFeatureInlayHintsController` calls the standard request directly and renders via `Editor.inlayModel`, since Rider's generic client has no rendering-side consumer for inlay hints either | No |
-| F24 · Hook Match CodeLens (Feature/Scenario/Step) | Glue — `hookCodeLens.ts` registers a `CodeLensProvider` directly (same pattern as F18) and calls `textDocument/codeLens`; click reuses F17's `reqnroll/goToHooks` with `alwaysShowPicker` forced on | **Custom** — classic (non-Roslyn) `Microsoft.VisualStudio.Language.CodeLens` API (`HookCodeLensTaggerProvider` + two data point providers), not VS.Extensibility's `ICodeLensProvider` (used for F18), which has no producer-side extension point for a custom language; data points run out-of-process and call back into `devenv.exe` via `ICodeLensCallbackService`/`HookCodeLensCallbackListener`. Like Rider, needs two providers (`HookCodeLensDataPointProvider` own-level + `StepHooksCodeLensDataPointProvider`) to render both lens kinds on a `Scenario:` line — but they share **one** line-scoped tag rather than getting one each ([#400](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/400)/[#407](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/407)). [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372)/[#398](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/398). See [Feature Designs §F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) for the full component inventory and flow diagrams | Glue — two `CodeVisionProvider`s (`HookCodeVisionProvider` for the own-level lens, `StepHooksCodeVisionProvider` for the step-hooks lens, ordered after via `CodeVisionRelativeOrderingAfter`) since one provider can't render two entries on the same line; shared logic in `HookLensSupport`; click via `GoToHooksRunner.runAndShow(alwaysShowPicker = true)` | No |
+| F24 · Hook Match CodeLens (Feature/Scenario/Step) | Glue — `hookCodeLens.ts` registers a `CodeLensProvider` directly (same pattern as F18) and calls `textDocument/codeLens`; click reuses F17's `reqnroll/findHooks` with `alwaysShowPicker` forced on | **Custom** — classic (non-Roslyn) `Microsoft.VisualStudio.Language.CodeLens` API (`HookCodeLensTaggerProvider` + two data point providers), not VS.Extensibility's `ICodeLensProvider` (used for F18), which has no producer-side extension point for a custom language; data points run out-of-process and call back into `devenv.exe` via `ICodeLensCallbackService`/`HookCodeLensCallbackListener`. Like Rider, needs two providers (`HookCodeLensDataPointProvider` own-level + `StepHooksCodeLensDataPointProvider`) to render both lens kinds on a `Scenario:` line — but they share **one** line-scoped tag rather than getting one each ([#400](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/400)/[#407](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/407)). [#372](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/372)/[#398](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/398). See [Feature Designs §F24](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) for the full component inventory and flow diagrams | Glue — two `CodeVisionProvider`s (`HookCodeVisionProvider` for the own-level lens, `StepHooksCodeVisionProvider` for the step-hooks lens, ordered after via `CodeVisionRelativeOrderingAfter`) since one provider can't render two entries on the same line; shared logic in `HookLensSupport`; click via `GoToHooksRunner.runAndShow(alwaysShowPicker = true)` | No |
 | F25 · Hook Match Count CodeLens (hook bindings) | Glue — shares F18's `.cs` `CodeLensProvider` registration; click via `goToMatchingScenarios.ts`, always shows a QuickPick | **Custom** — `HookMatchCountCodeLensProvider`, a second `ICodeLensProvider` alongside `StepCodeLensProvider`, reusing `StepCodeLensState`'s method-start-line registry *and* (since [#400](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/400)) its `IInvalidatableLens` refresh registry, without which the lens never repainted after a rebuild; results shown in the Find-Usages (F14) results window rather than a modal picker | Glue — the existing `StepUsagesCodeVisionProvider` (F18) dispatches by command name to `GoToMatchingScenariosRunner`, always shows a picker rather than auto-navigating | No |
 | F27 · C# Binding Validation Diagnostics | OOB (`textDocument/publishDiagnostics`) | OOB | OOB | No |
 
@@ -792,6 +804,17 @@ The following latency targets apply at **P95** (the 95th-percentile: 95% of requ
 | Initial workspace scan — cold start | < 30 s |
 
 > **Note**: These are design targets, not contractual SLAs. Benchmarks should be established in Phase 1 (against the F1 integration spec) and revisited as the feature set grows.
+
+> **Measured, no published threshold.** Several operations are field-instrumented (Layer 4) and
+> benchmarked (Layer 2) but carry no target in the table above, so their `PerfTargets` entries report
+> `—` and are never asserted (the #119 convention). The LSP-server test-outcome pipeline
+> (#700/#702, benchmarked by #714) added the largest batch: `reqnroll/testOutcomes/getOutcome` (bare,
+> plus its `#found`/`#not-found` variants), `reqnroll/testOutcomes/registerRun`,
+> `testOutcomes/ingest#results-burst`, `reqnroll/testOutcomes/changed`, and
+> `testOutcomes/persistence#load`/`#save`. The bare `getOutcome` row is what keeps the Layer 4 field
+> label and its synthetic counterpart aligned 1:1 — the variants exist because a cache hit and a miss
+> are genuinely different costs, not to replace it. They stay `—` until a threshold is proposed from
+> reference-machine data; their presence means "measured", not "expected to hit a number".
 
 ### Performance Verification
 
@@ -903,7 +926,7 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 
 | Field | Rationale |
 |-------|-----------|
-| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from `--ide` flag; enables per-IDE breakdown of all events |
+| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from the resolved IDE identity — the `--ide` flag, falling back to `InitializeParams.ClientInfo` when no flag was passed (issue #709); enables per-IDE breakdown of all events |
 | `DiscoveryType` (`roslyn` / `reflection`) | Added to `ReqnrollDiscovery` event; helps understand cache hit rates and build dependency |
 | `ExtensionInstalled` / `ExtensionUpgraded` origin | These events fire before the LSP server starts; must be sent by the IDE client, not the server — reinforces the open question on telemetry origin (Q11) |
 

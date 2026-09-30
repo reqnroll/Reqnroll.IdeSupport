@@ -216,17 +216,17 @@ public sealed class InteractiveScenarios
         }).ConfigureAwait(false);
 
     /// <summary>
-    /// <c>reqnroll/goToHooks</c> from the first scenario's step position — that scenario carries
+    /// <c>reqnroll/findHooks</c> from the first scenario's step position — that scenario carries
     /// the corpus's <c>@hookscope</c> tag (see <c>CorpusGenerator.BuildFeature</c>), so this exercises
     /// a real, populated hook match (the global + tag-scoped hooks from <c>CorpusGenerator.BuildBindings</c>),
     /// not just protocol-boundary dispatch cost against an empty result.
     /// </summary>
-    public async Task<LatencySummary> GoToHooksAsync()
-        => await RunAsync(PerfTargets.GoToHooks.Operation, async i =>
+    public async Task<LatencySummary> FindHooksAsync()
+        => await RunAsync(PerfTargets.FindHooks.Operation, async i =>
         {
             var f = _features[i % _features.Count];
             var (line, character) = f.StepPosition;
-            await _harness.RequestGoToHooksAsync(f.Uri, line, character).ConfigureAwait(false);
+            await _harness.RequestFindHooksAsync(f.Uri, line, character).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
     /// <summary>
@@ -242,6 +242,79 @@ public sealed class InteractiveScenarios
             var f = _features[i % _features.Count];
             await _harness.RequestResolveTestTargetsAsync(f.Uri, f.FirstScenarioRange).ConfigureAwait(false);
         }).ConfigureAwait(false);
+
+    // ── Test outcomes (issues #700/#714) ────────────────────────────────────────
+    // The Run CodeLens bridge's outcome lookup, on the same LSP transport every other interactive
+    // target is measured on. The store is seeded once (see TestOutcomeScenarios.SeedAsync) before
+    // these run, and every one of the three lookups below is a distinct cost shape, which is why
+    // each gets its own label: a hit stats the container, sorts rows and builds the DTO; a miss
+    // returns early without touching the filesystem; the bare label is the aggregate the server
+    // actually emits, kept so field and synthetic labels line up 1:1.
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/getOutcome</c> for a method the store knows — the container stat,
+    /// row sort and DTO build the handler does beyond a dictionary lookup.
+    /// </summary>
+    public async Task<LatencySummary> GetTestOutcomeFoundAsync(SeededTestOutcome seed)
+        => await RunAsync(PerfTargets.GetTestOutcomeFound.Operation, async _ =>
+        {
+            await _harness.RequestGetTestOutcomeAsync(seed.AssemblyPath, seed.TypeFullName, seed.MethodName)
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/getOutcome</c> for a method no run has reported — the dictionary miss
+    /// a freshly opened file's lenses mostly take, and the cheapest path through the handler.
+    /// </summary>
+    public async Task<LatencySummary> GetTestOutcomeNotFoundAsync()
+        => await RunAsync(PerfTargets.GetTestOutcomeNotFound.Operation, async _ =>
+        {
+            await _harness.RequestGetTestOutcomeAsync(
+                TestOutcomeScenarios.UnseededAssemblyPath,
+                TestOutcomeScenarios.UnseededTypeFullName,
+                TestOutcomeScenarios.UnseededMethodName).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+    /// <summary>
+    /// The bare <c>reqnroll/testOutcomes/getOutcome</c> label — the aggregate a real lens set produces
+    /// (hits and misses mixed, and it is the label the handler's own
+    /// <c>IOperationDurationRecorder.Measure</c> emits, so the two line up). Alternates hit and miss
+    /// so the aggregate is a genuine blend rather than a duplicate of either variant above.
+    /// </summary>
+    public async Task<LatencySummary> GetTestOutcomeAsync(SeededTestOutcome seed)
+        => await RunAsync(PerfTargets.GetTestOutcome.Operation, async i =>
+        {
+            if (i % 2 == 0)
+                await _harness.RequestGetTestOutcomeAsync(seed.AssemblyPath, seed.TypeFullName, seed.MethodName)
+                    .ConfigureAwait(false);
+            else
+                await _harness.RequestGetTestOutcomeAsync(
+                    TestOutcomeScenarios.UnseededAssemblyPath,
+                    TestOutcomeScenarios.UnseededTypeFullName,
+                    TestOutcomeScenarios.UnseededMethodName).ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/registerRun</c>, the request the IDE's runsettings-injection service
+    /// makes once per Test Explorer execution request. The <b>first</b> call is what binds the loopback
+    /// listener and starts its accept loop, and VS blocks a synchronous VSTest callback on this round
+    /// trip — so that first-call cost is measured on its own and printed, and only the steady-state
+    /// GUID mint is recorded against the target (mixing the two would hide a socket bind inside a
+    /// percentile).
+    /// </summary>
+    public async Task<LatencySummary> RegisterTestRunAsync()
+    {
+        var firstCallStart = Stopwatch.GetTimestamp();
+        var first = await _harness.RequestRegisterTestRunAsync().ConfigureAwait(false);
+        var firstCallMs = Stopwatch.GetElapsedTime(firstCallStart).TotalMilliseconds;
+        Console.WriteLine($"  [testOutcomes/registerRun] first call (loopback bind + accept loop): {firstCallMs:F1} ms " +
+                          $"(success={first?.Success ?? false}, endpoint={first?.Endpoint ?? "—"})");
+
+        return await RunAsync(PerfTargets.RegisterTestRun.Operation, async _ =>
+        {
+            await _harness.RequestRegisterTestRunAsync().ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
 
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────
 
@@ -319,13 +392,13 @@ public sealed class InteractiveScenarios
     }
 
     /// <summary>
-    /// <c>reqnroll/goToMatchingScenarios</c> (issue #373) — clicking a
+    /// <c>reqnroll/findMatchingScenarios</c> (issue #373) — clicking a
     /// <see cref="HookMatchCountCodeLensAsync"/> lens. The click position is read back from a real
     /// lens's own <c>Command.Arguments</c> (an untimed setup step, same precedent as
     /// <see cref="SemanticTokensDeltaAsync"/>'s <c>previousResultId</c> fetch), so the measured
     /// request round-trips the exact position a real client would send rather than a guessed one.
     /// </summary>
-    public async Task<LatencySummary> GoToMatchingScenariosAsync(string corpusRoot)
+    public async Task<LatencySummary> FindMatchingScenariosAsync(string corpusRoot)
     {
         var csPath = Path.Combine(corpusRoot, "Bindings", "CorpusSteps.cs");
         var uri = DocumentUri.FromFileSystemPath(csPath);
@@ -339,9 +412,9 @@ public sealed class InteractiveScenarios
         var line = args is { Count: > 1 } ? (int)args[1]! : 0;
         var character = args is { Count: > 2 } ? (int)args[2]! : 0;
 
-        return await RunAsync(PerfTargets.GoToMatchingScenarios.Operation, async _ =>
+        return await RunAsync(PerfTargets.FindMatchingScenarios.Operation, async _ =>
         {
-            await _harness.RequestGoToMatchingScenariosAsync(uri, line, character).ConfigureAwait(false);
+            await _harness.RequestFindMatchingScenariosAsync(uri, line, character).ConfigureAwait(false);
         }).ConfigureAwait(false);
     }
 

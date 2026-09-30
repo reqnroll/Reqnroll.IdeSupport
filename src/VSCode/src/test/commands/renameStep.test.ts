@@ -19,7 +19,13 @@ function fakeClient(overrides: {
   asWorkspaceEdit?: (edit: unknown) => Promise<vscode.WorkspaceEdit>;
 }): LanguageClient {
   return {
-    sendRequest: overrides.sendRequest ?? (() => Promise.resolve(null)),
+    // Production code passes either a method string (custom reqnroll/* requests) or a typed
+    // descriptor such as RenameRequest.type (standard requests); normalise so fakes match on the
+    // method name either way.
+    sendRequest: overrides.sendRequest
+      ? (method: string | { method: string }, params: unknown) =>
+          overrides.sendRequest!(typeof method === 'string' ? method : method.method, params)
+      : () => Promise.resolve(null),
     sendNotification: overrides.sendNotification ?? (() => Promise.resolve(undefined)),
     protocol2CodeConverter: {
       asWorkspaceEdit:
@@ -47,7 +53,7 @@ async function withStub<TNamespace extends object, TKey extends keyof TNamespace
 suite('renameStep', () => {
   suite('ReqnrollMethods', () => {
     test('defines the rename LSP method names the server implements', () => {
-      // Mirrors LspMethodNames.cs — a mismatch here means the client and server drift apart.
+      // Mirrors CustomLspMethodNames.cs — a mismatch here means the client and server drift apart.
       assert.strictEqual(ReqnrollMethods.renameTargets, 'reqnroll/renameTargets');
       assert.strictEqual(ReqnrollMethods.selectRenameTarget, 'reqnroll/selectRenameTarget');
     });

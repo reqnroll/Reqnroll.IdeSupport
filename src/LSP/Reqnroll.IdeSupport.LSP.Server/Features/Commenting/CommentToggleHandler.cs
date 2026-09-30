@@ -10,8 +10,8 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Commenting;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Commenting;
 
@@ -119,7 +119,7 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         if (result.Edits.Count == 0)
             return Unit.Value;
 
-        await _languageServer.SendRequest(LspMethodNames.WorkspaceApplyEdit, edit)
+        await _languageServer.SendRequest(LspStandardMethodNames.WorkspaceApplyEdit, edit)
             .Returning<ApplyWorkspaceEditResponse>(cancellationToken);
 
         return Unit.Value;

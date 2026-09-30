@@ -1,7 +1,8 @@
 using AwesomeAssertions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
@@ -18,8 +19,30 @@ public sealed class ProtocolSteps
     [Given("the LSP server is started")]
     public async Task GivenTheLspServerIsStarted() => await _ctx.EnsureStartedAsync();
 
-    [Given(@"the LSP server is started for IDE ""(.*)""")]
+    // Bound with [^"] rather than (.*) so a longer step that starts the same way — e.g. "...for IDE
+    // "vscode" with the client identifying itself as "Visual Studio"" (issue #709) — is not also
+    // matched by this one and reported as an ambiguous binding.
+    [Given(@"the LSP server is started for IDE ""([^""]*)""")]
     public async Task GivenTheLspServerIsStartedForIde(string ide) => await _ctx.EnsureStartedAsync(ide);
+
+    /// <summary>
+    /// Issue #709: starts the server with NO <c>--ide</c> argument, so the only identity it can have
+    /// is the one the client self-reports in <c>InitializeParams.ClientInfo</c>. This is the shape
+    /// the fallback exists for — a glue component that failed to wire the argument up.
+    /// </summary>
+    [Given(@"the LSP server is started for a client identifying itself as ""([^""]*)"" with no IDE argument")]
+    public async Task GivenTheLspServerIsStartedForClientInfoOnly(string clientName) =>
+        await _ctx.EnsureStartedAsync(
+            ideId: null,
+            clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
+
+    /// <summary>
+    /// Issue #709's cross-check case: an explicit <c>--ide</c> AND a contradicting
+    /// <c>InitializeParams.ClientInfo</c> in the same handshake. The argument must win.
+    /// </summary>
+    [Given(@"the LSP server is started for IDE ""([^""]*)"" with the client identifying itself as ""([^""]*)""")]
+    public async Task GivenTheLspServerIsStartedForIdeWithClientInfo(string ide, string clientName) =>
+        await _ctx.EnsureStartedAsync(ide, clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
 
     // Issue #70: the harness's simulated client negotiates LSP 3.16 change-annotation support
     // only when a scenario opts in via this step — every other scenario keeps the default
@@ -170,7 +193,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 0,    // Baseline
+            kind = 0,    // Baseline
             files = ToFileEntries(table, added: true)
         });
     }
@@ -192,7 +215,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 1,    // Delta
+            kind = 1,    // Delta
             files = ToFileEntries(table, added: false)
         });
 
@@ -216,7 +239,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 1,    // Delta
+            kind = 1,    // Delta
             files = ToFileEntries(table, added: true)
         });
 
@@ -283,16 +306,19 @@ public sealed class ProtocolSteps
     [Then("the server statically advertises textDocumentSync with full sync and openClose")]
     public void ThenTheServerStaticallyAdvertisesTextDocumentSync()
     {
-        var ts = _ctx.Harness.ServerInitializeResult.Capabilities.TextDocumentSync;
+        // Read from the snapshot of the raw initialize response, not ServerSettings: OmniSharp's
+        // client merges the later dynamic client/registerCapability into ServerSettings, which
+        // made a missing static entry look present (issue #800).
+        _ctx.Harness.InitializeResponseSeen.Should().BeTrue();
+        var ts = _ctx.Harness.StaticTextDocumentSync;
         ts.Should().NotBeNull(
-            "non-VS clients need a static textDocumentSync entry to bootstrap their " +
-            "DidChangeTextDocument infrastructure; without it, dynamic registration is silently ignored");
-        ts!.HasOptions.Should().BeTrue(
-            "the static entry must be TextDocumentSyncOptions (not just a kind enum) so that " +
-            "vscode-languageclient v10 recognises it and wires up its DidChangeTextDocument feature");
-        ts.Options!.OpenClose.Should().BeTrue(
-            "OpenClose=true is set explicitly in the static response — its presence in " +
-            "ServerSettings confirms the static entry was included in the InitializeResult");
+            "every client needs a static textDocumentSync entry: vscode-languageclient ignores a " +
+            "dynamic-only one, and Visual Studio never sends didOpen for a document it attached " +
+            "before the dynamic registration arrived (issue #800). It must also be " +
+            "TextDocumentSyncOptions, not just a kind enum (the snapshot is null otherwise), so " +
+            "vscode-languageclient v10 wires up its DidChangeTextDocument feature");
+        ts!.OpenClose.Should().BeTrue("didOpen/didClose must be enabled statically");
+        ts.Change.Should().Be(TextDocumentSyncKind.Full, "the server expects full-document didChange");
     }
 
     [Then("the server advertises renameProvider with prepareProvider")]
@@ -341,9 +367,9 @@ public sealed class ProtocolSteps
         extensionData!.Should().ContainKey("reqnrollTestOutcomesProvider");
 
         var provider = extensionData["reqnrollTestOutcomesProvider"];
-        provider.Value<string>("registerRunMethod").Should().Be(LspMethodNames.ReqnrollRegisterTestRun);
-        provider.Value<string>("getOutcomeMethod").Should().Be(LspMethodNames.ReqnrollGetTestOutcome);
-        provider.Value<string>("changedNotification").Should().Be(LspMethodNames.ReqnrollTestOutcomesChanged);
+        provider.Value<string>("registerRunMethod").Should().Be(CustomLspMethodNames.ReqnrollRegisterTestRun);
+        provider.Value<string>("getOutcomeMethod").Should().Be(CustomLspMethodNames.ReqnrollGetTestOutcome);
+        provider.Value<string>("changedNotification").Should().Be(CustomLspMethodNames.ReqnrollTestOutcomesChanged);
     }
 
     // Asserted via ExtensionData, not a typed sibling property: OmniSharp's InitializeResult.
@@ -467,8 +493,8 @@ public sealed class ProtocolSteps
     private object[] ToFileEntries(Table table, bool added)
         => table.Rows.Select(r => (object)new
         {
-            path  = _ctx.PathFor(r["path"]),
-            role  = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
+            path = _ctx.PathFor(r["path"]),
+            role = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
             added
         }).ToArray();
 

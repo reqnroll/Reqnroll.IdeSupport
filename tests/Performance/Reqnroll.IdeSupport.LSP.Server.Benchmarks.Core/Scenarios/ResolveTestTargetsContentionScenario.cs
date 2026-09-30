@@ -158,8 +158,10 @@ public sealed class ResolveTestTargetsContentionScenario
     /// hooks — this scenario measures dispatch fairness under many concurrent resolution requests,
     /// not resolution correctness (which the isolated <c>InteractiveScenarios.ResolveTestTargetsAsync</c>
     /// and the server-side <c>ScenarioTestTargetResolverTests</c> already cover).
+    /// <c>internal</c> so the outcome fan-out scenario (issue #714) reuses this exact shape rather
+    /// than duplicating it.
     /// </summary>
-    private static (string Text, IReadOnlyList<Range> ScenarioRanges) BuildLargeFeature(int scenarioCount)
+    internal static (string Text, IReadOnlyList<Range> ScenarioRanges) BuildLargeFeature(int scenarioCount)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Feature: Very large feature (resolveTestTargets contention, issue #495)");

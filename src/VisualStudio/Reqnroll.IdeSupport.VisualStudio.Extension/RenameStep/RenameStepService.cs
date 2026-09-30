@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 
@@ -14,8 +15,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 /// </summary>
 internal sealed class RenameStepService
 {
-    private const string RenameMethod = "textDocument/rename";
-
     private readonly LspInterception.LspInterceptingPipe _pipe;
     private readonly ILogger<RenameStepService> _logger;
 
@@ -38,10 +37,10 @@ internal sealed class RenameStepService
         var paramsJson = BuildPositionParams(fileUri, line0, char0);
 
         _logger.LogDebug(
-            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", ReqnrollMethodNames.RenameTargets, fileUri, line0, char0);
+            "RenameStepService: querying {RenameTargetsMethod} at {FileUri}:{Line0}:{Char0}", CustomLspMethodNames.ReqnrollRenameTargets, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.RenameTargets, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollRenameTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         try
@@ -101,10 +100,10 @@ internal sealed class RenameStepService
             $"{{\"uri\":{JsonEscape(fileUri)},\"version\":{version},\"attributeIndex\":{attributeIndex}," +
             $"\"position\":{{\"line\":{line},\"character\":{character}}}}}";
         _logger.LogDebug(
-            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", ReqnrollMethodNames.SelectRenameTarget, attributeIndex);
+            "RenameStepService: sending {SelectRenameTargetMethod} for attrIndex={AttributeIndex}", CustomLspMethodNames.ReqnrollSelectRenameTarget, attributeIndex);
 
         await _pipe
-            .SendNotificationToServerAsync(ReqnrollMethodNames.SelectRenameTarget, paramsJson, cancellationToken)
+            .SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollSelectRenameTarget, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -127,21 +126,23 @@ internal sealed class RenameStepService
     {
         var paramsJson = BuildRenameParams(fileUri, line0, char0, newName);
         _logger.LogDebug(
-            "RenameStepService: sending {RenameMethod} at {FileUri}:{Line0}:{Char0}", RenameMethod, fileUri, line0, char0);
+            "RenameStepService: sending {RenameMethod} at {FileUri}:{Line0}:{Char0}",
+            LspStandardMethodNames.TextDocumentRename, fileUri, line0, char0);
 
         var (_, error) = await _pipe
-            .SendRequestToServerWithErrorAsync(RenameMethod, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(LspStandardMethodNames.TextDocumentRename, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (error is not null)
         {
             var message = error["message"]?.Value<string>() ?? "Rename failed.";
             _logger.LogDebug(
-                "RenameStepService: {RenameMethod} rejected by server: {Message}", RenameMethod, message);
+                "RenameStepService: {RenameMethod} rejected by server: {Message}",
+                LspStandardMethodNames.TextDocumentRename, message);
             throw new RenameFailedException(message);
         }
 
-        _logger.LogDebug("RenameStepService: {RenameMethod} accepted by server", RenameMethod);
+        _logger.LogDebug("RenameStepService: {RenameMethod} accepted by server", LspStandardMethodNames.TextDocumentRename);
     }
 
     private static string BuildPositionParams(string fileUri, int line0, int char0)

@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.TestLogger;
@@ -41,7 +42,7 @@ internal sealed class RunTestOutcomeService
         try
         {
             var result = await _pipe
-                .SendRequestToServerAsync(ReqnrollMethodNames.RegisterTestRun, "{}", cancellationToken)
+                .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollRegisterTestRun, "{}", cancellationToken)
                 .ConfigureAwait(false);
 
             return MapRegistration(result as JObject);
@@ -69,7 +70,7 @@ internal sealed class RunTestOutcomeService
                 .Build();
 
             var result = await _pipe
-                .SendRequestToServerAsync(ReqnrollMethodNames.GetTestOutcome, paramsJson, cancellationToken)
+                .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollGetTestOutcome, paramsJson, cancellationToken)
                 .ConfigureAwait(false);
 
             return MapOutcome(result as JObject);

@@ -47,6 +47,16 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 /// window (for example with <c>IVsInvisibleEditorManager</c>) might not produce the open that VS
 /// reacts to, and has not been tested.
 /// </para>
+/// <para>
+/// Now a fallback (issue #78). Live logs showed this trigger does start the server, and VS does
+/// then send <c>didOpen</c> for the restored tab, but the tab itself stayed inert: it had been
+/// restored without the <c>Gherkin</c> content type, so no Gherkin-scoped view feature ever
+/// attached to it. That root cause is addressed by <c>GherkinContentTypeDefinition</c> (static
+/// registration) and <see cref="FeatureBufferContentTypeGuard"/> (re-typing). With the content
+/// type right from the start, VS's own document-open activation should fire, and this trigger
+/// should log "provider already activated; nothing to do" (Verbose). It stays until live logs
+/// confirm that.
+/// </para>
 /// </remarks>
 internal static class ScratchFileActivationTrigger
 {

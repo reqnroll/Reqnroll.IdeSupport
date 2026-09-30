@@ -41,6 +41,11 @@ public static class SessionRunner
         var outOfProcess = args.Contains("--out-of-process");
         var serverExe = StringArg(args, "--server-exe") ?? (outOfProcess ? ServerExeLocator.Find() : null);
 
+        // Issue #714 hermeticity, same as BenchmarkRunner's: the session's outcome pull must never
+        // read or write the developer's real outcome store.
+        using var outcomes = TestOutcomePersistenceRedirect.Begin();
+        var corpusAssembly = StringArg(args, "--corpus-assembly") ?? CorpusAssemblyLocator.TryFind();
+
         var corpusRoot = CorpusLocator.FindCorpusRoot();
         var manifest = CorpusManifest.Load(CorpusLocator.ManifestPath(corpusRoot));
 
@@ -65,7 +70,23 @@ public static class SessionRunner
         }
 
         var features = await InteractiveScenarios.OpenFeaturesAsync(harness, corpusRoot, fileCount).ConfigureAwait(false);
-        var session = new SessionScenario(harness, features, options);
+
+        // Issue #714 (scenario D): the session's outcome pull is only meaningful against a method the
+        // store genuinely knows about, so it is seeded through the outcome listener first. Without a
+        // built corpus assembly to use as that method's container the pull is omitted from the burst
+        // mix rather than faked against a key nothing has ever reported.
+        SeededTestOutcome? seededOutcome = null;
+        if (corpusAssembly is not null)
+        {
+            seededOutcome = await TestOutcomeScenarios.SeedAsync(harness, corpusAssembly).ConfigureAwait(false);
+        }
+        else
+        {
+            Console.WriteLine("  corpus bindings assembly: not found — the session's getOutcome pull is " +
+                              "omitted (seeding needs a container that exists on disk)");
+        }
+
+        var session = new SessionScenario(harness, features, options, seededOutcome);
         var result = await session.RunAsync().ConfigureAwait(false);
 
         var results = result.Results.Select(r => new OperationResult(r.Target, r.Summary)).ToList();

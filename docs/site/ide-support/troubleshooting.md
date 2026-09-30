@@ -1,5 +1,24 @@
 # Troubleshooting / FAQ
 
+## How do I report a bug?
+
+File an issue on the
+[Reqnroll.IdeSupport repository](https://github.com/reqnroll/Reqnroll.IdeSupport/issues),
+including your IDE and version, the extension version, and — if possible —
+the relevant log file (see [Where are the logs](#where-are-the-logs-and-how-do-i-change-the-log-level)
+below).
+
+## Known per-IDE limitations
+
+* **Visual Studio** — the native Document Outline window does not show
+  `.feature` file structure. See [Document Outline](editing-features/document-outline.md).
+* **Visual Studio** — native "Find All References" (Shift+F12) does not
+  route to Reqnroll step bindings; use the dedicated entry point instead.
+  See [Find Step Definition Usages](navigation-features/find-usages.md).
+* **VS Code** — Rename doesn't yet support disambiguating a step bound to
+  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
+  for the workaround (Rider and Visual Studio both handle this case).
+
 ## Can I have both extensions installed at once?
 
 Both **can** be installed side by side — installing one doesn't remove the
@@ -12,17 +31,6 @@ If you have both installed, disable one: **Extensions → Manage
 Extensions**, select the extension you're not using, and click
 **Disable**. See [Installation](installation/index.md) (Visual Studio tab)
 for how to tell the two listings apart in the Marketplace.
-
-## Known per-IDE limitations
-
-* **Visual Studio** — the native Document Outline window does not show
-  `.feature` file structure. See [Document Outline](editing-features/document-outline.md).
-* **Visual Studio** — native "Find All References" (Shift+F12) does not
-  route to Reqnroll step bindings; use the dedicated entry point instead.
-  See [Find Step Definition Usages](navigation-features/find-usages.md).
-* **VS Code** — Rename doesn't yet support disambiguating a step bound to
-  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
-  for the workaround (Rider and Visual Studio both handle this case).
 
 ## A shared `.feature` file shows hooks, diagnostics, or highlighting from the "wrong" project
 
@@ -117,10 +125,28 @@ server's logs — check those files directly.
 extension side at `Info` by default. The
 `REQNROLLVS_DEBUG` environment variable (set it to `1`, `true`, or a
 [`TraceLevel`](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.tracelevel)
-name, e.g. `Verbose`) raises the verbosity of the **extension-side**
-(`reqnroll-vs-ext-*.log`, `reqnroll-vs-codelens-sh-*.log`) loggers, but does not affect the LSP server's own
-`reqnroll-vs-server-*.log`/`reqnroll-vs-protocol-*.log` verbosity — see the
-note below.
+name, e.g. `Verbose`) raises the verbosity of **both sides**: the
+**extension-side** loggers (`reqnroll-vs-ext-*.log`, `reqnroll-vs-codelens-sh-*.log`)
+*and* the **LSP server's own** `reqnroll-vs-server-*.log`/`reqnroll-vs-protocol-*.log`
+files. The server reads `REQNROLLVS_DEBUG` itself at startup and lets it override
+whatever level Visual Studio requested; Visual Studio launches the server process
+with its own environment inherited (no override), so anything set in the
+environment `devenv.exe` runs in reaches the server too. This isn't
+Visual-Studio-specific — the same environment variable, read the same way,
+raises the server's logs no matter which of the three IDEs is hosting it (see
+the note below and the Rider tab).
+
+Set it before starting Visual Studio, since the variable is only read once, at
+server/extension startup:
+
+- Open a new **Command Prompt** and run `setx REQNROLLVS_DEBUG 1` (or a
+  `TraceLevel` name), then close and reopen it so the change takes effect —
+  `setx` writes the user environment but doesn't update the current session.
+- Or **System Properties → Environment Variables** → add it under **User
+  variables**.
+
+Either way, restart Visual Studio afterwards (a new `devenv.exe` process picks
+up the updated environment; an already-running one won't).
 ```
 
 ```{tab-item} VS Code
@@ -128,16 +154,42 @@ note below.
 
 Two Output channels (**View → Output**, then pick from the dropdown):
 
-- **Reqnroll LSP** — the standard client/server log
-- **Reqnroll LSP Trace** — LSP wire trace (only populated when tracing is
-  enabled, see below)
+- **Reqnroll** — a one-line summary of extension activation, LSP client
+  start/connect/stop, and each command's outcome, auto-revealing on a warning
+  or error. Also written to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
+- **Reqnroll LSP** — the language client's own connection-level diagnostics.
+  Also written to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
+
+The LSP wire trace has no Output channel; it goes only to the trace file
+described below.
 
 **Changing the log level:** set `"reqnroll.trace.server"` in
-`settings.json` to `"off"`, `"messages"`, or `"verbose"`. Setting it to
-`"verbose"` also writes a timestamped trace file under
-`%LOCALAPPDATA%\Reqnroll\logs\` (Windows) or `~/Library/Logs/Reqnroll/logs/` (macOS):
+`settings.json` to `"off"`, `"messages"`, or `"verbose"`. This maps onto the
+LSP server's own `--log-level` (`"off"`/`"messages"`/`"verbose"` →
+`Warning`/`Info`/`Verbose`), so it raises the server's file-log verbosity.
+Setting it to `"verbose"` also writes a timestamped trace file under
+`%LOCALAPPDATA%\Reqnroll\logs\` (Windows), `~/Library/Logs/Reqnroll/logs/` (macOS),
+or `~/.local/share/Reqnroll/logs/` (Linux):
 `reqnroll-vscode-inspector-<timestamp>.log`. **Reload the window** after
 changing this setting for it to take effect.
+
+The `REQNROLLVS_DEBUG` environment variable (see the Visual Studio tab for
+accepted values) also works here, and overrides `reqnroll.trace.server` for
+the server's own logs specifically — useful since VS Code never passes a
+`--protocol-log-level`, so `reqnroll-vscode-protocol-*.log` otherwise always
+stays at the `Warning` default. VS Code's child process inherits the
+environment the VS Code application itself was started with, so set the
+variable there before launching VS Code:
+
+- **Windows** — `setx REQNROLLVS_DEBUG 1` in a new Command Prompt, then
+  restart VS Code.
+- **macOS** — add `export REQNROLLVS_DEBUG=1` to your shell profile
+  (`~/.zshrc`/`~/.bash_profile`) if you launch VS Code from a terminal (`code`);
+  if you launch it from Spotlight/Finder/the Dock instead, a shell profile
+  isn't read, so use `launchctl setenv REQNROLLVS_DEBUG 1` in Terminal instead
+  (lasts for the current login session) and then restart VS Code.
+- **Linux** — add `export REQNROLLVS_DEBUG=1` to your shell profile and
+  restart VS Code.
 ```
 
 ```{tab-item} Rider
@@ -145,13 +197,44 @@ changing this setting for it to take effect.
 
 Log files are written to a per-OS Reqnroll `logs` directory — Windows
 `%LOCALAPPDATA%\Reqnroll\logs\`, macOS `~/Library/Logs/Reqnroll/logs/`, Linux
-`~/.local/share/Reqnroll/logs/` — named `reqnroll-rider-<role>-<yyyyMMdd>-<pid>.log`
-(`ext` for the plugin side, `server`/`protocol` for the LSP server). These
-are not written to Rider's own `idea.log` or a dedicated tool window.
+`~/.local/share/Reqnroll/logs/`:
 
-**Changing the log level:** there's no in-product setting or documented
-environment variable for Rider. The plugin logs at `Verbose` only in a
-development sandbox instance; a normal installed build runs at `Warning`.
+- `reqnroll-rider-ext-<yyyyMMdd>-<pid>.log` — the plugin's own client-side
+  glue log (lifecycle/diagnostics, not LSP wire traffic).
+- `reqnroll-rider-server-<yyyyMMdd>-<pid>.log` /
+  `reqnroll-rider-protocol-<yyyyMMdd>-<pid>.log` — the LSP server's application
+  log and protocol/wire-level internals.
+  The prefix is decided before the client connects, so a server started without
+  an `--ide` value keeps the generic `lsp` prefix for that whole session even if
+  the client then identifies itself in its `initialize` request.
+
+These are not written to Rider's own `idea.log` or a dedicated tool window.
+
+**Changing the log level:** the `REQNROLLVS_DEBUG` environment variable (see
+the Visual Studio tab for accepted values) also controls the plugin's own `ext`
+log. Unset, the `ext` log writes every level to the file (only the "Reqnroll"
+console tool window is filtered). Set it to `Info`, `Warning` or `Error` to
+raise the file's threshold, or `Off` to stop writing it; `1`, `true` or
+`Verbose` keep every level. Unrecognized values are ignored. Restart Rider
+after changing it.
+
+The **LSP server's** own log level *can* be changed, though, the same way as
+for the other two IDEs: the `REQNROLLVS_DEBUG` environment variable (see the
+Visual Studio tab for accepted values) works here too. Rider starts the
+server as a child process that inherits Rider's own environment, and the
+server reads `REQNROLLVS_DEBUG` directly regardless of which IDE launched it
+— so setting it in the environment Rider itself runs in raises
+`reqnroll-lsp-server-*.log`/`reqnroll-lsp-protocol-*.log` to `Verbose`:
+
+- **Windows** — `setx REQNROLLVS_DEBUG 1` in a new Command Prompt, then
+  restart Rider.
+- **macOS** — add `export REQNROLLVS_DEBUG=1` to your shell profile
+  (`~/.zshrc`) if you launch Rider from a terminal; if you launch it from
+  Spotlight/Finder/the Dock instead, use `launchctl setenv REQNROLLVS_DEBUG 1`
+  in Terminal instead (lasts for the current login session) and then restart
+  Rider.
+- **Linux** — add `export REQNROLLVS_DEBUG=1` to your shell profile and
+  restart Rider.
 ```
 
 :::
@@ -160,22 +243,18 @@ development sandbox instance; a normal installed build runs at `Warning`.
 :class: note
 
 Log-level configuration is inconsistent across the three IDEs today — VS
-Code has a real setting, Visual Studio only has a partial (extension-side
-only) environment-variable override, and Rider has neither. This gap is
-already tracked in [issue #291](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/291),
-which covers giving all three IDEs a real, shared way to change the LSP
-server's log level. If you need verbose logs for a bug report and your IDE
-doesn't currently support raising the level, say so on that issue (or on
-your bug report) — it's useful signal for prioritizing it.
+Code has a real, in-product setting for it; Visual Studio and Rider only
+have the `REQNROLLVS_DEBUG` environment-variable escape hatch, which raises
+the LSP server's own logs under any of the three IDEs (plus the extension-side
+logs, on Visual Studio) but isn't documented or discoverable anywhere in
+either IDE's own UI. This gap is already tracked in
+[issue #291](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/291),
+which covers giving all three IDEs a real, shared, in-product way to change
+the LSP server's log level. If you need verbose logs for a bug report and
+your IDE doesn't currently support raising the level from its own settings,
+say so on that issue (or on your bug report) — it's useful signal for
+prioritizing it.
 ```
-
-## How do I report a bug?
-
-File an issue on the
-[Reqnroll.IdeSupport repository](https://github.com/reqnroll/Reqnroll.IdeSupport/issues),
-including your IDE and version, the extension version, and — if possible —
-the relevant log file (see [Where are the logs](#where-are-the-logs-and-how-do-i-change-the-log-level)
-above).
 
 ## Where does telemetry data go?
 

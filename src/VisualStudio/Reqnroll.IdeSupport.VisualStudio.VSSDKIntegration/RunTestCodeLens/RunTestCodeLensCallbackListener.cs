@@ -61,6 +61,19 @@ public sealed class RunTestCodeLensCallbackListener : ICodeLensCallbackListener
             _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync returning {entries.Count} entr{(entries.Count == 1 ? "y" : "ies")} for {fileUri}:{line}");
             return entries;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // VS cancelled its own request (the lens scrolled away or was re-queried): routine, not an error.
+            _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync cancelled by the caller for {fileUri}:{line}");
+            throw;
+        }
+        catch (LspContentModifiedException)
+        {
+            // The document kept changing through every restart: transient, not an error. The next
+            // CodeLens refresh asks again.
+            _logger.LogVerbose($"RunTestCodeLensCallbackListener: GetTargetsForLineAsync for {fileUri}:{line} kept hitting ContentModified; giving up this request.");
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogException(ex, $"RunTestCodeLensCallbackListener: GetTargetsForLineAsync threw for {fileUri}:{line}");

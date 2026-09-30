@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -45,10 +46,10 @@ internal sealed class FindStepDefinitionsService
 
         _logger.LogDebug(
             "FindStepDefinitionsService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}",
-            ReqnrollMethodNames.FindStepDefinitions, fileUri, line0, char0);
+            CustomLspMethodNames.ReqnrollFindStepDefinitions, fileUri, line0, char0);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ReqnrollMethodNames.FindStepDefinitions, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindStepDefinitions, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         _logger.LogTrace(

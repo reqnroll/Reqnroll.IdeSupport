@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 
@@ -38,10 +39,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 /// </remarks>
 internal sealed class GherkinNavigationBarSymbolService
 {
-    // The LSP spec's ContentModified code (-32801). Not exposed as a named constant by any LSP
-    // client library this project depends on client-side, so it is defined here.
-    private const int ContentModifiedErrorCode = -32801;
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<GherkinNavigationBarSymbolService> _logger;
 
@@ -77,9 +74,11 @@ internal sealed class GherkinNavigationBarSymbolService
     /// cancellation has already been processed (it was Serial-dispatched and this call awaits the
     /// first attempt's full round trip first), so the retry is racing only whatever the user typed
     /// in that gap — a bounded, one-shot mitigation rather than a retry storm under sustained
-    /// typing. A second collision is left to resolve itself the same way any other stale read
-    /// would: the next natural trigger for this request (the next CodeLens refresh, the next
-    /// Navigation Bar update) picks up the current state.
+    /// typing. A second collision throws <see cref="LspContentModifiedException"/> rather than
+    /// returning no symbols, so no caller mistakes it for a real empty answer (issue #800
+    /// follow-up; seen live at startup, when the extension's own project notifications collided
+    /// twice). The Run CodeLens cache restarts its computation, and the Navigation Bar schedules
+    /// another refresh.
     /// </para>
     /// <para>
     /// The proper fix — not retrying around a scheduling defect — is OmniSharp's global,
@@ -93,16 +92,28 @@ internal sealed class GherkinNavigationBarSymbolService
         var paramsJson = BuildParams(fileUri);
 
         _logger.LogDebug(
-            "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
+            "GherkinNavigationBarSymbolService: querying {RequestMethod} for {FileUri}", CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);
 
         var (result, error) = await SendWithContentModifiedRetryAsync(paramsJson, fileUri, cancellationToken)
             .ConfigureAwait(false);
+
+        // A cancelled request comes back from the pipe as an empty result, not an exception. Mapping
+        // that to "no symbols" made the Run CodeLens cache a genuine-looking empty answer for a
+        // scenario line when its computation was cancelled by an invalidation (issue #78): the
+        // lens then stayed blank for the session. Cancellation must surface as cancellation.
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // The same failure mode for ContentModified that survived the one retry: "no symbols"
+        // would be cached as a real answer (issue #800 follow-up). Callers treat this exception
+        // as "ask again later".
+        if (IsContentModified(error))
+            throw new LspContentModifiedException(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);
 
         if (error != null)
         {
             _logger.LogDebug(
                 "GherkinNavigationBarSymbolService: {RequestMethod} for {FileUri} returned error {Error}; treating as no symbols.",
-                ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri, error);
+                CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri, error);
         }
 
         var mapped = MapResult(result as JArray);
@@ -118,7 +129,7 @@ internal sealed class GherkinNavigationBarSymbolService
         string paramsJson, string fileUri, CancellationToken cancellationToken)
     {
         var attempt = await _pipe
-            .SendRequestToServerWithErrorAsync(ReqnrollMethodNames.DocumentSymbolHierarchical, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (!IsContentModified(attempt.Error))
@@ -126,16 +137,16 @@ internal sealed class GherkinNavigationBarSymbolService
 
         _logger.LogDebug(
             "GherkinNavigationBarSymbolService: {RequestMethod} for {FileUri} was cancelled with ContentModified " +
-            "(a concurrent edit raced this request); retrying once.", ReqnrollMethodNames.DocumentSymbolHierarchical, fileUri);
+            "(a concurrent edit raced this request); retrying once.", CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, fileUri);
 
         return await _pipe
-            .SendRequestToServerWithErrorAsync(ReqnrollMethodNames.DocumentSymbolHierarchical, paramsJson, cancellationToken)
+            .SendRequestToServerWithErrorAsync(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, paramsJson, cancellationToken)
             .ConfigureAwait(false);
     }
 
     /// <summary><see langword="internal"/> so the retry decision is unit-testable without a live <see cref="LspInterceptingPipe"/>.</summary>
     internal static bool IsContentModified(JObject? error) =>
-        error?["code"]?.Value<int>() == ContentModifiedErrorCode;
+        error?["code"]?.Value<int>() == LspContentModifiedException.ErrorCode;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

@@ -71,8 +71,8 @@ public sealed class SessionScenario
     private readonly IReadOnlyList<OpenFeature> _features;
     private readonly SessionOptions _options;
 
-    // One recorder per operation. Within a burst each op type appears once and the four pulls write
-    // to four *different* recorders, so concurrent Add() never targets the same recorder; bursts are
+    // One recorder per operation. Within a burst each op type appears once and the five pulls write
+    // to five *different* recorders, so concurrent Add() never targets the same recorder; bursts are
     // sequential, so cross-burst appends are serial too. No locking on the recorders is needed.
     private readonly LatencyRecorder _semanticTokens = new(PerfTargets.SemanticTokensFull.Operation);
     private readonly LatencyRecorder _completion = new(PerfTargets.CompletionStep.Operation);
@@ -82,16 +82,28 @@ public sealed class SessionScenario
     private readonly LatencyRecorder _codeLens = new(PerfTargets.FeatureHookCodeLens.Operation);
     private readonly LatencyRecorder _diagnostics = new(PerfTargets.PublishDiagnostics.Operation);
 
+    // Issue #714 (scenario D): an outcome lookup is now a routine background request whenever
+    // outcomes exist — every `reqnroll/testOutcomes/changed` push makes each client re-pull one per
+    // visible Run lens — so it belongs in the load-only burst set alongside the outline/folding pulls,
+    // with the same TargetMs 0 (measured, never asserted) convention. Only sampled when a seeded
+    // outcome was supplied; a run without one simply omits the pull rather than faking a lookup.
+    private readonly LatencyRecorder _getTestOutcome = new(PerfTargets.GetTestOutcome.Operation);
+
+    private readonly SeededTestOutcome? _seededOutcome;
+
     private long _issued;
     private long _cancelled;
     private double _totalCancelMs;
     private readonly object _cancelMsLock = new();
 
-    public SessionScenario(BenchmarkLspHarness harness, IReadOnlyList<OpenFeature> features, SessionOptions options)
+    public SessionScenario(
+        BenchmarkLspHarness harness, IReadOnlyList<OpenFeature> features, SessionOptions options,
+        SeededTestOutcome? seededOutcome = null)
     {
         _harness = harness;
         _features = features;
         _options = options;
+        _seededOutcome = seededOutcome;
     }
 
     public async Task<SessionResult> RunAsync()
@@ -114,6 +126,7 @@ public sealed class SessionScenario
         AddIfSampled(PerfTargets.DefinitionCacheHit, _definition);
         AddIfSampled(PerfTargets.FeatureHookCodeLens, _codeLens);
         AddIfSampled(PerfTargets.PublishDiagnostics, _diagnostics);
+        AddIfSampled(PerfTargets.GetTestOutcome, _getTestOutcome);
 
         return new SessionResult(results, BuildStats());
     }
@@ -130,13 +143,21 @@ public sealed class SessionScenario
         var diag = _harness.WaitForDiagnosticsAsync(f.Uri, editAt);
 
         // 2. The editor's reaction: issued together, awaited together (pipelined on one connection).
-        var pulls = new[]
+        var pulls = new List<Task>
         {
             TimedAsync(_semanticTokens, record, ct => _harness.RequestSemanticTokensAsync(f.Uri, ct), cts.Token),
             TimedAsync(_completion, record, ct => _harness.RequestCompletionAsync(f.Uri, line, character, ct), cts.Token),
             TimedAsync(_documentSymbol, record, ct => _harness.RequestDocumentSymbolAsync(f.Uri, ct), cts.Token),
             TimedAsync(_foldingRange, record, ct => _harness.RequestFoldingRangeAsync(f.Uri, ct), cts.Token),
         };
+
+        // 2b. The outcome pull (issue #714, scenario D) rides the same burst: it is a background
+        //     request the clients issue per visible Run lens whenever outcomes exist, not a
+        //     user-initiated one, and it is superseded with the rest.
+        if (_seededOutcome is { } seed)
+            pulls.Add(TimedAsync(_getTestOutcome, record,
+                ct => _harness.RequestGetTestOutcomeAsync(seed.AssemblyPath, seed.TypeFullName, seed.MethodName, ct),
+                cts.Token));
 
         // 3. Fast typing: supersede a fraction of bursts — the next keystroke cancels the in-flight set.
         if (ShouldSupersede(i, _options.SupersedeRate))

@@ -2,7 +2,7 @@
 
 using System.Collections.Generic;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -23,7 +23,7 @@ public sealed class LspTelemetryService : ILspTelemetryService
     /// <summary>Sends the event and its properties to the LSP client as a <c>telemetry/event</c> notification.</summary>
     public void SendEvent(string eventName, Dictionary<string, object?> properties)
     {
-        _languageServer.SendNotification(LspMethodNames.TelemetryEvent, new
+        _languageServer.SendNotification(LspStandardMethodNames.TelemetryEvent, new
         {
             eventName,
             properties

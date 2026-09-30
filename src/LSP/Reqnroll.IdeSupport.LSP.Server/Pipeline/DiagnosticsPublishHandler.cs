@@ -2,12 +2,12 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -70,7 +70,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         var uri = notification.Uri;
 
         // Performance Verification (Layer 4): time the diagnostics aggregate-and-push (match-cache change → push sent).
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentPublishDiagnostics, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentPublishDiagnostics, uri);
 
         if (!_documentBufferService.TryGet(uri, out var buffer) || buffer?.Tags is null)
         {
@@ -109,7 +109,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
             $"DiagnosticsPublishHandler: pushing {lspDiagnostics.Length} diagnostic(s) for {uri} v{notification.Version}");
 
         _languageServer.SendNotification(
-            LspMethodNames.TextDocumentPublishDiagnostics,
+            LspStandardMethodNames.TextDocumentPublishDiagnostics,
             new PublishDiagnosticsParams
             {
                 Uri         = uri,
