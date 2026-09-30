@@ -518,7 +518,7 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 #### Startup sequence
 
 1. `activate()` registers command stubs and creates output/trace channels.
-2. Server binary is resolved for the host platform/architecture (`win-x64`, `osx-x64`, `osx-arm64`, `linux-x64`). If the binary is missing a VS Code error notification is shown.
+2. Server binary is resolved for the host platform/architecture (`win-x64`, `win-arm64`, `osx-x64`, `osx-arm64`, `linux-x64`, `linux-arm64`). If the binary is missing a VS Code error notification is shown.
 3. `LanguageClient` is constructed with `--ide vscode` flag and started via stdio.
 4. `StatusBarManager` subscribes to `onDidChangeState` immediately so the status bar reflects the `Starting` → `Running` transition.
 5. After `client.start()` resolves, `ProjectManager` is instantiated. It scans the workspace for `.csproj` files and sends `reqnroll/projectLoaded` notifications with MSBuild-evaluated properties (v2), falling back to empty fields if `dotnet` is unavailable.
@@ -555,8 +555,8 @@ When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspecto
 #### Packaging and distribution
 
 - Built with `vsce` (VS Code Extension CLI) and packaged as a `.vsix`
-- The LSP server self-contained binaries for all four RIDs are bundled under `server/<rid>/` inside the `.vsix`
-- CI publishes all four RIDs in parallel (see `.github/workflows/ci.yml`); the `build-vscode-extension` job downloads all four artifacts and then runs `vsce package`
+- The LSP server self-contained binaries for all six RIDs are bundled under `server/<rid>/` inside the `.vsix`
+- CI publishes all six RIDs in parallel (see `.github/workflows/ci.yml`); the `build-vscode-extension` job downloads all six artifacts and then runs `vsce package`
 - Minimum VS Code version: see [§6.1's client capabilities table](#61-vs-code) — an
   intentional pin (`vscode-languageclient` v10 compatibility), not a plain "current
   version" note; don't restate the number here separately from that table
@@ -662,7 +662,7 @@ Pure Gradle, via the `org.jetbrains.intellij.platform` Gradle plugin (Kotlin/JVM
 | Local dev (`./gradlew runIde`, no `-PlspServerBuildDir`) | The `publishServer` task runs `dotnet publish` for the host OS/arch only |
 | CI (`-PlspServerBuildDir=<dir>`) | `publishServer` is skipped; `prepareSandbox` copies whichever `server-<rid>` subdirectories already exist under `<dir>` — pre-built by the shared `test-lsp.yml` job — so Gradle never shells to `dotnet` at all |
 
-Since Rider runs on every desktop OS (unlike VS), the packaged plugin bundles **all four RIDs** (`win-x64`, `linux-x64`, `osx-x64`, `osx-arm64`); `ReqnrollServerPathResolver` picks the right one at runtime.
+Since Rider runs on every desktop OS (unlike VS), the packaged plugin bundles **all six RIDs** (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`); `ReqnrollServerPathResolver` picks the right one at runtime.
 
 Key Gradle tasks: `buildPlugin` (packages the `.zip`), `verifyPlugin` (JetBrains Plugin Verifier — the Marketplace plugin ID deliberately avoids the substring "rider", which the Verifier rejects), `runIde` (local dev sandbox), `test` (JUnit5/`kotlin.test` unit tests).
 
@@ -961,11 +961,11 @@ There are only two workflow files: `ci.yml` and `test-lsp.yml` (a reusable workf
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `ci.yml` | Push to `main` / PR / manual dispatch, path-filtered to `src/{Core,LSP,VisualStudio,VSCode,Rider}/**` and the matching `tests/**` trees | Orchestrates everything below via jobs, gated per-client on which paths changed (`changes` job) |
-| `test-lsp.yml` | Called by `ci.yml`'s `lsp` job | Builds the LSP server as a self-contained executable for all four RIDs and runs `LSP.Core.Tests`/`LSP.Server.Tests`/`LSP.Server.Specs` |
+| `test-lsp.yml` | Called by `ci.yml`'s `lsp` job | Builds the LSP server as a self-contained executable for all six RIDs and runs `LSP.Core.Tests`/`LSP.Server.Tests`/`LSP.Server.Specs` |
 
 `ci.yml`'s per-client jobs (`build-vs-extension` → `test-vs-extension`/`test-vs-wizards` → `publish-vsix`; `build-vscode-extension`/`tsc-only`; `build-rider-plugin` → `test-rider-plugin` → `publish-rider-plugin`) are jobs inside that one file, not separate workflows. Despite their names, `publish-vsix` and `publish-rider-plugin` only upload the built package as a CI artifact — actual Marketplace publication is not automated by either job today.
 
-**Build matrix**: The LSP server is built as a self-contained executable for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64` (`test-lsp.yml`'s matrix). Each IDE extension bundles the platform-appropriate server binary/binaries. Testing the server in isolation on Linux in CI is a concrete benefit of the LSP separation from IDE-specific code.
+**Build matrix**: The LSP server is built as a self-contained executable for `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64` (`test-lsp.yml`'s matrix). Each IDE extension bundles the platform-appropriate server binary/binaries. Testing the server in isolation on Linux in CI is a concrete benefit of the LSP separation from IDE-specific code.
 
 ### Versioning and Compatibility
 

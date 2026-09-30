@@ -155,9 +155,9 @@ CI (`.github/workflows/ci.yml`, with LSP server tests split out into
 `.github/workflows/test-lsp.yml`) is driven by a path-filter job, so it only builds/tests the
 clients whose paths actually changed — a Rider-only Kotlin change, for example, doesn't also
 rebuild the VS Code extension. On qualifying pushes/PRs it builds and tests the VS Code extension
-and the Rider plugin, and publishes the LSP server for all supported runtimes (win-x64, linux-x64,
-osx-x64, osx-arm64). See the comment header at the top of `ci.yml` for the full job dependency
-graph.
+and the Rider plugin, and publishes the LSP server for all supported runtimes (win-x64, win-arm64,
+linux-x64, linux-arm64, osx-x64, osx-arm64). See the comment header at the top of `ci.yml` for the
+full job dependency graph.
 
 ## Contributing
 

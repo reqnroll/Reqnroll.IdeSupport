@@ -2,6 +2,7 @@
 
 ## Improvements:
 
+* The LSP server is now published for `win-arm64` and `linux-arm64` in addition to the existing `win-x64`/`linux-x64`/`osx-x64`/`osx-arm64`, and the VS Code and Rider clients now resolve the native ARM64 server binary on Windows-on-ARM and Linux ARM64 instead of falling back to an x64 build that cannot run there (VS Code, Rider) - see #646
 * Run CodeLens now resolves each scenario's test target on demand instead of walking the whole `.feature` file on every refresh, fixing it getting stuck on very large feature files (VS, Rider) - see #495
 * Run CodeLens's Details popup now has a "Show in Test Explorer" action alongside Run/Debug, jumping straight to the test's native pass/fail state and run history (VS) - see #504
 * Run CodeLens now shows the scenario's last-run pass/fail glyph, matching VS's own test CodeLens (VS) - see #504

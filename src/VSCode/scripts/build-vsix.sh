@@ -5,7 +5,8 @@
 # Usage:
 #   ./scripts/build-vsix.sh [rid]
 #
-#   rid    Target runtime identifier (default: win-x64)
+#   rid    Target runtime identifier (default: win-x64); any supported RID, e.g.
+#          win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64
 #
 # Steps:
 #   1. Publish the LSP server for the target RID (calls publish-server.sh)
