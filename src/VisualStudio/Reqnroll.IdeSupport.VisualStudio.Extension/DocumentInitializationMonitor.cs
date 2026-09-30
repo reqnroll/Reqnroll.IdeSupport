@@ -322,6 +322,14 @@ internal sealed class DocumentInitializationMonitor : IVsRunningDocTableEvents2,
                 $"{(detail is null ? string.Empty : $" ({detail})")} " +
                 $"at +{DurationFormatter.FormatMilliseconds(_sinceAdvise.Elapsed)}.");
         }
+        catch (ArgumentException ex)
+        {
+            // A stale RDT cookie (the document was released or closed during restore) makes
+            // GetDocumentMoniker throw ArgumentException. In an observe-only monitor this is an
+            // expected race, not an error — log at Verbose so it does not surface as a spurious
+            // [Error] in the output pane (issue #814).
+            _logger.LogDebugException(ex, $"DocumentInitializationMonitor: logging '{what}' failed (stale RDT cookie).");
+        }
         catch (Exception ex)
         {
             _logger.LogException(ex, $"DocumentInitializationMonitor: logging '{what}' failed.");
