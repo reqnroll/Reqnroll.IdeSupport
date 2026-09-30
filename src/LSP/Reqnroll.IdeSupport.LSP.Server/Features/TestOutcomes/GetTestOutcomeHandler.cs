@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 
@@ -32,12 +33,15 @@ public sealed class GetTestOutcomeHandler
     private readonly TestOutcomeStore _store;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IErrorTelemetryService? _telemetryService;
 
-    public GetTestOutcomeHandler(TestOutcomeStore store, IIdeSupportLogger logger, IOperationDurationRecorder? recorder = null)
+    public GetTestOutcomeHandler(TestOutcomeStore store, IIdeSupportLogger logger, IOperationDurationRecorder? recorder = null,
+        IErrorTelemetryService? telemetryService = null)
     {
         _store = store;
         _logger = logger;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _telemetryService = telemetryService;
     }
 
     /// <summary>Handles a <c>reqnroll/testOutcomes/getOutcome</c> request.</summary>
@@ -65,7 +69,10 @@ public sealed class GetTestOutcomeHandler
         catch (Exception ex)
         {
             // Never fail the lens over an outcome lookup — Found=false means "fall back to the bridge".
-            _logger.LogException(ex, $"{nameof(GetTestOutcomeHandler)}: threw for {request.TypeFullName}.{request.MethodName}");
+            if (_telemetryService is not null)
+                _logger.LogException(_telemetryService, ex, $"{nameof(GetTestOutcomeHandler)}: threw for {request.TypeFullName}.{request.MethodName}");
+            else
+                _logger.LogException(ex, $"{nameof(GetTestOutcomeHandler)}: threw for {request.TypeFullName}.{request.MethodName}");
             return Task.FromResult(new GetTestOutcomeResponse { Found = false });
         }
     }

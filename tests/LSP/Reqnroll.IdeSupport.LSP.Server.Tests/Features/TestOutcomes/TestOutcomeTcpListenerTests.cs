@@ -2,8 +2,12 @@ using System.Net.Sockets;
 using System.Text;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes;
 
@@ -365,5 +369,74 @@ public class TestOutcomeTcpListenerTests : IDisposable
             using var client = new TcpClient();
             client.Connect(registration.Endpoint.Substring(0, colon), int.Parse(registration.Endpoint.Substring(colon + 1)));
         }).Should().Throw<SocketException>();
+    }
+
+    // ── Issue #722: telemetry + perf instrumentation ────────────────────────────────────────
+
+    [Fact]
+    public async Task RunComplete_sends_the_TestOutcomesRunCompleted_telemetry_event_with_counts_and_VSTestLogger_reporterKind()
+    {
+        var lspTelemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: lspTelemetry);
+        var registration = listener.RegisterRun()!;
+
+        await SendAsync(registration.Endpoint,
+            Hello(registration.RunId), // Hello() includes targetFramework, matching the real VSTest logger's hello.
+            Result("Add", "Add(1,2)", "Passed", registration.RunId),
+            Result("Add", "Add(3,4)", "Failed", registration.RunId),
+            RunComplete(registration.RunId));
+
+        (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add")?.Rows.Count == 2)).Should().BeTrue();
+        lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p =>
+            (int)p["ResultCount"]! == 2 &&
+            (bool)p["Aborted"]! == false &&
+            (bool)p["Canceled"]! == false &&
+            (string)p["ReporterKind"]! == "VSTestLogger"));
+    }
+
+    [Fact]
+    public async Task RunComplete_infers_MTP_reporterKind_when_hello_has_no_targetFramework_field()
+    {
+        var lspTelemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: lspTelemetry);
+        var registration = listener.RegisterRun()!;
+
+        // Mirrors ReqnrollMtpReporter's hello line: no targetFramework/idePid keys at all.
+        var mtpHello = new JObject { ["type"] = "hello", ["protocol"] = 1, ["runId"] = registration.RunId, ["runnerPid"] = 4242, ["connected"] = true }
+            .ToString(Newtonsoft.Json.Formatting.None);
+
+        await SendAsync(registration.Endpoint, mtpHello, Result("Add", "Add(1,2)", "Passed", registration.RunId), RunComplete(registration.RunId));
+
+        (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
+        lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
+    }
+
+    [Fact]
+    public async Task RunComplete_records_the_ingestion_duration_via_the_operation_recorder()
+    {
+        var recorder = Substitute.For<IOperationDurationRecorder>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, recorder: recorder);
+        var registration = listener.RegisterRun()!;
+
+        await SendAsync(registration.Endpoint, Hello(registration.RunId), Result("Add", "Add(1,2)", "Passed", registration.RunId), RunComplete(registration.RunId));
+
+        (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
+        recorder.Received(1).Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, Arg.Any<double>(), Arg.Any<OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri?>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task An_unparseable_hello_line_is_forwarded_to_telemetry_when_a_telemetry_service_is_supplied()
+    {
+        var telemetry = Substitute.For<IErrorTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, telemetryService: telemetry);
+        var registration = listener.RegisterRun()!;
+
+        // Not JSON at all (unlike "A_first_line_that_is_not_a_hello_is_rejected", which sends a
+        // well-formed "result" line): JObject.Parse throws synchronously outside the read loop's own
+        // per-line try/catch, exercising the handler's general catch-all → LogException(telemetryService, ...).
+        await SendAsync(registration.Endpoint, "this is not json at all {{{");
+
+        await Task.Delay(300);
+        telemetry.Received(1).MonitorError(Arg.Any<Exception>());
     }
 }

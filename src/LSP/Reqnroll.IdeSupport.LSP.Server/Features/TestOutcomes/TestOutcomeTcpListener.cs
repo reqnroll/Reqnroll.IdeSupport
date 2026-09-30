@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -13,7 +14,11 @@ using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
@@ -61,6 +66,9 @@ public sealed class TestOutcomeTcpListener : IDisposable
     private readonly Func<string?> _resolveWorkspaceRoot;
     private readonly IIdeSupportLogger _logger;
     private readonly Action _notifyChanged;
+    private readonly IErrorTelemetryService? _telemetryService;
+    private readonly ILspTelemetryService? _lspTelemetryService;
+    private readonly IOperationDurationRecorder _recorder;
     private readonly object _gate = new();
     private TcpListener? _listener;
     private Timer? _refreshTimer;
@@ -69,17 +77,21 @@ public sealed class TestOutcomeTcpListener : IDisposable
     private bool _disposed;
 
     /// <summary>DI entry point: pushes <c>reqnroll/testOutcomes/changed</c> to the connected client on change.</summary>
-    public TestOutcomeTcpListener(TestOutcomeStore store, TestOutcomePersistence persistence, TestOutcomeSessionBreadcrumb breadcrumb, ILanguageServerFacade languageServer, IIdeSupportLogger logger)
-        : this(store, logger, () => TestOutcomesChangedRequester.NotifyChanged(languageServer, logger), persistence, breadcrumb, () => ResolveWorkspaceRoot(languageServer))
+    public TestOutcomeTcpListener(TestOutcomeStore store, TestOutcomePersistence persistence, TestOutcomeSessionBreadcrumb breadcrumb, ILanguageServerFacade languageServer, IIdeSupportLogger logger,
+        IErrorTelemetryService telemetryService, ILspTelemetryService lspTelemetryService, IOperationDurationRecorder recorder)
+        : this(store, logger, () => TestOutcomesChangedRequester.NotifyChanged(languageServer, logger), persistence, breadcrumb, () => ResolveWorkspaceRoot(languageServer),
+            telemetryService, lspTelemetryService, recorder)
     {
     }
 
     /// <summary>
     /// Test seam: <paramref name="notifyChanged"/> replaces the LSP push; <paramref name="persistence"/>,
-    /// <paramref name="breadcrumb"/> and <paramref name="resolveWorkspaceRoot"/> may be null/omitted.
+    /// <paramref name="breadcrumb"/>, <paramref name="resolveWorkspaceRoot"/>, <paramref name="telemetryService"/>,
+    /// <paramref name="lspTelemetryService"/> and <paramref name="recorder"/> may be null/omitted.
     /// </summary>
     internal TestOutcomeTcpListener(TestOutcomeStore store, IIdeSupportLogger logger, Action notifyChanged,
-        TestOutcomePersistence? persistence = null, TestOutcomeSessionBreadcrumb? breadcrumb = null, Func<string?>? resolveWorkspaceRoot = null)
+        TestOutcomePersistence? persistence = null, TestOutcomeSessionBreadcrumb? breadcrumb = null, Func<string?>? resolveWorkspaceRoot = null,
+        IErrorTelemetryService? telemetryService = null, ILspTelemetryService? lspTelemetryService = null, IOperationDurationRecorder? recorder = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -87,6 +99,9 @@ public sealed class TestOutcomeTcpListener : IDisposable
         _persistence = persistence;
         _breadcrumb = breadcrumb;
         _resolveWorkspaceRoot = resolveWorkspaceRoot ?? (() => null);
+        _telemetryService = telemetryService;
+        _lspTelemetryService = lspTelemetryService;
+        _recorder = recorder ?? NullOperationDurationRecorder.Instance;
         _store.Changed += (_, _) => ScheduleRefresh();
     }
 
@@ -113,6 +128,19 @@ public sealed class TestOutcomeTcpListener : IDisposable
             .Select(f => f.Uri.GetFileSystemPath())
             .FirstOrDefault(p => !string.IsNullOrEmpty(p))
            ?? (string.IsNullOrEmpty(languageServer.ClientSettings.RootPath) ? null : languageServer.ClientSettings.RootPath);
+
+    /// <summary>
+    /// Logs an exception and, when a telemetry service was supplied, forwards it via the
+    /// telemetry-reporting overload — every fault site in this listener routes through here so none
+    /// are silently local-log-only (issue #722).
+    /// </summary>
+    private void LogException(Exception ex, string message)
+    {
+        if (_telemetryService is not null)
+            _logger.LogException(_telemetryService, ex, message);
+        else
+            _logger.LogException(ex, message);
+    }
 
     /// <summary>The bound loopback endpoint once started, e.g. <c>127.0.0.1:53412</c>; null before the first registration.</summary>
     public string? Endpoint
@@ -156,7 +184,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: failed to start loopback listener");
+                LogException(ex, $"{nameof(TestOutcomeTcpListener)}: failed to start loopback listener");
                 return false;
             }
         }
@@ -175,7 +203,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
             catch (Exception ex)
             {
                 if (_disposed) return;
-                _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: accept failed");
+                LogException(ex, $"{nameof(TestOutcomeTcpListener)}: accept failed");
                 continue;
             }
             _ = Task.Run(() => HandleConnectionAsync(client));
@@ -212,9 +240,19 @@ public sealed class TestOutcomeTcpListener : IDisposable
             // clear the marks the real one set.
             connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
             var protocol = hello.Value<int?>("protocol") ?? 0;
+            // Cheap reporter-kind inference (issue #722 suggested fix (c)): the VSTest logger's hello
+            // always carries a (possibly empty) "targetFramework" field; the MTP reporter's hello never
+            // includes that key at all (see ReqnrollIdeTestLogger vs. ReqnrollMtpReporter). No new
+            // wire field needed — just reading what's already parsed.
+            var reporterKind = hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP";
             _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
             if (protocol != 1)
                 _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
+
+            // Perf instrumentation (issue #722): the NDJSON ingestion hot path, timed from the
+            // connection's hello to its runComplete — not covered by the two thin RPC handlers'
+            // Measure() calls, which only time registerRun/getOutcome themselves.
+            var runStopwatch = Stopwatch.StartNew();
 
             string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
@@ -243,7 +281,24 @@ public sealed class TestOutcomeTcpListener : IDisposable
                         // Clear the running marks now rather than at socket close: the logger closes
                         // right after this line, but the glyph should follow the protocol, not the FIN.
                         _store.CompleteRun(connectionId);
-                        _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={message.Value<bool?>("aborted") ?? false}, canceled={message.Value<bool?>("canceled") ?? false}, {results} result(s) stored");
+                        var aborted = message.Value<bool?>("aborted") ?? false;
+                        var canceled = message.Value<bool?>("canceled") ?? false;
+                        _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={aborted}, canceled={canceled}, {results} result(s) stored");
+
+                        runStopwatch.Stop();
+                        _recorder.Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, runStopwatch.Elapsed.TotalMilliseconds,
+                            detail: $"results={results} reporterKind={reporterKind}");
+                        // Product telemetry (issue #722 fix (b)/(c)): counts/flags only — no paths, no
+                        // test names, no content — plus which reporter sent the run, so MTP ephemeral
+                        // injection's real-world adoption is visible in aggregate without a dedicated
+                        // client→server telemetry channel for it.
+                        _lspTelemetryService?.SendEvent(TelemetryEvents.TestOutcomesRunCompleted, new Dictionary<string, object?>
+                        {
+                            ["ResultCount"] = results,
+                            ["Aborted"] = aborted,
+                            ["Canceled"] = canceled,
+                            ["ReporterKind"] = reporterKind,
+                        });
                         break;
                 }
             }
@@ -254,7 +309,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: connection handler failed for run {runId ?? "?"}");
+            LogException(ex, $"{nameof(TestOutcomeTcpListener)}: connection handler failed for run {runId ?? "?"}");
         }
         finally
         {
@@ -368,7 +423,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
     {
         Interlocked.Exchange(ref _refreshScheduled, 0);
         try { _notifyChanged(); }
-        catch (Exception ex) { _logger.LogException(ex, $"{nameof(TestOutcomeTcpListener)}: change notification failed"); }
+        catch (Exception ex) { LogException(ex, $"{nameof(TestOutcomeTcpListener)}: change notification failed"); }
     }
 
     public void Dispose()

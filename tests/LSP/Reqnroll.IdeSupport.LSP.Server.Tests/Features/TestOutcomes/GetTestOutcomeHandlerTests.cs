@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
@@ -82,6 +83,35 @@ public class GetTestOutcomeHandlerTests : IDisposable
         var response = await handler.HandleAsync(Params(container, "Unknown"), CancellationToken.None);
 
         response.Found.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HandleAsync_forwards_an_unexpected_exception_to_telemetry_when_a_telemetry_service_is_supplied()
+    {
+        // TestOutcomeKey.ForLookup's StripSignature NREs on a null method name — the cheapest way to
+        // exercise the handler's catch-all without a mockable (sealed) TestOutcomeStore.
+        var container = NewContainer();
+        var store = new TestOutcomeStore();
+        var telemetry = Substitute.For<IErrorTelemetryService>();
+        var handler = new GetTestOutcomeHandler(store, _logger, telemetryService: telemetry);
+
+        var response = await handler.HandleAsync(new GetTestOutcomeParams { AssemblyPath = container, TypeFullName = Type, MethodName = null! }, CancellationToken.None);
+
+        response.Found.Should().BeFalse("an unexpected failure must fall back to the reflection bridge, not fault the lens");
+        telemetry.Received(1).MonitorError(Arg.Any<NullReferenceException>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_logs_but_does_not_reach_for_telemetry_when_none_is_supplied()
+    {
+        var container = NewContainer();
+        var store = new TestOutcomeStore();
+        var handler = new GetTestOutcomeHandler(store, _logger); // no telemetryService — issue #722's pre-existing log-only path.
+
+        var response = await handler.HandleAsync(new GetTestOutcomeParams { AssemblyPath = container, TypeFullName = Type, MethodName = null! }, CancellationToken.None);
+
+        response.Found.Should().BeFalse();
+        _logger.Received().Log(Arg.Is<LogMessage>(m => m.Level == System.Diagnostics.TraceLevel.Error));
     }
 
     [Fact]
