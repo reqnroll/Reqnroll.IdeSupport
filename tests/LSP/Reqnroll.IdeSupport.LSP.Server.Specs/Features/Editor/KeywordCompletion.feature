@@ -140,6 +140,34 @@ Scenario: Completion request on a non-feature file returns no items
     When completions are requested at line 0 column 0 in "Notes.txt"
     Then no completions are returned
 
+# ── No completion while editing an already-typed title (issue #818) ─────────
+
+Scenario: Completion while editing the end of an already-typed scenario title returns no completions
+    When the feature file "TitleEditEnd.feature" is opened with
+        """
+        Feature: Calculator
+        Scenario: Add numbersx
+        """
+    And completions are requested at line 1 column 22 in "TitleEditEnd.feature"
+    Then no completions are returned
+
+Scenario: Completion while editing the middle of an already-typed scenario title returns no completions
+    When the feature file "TitleEditMiddle.feature" is opened with
+        """
+        Feature: Calculator
+        Scenario: Add two numbers
+        """
+    And completions are requested at line 1 column 13 in "TitleEditMiddle.feature"
+    Then no completions are returned
+
+Scenario: Completion while editing an already-typed Feature title returns no completions
+    When the feature file "FeatureTitleEdit.feature" is opened with
+        """
+        Feature: Calculator Pro
+        """
+    And completions are requested at line 0 column 23 in "FeatureTitleEdit.feature"
+    Then no completions are returned
+
 # ── Replacement range never extends past the caret (issue #561) ─────────────
 
 Scenario: Keyword completion range does not extend past the caret when text follows it on the line
