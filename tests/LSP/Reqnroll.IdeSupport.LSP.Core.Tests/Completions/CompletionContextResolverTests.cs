@@ -216,6 +216,91 @@ public class CompletionContextResolverTests
         ctx.Dialect.Language.Should().Be("de");
     }
 
+    // ── Definition-line keyword (Feature/Scenario/etc.) → no completion past it ──
+    // Issue #818: keyword completion must stop once the cursor is editing the block's
+    // free-text title, not composing the keyword itself.
+    //
+    // Line 0 "Feature: F"  → DefinitionLineKeyword covers columns [0, 8)  ("Feature:")
+    // Line 1 "Scenario: S" → DefinitionLineKeyword covers columns [0, 9)  ("Scenario:")
+
+    [Fact]
+    public void Cursor_within_definition_keyword_still_returns_KeywordCompletionContext()
+    {
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
+
+        // Column 3 on line 1 is inside "Sce|nario:" -- still composing the keyword.
+        var ctx = _sut.Resolve(snapshot, 1, 3, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeOfType<KeywordCompletionContext>();
+    }
+
+    [Fact]
+    public void Cursor_at_start_of_definition_keyword_still_returns_KeywordCompletionContext()
+    {
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
+
+        var ctx = _sut.Resolve(snapshot, 1, 0, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeOfType<KeywordCompletionContext>();
+    }
+
+    [Fact]
+    public void Cursor_right_after_the_colon_returns_null()
+    {
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
+
+        // Column 9 on line 1 is the space right after "Scenario:" -- already past the keyword.
+        var ctx = _sut.Resolve(snapshot, 1, 9, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeNull();
+    }
+
+    [Fact]
+    public void Cursor_in_the_middle_of_the_scenario_title_returns_null()
+    {
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 11, length: 9) });
+
+        // Column 10 on line 1 is "S" of the title "S" -- editing the name, not the keyword.
+        var ctx = _sut.Resolve(snapshot, 1, 10, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeNull();
+    }
+
+    [Fact]
+    public void Cursor_past_the_feature_keyword_returns_null()
+    {
+        // Same rule applies to Feature (and, by the same tag, Rule/Background/Examples) lines,
+        // not just Scenario -- issue #818's "Note 2".
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 0, length: 8) });
+
+        var ctx = _sut.Resolve(snapshot, 0, 9, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeNull();
+    }
+
+    [Fact]
+    public void Definition_keyword_tag_on_a_different_line_does_not_suppress_completion()
+    {
+        var snapshot = Snapshot(DocText);
+        // The tag is for line 0; the cursor is on line 1, which has no tag of its own here.
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>())
+            .Returns(new[] { DefinitionKeywordTag(snapshot, lineStart: 0, length: 8) });
+
+        var ctx = _sut.Resolve(snapshot, 1, 10, ProjectBindingRegistry.Invalid, "en");
+
+        ctx.Should().BeOfType<KeywordCompletionContext>();
+    }
+
     // ── StepCompletionContext carries the step object ─────────────────────────
 
     [Fact]
@@ -239,6 +324,9 @@ public class CompletionContextResolverTests
 
     private static IdeSupportTag DocTag(IdeSupportGherkinDocument doc, IGherkinTextSnapshot snapshot)
         => new(IdeSupportTagTypes.Document, GherkinRange.Empty, doc);
+
+    private static IdeSupportTag DefinitionKeywordTag(IGherkinTextSnapshot snapshot, int lineStart, int length)
+        => new(IdeSupportTagTypes.DefinitionLineKeyword, GherkinRange.FromPoint(snapshot, lineStart, length));
 
     // ── Inline snapshot (avoids a dependency on the Server layer) ─────────────
 
