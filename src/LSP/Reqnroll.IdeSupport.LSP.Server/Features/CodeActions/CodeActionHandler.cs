@@ -66,6 +66,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         IDocumentBufferService    bufferService,
         IIdeSupportLogger            logger,
         IFileSystemForIDE         fileSystem,
+        ICSharpFileTextCache      csharpFileTextCache,
         ICompletionService        completionService,
         IErrorTelemetryService    errorTelemetryService,
         ClientIdeContext          clientIde,
@@ -80,7 +81,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
-        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem);
+        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache);
         _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
         _ambiguousActionBuilder   = new AmbiguousStepActionBuilder(fileSystem);
     }
@@ -216,23 +217,20 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var featurePath  = uri.GetFileSystemPath();
         var target       = _targetResolver.Resolve(uri, featurePath, primaryOwner, matchSet);
 
-        // Per-step ("cursor") actions are inserted first so they survive the MaxTargetedActions
-        // cap in Handle when both this and the "all"/"scenario" group are present.
-        var actions = new List<CommandOrCodeAction>();
-
-        // ── "Define all missing steps in file" ─────────────────────────────────
-        actions.AddRange(_actionBuilder.Build(target,
-            allUndefined.Count == 1 ? "Define missing step" : "Define all missing steps in file",
-            allUndefined));
-
-        // ── Per-step action for the step actually under the cursor ─────────────
-        // Only add it as a distinct action when it differs from the "all" action above
-        // (i.e. there are other undefined steps in the file besides this one).
-        if (stepAtCursor != allUndefined[0])
+        // The caller (Handle) has already confirmed stepAtCursor.IsUndefined. When it's the
+        // only undefined step in the file, "define this step" and "define all" are the same
+        // action - show it once, with the generic singular title.
+        if (allUndefined.Count == 1)
         {
-            var stepText = GetStepText(stepAtCursor);
-            actions.InsertRange(0, _actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor }));
+            return _actionBuilder.Build(target, "Define missing step", allUndefined);
         }
+
+        // Per-step action first, so it survives the MaxTargetedActions cap in Handle when
+        // both this and the "all" group are present.
+        var stepText = GetStepText(stepAtCursor);
+        var actions  = _actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor });
+
+        actions.AddRange(_actionBuilder.Build(target, "Define all missing steps in file", allUndefined));
 
         return actions;
     }

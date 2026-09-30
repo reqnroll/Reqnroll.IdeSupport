@@ -19,8 +19,30 @@ public sealed class ProtocolSteps
     [Given("the LSP server is started")]
     public async Task GivenTheLspServerIsStarted() => await _ctx.EnsureStartedAsync();
 
-    [Given(@"the LSP server is started for IDE ""(.*)""")]
+    // Bound with [^"] rather than (.*) so a longer step that starts the same way — e.g. "...for IDE
+    // "vscode" with the client identifying itself as "Visual Studio"" (issue #709) — is not also
+    // matched by this one and reported as an ambiguous binding.
+    [Given(@"the LSP server is started for IDE ""([^""]*)""")]
     public async Task GivenTheLspServerIsStartedForIde(string ide) => await _ctx.EnsureStartedAsync(ide);
+
+    /// <summary>
+    /// Issue #709: starts the server with NO <c>--ide</c> argument, so the only identity it can have
+    /// is the one the client self-reports in <c>InitializeParams.ClientInfo</c>. This is the shape
+    /// the fallback exists for — a glue component that failed to wire the argument up.
+    /// </summary>
+    [Given(@"the LSP server is started for a client identifying itself as ""([^""]*)"" with no IDE argument")]
+    public async Task GivenTheLspServerIsStartedForClientInfoOnly(string clientName) =>
+        await _ctx.EnsureStartedAsync(
+            ideId: null,
+            clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
+
+    /// <summary>
+    /// Issue #709's cross-check case: an explicit <c>--ide</c> AND a contradicting
+    /// <c>InitializeParams.ClientInfo</c> in the same handshake. The argument must win.
+    /// </summary>
+    [Given(@"the LSP server is started for IDE ""([^""]*)"" with the client identifying itself as ""([^""]*)""")]
+    public async Task GivenTheLspServerIsStartedForIdeWithClientInfo(string ide, string clientName) =>
+        await _ctx.EnsureStartedAsync(ide, clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
 
     // Issue #70: the harness's simulated client negotiates LSP 3.16 change-annotation support
     // only when a scenario opts in via this step — every other scenario keeps the default
@@ -171,7 +193,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 0,    // Baseline
+            kind = 0,    // Baseline
             files = ToFileEntries(table, added: true)
         });
     }
@@ -193,7 +215,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 1,    // Delta
+            kind = 1,    // Delta
             files = ToFileEntries(table, added: false)
         });
 
@@ -217,7 +239,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 1,    // Delta
+            kind = 1,    // Delta
             files = ToFileEntries(table, added: true)
         });
 
@@ -471,8 +493,8 @@ public sealed class ProtocolSteps
     private object[] ToFileEntries(Table table, bool added)
         => table.Rows.Select(r => (object)new
         {
-            path  = _ctx.PathFor(r["path"]),
-            role  = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
+            path = _ctx.PathFor(r["path"]),
+            role = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
             added
         }).ToArray();
 

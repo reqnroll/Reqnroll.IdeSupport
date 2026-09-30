@@ -204,6 +204,9 @@ Log files are written to a per-OS Reqnroll `logs` directory — Windows
 - `reqnroll-rider-server-<yyyyMMdd>-<pid>.log` /
   `reqnroll-rider-protocol-<yyyyMMdd>-<pid>.log` — the LSP server's application
   log and protocol/wire-level internals.
+  The prefix is decided before the client connects, so a server started without
+  an `--ide` value keeps the generic `lsp` prefix for that whole session even if
+  the client then identifies itself in its `initialize` request.
 
 These are not written to Rider's own `idea.log` or a dedicated tool window.
 

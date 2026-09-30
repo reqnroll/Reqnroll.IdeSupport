@@ -9,7 +9,7 @@ import java.util.concurrent.CompletableFuture
 
 /**
  * Custom LSP4J server interface adding the Reqnroll protocol extensions
- * (src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/LspMethodNames.cs) that the platform's
+ * (mirroring `CustomLspMethodNames` in `Reqnroll.IdeSupport.Common/Lsp/CustomLspMethodNames.cs`) that the platform's
  * generic LSP client has no built-in way to send. Wired in via
  * ReqnrollLspServerDescriptor.lsp4jServerClass; see
  * docs/Rider-Project-Document-Sync-Implementation-Plan.md §3.1 for how the resulting typed

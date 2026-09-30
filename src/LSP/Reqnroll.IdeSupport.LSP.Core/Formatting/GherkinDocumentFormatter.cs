@@ -53,6 +53,10 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
                     var examplesBlockIndentLevel =
                         indentLevel + formatSettings.ExamplesBlockIndentLevelWithinScenarioOutline;
                     SetTagsAndLine(lines, example, GetIndent(formatSettings, examplesBlockIndentLevel));
+                    // An Examples: block whose table was deleted has no table rows; Gherkin's
+                    // Examples.Rows throws on that, so skip table formatting and keep the block as-is.
+                    if (example.TableHeader == null)
+                        continue;
                     FormatTable(lines, example, formatSettings,
                         examplesBlockIndentLevel + formatSettings.ExamplesTableIndentLevelWithinExamplesBlock);
                 }
@@ -116,8 +120,11 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
 
     internal int[] GetTableWidths(IHasRows hasRows)
     {
-        var widths = new int[hasRows.Rows.Max(r => r.Cells.Count())];
-        foreach (var row in hasRows.Rows)
+        var rows = hasRows.GetRowsOrEmpty().ToArray();
+        if (rows.Length == 0)
+            return Array.Empty<int>();
+        var widths = new int[rows.Max(r => r.Cells.Count())];
+        foreach (var row in rows)
         foreach (var item in row.Cells.Select((c, i) => new { c, i }))
             widths[item.i] = Math.Max(widths[item.i], EscapeTableCellValue(item.c.Value).Length);
         return widths;
@@ -174,7 +181,7 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
         string indent, int[]? widths = null)
     {
         widths ??= GetTableWidths(hasRows);
-        foreach (var row in hasRows.Rows)
+        foreach (var row in hasRows.GetRowsOrEmpty())
         {
             var result = new StringBuilder();
             result.Append(indent);

@@ -60,4 +60,23 @@ public static class GherkinAstExtensions
             .Concat(gherkinDialect.ScenarioOutlineKeywords)
             .Concat(gherkinDialect.ExamplesKeywords)
             .ToArray();
+
+    /// <summary>
+    /// Returns the rows of <paramref name="hasRows"/>, or an empty sequence when the node is an
+    /// <see cref="Examples"/> block whose table is missing (deleting an Examples table leaves
+    /// the <c>Examples:</c> keyword line behind, so the parsed node has a null header/body and
+    /// Gherkin's <see cref="IHasRows.Rows"/> throws <see cref="ArgumentNullException"/>).
+    /// </summary>
+    public static IEnumerable<TableRow> GetRowsOrEmpty(this IHasRows hasRows)
+    {
+        if (hasRows == null)
+            throw new ArgumentNullException(nameof(hasRows));
+        return hasRows switch
+        {
+            Examples { TableHeader: { } header, TableBody: { } body } => new[] { header }.Concat(body),
+            Examples { TableHeader: { } header } => [header],
+            Examples { TableHeader: null } => [],
+            _ => hasRows.Rows,
+        };
+    }
 }

@@ -198,13 +198,68 @@ public sealed class CompletionHandler : ICompletionHandler
         // cursorChar ever lands before the first non-whitespace column.
         var kwRangeEnd   = cursorChar;
         var kwRangeStart = Math.Min(kwStart, kwRangeEnd);
+
+        // Issue #818 follow-up: keyword completion bundles several *groups* together -- block
+        // keywords, step keywords, tags, table/doc-string separators (AddKeywordEntries, one
+        // group per TokenType) -- and every group is only valid while the text already typed at
+        // the start of the line could still become one of ITS members. Narrowing is by whole
+        // group, not by individual entry: typing "Gi" still offers Given *and* When *and* Then
+        // together (deciding which one is the client's own job, via its list filtering) because
+        // the step-keyword group has a match, but typing "@" drops the block-keyword and
+        // step-keyword groups entirely, since none of their members could ever start with "@".
+        // A second tag typed after a complete first one on the same line ("@tag1 @") likewise
+        // matches no group's member and is dropped -- deliberately not special-cased to keep
+        // offering tags there, since a completion popup while composing tags is disruptive
+        // regardless of whether the position is technically still valid Gherkin (maintainer
+        // discussion on #818).
+        var typedSoFar = lineText.Substring(kwRangeStart, kwRangeEnd - kwRangeStart);
+        var entries = typedSoFar.Length == 0
+            ? kwResult.Entries
+            : FilterToMatchingGroups(k, typedSoFar);
+
+        if (entries.Count == 0)
+        {
+            _logger.LogVerbose(
+                $"CompletionHandler: '{typedSoFar}' matches no keyword/tag candidate — suppressing");
+            return new CompletionList();
+        }
+
         var kwRange = new LspRange(
             new Position(cursorLine, kwRangeStart),
             new Position(cursorLine, kwRangeEnd));
 
         _logger.LogVerbose(
-            $"CompletionHandler: {kwResult.Entries.Count} keyword completion(s)");
-        return new CompletionList(ToItems(kwResult.Entries, kwRange));
+            $"CompletionHandler: {entries.Count} keyword completion(s)");
+        return new CompletionList(ToItems(entries, kwRange));
+    }
+
+    /// <summary>
+    /// Narrows <paramref name="k"/>'s candidate set to only the expected-token groups (one
+    /// group per <see cref="TokenType"/>, e.g. every step keyword together, or every block
+    /// keyword together) that have at least one member starting with
+    /// <paramref name="typedSoFar"/>. A group that matches is kept whole, not trimmed to just
+    /// its matching member(s) -- see the call site for why. When <see cref="KeywordCompletionContext.ExpectedTokens"/>
+    /// is empty (the document didn't parse), the permissive fallback list is treated as one
+    /// flat group instead: kept whole if anything in it matches, dropped entirely otherwise.
+    /// </summary>
+    private List<CompletionEntry> FilterToMatchingGroups(KeywordCompletionContext k, string typedSoFar)
+    {
+        if (k.ExpectedTokens.Length == 0)
+        {
+            var fallback = _completionService.GetDefaultKeywordCompletions(k.Dialect).Entries;
+            return fallback.Any(e => e.Label.StartsWith(typedSoFar, StringComparison.OrdinalIgnoreCase))
+                ? fallback.ToList()
+                : new List<CompletionEntry>();
+        }
+
+        var entries = new List<CompletionEntry>();
+        foreach (var token in k.ExpectedTokens)
+        {
+            var group = _completionService.GetKeywordCompletions(new[] { token }, k.Dialect).Entries;
+            if (group.Any(e => e.Label.StartsWith(typedSoFar, StringComparison.OrdinalIgnoreCase)))
+                entries.AddRange(group);
+        }
+        return entries;
     }
 
     /// <summary>

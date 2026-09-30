@@ -62,6 +62,15 @@ public sealed class CompletionSteps
             $"a step completion with label '{label}' should be present");
     }
 
+    [Then(@"every completion label starts with ""(.*)""")]
+    public void ThenEveryCompletionLabelStartsWith(string prefix)
+    {
+        _ctx.LastCompletions.Should().NotBeNull();
+        _ctx.LastCompletions!.Items.Should().OnlyContain(
+            item => item.Label.StartsWith(prefix, StringComparison.Ordinal),
+            $"every completion label should start with '{prefix}'");
+    }
+
     [Then(@"the completions do not include a label ""(.*)""")]
     public void ThenCompletionsDoNotIncludeLabel(string label)
     {

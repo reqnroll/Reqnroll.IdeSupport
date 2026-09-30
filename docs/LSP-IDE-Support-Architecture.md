@@ -81,7 +81,14 @@ A standard LSP client *pulls* semantic tokens by sending `textDocument/semanticT
 
 The workaround is a **server-push + client-classifier** path that bypasses VS's native token pull entirely. When launched with `--ide visualstudio`, the server pushes encoded tokens to the VS client via a custom `reqnroll/semanticTokens` notification every time step binding matches change [ `MatchCacheChangedNotification`]. The VS extension captures this notification, decodes the token data, and caches it in a process-wide `SemanticTokenClassificationStore`. A classic MEF `IClassifierProvider` / `GherkinSemanticClassifier` then reads those cached tokens and emits `ClassificationSpan`s using the existing `IdeSupportClassifications` entries — the same classification names the existing VS extension uses, so users see no change in behavior of coloring (compared to the existing extension). VS Code and Rider are unaffected and use the standard pull flow.
 
-The `--ide` flag is the only place where the server behaves differently per IDE at the protocol level; the rest of the server is client-agnostic.
+The `--ide` flag is the server's primary per-IDE signal, and the only identity it has before the
+client connects, so it is the only place where the server behaves differently per IDE at the
+protocol level; the rest of the server is client-agnostic. It has a fallback (issue #709): when a
+client omits the flag, `InitializeParams.ClientInfo` — the LSP-standard `{name, version}` the client
+self-reports in the `initialize` request — is mapped onto the same identifier vocabulary. The flag
+always wins, so no shipped client's behaviour changes; see
+[Per-IDE capability registration via `--ide` flag](#per-ide-capability-registration-via---ide-flag)
+below for how the two sources are resolved.
 
 Full detail is in [F1 · Client-side token-type mapping](LSP-IDE-Support-Feature-Designs.md#client-side-token-type-mapping).
 
@@ -98,6 +105,13 @@ The trade-off is that the call graph is less linear: a `textDocument/didChange` 
 OmniSharp's handler base classes (e.g. `SemanticTokenHandlerBase`) register capabilities dynamically by default. Visual Studio requires static registration for semantic tokens and certain other capabilities — it cannot handle `client/registerCapability` reliably for these.
 
 Rather than encoding per-IDE logic inside each handler class, the server accepts a `--ide <ide>` flag at startup and uses it to decide, once during `initialize`, whether to register each capability statically or dynamically. This keeps all IDE-specific registration logic in one place (the startup path) while leaving handler implementations client-agnostic.
+
+**Identity resolution (issue #709).** The flag is the primary source, but it is not the only one. `InitializeParams.ClientInfo` — the LSP-standard `{name, version}` every client self-reports in the `initialize` request — is recorded by `ClientIdeContext.ApplyClientInfo` from `OnInitialized` and fills the identity in **only when no `--ide` was passed**. Two constraints shape this:
+
+- **The flag must keep winning.** It is available before the client connects, which is what lets `LspIdeSupportLogger` name its file and `ApplySemanticTokensCapability` decide VS's pull support. `ClientInfo` arrives later — after the DI container, and therefore `ClientIdeContext` itself, was built — which is exactly why the fallback is a mutation at `initialize` rather than a constructor input.
+- **`ClientInfo.Name` is not an identifier.** A client sends a product name ("Visual Studio Code"), not `vscode`, so the mapping in `MapClientInfoNameToIde` is an ordered, case-insensitive substring table. The order is load-bearing: "Visual Studio Code" contains "Visual Studio", so the VS Code tokens must be tested first — otherwise every VS Code client would resolve to Visual Studio and be handed the push-based semantic-token path above. A name matching nothing resolves to no identity rather than a guess, which preserves the "unknown IDE behaves like a non-VS client" default.
+
+Every per-IDE branch except the two `initialize`-time capability decisions reads `ClientIdeContext` lazily, per request (`SemanticTokensPushHandler`, `CodeActionHandler`, `CompletionHandler`, `RenameHandler`, `CodeLensRefreshRequester`), so the fallback reaches them for free. `ApplySemanticTokensCapability` resolves VS-ness through the same context rather than the raw argument, so the capability it advertises agrees with the handler that later pushes tokens. The resolved identity is logged at `initialize` (Info level) with both raw sources, which is what makes a disagreeing `ClientInfo` visible instead of silent.
 
 ### Custom `reqnroll/*` notifications for project-system information
 
@@ -257,7 +271,7 @@ Reqnroll.IdeSupport/
 │   │   │   └── globalUsings.cs
 │   │   │
 │   │   ├── Reqnroll.IdeSupport.LSP.Server/      # OmniSharp LSP host (net10.0, exe)
-│   │   │   ├── Protocol/                        # LspMethodNames constants; Documents/ = document extension helpers
+│   │   │   ├── Protocol/                        # wire DTOs; method names live in Reqnroll.IdeSupport.Common/Lsp; Documents/ = document extension helpers
 │   │   │   ├── Features/                        # OmniSharp handler classes (LSP messages), one folder per capability (e.g. Features/Completions, Features/Formatting, Features/SemanticTokens)
 │   │   │   ├── Pipeline/                        # MediatR notification handlers (internal events)
 │   │   │   ├── Hosting/                         # Program.cs, LanguageServerOptionsExtensions (capability + reqnroll/* registration), ClientIdeContext, ResilientMediator, ServiceCollectionExtensions
@@ -314,7 +328,7 @@ The server is a self-contained executable built on `OmniSharp.Extensions.Languag
 
 OmniSharp supports both static (declared in `initialize` response) and dynamic (via `client/registerCapability`) registration. Visual Studio has known issues with dynamic registration for some capabilities (see per-feature notes).
 
-The server accepts a `--ide <ide>` command-line flag at startup (e.g., `--ide visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic.
+The server accepts a `--ide <ide>` command-line flag at startup (e.g., `--ide visualstudio`) so that it can choose static vs. dynamic registration for each capability based on the consuming client, without requiring any client-side override logic. When the flag is absent the identity is resolved instead from `InitializeParams.ClientInfo` — see [Per-IDE capability registration via `--ide` flag](#per-ide-capability-registration-via---ide-flag).
 
 **OmniSharp implementation note (as-built)**: OmniSharp's handler base classes (e.g., `SemanticTokenHandlerBase`) use dynamic registration by default. Rather than building alternate base classes or patching OmniSharp's registration internals, capabilities needing static registration are wired manually via `options.OnRequest<>` in `LanguageServerOptionsExtensions.cs` (semantic tokens, references, document symbol, code lens/`codeLens/resolve`, inlay hint, folding range, prepare-rename/rename, rename targets), alongside `AddHandler<>` dynamic registration for the rest.
 
@@ -433,7 +447,7 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `FoldingRangeHandler` | `textDocument/foldingRange` |
 | `InlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
 | `FormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
-| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspMethodNames` like every other method) |
+| `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspStandardMethodNames` like every other method) |
 | `ReferencesHandler` | `textDocument/references` (from `.cs` cursors; two-state) |
 | `FindStepUsagesHandler` | `reqnroll/findStepUsages` (custom; three-state: isBinding false / 0 usages / locations) |
 | `RenameHandler` | `textDocument/prepareRename`, `textDocument/rename`, `reqnroll/selectRenameTarget` (retains the session state for a picked disambiguation target between requests) |
@@ -791,6 +805,17 @@ The following latency targets apply at **P95** (the 95th-percentile: 95% of requ
 
 > **Note**: These are design targets, not contractual SLAs. Benchmarks should be established in Phase 1 (against the F1 integration spec) and revisited as the feature set grows.
 
+> **Measured, no published threshold.** Several operations are field-instrumented (Layer 4) and
+> benchmarked (Layer 2) but carry no target in the table above, so their `PerfTargets` entries report
+> `—` and are never asserted (the #119 convention). The LSP-server test-outcome pipeline
+> (#700/#702, benchmarked by #714) added the largest batch: `reqnroll/testOutcomes/getOutcome` (bare,
+> plus its `#found`/`#not-found` variants), `reqnroll/testOutcomes/registerRun`,
+> `testOutcomes/ingest#results-burst`, `reqnroll/testOutcomes/changed`, and
+> `testOutcomes/persistence#load`/`#save`. The bare `getOutcome` row is what keeps the Layer 4 field
+> label and its synthetic counterpart aligned 1:1 — the variants exist because a cache hit and a miss
+> are genuinely different costs, not to replace it. They stay `—` until a threshold is proposed from
+> reference-machine data; their presence means "measured", not "expected to hit a number".
+
 ### Performance Verification
 
 The latency targets above are only meaningful if there is a defined mechanism to confirm them. Two distinct shapes of target need different verification:
@@ -901,7 +926,7 @@ The following monitoring events from the existing `Reqnroll.VisualStudio` extens
 
 | Field | Rationale |
 |-------|-----------|
-| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from `--ide` flag; enables per-IDE breakdown of all events |
+| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from the resolved IDE identity — the `--ide` flag, falling back to `InitializeParams.ClientInfo` when no flag was passed (issue #709); enables per-IDE breakdown of all events |
 | `DiscoveryType` (`roslyn` / `reflection`) | Added to `ReqnrollDiscovery` event; helps understand cache hit rates and build dependency |
 | `ExtensionInstalled` / `ExtensionUpgraded` origin | These events fire before the LSP server starts; must be sent by the IDE client, not the server — reinforces the open question on telemetry origin (Q11) |
 

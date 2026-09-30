@@ -375,7 +375,7 @@ so Rider and VS Code (once Phase 4/5 land) share the exact same aggregation/pers
 instead of each growing an independent copy — see §4.3 for why this was reconsidered before Rider/VS
 Code work started.
 
-- **New custom LSP protocol** (`LspMethodNames`): `reqnroll/testOutcomes/registerRun` (request —
+- **New custom LSP protocol** (`CustomLspMethodNames`): `reqnroll/testOutcomes/registerRun` (request —
   returns the listener's endpoint and a fresh run id to correlate with; no per-connection secret, see
   §5.1), `reqnroll/testOutcomes/getOutcome` (request — the outcome lookup, including the
   staleness/trust-window logic that used to live in `RunTestCodeLensCallbackListener`), and

@@ -7,8 +7,10 @@
 > it blindly for anything load-bearing.
 > **Audience:** Core team contributors, especially anyone adding a new IDE client or a new
 > server-side feature that needs to reach a client.
-> **Canonical source of truth:** [`LspMethodNames.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/LspMethodNames.cs)
-> on the server; [`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts) (VS Code) and
+> **Canonical source of truth:** [`CustomLspMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/CustomLspMethodNames.cs)
+> (custom `reqnroll/*` names) and [`LspStandardMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/LspStandardMethodNames.cs)
+> (standard names) in `Reqnroll.IdeSupport.Common`, shared by the LSP server and the Visual Studio
+> extension; [`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts) (VS Code) and
 > [`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/protocol/ReqnrollLanguageServer.kt)
 > (Rider) on the clients. This doc summarizes those; when they disagree, they win.
 
@@ -93,7 +95,9 @@ Two adjacent things that are **not** protocol extensions, despite looking like c
 - `--ide <identifier>` (e.g. `visualstudio`) is a process command-line argument read in
   [`Program.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/Program.cs), not an
   `initializationOptions` field. No client in this repo populates `initializationOptions` or an
-  `experimental` capabilities block.
+  `experimental` capabilities block. Its fallback, `InitializeParams.ClientInfo` (issue #709), is a
+  standard LSP field rather than an extension — the server reads it, it adds nothing to the wire, and
+  it is consulted only when no `--ide` was passed.
 - VS's `DocumentActivationTrackingInterceptor` re-sends `textDocument/didOpen` verbatim before
   sending `reqnroll/documentActivated` — it reorders delivery, it doesn't add fields to the
   standard notification.
@@ -155,7 +159,7 @@ F2-hijacking concern, but it means "extends `TextDocumentPositionParams` with
 
 When adding a `reqnroll/*` method:
 
-1. Add the constant to [`LspMethodNames.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/LspMethodNames.cs)
+1. Add the constant to [`CustomLspMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/CustomLspMethodNames.cs)
    under the "Custom Reqnroll Extensions" section, with an XML-doc `<c>...</c>` reference to the
    literal (existing entries follow this pattern).
 2. Register it in [`LanguageServerOptionsExtensions.cs`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/LanguageServerOptionsExtensions.cs)
