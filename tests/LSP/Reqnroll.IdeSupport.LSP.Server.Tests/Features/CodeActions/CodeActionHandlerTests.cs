@@ -149,6 +149,22 @@ public class CodeActionHandlerTests
         result!.Select(a => a.CodeAction!.Title).Should().NotContain(t => t.StartsWith("Define"));
     }
 
+    [Fact]
+    public async Task Does_not_offer_Define_action_when_cursor_is_on_a_defined_step_with_undefined_steps_elsewhere()
+    {
+        // Line 2 ("    Given a step") is defined; line 3 ("    When I press add") is a
+        // genuinely undefined step elsewhere in the same file. Invoking the lightbulb on the
+        // defined step must not offer to "define" the unrelated undefined step, for the same
+        // reason as the ambiguous-step case above.
+        SeedMatchService(
+            DefinedMatch("a step", ScenarioBlock.Given, FeatureUri, "Steps.cs", lineOffset: 23),
+            UndefinedMatch("I press add", ScenarioBlock.When, lineOffset: 41));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
+
+        result!.Select(a => a.CodeAction!.Title).Should().NotContain(t => t.StartsWith("Define"));
+    }
+
     // ── With an ambiguous step under the cursor (issue #563) ────────────────────
 
     [Fact]
@@ -206,6 +222,24 @@ public class CodeActionHandlerTests
         actions.Should().Contain(a =>
             a.CodeAction != null &&
             a.CodeAction.Title.Contains("Define all missing steps"));
+    }
+
+    [Fact]
+    public async Task Returns_both_actions_when_cursor_is_on_the_first_of_several_undefined_steps()
+    {
+        // Issue #816: the per-step action was previously skipped whenever the cursor's step
+        // happened to be the first undefined step in document order, regardless of whether other
+        // undefined steps existed elsewhere in the file. RequestAt(FeatureUri) defaults to line
+        // 0/char 0, which resolves to this first undefined step ("When I press add").
+        SeedMatchService(
+            UndefinedMatch("I press add",     ScenarioBlock.When),
+            UndefinedMatch("the result is 4", ScenarioBlock.Then));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        var titles = result!.Select(a => a.CodeAction!.Title).ToList();
+        titles.Should().Contain(t => t.Contains("Define all missing steps"));
+        titles.Should().Contain(t => t.StartsWith("Define step:"));
     }
 
     [Fact]
