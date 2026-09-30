@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.VisualStudio.Shell.Interop;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
 using Xunit;
 
@@ -78,5 +79,41 @@ public class RdtDocumentInitializationTests
     public void Treats_feature_and_csharp_documents_as_activation_relevant(string moniker, bool expected)
     {
         RdtDocumentInitialization.IsActivationRelevant(moniker).Should().Be(expected);
+    }
+
+    [Fact]
+    public void LogDocumentEvent_logs_a_stale_cookie_ArgumentException_at_Verbose_not_Error()
+    {
+        // Issue #814: a document released/closed during restore leaves a stale RDT cookie, and
+        // GetDocumentMoniker throws ArgumentException for it. In an observe-only monitor that is
+        // an expected race, so it must be logged at Verbose — never surface as a spurious [Error].
+        var rdt4 = (IVsRunningDocumentTable4)Substitute.For<IVsRunningDocumentTable, IVsRunningDocumentTable4>();
+        rdt4.GetDocumentMoniker(Arg.Any<uint>())
+            .Returns(_ => throw new ArgumentException("Value does not fall within the expected range."));
+
+        var logger = Substitute.For<IIdeSupportLogger>();
+        logger.Level.Returns(TraceLevel.Verbose);
+        var logged = new List<LogMessage>();
+        logger.Log(Arg.Do<LogMessage>(m => logged.Add(m)));
+
+        var monitor = CreateMonitor((IVsRunningDocumentTable)rdt4, logger);
+
+        monitor.OnAfterDocumentWindowHide(1234, null);
+
+        logged.Should().ContainSingle(m => m.Level == TraceLevel.Verbose)
+            .Which.Message.Should().Contain("stale RDT cookie");
+        logged.Should().NotContain(m => m.Level == TraceLevel.Error);
+    }
+
+    private static DocumentInitializationMonitor CreateMonitor(IVsRunningDocumentTable rdt, IIdeSupportLogger logger)
+    {
+        // The constructor is private; the monitor is only reachable through TryAdvise, which needs
+        // a UI thread. Construct it directly via reflection so the exception path is testable.
+        var ctor = typeof(DocumentInitializationMonitor).GetConstructor(
+            BindingFlags.NonPublic | BindingFlags.Instance,
+            null,
+            new[] { typeof(IVsRunningDocumentTable), typeof(IIdeSupportLogger) },
+            null);
+        return (DocumentInitializationMonitor)ctor!.Invoke(new object[] { rdt, logger });
     }
 }
