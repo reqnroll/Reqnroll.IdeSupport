@@ -240,11 +240,12 @@ public sealed class TestOutcomeTcpListener : IDisposable
             // clear the marks the real one set.
             connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
             var protocol = hello.Value<int?>("protocol") ?? 0;
-            // Cheap reporter-kind inference (issue #722 suggested fix (c)): the VSTest logger's hello
-            // always carries a (possibly empty) "targetFramework" field; the MTP reporter's hello never
-            // includes that key at all (see ReqnrollIdeTestLogger vs. ReqnrollMtpReporter). No new
-            // wire field needed — just reading what's already parsed.
-            var reporterKind = hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP";
+            // Reporter kind: prefer the explicit "reporterKind" field both loggers now send (issue #722
+            // suggested fix (c), made explicit). Fall back to the old presence-of-"targetFramework"
+            // inference for hello lines from older loggers that predate the field — the VSTest logger
+            // always carried a (possibly empty) "targetFramework" key, the MTP reporter never did.
+            var reporterKind = hello.Value<string>("reporterKind")
+                ?? (hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP");
             _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
             if (protocol != 1)
                 _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
