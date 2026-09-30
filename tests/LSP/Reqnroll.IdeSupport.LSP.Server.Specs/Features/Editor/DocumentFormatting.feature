@@ -186,3 +186,55 @@ Scenario: On-type formatting adds trailing pipe for row missing it
     And on-type formatting is requested for "OnTypeTrailingPipe.feature" at line 4 column 7 with trigger "|"
     Then formatting edits are returned
     And the formatted text contains "| short | longer value |"
+
+# ── Empty Examples block (issue #827) ────────────────────────────────────────
+
+Scenario: Format document does not crash when an Examples block has no table
+    When the feature file "EmptyExamples.feature" is opened with
+        """
+        Feature: EmptyExamples
+        Scenario Outline: Outline
+            Given <x>
+            Examples:
+        """
+    And the document "EmptyExamples.feature" is formatted
+    Then formatting edits are returned
+    And the formatted text contains "Examples:"
+
+Scenario: Range formatting does not crash when an Examples block has no table
+    When the feature file "EmptyExamplesRange.feature" is opened with
+        """
+        Feature: EmptyExamples
+        Scenario Outline: Outline
+            Given <x>
+            Examples:
+        """
+    And range formatting is requested for "EmptyExamplesRange.feature" from line 2 to line 3
+    Then formatting edits are returned
+
+Scenario: On-type formatting does not crash when a tableless Examples block precedes a data table
+    When the feature file "EmptyExamplesOnType.feature" is opened with
+        """
+        Feature: Mixed
+        Scenario Outline: Outline
+            Given <x>
+            Examples:
+        Scenario: WithTable
+            Given a table
+            | h |
+        """
+    And on-type formatting is requested for "EmptyExamplesOnType.feature" at line 6 column 2 with trigger "|"
+    Then formatting edits are returned
+
+Scenario: Format document preserves an Examples block with only a header row
+    When the feature file "HeaderOnlyExamples.feature" is opened with
+        """
+        Feature: HeaderOnly
+        Scenario Outline: Outline
+            Given <x>
+            Examples:
+            | x |
+        """
+    And the document "HeaderOnlyExamples.feature" is formatted
+    Then formatting edits are returned
+    And the formatted text contains "| x |"
