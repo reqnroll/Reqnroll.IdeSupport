@@ -66,6 +66,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         IDocumentBufferService    bufferService,
         IIdeSupportLogger            logger,
         IFileSystemForIDE         fileSystem,
+        ICSharpFileTextCache      csharpFileTextCache,
         ICompletionService        completionService,
         IErrorTelemetryService    errorTelemetryService,
         ClientIdeContext          clientIde,
@@ -80,7 +81,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
-        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem);
+        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache);
         _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
         _ambiguousActionBuilder   = new AmbiguousStepActionBuilder(fileSystem);
     }
