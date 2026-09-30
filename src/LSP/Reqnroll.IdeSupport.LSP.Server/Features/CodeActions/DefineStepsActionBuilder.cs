@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -21,12 +22,17 @@ internal sealed class DefineStepsActionBuilder
 {
     private readonly IStepScaffoldService _scaffoldService;
     private readonly IFileSystemForIDE _fileSystem;
+    private readonly ICSharpFileTextCache _csharpFileTextCache;
 
     /// <summary>Initializes a new instance of the <see cref="DefineStepsActionBuilder"/> class.</summary>
-    public DefineStepsActionBuilder(IStepScaffoldService scaffoldService, IFileSystemForIDE fileSystem)
+    public DefineStepsActionBuilder(
+        IStepScaffoldService scaffoldService,
+        IFileSystemForIDE    fileSystem,
+        ICSharpFileTextCache csharpFileTextCache)
     {
-        _scaffoldService = scaffoldService;
-        _fileSystem = fileSystem;
+        _scaffoldService     = scaffoldService;
+        _fileSystem          = fileSystem;
+        _csharpFileTextCache = csharpFileTextCache;
     }
 
     /// <summary>
@@ -60,7 +66,7 @@ internal sealed class DefineStepsActionBuilder
         var successfulAppends = new List<(string TargetPath, string ExistingContent, string AppendedContent)>();
         foreach (var candidate in target.AppendCandidates)
         {
-            var existingContent = _fileSystem.File.ReadAllText(candidate);
+            var existingContent = ReadCandidateContent(candidate);
             var appendedContent = StepDefinitionFileBuilder.AppendToFile(
                 existingContent, snippets, target.Indent, target.NewLine);
             if (appendedContent is not null)
@@ -91,6 +97,26 @@ internal sealed class DefineStepsActionBuilder
         actionsForTitle.Add(BuildCreateCodeAction(newFileTitle, newFileContent, target.TargetPath, diagnostics, isPreferred: isFirst));
 
         return actionsForTitle.Select(a => new CommandOrCodeAction(a)).ToList();
+    }
+
+    /// <summary>
+    /// Reads an append candidate's current content, preferring its live (possibly unsaved) text
+    /// over disk (issue #815). Applying one "Define step" action opens the target <c>.cs</c> file
+    /// in an unsaved editor buffer via <c>workspace/applyEdit</c> — it is not written to disk — so
+    /// a second "Define step" invocation against the same file, before the first is saved, would
+    /// otherwise compute its append (and full-document replace range) against pre-edit content,
+    /// corrupting the file once both edits land. <see cref="ICSharpFileTextCache"/> is updated on
+    /// every <c>.cs</c> <c>didOpen</c>/<c>didChange</c> regardless of source — including the edit
+    /// this class's own previous action applied — so it is always at least as current as the
+    /// client's buffer; a candidate the cache has never seen (never opened this session) falls
+    /// back to disk, which is accurate for a file nothing has touched.
+    /// </summary>
+    private string ReadCandidateContent(string candidatePath)
+    {
+        var uri = DocumentUri.FromFileSystemPath(candidatePath);
+        return _csharpFileTextCache.TryGet(uri, out var cached) && cached is not null
+            ? cached
+            : _fileSystem.File.ReadAllText(candidatePath);
     }
 
     private List<string>? RenderSnippets(

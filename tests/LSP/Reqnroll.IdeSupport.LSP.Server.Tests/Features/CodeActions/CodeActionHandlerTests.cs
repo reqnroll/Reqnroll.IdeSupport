@@ -39,6 +39,7 @@ public class CodeActionHandlerTests
     private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
     private readonly ILspTelemetryService        _telemetryService = Substitute.For<ILspTelemetryService>();
     private readonly IFileSystemForIDE           _fileSystem = new FileSystemForIDE();
+    private readonly ICSharpFileTextCache        _csharpFileTextCache = new CSharpFileTextCache();
     private readonly ICompletionService          _completionService = new CompletionService();
     private readonly IErrorTelemetryService      _errorTelemetryService = Substitute.For<IErrorTelemetryService>();
 
@@ -64,7 +65,7 @@ public class CodeActionHandlerTests
     // keep exercising the ambiguous-step "Go to" actions without each having to opt in.
     private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null) =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem,
-            _completionService, _errorTelemetryService, clientIde ?? new ClientIdeContext("vscode"),
+            _csharpFileTextCache, _completionService, _errorTelemetryService, clientIde ?? new ClientIdeContext("vscode"),
             _telemetryService);
 
     private static CodeActionParams RequestAt(

@@ -7,6 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Gherkin;
+using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeActions;
@@ -21,6 +22,7 @@ public class DefineStepsActionBuilderTests : IDisposable
 {
     private readonly IStepScaffoldService _scaffoldService = new StepScaffoldService();
     private readonly IFileSystemForIDE _fileSystem = new FileSystemForIDE();
+    private readonly ICSharpFileTextCache _csharpFileTextCache = new CSharpFileTextCache();
     private readonly string _projectFolder;
 
     private const string FeatureText = "Feature: F\nScenario: S\n    When I press add\n";
@@ -37,7 +39,7 @@ public class DefineStepsActionBuilderTests : IDisposable
         try { if (Directory.Exists(_projectFolder)) Directory.Delete(_projectFolder, recursive: true); } catch { /* best-effort */ }
     }
 
-    private DefineStepsActionBuilder CreateSut() => new(_scaffoldService, _fileSystem);
+    private DefineStepsActionBuilder CreateSut() => new(_scaffoldService, _fileSystem, _csharpFileTextCache);
 
     private static StepDefinitionTarget MakeTarget(string targetPath, params string[] appendCandidates) =>
         new(
@@ -143,5 +145,70 @@ public class DefineStepsActionBuilderTests : IDisposable
         actions.Should().ContainSingle();
         actions[0].CodeAction!.Title.Should().Be("Define missing step");
         actions[0].CodeAction!.IsPreferred.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_appends_onto_the_candidate_s_live_cached_text_rather_than_stale_disk_content()
+    {
+        // Reproduces issue #815: an earlier "Define step" action already appended WhenFoo to this
+        // candidate via workspace/applyEdit. That edit landed only in the client's open, unsaved
+        // editor buffer -- disk still has the pre-edit (no-WhenFoo) content, exactly as it would
+        // between two lightbulb invocations with nothing saved in between.
+        var candidatePath = Path.Combine(_projectFolder, "ExistingSteps.cs");
+        File.WriteAllText(candidatePath,
+            "namespace MyProject;\n\n[Binding]\npublic class ExistingSteps\n{\n}\n");
+
+        var liveContent =
+            "namespace MyProject;\n\n[Binding]\npublic class ExistingSteps\n{\n" +
+            "    [When(\"foo\")]\n    public void WhenFoo()\n    {\n        throw new PendingStepException();\n    }\n}\n";
+        _csharpFileTextCache.Update(DocumentUri.FromFileSystemPath(candidatePath), liveContent);
+
+        var target = MakeTarget(Path.Combine(_projectFolder, "MySteps.cs"), candidatePath);
+        var actions = CreateSut().Build(target, "Define missing step", new[] { UndefinedMatch("I press bar") });
+
+        var newText = AppendedNewText(actions, "ExistingSteps.cs");
+
+        // Both methods must be present exactly once each, inside one class -- not the doubled
+        // class/closing-brace corruption #815 reports when the append is computed from stale
+        // disk content instead of the live buffer the second edit will actually land on top of.
+        CountOccurrences(newText, "public class ExistingSteps").Should().Be(1);
+        CountOccurrences(newText, "WhenFoo").Should().Be(1);
+        CountOccurrences(newText, "I press bar").Should().Be(1);
+        CountOccurrences(newText, "PendingStepException").Should().Be(2);
+    }
+
+    [Fact]
+    public void Build_falls_back_to_disk_for_a_candidate_the_cache_has_never_seen()
+    {
+        // A candidate discovered purely via the binding registry (e.g. connector reflection over
+        // the built assembly) and never opened this session has no cache entry -- disk remains
+        // the only, and correct, source for it.
+        var candidatePath = Path.Combine(_projectFolder, "ExistingSteps.cs");
+        File.WriteAllText(candidatePath,
+            "namespace MyProject;\n\n[Binding]\npublic class ExistingSteps\n{\n}\n");
+
+        var target = MakeTarget(Path.Combine(_projectFolder, "MySteps.cs"), candidatePath);
+        var actions = CreateSut().Build(target, "Define missing step", new[] { UndefinedMatch("I press add") });
+
+        var newText = AppendedNewText(actions, "ExistingSteps.cs");
+        newText.Should().Contain("I press add");
+    }
+
+    private static string AppendedNewText(List<CommandOrCodeAction> actions, string candidateFileName)
+    {
+        var appendAction = actions.Single(a => a.CodeAction!.Title.EndsWith(candidateFileName)).CodeAction!;
+        var edit = appendAction.Edit!.DocumentChanges!.First(c => c.IsTextDocumentEdit).TextDocumentEdit!;
+        return edit.Edits.First().NewText;
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        int count = 0, index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
     }
 }
