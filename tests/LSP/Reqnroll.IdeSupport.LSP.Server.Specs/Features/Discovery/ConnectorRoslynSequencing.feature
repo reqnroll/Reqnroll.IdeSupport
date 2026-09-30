@@ -74,8 +74,10 @@ Scenario: Repeated edits to one .cs replace its bindings rather than accumulatin
 	# defines "I press add" but not "I press subtract", so "I press subtract" being reported as
 	# unbound is a positive signal that the connector's registry has actually landed — with an
 	# empty registry no step is classified undefined, so the old "reported as bound within N
-	# seconds" step passed vacuously before the connector had run (issue #817).
-	Then the feature step "I press subtract" is reported as unbound
+	# seconds" step passed vacuously before the connector had run (issue #817). Budgeted at 30s,
+	# like the other scenarios' first connector-landing check above: this is the same
+	# out-of-process connector cold start, and this scenario runs alone when reproducing #817.
+	Then the feature step "I press subtract" is reported as unbound within 30 seconds
 	And the feature step "I press add" is reported as bound
 	When the C# step definition file "Extra.cs" is opened with
 		"""

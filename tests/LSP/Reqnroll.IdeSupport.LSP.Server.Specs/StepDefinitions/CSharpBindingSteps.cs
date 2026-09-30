@@ -98,6 +98,24 @@ public sealed class CSharpBindingSteps
             $"the step '{stepText}' should be matched within {seconds}s of discovery starting");
     }
 
+    /// <summary>
+    /// <see cref="ThenTheFeatureStepIsReportedAsUnbound"/> with an explicit budget - same
+    /// cold-start rationale as <see cref="ThenTheFeatureStepIsReportedAsBoundWithin"/>, for a
+    /// scenario that gates on a step becoming *unbound* (e.g. a step the connector's fixture
+    /// deliberately doesn't define, used as a positive signal that connector discovery has
+    /// landed - issue #817) rather than bound.
+    /// </summary>
+    [Then(@"the feature step ""([^""]*)"" is reported as unbound within (\d+) seconds")]
+    public async Task ThenTheFeatureStepIsReportedAsUnboundWithin(string stepText, int seconds)
+    {
+        var ok = await PollFeatureTokensAsync(
+            tokens => tokens.Any(t => IsUndefinedStepFor(t, stepText)),
+            timeoutMs: seconds * 1000);
+
+        ok.Should().BeTrue(
+            $"the step '{stepText}' should be reported as unbound within {seconds}s of discovery starting");
+    }
+
     [Then(@"the feature step ""(.*)"" is reported as bound")]
     public async Task ThenTheFeatureStepIsReportedAsBound(string stepText)
     {
