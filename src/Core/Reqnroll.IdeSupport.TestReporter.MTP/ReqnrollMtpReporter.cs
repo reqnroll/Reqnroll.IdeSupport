@@ -41,6 +41,9 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     internal const int ProtocolVersion = 1;
     internal const int MaxStdoutLength = 64 * 1024;
 
+    /// <summary>Wire value of the <c>reporterKind</c> hello field — identifies this reporter to the LSP server.</summary>
+    internal const string ReporterKind = "MTP";
+
     private readonly OutcomeSink _sink = new();
     private readonly Func<string?> _findEndpoint;
     private bool _endpointResolved;
@@ -100,6 +103,8 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
             .Field("runId", _runId)
             .Field("runnerPid", runnerPid)
             .Field("connected", connected)
+            .Field("reporterKind", ReporterKind)
+            .Field("targetFramework", AppContext.TargetFrameworkName ?? string.Empty)
             .ToLine());
 
         return Task.CompletedTask;
