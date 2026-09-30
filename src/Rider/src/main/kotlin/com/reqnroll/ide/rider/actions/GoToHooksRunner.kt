@@ -37,7 +37,7 @@ object GoToHooksRunner {
         // hook-count CodeVision lens resolves its counts without ever calling reqnroll/findHooks,
         // so unlike VS's classic CodeLens there's no prefetch call through here to mislabel
         // (issue #698).
-        RiderTelemetryTransmitter.transmit("GoToHook command executed", emptyMap())
+        RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.GO_TO_HOOK_COMMAND_EXECUTED, emptyMap())
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
