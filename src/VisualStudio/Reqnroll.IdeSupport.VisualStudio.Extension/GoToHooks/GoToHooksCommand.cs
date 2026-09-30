@@ -4,6 +4,7 @@ using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 
@@ -15,8 +16,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 /// </summary>
 /// <remarks>
 /// When invoked, queries the LSP server for hook bindings applicable at the caret position.
-/// A single result navigates directly; multiple results show a picker via
-/// <see cref="NavigationPickerHelper.PickAndNavigateAsync"/>.
+/// A single result navigates directly. Several results are shown in the Find All References
+/// window (issue #315) instead of the <see cref="NavigationPickerHelper"/>'s modal picker —
+/// consistent with the other Go To Hooks entry points (code lens click, scenario-title context
+/// menu) and with Go To Definition's ambiguous-step handling
+/// (<c>GoToStepDefinitionPresenter</c>), both of which already use the FAR window for this case.
 /// </remarks>
 [VisualStudioContribution]
 internal sealed class GoToHooksCommand : Command
@@ -116,12 +120,30 @@ internal sealed class GoToHooksCommand : Command
 
             _logger.LogInformation("GoToHooksCommand: {HookCount} hook(s) found.", result.Hooks.Count);
 
-            var targets = BuildTargets(result.Hooks);
-            await NavigationPickerHelper.PickAndNavigateAsync(
-                    targets,
-                    _fileLogger,
-                    promptTitle: "Go to Hooks",
-                    cancellationToken)
+            if (result.Hooks.Count == 1)
+            {
+                var targets = BuildTargets(result.Hooks);
+                await NavigationPickerHelper.PickAndNavigateAsync(
+                        targets,
+                        _fileLogger,
+                        promptTitle: "Go to Hooks",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            // Several applicable hooks: show them in the Find All References window rather than
+            // NavigationPickerHelper's NavigationPickerDialog modal popup (issue #315).
+            var renderer = _state.Renderer;
+            if (renderer is null)
+            {
+                _logger.LogWarning("GoToHooksCommand: FindStepUsagesRenderer not available.");
+                return;
+            }
+
+            var locations = HookLocationsMapper.BuildLocations(result.Hooks);
+            var label     = $"Reqnroll: {locations.Count} hooks";
+            await renderer.RenderAsync(label, new StepUsagesResult(locations), cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -147,5 +169,37 @@ internal sealed class GoToHooksCommand : Command
             targets.Add(new NavigationTarget(displayText, filePath, h.StartLine, h.StartChar));
         }
         return targets;
+    }
+}
+
+/// <summary>
+/// Maps applicable hooks onto <see cref="StepUsageLocation"/>, the Find All References window's
+/// row type from Find Step Definition Usages — the same pipeline <c>HookMatchCountCodeLens</c>
+/// already reuses for matching scenarios (issue #315). <c>StepText</c> is supplied explicitly so
+/// the Code column shows the hook's type and method name instead of falling back to reading the
+/// source line from disk.
+/// </summary>
+/// <remarks>
+/// Kept on a plain static class (not on <see cref="GoToHooksCommand"/> itself) so it can be
+/// unit-tested without pulling in a reference to the VS/COM <c>Command</c> base type — same
+/// rationale as <c>RenameStepLabelParser</c>.
+/// </remarks>
+internal static class HookLocationsMapper
+{
+    public static IReadOnlyList<StepUsageLocation> BuildLocations(IReadOnlyList<HookLocation> hooks)
+    {
+        var locations = new List<StepUsageLocation>(hooks.Count);
+        foreach (var h in hooks)
+        {
+            var stepText = $"[{h.HookType}] {h.MethodName}";
+            locations.Add(new StepUsageLocation(
+                fileUri:   h.Uri,
+                startLine: h.StartLine,
+                startChar: h.StartChar,
+                endLine:   h.StartLine,
+                endChar:   h.StartChar,
+                stepText:  stepText));
+        }
+        return locations;
     }
 }
