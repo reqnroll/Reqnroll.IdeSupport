@@ -69,7 +69,7 @@ public static class GherkinTableLocator
             if (child is ScenarioOutline outline)
                 foreach (var ex in outline.Examples)
                     if (ex is IHasRows exRows &&
-                        exRows.Rows.Any(r => r.Location.Line == targetLine1Based))
+                        exRows.GetRowsOrEmpty().Any(r => r.Location.Line == targetLine1Based))
                         return exRows;
 
             if (child is Rule rule)
