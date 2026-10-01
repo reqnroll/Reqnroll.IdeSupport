@@ -139,7 +139,7 @@ public static class TelemetryEvents
     public const string TestOutcomesRunCompleted = "TestOutcomesRunCompleted";
 
     /// <summary>
-    /// Sent once per project, by <c>Registry.FeatureTagIndex</c>, when the first tag-completion
+    /// Sent once per project, by <c>Features.Completions.FeatureTagIndex</c>, when the first tag-completion
     /// request has finished building that project's tag index — the one-time cost of scanning
     /// every <c>.feature</c> file the project owns (issue #828). Counts and a duration only — no
     /// project, file or tag names — so the real-world size of that scan, and how much of it was

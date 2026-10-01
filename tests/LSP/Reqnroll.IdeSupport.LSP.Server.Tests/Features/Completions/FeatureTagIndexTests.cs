@@ -12,10 +12,10 @@ using Reqnroll.IdeSupport.LSP.Core.Completions.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
-using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Registry;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Completions;
 
 /// <summary>
 /// Tests for <see cref="FeatureTagIndex"/> against a real file system and the real

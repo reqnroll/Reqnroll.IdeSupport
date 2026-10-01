@@ -13,7 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Registry;
+namespace Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 
 /// <summary>
 /// Feeds tag completion with the tags currently in use across the project(s) that own a
