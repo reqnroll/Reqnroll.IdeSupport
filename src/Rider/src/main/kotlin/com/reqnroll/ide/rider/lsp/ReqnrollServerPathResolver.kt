@@ -49,6 +49,7 @@ object ReqnrollServerPathResolver {
         return when {
             os.contains("win") -> if (arch.contains("aarch64") || arch.contains("arm64")) "win-arm64" else "win-x64"
             os.contains("mac") -> if (arch.contains("aarch64") || arch.contains("arm")) "osx-arm64" else "osx-x64"
+            os.contains("linux") -> if (arch.contains("aarch64") || arch.contains("arm64")) "linux-arm64" else "linux-x64"
             else -> "linux-x64"
         }
     }

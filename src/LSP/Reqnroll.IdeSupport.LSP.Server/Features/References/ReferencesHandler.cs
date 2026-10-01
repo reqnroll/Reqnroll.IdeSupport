@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
@@ -133,7 +134,7 @@ public sealed class ReferencesHandler
     /// undercount that silently excludes two of the three IDE clients.
     /// </summary>
     private void SendUsagesTelemetry(int usagesCount, CancellationToken cancellationToken) =>
-        _telemetryService?.SendEvent("FindStepDefinitionUsages command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionUsagesCommandExecuted, new()
         {
             ["UsagesCount"] = usagesCount,
             ["IsCancelled"] = cancellationToken.IsCancellationRequested,

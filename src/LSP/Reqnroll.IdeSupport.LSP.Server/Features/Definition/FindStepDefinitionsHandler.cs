@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -81,7 +82,7 @@ public sealed class FindStepDefinitionsHandler
 
         // Same event and property as textDocument/definition: this is the same user command, reached
         // through the request Visual Studio sends for it. LocationCount counts navigable rows.
-        _telemetryService?.SendEvent(DefinitionHandler.TelemetryEventName, new()
+        _telemetryService?.SendEvent(TelemetryEvents.GoToStepDefinitionCommandExecuted, new()
         {
             ["LocationCount"] = resolvedCount,
         });

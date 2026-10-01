@@ -46,6 +46,7 @@ let statusBar: StatusBarManager | undefined;
 export function ridFor(platform: NodeJS.Platform, arch: string): string {
   if (platform === 'win32') return arch === 'arm64' ? 'win-arm64' : 'win-x64';
   if (platform === 'darwin') return arch === 'arm64' ? 'osx-arm64' : 'osx-x64';
+  if (platform === 'linux') return arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
   return 'linux-x64';
 }
 
