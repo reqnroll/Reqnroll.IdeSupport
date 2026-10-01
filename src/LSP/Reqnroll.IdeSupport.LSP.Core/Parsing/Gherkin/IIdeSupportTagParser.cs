@@ -22,4 +22,17 @@ public interface IIdeSupportTagParser
     IReadOnlyCollection<IdeSupportTag> Parse(
         IGherkinTextSnapshot fileSnapshot,
         ProjectBindingRegistry bindingRegistry);
+
+    /// <summary>
+    /// Parse <paramref name="fileSnapshot"/> for a feature file owned by several projects.
+    /// <paramref name="bindingRegistries"/> holds one registry per owning project, <b>primary
+    /// owner first</b> (must be non-empty). A step is reported undefined only when no owner's
+    /// registry binds it; otherwise it carries the first binding match found (primary owner
+    /// preferred). If the primary registry is <see cref="ProjectBindingRegistry.Invalid"/>, step
+    /// matching is skipped exactly as in the single-registry overload. Hook matching uses the
+    /// primary owner only.
+    /// </summary>
+    IReadOnlyCollection<IdeSupportTag> Parse(
+        IGherkinTextSnapshot fileSnapshot,
+        IReadOnlyList<ProjectBindingRegistry> bindingRegistries);
 }
