@@ -25,8 +25,18 @@ class ReqnrollServerPathResolverTest {
     }
 
     @Test
-    fun `rid falls back to linux-x64 for anything else`() {
+    fun `rid selects linux-arm64 for Linux with an arm64 arch`() {
+        assertEquals("linux-arm64", ReqnrollServerPathResolver.rid("Linux", "aarch64"))
+        assertEquals("linux-arm64", ReqnrollServerPathResolver.rid("Linux", "arm64"))
+    }
+
+    @Test
+    fun `rid selects linux-x64 for Linux amd64`() {
         assertEquals("linux-x64", ReqnrollServerPathResolver.rid("Linux", "amd64"))
+    }
+
+    @Test
+    fun `rid falls back to linux-x64 for anything else`() {
         assertEquals("linux-x64", ReqnrollServerPathResolver.rid("FreeBSD", "amd64"))
     }
 

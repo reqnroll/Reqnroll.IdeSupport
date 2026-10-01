@@ -2,6 +2,7 @@
 
 ## Improvements:
 
+* The LSP server is now published for `win-arm64` and `linux-arm64` in addition to the existing `win-x64`/`linux-x64`/`osx-x64`/`osx-arm64`, and the VS Code and Rider clients now resolve the native ARM64 server binary on Windows-on-ARM and Linux ARM64 instead of falling back to an x64 build that cannot run there (VS Code, Rider) - see #646
 * Telemetry event names are now defined in a single catalog — `Reqnroll.IdeSupport.Common.Telemetry.TelemetryEvents` — covering both LSP-server and Visual Studio host events; the last inline literals (`OpenProject command executed`, `RenameTargets resolved`, `GoToStepDefinition command executed`) and the VS host's inline `VsGenericEvent` names now reference it, so a typo or accidental rename fails the build instead of silently orphaning an event. VS Code and Rider mirror the client-originated `GoToHook command executed` name in their own constant modules. A new design doc (`docs/Telemetry-Events-Inventory.md`) inventories every event, its property schema, emitter, trigger, and Analytics use; the telemetry sections of the architecture doc and the archived telemetry build plan were brought in line with the events actually emitted today, and the two never-firing VS telemetry methods (`MonitorParserParse`, `MonitorReqnrollGeneration`) were removed along with their events - see #797, #627
 
 * Run CodeLens now resolves each scenario's test target on demand instead of walking the whole `.feature` file on every refresh, fixing it getting stuck on very large feature files (VS, Rider) - see #495
