@@ -138,6 +138,17 @@ public static class TelemetryEvents
     /// </summary>
     public const string TestOutcomesRunCompleted = "TestOutcomesRunCompleted";
 
+    /// <summary>
+    /// Sent once per project, by <c>Registry.FeatureTagIndex</c>, when the first tag-completion
+    /// request has finished building that project's tag index — the one-time cost of scanning
+    /// every <c>.feature</c> file the project owns (issue #828). Counts and a duration only — no
+    /// project, file or tag names — so the real-world size of that scan, and how much of it was
+    /// disk parsing, is visible in aggregate. Per-completion events are deliberately not sent
+    /// (completion fires per keystroke); steady-state latency is covered by
+    /// <c>PerfSample</c> under <c>textDocument/completion#tag</c>.
+    /// </summary>
+    public const string TagIndexFirstScanCompleted = "TagIndexFirstScanCompleted";
+
     // ── Visual Studio host events (VsGenericEvent → ITelemetryTransmitter) ─────────────────
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProjectSystem</c>) when the extension activates inside an IDE scope.</summary>

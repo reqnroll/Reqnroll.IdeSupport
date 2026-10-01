@@ -1,4 +1,5 @@
-﻿using Gherkin;
+﻿using System.Diagnostics;
+using Gherkin;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -12,6 +13,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using CompletionContext = Reqnroll.IdeSupport.LSP.Core.Completions.CompletionContext;
@@ -40,7 +42,7 @@ public class CompletionHandlerTests
         _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration());
     }
 
-    private CompletionHandler CreateSut(bool isVisualStudio = false) =>
+    private CompletionHandler CreateSut(bool isVisualStudio = false, IOperationDurationRecorder? recorder = null) =>
             new(
                 _contextResolver,
                 _completionService,
@@ -51,7 +53,8 @@ public class CompletionHandlerTests
                 _registryLookup,
                 _tagIndex,
                 new ClientIdeContext(isVisualStudio ? "visualstudio" : "vscode"),
-                _logger);
+                _logger,
+                recorder);
 
     /// <summary>Programs the substituted tag pipeline to return <paramref name="labels"/> as the tag-group entries.</summary>
     private void SetupTags(IReadOnlyList<string> labels)
@@ -342,6 +345,48 @@ public class CompletionHandlerTests
         var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
         range.Start.Should().Be(new Position(0, 7));
         range.End.Should().Be(new Position(0, 7));
+    }
+
+    [Fact]
+    public async Task The_tag_branch_is_timed_under_its_own_perf_label_Async()
+    {
+        SetupBuffer(FeatureUri, "@\n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, new[] { TokenType.TagLine }));
+        SetupTags(new[] { "@ignore" });
+        var recorder = Substitute.For<IOperationDurationRecorder>();
+
+        await CreateSut(recorder: recorder).Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, 1) },
+            CancellationToken.None);
+
+        recorder.Received(1).Measure("textDocument/completion#tag", Arg.Any<DocumentUri?>(), Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task A_failing_tag_index_degrades_to_built_in_tags_and_logs_a_warning_Async()
+    {
+        // The project index throwing (e.g. an unexpected parser/IO fault) must not fail the whole
+        // completion request: the popup still appears, with the built-in tags.
+        SetupBuffer(FeatureUri, "@\n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, new[] { TokenType.TagLine }));
+        SetupTags(new[] { "@ignore" });
+        _tagIndex.GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>())
+            .Returns<IReadOnlyCollection<StepCandidate>>(_ => throw new InvalidOperationException("boom"));
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, 1) },
+            CancellationToken.None);
+
+        result.Items.Select(i => i.Label).Should().Contain("@ignore");
+        _logger.Received().Log(Arg.Is<LogMessage>(m => m.Level == TraceLevel.Warning && m.Message.Contains("boom")));
     }
 
     [Fact]

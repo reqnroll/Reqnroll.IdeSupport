@@ -51,6 +51,12 @@ public sealed class CompletionHandler : ICompletionHandler
     private const string KeywordCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#keyword";
     private const string StepCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#step";
 
+    // Sub-timing recorded *inside* the keyword request whenever the tag branch runs (tag index
+    // lookup + matching). The enclosing "#keyword" sample includes it, so this separate label is
+    // what lets field P95s tell a slow tag index (e.g. a cold first scan of a big project) apart
+    // from slow keyword work (issue #828).
+    private const string TagCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#tag";
+
     /// <summary>Initializes a new instance of the <see cref="CompletionHandler"/> class.</summary>
     public CompletionHandler(
         ICompletionContextResolver contextResolver,
@@ -119,6 +125,15 @@ public sealed class CompletionHandler : ICompletionHandler
         var snapshot = buffer.ToGherkinTextSnapshot();
         var cursorLine = request.Position.Line;
         var cursorChar = request.Position.Character;
+
+        // What made the client ask matters when diagnosing "why no popup / why a popup": clients
+        // only request on identifier characters and declared trigger characters (see
+        // TriggerCharacters), and Invoked/TriggerForIncompleteCompletions look different from a
+        // typed character in this one line.
+        _logger.LogVerbose(
+            $"CompletionHandler: request at {cursorLine}:{cursorChar} trigger={request.Context?.TriggerKind.ToString() ?? "unspecified"}" +
+            (string.IsNullOrEmpty(request.Context?.TriggerCharacter) ? string.Empty : $" char='{request.Context!.TriggerCharacter}'") +
+            $" in {uri}");
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -256,14 +271,29 @@ public sealed class CompletionHandler : ICompletionHandler
                     ? inProgress.Substring(1)
                     : string.Empty;
 
-                var projectTags = await _tagIndex
-                    .GetTagCandidatesAsync(uri, cancellationToken)
-                    .ConfigureAwait(false);
+                using (_recorder.Measure(TagCompletionOp, uri))
+                {
+                    IReadOnlyCollection<StepCandidate> projectTags;
+                    try
+                    {
+                        projectTags = await _tagIndex
+                            .GetTagCandidatesAsync(uri, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // A failing project index must not take the whole completion request down
+                        // with it: degrade to the built-in tags (and the keyword groups below).
+                        _logger.LogWarning(
+                            $"CompletionHandler: tag index failed for {uri}; offering built-in tags only: {ex.GetType().Name}: {ex.Message}");
+                        projectTags = Array.Empty<StepCandidate>();
+                    }
 
-                tagEntries = _completionService
-                    .GetTagCompletions(projectTags, ExtractAtTokens(lineText), typedAfterAt, _matcher)
-                    .Entries
-                    .ToList();
+                    tagEntries = _completionService
+                        .GetTagCompletions(projectTags, ExtractAtTokens(lineText), typedAfterAt, _matcher)
+                        .Entries
+                        .ToList();
+                }
 
                 tagRange = new LspRange(
                     new Position(cursorLine, inProgressStart),
@@ -322,7 +352,7 @@ public sealed class CompletionHandler : ICompletionHandler
         }
 
         _logger.LogVerbose(
-            $"CompletionHandler: {items.Count} keyword completion(s)");
+            $"CompletionHandler: {items.Count} completion(s) ({kwEntries.Count} keyword, {tagEntries.Count} tag)");
         return new CompletionList(items);
     }
 

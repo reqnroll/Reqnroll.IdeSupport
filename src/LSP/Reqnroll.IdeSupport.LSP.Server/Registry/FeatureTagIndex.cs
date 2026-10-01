@@ -4,11 +4,13 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Completions.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -36,6 +38,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
     private readonly IIdeSupportTagParser _tagParser;
     private readonly IFileSystemForIDE _fileSystem;
     private readonly IIdeSupportLogger _logger;
+    private readonly ILspTelemetryService? _telemetryService;
 
     private readonly ConcurrentDictionary<string, ProjectTagIndex> _indexes
         = new(StringComparer.OrdinalIgnoreCase);
@@ -46,13 +49,15 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
         IDocumentBufferService bufferService,
         IIdeSupportTagParser tagParser,
         IFileSystemForIDE fileSystem,
-        IIdeSupportLogger logger)
+        IIdeSupportLogger logger,
+        ILspTelemetryService? telemetryService = null)
     {
         _scopeManager = scopeManager;
         _bufferService = bufferService;
         _tagParser = tagParser;
         _fileSystem = fileSystem;
         _logger = logger;
+        _telemetryService = telemetryService;
     }
 
     /// <inheritdoc/>
@@ -88,6 +93,9 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
         if (files.Count == 0)
             return;
 
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var stats = new ScanStats();
+
         // Drop cached entries for files the project no longer contains (baseline delta, or a
         // file deleted or excluded since the last request).
         var known = new HashSet<string>(files, StringComparer.OrdinalIgnoreCase);
@@ -95,22 +103,45 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
             if (!known.Contains(cachedPath))
                 index.Files.TryRemove(cachedPath, out _);
 
-        var perFile = await Task.WhenAll(files.Select(f => GetFileTagsAsync(index, f, ct)))
+        var perFile = await Task.WhenAll(files.Select(f => GetFileTagsAsync(index, f, stats, ct)))
             .ConfigureAwait(false);
 
+        var projectTagNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var counts in perFile)
         {
             if (counts is null) continue;
             foreach (var pair in counts)
+            {
+                projectTagNames.Add(pair.Key);
                 merged[pair.Key] = merged.TryGetValue(pair.Key, out var existing)
                     ? existing + pair.Value
                     : pair.Value;
+            }
         }
 
-        // One audible, once-per-project progression line; per-request traffic stays Verbose.
+        var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+        // One audible, once-per-project progression line (plus its telemetry counterpart: how big
+        // the one-time scan is in the field, and what it cost); per-request traffic stays Verbose.
         if (Interlocked.CompareExchange(ref index.FirstScanDone, 1, 0) == 0)
+        {
             _logger.LogInfo(
-                $"[TagIndex] Indexed {files.Count} feature file(s) for tag completion in project '{project.ProjectName}'");
+                $"[TagIndex] Indexed {files.Count} feature file(s) for tag completion in project '{project.ProjectName}' in {DurationFormatter.FormatMilliseconds(elapsedMs)} ({stats})");
+
+            // Counts and a duration only — no project, file or tag names.
+            _telemetryService?.SendEvent(TelemetryEvents.TagIndexFirstScanCompleted, new()
+            {
+                ["FileCount"] = files.Count,
+                ["FilesParsedFromDisk"] = stats.DiskParsed,
+                ["DistinctTagCount"] = projectTagNames.Count,
+                ["DurationMs"] = (long)Math.Round(elapsedMs),
+            });
+        }
+        else
+        {
+            _logger.LogVerbose(() =>
+                $"[TagIndex] project '{project.ProjectName}': {files.Count} file(s) in {DurationFormatter.FormatMilliseconds(elapsedMs)} ({stats})");
+        }
     }
 
     private IReadOnlyCollection<string> GetProjectFeatureFiles(LspReqnrollProject project)
@@ -140,6 +171,7 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
     private async Task<IReadOnlyDictionary<string, int>?> GetFileTagsAsync(
         ProjectTagIndex index,
         string filePath,
+        ScanStats stats,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -161,8 +193,12 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
             if (buffer.Tags is not null)
             {
                 if (hasCached && buffer.Version.HasValue && cached!.Version == buffer.Version.Value)
+                {
+                    stats.Cached();
                     return cached.Counts;
+                }
 
+                stats.CountedFromBuffer();
                 var counts = GherkinTagNameCollector.CollectCounts(buffer.Tags);
                 if (buffer.Version.HasValue)
                     index.Files[filePath] = new FileTagEntry(buffer.Version.Value, null, counts);
@@ -170,7 +206,10 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
             }
 
             if (hasCached)
+            {
+                stats.ReusedWhileParsePending();
                 return cached!.Counts;
+            }
         }
 
         // Closed document: disk is the source of truth. Re-parse only when the file's last-write
@@ -184,10 +223,14 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
         var lastWrite = _fileSystem.File.GetLastWriteTimeUtc(filePath);
         if (index.Files.TryGetValue(filePath, out var cachedEntry) &&
             cachedEntry.LastWriteTimeUtc == lastWrite)
+        {
+            stats.Cached();
             return cachedEntry.Counts;
+        }
 
         try
         {
+            stats.ParsedFromDisk();
             var text = await _fileSystem.File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false);
             var counts = CollectCounts(text);
             index.Files[filePath] = new FileTagEntry(null, lastWrite, counts);
@@ -212,6 +255,22 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
     private static string Normalise(string path) => MembershipIndex.NormaliseFilePath(path);
 
     // ── State ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Thread-safe per-scan tallies (files are processed concurrently) — how each file's counts were obtained, for the diagnostic log line and the first-scan telemetry event.</summary>
+    private sealed class ScanStats
+    {
+        private int _cached, _fromBuffer, _pendingReused, _diskParsed;
+
+        public int DiskParsed => Volatile.Read(ref _diskParsed);
+
+        public void Cached() => Interlocked.Increment(ref _cached);
+        public void CountedFromBuffer() => Interlocked.Increment(ref _fromBuffer);
+        public void ReusedWhileParsePending() => Interlocked.Increment(ref _pendingReused);
+        public void ParsedFromDisk() => Interlocked.Increment(ref _diskParsed);
+
+        public override string ToString()
+            => $"cached={Volatile.Read(ref _cached)} fromBuffer={Volatile.Read(ref _fromBuffer)} pendingParseReused={Volatile.Read(ref _pendingReused)} diskParsed={DiskParsed}";
+    }
 
     private sealed class ProjectTagIndex
     {

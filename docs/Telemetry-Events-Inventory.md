@@ -229,6 +229,20 @@ succeeds.
 `ResolveTestTargets…` lookup events), abort/cancel rates, and MTP source-compiled reporter
 adoption in the wild (issue #722). Counts/flags only — no paths, no test names.
 
+### `TagIndexFirstScanCompleted`
+| | |
+|---|---|
+| **Emitter** | `FeatureTagIndex` (tag completion's per-project index, issue #828) |
+| **When** | Once per project per server session — the first tag-completion request that finds the project owns at least one `.feature` file, after the index has been built |
+| **Properties** | `FileCount` (int — `.feature` files in the project scan), `FilesParsedFromDisk` (int — how many of them were closed files read and parsed rather than served from an open buffer), `DistinctTagCount` (int), `DurationMs` (long) |
+
+**Analytics use.** The one-time cost of the first `@` completion in a project: how big real
+projects are and what the cold scan costs, which is what decides whether per-request write-time
+checks (current design) are enough or watched-file invalidation is needed. Counts and a duration
+only — no project, file or tag names. There is deliberately no per-completion event (completion
+fires per keystroke; see `Completion inserted` in §7); steady-state tag-completion latency is
+`PerfSample` with `Operation = textDocument/completion#tag`.
+
 ---
 
 ## 4. Lifecycle & project events (Visual Studio host)
@@ -302,7 +316,7 @@ without leaking paths.
 |---|---|
 | **Emitter** | `OperationDurationRecorder` — wired into nearly every interactive LSP handler |
 | **When** | Each instrumented operation completes; emission gated by `IPerfTelemetrySampler` (`REQNROLL_PERF_TELEMETRY_SAMPLE`, fraction in `[0,1]`, default `0` = off) |
-| **Properties** | `Operation` (label, e.g. `textDocument/completion#step`), `DurationMs` (rounded ms), `DurationBucket` (`<=50`, `51-100`, …), `IDEClient` (`visualstudio`/`vscode`/`rider` from `--ide`) |
+| **Properties** | `Operation` (label, e.g. `textDocument/completion#step`; completion is also split into `#keyword` and, nested inside it whenever the tag branch runs, `#tag`), `DurationMs` (rounded ms), `DurationBucket` (`<=50`, `51-100`, …), `IDEClient` (`visualstudio`/`vscode`/`rider` from `--ide`) |
 
 **Analytics use.** Real-world P95/P99 per operation per IDE — the field half of the performance
 verification program (Layer 4). No URIs or content, ever.
@@ -336,6 +350,7 @@ verification program (Layer 4). No URIs or content, ever.
 | Crash/error rates | `UnhandledException` (server) + VS `ExceptionTelemetry` |
 | Adoption lifecycle | `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events |
 | Field performance (P95/P99) | `PerfSample` |
+| Tag-index cold-scan size and cost | `TagIndexFirstScanCompleted` (`FileCount`, `FilesParsedFromDisk`, `DurationMs`); steady state via `PerfSample` `textDocument/completion#tag` |
 
 ---
 

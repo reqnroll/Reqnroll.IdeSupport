@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Completions.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -30,6 +31,7 @@ public class FeatureTagIndexTests : IDisposable
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
+    private readonly ILspTelemetryService _telemetry = Substitute.For<ILspTelemetryService>();
 
     public FeatureTagIndexTests()
     {
@@ -50,7 +52,7 @@ public class FeatureTagIndexTests : IDisposable
 
         var tagParser = new IdeSupportTagParser(_logger, telemetry, config);
         return new FeatureTagIndex(
-            _scopeManager, _bufferService, tagParser, new FileSystemForIDE(), _logger);
+            _scopeManager, _bufferService, tagParser, new FileSystemForIDE(), _logger, _telemetry);
     }
 
     /// <summary>Registers a real project rooted at <paramref name="folder"/> as the sole owner of <paramref name="uri"/>.</summary>
@@ -262,6 +264,41 @@ public class FeatureTagIndexTests : IDisposable
 
         result.Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@smoke" },
             "with no parsed tags and nothing cached, the saved file is the best available source");
+    }
+
+    // ── Telemetry ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task The_first_scan_of_a_project_sends_one_counts_only_telemetry_event()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        RegisterOwner(uri, _root, hasBaseline: false);
+        WriteFeature(_root, "A.feature", FeatureWithTags("@smoke @wip"));
+        WriteFeature(_root, "B.feature", FeatureWithTags("@smoke"));
+
+        var provider = CreateProvider();
+        await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+        await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        _telemetry.Received(1).SendEvent(TelemetryEvents.TagIndexFirstScanCompleted, Arg.Is<Dictionary<string, object?>>(p =>
+            (int)p["FileCount"]! == 2 &&
+            (int)p["FilesParsedFromDisk"]! == 2 &&
+            (int)p["DistinctTagCount"]! == 2 &&
+            (long)p["DurationMs"]! >= 0 &&
+            p.Count == 4));
+    }
+
+    [Fact]
+    public async Task Telemetry_never_carries_project_file_or_tag_names()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        RegisterOwner(uri, _root, hasBaseline: false);
+        WriteFeature(_root, "Secret.feature", FeatureWithTags("@confidential"));
+
+        await CreateProvider().GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        _telemetry.Received(1).SendEvent(TelemetryEvents.TagIndexFirstScanCompleted, Arg.Is<Dictionary<string, object?>>(p =>
+            p.Values.All(v => v is int || v is long)));
     }
 
     // ── Ownership / aggregation ──────────────────────────────────────────────
