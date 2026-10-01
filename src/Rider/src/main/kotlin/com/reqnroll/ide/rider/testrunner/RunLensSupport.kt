@@ -91,6 +91,7 @@ internal object RunLensSupport {
         if (scenarioSymbols.isEmpty() && containerSymbols.isEmpty()) return emptyList()
 
         val result = mutableListOf<Pair<TextRange, CodeVisionEntry>>()
+        val resolvedScenarios = mutableListOf<ScenarioRunTarget>()
         for (symbol in scenarioSymbols) {
             val selectionRange = symbol.selectionRange ?: continue
             val startLine = selectionRange.start.line
@@ -108,6 +109,7 @@ internal object RunLensSupport {
                 resolved
             }
             if (targets.isEmpty()) continue
+            resolvedScenarios.add(ScenarioRunTarget(startLine, targets))
 
             val offset = document.getLineStartOffset(startLine)
             val entry = buildEntry(project, providerId, uri, startLine, targets)
@@ -142,7 +144,9 @@ internal object RunLensSupport {
             if (targets.isEmpty()) continue
 
             val offset = document.getLineStartOffset(startLine)
-            val entry = buildEntry(project, providerId, uri, startLine, targets, isContainer = true)
+            // The scenarios lying inside this block, so a run can also update each scenario's own lens.
+            val contained = resolvedScenarios.filter { it.startLine in range.start.line..range.end.line }
+            val entry = buildEntry(project, providerId, uri, startLine, targets, isContainer = true, scenarios = contained)
             result.add(TextRange(offset, offset) to entry)
         }
         return result
@@ -162,12 +166,13 @@ internal object RunLensSupport {
         startLine: Int,
         targets: List<ScenarioTestTargetItem>,
         isContainer: Boolean = false,
+        scenarios: List<ScenarioRunTarget> = emptyList(),
     ): ClickableTextCodeVisionEntry {
         val lastResult = RunTestResultStore.get(uri, startLine)
         val title = renderTitle(lastResult?.outcome, isContainer)
         val tooltip = renderTooltip(title, lastResult)
         return StepUsagesCodeVisionProvider.buildEntry(title, providerId, tooltip) {
-            RunTestRunner.run(project, uri, startLine, targets)
+            RunTestRunner.run(project, uri, startLine, targets, scenarios)
         }
     }
 
