@@ -27,9 +27,20 @@ public interface ICompletionService
     /// <see cref="ScenarioBlock"/> type, ranked by <paramref name="matcher"/>.
     /// </summary>
     CompletionResult GetStepCompletions(
-        IdeSupportGherkinStep                    step,
-        string                                 typedAfterKeyword,
-        ProjectBindingRegistry                 registry,
+        IdeSupportGherkinStep step,
+        string typedAfterKeyword,
+        ProjectBindingRegistry registry,
         Func<ProjectStepDefinitionBinding, int> usageCounter,
-        ICompletionMatcher                     matcher);
+        ICompletionMatcher matcher);
+
+    /// <summary>
+    /// Returns tag-definition-sample completions: the built-in tags plus the tags already used
+    /// anywhere in the project, minus the tags already present on the line being completed,
+    /// ranked by <paramref name="matcher"/> against <paramref name="typedAfterAt"/> (issue #828).
+    /// </summary>
+    CompletionResult GetTagCompletions(
+        IReadOnlyCollection<StepCandidate> projectTags,
+        IReadOnlyCollection<string> tagsOnTheLine,
+        string typedAfterAt,
+        ICompletionMatcher matcher);
 }

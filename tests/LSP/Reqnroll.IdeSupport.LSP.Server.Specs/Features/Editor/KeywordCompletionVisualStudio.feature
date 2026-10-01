@@ -34,4 +34,4 @@ Scenario: VS completion inside a table row does not include keyword completions
                 |4
         """
     And completions are requested at line 5 column 2 in "TableRow.feature"
-    Then the completions do not include a label "@tag1 "
+    Then the completions do not include a label "@ignore"

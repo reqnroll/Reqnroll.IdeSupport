@@ -2,6 +2,8 @@
 
 ## Improvements:
 
+* Typing `@` at a tag position in a `.feature` file now completes to the tags already used across the project — tags in open sibling files are picked up live as you type, tags in closed files are indexed from disk — ranked by how often each is used, plus the built-in `@ignore` tag that is always on offer, replacing the generic `@tag1` placeholder. Tags are offered on every tag position, including a second or third tag after a completed one, a tag already typed on the completing line is not re-offered, and accepting a suggestion only replaces the tag being typed rather than the line's leading text (LSP server, VS, VS Code, Rider) - see #828
+
 * Run CodeLens now resolves each scenario's test target on demand instead of walking the whole `.feature` file on every refresh, fixing it getting stuck on very large feature files (VS, Rider) - see #495
 * Run CodeLens's Details popup now has a "Show in Test Explorer" action alongside Run/Debug, jumping straight to the test's native pass/fail state and run history (VS) - see #504
 * Run CodeLens now shows the scenario's last-run pass/fail glyph, matching VS's own test CodeLens (VS) - see #504

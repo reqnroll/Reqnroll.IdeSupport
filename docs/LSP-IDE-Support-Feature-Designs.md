@@ -578,10 +578,13 @@ sequenceDiagram
 - **Dialect fallback**: `new GherkinDialectProvider(lang).DefaultDialect` (public API) rather than the `internal` `ReqnrollGherkinDialectProvider`.
 - **Insert text**: `TextEditOrInsertReplaceEdit` wrapping a `TextEdit` spanning the keyword range on the current line.
 - **Tests**: `CompletionServiceKeywordTests` (19 unit tests) + `KeywordCompletion.feature` spec (5 scenarios).
+- **Tag completion** (issue #828): a tag position (`TagLine` among the expected tokens) completes to the tags already used across the project — open sibling files re-parsed from the live buffer at request time, closed files indexed from disk once and cached until their write time changes — plus the built-in `@ignore` tag (`BuiltInTagNames`), ranked by usage count through the same matcher step completion uses. The completing line's own tags are excluded, the replacement range spans only the in-progress tag (so accepting a second tag never deletes the first), and the old generic `@tag1` placeholder is gone — its keyword-path `TagLine` entry is now a bare `@`, kept only as the parser-error quick fix ("Insert '@'"). The index is per project (`FeatureTagRegistryProvider` in `LSP.Server/Registry/`), fed by the membership index's per-project file list with a disk-scan-plus-open-buffers fallback before the baseline arrives.
 
 #### End-user experience
 
 Typing at the start of a line in a Gherkin scenario offers completions for keywords valid in the current context (`Given`, `When`, `Then`, `And`, `But`, `Scenario:`, `Feature:`, etc.). Completions are context-sensitive: `Examples:` only appears inside a Scenario Outline; `Background:` only at feature level.
+
+Typing `@` on a tag line — in any state, first tag or a second tag after a completed one — offers the tags already used elsewhere in the project, ranked by how often they are used, plus the built-in `@ignore` tag (issue #828). A tag already typed on the current line is not re-offered, and accepting a suggestion replaces only the tag being typed, never an already-typed tag before it (issue #561's range rule applied per tag word).
 
 > **Gherkin dialect note**: Completion items are sourced from the active Gherkin dialect configured in the project's `reqnroll.json`. If the project specifies `"language": "de"`, completions offer `Gegeben`, `Wenn`, `Dann` rather than `Given`, `When`, `Then`.
 

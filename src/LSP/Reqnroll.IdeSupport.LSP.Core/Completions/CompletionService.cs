@@ -43,8 +43,8 @@ public sealed class CompletionService : ICompletionService
 
     private static void AddKeywordEntries(
         List<CompletionEntry> entries,
-        TokenType             token,
-        GherkinDialect        dialect)
+        TokenType token,
+        GherkinDialect dialect)
     {
         switch (token)
         {
@@ -84,7 +84,7 @@ public sealed class CompletionService : ICompletionService
                 break;
             case TokenType.DocStringSeparator:
                 entries.Add(Kw("\"\"\"", "Doc-string separator: Provides multi-line text parameter for the step"));
-                entries.Add(Kw("```",   "Doc-string separator: Provides multi-line text parameter for the step"));
+                entries.Add(Kw("```", "Doc-string separator: Provides multi-line text parameter for the step"));
                 break;
             case TokenType.TableRow:
                 entries.Add(Kw("| ", "Data table and examples table cell separator"));
@@ -93,7 +93,11 @@ public sealed class CompletionService : ICompletionService
                 entries.Add(Kw("#language: ", "Specifies the language of the feature file"));
                 break;
             case TokenType.TagLine:
-                entries.Add(Kw("@tag1 ", "Labels a scenario, a feature or an examples block"));
+                // A bare "@" tag-prefix entry. Real tag completions (built-in @ignore plus the
+                // tags already used across the project) are served by GetTagCompletions — this
+                // placeholder remains only as the ParserErrorActionBuilder quick-fix candidate
+                // ("Insert '@'") for a position where Gherkin expected a tag (issue #828).
+                entries.Add(Kw("@", "Tag prefix — completes to a tag used in the project or the built-in @ignore"));
                 break;
         }
     }
@@ -102,17 +106,17 @@ public sealed class CompletionService : ICompletionService
 
     /// <summary>Builds ranked step-definition-sample completion entries matching the step's <c>ScenarioBlock</c> and the text typed so far.</summary>
     public CompletionResult GetStepCompletions(
-        IdeSupportGherkinStep                     step,
-        string                                  typedAfterKeyword,
-        ProjectBindingRegistry                  registry,
+        IdeSupportGherkinStep step,
+        string typedAfterKeyword,
+        ProjectBindingRegistry registry,
         Func<ProjectStepDefinitionBinding, int> usageCounter,
-        ICompletionMatcher                      matcher)
+        ICompletionMatcher matcher)
     {
         if (registry == ProjectBindingRegistry.Invalid)
             return CompletionResult.Empty;
 
         var sampler = new StepDefinitionSampler();
-        var seen    = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var candidates = new List<StepCandidate>();
 
         foreach (var sd in registry.StepDefinitions)
@@ -134,15 +138,70 @@ public sealed class CompletionService : ICompletionService
             candidates.Add(new StepCandidate(sample, usageCounter(sd)));
         }
 
-        var ranked  = matcher.Rank(typedAfterKeyword, candidates);
+        var ranked = matcher.Rank(typedAfterKeyword, candidates);
         var entries = ranked
             .Select((sc, i) => new CompletionEntry(
-                Label:      sc.Sample,
-                Detail:     null,
-                Kind:       CompletionEntryKind.Text,
+                Label: sc.Sample,
+                Detail: null,
+                Kind: CompletionEntryKind.Text,
                 InsertText: sc.Sample,
                 FilterText: sc.Sample,
-                SortText:   i.ToString("D6")))
+                SortText: i.ToString("D6")))
+            .ToList();
+
+        return new CompletionResult(entries, matcher.IsIncomplete);
+    }
+
+    // ── Tag completion ────────────────────────────────────────────────────────
+
+    private const string IgnoreTagDetail =
+        "Excludes the tagged feature/scenario from the test run (built-in Reqnroll tag)";
+
+    /// <summary>Builds tag completion entries: the built-in tags plus the tags already used across the project, minus the tags already typed on the completing line, ranked by usage count.</summary>
+    public CompletionResult GetTagCompletions(
+        IReadOnlyCollection<StepCandidate> projectTags,
+        IReadOnlyCollection<string> tagsOnTheLine,
+        string typedAfterAt,
+        ICompletionMatcher matcher)
+    {
+        // Start from the built-in set so a project that has never used any tag still gets
+        // candidates; a project tag with the same name as a built-in keeps its own usage count
+        // so ranking below reflects real usage.
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            [BuiltInTagNames.Ignore] = 0
+        };
+
+        foreach (var tag in projectTags)
+        {
+            counts[tag.Sample] = counts.TryGetValue(tag.Sample, out var existing)
+                ? existing + tag.UsageCount
+                : tag.UsageCount;
+        }
+
+        foreach (var usedTag in tagsOnTheLine)
+            counts.Remove(usedTag);
+
+        if (counts.Count == 0)
+            return CompletionResult.Empty;
+
+        // Most-used first (ties broken ordinally for a stable list); the matcher may then re-rank
+        // or trim server-side (the FuzzySharp contingency) just like step samples.
+        var candidates = counts
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => new StepCandidate(kv.Key, kv.Value))
+            .ToList();
+
+        var ranked = matcher.Rank(typedAfterAt, candidates);
+        var entries = ranked
+            .Select((sc, i) => new CompletionEntry(
+                Label: sc.Sample,
+                Detail: sc.Sample == BuiltInTagNames.Ignore ? IgnoreTagDetail : null,
+                Kind: CompletionEntryKind.Keyword,
+                InsertText: sc.Sample,
+                FilterText: sc.Sample,
+                SortText: i.ToString("D6")))
             .ToList();
 
         return new CompletionResult(entries, matcher.IsIncomplete);

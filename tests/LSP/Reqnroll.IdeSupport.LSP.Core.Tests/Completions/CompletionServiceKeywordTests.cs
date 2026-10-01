@@ -104,11 +104,14 @@ public class CompletionServiceKeywordTests
     // ── Non-keyword token types ───────────────────────────────────────────────
 
     [Fact]
-    public void TagLine_offers_at_tag_template()
+    public void TagLine_offers_the_tag_prefix()
     {
+        // The real tag candidates (built-in @ignore plus project tags) are served by
+        // GetTagCompletions; the keyword path only keeps a bare "@" for the parser-error
+        // quick fix (issue #828).
         var result = _sut.GetKeywordCompletions(new[] { TokenType.TagLine }, EnDialect());
 
-        result.Entries.Select(e => e.Label).Should().Contain("@tag1 ");
+        result.Entries.Select(e => e.Label).Should().Contain("@");
     }
 
     [Fact]
