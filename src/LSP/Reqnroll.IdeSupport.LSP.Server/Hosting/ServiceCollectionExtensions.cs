@@ -137,6 +137,10 @@ public static class ServiceCollectionExtensions
             // each feature file is resolved against only its own project's bindings.
             .AddSingleton<BindingRegistryProviderRouter>()
             .AddSingleton<IProjectBindingRegistryLookup>(sp => sp.GetRequiredService<BindingRegistryProviderRouter>())
+            // Per-project tag index feeding tag completion (issue #828): tags in use across the
+            // owning project's feature files, kept current from open buffers + disk, cached per
+            // file and re-validated on access (no event wiring needed).
+            .AddSingleton<IFeatureTagIndex, FeatureTagIndex>()
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
             // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).

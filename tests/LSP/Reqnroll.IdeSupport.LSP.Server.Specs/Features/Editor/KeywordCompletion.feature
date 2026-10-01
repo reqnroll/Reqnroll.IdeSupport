@@ -91,7 +91,7 @@ Scenario: Completion inside a table row does not include keyword completions
                 |4
         """
     And completions are requested at line 5 column 2 in "TableRow.feature"
-    Then the completions do not include a label "@tag1 "
+    Then the completions do not include a label "@ignore"
 
 # ── Language dialect: file-level language directive ─────────────────────────
 
@@ -107,14 +107,14 @@ Scenario: Completion returns keywords for the dialect specified in the feature f
 
 # ── Tag keyword ────────────────────────────────────────────────────────────────
 
-Scenario: Completion on a blank feature file also returns the tag keyword
+Scenario: Completion on a blank feature file also returns the built-in ignore tag
     When the feature file "TagBlank.feature" is opened with
         """
 
         """
     And completions are requested at line 0 column 0 in "TagBlank.feature"
     Then completions are returned
-    And the completions include a keyword label "@tag1 "
+    And the completions include a keyword label "@ignore"
 
 # ── Examples keyword ───────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ Scenario: Typing @ at the start of a blank line offers only the tag completion
     And completions are requested at line 0 column 1 in "TagAtStart.feature"
     Then completions are returned
     And every completion label starts with "@"
-    And the completions include a keyword label "@tag1 "
+    And the completions include a keyword label "@ignore"
 
 # ── "@" on a line that already has another keyword offers nothing (issue #818 follow-up) ─
 
@@ -219,21 +219,23 @@ Scenario: Typing @ after an already-typed scenario title offers no completions
     And completions are requested at line 1 column 23 in "TagAfterTitle.feature"
     Then no completions are returned
 
-# ── A second "@" on the same line offers no completions (issue #818 follow-up) ─
+# ── A second "@" on the same line offers tag completions (issue #828) ────────
 #
-# Gherkin does technically allow a second tag straight after a first one on the same line
-# ("@tag1 @tag2"), so this is a deliberate simplification, not a strict grammar rule: per
-# maintainer discussion on #818, a completion popup while composing tags is disruptive either
-# way, so the same "still a prefix of some candidate" rule that excludes keywords after a tag
-# also excludes a second tag after a first one, rather than special-casing it back in.
+# Gherkin allows any number of tags on one tag line, so every tag position — including a
+# second "@" right after a completed first tag — is completed with the project's real tags plus
+# the built-in @ignore. This reverses the merged #818 suppression, which dropped tag completion
+# there because the only candidate was the generic "@tag1 " placeholder (issue #828); the
+# completion now replaces only the in-progress tag, never the already-typed one before it.
 
-Scenario: Typing a second @ after an existing tag on the same line offers no completions
+Scenario: Typing a second @ after an existing tag on the same line offers tag completions
     When the feature file "SecondTag.feature" is opened with
         """
         @tag1 @
         """
     And completions are requested at line 0 column 7 in "SecondTag.feature"
-    Then no completions are returned
+    Then completions are returned
+    And every completion label starts with "@"
+    And the completions include a keyword label "@ignore"
 
 # ── "@" where a tag is not grammatically allowed (issue #818 follow-up) ──────
 #
@@ -248,7 +250,7 @@ Scenario: Typing @ as part of an already-bound step's text offers no tag or keyw
             Given a step@
         """
     And completions are requested at line 2 column 17 in "TagOnStep.feature"
-    Then the completions do not include a label "@tag1 "
+    Then the completions do not include a label "@ignore"
     And the completions do not include a label "Scenario: "
 
 # ── Known limitation: a genuinely blank line between two existing steps ─────
@@ -276,3 +278,56 @@ Scenario: Typing @ on a blank line strictly between two existing steps still off
     And completions are requested at line 3 column 1 in "TagBetweenSteps.feature"
     Then completions are returned
     And every completion label starts with "@"
+
+# ── Real tags from the project, plus the built-in @ignore (issue #828) ──────
+
+Scenario: Tags used in a sibling feature file are offered as completions
+    When the project is announced with output assembly "Sample.dll" for "TagsB.feature"
+    And the feature file "TagsA.feature" is opened with
+        """
+        @smoke @wip
+        Feature: Smoke tests
+        """
+    And the feature file "TagsB.feature" is opened with
+        """
+        @
+        """
+    And completions are requested at line 0 column 1 in "TagsB.feature"
+    Then completions are returned
+    And the completions include a keyword label "@smoke"
+    And the completions include a keyword label "@wip"
+    And the completions include a keyword label "@ignore"
+
+Scenario: Tags used in a closed sibling feature file are offered from disk
+    When the project is announced with output assembly "Sample.dll" for "TagsB.feature"
+    And the file "Sibling.feature" exists on disk with
+        """
+        @slow @wip
+        Feature: Sibling
+        """
+    And the feature file "TagsB.feature" is opened with
+        """
+        @
+        """
+    And completions are requested at line 0 column 1 in "TagsB.feature"
+    Then completions are returned
+    And the completions include a keyword label "@slow"
+    And the completions include a keyword label "@wip"
+    And the completions include a keyword label "@ignore"
+
+Scenario: Tags already typed on the completing line are not offered again
+    When the project is announced with output assembly "Sample.dll" for "TagsB.feature"
+    And the feature file "TagsA.feature" is opened with
+        """
+        @wip
+        Feature: F
+        """
+    And the feature file "TagsB.feature" is opened with
+        """
+        @wip @
+        """
+    And completions are requested at line 0 column 6 in "TagsB.feature"
+    Then completions are returned
+    And the completions include a keyword label "@ignore"
+    And the completions do not include a label "@wip"
+    And every completion's textEdit range does not extend past column 6
