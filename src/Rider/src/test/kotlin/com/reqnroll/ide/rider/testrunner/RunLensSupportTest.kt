@@ -22,6 +22,13 @@ class RunLensSupportTest {
             Range(Position(0, 0), Position(10, 0)),
         ).apply { this.children = children }
 
+    private fun featureSymbol(name: String, children: List<DocumentSymbol> = emptyList()) =
+        DocumentSymbol(
+            name, SymbolKind.Module,
+            Range(Position(0, 0), Position(20, 0)),
+            Range(Position(0, 0), Position(0, 9)),
+        ).apply { this.children = children }
+
     // ── collectMethodSymbols ─────────────────────────────────────────────────
 
     @Test
@@ -58,6 +65,36 @@ class RunLensSupportTest {
         assertEquals(emptyList(), RunLensSupport.collectMethodSymbols(emptyList()))
     }
 
+    // ── collectContainerSymbols ──────────────────────────────────────────────
+
+    @Test
+    fun `collectContainerSymbols collects a top-level Feature (Module-kind) symbol`() {
+        val result = RunLensSupport.collectContainerSymbols(listOf(featureSymbol("Add numbers")))
+        assertEquals(1, result.size)
+        assertEquals("Add numbers", result[0].name)
+    }
+
+    @Test
+    fun `collectContainerSymbols collects Rule (Namespace-kind) symbols nested inside a Feature`() {
+        val rule = namespaceSymbol("My Rule", emptyList())
+        val result = RunLensSupport.collectContainerSymbols(listOf(featureSymbol("Add numbers", listOf(rule))))
+        assertEquals(2, result.size)
+        assertEquals("My Rule", result[1].name)
+    }
+
+    @Test
+    fun `collectContainerSymbols ignores Scenario (Method-kind) symbols`() {
+        val scenario = methodSymbol("Add two numbers", 1)
+        val result = RunLensSupport.collectContainerSymbols(listOf(featureSymbol("Add numbers", listOf(scenario))))
+        assertEquals(1, result.size)
+        assertEquals("Add numbers", result[0].name)
+    }
+
+    @Test
+    fun `collectContainerSymbols returns an empty list for an empty tree`() {
+        assertEquals(emptyList(), RunLensSupport.collectContainerSymbols(emptyList()))
+    }
+
     // ── renderTitle ──────────────────────────────────────────────────────────
 
     @Test
@@ -73,6 +110,13 @@ class RunLensSupportTest {
     @Test
     fun `renderTitle shows the cross glyph for a cached failing result`() {
         assertEquals("✗ Run", RunLensSupport.renderTitle(RunOutcome.FAILED))
+    }
+
+    @Test
+    fun `renderTitle uses the plural Run Scenarios label for a container lens`() {
+        assertEquals("▶ Run Scenarios", RunLensSupport.renderTitle(null, isContainer = true))
+        assertEquals("✓ Run Scenarios", RunLensSupport.renderTitle(RunOutcome.PASSED, isContainer = true))
+        assertEquals("✗ Run Scenarios", RunLensSupport.renderTitle(RunOutcome.FAILED, isContainer = true))
     }
 
     // ── renderTooltip ────────────────────────────────────────────────────────

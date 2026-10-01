@@ -1,5 +1,6 @@
 package com.reqnroll.ide.rider.testrunner
 
+import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
 import java.util.concurrent.ConcurrentHashMap
 
 /** Outcome of the last `dotnet test` run for one scenario. */
@@ -18,6 +19,9 @@ data class RunResult(val outcome: RunOutcome, val rows: List<RunResultRow> = emp
 
 /** One row (test case) of a [RunResult] — mirrors the shape of the server's `TestOutcomeRowDto`, trimmed to what the CodeVision tooltip renders. */
 data class RunResultRow(val displayName: String, val outcome: RunOutcome, val failedStepText: String? = null)
+
+/** One scenario inside a Feature/Rule "Run Scenarios" run: its own lens line and resolved targets, so the run can record a per-scenario [RunResult] as well as the container's. */
+data class ScenarioRunTarget(val startLine: Int, val targets: List<ScenarioTestTargetItem>)
 
 /**
  * In-memory, per-scenario last-run result — tracked entirely in the plugin's own state (design doc

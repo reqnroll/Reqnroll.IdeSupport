@@ -52,8 +52,18 @@ object RunTestRunner {
     private const val OUTCOME_POLL_ATTEMPTS = 10
     private const val OUTCOME_POLL_DELAY_MS = 100L
 
-    /** Runs the resolved [targets] on a background task and updates [RunTestResultStore]/the lens once it completes. */
-    fun run(project: Project, uri: String, startLine: Int, targets: List<ScenarioTestTargetItem>) {
+    /**
+     * Runs the resolved [targets] on a background task and updates [RunTestResultStore]/the lens once it completes.
+     * For a Feature/Rule "Run Scenarios" run, [scenarios] lists each contained scenario's own lens line and
+     * targets so each scenario lens also gets its own outcome (see [scenarioResults]); empty for a single-scenario run.
+     */
+    fun run(
+        project: Project,
+        uri: String,
+        startLine: Int,
+        targets: List<ScenarioTestTargetItem>,
+        scenarios: List<ScenarioRunTarget> = emptyList(),
+    ) {
         ReqnrollDebugLogger.info(
             "RunTestRunner: invoked for $uri:$startLine (${targets.size} target(s))")
 
@@ -115,12 +125,16 @@ object RunTestRunner {
                 }
 
                 val assemblyPath = registration?.let { outputAssemblyPath(runnableProject) }
-                val result = if (assemblyPath != null && (loggerDirectory != null || reporterInjected)) {
-                    pollServerResult(project, assemblyPath, targets) ?: fallbackResult
+                val serverOutcomes = if (assemblyPath != null && (loggerDirectory != null || reporterInjected)) {
+                    pollServerOutcomes(project, assemblyPath, targets)
                 } else {
-                    fallbackResult
+                    null
                 }
+                val result = serverOutcomes?.let { combineServerOutcomes(it.values.toList()) } ?: fallbackResult
                 RunTestResultStore.set(uri, startLine, result)
+                for ((scenarioLine, scenarioResult) in scenarioResults(scenarios, serverOutcomes, fallbackResult)) {
+                    if (scenarioLine != startLine) RunTestResultStore.set(uri, scenarioLine, scenarioResult)
+                }
 
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) RunTestCodeVisionProvider.refreshOpenFeatureEditors(project)
@@ -183,7 +197,7 @@ object RunTestRunner {
      * that could explain a mismatch given type/method are independently derived from the same
      * Reqnroll-generated method on both sides). This surfaced as the Run lens glyph correctly
      * updating (exit-code fallback still worked) but its hover never showing more than "Run" — no
-     * failed-step detail — because `pollServerResult` always timed out and fell back to the
+     * failed-step detail — because `pollServerOutcomes` always timed out and fell back to the
      * detail-free exit-code-only result.
      */
     internal fun outputAssemblyPath(runnableProject: RunnableProject): String? =
@@ -223,25 +237,64 @@ object RunTestRunner {
      * Polls the server for every distinct target method's outcome, retrying briefly
      * ([OUTCOME_POLL_ATTEMPTS] × [OUTCOME_POLL_DELAY_MS]) since the logger's final `runComplete`
      * write and the server processing it are not guaranteed to have landed the instant the
-     * `dotnet test` process itself exits. Returns null (fall back to TRX) unless *every* method
-     * has a usable outcome ([combineIfComplete]) within the attempts. Runs on the calling
-     * (background task) thread — never call from the EDT.
+     * `dotnet test` process itself exits. Returns the per-method responses keyed by
+     * (declaring type, method), or null (fall back to TRX) unless *every* method has a usable
+     * outcome ([usableOrNull]) within the attempts. Runs on the calling (background task) thread —
+     * never call from the EDT.
      */
-    private fun pollServerResult(project: Project, assemblyPath: String, targets: List<ScenarioTestTargetItem>): RunResult? {
+    private fun pollServerOutcomes(
+        project: Project,
+        assemblyPath: String,
+        targets: List<ScenarioTestTargetItem>,
+    ): Map<Pair<String, String>, GetTestOutcomeResponse>? {
         val distinctMethods = targets.map { it.declaringTypeFullName to it.methodName }.distinct()
         repeat(OUTCOME_POLL_ATTEMPTS) { attempt ->
             val responses = distinctMethods.map { (type, method) ->
                 ReqnrollRequestSender.getTestOutcome(project, assemblyPath, type, method)
             }
-            combineIfComplete(responses)?.let { return it }
+            usableOrNull(responses)?.let { usable -> return distinctMethods.zip(usable).toMap() }
             if (attempt < OUTCOME_POLL_ATTEMPTS - 1) Thread.sleep(OUTCOME_POLL_DELAY_MS)
         }
         return null
     }
 
     /**
+     * The per-scenario results of a Feature/Rule run, keyed by each scenario's lens line, so the
+     * scenario lenses show their own outcome instead of only the container's. From [serverOutcomes]
+     * each scenario combines just its own methods' responses (a scenario with any method missing is
+     * skipped). Without them (TRX/exit-code fallback — no per-method detail), an aggregate
+     * [fallback] of PASSED still proves every scenario passed, so each gets PASSED; a FAILED
+     * aggregate says nothing about which scenario failed, so none are set. `internal` for testability.
+     */
+    internal fun scenarioResults(
+        scenarios: List<ScenarioRunTarget>,
+        serverOutcomes: Map<Pair<String, String>, GetTestOutcomeResponse>?,
+        fallback: RunResult,
+    ): Map<Int, RunResult> {
+        val results = mutableMapOf<Int, RunResult>()
+        for (scenario in scenarios) {
+            if (serverOutcomes == null) {
+                if (fallback.outcome == RunOutcome.PASSED) results[scenario.startLine] = RunResult(RunOutcome.PASSED)
+                continue
+            }
+            val methods = scenario.targets.map { it.declaringTypeFullName to it.methodName }.distinct()
+            val responses = methods.map { serverOutcomes[it] }
+            if (responses.isEmpty() || responses.any { it == null }) continue
+            results[scenario.startLine] = combineServerOutcomes(responses.filterNotNull())
+        }
+        return results
+    }
+
+    /**
      * One poll attempt's verdict: [combineServerOutcomes] over [responses] only when every one is
-     * usable for *this* run, else null (keep polling / fall back to TRX). "Usable" means
+     * usable for *this* run, else null (keep polling / fall back to TRX). See [usableOrNull].
+     * `internal` for testability.
+     */
+    internal fun combineIfComplete(responses: List<GetTestOutcomeResponse?>): RunResult? =
+        usableOrNull(responses)?.let { combineServerOutcomes(it) }
+
+    /**
+     * [responses] unwrapped, only when every one is usable for *this* run. "Usable" means
      * [GetTestOutcomeResponse.found] and neither [GetTestOutcomeResponse.isStale] nor
      * [GetTestOutcomeResponse.isRunning]: the server's `TryGet` happily returns the *previous*
      * run's outcome for a method (`Found = true`) with `IsStale = true` once this run's build has
@@ -250,12 +303,10 @@ object RunTestRunner {
      * load/connect). Requiring every method, not just one, keeps a multi-target scenario from
      * being summarized off a partial set (method A recorded, B still in flight) — the same
      * `Failed` > `Passed` precedence as [combineServerOutcomes] is meaningless over half the rows.
-     * `internal` for testability.
      */
-    internal fun combineIfComplete(responses: List<GetTestOutcomeResponse?>): RunResult? {
+    private fun usableOrNull(responses: List<GetTestOutcomeResponse?>): List<GetTestOutcomeResponse>? {
         if (responses.isEmpty()) return null
-        val usable = responses.map { it?.takeIf { r -> r.found && !r.isStale && !r.isRunning } ?: return null }
-        return combineServerOutcomes(usable)
+        return responses.map { it?.takeIf { r -> r.found && !r.isStale && !r.isRunning } ?: return null }
     }
 
     /**

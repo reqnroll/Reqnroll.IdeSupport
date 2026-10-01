@@ -172,6 +172,42 @@ class RunTestRunnerTest {
         assertEquals(RunResultRow("row 2", RunOutcome.FAILED, "When the calculation explodes"), result.rows[1])
     }
 
+    // ── scenarioResults ──────────────────────────────────────────────────────
+
+    private fun target(method: String) =
+        ScenarioTestTargetItem(declaringTypeFullName = "NS.Feat", methodName = method)
+
+    @Test
+    fun `scenarioResults gives each scenario only its own methods' outcome`() {
+        val scenarios = listOf(ScenarioRunTarget(3, listOf(target("A"))), ScenarioRunTarget(7, listOf(target("B"))))
+        val outcomes = mapOf(
+            ("NS.Feat" to "A") to outcome("Passed", row("a", "Passed")),
+            ("NS.Feat" to "B") to outcome("Failed", row("b", "Failed")),
+        )
+
+        val results = RunTestRunner.scenarioResults(scenarios, outcomes, RunResult(RunOutcome.FAILED))
+
+        assertEquals(RunOutcome.PASSED, results[3]?.outcome)
+        assertEquals(RunOutcome.FAILED, results[7]?.outcome)
+    }
+
+    @Test
+    fun `scenarioResults skips a scenario whose method has no outcome`() {
+        val scenarios = listOf(ScenarioRunTarget(3, listOf(target("A"))))
+        val outcomes = mapOf(("NS.Feat" to "Other") to outcome("Passed", row("o", "Passed")))
+
+        assertEquals(emptyMap<Int, RunResult>(), RunTestRunner.scenarioResults(scenarios, outcomes, RunResult(RunOutcome.PASSED)))
+    }
+
+    @Test
+    fun `scenarioResults without server outcomes marks every scenario passed only when the aggregate passed`() {
+        val scenarios = listOf(ScenarioRunTarget(3, listOf(target("A"))), ScenarioRunTarget(7, listOf(target("B"))))
+
+        val passed = RunTestRunner.scenarioResults(scenarios, null, RunResult(RunOutcome.PASSED))
+        assertEquals(setOf(3, 7), passed.keys)
+        assertEquals(emptyMap<Int, RunResult>(), RunTestRunner.scenarioResults(scenarios, null, RunResult(RunOutcome.FAILED)))
+    }
+
     // ── combineIfComplete ────────────────────────────────────────────────────
 
     @Test

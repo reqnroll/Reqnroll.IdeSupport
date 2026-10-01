@@ -254,6 +254,28 @@ data class ScenarioTestTargetItem(
     val rowIndex: Int? = null,
 )
 
+/**
+ * Params for `reqnroll/resolveContainerTestTargets` — mirrors ResolveContainerTestTargetsParams.cs
+ * field-for-field (issue #744, "Run scenarios" on Feature/Rule blocks). [range] is the container's
+ * *full body* range (not its header line alone), matching what the server expects: every
+ * Scenario/Outline fully contained within it is resolved, including Rule-nested scenarios when the
+ * range is the enclosing Feature's.
+ */
+data class ResolveContainerTestTargetsParams(
+    val textDocument: TextDocumentIdentifier,
+    val range: Range,
+)
+
+/**
+ * Response for `reqnroll/resolveContainerTestTargets` — mirrors
+ * ResolveContainerTestTargetsResponse.cs field-for-field (issue #744, "Run scenarios"); shares
+ * [ScenarioTestTargetItem] with [ResolveTestTargetsResponse], so one target looks the same whether
+ * it came from a single-scenario or a whole-container resolution.
+ */
+data class ResolveContainerTestTargetsResponse(
+    val targets: List<ScenarioTestTargetItem> = emptyList(),
+)
+
 /** Response for `reqnroll/testOutcomes/registerRun` (takes [ReqnrollEmptyParams] — see its doc comment) — mirrors RegisterTestRunResponse.cs field-for-field. [success] false means "the server couldn't start its loopback listener"; the caller falls back to its own execution's TRX output. */
 data class RegisterTestRunResponse(
     val success: Boolean = false,
