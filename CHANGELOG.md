@@ -32,7 +32,7 @@
 * Added a "Run Scenarios" CodeLens on `Feature:` and `Rule:` block header lines, running every Scenario/Scenario Outline they contain (including a Feature's Rule-nested ones) as a single batched Test Explorer run, alongside the existing per-scenario Run CodeLens - backed by a new `reqnroll/resolveContainerTestTargets` LSP request that broadens the existing single-scenario test-target resolution to a whole container instead of introducing a separate execution mechanism (VS; LSP server capability only, VS Code/Rider CodeLens wiring left as follow-up) - see #744
 * Go to Hooks, invoked over a step with several applicable hooks, now lists them in the Find All References window instead of a modal picker dialog - consistent with its other entry points (the hook-match-count code lens, and invoking over a `Scenario:`/`Feature:` line), which already used the FAR window for this case, and with Go To Definition's own ambiguous-step handling (VS) - see #315
 
-* The extension now ships a "Get Started with Reqnroll" Welcome walkthrough (`contributes.walkthroughs`) - a single page that introduces the extension and links to the end-user documentation on docs.reqnroll.net (VS Code) - see #694
+* The extension now ships a "Get Started with Reqnroll" Welcome walkthrough (`contributes.walkthroughs`) - a single page that introduces the extension and links to the end-user documentation on docs.reqnroll.net, and opens automatically once on first activation of a packaged install (VS Code) - see #694
 
 ## Bug fixes:
 

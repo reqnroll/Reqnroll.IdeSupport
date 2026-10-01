@@ -33,6 +33,7 @@ import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
 import { registerTestOutcomeCodeLens } from './testOutcomes/testOutcomeCodeLens';
+import { showWalkthroughOnFirstActivation } from './walkthrough';
 
 let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
@@ -141,6 +142,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
   });
   setAppLogChannel(appLogChannel);
   appLogChannel.info('Reqnroll extension activated.');
+
+  // First-run Get Started walkthrough; fire-and-forget so a failure can't block activation.
+  void showWalkthroughOnFirstActivation(context).catch((err) =>
+    appLogChannel.warn(`Could not open the Get Started walkthrough: ${String(err)}`),
+  );
 
   // Project-local MTP reporter stubs (issue #741): obj/<Project>.csproj.reqnroll-ide.targets for each
   // MTP-capable Reqnroll project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
