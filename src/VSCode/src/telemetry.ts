@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LanguageClient, TelemetryEventNotification } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
+import { createTelemetryDebugLogFromEnvironment } from './logging/telemetryDebugLog';
 
 // Same Application Insights resource VS's AnalyticsTransmitter uses (see
 // src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Analytics/InstrumentationKey.txt)
@@ -68,14 +69,25 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
  * the classic VS CodeLens's Details-popup prefetch, so it no longer claims to). Most telemetry
  * should still be server-originated and reach Application Insights via the notification forwarder
  * in `registerTelemetry` above; reach for this only when the client itself is the source of truth.
- * A no-op before `registerTelemetry` has run, after its subscription disposes, or while telemetry
- * is disabled.
+ * A no-op (other than mirroring to the debug log, see below) before `registerTelemetry` has run,
+ * after its subscription disposes, or while telemetry is disabled.
+ *
+ * Also the single point every client-originated and server-relayed event passes through (the
+ * notification forwarder in `registerTelemetry` calls this too), so mirroring the attempt here to
+ * the local debug log (issue #799) — independent of `enabled`/whether a reporter exists, matching
+ * VS's `TelemetryTransmitter.TransmitEvent` — covers both paths with one call site.
  */
 export function sendTelemetryEvent(
   eventName: string,
   properties?: Record<string, TelemetryPropertyValue>,
 ): void {
-  if (!reporter) return;
+  const enabled = isTelemetryEnabledByEnv();
+  const debugLog = createTelemetryDebugLogFromEnvironment();
+
+  if (!reporter) {
+    debugLog.record('host', eventName, properties, enabled, false);
+    return;
+  }
 
   const stringProps: Record<string, string> = {};
   for (const [key, value] of Object.entries(properties ?? {})) {
@@ -83,4 +95,5 @@ export function sendTelemetryEvent(
   }
 
   reporter.sendTelemetryEvent(eventName, stringProps);
+  debugLog.record('host', eventName, properties, enabled, true);
 }

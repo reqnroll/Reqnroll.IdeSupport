@@ -38,6 +38,7 @@ import './grammar.test';
 import './logging/logPaths.test';
 import './logging/generalFileLog.test';
 import './logging/appNotify.test';
+import './logging/telemetryDebugLog.test';
 import './testOutcomes/runSettingsInjector.test';
 import './testOutcomes/testLoggerPath.test';
 import './testOutcomes/testOutcomeCodeLens.test';

@@ -53,10 +53,18 @@ object RiderTelemetryTransmitter {
 
     private val httpClient: HttpClient by lazy { HttpClient.newHttpClient() }
 
-    /** Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled. */
+    /**
+     * Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled;
+     * always mirrors the attempt (sent or not) to the local debug log (issue #799), matching VS's
+     * `TelemetryTransmitter.TransmitEvent` and VS Code's `telemetry.ts#sendTelemetryEvent`.
+     */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
-        if (!isEnabled(System.getenv(TELEMETRY_ENV_VAR))) {
+        val debugLog = RiderTelemetryDebugLog.fromEnvironment()
+        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
+
+        if (!enabled) {
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
+            debugLog.record("host", eventName, properties, enabled = false, transmitted = false)
             return
         }
 
@@ -79,10 +87,13 @@ object RiderTelemetryTransmitter {
                     ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: failed to send $eventName", ex)
                     null
                 }
+
+            debugLog.record("host", eventName, properties, enabled = true, transmitted = true)
         } catch (ex: Exception) {
             // A telemetry failure must never break the plugin — same posture as VS's
             // TelemetryTransmitter.TransmitEvent catch-all.
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
+            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = ex.message)
         }
     }
 
