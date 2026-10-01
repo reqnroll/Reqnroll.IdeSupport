@@ -176,6 +176,18 @@
           "default": "off",
           "description": "Traces the communication between VS Code and the Reqnroll LSP server, and also controls the server's own log verbosity ('off' -> Warning, 'messages' -> Info, 'verbose' -> Verbose). When set to 'verbose', a log file is also written to the Reqnroll log directory. Requires a window reload to take effect on the running server."
         },
+        "reqnroll.protocolLogLevel": {
+          "type": "string",
+          "enum": [
+            "Off",
+            "Error",
+            "Warning",
+            "Info",
+            "Verbose"
+          ],
+          "default": "Warning",
+          "description": "Controls the verbosity of the Reqnroll LSP server's own internal protocol diagnostics (OmniSharp request dispatch, DryIoc, JSON-RPC plumbing), passed to the server as --protocol-log-level and written to both window/logMessage and the dedicated reqnroll-vscode-protocol-*.log file. Independent of reqnroll.trace.server, which drives the server's --log-level. Requires a window reload to take effect on the running server."
+        },
         "reqnroll.testOutcomes.enabled": {
           "type": "boolean",
           "default": false,

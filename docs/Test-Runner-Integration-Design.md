@@ -371,6 +371,54 @@ Handler: `ResolveTestTargetsHandler` in `LSP.Server/Features/TestTargets/`, thin
 `IScenarioTestTargetResolver`. No new registration-option surface needed (not a standard LSP capability;
 a plain `workspace/executeCommand`-style custom request is enough, matching F17/F25).
 
+### 4a. Container (Feature/Rule) resolution — `reqnroll/resolveContainerTestTargets` (issue #744)
+
+PR #789 added a sibling request for running every scenario a `Feature:` or `Rule:` block contains as one
+batched run, alongside the single-scenario `reqnroll/resolveTestTargets` above. It is a **separate
+handler**, not an extension of the single-scenario one, so the well-exercised per-scenario path is
+untouched by the broader query:
+
+| Direction | Method | Purpose |
+|-----------|--------|---------|
+| Client → Server | `reqnroll/resolveContainerTestTargets` (`uri`, `range`) | Resolve the generated test method(s) for every Scenario/Scenario Outline fully contained within a Feature's or Rule's body range |
+| Server → Client | `ScenarioTestTarget[]` | Same §3 shape as `reqnroll/resolveTestTargets` — one target looks identical whether it came from a single-scenario or a whole-container resolution |
+
+Handler: `ResolveContainerTestTargetsHandler` in `LSP.Server/Features/TestTargets/`, a structural sibling
+of `ResolveTestTargetsHandler` (same guard rails, same DTO shape). It delegates to
+`IScenarioTestTargetResolver.ResolveAll` rather than `Resolve`.
+
+**Contract.** The `range` is the container's **full body** (not its header line alone). The server
+resolves every Scenario/Scenario Outline tag fully contained within that range — including scenarios
+nested in a `Rule:` when the range is the enclosing Feature's. `Background:` blocks are excluded: they
+share `IdeSupportTagTypes.ScenarioDefinitionBlock` with real scenarios/Outlines (see
+`DocumentSymbolService.BuildScenarioSymbol`'s type switch), but `GetScenarioName` only recognizes
+`Scenario`/`ScenarioOutline` data, so `ResolveAll` filters them out the same way the single-scenario
+path already does. A header-only range resolves nothing — the caller must pass the container symbol's
+own `Range`, not its `SelectionRange`.
+
+**Shared `ResolveScenarioTag` helper.** The per-scenario resolution logic — locate the generated class
+via `BuildContext`, then resolve one scenario tag against it (exact-name method for row-tests mode,
+name-prefix match for individual-methods mode) — was extracted into the private static
+`ResolveScenarioTag` method, shared by both `Resolve` (single scenario) and `ResolveAll` (every
+contained scenario). `ResolveAll` walks the container's contained scenario tags and calls
+`ResolveScenarioTag` once per tag with `selectedRow: null` (a container run never targets a specific
+`Examples:` row — it always runs the whole method, per §7 item 6).
+
+**VS client dispatch.** `RunTestCodeLensService.GetTargetsForLineAsync` checks the Method-kind
+(Scenario/Outline) nodes first — the overwhelmingly common case — and only when no scenario starts on
+the line does it fall back to `CollectContainerNodes`, which walks the symbol tree for `SymbolKind.Module`
+(Feature) and `SymbolKind.Namespace` (Rule) nodes. A container header line resolves via
+`ScenarioTestTargetService.ResolveContainerTestTargetsAsync` (one `reqnroll/resolveContainerTestTargets`
+call per block, passing `node.Range` — the full body), and every resulting entry is marked
+`IsScenarioOutline: true` so the CodeLens label reads "Run Scenarios" (plural), reusing the existing
+row-tests-Outline wording rather than introducing a third label. **No changes were needed to
+`RunTestCodeLensDataPoint` or the OOP CodeLens plumbing**: the container path produces the same
+`RunTestTargetEntry` shape as a single scenario's Run, so the existing data-point/Test Explorer
+execution path consumes it unchanged — only the target set is broader. The tag-placement walk
+(`GetTagLocationsAsync`) likewise just concatenates container lens locations onto the method ones;
+Feature/Rule header lines are always distinct from Scenario/Outline headers, so no key collision
+arises.
+
 ---
 
 ## 5. Run/debug gutter affordance, per IDE

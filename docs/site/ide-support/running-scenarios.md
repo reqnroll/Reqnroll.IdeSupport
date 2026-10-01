@@ -51,6 +51,11 @@ Visual Studio restarts; they're automatically discarded the next time the projec
 stale green/red glyph from before a code change never lingers — the glyph simply disappears until
 the scenario is run again.
 
+**Feature and Rule block header lines** get their own `▶ Run Scenarios` lens, running every
+Scenario/Scenario Outline the block contains (including a Feature's Rule-nested scenarios) as a
+single batched Test Explorer run — the same Details popup and pass/fail tracking as a single
+scenario's lens, just over the whole container. `Background:` steps are never run on their own.
+
 ![](running-scenarios/running-scenarios-vs.gif)
 
 ```{admonition} MSTest runs using Microsoft.Testing.Platform
@@ -133,6 +138,11 @@ Above each scenario, an inline `▶ Run` lens runs the generated test directly (
 --filter`, scoped to that scenario's method). Once it's been run, the lens updates to `✓ Run` or
 `✗ Run` depending on the last outcome — and, for a Scenario Outline, each `Examples:` row is
 tracked individually, with the specific failed step named for a failing row.
+
+**Feature and Rule block header lines** get their own `▶ Run Scenarios` lens, running every
+Scenario/Scenario Outline the block contains (including a Feature's Rule-nested scenarios) as a
+single batched `dotnet test` run — the same outcome glyph and per-row tracking as a single
+scenario's lens, just over the whole container. `Background:` steps are never run on their own.
 
 ![](running-scenarios/running-scenarios-rider.gif)
 
