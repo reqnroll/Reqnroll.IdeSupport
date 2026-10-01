@@ -104,6 +104,15 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun resolveTestTargets(params: ResolveTestTargetsParams): CompletableFuture<ResolveTestTargetsResponse>
 
     /**
+     * Resolves every generated C# test method under a Feature/Rule container's full body range
+     * (issue #744, "Run scenarios") — see ResolveContainerTestTargetsHandler.cs. Used by
+     * [com.reqnroll.ide.rider.testrunner.RunLensSupport] to build the "Run Scenarios" CodeVision
+     * lens on Feature/Rule header lines.
+     */
+    @JsonRequest("reqnroll/resolveContainerTestTargets")
+    fun resolveContainerTestTargets(params: ResolveContainerTestTargetsParams): CompletableFuture<ResolveContainerTestTargetsResponse>
+
+    /**
      * LSP-server outcome pipeline (#700/#702, refactored out of a Visual Studio-only,
      * in-proc pipeline): returns the listener's endpoint and a fresh run id to correlate with — no
      * per-connection secret, see TestOutcomeTcpListener.cs's remarks. See RegisterTestRunHandler.cs.

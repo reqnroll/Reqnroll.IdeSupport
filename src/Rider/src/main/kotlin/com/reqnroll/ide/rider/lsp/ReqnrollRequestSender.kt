@@ -19,6 +19,8 @@ import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetsResponse
+import com.reqnroll.ide.rider.lsp.protocol.ResolveContainerTestTargetsParams
+import com.reqnroll.ide.rider.lsp.protocol.ResolveContainerTestTargetsResponse
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsParams
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsResponse
 import org.eclipse.lsp4j.CodeLens
@@ -70,6 +72,7 @@ object ReqnrollRequestSender {
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
     private const val RESOLVE_TEST_TARGETS_TIMEOUT_MS = 10_000
+    private const val RESOLVE_CONTAINER_TEST_TARGETS_TIMEOUT_MS = 10_000
     private const val REGISTER_TEST_RUN_TIMEOUT_MS = 10_000
     private const val GET_TEST_OUTCOME_TIMEOUT_MS = 10_000
 
@@ -431,6 +434,32 @@ object ReqnrollRequestSender {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("resolveTestTargets: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs `reqnroll/resolveContainerTestTargets` for the full-body range of a Feature/Rule
+     * container [(startLine, startChar), (endLine, endChar)] in a `.feature` file (issue #744,
+     * "Run scenarios") — resolves the generated test method(s) for every Scenario/Outline the
+     * container holds, in one call. Returns null if no Reqnroll LSP server is running, or on failure.
+     */
+    fun resolveContainerTestTargets(
+        project: Project, uri: String, startLine: Int, startChar: Int, endLine: Int, endChar: Int,
+    ): ResolveContainerTestTargetsResponse? {
+        val server = firstRunningServer(project) ?: return null
+        val params = ResolveContainerTestTargetsParams(
+            TextDocumentIdentifier(uri),
+            Lsp4jRange(Lsp4jPosition(startLine, startChar), Lsp4jPosition(endLine, endChar)),
+        )
+        return try {
+            server.sendRequestSync(RESOLVE_CONTAINER_TEST_TARGETS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).resolveContainerTestTargets(params)
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("resolveContainerTestTargets: request failed", ex)
             null
         }
     }
