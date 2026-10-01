@@ -1,5 +1,6 @@
-using Gherkin;
+﻿using Gherkin;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -301,6 +302,46 @@ public class CompletionHandlerTests
         var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
         range.Start.Should().Be(new Position(0, 6), "the replacement starts after the completed first tag");
         range.End.Should().Be(new Position(0, 7), "the replacement stops at the caret");
+    }
+
+    [Fact]
+    public void Registration_declares_at_and_space_as_completion_trigger_characters()
+    {
+        // Clients only request completion on identifier characters (and backspace/delete) unless a
+        // trigger character is declared: without " " no popup follows the space that separates two
+        // tags, or a space typed on a blank line before a tag (issue #828 follow-up).
+        var options = CreateSut().GetRegistrationOptions(new CompletionCapability(), new ClientCapabilities());
+
+        options.TriggerCharacters.Should().BeEquivalentTo(new[] { "@", " " });
+    }
+
+    [Fact]
+    public async Task A_space_after_a_completed_tag_offers_tags_with_an_empty_replacement_range_Async()
+    {
+        SetupBuffer(FeatureUri, "@smoke \n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, new[] { TokenType.TagLine }));
+        SetupTags(new[] { "@ignore" });
+
+        var result = await CreateSut().Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(0, 7),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.TriggerCharacter,
+                    TriggerCharacter = " "
+                }
+            },
+            CancellationToken.None);
+
+        var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
+        range.Start.Should().Be(new Position(0, 7));
+        range.End.Should().Be(new Position(0, 7));
     }
 
     [Fact]

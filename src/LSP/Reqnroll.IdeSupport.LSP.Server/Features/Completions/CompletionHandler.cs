@@ -78,6 +78,15 @@ public sealed class CompletionHandler : ICompletionHandler
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
+    /// <summary>
+    /// Characters that make the client request completion by themselves, beyond the identifier
+    /// characters it always triggers on. A space is needed so the popup also opens after the
+    /// whitespace that separates a completed tag from the next one, or that precedes a tag on a
+    /// blank line — clients do not request completion on Enter or on a space unless it is
+    /// declared here (they do on backspace, which is why deleting the space used to "fix" it).
+    /// </summary>
+    internal static readonly string[] TriggerCharacters = { "@", " " };
+
     /// <summary>Builds the LSP registration options advertising completion support (no resolve step) for <c>.feature</c> files.</summary>
     public CompletionRegistrationOptions GetRegistrationOptions(
         CompletionCapability capability,
@@ -86,7 +95,8 @@ public sealed class CompletionHandler : ICompletionHandler
         {
             DocumentSelector = new TextDocumentSelector(
                 new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern }),
-            ResolveProvider = false
+            ResolveProvider = false,
+            TriggerCharacters = new Container<string>(TriggerCharacters)
         };
 
     /// <summary>Handles a <c>textDocument/completion</c> request for Gherkin completions.</summary>
