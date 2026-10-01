@@ -43,8 +43,8 @@ public sealed class CompletionService : ICompletionService
 
     private static void AddKeywordEntries(
         List<CompletionEntry> entries,
-        TokenType token,
-        GherkinDialect dialect)
+        TokenType             token,
+        GherkinDialect        dialect)
     {
         switch (token)
         {
@@ -84,7 +84,7 @@ public sealed class CompletionService : ICompletionService
                 break;
             case TokenType.DocStringSeparator:
                 entries.Add(Kw("\"\"\"", "Doc-string separator: Provides multi-line text parameter for the step"));
-                entries.Add(Kw("```", "Doc-string separator: Provides multi-line text parameter for the step"));
+                entries.Add(Kw("```",   "Doc-string separator: Provides multi-line text parameter for the step"));
                 break;
             case TokenType.TableRow:
                 entries.Add(Kw("| ", "Data table and examples table cell separator"));
@@ -106,17 +106,17 @@ public sealed class CompletionService : ICompletionService
 
     /// <summary>Builds ranked step-definition-sample completion entries matching the step's <c>ScenarioBlock</c> and the text typed so far.</summary>
     public CompletionResult GetStepCompletions(
-        IdeSupportGherkinStep step,
-        string typedAfterKeyword,
-        ProjectBindingRegistry registry,
+        IdeSupportGherkinStep                     step,
+        string                                  typedAfterKeyword,
+        ProjectBindingRegistry                  registry,
         Func<ProjectStepDefinitionBinding, int> usageCounter,
-        ICompletionMatcher matcher)
+        ICompletionMatcher                      matcher)
     {
         if (registry == ProjectBindingRegistry.Invalid)
             return CompletionResult.Empty;
 
         var sampler = new StepDefinitionSampler();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var seen    = new HashSet<string>(StringComparer.Ordinal);
         var candidates = new List<StepCandidate>();
 
         foreach (var sd in registry.StepDefinitions)
@@ -138,15 +138,15 @@ public sealed class CompletionService : ICompletionService
             candidates.Add(new StepCandidate(sample, usageCounter(sd)));
         }
 
-        var ranked = matcher.Rank(typedAfterKeyword, candidates);
+        var ranked  = matcher.Rank(typedAfterKeyword, candidates);
         var entries = ranked
             .Select((sc, i) => new CompletionEntry(
-                Label: sc.Sample,
-                Detail: null,
-                Kind: CompletionEntryKind.Text,
+                Label:      sc.Sample,
+                Detail:     null,
+                Kind:       CompletionEntryKind.Text,
                 InsertText: sc.Sample,
                 FilterText: sc.Sample,
-                SortText: i.ToString("D6")))
+                SortText:   i.ToString("D6")))
             .ToList();
 
         return new CompletionResult(entries, matcher.IsIncomplete);

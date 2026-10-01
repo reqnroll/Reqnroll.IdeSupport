@@ -347,6 +347,31 @@ public class CompletionHandlerTests
         range.End.Should().Be(new Position(0, 7));
     }
 
+    [Theory]
+    [InlineData("Scenario ", 9)]
+    [InlineData("z ", 2)]
+    [InlineData("@smoke Feature ", 15)]
+    public async Task Tags_are_not_offered_after_a_space_that_follows_non_tag_text_Async(string line, int caret)
+    {
+        // A space is a completion trigger, so "Scenario " (mid-keyword) or "z " reaches the
+        // handler with an empty in-progress word on a tag-legal line. Tags must still not be
+        // offered: a tag line holds tags only, so text before the word rules tags out.
+        SetupBuffer(FeatureUri, line + "\n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, new[] { TokenType.TagLine }));
+        SetupTags(new[] { "@ignore" });
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, caret) },
+            CancellationToken.None);
+
+        result.Items.Should().BeEmpty();
+        _ = _tagIndex.DidNotReceive().GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task The_tag_branch_is_timed_under_its_own_perf_label_Async()
     {

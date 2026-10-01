@@ -265,7 +265,16 @@ public sealed class CompletionHandler : ICompletionHandler
             var inProgressStart = upToCursor.LastIndexOfAny(new[] { ' ', '\t' }) + 1;
             var inProgress = upToCursor.Substring(inProgressStart);
 
-            if (inProgress.Length == 0 || inProgress.StartsWith("@", StringComparison.Ordinal))
+            // A tag line is made of tags only: whatever precedes the word being typed must be
+            // nothing but already-completed tags. Without this, a space typed after any other word
+            // ("Scenario " on its way to "Scenario Outline:", or a stray "z ") would offer tags
+            // after non-tag text, which is not valid Gherkin.
+            var precededOnlyByTags = upToCursor.Substring(0, inProgressStart)
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .All(word => word.StartsWith("@", StringComparison.Ordinal));
+
+            if (precededOnlyByTags &&
+                (inProgress.Length == 0 || inProgress.StartsWith("@", StringComparison.Ordinal)))
             {
                 var typedAfterAt = inProgress.StartsWith("@", StringComparison.Ordinal)
                     ? inProgress.Substring(1)
