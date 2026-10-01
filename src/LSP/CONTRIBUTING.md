@@ -277,16 +277,19 @@ in `devenv.exe` and `CodeLensHostLogger.Instance` in the CodeLens ServiceHub hos
   all.
 - `reqnroll-telemetry-<yyyyMMdd>.jsonl` (UTC date) — **off by default.** Set the
   `REQNROLL_TELEMETRY_DEBUG_LOG` environment variable before launching the IDE to mirror every
-  `telemetry/event` the server (and, for VS, the host-side `TelemetryTransmitter`) emits to this
-  file as newline-delimited JSON — one line per event: `ts`, `source`, `event`, `props`, plus
-  `enabled`/`transmitted`/`error` on the host-side sink. `1`/`true` writes to the default path
-  above (`TelemetryDebugLog.DefaultPath`, in this same log directory); any other value is treated
-  as an explicit target file path; unset/`0`/`false` disables it. The mirror is independent of
-  `REQNROLL_TELEMETRY_ENABLED` (the transmission opt-out) and of whether the event is actually
-  transmitted downstream, so it records exactly what was *produced* even when transmission is
-  disabled or the event gets dropped — see `TelemetryDebugLog.cs`
-  (`src/Core/Reqnroll.IdeSupport.Common/Logging/TelemetryDebugLog.cs`) and
-  `FileLoggingLspTelemetryService.cs`.
+  `telemetry/event` the server emits, and every event each host-side transmitter (VS's
+  `TelemetryTransmitter`, VS Code's `telemetry.ts`, Rider's `RiderTelemetryTransmitter`) attempts to
+  send, to this file as newline-delimited JSON — one line per event: `ts`, `source`, `event`,
+  `props`, plus `enabled`/`transmitted`/`error` on the host-side sink. `1`/`true` writes to the
+  default path above (`TelemetryDebugLog.DefaultPath`, in this same log directory); any other value
+  is treated as an explicit target file path; unset/`0`/`false` disables it. The mirror is
+  independent of `REQNROLL_TELEMETRY_ENABLED` (the transmission opt-out) and of whether the event is
+  actually transmitted downstream, so it records exactly what was *produced* even when transmission
+  is disabled or the event gets dropped — see `TelemetryDebugLog.cs`
+  (`src/Core/Reqnroll.IdeSupport.Common/Logging/TelemetryDebugLog.cs`),
+  `FileLoggingLspTelemetryService.cs`, `telemetryDebugLog.ts`
+  (`src/VSCode/src/logging/telemetryDebugLog.ts`) and `RiderTelemetryDebugLog.kt`
+  (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/telemetry/RiderTelemetryDebugLog.kt`).
 
 When a bug report only makes sense with more than one of these, ask for them together rather than
 guessing from one side.

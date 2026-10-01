@@ -1,8 +1,11 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
-import { registerTelemetry } from '../telemetry';
+import { registerTelemetry, sendTelemetryEvent } from '../telemetry';
 
 function fakeClient(): { client: LanguageClient; fire: (params: unknown) => void } {
   let handler: ((params: unknown) => void) | undefined;
@@ -165,6 +168,84 @@ suite('telemetry', () => {
 
         assert.deepStrictEqual(calls[0].properties, { present: 'yes' });
       });
+    });
+  });
+
+  // sendTelemetryEvent is the single point every client-originated and server-relayed event
+  // passes through, so its REQNROLL_TELEMETRY_DEBUG_LOG mirror (issue #799) is exercised directly
+  // here rather than through registerTelemetry's notification forwarder.
+  suite('sendTelemetryEvent debug log mirror', () => {
+    const originalDebugLogEnv = process.env.REQNROLL_TELEMETRY_DEBUG_LOG;
+    const originalEnabledEnv = process.env.REQNROLL_TELEMETRY_ENABLED;
+    let target: string;
+
+    setup(() => {
+      target = path.join(os.tmpdir(), `reqnroll-tel-test-${Date.now()}-${Math.random()}.jsonl`);
+      process.env.REQNROLL_TELEMETRY_DEBUG_LOG = target;
+    });
+
+    teardown(() => {
+      if (originalDebugLogEnv === undefined) delete process.env.REQNROLL_TELEMETRY_DEBUG_LOG;
+      else process.env.REQNROLL_TELEMETRY_DEBUG_LOG = originalDebugLogEnv;
+      if (originalEnabledEnv === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
+      else process.env.REQNROLL_TELEMETRY_ENABLED = originalEnabledEnv;
+      if (fs.existsSync(target)) fs.unlinkSync(target);
+    });
+
+    interface DebugLogRecord {
+      source: string;
+      event: string;
+      props?: Record<string, unknown>;
+      enabled?: boolean;
+      transmitted?: boolean;
+    }
+
+    function readRecords(): DebugLogRecord[] {
+      return fs
+        .readFileSync(target, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as DebugLogRecord);
+    }
+
+    test('mirrors as transmitted:false when no reporter has been registered, even though the kill switch defaults to enabled', () => {
+      sendTelemetryEvent('reqnroll/noReporterYet', { a: 1 });
+
+      const records = readRecords();
+      assert.strictEqual(records.length, 1);
+      assert.strictEqual(records[0].source, 'host');
+      assert.strictEqual(records[0].event, 'reqnroll/noReporterYet');
+      assert.strictEqual(records[0].enabled, true);
+      assert.strictEqual(records[0].transmitted, false);
+    });
+
+    test('mirrors as enabled:true/transmitted:true once a reporter is registered and the event is sent', async () => {
+      process.env.REQNROLL_TELEMETRY_ENABLED = '1';
+      const { client } = fakeClient();
+      const context = fakeContext();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        sendTelemetryEvent('reqnroll/withReporter', { count: 3 });
+
+        assert.strictEqual(calls.length, 1);
+        const records = readRecords();
+        assert.strictEqual(records.length, 1);
+        assert.strictEqual(records[0].enabled, true);
+        assert.strictEqual(records[0].transmitted, true);
+        assert.strictEqual(records[0].props?.count, 3);
+      });
+    });
+
+    test('mirrors as enabled:false/transmitted:false when the kill switch is off, even though it still no-ops the reporter', () => {
+      process.env.REQNROLL_TELEMETRY_ENABLED = '0';
+
+      sendTelemetryEvent('reqnroll/killSwitchOff');
+
+      const records = readRecords();
+      assert.strictEqual(records.length, 1);
+      assert.strictEqual(records[0].enabled, false);
+      assert.strictEqual(records[0].transmitted, false);
     });
   });
 });
