@@ -16,8 +16,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Registry;
 /// <summary>
 /// Feeds tag completion with the tags currently in use across the project(s) that own a
 /// document (issue #828). Per project it keeps a per-file cache of tag-usage counts: open
-/// documents are re-extracted from the live document buffer on every request (so a tag typed a
-/// second ago in a sibling file is offered immediately), closed documents are parsed from disk
+/// documents are counted from the buffer's already-parsed tags on every request (best-effort: a
+/// tag typed while the background parse is still pending is offered a moment later), closed documents are parsed from disk
 /// once and reused while their write time is unchanged, and the per-project file set is
 /// re-checked against the membership index every request (so baseline deltas and disk changes
 /// show up without any event wiring).
@@ -146,20 +146,31 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
 
         var uri = DocumentUri.FromFileSystemPath(filePath);
 
-        // Open document: parse the live buffer text — never a disk cache, which could lag the
-        // editor's current content. Cache by buffer version so an unedited file costs one
-        // dictionary lookup, not a re-parse, on the next request.
+        // Open document: count the tags in the buffer's already-parsed Tags — the background
+        // parse scheduler keeps them current, and completion must never add a parse of its own on
+        // top of it. Cache by buffer version so an unedited file costs one dictionary lookup.
+        //
+        // Accuracy here is deliberately best-effort: every edit resets buffer.Tags to null until
+        // the scheduled parse lands, so while a parse is pending the file's last known counts are
+        // reused (a tag typed a moment ago is simply not offered yet). Only a file with nothing
+        // cached yet — e.g. just opened — falls through to the disk path below.
         if (_bufferService.TryGet(uri, out var buffer) && buffer is not null)
         {
-            if (buffer.Version.HasValue &&
-                index.Files.TryGetValue(filePath, out var cached) &&
-                cached.Version == buffer.Version.Value)
-                return cached.Counts;
+            var hasCached = index.Files.TryGetValue(filePath, out var cached);
 
-            var counts = CollectCounts(buffer.Text);
-            if (buffer.Version.HasValue)
-                index.Files[filePath] = new FileTagEntry(buffer.Version.Value, null, counts);
-            return counts;
+            if (buffer.Tags is not null)
+            {
+                if (hasCached && buffer.Version.HasValue && cached!.Version == buffer.Version.Value)
+                    return cached.Counts;
+
+                var counts = GherkinTagNameCollector.CollectCounts(buffer.Tags);
+                if (buffer.Version.HasValue)
+                    index.Files[filePath] = new FileTagEntry(buffer.Version.Value, null, counts);
+                return counts;
+            }
+
+            if (hasCached)
+                return cached!.Counts;
         }
 
         // Closed document: disk is the source of truth. Re-parse only when the file's last-write

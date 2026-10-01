@@ -6,7 +6,9 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Completions.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -75,9 +77,23 @@ public class FeatureTagIndexTests : IDisposable
         return project;
     }
 
-    private void SetupBuffer(DocumentUri uri, int version, string text)
+    /// <summary>
+    /// Registers an open buffer. <paramref name="parsed"/> mirrors the background parse having
+    /// landed (<c>buffer.Tags</c> populated); <c>false</c> mirrors the window right after an edit,
+    /// where <c>DocumentBufferService.Update</c> has reset <c>Tags</c> to null.
+    /// </summary>
+    private void SetupBuffer(DocumentUri uri, int version, string text, bool parsed = true)
     {
-        var buffer = new DocumentBuffer(uri, version, text);
+        IReadOnlyCollection<IdeSupportTag>? tags = null;
+        if (parsed)
+        {
+            var config = Substitute.For<IIdeSupportConfigurationProvider>();
+            config.GetConfiguration().Returns(new IdeSupportConfiguration());
+            var parser = new IdeSupportTagParser(_logger, Substitute.For<IErrorTelemetryService>(), config);
+            tags = parser.Parse(new LspTextSnapshot(string.Empty, 0, text), ProjectBindingRegistry.Invalid);
+        }
+
+        var buffer = new DocumentBuffer(uri, version, text, tags);
         DocumentBuffer? outBuffer;
         _bufferService.TryGet(uri, out outBuffer).Returns(x => { x[1] = buffer; return true; });
     }
@@ -207,6 +223,45 @@ public class FeatureTagIndexTests : IDisposable
         SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"));
         var third = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
         third.Select(t => t.Sample).Should().BeEquivalentTo("@slow");
+    }
+
+    [Fact]
+    public async Task While_the_background_parse_is_pending_the_last_known_counts_are_reused_without_reparsing()
+    {
+        // An edit resets buffer.Tags to null until the scheduled parse lands. Completion must not
+        // add a parse of its own: it keeps serving what it last knew (best-effort accuracy).
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        RegisterOwner(uri, _root, hasBaseline: false);
+        WriteFeature(_root, "Target.feature", FeatureWithTags("@disk"));
+        SetupBuffer(uri, version: 1, text: FeatureWithTags("@wip"));
+
+        var provider = CreateProvider();
+        (await provider.GetTagCandidatesAsync(uri, CancellationToken.None))
+            .Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@wip" });
+
+        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"), parsed: false);
+        var pending = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+        pending.Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@wip" },
+            "the unparsed edit is ignored for now rather than reparsed on the completion path");
+
+        SetupBuffer(uri, version: 2, text: FeatureWithTags("@slow"));
+        var landed = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+        landed.Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@slow" }, "the parse landed, so the new version is counted");
+    }
+
+    [Fact]
+    public async Task An_open_buffer_that_has_never_been_parsed_falls_back_to_the_disk_content()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        RegisterOwner(uri, _root, hasBaseline: false);
+        WriteFeature(_root, "Target.feature", FeatureWithTags("@smoke"));
+        SetupBuffer(uri, version: 1, text: FeatureWithTags("@wip"), parsed: false);
+
+        var provider = CreateProvider();
+        var result = await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        result.Select(t => t.Sample).Should().BeEquivalentTo(new[] { "@smoke" },
+            "with no parsed tags and nothing cached, the saved file is the best available source");
     }
 
     // ── Ownership / aggregation ──────────────────────────────────────────────
