@@ -1,6 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -69,7 +70,7 @@ public sealed class RenameTargetsHandler
         // picker UI is actually triggered (TargetCount > 1) versus a rename resolving
         // unambiguously (TargetCount <= 1) -- independent of whether the eventual rename itself
         // (see RenameHandler.SendRenameTelemetry) succeeds.
-        _telemetryService?.SendEvent("RenameTargets resolved", new()
+        _telemetryService?.SendEvent(TelemetryEvents.RenameTargetsResolved, new()
         {
             ["TargetCount"] = response?.Targets.Count ?? 0,
         });

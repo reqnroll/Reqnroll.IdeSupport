@@ -4,6 +4,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
@@ -129,7 +130,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // branch below). FeatureFileCount is best-effort: the membership baseline
             // (reqnroll/projectFiles) may not have arrived yet at this exact moment -- see the
             // deferred-rescan handling below -- so null means "not yet known" rather than zero.
-            _telemetryService?.SendEvent("OpenProject command executed", new()
+            _telemetryService?.SendEvent(TelemetryEvents.OpenProjectCommandExecuted, new()
             {
                 ["FeatureFileCount"] = HasBaselineForProject(project)
                     ? GetIndexedFeatureFiles(project).Count

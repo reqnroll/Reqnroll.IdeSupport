@@ -157,15 +157,15 @@ intellijPlatform {
 val execOperations = serviceOf<ExecOperations>()
 
 val repoRoot = layout.projectDirectory.dir("../..").asFile.canonicalFile
-val allServerRids = listOf("win-x64", "linux-x64", "osx-x64", "osx-arm64")
+val allServerRids = listOf("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64")
 
 fun defaultServerRid(): String {
     val os = OperatingSystem.current()
     val arch = System.getProperty("os.arch").lowercase()
     return when {
-        os.isWindows -> "win-x64"
+        os.isWindows -> if (arch.contains("aarch64") || arch.contains("arm64")) "win-arm64" else "win-x64"
         os.isMacOsX -> if (arch.contains("aarch64") || arch.contains("arm")) "osx-arm64" else "osx-x64"
-        else -> "linux-x64"
+        else -> if (arch.contains("aarch64") || arch.contains("arm64")) "linux-arm64" else "linux-x64"
     }
 }
 

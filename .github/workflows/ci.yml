@@ -462,11 +462,23 @@ jobs:
           name: server-win-x64
           path: ${{ env.VSCODE_DIR }}/server/win-x64
 
+      - name: Download server (win-arm64)
+        uses: actions/download-artifact@v8
+        with:
+          name: server-win-arm64
+          path: ${{ env.VSCODE_DIR }}/server/win-arm64
+
       - name: Download server (linux-x64)
         uses: actions/download-artifact@v8
         with:
           name: server-linux-x64
           path: ${{ env.VSCODE_DIR }}/server/linux-x64
+
+      - name: Download server (linux-arm64)
+        uses: actions/download-artifact@v8
+        with:
+          name: server-linux-arm64
+          path: ${{ env.VSCODE_DIR }}/server/linux-arm64
 
       - name: Download server (osx-x64)
         uses: actions/download-artifact@v8
@@ -489,7 +501,7 @@ jobs:
         # output — just a timeout waiting for State.Running). Same binaries a packaged VSIX
         # ships to real Mac/Linux users, so this isn't just a test-fixture problem.
         run: |
-          find "${{ env.VSCODE_DIR }}/server/linux-x64" "${{ env.VSCODE_DIR }}/server/osx-x64" "${{ env.VSCODE_DIR }}/server/osx-arm64" \
+          find "${{ env.VSCODE_DIR }}/server/linux-x64" "${{ env.VSCODE_DIR }}/server/linux-arm64" "${{ env.VSCODE_DIR }}/server/osx-x64" "${{ env.VSCODE_DIR }}/server/osx-arm64" \
             \( -name 'Reqnroll.IdeSupport.LSP.Server' -o -name 'reqnroll-ide-connector' \) \
             -type f -exec chmod +x {} +
 
@@ -612,7 +624,7 @@ jobs:
   # would `dotnet publish` the logger on this runner — which happens to work
   # only because ubuntu-latest ships a .NET SDK, not by contract.
   #
-  # Rider runs on every desktop OS, so the plugin bundles all four RIDs into
+  # Rider runs on every desktop OS, so the plugin bundles all six RIDs into
   # one universal .zip and picks the right one at runtime
   # (ReqnrollServerPathResolver.currentRid()). Each RID is downloaded to an
   # explicit path below rather than via a single `pattern: server-*` download:
@@ -650,11 +662,23 @@ jobs:
           name: server-win-x64
           path: ${{ env.RIDER_DIR }}/downloaded-server/win-x64
 
+      - name: Download server (win-arm64)
+        uses: actions/download-artifact@v8
+        with:
+          name: server-win-arm64
+          path: ${{ env.RIDER_DIR }}/downloaded-server/win-arm64
+
       - name: Download server (linux-x64)
         uses: actions/download-artifact@v8
         with:
           name: server-linux-x64
           path: ${{ env.RIDER_DIR }}/downloaded-server/linux-x64
+
+      - name: Download server (linux-arm64)
+        uses: actions/download-artifact@v8
+        with:
+          name: server-linux-arm64
+          path: ${{ env.RIDER_DIR }}/downloaded-server/linux-arm64
 
       - name: Download server (osx-x64)
         uses: actions/download-artifact@v8

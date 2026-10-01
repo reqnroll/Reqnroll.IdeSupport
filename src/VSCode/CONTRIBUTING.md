@@ -162,7 +162,7 @@ cd src/VSCode
 npm run build:vsix
 ```
 
-This publishes the server for all four RIDs and packages the `.vsix` in one step. Requires Docker or cross-compilation support for non-host RIDs.
+This publishes the server for all six RIDs and packages the `.vsix` in one step. Requires Docker or cross-compilation support for non-host RIDs.
 
 The bundled LSP server is published `Release` by default (`publish-server.sh`'s configuration
 argument defaults to `Release`) — quiet logging unless `reqnroll.trace.server` is raised, as
@@ -247,6 +247,6 @@ no-ops, so no Output panel exists for the wire trace (removed in issue #792).
 
 The GitHub Actions workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs its VS Code jobs (`build-vscode-extension`, `tsc-only`) whenever a push or PR touches VS Code, Core, or LSP paths. It:
 
-1. Publishes the server for all four RIDs in parallel
+1. Publishes the server for all six RIDs in parallel
 2. Compiles TypeScript, lints, format-checks, and validates semantic token scopes
 3. Packages the `.vsix`

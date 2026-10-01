@@ -9,8 +9,10 @@
 #   configuration Build configuration (default: Release)
 #
 # Examples:
-#   ./scripts/publish-server.sh win-x64          # Windows self-contained
-#   ./scripts/publish-server.sh linux-x64         # Linux self-contained
+#   ./scripts/publish-server.sh win-x64          # Windows x64 self-contained
+#   ./scripts/publish-server.sh win-arm64        # Windows on ARM self-contained
+#   ./scripts/publish-server.sh linux-x64         # Linux x64 self-contained
+#   ./scripts/publish-server.sh linux-arm64       # Linux ARM64 self-contained
 #   ./scripts/publish-server.sh osx-x64           # macOS Intel
 #   ./scripts/publish-server.sh osx-arm64         # macOS Apple Silicon
 #
