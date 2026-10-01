@@ -228,6 +228,23 @@
           ]
         }
       }
+    ],
+    "walkthroughs": [
+      {
+        "id": "reqnroll.getStarted",
+        "title": "Get Started with Reqnroll",
+        "description": "Welcome to Reqnroll for VS Code — write BDD tests in plain language. This page links to the full end-user documentation.",
+        "steps": [
+          {
+            "id": "welcome",
+            "title": "Welcome to Reqnroll",
+            "description": "Reqnroll brings Gherkin / BDD support to VS Code. This page points you to the full documentation on the Reqnroll website.",
+            "media": {
+              "markdown": "media/walkthroughs/welcome.md"
+            }
+          }
+        ]
+      }
     ]
   },
   "main": "./out/extension.js",
