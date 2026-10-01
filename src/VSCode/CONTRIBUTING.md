@@ -211,22 +211,27 @@ VS Code Settings. A timestamped trace file is written to
 There is no visible Output panel for the wire trace — the log file is the
 intended artifact for debugging and support (issue #792).
 
-Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--trace` or
-`--protocol-log-level` — `reqnroll.trace.server` is the one setting that drives both sides:
+Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--trace` — the
+wire-level trace and the server's log verbosity are driven by two separate settings:
 
 - The wire-level trace (`InitializeParams.Trace` at startup, `$/setTrace` on later changes) is
   handled entirely by `vscode-languageclient` itself, via the `LogOutputChannel` returned from
-  `createTraceChannel()` (`src/lspInspectorLogger.ts`) — `off` maps to `vscode.LogLevel.Off`
-  (client sends `trace: "off"`), anything else to `vscode.LogLevel.Trace` (client sends
-  `trace: "messages"`/`"verbose"` matching the setting). No `--trace` CLI flag is involved.
-- `traceServerToLogLevel()` (same file) separately maps the setting onto the server's
+  `createTraceChannel()` (`src/lspInspectorLogger.ts`) — `reqnroll.trace.server` `off` maps to
+  `vscode.LogLevel.Off` (client sends `trace: "off"`), anything else to `vscode.LogLevel.Trace`
+  (client sends `trace: "messages"`/`"verbose"` matching the setting). No `--trace` CLI flag is
+  involved.
+- `traceServerToLogLevel()` (same file) maps `reqnroll.trace.server` onto the server's
   `--log-level` CLI argument passed in `extension.ts` (`off` → `Warning`, `messages` → `Info`,
   `verbose` → `Verbose`), so the same lever also controls the server's own file/protocol log
-  verbosity. `--protocol-log-level` is left at the server's own default (`Warning`) — there's no
-  VS Code setting for it yet.
+  verbosity.
+- The separate `reqnroll.protocolLogLevel` setting (`Off`/`Error`/`Warning`/`Info`/`Verbose`,
+  default `Warning`) maps onto the server's `--protocol-log-level` CLI argument via
+  `protocolLogLevelToArg()` (same file), giving VS Code users the independent dial for
+  OmniSharp's own internal protocol diagnostics (request dispatch, DryIoc, JSON-RPC plumbing)
+  that the VS extension's `--protocol-log-level` already provides (issue #665).
 
-Changing `reqnroll.trace.server` requires a window reload to take effect on the already-running
-server (the `--log-level` it maps to is fixed at process launch).
+Changing either setting requires a window reload to take effect on the already-running server
+(the `--log-level`/`--protocol-log-level` they map to are fixed at process launch).
 
 Since `reqnroll.trace.server` is the one setting driving the server's `--log-level`, it also
 decides whether the out-of-process **Connector** (the child process that runs reflection-based

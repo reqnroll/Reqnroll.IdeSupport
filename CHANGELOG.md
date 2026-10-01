@@ -2,6 +2,7 @@
 
 ## Improvements:
 
+* Added a new `reqnroll.protocolLogLevel` VS Code setting (`Off`/`Error`/`Warning`/`Info`/`Verbose`), passed to the LSP server as `--protocol-log-level`, so OmniSharp's own internal protocol diagnostics (request dispatch, DryIoc, JSON-RPC plumbing) can be turned up independently of `reqnroll.trace.server` — previously VS Code had no way to set it, leaving `reqnroll-vscode-protocol-*.log` stuck at the server's `Warning` default (VS Code) - see #665
 * Run CodeLens now resolves each scenario's test target on demand instead of walking the whole `.feature` file on every refresh, fixing it getting stuck on very large feature files (VS, Rider) - see #495
 * Run CodeLens's Details popup now has a "Show in Test Explorer" action alongside Run/Debug, jumping straight to the test's native pass/fail state and run history (VS) - see #504
 * Run CodeLens now shows the scenario's last-run pass/fail glyph, matching VS's own test CodeLens (VS) - see #504
