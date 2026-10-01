@@ -18,7 +18,14 @@ enum class RunOutcome { PASSED, FAILED }
 data class RunResult(val outcome: RunOutcome, val rows: List<RunResultRow> = emptyList())
 
 /** One row (test case) of a [RunResult] — mirrors the shape of the server's `TestOutcomeRowDto`, trimmed to what the CodeVision tooltip renders. */
-data class RunResultRow(val displayName: String, val outcome: RunOutcome, val failedStepText: String? = null)
+data class RunResultRow(
+    val displayName: String,
+    val outcome: RunOutcome,
+    val failedStepText: String? = null,
+    /** 0-based execution index of the failing step across the traced steps (Background first), for [FailedStepLocator]. */
+    val failedStepIndex: Int? = null,
+    val errorMessage: String? = null,
+)
 
 /** One scenario inside a Feature/Rule "Run Scenarios" run: its own lens line and resolved targets, so the run can record a per-scenario [RunResult] as well as the container's. */
 data class ScenarioRunTarget(val startLine: Int, val targets: List<ScenarioTestTargetItem>)

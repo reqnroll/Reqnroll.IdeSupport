@@ -146,6 +146,14 @@ class RunTestRunnerTest {
         TestOutcomeRowItem(displayName = displayName, outcome = outcome, failedStepText = failedStepText)
 
     @Test
+    fun `combineServerOutcomes carries the failed-step index and error message for the gutter mark`() {
+        val failing = TestOutcomeRowItem(
+            displayName = "r", outcome = "Failed", failedStepText = "When x", failedStepIndex = 2, errorMessage = "boom")
+        val result = RunTestRunner.combineServerOutcomes(listOf(outcome("Failed", failing)))
+        assertEquals(RunResultRow("r", RunOutcome.FAILED, "When x", 2, "boom"), result.rows[0])
+    }
+
+    @Test
     fun `combineServerOutcomes is Passed when every method's aggregate passed`() {
         val result = RunTestRunner.combineServerOutcomes(listOf(outcome("Passed", row("r1", "Passed"))))
         assertEquals(RunOutcome.PASSED, result.outcome)
