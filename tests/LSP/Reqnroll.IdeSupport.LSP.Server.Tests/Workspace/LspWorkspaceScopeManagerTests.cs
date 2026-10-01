@@ -225,6 +225,29 @@ public class LspWorkspaceScopeManagerTests : IDisposable
         sut.Dispose();
     }
 
+    [Theory]
+    [InlineData("Proj.csproj", "CSharp")]
+    [InlineData("Proj.vbproj", "VB")]
+    [InlineData("Proj.fsproj", "FSharp")]
+    public async Task HandleProjectLoadedAsync_OpenProject_telemetry_carries_the_project_profile(
+        string projectFileName, string expectedLanguage)
+    {
+        // Issue #846: the profile is emitted server-side so VS Code and Rider get it too.
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1, projectFileName), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "OpenProject command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                ".NETCoreApp,Version=v8.0".Equals(p["ProjectTargetFramework"]) &&
+                expectedLanguage.Equals(p["ProgrammingLanguage"]) &&
+                p.Keys.Count == 3));
+
+        sut.Dispose();
+    }
+
     [Fact]
     public async Task HandleProjectLoadedAsync_does_not_re_emit_OpenProject_telemetry_for_a_re_sent_load()
     {

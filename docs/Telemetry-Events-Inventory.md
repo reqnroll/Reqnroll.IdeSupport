@@ -74,13 +74,23 @@ include URIs; the `PerfSample` telemetry payload never does.)
 |---|---|---|
 | `DiscoverySource` | `"Connector"` \| `"Roslyn"` | Which discovery path ran |
 | `TriggerContext` | Connector: `"projectLoad"` \| `"build"`; Roslyn: `"csOpen"` \| `"csEdit"` | What triggered the run |
-| `IsFailed` | bool | Omitted on the connector hash-noop outcome; otherwise false (success) or true (failure) |
+| `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
 | `ErrorMessage` | string | Connector failure: the exception message |
 | `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
-| `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector: the project's TFM |
+| `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
+| `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
+| `ReqnrollVersion` | string | Connector success only: the project's Reqnroll (or SpecFlow) version reduced to `major.minor`; omitted when unknown |
+| `LegacySpecFlow` | bool | Connector success only: the project is a legacy SpecFlow project |
+| `ConnectorType` | string | Connector success only: which connector flavour ran |
+| `ConnectorExitCode` | int | Connector success only: the connector process exit code |
+
+The last four come from the connector's `DiscoveryResult.TelemetryProperties` through an explicit
+whitelist (`ConnectorRunTelemetry`, issue #846). The connector's `ConnectorArguments` (command
+line, contains paths) and raw `Error` text are deliberately **not** forwarded, and the connector's
+`ProjectReqnrollVersion` is dropped in favour of the normalised `ReqnrollVersion`.
 
 **Analytics use.** (a) *Discovery reliability* — failure rate and error-message histogram;
 (b) *build churn* — the connector `HashMatched=true` rate measures how often a build or
@@ -202,7 +212,7 @@ formatting is deliberately *not* telemetried — see the retired-event table bel
 |---|---|
 | **Emitter** | `LspWorkspaceScopeManager` (server — issue #581 finding 2) |
 | **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Feature file opened` |
-| **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero) |
+| **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero); `ProjectTargetFramework` (string, the full TFM moniker); `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`, from the project-file extension — never the path). Reqnroll version and `LegacySpecFlow` are *not* here: they are reported by the first `ReqnrollDiscoveryExecuted` (issue #846) |
 
 **Analytics use.** Active-session project counts; per-solution feature-file scale. A *sessions*
 proxy: one event per project per server lifetime.
@@ -342,6 +352,7 @@ verification program (Layer 4). No URIs or content, ever.
 | Binding-discovery reliability / failure rate | `ReqnrollDiscoveryExecuted` (`IsFailed`, `ErrorMessage`) |
 | Build churn (no-op rediscoveries) | `ReqnrollDiscoveryExecuted` (`HashMatched=true`) |
 | Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), `Project loaded`, discovery counts |
+| Project profile, all IDEs (Reqnroll version, SpecFlow-legacy, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `LegacySpecFlow`, `ConnectorType`) |
 | Command usage & adoption | all `* command executed` / `* command offered` events |
 | Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
 | Picker UI trigger rate | `RenameTargetsResolved` (`TargetCount > 1` share) |

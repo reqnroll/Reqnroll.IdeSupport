@@ -135,6 +135,11 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
                 ["FeatureFileCount"] = HasBaselineForProject(project)
                     ? GetIndexedFeatureFiles(project).Count
                     : (int?)null,
+                // Issue #846: the cross-IDE project profile (previously VS-only). Reqnroll
+                // version / LegacySpecFlow arrive on the first ReqnrollDiscoveryExecuted event,
+                // where the connector reports them authoritatively.
+                ["ProjectTargetFramework"] = project.TargetFrameworkMonikers,
+                ["ProgrammingLanguage"] = ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),
             });
         }
         else
