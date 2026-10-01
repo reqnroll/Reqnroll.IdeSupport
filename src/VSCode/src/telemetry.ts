@@ -63,6 +63,33 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
 }
 
 /**
+ * Stringifies `properties` (dropping null/undefined) and stamps the host's client identity (issue
+ * #844), matching what VS's `TelemetryTransmitter` and Rider's `RiderTelemetryTransmitter` stamp:
+ * `Ide`/`IdeVersion`/`ExtensionVersion`, plus the canonical `IdeClient` (same vocabulary the LSP
+ * server stamps on server-originated events). `IdeClient` is only added when absent so a
+ * server-stamped value is never overridden. Exported for tests.
+ */
+export function withClientIdentity(
+  properties?: Record<string, TelemetryPropertyValue>,
+): Record<string, string> {
+  const stringProps: Record<string, string> = {};
+  for (const [key, value] of Object.entries(properties ?? {})) {
+    if (value !== undefined && value !== null) stringProps[key] = String(value);
+  }
+  stringProps.IdeClient ??= 'vscode';
+  stringProps.Ide = 'Visual Studio Code';
+  stringProps.IdeVersion = vscode.version;
+  stringProps.ExtensionVersion = extensionVersion();
+  return stringProps;
+}
+
+function extensionVersion(): string {
+  const packageJson = vscode.extensions.getExtension('reqnroll.reqnroll-ide-support')
+    ?.packageJSON as { version?: unknown } | undefined;
+  return typeof packageJson?.version === 'string' ? packageJson.version : 'unknown';
+}
+
+/**
  * Sends a client-originated telemetry event directly, for the rare case where the event describes
  * something only the client knows (e.g. `doGoToHooks.ts`'s "GoToHook command executed" -- issue
  * #698: the server's own `reqnroll/findHooks` handler cannot tell a genuine navigation apart from
@@ -89,10 +116,7 @@ export function sendTelemetryEvent(
     return;
   }
 
-  const stringProps: Record<string, string> = {};
-  for (const [key, value] of Object.entries(properties ?? {})) {
-    if (value !== undefined && value !== null) stringProps[key] = String(value);
-  }
+  const stringProps = withClientIdentity(properties);
 
   reporter.sendTelemetryEvent(eventName, stringProps);
   debugLog.record('host', eventName, properties, enabled, true);

@@ -73,10 +73,23 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         var client = new TelemetryClient(config);
         client.Context.User.Id = userStore.GetUserId();
         client.Context.User.AccountId = userStore.GetUserId();
-        client.Context.GlobalProperties["Ide"] = "Microsoft Visual Studio";
-        client.Context.GlobalProperties["IdeVersion"] = versionProvider.GetVsVersion();
-        client.Context.GlobalProperties["ExtensionVersion"] = versionProvider.GetExtensionVersion();
+        ApplyClientIdentity(client.Context.GlobalProperties, versionProvider);
         return client;
+    }
+
+    /// <summary>
+    /// Stamps the host's client identity on every event (issue #844). <c>IdeClient</c> is the
+    /// canonical cross-IDE key, also stamped server-side on server-originated events with the same
+    /// <c>visualstudio</c>/<c>vscode</c>/<c>rider</c> vocabulary; stamping it here as well covers
+    /// host-originated events the server never sees. Per-event properties take precedence over
+    /// these global ones in Application Insights, so a server-stamped value is never overridden.
+    /// </summary>
+    internal static void ApplyClientIdentity(IDictionary<string, string> properties, IVersionProvider versionProvider)
+    {
+        properties["IdeClient"] = "visualstudio";
+        properties["Ide"] = "Microsoft Visual Studio";
+        properties["IdeVersion"] = versionProvider.GetVsVersion();
+        properties["ExtensionVersion"] = versionProvider.GetExtensionVersion();
     }
 
     /// <summary>

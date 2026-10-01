@@ -83,6 +83,22 @@ public class TelemetryTransmitterTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void Should_StampCanonicalClientIdentity_OnEveryEvent()
+    {
+        var versions = Substitute.For<IVersionProvider>();
+        versions.GetVsVersion().Returns("17.14");
+        versions.GetExtensionVersion().Returns("1.2.3");
+        var properties = new Dictionary<string, string>();
+
+        VsTelemetryTransmitter.ApplyClientIdentity(properties, versions);
+
+        properties.Should().Contain("IdeClient", "visualstudio")
+            .And.Contain("Ide", "Microsoft Visual Studio")
+            .And.Contain("IdeVersion", "17.14")
+            .And.Contain("ExtensionVersion", "1.2.3");
+    }
+
     // NSubstitute doesn't auto-populate ImmutableDictionary-typed members with an empty
     // instance the way it does for common collection interfaces, so a bare
     // Substitute.For<ITelemetryEvent>() has a null Properties and blows up in the

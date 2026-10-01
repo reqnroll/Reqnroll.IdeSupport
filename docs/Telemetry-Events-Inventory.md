@@ -38,6 +38,22 @@ kill switch; each host additionally honors its own opt-out (VS telemetry setting
 event (server- and host-side) to a local JSONL file — see the archived
 `docs/Archive/build-plan-telemetry-capture.md` §8.
 
+**Client identity (issue #844).** Every event carries one canonical client identity so
+cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniformly. The decision:
+
+| Key | Stamped by | Value |
+|---|---|---|
+| `IdeClient` | **canonical.** Server (`IdentityStampingLspTelemetryService`, outermost decorator, so the debug-log mirror sees it) on every server-originated event; each host also stamps it on every event it transmits (covers host-originated events) | `visualstudio` \| `vscode` \| `rider` (the `--ide` vocabulary) |
+| `IdeClientVersion` | Server, when the client sent `InitializeParams.ClientInfo.Version` | client self-reported version |
+| `ServerVersion` | Server | assembly informational version |
+| `SessionId` | Server | random GUID per server process (not user-identifying; links an event stream to one server run) |
+| `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version, extension version |
+
+Stamping never overrides a key the caller already set, and server-side stamping copies the property
+dictionary rather than mutating the caller's. `PerfSample`'s former `IDEClient` key is retired in
+favor of `IdeClient` (historical `IDEClient` data is not back-filled). `Ide*`/`ExtensionVersion`
+remain host-stamped because only the host knows the IDE product and extension build.
+
 **Schema conventions.** Events are identified by name only — there are no event IDs, and the
 property dictionaries are the schema. Transmitters stringify every property value; booleans
 become `"True"`/`"False"`, numbers their invariant string. All property names are PascalCase.
@@ -316,7 +332,7 @@ without leaking paths.
 |---|---|
 | **Emitter** | `OperationDurationRecorder` — wired into nearly every interactive LSP handler |
 | **When** | Each instrumented operation completes; emission gated by `IPerfTelemetrySampler` (`REQNROLL_PERF_TELEMETRY_SAMPLE`, fraction in `[0,1]`, default `0` = off) |
-| **Properties** | `Operation` (label, e.g. `textDocument/completion#step`; completion is also split into `#keyword` and, nested inside it whenever the tag branch runs, `#tag`), `DurationMs` (rounded ms), `DurationBucket` (`<=50`, `51-100`, …), `IDEClient` (`visualstudio`/`vscode`/`rider` from `--ide`) |
+| **Properties** | `Operation` (label, e.g. `textDocument/completion#step`; completion is also split into `#keyword` and, nested inside it whenever the tag branch runs, `#tag`), `DurationMs` (rounded ms), `DurationBucket` (`<=50`, `51-100`, …); per-IDE breakdown uses the canonical `IdeClient` stamped on every event (§1; formerly a `PerfSample`-only `IDEClient`) |
 
 **Analytics use.** Real-world P95/P99 per operation per IDE — the field half of the performance
 verification program (Layer 4). No URIs or content, ever.

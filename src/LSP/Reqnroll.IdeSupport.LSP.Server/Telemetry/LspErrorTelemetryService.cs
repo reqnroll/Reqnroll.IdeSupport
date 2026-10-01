@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// wizards, dialogs, project-system open) is a no-op here, same as <see cref="NullLspTelemetryService"/>
 /// — those only make sense from a host UI, which the server doesn't have.
 /// <see cref="IErrorTelemetryService.MonitorError"/> is the one exception: it forwards to
-/// <see cref="ILspTelemetryService"/> as an "Error" <c>telemetry/event</c>, so exceptions raised
+/// <see cref="ILspTelemetryService"/> as an <c>UnhandledException</c> <c>telemetry/event</c>, so exceptions raised
 /// inside LSP.Core (e.g. <c>IdeSupportGherkinParser</c>/<c>IdeSupportTagParser</c> via
 /// <c>IdeSupportLoggerExtensions.LogException</c>) actually reach telemetry instead of being
 /// silently dropped. Previously the server was wired with <see cref="NullLspTelemetryService"/> for
@@ -33,7 +33,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
 {
     // Windows absolute/UNC paths (C:\..., \\server\share\...) and POSIX absolute paths (/home/...).
     // Deliberately broad (over-redacting is safe; under-redacting leaks a path) — see
-    // docs/LSP-IDE-Support-Architecture.md's Privacy Considerations: "The Error event must scrub
+    // docs/LSP-IDE-Support-Architecture.md's Privacy Considerations: "The UnhandledException event must scrub
     // exception messages for file paths and user-identifiable strings before transmission."
     private static readonly Regex PathPattern = new(
         @"(?:[A-Za-z]:\\|\\\\|/)[^\s""'<>:*?|]+",
@@ -65,7 +65,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings projectSettings) { }
 
     /// <summary>
-    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>, with the exception
+    /// Sends the exception to the client as an <c>UnhandledException</c> <c>telemetry/event</c>, with the exception
     /// message redacted via <see cref="RedactPaths"/> first.
     /// </summary>
     public void MonitorError(Exception exception, bool? isFatal = null)

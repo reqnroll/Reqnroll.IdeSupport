@@ -48,6 +48,8 @@ object RiderTelemetryTransmitter {
      */
     internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
 
+    internal const val IDE_CLIENT = "rider"
+
     private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
     private const val USER_ID_PROPERTY_KEY = "com.reqnroll.idesupport.telemetry.userId"
 
@@ -71,9 +73,7 @@ object RiderTelemetryTransmitter {
         try {
             val stringProps = LinkedHashMap<String, String>()
             properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
-            stringProps["Ide"] = "JetBrains Rider"
-            stringProps["IdeVersion"] = ideVersion()
-            stringProps["ExtensionVersion"] = extensionVersion()
+            stampClientIdentity(stringProps, ideVersion(), extensionVersion())
 
             val body = buildEnvelope(eventName, userId(), stringProps, Instant.now())
             val request = HttpRequest.newBuilder()
@@ -95,6 +95,23 @@ object RiderTelemetryTransmitter {
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
             debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = ex.message)
         }
+    }
+
+    /**
+     * Stamps the host's client identity on every event (issue #844). `IdeClient` is the canonical
+     * cross-IDE key, also stamped by the LSP server on server-originated events with the same
+     * `visualstudio`/`vscode`/`rider` vocabulary; it is only added when absent so a server-stamped
+     * value is never overridden, and covers host-originated events (GoToHook) the server never sees.
+     */
+    internal fun stampClientIdentity(
+        properties: MutableMap<String, String>,
+        ideVersion: String,
+        extensionVersion: String,
+    ) {
+        properties.putIfAbsent("IdeClient", IDE_CLIENT)
+        properties["Ide"] = "JetBrains Rider"
+        properties["IdeVersion"] = ideVersion
+        properties["ExtensionVersion"] = extensionVersion
     }
 
     private fun userId(): String {

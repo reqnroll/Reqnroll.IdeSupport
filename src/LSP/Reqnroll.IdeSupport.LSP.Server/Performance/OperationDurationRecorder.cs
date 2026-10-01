@@ -1,4 +1,4 @@
-﻿using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -13,8 +13,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 /// </summary>
 /// <remarks>
 /// Privacy: the log line may carry the document URI for local diagnosis, but the telemetry
-/// event must not — it carries only the operation label, the duration, a coarse bucket and the
-/// IDE client, never a path or file content.
+/// event must not — it carries only the operation label, the duration, a coarse bucket (the
+/// client identity is stamped by the telemetry pipeline, #844), never a path or file content.
 /// </remarks>
 public sealed class OperationDurationRecorder : IOperationDurationRecorder
 {
@@ -22,7 +22,6 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     public const string PerfSampleEventName = "PerfSample";
 
     private readonly IIdeSupportLogger _logger;
-    private readonly ClientIdeContext _ide;
     private readonly ILspTelemetryService? _telemetry;
     private readonly IPerformanceTelemetrySampler _sampler;
     private readonly ITraceService? _trace;
@@ -30,13 +29,11 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     /// <summary>Initializes a new instance of the <see cref="OperationDurationRecorder"/> class.</summary>
     public OperationDurationRecorder(
         IIdeSupportLogger logger,
-        ClientIdeContext ide,
         ILspTelemetryService? telemetry = null,
         IPerformanceTelemetrySampler? sampler = null,
         ITraceService? trace = null)
     {
         _logger = logger;
-        _ide = ide;
         _telemetry = telemetry;
         _sampler = sampler ?? PerformanceTelemetrySampler.FromEnvironment();
         _trace = trace;
@@ -77,7 +74,6 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
                 ["Operation"] = operation,
                 ["DurationMs"] = (long)Math.Round(elapsedMs),
                 ["DurationBucket"] = Bucket(elapsedMs),
-                ["IDEClient"] = _ide.Ide,
             });
         }
     }
