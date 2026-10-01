@@ -50,6 +50,9 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
     /// <summary>Bumped for incompatible wire-format changes; sent in <c>hello</c>.</summary>
     public const int ProtocolVersion = 1;
 
+    /// <summary>Wire value of the <c>reporterKind</c> hello field — identifies this logger to the LSP server.</summary>
+    public const string ReporterKind = "VSTestLogger";
+
     /// <summary><c>host:port</c> the IDE listens on for this run (loopback).</summary>
     public const string EndpointParameter = "Endpoint";
 
@@ -112,6 +115,7 @@ public sealed class ReqnrollIdeTestLogger : ITestLoggerWithParameters
             .Field("runnerPid", runnerPid)
             .Field("idePid", idePid)
             .Field("connected", connected)
+            .Field("reporterKind", ReporterKind)
             .Field("targetFramework", Get(parameters, DefaultLoggerParameterNames.TargetFramework) ?? string.Empty)
             .Field("testRunDirectory", Get(parameters, DefaultLoggerParameterNames.TestRunDirectory) ?? string.Empty)
             .ToLine());

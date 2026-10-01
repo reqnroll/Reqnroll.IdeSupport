@@ -119,6 +119,7 @@ public class ReqnrollIdeTestLoggerTests
         hello.GetProperty("runId").GetString().Should().Be("run-1");
         hello.GetProperty("idePid").GetString().Should().Be("999");
         hello.GetProperty("runnerPid").GetInt32().Should().Be(Environment.ProcessId);
+        hello.GetProperty("reporterKind").GetString().Should().Be(ReqnrollIdeTestLogger.ReporterKind);
         hello.GetProperty("targetFramework").GetString().Should().Be(".NETCoreApp,Version=v8.0");
 
         var start = Parse(lines[1]);

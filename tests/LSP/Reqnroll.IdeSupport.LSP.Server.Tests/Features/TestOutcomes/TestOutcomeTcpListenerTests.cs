@@ -412,6 +412,32 @@ public class TestOutcomeTcpListenerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunComplete_prefers_explicit_reporterKind_over_targetFramework_inference()
+    {
+        // The new MTP reporter hello carries BOTH targetFramework and an explicit reporterKind="MTP".
+        // The explicit field must win — presence of targetFramework alone must not mislabel it VSTestLogger.
+        var lspTelemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: lspTelemetry);
+        var registration = listener.RegisterRun()!;
+
+        var mtpHello = new JObject
+        {
+            ["type"] = "hello",
+            ["protocol"] = 1,
+            ["runId"] = registration.RunId,
+            ["runnerPid"] = 4242,
+            ["connected"] = true,
+            ["reporterKind"] = "MTP",
+            ["targetFramework"] = ".NETCoreApp,Version=v10.0",
+        }.ToString(Newtonsoft.Json.Formatting.None);
+
+        await SendAsync(registration.Endpoint, mtpHello, Result("Add", "Add(1,2)", "Passed", registration.RunId), RunComplete(registration.RunId));
+
+        (await WaitForStoreAsync(() => _store.TryGet(Source, "Specs.CalcFeature", "Add") is not null)).Should().BeTrue();
+        lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
+    }
+
+    [Fact]
     public async Task RunComplete_records_the_ingestion_duration_via_the_operation_recorder()
     {
         var recorder = Substitute.For<IOperationDurationRecorder>();

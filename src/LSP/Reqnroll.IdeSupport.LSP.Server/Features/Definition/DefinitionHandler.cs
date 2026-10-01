@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.Common.Lsp;
@@ -27,12 +28,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 /// </summary>
 public sealed class DefinitionHandler : IDefinitionHandler
 {
-    /// <summary>
-    /// Telemetry event for Go to Step Definition. Also sent by <see cref="FindStepDefinitionsHandler"/>,
-    /// which Visual Studio uses for the same command (issue #757).
-    /// </summary>
-    internal const string TelemetryEventName = "GoToStepDefinition command executed";
-
     private readonly StepAtPositionResolver    _resolver;
     private readonly IIdeSupportLogger           _logger;
     private readonly ILspTelemetryService?      _telemetryService;
@@ -94,7 +89,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
         // of FindStepUsagesHandler's "is a binding" gate) -- LocationCount is 0 for the
         // undefined/ambiguous/unresolved cases below, matching the Erroneous-style signal other
         // handlers use, rather than a separate boolean.
-        _telemetryService?.SendEvent(TelemetryEventName, new()
+        _telemetryService?.SendEvent(TelemetryEvents.GoToStepDefinitionCommandExecuted, new()
         {
             ["LocationCount"] = locations.Length,
         });

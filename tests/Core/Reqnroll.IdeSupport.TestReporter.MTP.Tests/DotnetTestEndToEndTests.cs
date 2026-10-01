@@ -113,6 +113,8 @@ public class DotnetTestEndToEndTests
         var hello = messages[0];
         hello.GetProperty("connected").GetBoolean().Should().BeTrue();
         hello.GetProperty("runnerPid").GetInt32().Should().NotBe(Environment.ProcessId, "the reporter runs in the MTP test host, not in this process");
+        hello.GetProperty("reporterKind").GetString().Should().Be("MTP");
+        hello.GetProperty("targetFramework").GetString().Should().NotBeNullOrEmpty("the MTP reporter now sends its target framework in hello");
 
         var results = messages.Where(m => m.GetProperty("type").GetString() == "result").ToList();
         results.Should().HaveCount(5, "2 scenarios + 3 outline rows");

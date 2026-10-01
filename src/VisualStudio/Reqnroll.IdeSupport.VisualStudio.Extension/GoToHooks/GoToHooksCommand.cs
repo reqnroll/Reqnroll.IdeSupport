@@ -25,16 +25,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 [VisualStudioContribution]
 internal sealed class GoToHooksCommand : Command
 {
-    /// <summary>
-    /// Telemetry event name for a genuine "Go to Hooks" navigation (issue #698). Originated here,
-    /// client-side, rather than by the LSP server's <c>reqnroll/findHooks</c> handler: that handler
-    /// also backs the classic VS CodeLens's Details-popup prefetch (every lens render, not just a
-    /// click), so it cannot honestly claim every request is a navigation — only this command's own
-    /// invocation genuinely is one. The server instead reports <c>TelemetryEvents.FindHooksCommandExecuted</c>
-    /// for every request, prefetch or not.
-    /// </summary>
-    private const string GoToHookCommandExecutedEventName = "GoToHook command executed";
-
     private readonly FindHooksState  _state;
     private readonly LspServerConnectionService _connectionService;
     private readonly ILogger<GoToHooksCommand> _logger;
@@ -90,7 +80,7 @@ internal sealed class GoToHooksCommand : Command
             // (which never runs through this command) — emit here, not from the server's
             // reqnroll/findHooks handler, which cannot tell the two apart (issue #698).
             _connectionService.TelemetryTransmitter?.TransmitEvent(
-                new GenericEvent(GoToHookCommandExecutedEventName, []));
+                new GenericEvent(TelemetryEvents.GoToHookCommandExecuted, []));
 
             var textView = await context.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
             if (textView is null)
