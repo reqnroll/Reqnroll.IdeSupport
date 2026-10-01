@@ -41,7 +41,7 @@ public sealed class CompletionHandler : ICompletionHandler
     private readonly IDocumentBufferService _bufferService;
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly IProjectBindingRegistryLookup _registryLookup;
-    private readonly IFeatureTagRegistryProvider _tagRegistry;
+    private readonly IFeatureTagIndex _tagIndex;
     private readonly ClientIdeContext _clientIde;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
@@ -60,7 +60,7 @@ public sealed class CompletionHandler : ICompletionHandler
         IDocumentBufferService bufferService,
         ILspWorkspaceScopeManager scopeManager,
         IProjectBindingRegistryLookup registryLookup,
-        IFeatureTagRegistryProvider tagRegistry,
+        IFeatureTagIndex tagIndex,
         ClientIdeContext clientIde,
         IIdeSupportLogger logger,
         IOperationDurationRecorder? recorder = null)
@@ -72,7 +72,7 @@ public sealed class CompletionHandler : ICompletionHandler
         _bufferService = bufferService;
         _scopeManager = scopeManager;
         _registryLookup = registryLookup;
-        _tagRegistry = tagRegistry;
+        _tagIndex = tagIndex;
         _clientIde = clientIde;
         _logger = logger;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
@@ -256,7 +256,7 @@ public sealed class CompletionHandler : ICompletionHandler
                     ? inProgress.Substring(1)
                     : string.Empty;
 
-                var projectTags = await _tagRegistry
+                var projectTags = await _tagIndex
                     .GetTagCandidatesAsync(uri, cancellationToken)
                     .ConfigureAwait(false);
 

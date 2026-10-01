@@ -15,21 +15,21 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Registry;
 
 /// <summary>
-/// Tests for <see cref="FeatureTagRegistryProvider"/> against a real file system and the real
+/// Tests for <see cref="FeatureTagIndex"/> against a real file system and the real
 /// <see cref="IdeSupportTagParser"/> — open buffers preferred over disk, closed files parsed from
 /// disk once and cached until their write time changes, and the membership-index file list
 /// overriding the disk scan once the project baseline has arrived (issue #828).
 /// </summary>
-public class FeatureTagRegistryProviderTests : IDisposable
+public class FeatureTagIndexTests : IDisposable
 {
     private readonly string _root = Path.Combine(
-        Path.GetTempPath(), "ReqnrollTagRegistryTests", Guid.NewGuid().ToString("N"));
+        Path.GetTempPath(), "ReqnrollTagIndexTests", Guid.NewGuid().ToString("N"));
 
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
 
-    public FeatureTagRegistryProviderTests()
+    public FeatureTagIndexTests()
     {
         Directory.CreateDirectory(_root);
     }
@@ -40,14 +40,14 @@ public class FeatureTagRegistryProviderTests : IDisposable
         catch { /* best-effort temp cleanup */ }
     }
 
-    private FeatureTagRegistryProvider CreateProvider()
+    private FeatureTagIndex CreateProvider()
     {
         var telemetry = Substitute.For<IErrorTelemetryService>();
         var config = Substitute.For<IIdeSupportConfigurationProvider>();
         config.GetConfiguration().Returns(new IdeSupportConfiguration());
 
         var tagParser = new IdeSupportTagParser(_logger, telemetry, config);
-        return new FeatureTagRegistryProvider(
+        return new FeatureTagIndex(
             _scopeManager, _bufferService, tagParser, new FileSystemForIDE(), _logger);
     }
 

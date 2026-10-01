@@ -27,7 +27,7 @@ public class CompletionHandlerTests
     private readonly IDocumentBufferService _bufferService = Substitute.For<IDocumentBufferService>();
     private readonly ILspWorkspaceScopeManager _scopeManager = Substitute.For<ILspWorkspaceScopeManager>();
     private readonly IProjectBindingRegistryLookup _registryLookup = Substitute.For<IProjectBindingRegistryLookup>();
-    private readonly IFeatureTagRegistryProvider _tagRegistry = Substitute.For<IFeatureTagRegistryProvider>();
+    private readonly IFeatureTagIndex _tagIndex = Substitute.For<IFeatureTagIndex>();
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly IIdeSupportConfigurationProvider _configProvider = Substitute.For<IIdeSupportConfigurationProvider>();
 
@@ -49,14 +49,14 @@ public class CompletionHandlerTests
                 _bufferService,
                 _scopeManager,
                 _registryLookup,
-                _tagRegistry,
+                _tagIndex,
                 new ClientIdeContext(isVisualStudio ? "visualstudio" : "vscode"),
                 _logger);
 
     /// <summary>Programs the substituted tag pipeline to return <paramref name="labels"/> as the tag-group entries.</summary>
     private void SetupTags(IReadOnlyList<string> labels)
     {
-        _tagRegistry.GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>())
+        _tagIndex.GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>())
             .Returns(new[] { new StepCandidate("@smoke", 1) });
         _completionService.GetTagCompletions(
                 Arg.Any<IReadOnlyCollection<StepCandidate>>(),
@@ -226,7 +226,7 @@ public class CompletionHandlerTests
             CancellationToken.None);
 
         result.Items.Select(i => i.Label).Should().BeEquivalentTo("@ignore", "@smoke");
-        _ = _tagRegistry.Received(1).GetTagCandidatesAsync(FeatureUri, Arg.Any<CancellationToken>());
+        _ = _tagIndex.Received(1).GetTagCandidatesAsync(FeatureUri, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -384,7 +384,7 @@ public class CompletionHandlerTests
             CancellationToken.None);
 
         result.Items.Should().BeEmpty();
-        _ = _tagRegistry.DidNotReceive().GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
+        _ = _tagIndex.DidNotReceive().GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
         _completionService.DidNotReceive().GetTagCompletions(
             Arg.Any<IReadOnlyCollection<StepCandidate>>(), Arg.Any<IReadOnlyCollection<string>>(),
             Arg.Any<string>(), _matcher);
@@ -410,6 +410,6 @@ public class CompletionHandlerTests
             CancellationToken.None);
 
         result.Items.Should().BeEmpty();
-        _ = _tagRegistry.DidNotReceive().GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
+        _ = _tagIndex.DidNotReceive().GetTagCandidatesAsync(Arg.Any<DocumentUri>(), Arg.Any<CancellationToken>());
     }
 }

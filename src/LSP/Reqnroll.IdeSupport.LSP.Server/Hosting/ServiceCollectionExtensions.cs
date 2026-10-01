@@ -140,7 +140,7 @@ public static class ServiceCollectionExtensions
             // Per-project tag index feeding tag completion (issue #828): tags in use across the
             // owning project's feature files, kept current from open buffers + disk, cached per
             // file and re-validated on access (no event wiring needed).
-            .AddSingleton<IFeatureTagRegistryProvider, FeatureTagRegistryProvider>()
+            .AddSingleton<IFeatureTagIndex, FeatureTagIndex>()
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
             // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).

@@ -22,14 +22,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Registry;
 /// re-checked against the membership index every request (so baseline deltas and disk changes
 /// show up without any event wiring).
 /// </summary>
-public interface IFeatureTagRegistryProvider
+public interface IFeatureTagIndex
 {
     /// <summary>Returns the tags in use across the projects owning <paramref name="uri"/>, as candidate/usage-count pairs.</summary>
     Task<IReadOnlyCollection<StepCandidate>> GetTagCandidatesAsync(DocumentUri uri, CancellationToken ct);
 }
 
-/// <summary>Default implementation of <see cref="IFeatureTagRegistryProvider"/>.</summary>
-public sealed class FeatureTagRegistryProvider : IFeatureTagRegistryProvider
+/// <summary>Default implementation of <see cref="IFeatureTagIndex"/>.</summary>
+public sealed class FeatureTagIndex : IFeatureTagIndex
 {
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly IDocumentBufferService _bufferService;
@@ -40,8 +40,8 @@ public sealed class FeatureTagRegistryProvider : IFeatureTagRegistryProvider
     private readonly ConcurrentDictionary<string, ProjectTagIndex> _indexes
         = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Initializes a new instance of the <see cref="FeatureTagRegistryProvider"/> class.</summary>
-    public FeatureTagRegistryProvider(
+    /// <summary>Initializes a new instance of the <see cref="FeatureTagIndex"/> class.</summary>
+    public FeatureTagIndex(
         ILspWorkspaceScopeManager scopeManager,
         IDocumentBufferService bufferService,
         IIdeSupportTagParser tagParser,
@@ -110,7 +110,7 @@ public sealed class FeatureTagRegistryProvider : IFeatureTagRegistryProvider
         // One audible, once-per-project progression line; per-request traffic stays Verbose.
         if (Interlocked.CompareExchange(ref index.FirstScanDone, 1, 0) == 0)
             _logger.LogInfo(
-                $"[TagRegistry] Indexed {files.Count} feature file(s) for tag completion in project '{project.ProjectName}'");
+                $"[TagIndex] Indexed {files.Count} feature file(s) for tag completion in project '{project.ProjectName}'");
     }
 
     private IReadOnlyCollection<string> GetProjectFeatureFiles(LspReqnrollProject project)
@@ -184,7 +184,7 @@ public sealed class FeatureTagRegistryProvider : IFeatureTagRegistryProvider
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogVerbose($"[TagRegistry] could not read '{filePath}': {ex.Message}");
+            _logger.LogVerbose($"[TagIndex] could not read '{filePath}': {ex.Message}");
             index.Files.TryRemove(filePath, out _);
             return null;
         }
@@ -204,7 +204,7 @@ public sealed class FeatureTagRegistryProvider : IFeatureTagRegistryProvider
 
     private sealed class ProjectTagIndex
     {
-        /// <summary>Guards the once-per-project Info scan log; see <see cref="FeatureTagRegistryProvider.MergeProjectTagsAsync"/>.</summary>
+        /// <summary>Guards the once-per-project Info scan log; see <see cref="FeatureTagIndex.MergeProjectTagsAsync"/>.</summary>
         public int FirstScanDone;
 
         public readonly ConcurrentDictionary<string, FileTagEntry> Files = new(StringComparer.OrdinalIgnoreCase);
