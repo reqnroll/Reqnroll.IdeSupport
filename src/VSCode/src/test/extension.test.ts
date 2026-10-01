@@ -23,6 +23,7 @@ import './commands/renameStep.test';
 import './tableHighlightService.test';
 import './commands/stepNavigation.test';
 import './statusBar.test';
+import './walkthrough.test';
 import './commands/stepUsages.test';
 import './commands/findUnusedStepDefinitions.test';
 import './commands/goToHooks.test';
