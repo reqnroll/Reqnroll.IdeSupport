@@ -51,8 +51,10 @@ back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExec
 `UnhandledException` (#627) as the precedent: confirm with the team before renaming any event.
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
-are transmitted. The `UnhandledException` message is scrubbed for filesystem paths
-(`<path>`) before transmission. `AffectedFile` on the Roslyn discovery event carries the file
+are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
+`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed for filesystem paths (`<path>`) via
+`TelemetryScrubber.RedactPaths` before transmission (#843). Other string properties are fixed literals
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
 *name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
@@ -77,7 +79,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `IsFailed` | bool | Omitted on the connector hash-noop outcome; otherwise false (success) or true (failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
-| `ErrorMessage` | string | Connector failure: the exception message |
+| `ErrorMessage` | string | Connector failure: the exception message, filesystem-path-scrubbed (`<path>`) |
 | `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector: the project's TFM |
