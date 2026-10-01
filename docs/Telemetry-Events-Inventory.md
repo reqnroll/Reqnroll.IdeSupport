@@ -52,8 +52,10 @@ back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExec
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
 are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
-`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed for filesystem paths (`<path>`) via
-`TelemetryScrubber.RedactPaths` before transmission (#843). Other string properties are fixed literals
+`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed for filesystem paths (`<path>`) at the
+last server hop before the event goes to the client (`LspTelemetryService` →
+`TelemetryScrubber.ScrubProperties`, #843), so emit sites and the local debug-log mirror keep the raw text for
+debugging. Other string properties are fixed literals
 (`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
 *name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)

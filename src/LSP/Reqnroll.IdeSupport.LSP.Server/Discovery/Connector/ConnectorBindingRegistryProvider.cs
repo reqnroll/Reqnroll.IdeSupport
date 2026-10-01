@@ -342,8 +342,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 ["DiscoverySource"] = "Connector",
                 ["TriggerContext"] = _isFirstRun ? "projectLoad" : "build",
                 ["IsFailed"] = true,
-                // Scrubbed: connector/reflection failures routinely embed absolute paths (#843).
-                ["ErrorMessage"] = TelemetryScrubber.RedactPaths(ex.Message),
+                ["ErrorMessage"] = ex.Message,
                 ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
             });
         }

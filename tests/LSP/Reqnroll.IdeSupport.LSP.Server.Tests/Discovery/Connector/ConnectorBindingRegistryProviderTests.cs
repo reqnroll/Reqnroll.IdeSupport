@@ -504,32 +504,6 @@ namespace S
                 "connector boom".Equals(d["ErrorMessage"])));
     }
 
-    [Theory]
-    [InlineData(@"Could not load C:\Users\someone\proj\bin\x.dll", "Could not load <path>")]
-    [InlineData("Could not load /home/someone/proj/x.dll", "Could not load <path>")]
-    public async Task TriggerRefresh_redacts_filesystem_paths_from_failure_telemetry_ErrorMessage(
-        string exceptionMessage, string expected)
-    {
-        _discovery.RunDiscovery(
-                Arg.Any<IProjectScope>(),
-                Arg.Any<ProjectBindingRegistry>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>())
-            .Returns(_ => throw new FileNotFoundException(exceptionMessage));
-        var telemetry = Substitute.For<ILspTelemetryService>();
-        var sent = new TaskCompletionSource();
-        telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
-            .Do(_ => sent.TrySetResult());
-
-        var sut = CreateSutWithTelemetry(telemetry);
-        sut.TriggerRefresh();
-        await Task.WhenAny(sent.Task, Task.Delay(5000));
-
-        telemetry.Received(1).SendEvent(
-            TelemetryEvents.ReqnrollDiscoveryExecuted,
-            Arg.Is<Dictionary<string, object?>>(d => expected.Equals(d["ErrorMessage"])));
-    }
-
     [Fact]
     public async Task TriggerRefresh_does_not_emit_failure_telemetry_on_cancellation()
     {
