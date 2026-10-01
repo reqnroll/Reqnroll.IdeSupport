@@ -173,11 +173,17 @@ or `~/.local/share/Reqnroll/logs/` (Linux):
 `reqnroll-vscode-inspector-<timestamp>.log`. **Reload the window** after
 changing this setting for it to take effect.
 
+The LSP server's **protocol** log (`reqnroll-vscode-protocol-*.log`, OmniSharp's
+own internal request-dispatch/DryIoc/JSON-RPC diagnostics) has its own dial:
+set `"reqnroll.protocolLogLevel"` in `settings.json` to `"Off"`, `"Error"`,
+`"Warning"`, `"Info"`, or `"Verbose"` (default `"Warning"`). It maps onto the
+server's separate `--protocol-log-level` flag, independent of
+`reqnroll.trace.server` (which drives `--log-level`). **Reload the window**
+after changing it for it to take effect.
+
 The `REQNROLLVS_DEBUG` environment variable (see the Visual Studio tab for
 accepted values) also works here, and overrides `reqnroll.trace.server` for
-the server's own logs specifically — useful since VS Code never passes a
-`--protocol-log-level`, so `reqnroll-vscode-protocol-*.log` otherwise always
-stays at the `Warning` default. VS Code's child process inherits the
+the server's own logs specifically. VS Code's child process inherits the
 environment the VS Code application itself was started with, so set the
 variable there before launching VS Code:
 

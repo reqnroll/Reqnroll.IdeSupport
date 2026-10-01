@@ -9,7 +9,7 @@ import { resolveLogDirectory } from '../logging/logPaths';
  *
  * Why this class exists at all (issue #792 removed the visible "Reqnroll LSP Trace" Output pane,
  * not the trace): `traceOutputChannel` is vscode-languageclient's only hook for receiving the
- * per-message trace, and it insists on a `LogOutputChannel` — there is no "write the trace to this
+ * per-message trace, and it insists on a `LogOutputChannel` ï¿½ there is no "write the trace to this
  * file" option. Passing nothing would make the client create its own visible "... Trace" pane
  * (which is what #792 removed), and passing a plain object would not type-check. So this class
  * implements that interface, keeps the one method the client feeds (`trace()`) and the level
@@ -258,6 +258,28 @@ export function traceServerToLogLevel(): 'Warning' | 'Info' | 'Verbose' {
       return 'Verbose';
     case 'messages':
       return 'Info';
+    default:
+      return 'Warning';
+  }
+}
+
+/**
+ * Maps the `reqnroll.protocolLogLevel` setting onto the LSP server's `--protocol-log-level`
+ * argument, so VS Code users can control OmniSharp's own internal protocol diagnostics
+ * (request dispatch, DryIoc, JSON-RPC plumbing) independently of `reqnroll.trace.server`.
+ * Mirrors `traceServerToLogLevel()`: `reqnroll.trace.server` drives the server's `--log-level`,
+ * and this setting drives the separate `--protocol-log-level` dial (issue #665).
+ */
+export function protocolLogLevelToArg(): 'Off' | 'Error' | 'Warning' | 'Info' | 'Verbose' {
+  const level = vscode.workspace
+    .getConfiguration('reqnroll')
+    .get<string>('protocolLogLevel', 'Warning');
+  switch (level) {
+    case 'Off':
+    case 'Error':
+    case 'Info':
+    case 'Verbose':
+      return level;
     default:
       return 'Warning';
   }

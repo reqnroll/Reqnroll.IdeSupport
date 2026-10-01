@@ -3,7 +3,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { resolveLogDirectory } from '../../logging/logPaths';
-import { createTraceChannel, traceServerToLogLevel } from '../../lsp/lspInspectorLogger';
+import {
+  createTraceChannel,
+  protocolLogLevelToArg,
+  traceServerToLogLevel,
+} from '../../lsp/lspInspectorLogger';
 
 suite('traceServerToLogLevel', () => {
   const config = vscode.workspace.getConfiguration('reqnroll');
@@ -30,6 +34,52 @@ suite('traceServerToLogLevel', () => {
   test("maps 'verbose' to Verbose", async () => {
     await config.update('trace.server', 'verbose', vscode.ConfigurationTarget.Global);
     assert.strictEqual(traceServerToLogLevel(), 'Verbose');
+  });
+});
+
+suite('protocolLogLevelToArg', () => {
+  const config = vscode.workspace.getConfiguration('reqnroll');
+
+  teardown(async () => {
+    await config.update('protocolLogLevel', undefined, vscode.ConfigurationTarget.Global);
+  });
+
+  test('defaults to Warning when the setting is unset', async () => {
+    await config.update('protocolLogLevel', undefined, vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Warning');
+  });
+
+  test("maps 'Off' to Off", async () => {
+    await config.update('protocolLogLevel', 'Off', vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Off');
+  });
+
+  test("maps 'Error' to Error", async () => {
+    await config.update('protocolLogLevel', 'Error', vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Error');
+  });
+
+  test("maps 'Warning' to Warning", async () => {
+    await config.update('protocolLogLevel', 'Warning', vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Warning');
+  });
+
+  test("maps 'Info' to Info", async () => {
+    await config.update('protocolLogLevel', 'Info', vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Info');
+  });
+
+  test("maps 'Verbose' to Verbose", async () => {
+    await config.update('protocolLogLevel', 'Verbose', vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Verbose');
+  });
+
+  test('falls back to Warning for an unrecognized value', async () => {
+    // config.update accepts any value at the API level even though package.json's enum
+    // restricts what users can pick in the settings UI, so an out-of-contract value
+    // exercises the function's own fallback path rather than the enum validation.
+    await config.update('protocolLogLevel', 'Fatal', vscode.ConfigurationTarget.Global);
+    assert.strictEqual(protocolLogLevelToArg(), 'Warning');
   });
 });
 

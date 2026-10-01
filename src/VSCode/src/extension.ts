@@ -2,7 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
-import { createTraceChannel, traceServerToLogLevel } from './lsp/lspInspectorLogger';
+import {
+  createTraceChannel,
+  protocolLogLevelToArg,
+  traceServerToLogLevel,
+} from './lsp/lspInspectorLogger';
 import { createGeneralLogChannel } from './logging/generalFileLog';
 import { setAppLogChannel, showError, showInfo } from './logging/appNotify';
 import { ProjectManager } from './lsp/projectManager';
@@ -328,7 +332,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
   // ── LSP client ─────────────────────────────────────────────────────────────
   const serverOptions: ServerOptions = {
     command: serverPath,
-    args: ['--ide', 'vscode', '--log-level', traceServerToLogLevel()],
+    args: [
+      '--ide',
+      'vscode',
+      '--log-level',
+      traceServerToLogLevel(),
+      '--protocol-log-level',
+      protocolLogLevelToArg(),
+    ],
     options: {
       env: { ...process.env },
     },
