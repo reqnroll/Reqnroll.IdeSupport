@@ -125,7 +125,7 @@ public static class VsWellKnownIdsSelfCheck
         if (joined.Length > MaxProblemsLength)
             joined = joined.Substring(0, MaxProblemsLength);
 
-        return new VsGenericEvent("VsWellKnownIdsSelfCheckMismatch", new Dictionary<string, object>
+        return new VsGenericEvent(TelemetryEvents.VsWellKnownIdsSelfCheckMismatch, new Dictionary<string, object>
         {
             ["ProblemCount"] = problems.Count,
             ["ExpectedCount"] = expectedCount,

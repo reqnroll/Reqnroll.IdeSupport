@@ -39,6 +39,15 @@ object RiderTelemetryTransmitter {
     // since REQNROLL_TELEMETRY_ENABLED is meant to be a single cross-IDE kill switch.
     internal const val TELEMETRY_ENV_VAR = "REQNROLL_TELEMETRY_ENABLED"
 
+    /**
+     * Client-originated telemetry event names — mirrors `TelemetryEvents.cs` in the shared
+     * `Reqnroll.IdeSupport.Common` project (`src/Core/Reqnroll.IdeSupport.Common/Telemetry/TelemetryEvents.cs`)
+     * and the VS Code copy in `src/VSCode/src/telemetryEvents.ts`. Server-originated events
+     * (forwarded by [ReqnrollTelemetryEventInterceptor]) need no entries here. Keep the three
+     * copies in sync.
+     */
+    internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
+
     private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
     private const val USER_ID_PROPERTY_KEY = "com.reqnroll.idesupport.telemetry.userId"
 
