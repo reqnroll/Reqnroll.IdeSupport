@@ -70,13 +70,15 @@ public sealed class FormattingHandler
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentFormatting, request.TextDocument.Uri);
         var filePath = request.TextDocument.Uri.GetFileSystemPath();
         _logger.LogInfo($"Document auto-formatting textDocument/formatting: {request.TextDocument.Uri}");
-        var result = await FormatDocumentAsync(request.TextDocument.Uri, filePath, request.Options,
+        var (result, editCount, lineCount) = await FormatDocumentAsync(request.TextDocument.Uri, filePath, request.Options,
             startLine: null, endLine: null).ConfigureAwait(false);
 
         // Telemetry
         _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
         {
             ["IsSelectionFormatting"] = false,
+            [TelemetryProperties.EditCount] = editCount,
+            [TelemetryProperties.DocumentLineBucket] = TelemetryBuckets.LineCount(lineCount),
         });
 
         return result;
@@ -95,16 +97,18 @@ public sealed class FormattingHandler
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentRangeFormatting, request.TextDocument.Uri);
         var filePath = request.TextDocument.Uri.GetFileSystemPath();
         _logger.LogInfo($"Document auto-formatting textDocument/rangeFormatting: {request.TextDocument.Uri}");
-        var result = await FormatDocumentAsync(
+        var (formatted, editCount, lineCount) = await FormatDocumentAsync(
             request.TextDocument.Uri, filePath, request.Options,
             startLine: (int)request.Range.Start.Line,
-            endLine: (int)request.Range.End.Line).ConfigureAwait(false)
-            ?? new TextEditContainer();
+            endLine: (int)request.Range.End.Line).ConfigureAwait(false);
+        var result = formatted ?? new TextEditContainer();
 
         // Telemetry
         _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
         {
             ["IsSelectionFormatting"] = true,
+            [TelemetryProperties.EditCount] = editCount,
+            [TelemetryProperties.DocumentLineBucket] = TelemetryBuckets.LineCount(lineCount),
         });
 
         return result;
@@ -194,7 +198,9 @@ public sealed class FormattingHandler
 
     // ── Shared implementation ─────────────────────────────────────────────────
 
-    private Task<TextEditContainer?> FormatDocumentAsync(
+    // EditCount counts edits that change the text (0 = the range was already formatted); LineCount is the
+    // document's line count, 0 when the document is unknown to the server. Both feed telemetry only.
+    private Task<(TextEditContainer? Edits, int EditCount, int LineCount)> FormatDocumentAsync(
         OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri uri,
         string? filePath,
         FormattingOptions lspOptions,
@@ -204,7 +210,7 @@ public sealed class FormattingHandler
         if (!_documentBufferService.TryGet(uri, out var buffer) || buffer is null)
         {
             _logger.LogWarning($"Formatting requested for unknown document: {uri}");
-            return Task.FromResult<TextEditContainer?>(new TextEditContainer());
+            return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, 0));
         }
 
         var text = buffer.Text;
@@ -212,7 +218,7 @@ public sealed class FormattingHandler
         var allLines = SplitLines(text);
 
         if (allLines.Length == 0)
-            return Task.FromResult<TextEditContainer?>(new TextEditContainer());
+            return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, 0));
 
         var configuration = _configurationProvider.GetConfiguration();
         var formatSettings = GherkinFormatSettings.FromLspOptions(
@@ -224,7 +230,7 @@ public sealed class FormattingHandler
 
         var gherkinDocument = ParseDocument(text);
         if (gherkinDocument?.Feature == null)
-            return Task.FromResult<TextEditContainer?>(new TextEditContainer());
+            return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, allLines.Length));
 
         var editStart = startLine ?? 0;
         var editEnd = endLine ?? (allLines.Length - 1);
@@ -235,6 +241,8 @@ public sealed class FormattingHandler
 
         // Capture original end-line length BEFORE the formatter mutates allLines in-place.
         var originalEditEndLineLength = allLines[editEnd].Length;
+        var lineCount = allLines.Length;
+        var originalText = string.Join(lineEnding, allLines[editStart..(editEnd + 1)]);
 
         var linesBuffer = new DocumentLinesEditBuffer(allLines, editStart, editEnd);
         _formatter.FormatGherkinDocument(gherkinDocument, linesBuffer, formatSettings);
@@ -246,8 +254,10 @@ public sealed class FormattingHandler
             new Position(editStart, 0),
             new Position(editEnd, originalEditEndLineLength));
 
-        return Task.FromResult<TextEditContainer?>(new TextEditContainer(
-            new TextEdit { Range = editRange, NewText = formattedText }));
+        return Task.FromResult<(TextEditContainer?, int, int)>((
+            new TextEditContainer(new TextEdit { Range = editRange, NewText = formattedText }),
+            string.Equals(originalText, formattedText, StringComparison.Ordinal) ? 0 : 1,
+            lineCount));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

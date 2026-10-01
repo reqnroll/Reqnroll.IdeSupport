@@ -85,6 +85,8 @@ public sealed class FindStepDefinitionsHandler
         _telemetryService?.SendEvent(TelemetryEvents.GoToStepDefinitionCommandExecuted, new()
         {
             ["LocationCount"] = resolvedCount,
+            [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, resolvedCount),
+            [TelemetryProperties.Protocol] = CustomLspMethodNames.ReqnrollFindStepDefinitions,
         });
 
         return Task.FromResult(new FindStepDefinitionsResponse { Items = items });

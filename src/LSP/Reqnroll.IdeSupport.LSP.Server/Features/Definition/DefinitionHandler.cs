@@ -92,6 +92,8 @@ public sealed class DefinitionHandler : IDefinitionHandler
         _telemetryService?.SendEvent(TelemetryEvents.GoToStepDefinitionCommandExecuted, new()
         {
             ["LocationCount"] = locations.Length,
+            [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, locations.Length),
+            [TelemetryProperties.Protocol] = LspStandardMethodNames.TextDocumentDefinition,
         });
 
         if (locations.Length == 0)

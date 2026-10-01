@@ -40,6 +40,9 @@ public class FindMatchingScenariosHandlerTests
     private FindMatchingScenariosHandler CreateSut() =>
         new(_matchService, _scopeManager, _registryLookup, _logger);
 
+    private FindMatchingScenariosHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
+        new(_matchService, _scopeManager, _registryLookup, _logger, telemetry);
+
     private static TextDocumentPositionParams RequestAt(DocumentUri uri, int line, int character) =>
         new()
         {
@@ -112,6 +115,23 @@ public class FindMatchingScenariosHandlerTests
         result.Scenarios.Should().ContainSingle();
         result.Scenarios[0].ScenarioName.Should().Be("S");
         result.Scenarios[0].Uri.Should().Be(FeatureUri.ToString());
+    }
+
+    [Fact]
+    public async Task Handle_hook_at_exact_position_emits_telemetry_with_the_match_count()
+    {
+        var hook = MakeHook(HookType.BeforeScenario);
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+        var matchSet = BuildMatchSet("Feature: F\nScenario: S\n    Given a step\n", registry, FeatureUri.ToString());
+        _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(new[] { matchSet });
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleAsync(RequestAt(CsUri, 4, 0), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "GoToMatchingScenarios command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["MatchCount"]! == 1));
     }
 
     [Fact]

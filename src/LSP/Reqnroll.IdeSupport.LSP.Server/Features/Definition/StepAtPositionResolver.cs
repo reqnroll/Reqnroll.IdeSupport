@@ -7,6 +7,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
@@ -78,6 +79,17 @@ internal sealed class StepAtPositionResolver
             _logger.LogVerbose($"{_logPrefix}: no step at offset {offset} in {uri}");
         return step;
     }
+
+    /// <summary>
+    /// The <c>Status</c> telemetry value (issue #849) for a step whose Go To Definition offered
+    /// <paramref name="navigableCount"/> rows: ambiguous is reported as such, a step with no defined binding is <c>Undefined</c>, and a defined step
+    /// with nothing navigable (no binding source on this machine) is <c>Unresolved</c>.
+    /// </summary>
+    public static string ClassifyStatus(StepBindingMatch step, int navigableCount) =>
+        step.IsAmbiguous ? TelemetryProperties.StepStatus.Ambiguous
+        : !step.IsDefined ? TelemetryProperties.StepStatus.Undefined
+        : navigableCount > 0 ? TelemetryProperties.StepStatus.Bound
+        : TelemetryProperties.StepStatus.Unresolved;
 
     /// <summary>
     /// The bindings <paramref name="step"/> matched that record a source file, in match order.

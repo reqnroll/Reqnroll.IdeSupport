@@ -116,7 +116,10 @@ public sealed class FindMatchingScenariosHandler
 
         var locations = scenarios.Select(ToLocation).ToList();
 
-        _telemetryService?.SendEvent(TelemetryEvents.GoToMatchingScenariosCommandExecuted, new());
+        _telemetryService?.SendEvent(TelemetryEvents.GoToMatchingScenariosCommandExecuted, new()
+        {
+            [TelemetryProperties.MatchCount] = locations.Count,
+        });
 
         return Task.FromResult(new FindMatchingScenariosResponse { Scenarios = locations });
     }

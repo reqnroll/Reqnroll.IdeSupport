@@ -237,7 +237,24 @@ public class StepReferencesHandlerTests
         telemetry.Received(1).SendEvent(
             "FindStepDefinitionUsages command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
-                (int)p["UsagesCount"]! == 0 && (string)p["Protocol"]! == "textDocument/references"));
+                (int)p["UsagesCount"]! == 0 && (string)p["Protocol"]! == "textDocument/references"
+                && (int)p["FileCount"]! == 0 && p["DurationBucket"] is string));
+    }
+
+    [Fact]
+    public async Task Handle_usages_across_files_emit_telemetry_with_the_distinct_file_count()
+    {
+        var otherFeature = DocumentUri.FromFileSystemPath("/workspace/other.feature");
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { MakeMatch(FeatureUri, 33, 6), MakeMatch(FeatureUri, 11, 3), MakeMatch(otherFeature, 33, 6) });
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).HandleAsync(
+            RequestAt(CsUri, 9, 0), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "FindStepDefinitionUsages command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["UsagesCount"]! == 3 && (int)p["FileCount"]! == 2));
     }
 
     [Fact]
@@ -257,6 +274,7 @@ public class StepReferencesHandlerTests
         telemetry.Received(1).SendEvent(
             "FindStepDefinitionUsages command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
-                (int)p["UsagesCount"]! == 1 && (string)p["Protocol"]! == "textDocument/references"));
+                (int)p["UsagesCount"]! == 1 && (string)p["Protocol"]! == "textDocument/references"
+                && (int)p["FileCount"]! == 1 && p["DurationBucket"] is string));
     }
 }

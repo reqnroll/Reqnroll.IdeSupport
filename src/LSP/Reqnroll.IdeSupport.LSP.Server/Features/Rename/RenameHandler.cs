@@ -292,14 +292,19 @@ public sealed class RenameHandler
         // most complex operation in the server (workspace-wide applyEdit).
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentRename, uri);
 
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var origin = uri.Path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase)
+            ? TelemetryProperties.RenameOrigin.Feature
+            : TelemetryProperties.RenameOrigin.CSharpBinding;
+
         if (string.IsNullOrEmpty(path))
         {
-            SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "InvalidRequest");
             throw RenameFailedError("No step definition found at this position", "position");
         }
         if (string.IsNullOrEmpty(newName))
         {
-            SendRenameTelemetry(erroneous: true, reason: "InvalidRequest");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "InvalidRequest");
             throw RenameFailedError("The new step text cannot be empty", "rename");
         }
 
@@ -314,7 +319,7 @@ public sealed class RenameHandler
         if (registry == ProjectBindingRegistry.Invalid)
         {
             _logger.LogVerbose("RenameHandler: registry is invalid");
-            SendRenameTelemetry(erroneous: true, reason: "RegistryInvalid");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "RegistryInvalid");
             throw RenameFailedError("The project is not initialized yet", "project");
         }
 
@@ -336,7 +341,7 @@ public sealed class RenameHandler
 
         if (binding == null)
         {
-            SendRenameTelemetry(erroneous: true, reason: "BindingNotResolved");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "BindingNotResolved");
             throw RenameFailedError("No step definition found at this position", "position");
         }
 
@@ -366,7 +371,7 @@ public sealed class RenameHandler
             path, uri, request.Position, usages, sourceExpression, newName, ReadStepText);
         if (effectiveNewName == null)
         {
-            SendRenameTelemetry(erroneous: true, reason: "NewNameNotReconciled");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "NewNameNotReconciled");
             throw RenameFailedError(
                 "Could not match the new step text to this step's parameters — only the wording can change, not the parameter values",
                 "rename");
@@ -377,7 +382,7 @@ public sealed class RenameHandler
         if (nameError != null)
         {
             _logger.LogVerbose($"RenameHandler: validation failed — {nameError.Message}");
-            SendRenameTelemetry(erroneous: true, reason: "InvalidNewName");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "InvalidNewName");
             throw RenameFailedError(nameError.Message, nameError.Scope);
         }
 
@@ -399,7 +404,7 @@ public sealed class RenameHandler
 
         if (builder.IsEmpty)
         {
-            SendRenameTelemetry(erroneous: true, reason: "NoEditsProduced");
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "NoEditsProduced");
             throw RenameFailedError(
                 "The rename produced no changes — the step definition could not be located in source",
                 "rename");
@@ -426,10 +431,12 @@ public sealed class RenameHandler
         _postApplyCoordinator.SchedulePostResponseApply(uri, builder);
 
         SendRenameTelemetry(
+            origin, started,
             erroneous: false,
             reason: null,
             changeAnnotationsUsed: supportsChangeAnnotations,
-            editedFileCount: builder.TouchedUris.Count);
+            editedFileCount: builder.TouchedUris.Count,
+            occurrenceCount: usages.Count);
 
         // VS gets the edit through the workspace/applyEdit push above and nothing else. Its
         // native rename client (F2 / Ctrl+R,R, which reaches this handler with the same params as
@@ -449,12 +456,22 @@ public sealed class RenameHandler
     /// early return sends its own event with a <paramref name="reason"/> distinguishing which
     /// validation/resolution step rejected the request, so <c>Erroneous</c> finally carries the
     /// signal its name promises. <paramref name="changeAnnotationsUsed"/> and
-    /// <paramref name="editedFileCount"/> are only meaningful on the success path.
+    /// <paramref name="editedFileCount"/> and <paramref name="occurrenceCount"/> are only meaningful on the success path;
+    /// <c>Origin</c> and <c>DurationBucket</c> (issue #849) are sent on every path.
     /// </summary>
     private void SendRenameTelemetry(
-        bool erroneous, string? reason, bool? changeAnnotationsUsed = null, int? editedFileCount = null)
+        string origin, long startedTimestamp,
+        bool erroneous, string? reason, bool? changeAnnotationsUsed = null, int? editedFileCount = null,
+        int? occurrenceCount = null)
     {
-        var properties = new Dictionary<string, object?> { ["Erroneous"] = erroneous };
+        var properties = new Dictionary<string, object?>
+        {
+            ["Erroneous"] = erroneous,
+            [TelemetryProperties.Origin] = origin,
+            [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(startedTimestamp),
+        };
+        if (occurrenceCount != null)
+            properties[TelemetryProperties.OccurrenceCount] = occurrenceCount;
         if (reason != null)
             properties["Reason"] = reason;
         if (changeAnnotationsUsed != null)

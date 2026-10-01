@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Reqnroll.IdeSupport.Common;
@@ -77,6 +78,8 @@ public sealed class LspErrorTelemetryService : ITelemetryService
         };
         if (isFatal.HasValue)
             properties["IsFatal"] = isFatal.Value;
+        if (ResolveSource(exception) is { } source)
+            properties[TelemetryProperties.Source] = source;
 
         _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
     }
@@ -93,6 +96,38 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorWelcomeDialogDismissed(Dictionary<string, object> additionalProps) { }
     /// <summary>No-op: the LSP server does not transmit ad-hoc telemetry events through this channel.</summary>
     public void TransmitEvent(ITelemetryEvent runtimeEvent) { }
+
+    /// <summary>
+    /// The simple name of the class (no namespace, no stack trace) that contains the topmost frame of
+    /// <paramref name="exception"/>'s stack in a <c>Reqnroll.IdeSupport</c> assembly, so an error can be
+    /// attributed to a component without transmitting the stack (issue #849, #620). Compiler-generated
+    /// async/lambda types are folded into the class that declares them. <see langword="null"/> when the
+    /// exception was never thrown or no frame belongs to this product.
+    /// </summary>
+    internal static string ResolveSource(Exception exception)
+    {
+        // MonitorError must never throw: stack metadata can be trimmed or unavailable, so any failure means "unknown".
+        try
+        {
+            foreach (var frame in new StackTrace(exception, fNeedFileInfo: false).GetFrames() ?? Array.Empty<StackFrame>())
+            {
+                var type = frame.GetMethod()?.DeclaringType;
+                if (type?.Namespace is null || !type.Namespace.StartsWith("Reqnroll.IdeSupport", StringComparison.Ordinal))
+                    continue;
+
+                // <Method>d__3 and <>c__DisplayClass are nested, compiler-named types: report their declaring class.
+                while (type.IsNested && type.Name.StartsWith('<') && type.DeclaringType is { } outer)
+                    type = outer;
+                return type.Name;
+            }
+        }
+        catch (Exception)
+        {
+            // fall through: no Source
+        }
+
+        return null;
+    }
 
     /// <summary>Replaces filesystem-path-shaped substrings with <c>&lt;path&gt;</c>.</summary>
     internal static string RedactPaths(string message) =>

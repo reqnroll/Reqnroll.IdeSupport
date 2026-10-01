@@ -347,4 +347,38 @@ public class FindStepUsagesHandlerTests
             "FindStepDefinitionUsages command executed",
             Arg.Is<Dictionary<string, object?>>(p => (int)p["UsagesCount"]! == 1));
     }
+
+    // ── Telemetry characteristics (issue #849) ───────────────────────────────
+
+    [Fact]
+    public async Task Handle_usages_across_files_emit_telemetry_with_file_count_and_duration_bucket()
+    {
+        var otherFeature = DocumentUri.FromFileSystemPath("/workspace/other.feature");
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { MakeMatch(FeatureUri, 33, 6), MakeMatch(FeatureUri, 11, 3), MakeMatch(otherFeature, 33, 6) });
+
+        await CreateSut().HandleAsync(RequestAt(CsUri, 9, 0), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "FindStepDefinitionUsages command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["UsagesCount"]! == 3 && (int)p["FileCount"]! == 2
+                && (string)p["Protocol"]! == "reqnroll/findStepUsages"
+                && p["DurationBucket"] is string));
+    }
+
+    [Fact]
+    public async Task Handle_binding_with_no_usages_emits_telemetry_with_zero_file_count()
+    {
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(Array.Empty<StepBindingMatch>());
+        _registryLookup.HasBindingAtLocation(Arg.Any<DocumentUri>(), Arg.Any<SourceLocation>()).Returns(true);
+
+        await CreateSut().HandleAsync(RequestAt(CsUri, 9, 0), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "FindStepDefinitionUsages command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["FileCount"]! == 0 && p["DurationBucket"] is string));
+    }
 }

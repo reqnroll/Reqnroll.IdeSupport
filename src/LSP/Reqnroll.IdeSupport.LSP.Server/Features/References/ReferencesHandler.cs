@@ -59,6 +59,7 @@ public sealed class ReferencesHandler
         CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // Performance Verification (Layer 4): time the workspace-wide references search.
         using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentReferences, uri);
@@ -104,7 +105,7 @@ public sealed class ReferencesHandler
 
             _logger.LogVerbose(
                 $"ReferencesHandler: binding at {filePath}:{line} has 0 usages");
-            SendUsagesTelemetry(0, cancellationToken);
+            SendUsagesTelemetry(0, 0, started, cancellationToken);
             return Task.FromResult<LocationOrLocationLinks>(new LocationOrLocationLinks());
         }
 
@@ -119,7 +120,8 @@ public sealed class ReferencesHandler
             }))
             .ToArray();
 
-        SendUsagesTelemetry(usages.Count, cancellationToken);
+        SendUsagesTelemetry(
+            usages.Count, usages.Select(u => u.FeatureDocumentId).Distinct().Count(), started, cancellationToken);
 
         return Task.FromResult<LocationOrLocationLinks>(
             new LocationOrLocationLinks(locations));
@@ -133,12 +135,14 @@ public sealed class ReferencesHandler
     /// Visual Studio's custom request — produce one comparable usage-count metric instead of an
     /// undercount that silently excludes two of the three IDE clients.
     /// </summary>
-    private void SendUsagesTelemetry(int usagesCount, CancellationToken cancellationToken) =>
+    private void SendUsagesTelemetry(int usagesCount, int fileCount, long startedTimestamp, CancellationToken cancellationToken) =>
         _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionUsagesCommandExecuted, new()
         {
             ["UsagesCount"] = usagesCount,
             ["IsCancelled"] = cancellationToken.IsCancellationRequested,
             ["Protocol"] = "textDocument/references",
+            [TelemetryProperties.FileCount] = fileCount,
+            [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(startedTimestamp),
         });
 
     private static bool IsCSharp(DocumentUri uri) =>

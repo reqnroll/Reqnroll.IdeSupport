@@ -205,6 +205,8 @@ public class ResolveContainerTestTargetsHandlerTests
         await CreateSutWithTelemetry(telemetry).HandleAsync(
             RequestAt(FeatureUri, 0, 0, 4, 0), CancellationToken.None);
 
-        telemetry.Received(1).SendEvent("ResolveContainerTestTargets command executed", Arg.Any<Dictionary<string, object?>>());
+        telemetry.Received(1).SendEvent(
+            "ResolveContainerTestTargets command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["TargetCount"]! == 0 && (string)p["Kind"]! == "Feature"));
     }
 }

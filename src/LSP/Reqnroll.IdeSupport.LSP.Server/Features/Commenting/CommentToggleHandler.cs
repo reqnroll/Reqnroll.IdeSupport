@@ -114,7 +114,11 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         _logger.LogInfo($"Comment/Uncomment toggle reqnroll.toggleComment: {uri} lines [{startLine}..{endLine}] mode={mode} → {result.Edits.Count} change(s)");
 
         // Telemetry
-        _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new());
+        _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new()
+        {
+            [TelemetryProperties.Mode] = mode.ToString(),
+            [TelemetryProperties.LineCountBucket] = TelemetryBuckets.LineCount(Math.Max(0, endLine - startLine + 1)),
+        });
 
         // Uncomment on lines that carry no comment yields nothing to change; skip the round-trip.
         if (result.Edits.Count == 0)

@@ -69,6 +69,7 @@ public sealed class FindStepUsagesHandler
         CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // Performance Verification (Layer 4): time the workspace-wide step-usages search.
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindStepUsages, uri);
@@ -117,6 +118,8 @@ public sealed class FindStepUsagesHandler
                 ["UsagesCount"] = 0,
                 ["IsCancelled"] = cancellationToken.IsCancellationRequested,
                 ["Protocol"] = "reqnroll/findStepUsages",
+                [TelemetryProperties.FileCount] = 0,
+                [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(started),
             });
             return Task.FromResult<FindStepUsagesResponse>(
                 new FindStepUsagesResponse { IsBinding = true });
@@ -135,6 +138,8 @@ public sealed class FindStepUsagesHandler
             ["UsagesCount"] = usages.Count,
             ["IsCancelled"] = cancellationToken.IsCancellationRequested,
             ["Protocol"] = "reqnroll/findStepUsages",
+            [TelemetryProperties.FileCount] = usages.Select(u => u.FeatureDocumentId).Distinct().Count(),
+            [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(started),
         });
 
         return Task.FromResult<FindStepUsagesResponse>(

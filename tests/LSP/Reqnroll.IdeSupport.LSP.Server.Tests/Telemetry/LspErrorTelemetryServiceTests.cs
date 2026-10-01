@@ -27,6 +27,59 @@ public class LspErrorTelemetryServiceTests
                 !props.ContainsKey("IsFatal")));
     }
 
+    [Fact]
+    public void MonitorError_attributes_a_thrown_exception_to_the_class_it_passed_through()
+    {
+        var thrown = CaptureThrown(() => throw new InvalidOperationException("boom"));
+
+        CreateSut().MonitorError(thrown);
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props =>
+                (string?)props["Source"] == nameof(LspErrorTelemetryServiceTests)));
+    }
+
+    [Fact]
+    public async Task MonitorError_folds_a_compiler_generated_async_type_into_its_declaring_class()
+    {
+        var thrown = await CaptureThrownAsync();
+
+        CreateSut().MonitorError(thrown);
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props =>
+                (string?)props["Source"] == nameof(LspErrorTelemetryServiceTests)));
+    }
+
+    [Fact]
+    public void MonitorError_omits_Source_for_an_exception_that_was_never_thrown()
+    {
+        CreateSut().MonitorError(new InvalidOperationException("never thrown"));
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props => !props.ContainsKey("Source")));
+    }
+
+    private static Exception CaptureThrown(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { return ex; }
+        throw new InvalidOperationException("action did not throw");
+    }
+
+    private static async Task<Exception> CaptureThrownAsync()
+    {
+        try
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("async boom");
+        }
+        catch (Exception ex) { return ex; }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

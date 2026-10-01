@@ -147,6 +147,9 @@ public class FindStepDefinitionsHandlerTests
 
         telemetry.Received(1).SendEvent(
             "GoToStepDefinition command executed",
-            Arg.Is<Dictionary<string, object?>>(p => (int)p["LocationCount"]! == 1));
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["LocationCount"]! == 1
+                && (string)p["Status"]! == "Ambiguous"
+                && (string)p["Protocol"]! == "reqnroll/findStepDefinitions"));
     }
 }
