@@ -130,8 +130,8 @@ There are two ways to populate `server/<rid>/`, both wired up in `build.gradle.k
   server build and full diagnostic logging with zero manual configuration.
 
 - **CI** (see `.github/workflows/ci.yml`'s `build-rider-plugin` job) — passes
-  `-PlspServerBuildDir=<dir>`, where `<dir>` contains a `win-x64/`, `linux-x64/`,
-  `osx-x64/`, `osx-arm64/` subdirectory (populated from the `server-<rid>` artifacts
+  `-PlspServerBuildDir=<dir>`, where `<dir>` contains a `win-x64/`, `win-arm64/`, `linux-x64/`,
+  `linux-arm64/`, `osx-x64/`, `osx-arm64/` subdirectory (populated from the `server-<rid>` artifacts
   `test-lsp.yml` already built and tested). `publishServer` is skipped entirely in this
   mode — Gradle never needs `dotnet` on the CI runner — and `prepareSandbox` bundles
   every RID found under `<dir>` instead of just one.

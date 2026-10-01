@@ -31,7 +31,7 @@
 # that didn't change, for no benefit. ci.yml's `lsp` job passes skip-tests:
 # true when its `core_lsp` paths-filter output is false, skipping straight
 # from build-lsp to publish-lsp-server (build-lsp itself still runs as a
-# cheap fail-fast check before spending time on the 4-way publish matrix).
+# cheap fail-fast check before spending time on the 6-way publish matrix).
 # ---------------------------------------------------------------------------
 name: Test LSP
 
@@ -259,7 +259,7 @@ jobs:
       (needs.spec-test-lsp.result == 'success' || needs.spec-test-lsp.result == 'skipped')
     strategy:
       matrix:
-        rid: [win-x64, linux-x64, osx-x64, osx-arm64]
+        rid: [win-x64, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

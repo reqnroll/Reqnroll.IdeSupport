@@ -518,7 +518,7 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 #### Startup sequence
 
 1. `activate()` registers command stubs and creates output/trace channels.
-2. Server binary is resolved for the host platform/architecture (`win-x64`, `osx-x64`, `osx-arm64`, `linux-x64`). If the binary is missing a VS Code error notification is shown.
+2. Server binary is resolved for the host platform/architecture (`win-x64`, `win-arm64`, `osx-x64`, `osx-arm64`, `linux-x64`, `linux-arm64`). If the binary is missing a VS Code error notification is shown.
 3. `LanguageClient` is constructed with `--ide vscode` flag and started via stdio.
 4. `StatusBarManager` subscribes to `onDidChangeState` immediately so the status bar reflects the `Starting` → `Running` transition.
 5. After `client.start()` resolves, `ProjectManager` is instantiated. It scans the workspace for `.csproj` files and sends `reqnroll/projectLoaded` notifications with MSBuild-evaluated properties (v2), falling back to empty fields if `dotnet` is unavailable.
@@ -555,8 +555,8 @@ When `reqnroll.trace.server` is set to `messages` or `verbose`, the `lspInspecto
 #### Packaging and distribution
 
 - Built with `vsce` (VS Code Extension CLI) and packaged as a `.vsix`
-- The LSP server self-contained binaries for all four RIDs are bundled under `server/<rid>/` inside the `.vsix`
-- CI publishes all four RIDs in parallel (see `.github/workflows/ci.yml`); the `build-vscode-extension` job downloads all four artifacts and then runs `vsce package`
+- The LSP server self-contained binaries for all six RIDs are bundled under `server/<rid>/` inside the `.vsix`
+- CI publishes all six RIDs in parallel (see `.github/workflows/ci.yml`); the `build-vscode-extension` job downloads all six artifacts and then runs `vsce package`
 - Minimum VS Code version: see [§6.1's client capabilities table](#61-vs-code) — an
   intentional pin (`vscode-languageclient` v10 compatibility), not a plain "current
   version" note; don't restate the number here separately from that table
@@ -662,7 +662,7 @@ Pure Gradle, via the `org.jetbrains.intellij.platform` Gradle plugin (Kotlin/JVM
 | Local dev (`./gradlew runIde`, no `-PlspServerBuildDir`) | The `publishServer` task runs `dotnet publish` for the host OS/arch only |
 | CI (`-PlspServerBuildDir=<dir>`) | `publishServer` is skipped; `prepareSandbox` copies whichever `server-<rid>` subdirectories already exist under `<dir>` — pre-built by the shared `test-lsp.yml` job — so Gradle never shells to `dotnet` at all |
 
-Since Rider runs on every desktop OS (unlike VS), the packaged plugin bundles **all four RIDs** (`win-x64`, `linux-x64`, `osx-x64`, `osx-arm64`); `ReqnrollServerPathResolver` picks the right one at runtime.
+Since Rider runs on every desktop OS (unlike VS), the packaged plugin bundles **all six RIDs** (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`); `ReqnrollServerPathResolver` picks the right one at runtime.
 
 Key Gradle tasks: `buildPlugin` (packages the `.zip`), `verifyPlugin` (JetBrains Plugin Verifier — the Marketplace plugin ID deliberately avoids the substring "rider", which the Verifier rejects), `runIde` (local dev sandbox), `test` (JUnit5/`kotlin.test` unit tests).
 
@@ -872,7 +872,10 @@ interceptor registered on that IDE's LSP client (`TelemetryEventInterceptor.cs` 
 Rider). Rider had no such interceptor until issue #255 — every event below was reaching VS and VS
 Code but producing zero telemetry for Rider users. This resolved [Q11](LSP-IDE-Support-Open-Questions.md)
 in favor of option (c); see the archived `docs/Archive/build-plan-telemetry-capture.md` and
-`docs/Archive/plan-refactor-analytics-appinsights.md` for the full design detail.
+`docs/Archive/plan-refactor-analytics-appinsights.md` for the full design detail. Every event
+name is defined in one catalog — `TelemetryEvents` in `Reqnroll.IdeSupport.Common.Telemetry` —
+and the per-event schema, emitter, trigger, and Analytics use are documented in
+[`Telemetry-Events-Inventory.md`](Telemetry-Events-Inventory.md).
 
 Separately, the LSP server's own `ITelemetryService` was wired to a permanent no-op
 (`NullTelemetryService`), so `MonitorError` calls from LSP.Core were silently dropped in production
@@ -895,40 +898,42 @@ hardcoded to `NullTelemetryService` rather than the DI-registered service, so er
 through that specific access path (e.g. `WatchedFilesHandler`'s config-load exceptions) were
 silently dropped even after the `MonitorError` fix above — now fixed by injecting the real service.
 
-The following monitoring events from the existing `Reqnroll.VisualStudio` extension should be carried forward:
+The table below maps each legacy `Reqnroll.VisualStudio` monitoring event to its current
+implementation (all names are defined in the shared `TelemetryEvents` catalog; full schemas are
+in [`Telemetry-Events-Inventory.md`](Telemetry-Events-Inventory.md)):
 
-| Event | Trigger |
+| Legacy event | Current implementation |
 |-------|---------|
-| `ExtensionInstalled` | First activation after installation |
-| `ExtensionUpgraded` | First activation after version change |
-| `ExtensionDaysOfUsage` | Daily active use heartbeat — **implemented**: `WelcomeService` fires it right after incrementing/persisting `status.UsageDays` (issue #255/#259; the underlying day-counting was already live, only the telemetry call was missing) |
-| `OpenProject` | Workspace project loaded (includes feature file count) |
-| `OpenFeatureFile` | `.feature` file opened — **implemented**: wired into `VsProjectEventMonitor`'s document-activation phase machine (fires exactly once per open-lifetime, on the same `SendNow` transition that triggers `reqnroll/documentActivated` — issue #255/#259; the transmission code already existed but had no caller anywhere) |
-| `ReqnrollDiscovery` | Binding discovery completed (success/failure, step count) |
-| `CommandGoToStepDefinition` | F5 invoked |
-| `CommandGoToHook` | F17 invoked |
-| `CommandDefineSteps` | F6 invoked — **implemented** as `"DefineSteps command offered"` (`CodeActionHandler`), sent when the code action is *offered* (undefined-step count, actions-offered count). Not "action taken": the code action's `WorkspaceEdit` is applied entirely client-side (`workspace/applyEdit`), so — unlike F13's `workspace/executeCommand` round trip — the server has no signal for whether the user actually clicked it. Offered count is the closest available proxy |
-| `CommandFindStepDefinitionUsages` | F14 invoked — **implemented** as `"FindStepDefinitionUsages command executed"` (`FindStepUsagesHandler`), with `UsagesCount` and a best-effort `IsCancelled` (`cancellationToken.IsCancellationRequested` at completion) |
-| `CommandFindUnusedStepDefinitions` | F15 invoked (unused count, files scanned) |
-| `CommandRenameStep` | F16 invoked |
-| `CommandAutoFormatDocument` | F11 invoked — **implemented** as `"AutoFormatDocument command executed"` (`FormattingHandler`), with an `IsSelectionFormatting` flag distinguishing whole-document from range formatting |
-| `CommandAutoFormatTable` | F12 invoked — **deliberately not implemented**: on-type table formatting fires on every keystroke inside a table (`|`/tab/newline), not on a discrete user command, so it's scoped out of usage telemetry the same way the continuous editor features (semantic tokens, completion, etc.) are — perf sampling already covers it (`PerfTargets.OnTypeFormatting`) |
-| `CommandCommentUncomment` | F13 invoked |
-| `CommandAddFeatureFile` | New `.feature` item added |
-| `ProjectTemplateWizardCompleted` | F19 wizard completed (framework selected) |
-| `Error` | Unhandled exception (fatal / non-fatal) — **implemented** server-side (`LspErrorTelemetryService`) for LSP.Core exceptions (issue #255); VS-side wizard/dialog exceptions were already transmitted via the pre-existing `TelemetryTransmitter.TransmitExceptionEvent` path |
-| `ParserParse` | Feature file parsed (duration, file size, dialect) — **retired, not carried forward** (issue #255/#259): VS no longer parses `.feature` files locally, so this event's whole trigger context is gone; the modern equivalent is the LSP server's perf-sampling telemetry (`PerfSample` events for `textDocument/didOpen`/`didChange`, see Performance Verification above), which times parsing uniformly across every IDE instead |
-| `NotificationShown` | User-facing notification displayed (notification ID) |
-| `NotificationDismissed` | User-facing notification dismissed |
-| `LinkClicked` | External link opened from extension UI |
+| `ExtensionInstalled` | ✅ `ExtensionInstalled` (`TelemetryService.MonitorExtensionInstalled`) |
+| `ExtensionUpgraded` | ✅ `ExtensionUpgraded` (with `OldExtensionVersion`) |
+| `ExtensionDaysOfUsage` | ✅ `"{N} day usage"` heartbeat family (`DaysOfUsageEventNameFormat`), fired by `WelcomeService` right after incrementing `status.UsageDays` (issue #255/#259; the day-counting was already live, only the telemetry call was missing) |
+| `OpenProject` | ✅ `OpenProject command executed` — now **server-side** (`LspWorkspaceScopeManager`, issue #581 finding 2), covering all three IDEs from one place; `FeatureFileCount` is best-effort (`null` until the membership baseline arrives, not zero) |
+| `OpenFeatureFile` | ✅ `Feature file opened` (`TelemetryService`; wired into `VsProjectEventMonitor`'s document-activation phase machine, once per open-lifetime — issue #255/#259) |
+| `ReqnrollDiscovery` | ✅ `ReqnrollDiscoveryExecuted` — success / hash-noop / failure outcomes discriminated by `DiscoverySource` (Connector/Roslyn) and `TriggerContext` |
+| `CommandGoToStepDefinition` | ✅ `GoToStepDefinition command executed` (server; both the `textDocument/definition` and VS's `reqnroll/findStepDefinitions` paths — issue #757) |
+| `CommandGoToHook` | ✅ split (issue #698): the server's `FindHooks command executed` fires for every `reqnroll/findHooks` lookup incl. CodeLens prefetch; each IDE client emits `GoToHook command executed` only for a genuine navigation |
+| `CommandDefineSteps` | ✅ `DefineSteps command offered` (`CodeActionHandler`) — *offered*, not accepted (the `WorkspaceEdit` is applied client-side, so acceptance is unobservable to the server) |
+| `CommandFindStepDefinitionUsages` | ✅ `FindStepDefinitionUsages command executed` — shared by `reqnroll/findStepUsages` (VS) and `textDocument/references` (VS Code/Rider), discriminated by `Protocol` (issue #581 finding 3) |
+| `CommandFindUnusedStepDefinitions` | ✅ `FindUnusedStepDefinitions command executed` |
+| `CommandRenameStep` | ✅ `Rename step command executed` (server, every terminal path; `Erroneous`/`Reason`/`ChangeAnnotationsUsed`/`EditedFileCount`) |
+| `CommandAutoFormatDocument` | ✅ `AutoFormatDocument command executed` (`IsSelectionFormatting`) |
+| `CommandAutoFormatTable` | ⏸️ deliberately not implemented — on-type table formatting fires per keystroke, not per command; perf sampling covers it (`PerfTargets.OnTypeFormatting`) |
+| `CommandCommentUncomment` | ✅ `CommentUncomment command executed` |
+| `CommandAddFeatureFile` | ✅ `Feature file added` |
+| `ProjectTemplateWizardCompleted` | ✅ `Project Template Wizard Started` / `Project Template Wizard Completed` |
+| `Error` | ✅ `UnhandledException` (server-side, path-scrubbed — issue #255); VS-host wizard/dialog exceptions go through `TrackException` (`TransmitExceptionEvent`/`TransmitFatalExceptionEvent`) |
+| `ParserParse` | ⏸️ retired (issue #255/#259) — VS no longer parses `.feature` files locally; the modern equivalent is the LSP server's sampled `PerfSample` timing (`textDocument/didOpen`/`didChange`) |
+| `NotificationShown` / `NotificationDismissed` | ⏸️ not carried over — the current extension has no notification system to hook into |
+| `LinkClicked` | ✅ `Link clicked` (`Source`, `URL`) |
+| *(new since the legacy list)* | `RenameTargets resolved`, `GoToMatchingScenarios command executed`, `ResolveTestTargets command executed` / `ResolveContainerTestTargets command executed`, `TestOutcomesRunCompleted`, `PerfSample`, `VsWellKnownIdsSelfCheckMismatch` |
 
-**Required data model enhancements** over the existing VS extension:
-
-| Field | Rationale |
-|-------|-----------|
-| `IDEClient` (`visualstudio` / `vscode` / `rider`) | Derived from the resolved IDE identity — the `--ide` flag, falling back to `InitializeParams.ClientInfo` when no flag was passed (issue #709); enables per-IDE breakdown of all events |
-| `DiscoveryType` (`roslyn` / `reflection`) | Added to `ReqnrollDiscovery` event; helps understand cache hit rates and build dependency |
-| `ExtensionInstalled` / `ExtensionUpgraded` origin | These events fire before the LSP server starts; must be sent by the IDE client, not the server — reinforces the open question on telemetry origin (Q11) |
+The legacy "required data model enhancements" list is now as-built: discovery events carry
+`DiscoverySource`/`TriggerContext` (the proposed `DiscoveryType` idea, renamed); install/upgrade
+events are originated by the VS host (before the LSP server starts); per-IDE breakdown is
+satisfied by each transmitter's environment properties — VS's `ReqnrollTelemetryContextInitializer`
+adds `Ide`/`IdeVersion`/`ExtensionVersion`, Rider adds the same three to every envelope, VS
+Code's `TelemetryReporter` adds its own telemetry-level context — with `PerfSample` additionally
+carrying an explicit `IDEClient` field.
 
 ### Configuration
 
@@ -961,11 +966,11 @@ There are only two workflow files: `ci.yml` and `test-lsp.yml` (a reusable workf
 | Workflow | Trigger | What it does |
 |---|---|---|
 | `ci.yml` | Push to `main` / PR / manual dispatch, path-filtered to `src/{Core,LSP,VisualStudio,VSCode,Rider}/**` and the matching `tests/**` trees | Orchestrates everything below via jobs, gated per-client on which paths changed (`changes` job) |
-| `test-lsp.yml` | Called by `ci.yml`'s `lsp` job | Builds the LSP server as a self-contained executable for all four RIDs and runs `LSP.Core.Tests`/`LSP.Server.Tests`/`LSP.Server.Specs` |
+| `test-lsp.yml` | Called by `ci.yml`'s `lsp` job | Builds the LSP server as a self-contained executable for all six RIDs and runs `LSP.Core.Tests`/`LSP.Server.Tests`/`LSP.Server.Specs` |
 
 `ci.yml`'s per-client jobs (`build-vs-extension` → `test-vs-extension`/`test-vs-wizards` → `publish-vsix`; `build-vscode-extension`/`tsc-only`; `build-rider-plugin` → `test-rider-plugin` → `publish-rider-plugin`) are jobs inside that one file, not separate workflows. Despite their names, `publish-vsix` and `publish-rider-plugin` only upload the built package as a CI artifact — actual Marketplace publication is not automated by either job today.
 
-**Build matrix**: The LSP server is built as a self-contained executable for `win-x64`, `linux-x64`, `osx-x64`, and `osx-arm64` (`test-lsp.yml`'s matrix). Each IDE extension bundles the platform-appropriate server binary/binaries. Testing the server in isolation on Linux in CI is a concrete benefit of the LSP separation from IDE-specific code.
+**Build matrix**: The LSP server is built as a self-contained executable for `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64` (`test-lsp.yml`'s matrix). Each IDE extension bundles the platform-appropriate server binary/binaries. Testing the server in isolation on Linux in CI is a concrete benefit of the LSP separation from IDE-specific code.
 
 ### Versioning and Compatibility
 

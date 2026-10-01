@@ -15,8 +15,13 @@ suite('resolveServerPath', () => {
       assert.strictEqual(ridFor('darwin', 'arm64'), 'osx-arm64');
     });
 
-    test('maps any other platform to linux-x64', () => {
+    test('maps linux/x64 to linux-x64 and linux/arm64 to linux-arm64', () => {
       assert.strictEqual(ridFor('linux', 'x64'), 'linux-x64');
+      assert.strictEqual(ridFor('linux', 'arm64'), 'linux-arm64');
+    });
+
+    test('maps any other platform to linux-x64', () => {
+      assert.strictEqual(ridFor('freebsd', 'x64'), 'linux-x64');
     });
   });
 

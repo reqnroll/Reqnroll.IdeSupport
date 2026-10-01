@@ -62,8 +62,10 @@ Key points:
 
 ## 2. Event Schema: Discovery (implemented)
 
-Emitted by the LSP server. All use event name **`Reqnroll Discovery executed`** with a
-`DiscoverySource` discriminator.
+Emitted by the LSP server. All use event name **`ReqnrollDiscoveryExecuted`** (renamed from
+`Reqnroll Discovery executed` in issue #627) with a `DiscoverySource` discriminator. All names
+are defined in the shared catalog `TelemetryEvents` (`Reqnroll.IdeSupport.Common.Telemetry`);
+the live per-event schema is `docs/Telemetry-Events-Inventory.md`.
 
 ### 2.1 Sources & triggers
 
@@ -114,22 +116,32 @@ The failure event is emitted from the `catch (Exception)` block; `OperationCance
 All emitted from the corresponding LSP server handler at its success exit point via
 `ILspTelemetryService`.
 
-| Event | Properties | Handler | Status |
+| Event | Properties | Handler(s) | Status |
 |-------|-----------|---------|--------|
-| `GoToStepDefinition command executed` | `GenerateSnippet: bool` | `GoToStepDefinitionsHandler` | ✅ |
-| `GoToHook command executed` | — | `GoToHooksHandler` | ✅ |
+| `GoToStepDefinition command executed` | `LocationCount` | `DefinitionHandler` (`textDocument/definition`), `FindStepDefinitionsHandler` (`reqnroll/findStepDefinitions`) | ✅ |
+| `FindHooks command executed` | — | `FindHooksHandler` (every `reqnroll/findHooks` lookup, incl. CodeLens prefetch) | ✅ (renamed from `GoToHook command executed` in issue #698; genuine navigations are client-originated as `GoToHook command executed`) |
 | `FindUnusedStepDefinitions command executed` | `UnusedStepDefinitions`, `ScannedFeatureFiles`, `IsCancellationRequested` | `FindUnusedStepDefinitionsHandler` | ✅ |
 | `CommentUncomment command executed` | — | `CommentToggleHandler` | ✅ |
-| `Rename step command executed` | `Erroneous: bool` | `StepRenameHandler` | ✅ (see note) |
+| `Rename step command executed` | `Erroneous`, `Reason`, `ChangeAnnotationsUsed`, `EditedFileCount` | `RenameHandler` (every terminal path) | ✅ (see note) |
+| `FindStepDefinitionUsages command executed` | `UsagesCount`, `IsCancelled`, `Protocol` | `FindStepUsagesHandler` + `ReferencesHandler` | ✅ (issue #581 finding 3) |
+| `GoToMatchingScenarios command executed` | — | `FindMatchingScenariosHandler` | ✅ |
+| `DefineSteps command offered` | `UndefinedStepCount`, `ActionsOffered` | `CodeActionHandler` | ✅ |
+| `OpenProject command executed` | `FeatureFileCount` | `LspWorkspaceScopeManager` | ✅ (issue #581 finding 2) |
+| `RenameTargets resolved` | `TargetCount` | `RenameTargetsHandler` | ✅ (issue #581 finding 5) |
+| `ResolveTestTargets command executed` / `ResolveContainerTestTargets command executed` | — | `ResolveTestTargetsHandler` / `ResolveContainerTestTargetsHandler` | ✅ |
+| `TestOutcomesRunCompleted` | `ResultCount`, `Aborted`, `Canceled`, `ReporterKind` | `TestOutcomeTcpListener` | ✅ (issue #722) |
 
 > **Deviation from the original plan:** Rename was planned as a VS *client-side*
 > (`RenameStepService` → `IAnalyticsTransmitter`) capture. It is instead emitted **server-side**
-> from `StepRenameHandler.HandleRenameAsync`, consistent with the "server emits / host
-> transmits" pipeline and avoiding a second emission path. The event currently fires on the
-> success branch (`Erroneous=false`); the early-return validation-failure branches do not emit.
+> from `RenameHandler.HandleRenameAsync`, consistent with the "server emits / host
+> transmits" pipeline and avoiding a second emission path. Every terminal path emits —
+> success and each validation/rejection branch — so `Erroneous` finally carries the signal its
+> name promises, with `Reason` naming the rejecting validation (issue #581 finding 4).
 
-**Deferred** (commands not present in the current extension): `DefineSteps`,
-`FindStepDefinitionUsages`, `AutoFormatTable` / `AutoFormatDocument`.
+**Deferred / deliberately absent:** `AutoFormatTable` — on-type table formatting fires per
+keystroke, not per command, so it stays out of usage telemetry (perf sampling covers it via
+`PerfTargets.OnTypeFormatting`). `DefineSteps`, `FindStepDefinitionUsages` and
+`AutoFormatDocument` were **implemented** after this plan was written (see the rows above).
 
 ---
 
@@ -293,7 +305,7 @@ server-emission fault.
 ### Record schema (one JSON object per line)
 
 ```json
-{"ts":"2026-06-27T14:02:11.314Z","source":"server","event":"Reqnroll Discovery executed","props":{"DiscoverySource":"Connector","StepDefinitionCount":42,"HookCount":7},"enabled":null,"transmitted":null,"error":null}
+{"ts":"2026-06-27T14:02:11.314Z","source":"server","event":"ReqnrollDiscoveryExecuted","props":{"DiscoverySource":"Connector","StepDefinitionCount":42,"HookCount":7},"enabled":null,"transmitted":null,"error":null}
 {"ts":"2026-06-27T14:02:12.991Z","source":"host","event":"Welcome dialog dismissed","props":{},"enabled":false,"transmitted":false,"error":null}
 {"ts":"2026-06-27T14:02:13.402Z","source":"host","event":"(exception) DiscoveryException","props":{"ExceptionType":"...DiscoveryException","Message":"connector timed out","IsFatal":"True"},"enabled":null,"transmitted":true,"error":null}
 ```
