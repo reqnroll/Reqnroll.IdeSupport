@@ -37,6 +37,9 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     // and the worst outcome is one duplicate log line.
     private bool _loggedNonReqnrollSkip;
 
+    /// <inheritdoc/>
+    public ConnectorRunTelemetry? LastRunTelemetry { get; private set; }
+
     /// <summary>Initializes a new instance of the <see cref="ConnectorDiscoveryService"/> class.</summary>
     public ConnectorDiscoveryService(IIdeSupportLogger logger, IOutProcConnectorFactory connectorFactory,
         IFileSystemForIDE fileSystem)
@@ -84,6 +87,9 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         string lastHash,
         CancellationToken ct)
     {
+        // Cleared up front so a run that never reaches the connector (no assembly, hash match,
+        // non-Reqnroll project) can't leave the previous run's telemetry to be re-sent.
+        LastRunTelemetry = null;
         var assemblyPath = scope.OutputAssemblyPath;
 
         if (string.IsNullOrEmpty(assemblyPath))
@@ -154,6 +160,9 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return (lastGood, lastHash);
         }
         sw.Stop();
+
+        // Issue #846: keep only the whitelisted, path-free subset of the connector's telemetry.
+        LastRunTelemetry = ConnectorRunTelemetry.FromConnectorProperties(result.TelemetryProperties);
 
         ct.ThrowIfCancellationRequested();
 

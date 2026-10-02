@@ -112,6 +112,50 @@ public class ConnectorDiscoveryServiceTests : IDisposable
 
     private ConnectorDiscoveryService CreateSut() => new(_logger, _factory, new FileSystemForIDE());
 
+    // ── Connector telemetry whitelist (issue #846) ─────────────────────────────
+
+    [Fact]
+    public void RunDiscovery_exposes_only_whitelisted_connector_telemetry()
+    {
+        var result = SuccessfulResult();
+        result.TelemetryProperties = new Dictionary<string, object>
+        {
+            ["ReqnrollVersion"] = "2.1.3-beta.4",
+            ["ProjectReqnrollVersion"] = "2.1.3",
+            ["ConnectorType"] = "Generic",
+            ["ConnectorExitCode"] = 0,
+            ["ConnectorArguments"] = "C:\\Users\\someone\\proj\\MyApp.Tests.dll",
+            ["Error"] = "Could not load C:\\Users\\someone\\secret.dll",
+            ["ProjectTargetFramework"] = ".NETCoreApp,Version=v8.0",
+        };
+        GivenConnectorReturns(result);
+        var sut = CreateSut();
+
+        sut.RunDiscovery(MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        sut.LastRunTelemetry.Should().Be(new ConnectorRunTelemetry("2.1", "Generic", 0));
+        var sent = new Dictionary<string, object?>();
+        sut.LastRunTelemetry!.AddTo(sent);
+        sent.Keys.Should().BeEquivalentTo("ReqnrollVersion", "ConnectorType", "ConnectorExitCode");
+        sent.Values.OfType<string>().Should().NotContain(v => v.Contains("Users") || v.Contains("secret"));
+    }
+
+    [Fact]
+    public void RunDiscovery_clears_LastRunTelemetry_when_a_later_run_does_not_reach_the_connector()
+    {
+        var result = SuccessfulResult();
+        result.TelemetryProperties = new Dictionary<string, object> { ["ConnectorType"] = "Generic" };
+        GivenConnectorReturns(result);
+        var sut = CreateSut();
+        var scope = MakeScope(_assemblyPath);
+        var (_, hash) = sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+        sut.LastRunTelemetry.Should().NotBeNull();
+
+        sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, hash, CancellationToken.None); // hash match
+
+        sut.LastRunTelemetry.Should().BeNull("a hash-noop run did not invoke the connector, so stale telemetry must not be re-sent");
+    }
+
     // ── Happy path ─────────────────────────────────────────────────────────────
 
     [Fact]

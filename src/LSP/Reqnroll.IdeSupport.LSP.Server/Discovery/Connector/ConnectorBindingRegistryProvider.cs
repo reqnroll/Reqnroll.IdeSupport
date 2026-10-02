@@ -4,6 +4,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -261,6 +262,9 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
     private async Task RunDiscoveryAsync(CancellationToken ct)
     {
+        // Times only the discovery run itself (not the debounce); declared outside the try so the
+        // failure event can report it too.
+        var stopwatch = new System.Diagnostics.Stopwatch();
         try
         {
             // Debounce: absorb file-system churn from incremental builds.
@@ -268,9 +272,11 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
             ct.ThrowIfCancellationRequested();
 
+            stopwatch.Start();
             var (newRegistry, newHash) = await Task
                 .Run(() => _discoveryService.RunDiscovery(_project, _current, _lastHash, ct), ct)
                 .ConfigureAwait(false);
+            stopwatch.Stop();
 
             ct.ThrowIfCancellationRequested();
 
@@ -284,6 +290,10 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                     ["DiscoverySource"] = "Connector",
                     ["HashMatched"] = true,
                     ["TriggerContext"] = _isFirstRun ? "projectLoad" : "build",
+                    ["IsFailed"] = false,
+                    ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
+                    ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                    ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
                 });
                 if (_isFirstRun) _isFirstRun = false;
                 return;
@@ -312,7 +322,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             _isFirstRun = false;
             // StepArgumentTransformations are not reported: the connector surfaces them, but
             // ProjectBindingRegistry does not model them, so there is no count to emit here.
-            _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
+            var properties = new Dictionary<string, object?>
             {
                 ["DiscoverySource"] = "Connector",
                 ["TriggerContext"] = triggerContext,
@@ -320,7 +330,14 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 ["StepDefinitionCount"] = newRegistry.StepDefinitions.Length,
                 ["HookCount"] = newRegistry.Hooks.Length,
                 ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
-            });
+                ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
+            };
+            // Issue #846: project profile (Reqnroll version, legacy SpecFlow, connector type, exit
+            // code) from the connector run, whitelisted by ConnectorRunTelemetry -- never the
+            // connector's command line or raw error text.
+            _discoveryService.LastRunTelemetry?.AddTo(properties);
+            _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, properties);
 
             _bindingRegistryChanged?.Invoke(this, true);
         }
@@ -344,6 +361,8 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 ["IsFailed"] = true,
                 ["ErrorMessage"] = ex.Message,
                 ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
+                ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
             });
         }
     }

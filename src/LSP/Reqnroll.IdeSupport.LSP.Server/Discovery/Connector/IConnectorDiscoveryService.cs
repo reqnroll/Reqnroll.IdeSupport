@@ -13,6 +13,14 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 public interface IConnectorDiscoveryService
 {
     /// <summary>
+    /// The whitelisted telemetry of the most recent run that actually invoked the connector
+    /// (successful or not), or <see langword="null"/> when the latest run did not reach the
+    /// connector (no assembly, hash match, non-Reqnroll project, invocation exception).
+    /// Instances are per-project, so this is per-project state.
+    /// </summary>
+    ConnectorRunTelemetry? LastRunTelemetry { get; }
+
+    /// <summary>
     /// Runs discovery for <paramref name="scope"/>.
     /// </summary>
     /// <returns>
