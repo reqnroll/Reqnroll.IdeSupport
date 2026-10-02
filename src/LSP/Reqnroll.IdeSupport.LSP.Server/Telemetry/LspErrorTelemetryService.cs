@@ -1,5 +1,6 @@
 #nullable disable
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Collections.Generic;
 using Reqnroll.IdeSupport.Common;
@@ -31,12 +32,23 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// </summary>
 public sealed class LspErrorTelemetryService : ITelemetryService
 {
+    /// <summary>Most distinct stacks per server session that get <c>StackFrames</c> attached (volume bound, issue #620).</summary>
+    internal const int DefaultMaxDistinctStacksPerSession = 25;
+
     private readonly ILspTelemetryService _lspTelemetryService;
+    private readonly int _maxDistinctStacks;
+    private readonly ConcurrentDictionary<string, byte> _stacksSent = new();
 
     /// <summary>Initializes a new instance of the <see cref="LspErrorTelemetryService"/> class.</summary>
     public LspErrorTelemetryService(ILspTelemetryService lspTelemetryService)
+        : this(lspTelemetryService, DefaultMaxDistinctStacksPerSession)
+    {
+    }
+
+    internal LspErrorTelemetryService(ILspTelemetryService lspTelemetryService, int maxDistinctStacks)
     {
         _lspTelemetryService = lspTelemetryService;
+        _maxDistinctStacks = maxDistinctStacks;
     }
 
     /// <summary>No-op: the LSP server does not track project-system open telemetry.</summary>
@@ -72,8 +84,32 @@ public sealed class LspErrorTelemetryService : ITelemetryService
             properties["IsFatal"] = isFatal.Value;
         if (ResolveSource(exception) is { } source)
             properties[TelemetryProperties.Source] = source;
+        if (ResolveStackFramesOnce(exception) is { } stackFrames)
+            properties[TelemetryProperties.StackFrames] = stackFrames;
 
         _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
+    }
+
+    /// <summary>
+    /// The sanitized stack (<see cref="ExceptionStackSanitizer"/>) the first time this exception type/stack is
+    /// seen in this session, up to a per-session cap on distinct stacks; <see langword="null"/> otherwise, so a
+    /// hot failure loop cannot multiply payload size (the event itself is still sent and counted).
+    /// </summary>
+    private string ResolveStackFramesOnce(Exception exception)
+    {
+        var frames = ExceptionStackSanitizer.Sanitize(exception);
+        if (frames is null || _stacksSent.Count >= _maxDistinctStacks)
+            return null;
+        var key = exception.GetType().FullName + "|" + frames;
+        if (!_stacksSent.TryAdd(key, 0))
+            return null;
+        // Concurrent callers can all pass the Count check above; back out so the cap is strict.
+        if (_stacksSent.Count > _maxDistinctStacks)
+        {
+            _stacksSent.TryRemove(key, out _);
+            return null;
+        }
+        return frames;
     }
 
     /// <summary>No-op: the LSP server does not track project-template-wizard-started telemetry.</summary>
