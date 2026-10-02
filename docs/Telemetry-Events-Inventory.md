@@ -38,6 +38,27 @@ kill switch; each host additionally honors its own opt-out (VS telemetry setting
 event (server- and host-side) to a local JSONL file — see the archived
 `docs/Archive/build-plan-telemetry-capture.md` §8.
 
+**Delivery policy: best-effort, bounded, silent, one notice (issue #859).** Telemetry must be
+invisible when it cannot be delivered (offline, DNS failure, blocked or black-holed endpoint). Each
+host transmitter has a small circuit breaker (`TelemetryCircuitBreaker.cs` / `.kt` /
+`telemetryCircuitBreaker.ts`, same behaviour in all three):
+
+- After the **first** failure (exception, DNS/connect error, timeout, or non-2xx such as a proxy's
+  403/407) the breaker opens for the rest of the session. While open, `Transmit*` /
+  `sendTelemetryEvent` return immediately without touching the network; events are dropped, not queued.
+- The first failure writes exactly one line to the Reqnroll output pane and log file:
+  `Telemetry endpoint unreachable; telemetry for this session will be dropped`. Later failures are
+  verbose-log only. The notice carries no endpoint or credentials.
+- No exception reaches the user. VS never reports a failed transmission as a new exception event
+  (it would go to the same unreachable endpoint).
+- Shutdown is never delayed: VS uses an in-memory channel only (no on-disk buffer to replay later),
+  skips the flush when the breaker is open, and otherwise bounds it to 500 ms; VS Code bounds the
+  reporter's dispose to 500 ms; Rider sets 5 s connect and request timeouts.
+- The local debug log still records the attempt, with `transmitted:false` and the error.
+- Caveat: VS Code's `TelemetryReporter` and the Application Insights SDK deliver asynchronously and
+  do not report network failures back, so in those two hosts the breaker opens on synchronous
+  failures and on a timed-out flush, not on a failed background send. Rider observes every send.
+
 **Client identity (issue #844).** Every event carries one canonical client identity so
 cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniformly. The decision:
 

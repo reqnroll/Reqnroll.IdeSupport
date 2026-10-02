@@ -9,6 +9,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -53,7 +54,19 @@ object RiderTelemetryTransmitter {
     private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
     private const val USER_ID_PROPERTY_KEY = "com.reqnroll.idesupport.telemetry.userId"
 
-    private val httpClient: HttpClient by lazy { HttpClient.newHttpClient() }
+    // Bounded timeouts (#859): without them a black-holed endpoint leaves one pending request and
+    // socket per event until the OS gives up.
+    internal val CONNECT_TIMEOUT: Duration = Duration.ofSeconds(5)
+    internal val REQUEST_TIMEOUT: Duration = Duration.ofSeconds(5)
+
+    private val httpClient: HttpClient by lazy { newHttpClient() }
+
+    internal fun newHttpClient(): HttpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build()
+
+    internal val breaker = TelemetryCircuitBreaker(
+        onFirstFailure = { ReqnrollDebugLogger.info(it) },
+        onSuppressedFailure = { ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: $it") },
+    )
 
     /**
      * Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled;
@@ -70,30 +83,69 @@ object RiderTelemetryTransmitter {
             return
         }
 
+        if (breaker.isOpen) {
+            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = "telemetry endpoint unreachable")
+            return
+        }
+
         try {
             val stringProps = LinkedHashMap<String, String>()
             properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
             stampClientIdentity(stringProps, ideVersion(), extensionVersion())
 
             val body = buildEnvelope(eventName, userId(), stringProps, Instant.now())
-            val request = HttpRequest.newBuilder()
-                .uri(URI.create(INGESTION_ENDPOINT))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body))
-                .build()
-
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                .exceptionally { ex ->
-                    ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: failed to send $eventName", ex)
-                    null
-                }
+            post(httpClient, URI.create(INGESTION_ENDPOINT), body, breaker) { reason ->
+                debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = reason)
+            }
 
             debugLog.record("host", eventName, properties, enabled = true, transmitted = true)
         } catch (ex: Exception) {
             // A telemetry failure must never break the plugin — same posture as VS's
             // TelemetryTransmitter.TransmitEvent catch-all.
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
+            breaker.recordFailure(ex.message ?: ex.javaClass.simpleName)
             debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = ex.message)
+        }
+    }
+
+    /**
+     * Fire-and-forget POST of [body]; never throws. Any failure (DNS, refused/reset, TLS, timeout,
+     * or a non-2xx status such as a proxy's 403/407) opens [breaker] and is reported to
+     * [onFailure], so an unreachable endpoint costs at most the first in-flight requests (#859).
+     */
+    internal fun post(
+        client: HttpClient,
+        endpoint: URI,
+        body: String,
+        breaker: TelemetryCircuitBreaker,
+        timeout: Duration = REQUEST_TIMEOUT,
+        onFailure: (String) -> Unit = {},
+    ) {
+        try {
+            val request = HttpRequest.newBuilder()
+                .uri(endpoint)
+                .timeout(timeout)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build()
+
+            client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+                .whenComplete { response, ex ->
+                    val reason = when {
+                        ex != null -> (ex.cause ?: ex).let { it.message ?: it.javaClass.simpleName }
+                        response.statusCode() !in 200..299 -> "HTTP ${response.statusCode()}"
+                        else -> null
+                    }
+                    if (reason != null) {
+                        breaker.recordFailure(reason)
+                        onFailure(reason)
+                    }
+                }
+        } catch (ex: Exception) {
+            // Synchronous failure (e.g. unresolvable host surfaced eagerly) -- same policy.
+            val reason = ex.message ?: ex.javaClass.simpleName
+            breaker.recordFailure(reason)
+            onFailure(reason)
         }
     }
 

@@ -3,6 +3,7 @@ using System.ComponentModel.Composition;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -31,6 +32,8 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     private readonly IEnableTelemetryChecker _enableTelemetryChecker;
     private readonly IIdeSupportLogger? _logger;
     private readonly ITelemetryDebugLog _debugLog;
+    private readonly TelemetryCircuitBreaker _breaker;
+    private static readonly TimeSpan FlushTimeout = TimeSpan.FromMilliseconds(500);
 
     /// <summary>MEF importing constructor; builds a real <see cref="TelemetryClient"/> backed by Application Insights.</summary>
     [ImportingConstructor]
@@ -59,11 +62,18 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         _enableTelemetryChecker = enableTelemetryChecker;
         _logger = logger;
         _debugLog = debugLog ?? NullTelemetryDebugLog.Instance;
+        _breaker = new TelemetryCircuitBreaker(logger);
     }
 
     private static TelemetryClient CreateClient(IUserUniqueIdStore userStore, IVersionProvider versionProvider)
     {
-        var config = new TelemetryConfiguration();
+        // Best-effort delivery (#859): an in-memory channel only -- no persistent on-disk buffer
+        // that could be replayed later -- with a small bounded buffer, so an unreachable endpoint
+        // drops events rather than queueing them.
+        var config = new TelemetryConfiguration
+        {
+            TelemetryChannel = new InMemoryChannel { MaxTelemetryBufferCapacity = 100, SendingInterval = TimeSpan.FromSeconds(30) },
+        };
         var assembly = typeof(TelemetryTransmitter).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
             .Single(n => n.EndsWith("InstrumentationKey.txt", StringComparison.Ordinal));
@@ -111,6 +121,13 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
                 return;
             }
 
+            if (_breaker.IsOpen)
+            {
+                _debugLog.Record("host", telemetryEvent.EventName, telemetryEvent.Properties,
+                    enabled: true, transmitted: false, error: "telemetry endpoint unreachable");
+                return;
+            }
+
             var eventTelemetry = new EventTelemetry(telemetryEvent.EventName) { Timestamp = DateTime.UtcNow };
             foreach (var property in telemetryEvent.Properties)
             {
@@ -123,9 +140,11 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            // Never report a failed transmission as a new exception event: it would go to the same
+            // unreachable endpoint (#859).
+            _breaker.RecordFailure(ex);
             _debugLog.Record("host", telemetryEvent.EventName, telemetryEvent.Properties,
                 enabled: enabled, transmitted: false, error: ex.Message);
-            TransmitExceptionEvent(ex, ImmutableDictionary<string, object>.Empty);
         }
     }
 
@@ -162,7 +181,11 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
 
         DumpTelemetryException(exception, additionalPropsArray);
 
-        if (enabled)
+        if (enabled && _breaker.IsOpen)
+        {
+            transmitError = "telemetry endpoint unreachable";
+        }
+        else if (enabled)
         {
             try
             {
@@ -178,6 +201,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             {
                 // catch all exceptions since we do not want to break the whole extension simply because data transmission failed
                 transmitError = ex.Message;
+                _breaker.RecordFailure(ex);
                 Debug.WriteLine(ex, "Error during transmitting analytics event.");
             }
         }
@@ -230,7 +254,25 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     /// <summary>Flushes any queued telemetry to Application Insights before this transmitter is disposed.</summary>
     public async ValueTask DisposeAsync()
     {
-        _telemetryClient.Flush();
-        await Task.Delay(1000);
+        // Nothing can be delivered once the breaker is open, and Flush() is synchronous and can
+        // block on a black-holed endpoint, so skip it; otherwise bound it (#859).
+        if (_breaker.IsOpen)
+            return;
+
+        try
+        {
+            var flush = Task.Run(() => _telemetryClient.Flush());
+            if (await Task.WhenAny(flush, Task.Delay(FlushTimeout)).ConfigureAwait(false) != flush)
+            {
+                // Abandon the still-running flush; observe its eventual fault so it is never unobserved.
+                _ = flush.ContinueWith(t => _ = t.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                _breaker.RecordFailure(new TimeoutException("Telemetry flush timed out"));
+            }
+        }
+        catch (Exception ex)
+        {
+            _breaker.RecordFailure(ex);
+        }
     }
 }

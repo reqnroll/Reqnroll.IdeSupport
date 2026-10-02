@@ -1,8 +1,9 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
 
@@ -16,6 +17,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.Telemetry;
 public class TelemetryTransmitterTests
 {
     private InMemoryTelemetryChannel _telemetryChannel;
+    private readonly List<string> _logLines = new();
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
     private readonly CapturingDebugLog _debugLog = new();
 
@@ -130,7 +132,76 @@ public class TelemetryTransmitterTests
             ConnectionString = $"InstrumentationKey={Guid.NewGuid():N}"
         };
         var telemetryClient = new TelemetryClient(config);
-        return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, null, _debugLog);
+        var logger = Substitute.For<IIdeSupportLogger>();
+        logger.Level.Returns(System.Diagnostics.TraceLevel.Verbose);
+        logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(c =>
+        {
+            var m = c.Arg<LogMessage>();
+            if (m.Level == System.Diagnostics.TraceLevel.Info) _logLines.Add(m.Message);
+        });
+        return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, logger, _debugLog);
+    }
+
+    // ── Unreachable endpoint (#859) ───────────────────────────────────────────────
+
+    [Fact]
+    public void Should_NotProduceSecondEvent_WhenTransmissionFails()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        _telemetryChannel.ThrowOnSend = true;
+
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+
+        _telemetryChannel.SendAttempts.Should().Be(1);
+        _debugLog.Records.Should().ContainSingle(r => r.Transmitted == false && r.Error != null);
+    }
+
+    [Fact]
+    public void Should_StopTouchingTheNetwork_AndLogOnce_AfterFirstFailure()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        _telemetryChannel.ThrowOnSend = true;
+
+        for (var i = 0; i < 25; i++)
+            sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
+
+        _telemetryChannel.SendAttempts.Should().Be(1);
+        _logLines.Should().ContainSingle().Which.Should().Be(
+            "Telemetry endpoint unreachable; telemetry for this session will be dropped");
+        // every dropped attempt is still mirrored to the debug log, with transmitted:false
+        _debugLog.Records.Should().HaveCount(26).And.OnlyContain(r => r.Transmitted == false);
+    }
+
+    [Fact]
+    public async Task Should_NotFlush_OnDispose_WhenBreakerOpen()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        _telemetryChannel.ThrowOnSend = true;
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+
+        await sut.DisposeAsync();
+
+        _telemetryChannel.IsFlushed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Should_BoundDispose_WhenFlushBlackHoled()
+    {
+        var sut = CreateSut();
+        using var gate = new System.Threading.ManualResetEventSlim(false);
+        _telemetryChannel.BlockFlush = gate;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await sut.DisposeAsync();
+        sw.Stop();
+        gate.Set();
+
+        sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3));
+        _logLines.Should().ContainSingle();
     }
 
     // ── Debug-log mirror (host side) ──────────────────────────────────────────────
@@ -264,11 +335,19 @@ public class InMemoryTelemetryChannel : ITelemetryChannel
 
     public void Send(ITelemetry item)
     {
+        SendAttempts++;
         if (ThrowOnSend)
             throw new InvalidOperationException("Simulated AppInsights failure");
         SentTelemtries.Add(item);
     }
 
-    public void Flush() => IsFlushed = true;
+    public int SendAttempts { get; private set; }
+    public System.Threading.ManualResetEventSlim BlockFlush { get; set; }
+
+    public void Flush()
+    {
+        BlockFlush?.Wait();
+        IsFlushed = true;
+    }
     public void Dispose() { }
 }
