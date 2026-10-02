@@ -222,12 +222,17 @@ succeeds.
 | | |
 |---|---|
 | **Emitter** | `TestOutcomeTcpListener` |
-| **When** | The bundled VSTest-logger socket delivers the `runComplete` message for a test run |
-| **Properties** | `ResultCount` (int), `Aborted` (bool), `Canceled` (bool), `ReporterKind` (string — which reporter flavor, incl. the MTP source-compiled one, sent the run) |
+| **When** | A test run's socket connection ends: the bundled VSTest logger / MTP reporter delivers `runComplete`, **or** the connection closes after `runStart`/results without one (killed test host, crashed MTP process — sent with `Aborted=true`, `CompletedNormally=false`). Idle spare connections that never started a run send nothing |
+| **Properties** | `ResultCount` (int — results stored), `PassedCount` / `FailedCount` / `SkippedCount` (int — stored results by outcome), `ExecutedCount` (int — the runner's `executed` from `runComplete`; results seen so far on a dropped connection), `Aborted` (bool), `Canceled` (bool), `CompletedNormally` (bool — `false` when aborted, canceled or dropped), `ReporterKind` (string — which reporter flavor, incl. the MTP source-compiled one, sent the run), `TargetFramework` (string — the hello line's TFM moniker, e.g. `.NETCoreApp,Version=v8.0`; empty if not sent), `DurationMs` (long — hello to runComplete/drop), `DurationBucket` (string — same buckets as `PerfSample`) |
 
 **Analytics use.** Run CodeLens actual-run volume (the completion side of the
-`ResolveTestTargets…` lookup events), abort/cancel rates, and MTP source-compiled reporter
-adoption in the wild (issue #722). Counts/flags only — no paths, no test names.
+`ResolveTestTargets…` lookup events), abort/cancel/crash rates (dropped runs are now counted rather
+than only logged), pass/fail mix, run duration, TFM distribution, and MTP source-compiled reporter
+adoption in the wild (issue #722). Counts/flags/durations/TFM only — no paths, no test names.
+
+**Not sent (issue #848).** Run vs Debug and Scenario/Feature/Rule/Project scope: `reqnroll/registerTestRun`
+takes no parameters and is called once per client session, not per Run click, so the server cannot
+learn them. A user-click event would have to be emitted by each client.
 
 ### `TagIndexFirstScanCompleted`
 | | |
