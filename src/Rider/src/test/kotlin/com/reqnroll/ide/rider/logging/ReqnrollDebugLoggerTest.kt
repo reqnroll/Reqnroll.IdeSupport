@@ -1,5 +1,6 @@
 package com.reqnroll.ide.rider.logging
 
+import com.reqnroll.ide.rider.telemetry.ClientExceptionTelemetry
 import java.io.File
 import java.time.Instant
 import kotlin.test.Test
@@ -186,6 +187,39 @@ class ReqnrollDebugLoggerTest {
     fun `shouldLog with an Off threshold suppresses every level`() {
         for (level in listOf("Verbose", "Info", "Warning", "Error")) {
             assertFalse(ReqnrollDebugLogger.shouldLog(level, "Off"), level)
+        }
+    }
+
+    private fun <T> withRecordedExceptionTelemetry(block: (MutableList<Map<String, String>>) -> T): T {
+        val sent = mutableListOf<Map<String, String>>()
+        val previous = ClientExceptionTelemetry.replaceSessionForTests(
+            ClientExceptionTelemetry.Reporter { _, props -> sent.add(props) },
+        )
+        try {
+            return block(sent)
+        } finally {
+            ClientExceptionTelemetry.replaceSessionForTests(previous)
+        }
+    }
+
+    @Test
+    fun `warn and error with a throwable report it as client exception telemetry`() {
+        withRecordedExceptionTelemetry { sent ->
+            ReqnrollDebugLogger.warn("ReqnrollDebugLoggerTest: warn hook", java.io.IOException("warn-hook"))
+            ReqnrollDebugLogger.error("ReqnrollDebugLoggerTest: error hook", IllegalStateException("error-hook"))
+
+            assertEquals(listOf("warn-hook", "error-hook"), sent.map { it["Message"] })
+        }
+    }
+
+    @Test
+    fun `entries without a throwable and verbose entries are not reported`() {
+        withRecordedExceptionTelemetry { sent ->
+            ReqnrollDebugLogger.warn("ReqnrollDebugLoggerTest: no throwable")
+            ReqnrollDebugLogger.info("ReqnrollDebugLoggerTest: info")
+            ReqnrollDebugLogger.verbose("ReqnrollDebugLoggerTest: verbose", java.io.IOException("verbose-only"))
+
+            assertEquals(0, sent.size)
         }
     }
 }

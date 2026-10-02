@@ -34,15 +34,13 @@ function isTelemetryEnabledByEnv(): boolean {
 let reporter: TelemetryReporter | undefined;
 
 /**
- * Forwards the server's `telemetry/event` notifications (see ILspTelemetryService /
- * LspTelemetryService.cs) to Application Insights, mirroring what VS's
- * TelemetryEventInterceptor.cs does for the Visual Studio client. TelemetryReporter routes
- * through vscode.env's telemetry logger internally, so this automatically honours the user's
- * global telemetry opt-out (`telemetry.telemetryLevel`) in addition to the env-var kill switch
- * checked here.
+ * Creates the shared `TelemetryReporter` if telemetry is enabled and it does not exist yet. Called by
+ * `extension.ts` *before* `client.start()` so that client-originated server-lifecycle events
+ * (`ServerStartFailed`, issue #845) can be sent when the server never comes up, and again (as a
+ * no-op) by `registerTelemetry` once it has.
  */
-export function registerTelemetry(client: LanguageClient, context: vscode.ExtensionContext): void {
-  if (!isTelemetryEnabledByEnv()) return;
+export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {
+  if (reporter || !isTelemetryEnabledByEnv()) return;
 
   reporter = new TelemetryReporter(CONNECTION_STRING);
   context.subscriptions.push(reporter);
@@ -51,6 +49,28 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
       reporter = undefined;
     },
   });
+}
+
+/**
+ * Test hook: forgets the module-level reporter. The extension itself creates one at activation
+ * (`ensureTelemetryReporter`), which the extension-host tests share a module instance with, so tests
+ * that assert on "no reporter registered" start from a clean slate. Not used in production code.
+ */
+export function resetTelemetryReporterForTests(): void {
+  reporter = undefined;
+}
+
+/**
+ * Forwards the server's `telemetry/event` notifications (see ILspTelemetryService /
+ * LspTelemetryService.cs) to Application Insights, mirroring what VS's
+ * TelemetryEventInterceptor.cs does for the Visual Studio client. TelemetryReporter routes
+ * through vscode.env's telemetry logger internally, so this automatically honours the user's
+ * global telemetry opt-out (`telemetry.telemetryLevel`) in addition to the env-var kill switch
+ * checked here.
+ */
+export function registerTelemetry(client: LanguageClient, context: vscode.ExtensionContext): void {
+  ensureTelemetryReporter(context);
+  if (!reporter) return;
 
   context.subscriptions.push(
     client.onNotification(TelemetryEventNotification.type, (params: unknown) => {

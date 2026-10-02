@@ -1,5 +1,6 @@
 package com.reqnroll.ide.rider.logging
 
+import com.reqnroll.ide.rider.telemetry.ClientExceptionTelemetry
 import java.io.File
 import java.time.Instant
 import java.time.ZoneOffset
@@ -77,8 +78,29 @@ object ReqnrollDebugLogger {
         levelRank(level) >= levelRank(threshold)
 
     fun info(message: String) = log("Info", message, null)
-    fun warn(message: String, throwable: Throwable? = null) = log("Warning", message, throwable)
-    fun error(message: String, throwable: Throwable? = null) = log("Error", message, throwable)
+    fun warn(message: String, throwable: Throwable? = null) {
+        log("Warning", message, throwable)
+        reportException(throwable)
+    }
+
+    fun error(message: String, throwable: Throwable? = null) {
+        log("Error", message, throwable)
+        reportException(throwable)
+    }
+
+    /**
+     * Every exception this plugin catches and logs at Warning or Error is also reported as client-side
+     * exception telemetry (issue #621; see [ClientExceptionTelemetry] for the privacy contract and rate
+     * limits). `Verbose` entries are diagnostics, not failures, and are never reported. Never throws.
+     */
+    private fun reportException(throwable: Throwable?) {
+        if (throwable == null) return
+        try {
+            ClientExceptionTelemetry.report(throwable)
+        } catch (_: Throwable) {
+            // Best-effort — telemetry must never break logging or plugin behavior.
+        }
+    }
 
     /**
      * The fourth level in the project's shared Error/Warning/Info/Verbose vocabulary (already used

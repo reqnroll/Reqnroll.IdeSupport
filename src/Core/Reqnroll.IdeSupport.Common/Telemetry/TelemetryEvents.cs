@@ -66,7 +66,9 @@ public static class TelemetryEvents
 
     /// <summary>Sent by <c>Telemetry.LspErrorTelemetryService.MonitorError</c> for every reported exception.</summary>
     /// <remarks>Renamed from the bare, collision-prone <c>"Error"</c> (issue #627) — see the schema note
-    /// in the design doc. The message is scrubbed for filesystem paths before transmission.</remarks>
+    /// in the design doc. The message is scrubbed for filesystem paths before transmission. The VS Code and Rider
+    /// clients also send this event for exceptions in their own code (issue #621), marked <c>ExceptionOrigin = "Client"</c>;
+    /// <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c> mirror the name.</remarks>
     public const string UnhandledException = "UnhandledException";
 
     /// <summary>Sent by <c>Features.Commenting.CommentToggleHandler</c> after handling a comment/uncomment request.</summary>

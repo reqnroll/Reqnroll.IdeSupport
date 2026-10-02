@@ -32,7 +32,13 @@ import {
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
-import { registerTelemetry } from './telemetry';
+import { ensureTelemetryReporter, registerTelemetry } from './telemetry';
+import {
+  SOURCE_ACTIVATION,
+  createReportingErrorHandler,
+  registerGuardedCommand,
+  reportClientException,
+} from './clientExceptionTelemetry';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
@@ -128,6 +134,28 @@ export interface ReqnrollExtensionApi {
  * registers all Reqnroll commands.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
+  // Client-side exception telemetry (issue #621): the reporter must exist before anything below can
+  // throw, and an exception escaping activation is reported (then rethrown unchanged).
+  try {
+    ensureTelemetryReporter(context);
+  } catch {
+    // Telemetry setup must never block activation.
+  }
+  try {
+    return await activateCore(context);
+  } catch (err: unknown) {
+    reportClientException(SOURCE_ACTIVATION, err);
+    throw err;
+  }
+}
+
+/** Every command is registered through this so a throwing handler is reported (issue #621) and rethrown. */
+const registerCommand = <A extends unknown[], R>(
+  commandId: string,
+  handler: (...args: A) => R,
+): vscode.Disposable => registerGuardedCommand(vscode.commands.registerCommand, commandId, handler);
+
+async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
   const api: ReqnrollExtensionApi = { getClient: () => client };
 
   const notReady = (label: string) => () => {
@@ -167,10 +195,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     appLogChannel,
     traceChannel,
 
-    vscode.commands.registerCommand('reqnroll.showOutputChannel', () => appLogChannel.show()),
+    registerCommand('reqnroll.showOutputChannel', () => appLogChannel.show()),
 
     // Comment/Uncomment toggle (Ctrl+/ for gherkin files)
-    vscode.commands.registerCommand('reqnroll.toggleComment', async () => {
+    registerCommand('reqnroll.toggleComment', async () => {
       if (!client) {
         notReady('Comment/Uncomment')();
         return;
@@ -180,7 +208,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
 
     // Find Step Definition Usages (invoked from command palette, context menu, or CodeLens click)
     // When invoked from a CodeLens the server passes [uri, line, char] as arguments.
-    vscode.commands.registerCommand('reqnroll.findStepUsages', async (...args: unknown[]) => {
+    registerCommand('reqnroll.findStepUsages', async (...args: unknown[]) => {
       if (!client) {
         notReady('Find Step Usages')();
         return;
@@ -208,12 +236,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     // package.json's contributes.commands: it's only ever invoked as a CodeLens click target
     // (see StepCodeLensHandler.cs), never from the command palette, so it doesn't need a
     // manifest entry — VS Code only requires one for palette/keybinding/menu visibility.
-    vscode.commands.registerCommand('reqnroll.noStepUsages', () => {
+    registerCommand('reqnroll.noStepUsages', () => {
       void showInfo('Reqnroll: This step definition has no usages in any feature file.');
     }),
 
     // Find Unused Step Definitions
-    vscode.commands.registerCommand('reqnroll.findUnusedStepDefinitions', async () => {
+    registerCommand('reqnroll.findUnusedStepDefinitions', async () => {
       if (!client) {
         notReady('Find Unused Step Definitions')();
         return;
@@ -228,7 +256,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     // alwaysShowPicker is set for every CodeLens-sourced call (issue #372 follow-up) so clicking
     // a lens always shows the picker, even for a single match, rather than jumping straight
     // there — the command-palette/keybinding path (no args) keeps the direct-navigate shortcut.
-    vscode.commands.registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
+    registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
         notReady('Go to Hooks')();
         return;
@@ -250,7 +278,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     // click, with the lens's own attribute location as [uri, line, char] arguments. Deliberately
     // absent from package.json's contributes.commands, matching reqnroll.noStepUsages: it has no
     // command-palette/keybinding entry point.
-    vscode.commands.registerCommand(
+    registerCommand(
       'reqnroll.goToMatchingScenarios',
       async (uri: string, line: number, character: number) => {
         if (!client) {
@@ -262,7 +290,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     ),
 
     // Go to Step Definition (rich picker with method name + step type)
-    vscode.commands.registerCommand('reqnroll.goToStepDefinition', async () => {
+    registerCommand('reqnroll.goToStepDefinition', async () => {
       if (!client) {
         notReady('Go to Step Definition')();
         return;
@@ -271,7 +299,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     }),
 
     // Define Steps (code action / quick-fix that generates step stubs; delegates to VS Code's native code-action picker)
-    vscode.commands.registerCommand('reqnroll.defineSteps', async () => {
+    registerCommand('reqnroll.defineSteps', async () => {
       await vscode.commands.executeCommand('editor.action.quickFix');
     }),
 
@@ -283,7 +311,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     // must run BEFORE editor.action.rename starts — see its doc comment (issue #456): mutating
     // the selection while that command already has an in-flight prepareRename request cancels
     // the rename outright for parameterized steps.
-    vscode.commands.registerCommand('reqnroll.renameStep', async () => {
+    registerCommand('reqnroll.renameStep', async () => {
       const editor = vscode.window.activeTextEditor;
       if (editor?.document.languageId === CSHARP_LANGUAGE_ID) {
         if (!client) {
@@ -303,7 +331,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     // expression, or a .cs file the Reqnroll server doesn't own at all) must fall through to VS
     // Code's own editor.action.rename rather than showing a Reqnroll-specific message — otherwise
     // F2 would stop renaming ordinary C# symbols everywhere in every .cs file.
-    vscode.commands.registerCommand('reqnroll.renameStepOrSymbol', async () => {
+    registerCommand('reqnroll.renameStepOrSymbol', async () => {
       const editor = vscode.window.activeTextEditor;
       if (editor?.document.languageId === CSHARP_LANGUAGE_ID) {
         if (!client) {
@@ -358,6 +386,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
     },
     outputChannel,
     traceOutputChannel: traceChannel,
+    // Transport errors are reported as client exceptions (issue #621); restart/shutdown decisions stay
+    // with the client's default handler.
+    errorHandler: createReportingErrorHandler(() => client!.createDefaultErrorHandler()),
     // .cs sync is driven manually (see manualDocumentSync.ts) because
     // vscode-languageclient's built-in sync has proven unreliable for it; this middleware
     // stops the built-in path from also emitting sync notifications for .cs documents.

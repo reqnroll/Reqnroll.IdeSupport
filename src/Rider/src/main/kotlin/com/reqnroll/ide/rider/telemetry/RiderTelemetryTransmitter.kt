@@ -48,6 +48,9 @@ object RiderTelemetryTransmitter {
      */
     internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
 
+    /** Exception caught in the plugin's own code (issue #621); same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
+    internal const val UNHANDLED_EXCEPTION = "UnhandledException"
+
     internal const val IDE_CLIENT = "rider"
 
     private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")

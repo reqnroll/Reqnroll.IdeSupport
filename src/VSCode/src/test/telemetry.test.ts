@@ -5,7 +5,12 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
-import { registerTelemetry, sendTelemetryEvent, withClientIdentity } from '../telemetry';
+import {
+  registerTelemetry,
+  resetTelemetryReporterForTests,
+  sendTelemetryEvent,
+  withClientIdentity,
+} from '../telemetry';
 
 function fakeClient(): { client: LanguageClient; fire: (params: unknown) => void } {
   let handler: ((params: unknown) => void) | undefined;
@@ -65,6 +70,9 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
+  // The activated extension owns a module-level reporter (ensureTelemetryReporter, #845); start clean.
+  setup(() => resetTelemetryReporterForTests());
+
   suite('client identity (#844)', () => {
     test('withClientIdentity stamps IdeClient, Ide, IdeVersion and ExtensionVersion', () => {
       const props = withClientIdentity({ a: 1 });
