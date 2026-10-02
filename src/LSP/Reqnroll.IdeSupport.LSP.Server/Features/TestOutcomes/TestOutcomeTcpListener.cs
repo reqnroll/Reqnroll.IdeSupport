@@ -217,6 +217,12 @@ public sealed class TestOutcomeTcpListener : IDisposable
         var results = 0;
         var started = false;
         var completed = false;
+        var passed = 0;
+        var failed = 0;
+        var skipped = 0;
+        string reporterKind = "unknown";
+        string targetFramework = string.Empty;
+        Stopwatch? runStopwatch = null;
         try
         {
             client.NoDelay = true;
@@ -240,11 +246,12 @@ public sealed class TestOutcomeTcpListener : IDisposable
             // clear the marks the real one set.
             connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
             var protocol = hello.Value<int?>("protocol") ?? 0;
+            targetFramework = hello.Value<string>("targetFramework") ?? string.Empty;
             // Reporter kind: prefer the explicit "reporterKind" field both loggers now send (issue #722
             // suggested fix (c), made explicit). Fall back to the old presence-of-"targetFramework"
             // inference for hello lines from older loggers that predate the field — the VSTest logger
             // always carried a (possibly empty) "targetFramework" key, the MTP reporter never did.
-            var reporterKind = hello.Value<string>("reporterKind")
+            reporterKind = hello.Value<string>("reporterKind")
                 ?? (hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP");
             _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
             if (protocol != 1)
@@ -253,7 +260,7 @@ public sealed class TestOutcomeTcpListener : IDisposable
             // Perf instrumentation (issue #722): the NDJSON ingestion hot path, timed from the
             // connection's hello to its runComplete — not covered by the two thin RPC handlers'
             // Measure() calls, which only time registerRun/getOutcome themselves.
-            var runStopwatch = Stopwatch.StartNew();
+            runStopwatch = Stopwatch.StartNew();
 
             string? line;
             while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
@@ -275,7 +282,17 @@ public sealed class TestOutcomeTcpListener : IDisposable
                         _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
                         break;
                     case "result":
-                        if (_store.Record(ToRecord(connectionId, message)) is not null) results++;
+                        var record = ToRecord(connectionId, message);
+                        if (_store.Record(record) is not null)
+                        {
+                            results++;
+                            switch (record.Outcome)
+                            {
+                                case TestOutcomeKind.Passed: passed++; break;
+                                case TestOutcomeKind.Failed: failed++; break;
+                                case TestOutcomeKind.Skipped: skipped++; break;
+                            }
+                        }
                         break;
                     case "runComplete":
                         completed = true;
@@ -287,19 +304,15 @@ public sealed class TestOutcomeTcpListener : IDisposable
                         _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={aborted}, canceled={canceled}, {results} result(s) stored");
 
                         runStopwatch.Stop();
+                        var executed = message.Value<int?>("executed") ?? 0;
                         _recorder.Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, runStopwatch.Elapsed.TotalMilliseconds,
                             detail: $"results={results} reporterKind={reporterKind}");
                         // Product telemetry (issue #722 fix (b)/(c)): counts/flags only — no paths, no
                         // test names, no content — plus which reporter sent the run, so MTP ephemeral
                         // injection's real-world adoption is visible in aggregate without a dedicated
                         // client→server telemetry channel for it.
-                        _lspTelemetryService?.SendEvent(TelemetryEvents.TestOutcomesRunCompleted, new Dictionary<string, object?>
-                        {
-                            ["ResultCount"] = results,
-                            ["Aborted"] = aborted,
-                            ["Canceled"] = canceled,
-                            ["ReporterKind"] = reporterKind,
-                        });
+                        SendRunCompletedTelemetry(results, passed, failed, skipped, executed, aborted, canceled,
+                            completedNormally: !aborted && !canceled, reporterKind, targetFramework, runStopwatch.Elapsed.TotalMilliseconds);
                         break;
                 }
             }
@@ -320,7 +333,15 @@ public sealed class TestOutcomeTcpListener : IDisposable
                 // instance (it Initializes the logger more than once per run and only closes the idle
                 // sockets later) — routine, not a lost run.
                 if (started || results > 0)
+                {
                     _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
+                    // The most interesting runs (killed test host, crashed MTP process) never send
+                    // runComplete; count them too so aborted runs aren't undercounted (issue #848).
+                    // ExecutedCount is what we saw (no runComplete to read it from).
+                    runStopwatch?.Stop();
+                    SendRunCompletedTelemetry(results, passed, failed, skipped, executed: results, aborted: true, canceled: false,
+                        completedNormally: false, reporterKind, targetFramework, runStopwatch?.Elapsed.TotalMilliseconds ?? 0);
+                }
                 else
                     _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: idle connection for run {runId} closed without a runStart; ignoring.");
             }
@@ -337,6 +358,30 @@ public sealed class TestOutcomeTcpListener : IDisposable
             if (results > 0) ScheduleRefresh();
         }
     }
+
+    /// <summary>
+    /// Product telemetry (issues #722, #848): counts, flags, a duration and the target framework moniker
+    /// only — no paths, no test names, no content. Run mode / scope (Run vs Debug, Scenario vs Feature)
+    /// are not sent: <c>reqnroll/registerTestRun</c> takes no parameters and is called once per client
+    /// session (VS Code), not per Run click, so the server never learns them.
+    /// </summary>
+    private void SendRunCompletedTelemetry(int results, int passed, int failed, int skipped, int executed,
+        bool aborted, bool canceled, bool completedNormally, string reporterKind, string targetFramework, double elapsedMs)
+        => _lspTelemetryService?.SendEvent(TelemetryEvents.TestOutcomesRunCompleted, new Dictionary<string, object?>
+        {
+            ["ResultCount"] = results,
+            ["PassedCount"] = passed,
+            ["FailedCount"] = failed,
+            ["SkippedCount"] = skipped,
+            ["ExecutedCount"] = executed,
+            ["Aborted"] = aborted,
+            ["Canceled"] = canceled,
+            ["CompletedNormally"] = completedNormally,
+            ["ReporterKind"] = reporterKind,
+            ["TargetFramework"] = targetFramework,
+            ["DurationMs"] = (long)Math.Round(elapsedMs),
+            ["DurationBucket"] = OperationDurationRecorder.Bucket(elapsedMs),
+        });
 
     /// <summary>Mirror of the logger's <c>ReqnrollIdeTestLogger.TestIdentitySeparator</c> (U+001F).</summary>
     internal const char TestIdentitySeparator = (char)0x1f;

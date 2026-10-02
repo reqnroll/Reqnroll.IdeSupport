@@ -437,6 +437,101 @@ public class TestOutcomeTcpListenerTests : IDisposable
         lspTelemetry.Received(1).SendEvent(TelemetryEvents.TestOutcomesRunCompleted, Arg.Is<Dictionary<string, object?>>(p => (string)p["ReporterKind"]! == "MTP"));
     }
 
+    private static async Task<Dictionary<string, object?>> CaptureRunCompletedAsync(
+        TestOutcomeTcpListener listener, ILspTelemetryService telemetry, Func<string, string[]> lines)
+    {
+        var registration = listener.RegisterRun()!;
+        await SendAsync(registration.Endpoint, lines(registration.RunId));
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline && !telemetry.ReceivedCalls().Any()) await Task.Delay(20);
+        var call = telemetry.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(ILspTelemetryService.SendEvent));
+        call.GetArguments()[0].Should().Be(TelemetryEvents.TestOutcomesRunCompleted);
+        return (Dictionary<string, object?>)call.GetArguments()[1]!;
+    }
+
+    [Fact]
+    public async Task RunComplete_telemetry_carries_pass_fail_skip_counts_duration_and_targetFramework()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: telemetry);
+
+        var p = await CaptureRunCompletedAsync(listener, telemetry, id => new[]
+        {
+            Hello(id),
+            Result("A", "A", "Passed", id), Result("B", "B", "Passed", id), Result("C", "C", "Failed", id), Result("D", "D", "Skipped", id),
+            RunComplete(id),
+        });
+
+        p["ResultCount"].Should().Be(4);
+        p["PassedCount"].Should().Be(2);
+        p["FailedCount"].Should().Be(1);
+        p["SkippedCount"].Should().Be(1);
+        p["ExecutedCount"].Should().Be(2); // taken from runComplete.executed
+        p["Aborted"].Should().Be(false);
+        p["Canceled"].Should().Be(false);
+        p["CompletedNormally"].Should().Be(true);
+        p["TargetFramework"].Should().Be(".NETCoreApp,Version=v8.0");
+        ((long)p["DurationMs"]!).Should().BeGreaterThanOrEqualTo(0);
+        p["DurationBucket"].Should().BeOfType<string>().Which.Should().NotBeNullOrEmpty();
+        p.Keys.Should().NotContain(k => k.Contains("Name") || k.Contains("Path"));
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task RunComplete_telemetry_reports_runner_declared_abort_and_cancel_as_not_completed_normally(bool aborted, bool canceled)
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: telemetry);
+
+        var p = await CaptureRunCompletedAsync(listener, telemetry, id => new[]
+        {
+            Hello(id), Result("A", "A", "Passed", id),
+            $"{{\"type\":\"runComplete\",\"runId\":\"{id}\",\"executed\":1,\"aborted\":{aborted.ToString().ToLowerInvariant()},\"canceled\":{canceled.ToString().ToLowerInvariant()}}}",
+        });
+
+        p["Aborted"].Should().Be(aborted);
+        p["Canceled"].Should().Be(canceled);
+        p["CompletedNormally"].Should().Be(false);
+    }
+
+    [Fact]
+    public async Task A_dropped_connection_after_runStart_still_sends_the_event_as_aborted()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: telemetry);
+
+        // SendAsync closes the socket after writing: no runComplete ever arrives.
+        var p = await CaptureRunCompletedAsync(listener, telemetry, id => new[]
+        {
+            Hello(id), RunStart(id, Identity("A", "A"), Identity("B", "B")),
+            Result("A", "A", "Passed", id), Result("B", "B", "Failed", id),
+        });
+
+        p["Aborted"].Should().Be(true);
+        p["Canceled"].Should().Be(false);
+        p["CompletedNormally"].Should().Be(false);
+        p["ResultCount"].Should().Be(2);
+        p["PassedCount"].Should().Be(1);
+        p["FailedCount"].Should().Be(1);
+        p["ExecutedCount"].Should().Be(2);
+        p["ReporterKind"].Should().Be("VSTestLogger");
+        p["TargetFramework"].Should().Be(".NETCoreApp,Version=v8.0");
+    }
+
+    [Fact]
+    public async Task An_idle_connection_that_never_sent_runStart_does_not_send_the_event()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        using var listener = new TestOutcomeTcpListener(_store, _logger, () => { }, lspTelemetryService: telemetry);
+        var registration = listener.RegisterRun()!;
+
+        await SendAsync(registration.Endpoint, Hello(registration.RunId));
+        await Task.Delay(300);
+
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+    }
+
     [Fact]
     public async Task RunComplete_records_the_ingestion_duration_via_the_operation_recorder()
     {

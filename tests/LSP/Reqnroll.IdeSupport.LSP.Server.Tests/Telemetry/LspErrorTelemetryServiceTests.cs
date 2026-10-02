@@ -94,21 +94,17 @@ public class LspErrorTelemetryServiceTests
             Arg.Is<Dictionary<string, object?>>(props => (bool)props["IsFatal"]! == isFatal));
     }
 
-    [Theory]
-    [InlineData(@"Error reading C:\Users\alice\project\feature.feature", @"Error reading <path>")]
-    [InlineData(@"Failed at /home/bob/project/feature.feature", @"Failed at <path>")]
-    [InlineData(@"UNC failure \\server\share\file.feature", @"UNC failure <path>")]
-    [InlineData("No paths here", "No paths here")]
-    [InlineData("", "")]
-    public void MonitorError_redacts_filesystem_paths_from_the_message(string message, string expected)
+    [Fact]
+    public void MonitorError_passes_the_message_through_unredacted_because_the_sink_scrubs_it()
     {
         var sut = CreateSut();
+        const string message = @"Error reading C:\Users\alice\project\feature.feature";
 
         sut.MonitorError(new Exception(message));
 
         _lspTelemetryService.Received(1).SendEvent(
             TelemetryEvents.UnhandledException,
-            Arg.Is<Dictionary<string, object?>>(props => (string?)props["Message"] == expected));
+            Arg.Is<Dictionary<string, object?>>(props => (string?)props["Message"] == message));
     }
 
     [Fact]
