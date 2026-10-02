@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import type { ErrorHandler } from 'vscode-languageclient';
+import { ResponseError, type ErrorHandler } from 'vscode-languageclient';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
 import {
   ClientExceptionReporter,
@@ -9,8 +9,9 @@ import {
   buildExceptionProperties,
   createReportingErrorHandler,
   guardCommand,
-  redactPaths,
+  executeForeignCommand,
   reportClientException,
+  scrubMessage,
   wrapErrorHandler,
 } from '../clientExceptionTelemetry';
 import { ensureTelemetryReporter, resetTelemetryReporterForTests } from '../telemetry';
@@ -57,14 +58,105 @@ suite('clientExceptionTelemetry (#621)', () => {
     });
 
     test('redacts Windows, UNC and POSIX paths from the message', () => {
-      const message = redactPaths(
+      const message = scrubMessage(
         'ENOENT C:\\Users\\bob\\proj\\a.feature and \\\\srv\\share\\x and /home/bob/proj/b.cs failed',
       );
 
       assert.strictEqual(message, 'ENOENT <path> and <path> and <path> failed');
     });
 
-    test('scrubs paths and caps the length of the transmitted message', () => {
+    test('redacts a drive-letter path whose user directory contains spaces', () => {
+      const message = scrubMessage(
+        'EACCES C:\\Users\\John Smith\\My Projects\\Calc\\a.feature denied',
+      );
+
+      assert.ok(!message.includes('John'), message);
+      assert.ok(!message.includes('Smith'), message);
+      assert.ok(!message.includes('Projects'), message);
+      assert.strictEqual(message, 'EACCES <path> denied');
+    });
+
+    test('redacts a UNC path with spaces and a POSIX path with spaces', () => {
+      assert.strictEqual(scrubMessage('\\\\srv\\my share\\dir\\f failed'), '<path> failed');
+      assert.strictEqual(scrubMessage('open /home/john smith/work/x now'), 'open <path> now');
+    });
+
+    test('redacts a quoted path wholly, spaces included', () => {
+      const message = scrubMessage(
+        'Cannot find "C:\\Users\\Jane Doe\\proj\\x.csproj" or ' + "'/home/jane doe/x'",
+      );
+
+      assert.ok(!message.includes('Jane'), message);
+      assert.ok(!message.includes('proj'), message);
+    });
+
+    test('drops a URL wholly, so its query string token and fragment never leave', () => {
+      const message = scrubMessage(
+        'fetch https://example.com/a/b?token=SECRET123&x=1#frag failed; file:///c:/Users/bob/x.json too',
+      );
+
+      assert.ok(!message.includes('SECRET123'), message);
+      assert.ok(!message.includes('frag'), message);
+      assert.ok(!message.includes('bob'), message);
+      assert.strictEqual(message, 'fetch <url> failed; <url> too');
+    });
+
+    test('redacts relative paths and ./ ../ forms', () => {
+      const message = scrubMessage(
+        'missing src/Features/Calc.feature and ../shared/x and .\\obj\\y',
+      );
+
+      assert.ok(!message.includes('Calc'), message);
+      assert.ok(!message.includes('shared'), message);
+      assert.ok(!message.includes('obj'), message);
+    });
+
+    test('redacts bare file names with source or config extensions', () => {
+      const message = scrubMessage(
+        'Error in Calculator.feature, Steps.cs, App.csproj, appsettings.json and README.md',
+      );
+
+      assert.strictEqual(message, 'Error in <path>, <path>, <path>, <path> and <path>');
+    });
+
+    test('redacts %VAR%, $VAR and ~ home-style paths', () => {
+      assert.strictEqual(scrubMessage('x %USERPROFILE%\\proj\\a here'), 'x <path> here');
+      assert.strictEqual(scrubMessage('x ~/work/proj/a here'), 'x <path> here');
+      assert.strictEqual(scrubMessage('x $HOME/work/a here'), 'x <path> here');
+    });
+
+    test('leaves ordinary words, LSP-method-looking words and dotted type names alone', () => {
+      assert.strictEqual(
+        scrubMessage('and/or textDocument/definition System.Text.Json x'),
+        'and/or textDocument/definition System.Text.Json x',
+      );
+    });
+
+    test('drops the quoted source snippet of a JSON.parse-style message', () => {
+      let thrown: Error | undefined;
+      try {
+        JSON.parse('{"stepText": Given my secret password is hunter2}');
+      } catch (e) {
+        thrown = e as Error;
+      }
+      const props = buildExceptionProperties('Command:reqnroll.x', thrown);
+
+      assert.ok(props.Message.includes('<text>'), props.Message);
+      assert.ok(!props.Message.includes('hunter2'), props.Message);
+      assert.ok(!props.Message.includes('stepText'), props.Message);
+      // Nested quotes inside the snippet must not end the dropped span early.
+      assert.strictEqual(
+        scrubMessage('bad "{"stepText": "Given my hunter2", }" in JSON'),
+        'bad <text> in JSON',
+      );
+      assert.ok(!props.Message.includes('secret'), props.Message);
+      assert.strictEqual(
+        scrubMessage('Unexpected token } , "{a: secret}" is not valid JSON'),
+        'Unexpected token } , <text> is not valid JSON',
+      );
+    });
+
+    test('scrubs paths and caps the transmitted message at 128 characters', () => {
       const props = buildExceptionProperties(
         'Activation',
         new Error(`cannot open /home/bob/secret.feature ${'x'.repeat(2000)}`),
@@ -72,7 +164,7 @@ suite('clientExceptionTelemetry (#621)', () => {
 
       assert.ok(!props.Message.includes('bob'));
       assert.ok(props.Message.startsWith('cannot open <path>'));
-      assert.ok(props.Message.length <= 512);
+      assert.ok(props.Message.length <= 128);
     });
 
     test('a custom error class reports its name; an unsafe name falls back to Error', () => {
@@ -124,6 +216,35 @@ suite('clientExceptionTelemetry (#621)', () => {
       }
 
       assert.strictEqual(sent.length, MAX_EVENTS_PER_SESSION);
+    });
+
+    test('does not report LSP ResponseError (the server already reports those; text can embed step text)', () => {
+      const { reporter, sent } = recordingReporter();
+
+      assert.strictEqual(
+        reporter.report(
+          'Command:x',
+          new ResponseError(-32603, 'No step matches "Given my secret"'),
+        ),
+        false,
+      );
+      const wrapped = new Error('request failed', { cause: new ResponseError(-32603, 'inner') });
+      assert.strictEqual(reporter.report('Command:x', wrapped), false);
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('counts duplicates and cap drops and attaches SuppressedCount to the next sent event', () => {
+      const { reporter, sent } = recordingReporter();
+
+      reporter.report('Activation', new Error('a'));
+      reporter.report('Activation', new Error('a'));
+      reporter.report('Activation', new Error('a'));
+      reporter.report('Activation', new Error('b'));
+      reporter.report('Activation', new Error('c'));
+
+      assert.strictEqual(sent[0].props.SuppressedCount, undefined);
+      assert.strictEqual(sent[1].props.SuppressedCount, '2');
+      assert.strictEqual(sent[2].props.SuppressedCount, undefined);
     });
 
     test('does not report cancellations', () => {
@@ -186,6 +307,35 @@ suite('clientExceptionTelemetry (#621)', () => {
 
       assert.strictEqual(await guarded(2, 3), 5);
       assert.strictEqual(calls.length, 0);
+    });
+  });
+
+  suite('foreign (delegated built-in) commands', () => {
+    test('an error from the F2 fall-through to editor.action.rename is rethrown but never reported', async () => {
+      const { reporter, sent } = recordingReporter();
+      const boom = new Error('No result.');
+      const guarded = guardCommand(
+        'reqnroll.renameStepOrSymbol',
+        async () => {
+          await executeForeignCommand('editor.action.rename', () => Promise.reject(boom));
+        },
+        (source, err) => void reporter.report(source, err),
+      );
+
+      await assert.rejects(guarded(), (err) => err === boom);
+      assert.strictEqual(sent.length, 0);
+    });
+
+    test('an error from our own code in the same command is still reported', async () => {
+      const { reporter, sent } = recordingReporter();
+      const guarded = guardCommand(
+        'reqnroll.renameStepOrSymbol',
+        () => Promise.reject(new Error('ours')),
+        (source, err) => void reporter.report(source, err),
+      );
+
+      await assert.rejects(guarded());
+      assert.strictEqual(sent.length, 1);
     });
   });
 

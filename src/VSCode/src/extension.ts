@@ -36,6 +36,7 @@ import { ensureTelemetryReporter, registerTelemetry } from './telemetry';
 import {
   SOURCE_ACTIVATION,
   createReportingErrorHandler,
+  executeForeignCommand,
   registerGuardedCommand,
   reportClientException,
 } from './clientExceptionTelemetry';
@@ -323,7 +324,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       }
 
       collapseActiveSelectionForFeatureStepRename();
-      await vscode.commands.executeCommand('editor.action.rename');
+      await executeForeignCommand('editor.action.rename');
     }),
 
     // F2 keybinding target (issue #506). F2 is the default C# rename-symbol shortcut, so unlike
@@ -335,7 +336,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       const editor = vscode.window.activeTextEditor;
       if (editor?.document.languageId === CSHARP_LANGUAGE_ID) {
         if (!client) {
-          await vscode.commands.executeCommand('editor.action.rename');
+          await executeForeignCommand('editor.action.rename');
           return;
         }
         await renameStepFromCSharp(client, editor, { fallbackToNativeRename: true });
@@ -343,7 +344,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       }
 
       collapseActiveSelectionForFeatureStepRename();
-      await vscode.commands.executeCommand('editor.action.rename');
+      await executeForeignCommand('editor.action.rename');
     }),
   );
 
