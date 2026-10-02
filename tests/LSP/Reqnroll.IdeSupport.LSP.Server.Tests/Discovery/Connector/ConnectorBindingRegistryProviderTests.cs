@@ -430,7 +430,7 @@ namespace S
     public async Task TriggerRefresh_merges_whitelisted_connector_telemetry_into_the_success_event()
     {
         GivenDiscoveryReturns(NonInvalidRegistry(hash: 42), "hash-1");
-        _discovery.LastRunTelemetry.Returns(new ConnectorRunTelemetry("2.1", true, "Generic", 0));
+        _discovery.LastRunTelemetry.Returns(new ConnectorRunTelemetry("2.1", "Generic", 0));
         var telemetry = Substitute.For<ILspTelemetryService>();
 
         var sut = CreateSutWithTelemetry(telemetry);
@@ -443,7 +443,7 @@ namespace S
             TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "2.1".Equals(d["ReqnrollVersion"]) &&
-                true.Equals(d["LegacySpecFlow"]) &&
+                !d.ContainsKey("LegacySpecFlow") &&
                 "Generic".Equals(d["ConnectorType"]) &&
                 0.Equals(d["ConnectorExitCode"]) &&
                 d["DurationMs"] is long &&

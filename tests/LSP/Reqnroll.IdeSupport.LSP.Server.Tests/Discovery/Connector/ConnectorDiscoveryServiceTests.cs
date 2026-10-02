@@ -122,7 +122,6 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         {
             ["ReqnrollVersion"] = "2.1.3-beta.4",
             ["ProjectReqnrollVersion"] = "2.1.3",
-            ["LegacySpecFlow"] = true,
             ["ConnectorType"] = "Generic",
             ["ConnectorExitCode"] = 0,
             ["ConnectorArguments"] = "C:\\Users\\someone\\proj\\MyApp.Tests.dll",
@@ -134,10 +133,10 @@ public class ConnectorDiscoveryServiceTests : IDisposable
 
         sut.RunDiscovery(MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
 
-        sut.LastRunTelemetry.Should().Be(new ConnectorRunTelemetry("2.1", true, "Generic", 0));
+        sut.LastRunTelemetry.Should().Be(new ConnectorRunTelemetry("2.1", "Generic", 0));
         var sent = new Dictionary<string, object?>();
         sut.LastRunTelemetry!.AddTo(sent);
-        sent.Keys.Should().BeEquivalentTo("ReqnrollVersion", "LegacySpecFlow", "ConnectorType", "ConnectorExitCode");
+        sent.Keys.Should().BeEquivalentTo("ReqnrollVersion", "ConnectorType", "ConnectorExitCode");
         sent.Values.OfType<string>().Should().NotContain(v => v.Contains("Users") || v.Contains("secret"));
     }
 

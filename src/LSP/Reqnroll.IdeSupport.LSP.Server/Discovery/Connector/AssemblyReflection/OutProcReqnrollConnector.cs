@@ -154,7 +154,7 @@ public abstract class OutProcReqnrollConnector
         // The connector's JSON carries neither ConnectorType nor ReqnrollVersion as result fields, so the
         // type is stamped here (before the telemetry overlay) rather than after Deserialize returns.
         discoveryResult.ConnectorType = GetConnectorType();
-        ApplyRunTelemetry(discoveryResult, _targetFrameworkMoniker, ReqnrollVersion, _projectSettings.IsSpecFlowProject,
+        ApplyRunTelemetry(discoveryResult, _targetFrameworkMoniker, ReqnrollVersion,
             result.Arguments, result.ExitCode);
 
         if (!string.IsNullOrEmpty(discoveryResult.ErrorMessage))
@@ -172,14 +172,12 @@ public abstract class OutProcReqnrollConnector
     /// LSP server does not currently populate.
     /// </summary>
     internal static void ApplyRunTelemetry(DiscoveryResult discoveryResult, TargetFrameworkMoniker targetFramework,
-        NuGetVersion projectReqnrollVersion, bool isSpecFlowProject, string arguments, int exitCode)
+        NuGetVersion projectReqnrollVersion, string arguments, int exitCode)
     {
         var telemetry = discoveryResult.TelemetryProperties ??= new Dictionary<string, object>();
 
         telemetry["ProjectTargetFramework"] = targetFramework;
         telemetry["ProjectReqnrollVersion"] = projectReqnrollVersion;
-        if (isSpecFlowProject)
-            telemetry["LegacySpecFlow"] = true;
         if (!string.IsNullOrEmpty(discoveryResult.ConnectorType))
             telemetry["ConnectorType"] = discoveryResult.ConnectorType;
         telemetry["ConnectorArguments"] = arguments;

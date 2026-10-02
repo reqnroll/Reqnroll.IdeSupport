@@ -26,9 +26,9 @@ public class OutProcReqnrollConnectorTelemetryTests
         return new DiscoveryResult { ConnectorType = connectorType!, TelemetryProperties = telemetry };
     }
 
-    private static ConnectorRunTelemetry Apply(DiscoveryResult result, NuGetVersion? projectVersion = null, bool specFlow = false)
+    private static ConnectorRunTelemetry Apply(DiscoveryResult result, NuGetVersion? projectVersion = null)
     {
-        OutProcReqnrollConnector.ApplyRunTelemetry(result, Tfm, projectVersion, specFlow, "--secret some-path", 0);
+        OutProcReqnrollConnector.ApplyRunTelemetry(result, Tfm, projectVersion, "--secret some-path", 0);
         return ConnectorRunTelemetry.FromConnectorProperties(result.TelemetryProperties);
     }
 
@@ -61,12 +61,11 @@ public class OutProcReqnrollConnectorTelemetryTests
     }
 
     [Fact]
-    public void Legacy_flag_and_exit_code_are_forwarded_and_arguments_are_not()
+    public void Exit_code_is_forwarded_and_arguments_are_not()
     {
         var result = ConnectorResult();
-        var telemetry = Apply(result, specFlow: true);
+        var telemetry = Apply(result);
 
-        telemetry.LegacySpecFlow.Should().BeTrue();
         telemetry.ConnectorExitCode.Should().Be(0);
         var props = new Dictionary<string, object?>();
         telemetry.AddTo(props);

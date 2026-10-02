@@ -20,9 +20,9 @@ public class ConnectorRunTelemetryTests
     public void FromConnectorProperties_tolerates_null_and_missing_keys()
     {
         ConnectorRunTelemetry.FromConnectorProperties(null)
-            .Should().Be(new ConnectorRunTelemetry(null, false, null, null));
+            .Should().Be(new ConnectorRunTelemetry(null, null, null));
         ConnectorRunTelemetry.FromConnectorProperties(new Dictionary<string, object>())
-            .Should().Be(new ConnectorRunTelemetry(null, false, null, null));
+            .Should().Be(new ConnectorRunTelemetry(null, null, null));
     }
 
     [Fact]
@@ -30,20 +30,20 @@ public class ConnectorRunTelemetryTests
     {
         var props = new Dictionary<string, object>
         {
-            ["ReqnrollVersion"] = 5, ["LegacySpecFlow"] = "yes", ["ConnectorType"] = 3, ["ConnectorExitCode"] = "0",
+            ["ReqnrollVersion"] = 5, ["ConnectorType"] = 3, ["ConnectorExitCode"] = "0",
         };
 
         ConnectorRunTelemetry.FromConnectorProperties(props)
-            .Should().Be(new ConnectorRunTelemetry(null, false, null, null));
+            .Should().Be(new ConnectorRunTelemetry(null, null, null));
     }
 
     [Fact]
-    public void AddTo_omits_unknown_values_but_always_reports_LegacySpecFlow()
+    public void AddTo_omits_unknown_values()
     {
         var target = new Dictionary<string, object?>();
 
-        new ConnectorRunTelemetry(null, false, null, null).AddTo(target);
+        new ConnectorRunTelemetry(null, null, null).AddTo(target);
 
-        target.Should().ContainSingle().Which.Should().Be(new KeyValuePair<string, object?>("LegacySpecFlow", false));
+        target.Should().BeEmpty();
     }
 }

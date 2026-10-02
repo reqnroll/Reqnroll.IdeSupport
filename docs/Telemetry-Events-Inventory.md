@@ -82,8 +82,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
 | `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
-| `ReqnrollVersion` | string | Connector success only: the project's Reqnroll (or SpecFlow) version reduced to `major.minor`; omitted when unknown |
-| `LegacySpecFlow` | bool | Connector success only: the project is a legacy SpecFlow project |
+| `ReqnrollVersion` | string | Connector success only: the project's Reqnroll version reduced to `major.minor`; omitted when unknown |
 | `ConnectorType` | string | Connector success only: which connector flavour ran |
 | `ConnectorExitCode` | int | Connector success only: the connector process exit code |
 
@@ -212,7 +211,7 @@ formatting is deliberately *not* telemetried — see the retired-event table bel
 |---|---|
 | **Emitter** | `LspWorkspaceScopeManager` (server — issue #581 finding 2) |
 | **When** | The *first* time a Reqnroll project is discovered in a workspace (not on VS's post-build `projectLoaded` re-sends); covers all three IDEs from one place, unlike the per-client `Feature file opened` |
-| **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero); `ProjectTargetFramework` (string, the full TFM moniker); `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`, from the project-file extension — never the path). Reqnroll version and `LegacySpecFlow` are *not* here: they are reported by the first `ReqnrollDiscoveryExecuted` (issue #846) |
+| **Properties** | `FeatureFileCount` (int?, `null` = membership baseline not yet arrived, not zero); `ProjectTargetFramework` (string, the full TFM moniker); `ProgrammingLanguage` (`CSharp`/`VB`/`FSharp`/`Other`, from the project-file extension — never the path). The Reqnroll version is *not* here: they are reported by the first `ReqnrollDiscoveryExecuted` (issue #846) |
 
 **Analytics use.** Active-session project counts; per-solution feature-file scale. A *sessions*
 proxy: one event per project per server lifetime.
@@ -352,7 +351,7 @@ verification program (Layer 4). No URIs or content, ever.
 | Binding-discovery reliability / failure rate | `ReqnrollDiscoveryExecuted` (`IsFailed`, `ErrorMessage`) |
 | Build churn (no-op rediscoveries) | `ReqnrollDiscoveryExecuted` (`HashMatched=true`) |
 | Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), `Project loaded`, discovery counts |
-| Project profile, all IDEs (Reqnroll version, SpecFlow-legacy, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `LegacySpecFlow`, `ConnectorType`) |
+| Project profile, all IDEs (Reqnroll version, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `ConnectorType`) |
 | Command usage & adoption | all `* command executed` / `* command offered` events |
 | Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
 | Picker UI trigger rate | `RenameTargetsResolved` (`TargetCount > 1` share) |

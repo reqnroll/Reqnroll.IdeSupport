@@ -12,15 +12,13 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 /// <c>ConnectorArguments</c> (the command line, which contains file-system paths) and the raw
 /// <c>Error</c> text. This type is an explicit whitelist, so adding a key to the connector's
 /// dictionary can never leak into telemetry by accident. Only versions (reduced to major.minor),
-/// flags, an enum-like connector type and an exit code are carried.
+/// an enum-like connector type and an exit code are carried.
 /// </remarks>
 /// <param name="ReqnrollVersion">The Reqnroll (or SpecFlow) version the connector reported, normalised to <c>major.minor</c>; <see langword="null"/> when unknown.</param>
-/// <param name="LegacySpecFlow">Whether the project is a legacy SpecFlow project.</param>
 /// <param name="ConnectorType">Which connector flavour ran (e.g. generic or custom).</param>
 /// <param name="ConnectorExitCode">The connector process exit code; <see langword="null"/> when unavailable.</param>
 public sealed record ConnectorRunTelemetry(
     string? ReqnrollVersion,
-    bool LegacySpecFlow,
     string? ConnectorType,
     int? ConnectorExitCode)
 {
@@ -28,16 +26,14 @@ public sealed record ConnectorRunTelemetry(
     public static ConnectorRunTelemetry FromConnectorProperties(IReadOnlyDictionary<string, object>? properties)
     {
         if (properties is null)
-            return new ConnectorRunTelemetry(null, false, null, null);
+            return new ConnectorRunTelemetry(null, null, null);
 
         properties.TryGetValue("ReqnrollVersion", out var version);
-        properties.TryGetValue("LegacySpecFlow", out var legacy);
         properties.TryGetValue("ConnectorType", out var connectorType);
         properties.TryGetValue("ConnectorExitCode", out var exitCode);
 
         return new ConnectorRunTelemetry(
             NormalizeVersion(version as string),
-            legacy is true,
             connectorType as string,
             exitCode switch
             {
@@ -52,7 +48,6 @@ public sealed record ConnectorRunTelemetry(
     {
         if (ReqnrollVersion is not null)
             target["ReqnrollVersion"] = ReqnrollVersion;
-        target["LegacySpecFlow"] = LegacySpecFlow;
         if (ConnectorType is not null)
             target["ConnectorType"] = ConnectorType;
         if (ConnectorExitCode is not null)
