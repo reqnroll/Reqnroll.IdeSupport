@@ -64,6 +64,65 @@ public class LspErrorTelemetryServiceTests
     }
 
     [Fact]
+    public void ResolveSource_ignores_a_lookalike_namespace_that_merely_starts_with_the_product_name()
+    {
+        var thrown = CaptureThrown(() => Reqnroll.IdeSupportLookalike.Evil.Throw());
+
+        // Evil is skipped; the first genuine product frame is this test class's lambda.
+        LspErrorTelemetryService.ResolveSource(thrown).Should().Be(nameof(LspErrorTelemetryServiceTests));
+    }
+
+    [Fact]
+    public void MonitorError_caps_distinct_stacks_exactly_under_concurrency()
+    {
+        const int max = 5;
+        var sut = new LspErrorTelemetryService(_lspTelemetryService, maxDistinctStacks: max);
+        Type[] types =
+        [
+            typeof(InvalidOperationException), typeof(ArgumentException), typeof(ArgumentNullException),
+            typeof(ArgumentOutOfRangeException), typeof(FormatException), typeof(NotSupportedException),
+            typeof(NotImplementedException), typeof(TimeoutException), typeof(System.IO.IOException),
+            typeof(System.IO.FileNotFoundException), typeof(System.IO.DirectoryNotFoundException),
+            typeof(UnauthorizedAccessException), typeof(KeyNotFoundException), typeof(OverflowException),
+            typeof(DivideByZeroException), typeof(ObjectDisposedException), typeof(InvalidCastException),
+            typeof(IndexOutOfRangeException), typeof(NullReferenceException), typeof(ArithmeticException),
+        ];
+        var exceptions = types
+            .Select(t => CaptureThrown(() => throw (Exception)Activator.CreateInstance(t, "m")!))
+            .ToArray();
+
+        using var barrier = new Barrier(exceptions.Length);
+        var threads = exceptions.Select(e => new Thread(() =>
+        {
+            barrier.SignalAndWait();
+            sut.MonitorError(e);
+        })).ToArray();
+        foreach (var thread in threads) thread.Start();
+        foreach (var thread in threads) thread.Join();
+
+        var calls = _lspTelemetryService.ReceivedCalls().ToList();
+        calls.Should().HaveCount(exceptions.Length);
+        calls.Count(c => ((Dictionary<string, object?>)c.GetArguments()[1]!).ContainsKey(TelemetryProperties.StackFrames))
+            .Should().Be(max);
+    }
+
+    [Fact]
+    public void MonitorError_never_puts_exception_chain_text_or_user_exception_names_in_StackFrames()
+    {
+        var thrown = CaptureThrown(() => throw new AcmeCustomerException("outer", new InvalidOperationException("inner-secret")));
+
+        CreateSut().MonitorError(thrown);
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props =>
+                !((string?)props[TelemetryProperties.StackFrames])!.Contains("Acme") &&
+                !((string?)props[TelemetryProperties.StackFrames])!.Contains("secret")));
+    }
+
+    private sealed class AcmeCustomerException(string message, Exception inner) : Exception(message, inner);
+
+    [Fact]
     public void MonitorError_attaches_sanitized_StackFrames_for_a_thrown_exception()
     {
         var thrown = CaptureThrown(() => ThrowWithSecret(@"C:\Users\alice\Login.feature"));

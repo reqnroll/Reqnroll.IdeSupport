@@ -1,6 +1,5 @@
 #nullable disable
 using System;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Collections.Generic;
 using Reqnroll.IdeSupport.Common;
@@ -37,7 +36,8 @@ public sealed class LspErrorTelemetryService : ITelemetryService
 
     private readonly ILspTelemetryService _lspTelemetryService;
     private readonly int _maxDistinctStacks;
-    private readonly ConcurrentDictionary<string, byte> _stacksSent = new();
+    private readonly object _stacksGate = new();
+    private readonly HashSet<string> _stacksSent = new();
 
     /// <summary>Initializes a new instance of the <see cref="LspErrorTelemetryService"/> class.</summary>
     public LspErrorTelemetryService(ILspTelemetryService lspTelemetryService)
@@ -82,9 +82,11 @@ public sealed class LspErrorTelemetryService : ITelemetryService
         };
         if (isFatal.HasValue)
             properties["IsFatal"] = isFatal.Value;
-        if (ResolveSource(exception) is { } source)
+        // One stack walk feeds both Source and StackFrames.
+        var captured = ExceptionStackSanitizer.Capture(exception);
+        if (captured?.Source is { } source)
             properties[TelemetryProperties.Source] = source;
-        if (ResolveStackFramesOnce(exception) is { } stackFrames)
+        if (ResolveStackFramesOnce(exception, captured) is { } stackFrames)
             properties[TelemetryProperties.StackFrames] = stackFrames;
 
         _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
@@ -95,21 +97,29 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     /// seen in this session, up to a per-session cap on distinct stacks; <see langword="null"/> otherwise, so a
     /// hot failure loop cannot multiply payload size (the event itself is still sent and counted).
     /// </summary>
-    private string ResolveStackFramesOnce(Exception exception)
+    private string ResolveStackFramesOnce(Exception exception, ExceptionStackSanitizer.CapturedStack captured)
     {
-        var frames = ExceptionStackSanitizer.Sanitize(exception);
-        if (frames is null || _stacksSent.Count >= _maxDistinctStacks)
+        if (captured is null)
             return null;
-        var key = exception.GetType().FullName + "|" + frames;
-        if (!_stacksSent.TryAdd(key, 0))
-            return null;
-        // Concurrent callers can all pass the Count check above; back out so the cap is strict.
-        if (_stacksSent.Count > _maxDistinctStacks)
+
+        // Cheap pre-check so a saturated session skips the formatting work entirely.
+        lock (_stacksGate)
         {
-            _stacksSent.TryRemove(key, out _);
-            return null;
+            if (_stacksSent.Count >= _maxDistinctStacks)
+                return null;
         }
-        return frames;
+
+        var frames = captured.Sanitize();
+        if (frames is null)
+            return null;
+
+        // Re-check under the lock: the cap is exact even when callers race.
+        lock (_stacksGate)
+        {
+            if (_stacksSent.Count >= _maxDistinctStacks)
+                return null;
+            return _stacksSent.Add(exception.GetType().FullName + "|" + frames) ? frames : null;
+        }
     }
 
     /// <summary>No-op: the LSP server does not track project-template-wizard-started telemetry.</summary>
@@ -134,26 +144,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     /// </summary>
     internal static string ResolveSource(Exception exception)
     {
-        // MonitorError must never throw: stack metadata can be trimmed or unavailable, so any failure means "unknown".
-        try
-        {
-            foreach (var frame in new StackTrace(exception, fNeedFileInfo: false).GetFrames() ?? Array.Empty<StackFrame>())
-            {
-                var type = frame.GetMethod()?.DeclaringType;
-                if (type?.Namespace is null || !type.Namespace.StartsWith("Reqnroll.IdeSupport", StringComparison.Ordinal))
-                    continue;
-
-                // <Method>d__3 and <>c__DisplayClass are nested, compiler-named types: report their declaring class.
-                while (type.IsNested && type.Name.StartsWith('<') && type.DeclaringType is { } outer)
-                    type = outer;
-                return type.Name;
-            }
-        }
-        catch (Exception)
-        {
-            // fall through: no Source
-        }
-
-        return null;
+        // Shares ExceptionStackSanitizer's product test (namespace AND assembly, exact-or-dotted); never throws.
+        return ExceptionStackSanitizer.Capture(exception)?.Source;
     }
 }

@@ -110,6 +110,169 @@ public class ExceptionStackSanitizerTests
         result.Should().NotContain("alice").And.NotContain("Login");
     }
 
+    private static string First(string sanitized) => sanitized.Split(ExceptionStackSanitizer.FrameSeparator)[0];
+
+    [Fact]
+    public void IsProductType_requires_both_namespace_and_assembly_in_the_product_tree()
+    {
+        ExceptionStackSanitizer.IsProductType(typeof(ExceptionStackSanitizerTests)).Should().BeTrue();
+        ExceptionStackSanitizer.IsProductType(typeof(string)).Should().BeFalse();
+        ExceptionStackSanitizer.IsProductType(null!).Should().BeFalse();
+        ExceptionStackSanitizer.IsProductType(typeof(Reqnroll.IdeSupportLookalike.Evil)).Should().BeFalse();
+        ExceptionStackSanitizer.IsProductType(ImpostorType()).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Does_not_name_an_exact_namespace_impostor_declared_in_a_foreign_assembly()
+    {
+        var run = ImpostorType().GetMethod("Run")!;
+        var action = (Action<Action>)Delegate.CreateDelegate(typeof(Action<Action>), run);
+
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => action(() => throw new InvalidOperationException("x"))))!;
+
+        result.Should().NotContain("Impostor").And.NotContain("ForeignDyn");
+        result.Split(ExceptionStackSanitizer.FrameSeparator).Should().Contain(ExceptionStackSanitizer.ExternalPlaceholder);
+    }
+
+    [Fact]
+    public void Explicit_interface_implementation_never_emits_the_interface_or_its_generic_arguments()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => ((IHandler<UserSecretType>)new ExplicitImpl()).Handle()))!;
+
+        First(result).Should().Be($"{Prefix}.ExplicitImpl.Handle");
+        result.Should().NotContain("UserSecretType").And.NotContain("IHandler");
+    }
+
+    [Fact]
+    public void Local_function_inside_a_lambda_is_reported_as_its_enclosing_member()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(LocalInLambda))!;
+
+        First(result).Should().Be($"{Prefix}.LocalInLambda{{local}}");
+        result.Should().NotContain("<").And.NotContain("|").And.NotContain(">");
+    }
+
+    [Fact]
+    public void Iterator_methods_are_reported_by_their_declaring_member()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => Iterator().ToList()))!;
+
+        First(result).Should().Be($"{Prefix}.Iterator");
+    }
+
+    [Fact]
+    public void Property_accessors_are_reported_by_accessor_name()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => _ = ThrowingProperty))!;
+
+        First(result).Should().Be($"{Prefix}.get_ThrowingProperty");
+    }
+
+    [Fact]
+    public void Static_constructors_are_reported_as_cctor()
+    {
+        var typeInit = Thrown(() => ThrowingStaticCtor.Touch());
+
+        ExceptionStackSanitizer.Sanitize(typeInit.InnerException!)!
+            .Should().StartWith($"{Prefix}.ThrowingStaticCtor.{{cctor}}");
+    }
+
+    [Fact]
+    public void Nested_type_inside_a_generic_type_drops_the_arity_and_arguments()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => new OuterGeneric<UserSecretType>.Inner().Go()))!;
+
+        First(result).Should().Be($"{Prefix}.OuterGeneric.Inner.Go");
+        result.Should().NotContain("UserSecretType").And.NotContain("`");
+    }
+
+    [Fact]
+    public void Never_emits_user_named_exception_types_or_chained_exceptions()
+    {
+        var ex = Thrown(() => throw new AcmeCustomerException("c", new InvalidOperationException("inner-secret", new FormatException("deepest-secret"))));
+
+        var result = ExceptionStackSanitizer.Sanitize(ex)!;
+
+        result.Should().NotContain("Acme").And.NotContain("Customer").And.NotContain("secret");
+    }
+
+    [Fact]
+    public void A_very_deep_recursion_is_truncated_to_the_frame_cap()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => Recurse(3000)))!;
+
+        var frames = result.Split(ExceptionStackSanitizer.FrameSeparator);
+        frames.Should().HaveCount(ExceptionStackSanitizer.DefaultMaxFrames);
+        frames[0].Should().Be($"{Prefix}.Recurse");
+        result.Length.Should().BeLessThanOrEqualTo(ExceptionStackSanitizer.MaxLength);
+    }
+
+    [Fact]
+    public void Capture_Source_ignores_the_lookalike_namespace_and_names_the_first_product_class()
+    {
+        var captured = ExceptionStackSanitizer.Capture(Thrown(() => Reqnroll.IdeSupportLookalike.Evil.Throw()))!;
+
+        captured.Source.Should().Be(nameof(ExceptionStackSanitizerTests));
+    }
+
+    private static Type ImpostorType()
+    {
+        var asm = System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
+            new System.Reflection.AssemblyName("ForeignDyn"), System.Reflection.Emit.AssemblyBuilderAccess.Run);
+        var module = asm.DefineDynamicModule("ForeignDyn");
+        var type = module.DefineType("Reqnroll.IdeSupport.Impostor", System.Reflection.TypeAttributes.Public | System.Reflection.TypeAttributes.Abstract | System.Reflection.TypeAttributes.Sealed);
+        var method = type.DefineMethod("Run", System.Reflection.MethodAttributes.Public | System.Reflection.MethodAttributes.Static, typeof(void), new[] { typeof(Action) });
+        var il = method.GetILGenerator();
+        il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+        il.Emit(System.Reflection.Emit.OpCodes.Callvirt, typeof(Action).GetMethod("Invoke")!);
+        il.Emit(System.Reflection.Emit.OpCodes.Ret);
+        return type.CreateType()!;
+    }
+
+    private interface IHandler<T> { void Handle(); }
+
+    private sealed class ExplicitImpl : IHandler<UserSecretType>
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        void IHandler<UserSecretType>.Handle() => throw new InvalidOperationException("explicit");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void LocalInLambda()
+    {
+        Action a = () =>
+        {
+            void L() => throw new InvalidOperationException("local");
+            L();
+        };
+        a();
+    }
+
+    private static IEnumerable<int> Iterator()
+    {
+        yield return 1;
+        throw new InvalidOperationException("iterator");
+    }
+
+    private static int ThrowingProperty => throw new InvalidOperationException("property");
+
+    private static class ThrowingStaticCtor
+    {
+        static ThrowingStaticCtor() => throw new InvalidOperationException("cctor");
+        public static void Touch() { }
+    }
+
+    private sealed class OuterGeneric<T>
+    {
+        public sealed class Inner
+        {
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            public void Go() => throw new InvalidOperationException("nested");
+        }
+    }
+
+    private sealed class AcmeCustomerException(string message, Exception inner) : Exception(message, inner);
+
     private static Exception Thrown(Action action)
     {
         try { action(); }
