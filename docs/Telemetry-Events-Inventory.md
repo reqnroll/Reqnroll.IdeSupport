@@ -44,15 +44,17 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | Key | Stamped by | Value |
 |---|---|---|
 | `IdeClient` | **canonical.** Server (`IdentityStampingLspTelemetryService`, outermost decorator, so the debug-log mirror sees it) on every server-originated event; each host also stamps it on every event it transmits (covers host-originated events) | `visualstudio` \| `vscode` \| `rider` (the `--ide` vocabulary) |
-| `IdeClientVersion` | Server, when the client sent `InitializeParams.ClientInfo.Version` | client self-reported version |
 | `ServerVersion` | Server | assembly informational version |
 | `SessionId` | Server | random GUID per server process (not user-identifying; links an event stream to one server run) |
-| `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version, extension version |
+| `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version (**the single source of the IDE version**), extension version |
 
 Stamping never overrides a key the caller already set, and server-side stamping copies the property
 dictionary rather than mutating the caller's. `PerfSample`'s former `IDEClient` key is retired in
 favor of `IdeClient` (historical `IDEClient` data is not back-filled). `Ide*`/`ExtensionVersion`
-remain host-stamped because only the host knows the IDE product and extension build.
+remain host-stamped because only the host knows the IDE product and extension build. There is
+no server-stamped IDE version: the host stamps `IdeVersion` on every event it transmits (server-
+and host-originated), whereas `InitializeParams.ClientInfo.Version` is optional, client-defined,
+and absent before `initialize`, so the server records it in its startup log only.
 
 **Schema conventions.** Events are identified by name only — there are no event IDs, and the
 property dictionaries are the schema. Transmitters stringify every property value; booleans

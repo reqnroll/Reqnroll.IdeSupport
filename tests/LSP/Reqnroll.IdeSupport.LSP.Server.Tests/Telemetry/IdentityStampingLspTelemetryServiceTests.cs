@@ -25,7 +25,7 @@ public class IdentityStampingLspTelemetryServiceTests
     }
 
     [Fact]
-    public void Stamps_ide_client_client_version_server_version_and_session_id()
+    public void Stamps_ide_client_server_version_and_session_id()
     {
         var ide = new ClientIdeContext("rider");
         ide.ApplyClientInfo(new ClientInfo { Name = "Rider", Version = "2025.1" });
@@ -33,7 +33,9 @@ public class IdentityStampingLspTelemetryServiceTests
         var sent = Send(ide);
 
         sent["IdeClient"].Should().Be("rider");
-        sent["IdeClientVersion"].Should().Be("2025.1");
+        // The IDE version is host-stamped (IdeVersion); the self-reported ClientInfo.Version is
+        // log-only, so there is deliberately a single source for it.
+        sent.Should().NotContainKey("IdeClientVersion");
         sent["ServerVersion"].Should().Be("9.9.9");
         sent["SessionId"].Should().Be("session-1");
     }
@@ -44,7 +46,6 @@ public class IdentityStampingLspTelemetryServiceTests
         var sent = Send(new ClientIdeContext(null));
 
         sent.Should().NotContainKey("IdeClient");
-        sent.Should().NotContainKey("IdeClientVersion");
         sent.Should().ContainKey("ServerVersion");
         sent.Should().ContainKey("SessionId");
     }

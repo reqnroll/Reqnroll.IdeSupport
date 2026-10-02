@@ -12,19 +12,16 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// canonical client identity, regardless of which IDE forwards it (issue #844). Stamping here, in
 /// the server, keeps the three host forwarders dumb and guarantees identical behavior across them.
 /// <para>
-/// Stamped keys (<c>IdeClient</c>, <c>IdeClientVersion</c>, <c>ServerVersion</c>, <c>SessionId</c>)
+/// Stamped keys (<c>IdeClient</c>, <c>ServerVersion</c>, <c>SessionId</c>)
 /// are added only when the caller has not already supplied the same key, and the caller's
 /// dictionary is never mutated — a copy is forwarded. Null identity values (client not yet
-/// initialized, no <c>ClientInfo.Version</c>) are omitted rather than sent as empty strings.
+/// initialized) are omitted rather than sent as empty strings.
 /// </para>
 /// </summary>
 public sealed class IdentityStampingLspTelemetryService : ILspTelemetryService
 {
     /// <summary>Canonical IDE identifier key (<c>visualstudio</c>/<c>vscode</c>/<c>rider</c>).</summary>
     public const string IdeClientKey = "IdeClient";
-
-    /// <summary>The client's self-reported version (<c>InitializeParams.ClientInfo.Version</c>).</summary>
-    public const string IdeClientVersionKey = "IdeClientVersion";
 
     /// <summary>The LSP server's informational version.</summary>
     public const string ServerVersionKey = "ServerVersion";
@@ -58,7 +55,6 @@ public sealed class IdentityStampingLspTelemetryService : ILspTelemetryService
     {
         var stamped = new Dictionary<string, object?>(properties);
         TryStamp(stamped, IdeClientKey, _ide.Ide);
-        TryStamp(stamped, IdeClientVersionKey, _ide.ClientVersion);
         TryStamp(stamped, ServerVersionKey, _serverVersion);
         TryStamp(stamped, SessionIdKey, _sessionId);
         _inner.SendEvent(eventName, stamped);
