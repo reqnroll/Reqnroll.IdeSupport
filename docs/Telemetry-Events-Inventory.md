@@ -58,7 +58,9 @@ and absent before `initialize`, so the server records it in its startup log only
 
 **Schema conventions.** Events are identified by name only — there are no event IDs, and the
 property dictionaries are the schema. Transmitters stringify every property value; booleans
-become `"True"`/`"False"`, numbers their invariant string. All property names are PascalCase.
+become `"True"`/`"False"`, numbers their invariant string. All property names are PascalCase, including on the `telemetry/event` wire: the server sends
+properties as a JSON object whose names are never rewritten (a dictionary would be camelCased by
+the LSP serializer), and the hosts forward them verbatim (#844).
 Names are `"<PascalCaseWord> <action>"` in the legacy style for command events
 (`"FindStepUsages command executed"`) or a single PascalCase word for the two events renamed in
 #627 (`ReqnrollDiscoveryExecuted`, `UnhandledException`).
