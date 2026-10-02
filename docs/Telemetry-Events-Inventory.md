@@ -383,11 +383,11 @@ without leaking paths.
 **Analytics use.** Real-world P95/P99 per operation per IDE — the field half of the performance
 verification program (Layer 4). No URIs or content, ever.
 
-### `FeatureUsageSummary` (aggregated, opt-in)
+### `FeatureUsageSummary` (aggregated)
 | | |
 |---|---|
 | **Emitter** | `FeatureUsageFlushService`, draining `FeatureUsageCounters`; counters are incremented from `OperationDurationRecorder.Record` for operations in `FeatureUsageCatalog` (issue #582) |
-| **When** | Every flush interval, plus once on the LSP `shutdown` request (`IsFinal=true`); a window in which nothing was counted sends nothing. **Off by default** - enabled by setting `REQNROLL_FEATURE_USAGE_FLUSH_INTERVAL_SECONDS` to a positive number of seconds (a non-positive value disables); `FeatureUsageFlushService.EnabledByDefault`/`DefaultInterval` (10 min) is the single switch issue #851 flips |
+| **When** | Every flush interval, plus once on the LSP `shutdown` request (`IsFinal=true`); a window in which nothing was counted sends nothing. **On by default**, every 10 minutes (`FeatureUsageFlushService.EnabledByDefault`/`DefaultInterval`); `REQNROLL_FEATURE_USAGE_FLUSH_INTERVAL_SECONDS` overrides the interval (a non-positive value disables the event). The `REQNROLL_TELEMETRY_ENABLED` kill switch applies as for every event |
 | **Properties** | `LookupCounts` and `PassiveCounts` (string - compact, key-sorted JSON object of feature key to count, e.g. `{"CodeAction":3,"Completion.Step":41}`; a kind with no counts is omitted), `WindowSeconds` (seconds covered by this window), `SessionSeconds` (seconds since the flush service started, approximately server uptime), `Sequence` (long - 1, 2, 3... per `SessionId`, advanced only by emitted events, so a gap marks a lost flush), `IsFinal` (bool - the shutdown flush); identity (`IdeClient`, `ServerVersion`, `SessionId`) is stamped like every server event (section 1) |
 
 Counts are sent as a JSON *string*, not a nested object, because the three IDE forwarders
@@ -445,7 +445,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Crash/error rates | `UnhandledException` (server) + VS `ExceptionTelemetry` |
 | Adoption lifecycle | `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events |
 | Field performance (P95/P99) | `PerfSample` |
-| Volume/passive feature usage (completion, code actions, CodeLens, inlay hints, ...) | `FeatureUsageSummary` (opt-in) |
+| Volume/passive feature usage (completion, code actions, CodeLens, inlay hints, ...) | `FeatureUsageSummary` |
 | Tag-index cold-scan size and cost | `TagIndexFirstScanCompleted` (`FileCount`, `FilesParsedFromDisk`, `DurationMs`); steady state via `PerfSample` `textDocument/completion#tag` |
 
 ---

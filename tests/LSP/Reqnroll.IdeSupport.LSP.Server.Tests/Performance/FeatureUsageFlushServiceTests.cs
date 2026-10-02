@@ -232,18 +232,22 @@ public class FeatureUsageFlushServiceTests
     }
 
     [Theory]
-    [InlineData(null, false)]
-    [InlineData("", false)]
-    [InlineData("not-a-number", false)]
-    [InlineData("0", false)]
-    [InlineData("-5", false)]
-    [InlineData("30", true)]
-    public void ResolveInterval_enables_only_for_a_positive_seconds_value_while_off_by_default(string? raw, bool enabled)
-    {
-        // The unset/unparseable rows assume EnabledByDefault is false; #851 flipping it changes them.
-        var interval = FeatureUsageFlushService.ResolveInterval(raw);
+    [InlineData("0")]
+    [InlineData("-5")]
+    public void ResolveInterval_disables_for_a_non_positive_seconds_value(string raw)
+        => FeatureUsageFlushService.ResolveInterval(raw).Should().BeNull();
 
-        (interval is not null).Should().Be(enabled);
-        if (enabled) interval.Should().Be(TimeSpan.FromSeconds(30));
+    [Fact]
+    public void ResolveInterval_uses_the_positive_seconds_value_when_given()
+        => FeatureUsageFlushService.ResolveInterval("30").Should().Be(TimeSpan.FromSeconds(30));
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-number")]
+    public void ResolveInterval_falls_back_to_the_default_when_unset_or_unparseable(string? raw)
+    {
+        FeatureUsageFlushService.EnabledByDefault.Should().BeTrue();
+        FeatureUsageFlushService.ResolveInterval(raw).Should().Be(FeatureUsageFlushService.DefaultInterval);
     }
 }

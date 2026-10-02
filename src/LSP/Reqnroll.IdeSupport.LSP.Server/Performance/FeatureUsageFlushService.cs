@@ -9,11 +9,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 /// <summary>
 /// Default <see cref="IFeatureUsageFlushService"/>. Whether and how often it flushes is resolved by
 /// <see cref="ResolveInterval"/> from <see cref="FlushIntervalEnvVar"/> (seconds) and the
-/// <see cref="EnabledByDefault"/>/<see cref="DefaultInterval"/> constants; a <c>null</c> interval
-/// disables the periodic flush entirely — counting stays in-memory only and no
+/// <see cref="EnabledByDefault"/>/<see cref="DefaultInterval"/> constants (on, every 10 minutes, unless
+/// overridden); a <c>null</c> interval disables the periodic flush entirely — counting stays in-memory only and no
 /// <c>FeatureUsageSummary</c> event is ever sent (issue #582's "Rollout and rollback": counting
-/// itself is a few <c>Interlocked</c> adds and can stay always-on; the increment is inert without
-/// this service running).
+/// itself is a few <c>Interlocked</c> adds and stays always-on).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -43,10 +42,12 @@ public sealed class FeatureUsageFlushService : IFeatureUsageFlushService
     public const string FlushIntervalEnvVar = "REQNROLL_FEATURE_USAGE_FLUSH_INTERVAL_SECONDS";
 
     /// <summary>
-    /// Whether the summary is sent when <see cref="FlushIntervalEnvVar"/> is unset. Off for now
-    /// (opt-in, like <c>PerfSample</c>); issue #851 flips this single constant.
+    /// Whether the summary is sent when <see cref="FlushIntervalEnvVar"/> is unset. On: the event is
+    /// aggregate counts from a closed catalogue, and the <c>REQNROLL_TELEMETRY_ENABLED</c> kill switch
+    /// still applies in every IDE host (issue #851 argued against env-var-only opt-in gates, which
+    /// collect no field data). Set the env var to <c>0</c> to disable.
     /// </summary>
-    public const bool EnabledByDefault = false;
+    public const bool EnabledByDefault = true;
 
     /// <summary>Flush interval used when enabled and <see cref="FlushIntervalEnvVar"/> is unset.</summary>
     public static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(10);
