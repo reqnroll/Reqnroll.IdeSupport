@@ -1,7 +1,6 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
@@ -31,14 +30,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// </summary>
 public sealed class LspErrorTelemetryService : ITelemetryService
 {
-    // Windows absolute/UNC paths (C:\..., \\server\share\...) and POSIX absolute paths (/home/...).
-    // Deliberately broad (over-redacting is safe; under-redacting leaks a path) — see
-    // docs/LSP-IDE-Support-Architecture.md's Privacy Considerations: "The Error event must scrub
-    // exception messages for file paths and user-identifiable strings before transmission."
-    private static readonly Regex PathPattern = new(
-        @"(?:[A-Za-z]:\\|\\\\|/)[^\s""'<>:*?|]+",
-        RegexOptions.Compiled);
-
     private readonly ILspTelemetryService _lspTelemetryService;
 
     /// <summary>Initializes a new instance of the <see cref="LspErrorTelemetryService"/> class.</summary>
@@ -65,15 +56,16 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings projectSettings) { }
 
     /// <summary>
-    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>, with the exception
-    /// message redacted via <see cref="RedactPaths"/> first.
+    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>. The message is passed
+    /// through raw: <see cref="LspTelemetryService"/> (the last hop before the client) redacts paths via
+    /// <see cref="TelemetryScrubber.ScrubProperties"/>, so local logs and the debug-log mirror keep it.
     /// </summary>
     public void MonitorError(Exception exception, bool? isFatal = null)
     {
         var properties = new Dictionary<string, object>
         {
             ["ExceptionType"] = exception.GetType().FullName,
-            ["Message"] = RedactPaths(exception.Message),
+            ["Message"] = exception.Message,
         };
         if (isFatal.HasValue)
             properties["IsFatal"] = isFatal.Value;
@@ -93,8 +85,4 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorWelcomeDialogDismissed(Dictionary<string, object> additionalProps) { }
     /// <summary>No-op: the LSP server does not transmit ad-hoc telemetry events through this channel.</summary>
     public void TransmitEvent(ITelemetryEvent runtimeEvent) { }
-
-    /// <summary>Replaces filesystem-path-shaped substrings with <c>&lt;path&gt;</c>.</summary>
-    internal static string RedactPaths(string message) =>
-        string.IsNullOrEmpty(message) ? message : PathPattern.Replace(message, "<path>");
 }
