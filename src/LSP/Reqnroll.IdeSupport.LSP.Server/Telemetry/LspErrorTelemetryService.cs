@@ -56,15 +56,16 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings projectSettings) { }
 
     /// <summary>
-    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>, with the exception
-    /// message redacted via <see cref="TelemetryScrubber.RedactPaths"/> first.
+    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>. The message is passed
+    /// through raw: <see cref="LspTelemetryService"/> (the last hop before the client) redacts paths via
+    /// <see cref="TelemetryScrubber.ScrubProperties"/>, so local logs and the debug-log mirror keep it.
     /// </summary>
     public void MonitorError(Exception exception, bool? isFatal = null)
     {
         var properties = new Dictionary<string, object>
         {
             ["ExceptionType"] = exception.GetType().FullName,
-            ["Message"] = TelemetryScrubber.RedactPaths(exception.Message),
+            ["Message"] = exception.Message,
         };
         if (isFatal.HasValue)
             properties["IsFatal"] = isFatal.Value;
