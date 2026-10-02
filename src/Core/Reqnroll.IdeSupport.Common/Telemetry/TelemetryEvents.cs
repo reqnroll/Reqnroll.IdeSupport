@@ -250,7 +250,7 @@ public static class TelemetryEvents
     /// <summary>
     /// Sent by each IDE client when the language server fails to start or to finish its handshake
     /// (issue #845): VS (<c>LspServerConnectionService</c>), VS Code (language-client start failure)
-    /// and Rider (server support provider). A dead server cannot report itself, so the client does.
+    /// and Rider (<c>ReqnrollServerLifecycleListener</c>, from <c>LspServerManagerListener</c> state changes). A dead server cannot report itself, so the client does.
     /// Properties: <c>Reason</c> (closed enum, see <c>ServerFailureReason</c>) and <c>AttemptNumber</c>.
     /// Mirrored verbatim in <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>.
     /// </summary>

@@ -413,33 +413,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
 
   client
     .start()
-    .then(() => {
-      projectManager = new ProjectManager(client!);
-      // Step usage count CodeLens for C# files (registered after client is running)
-      registerStepCodeLens(client!, context);
-      // Hook-match count CodeLens for .feature files (issue #269)
-      registerHookCodeLens(client!, context);
-      // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
-      // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
-      // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"
-      // action and a later vscode.TestController migration were both tried and reverted here.
-      // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
-      // above) instead of relying on vscode-languageclient's built-in sync feature.
-      context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
-      // Forward server-emitted telemetry/event notifications to Application Insights.
-      registerTelemetry(client!, context);
-      // LSP-server outcome pipeline (#700/#702), opt-in via reqnroll.testOutcomes.enabled —
-      // registers this session with the server and merges the bundled VSTest logger into
-      // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
-      // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
-      // blocks activation, and every failure degrades silently (see the module's own doc comment).
-      void activateTestOutcomes(context, client!);
-      // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
-      // doc comment for why it carries no real Run/Debug action (issue #504).
-      registerTestOutcomeCodeLens(client!, projectManager, context);
-    })
+    .then(
+      () => {
+        projectManager = new ProjectManager(client!);
+        // Step usage count CodeLens for C# files (registered after client is running)
+        registerStepCodeLens(client!, context);
+        // Hook-match count CodeLens for .feature files (issue #269)
+        registerHookCodeLens(client!, context);
+        // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
+        // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
+        // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"
+        // action and a later vscode.TestController migration were both tried and reverted here.
+        // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
+        // above) instead of relying on vscode-languageclient's built-in sync feature.
+        context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
+        // Forward server-emitted telemetry/event notifications to Application Insights.
+        registerTelemetry(client!, context);
+        // LSP-server outcome pipeline (#700/#702), opt-in via reqnroll.testOutcomes.enabled —
+        // registers this session with the server and merges the bundled VSTest logger into
+        // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
+        // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
+        // blocks activation, and every failure degrades silently (see the module's own doc comment).
+        void activateTestOutcomes(context, client!);
+        // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
+        // doc comment for why it carries no real Run/Debug action (issue #504).
+        registerTestOutcomeCodeLens(client!, projectManager, context);
+      },
+      // Second argument of then(), not a trailing catch(): only a rejected start() is a server start
+      // failure. A throw in the success handler above (CodeLens registration etc.) happens after a
+      // successful start and must not be reported as ServerStartFailed (issue #845).
+      (err: unknown) => {
+        serverLifecycle?.reportStartRejected();
+        throw err;
+      },
+    )
     .catch((err: unknown) => {
-      serverLifecycle?.reportStartRejected();
       const msg = err instanceof Error ? err.message : String(err);
       void showError(`Reqnroll LSP server failed to start: ${msg}`);
     });

@@ -263,7 +263,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     .SwitchToMainThreadAsync(cancellationToken);
 
                 var serviceProvider = ServiceProvider.GlobalProvider;
-                _connectionService.TelemetryTransmitter = ResolveMefService<ITelemetryTransmitter>(serviceProvider);
+                _connectionService.TelemetryTransmitter ??= ResolveMefService<ITelemetryTransmitter>(serviceProvider);
 
                 // Run CodeLens bridge (design doc §5/§6, issue #262) — needs a DTE-resolvable
                 // IServiceProvider for the owning project's output assembly path, so it's

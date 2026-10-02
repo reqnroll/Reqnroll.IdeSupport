@@ -53,7 +53,8 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
 
   /** Call when `client.start()` rejects; a no-op if the state change already reported this attempt's failure. */
   reportStartRejected(): void {
-    if (this._intentionalStop || this._failureReported) return;
+    // A client that already reached Running started fine: a later throw is not a start failure.
+    if (this._intentionalStop || this._failureReported || this._reachedRunning) return;
     this._attempt = Math.max(this._attempt, 1);
     this._reportFailure(TelemetryEvents.serverStartFailed, ServerFailureReason.startFailed);
   }
@@ -68,7 +69,7 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
     this._failureReported = false;
     if (this._attempt > 1) {
       this._send(TelemetryEvents.serverRestarted, {
-        Reason: this._lastFailureReason ?? ServerFailureReason.userRestart,
+        Reason: this._lastFailureReason ?? ServerFailureReason.sessionEnded,
         AttemptNumber: this._attempt,
       });
       this._lastFailureReason = undefined;

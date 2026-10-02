@@ -65,7 +65,7 @@ public sealed class ServerSessionTelemetry
             [TelemetryProperties.Runtime] = RuntimeInformation.FrameworkDescription,
             [TelemetryProperties.StartupMs] = (long)_processUptime().TotalMilliseconds,
         };
-        if (!string.IsNullOrWhiteSpace(_ide.ClientVersion))
+        if (IsSafeVersion(_ide.ClientVersion))
             properties[TelemetryProperties.ClientVersion] = _ide.ClientVersion;
 
         Send(TelemetryEvents.ServerSessionStarted, properties);
@@ -92,6 +92,15 @@ public sealed class ServerSessionTelemetry
     /// final <c>FeatureUsageSummary</c> precedes <c>ServerSessionEnded</c> in the stream.
     /// </summary>
     public IDisposable EndOnShutdown(IObservable<bool> shutdown) => shutdown.Subscribe(new ShutdownObserver(this));
+
+    private static readonly System.Text.RegularExpressions.Regex SafeVersion =
+        new(@"^[\w.\-+]{1,32}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// The client version is client-controlled text, so it is only sent when it looks like a version
+    /// (word characters, dots, hyphens, plus; at most 32 characters). Anything else is omitted.
+    /// </summary>
+    internal static bool IsSafeVersion(string? version) => version is not null && SafeVersion.IsMatch(version);
 
     private void Send(string eventName, Dictionary<string, object?> properties)
     {

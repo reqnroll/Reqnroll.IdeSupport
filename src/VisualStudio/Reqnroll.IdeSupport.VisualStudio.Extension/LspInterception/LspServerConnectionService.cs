@@ -361,11 +361,6 @@ internal sealed class LspServerConnectionService : IDisposable
     }
 
     /// <summary>
-    /// Resolves the bundled LSP server executable path relative to the extension assembly's own
-    /// location. Pure/deterministic — extracted so the path-building logic is unit-testable
-    /// without touching <see cref="Process"/> or <see cref="ThreadHelper"/>.
-    /// </summary>
-    /// <summary>
     /// Whether a server process that is gone ended without the client having asked it to: the connection
     /// service is not shutting down, no LSP <c>shutdown</c> was observed and the pipe was not yet marked
     /// terminated (it is marked as the <c>exit</c> notification goes out). <paramref name="pipeTerminated"/>
@@ -393,6 +388,11 @@ internal sealed class LspServerConnectionService : IDisposable
         _lifecycleReporter.Report(TelemetryEvents.ServerExitedUnexpectedly, ServerFailureReason.ProcessExited, generation);
     }
 
+    /// <summary>
+    /// Resolves the bundled LSP server executable path relative to the extension assembly's own
+    /// location. Pure/deterministic — extracted so the path-building logic is unit-testable
+    /// without touching <see cref="Process"/> or <see cref="ThreadHelper"/>.
+    /// </summary>
     internal static string ResolveServerExePath(string extensionAssemblyLocation)
         => Path.Combine(
             Path.GetDirectoryName(extensionAssemblyLocation)!,

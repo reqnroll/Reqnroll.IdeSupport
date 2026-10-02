@@ -294,20 +294,25 @@ fires per keystroke; see `Completion inserted` in §7); steady-state tag-complet
 | | |
 |---|---|
 | **Emitter** | `ServerSessionTelemetry` (server). Identical from VS, VS Code and Rider; no per-IDE code |
-| **When** | `ServerSessionStarted`: once, from the server's `OnStarted` (after the LSP `initialized` notification). `ServerSessionEnded`: once, best-effort, when the LSP `shutdown` request arrives (a post-`exit` fallback also tries) — subscribed after `FeatureUsageSummary`'s final flush, so the final summary precedes it |
-| **Properties** | Started: `ClientVersion` (the client's self-reported `ClientInfo.Version`; omitted when absent), `OperatingSystem` (`Windows`/`macOS`/`Linux`/`Other`), `Architecture` (`X64`/`Arm64`/...), `Runtime` (.NET framework description), `StartupMs` (server process start to ready). Ended: `SessionSeconds`. Both also carry the stamped `IdeClient`, `ServerVersion` and `SessionId` |
+| **When** | `ServerSessionStarted`: once, from the server's `OnStarted` (after the LSP `initialized` notification). `ServerSessionEnded`: once, best-effort, when the LSP `shutdown` request arrives — subscribed after `FeatureUsageSummary`'s final flush, so the final summary precedes it — or, when the client sends `exit` without a preceding `shutdown`, from a post-exit fallback (which may be lost if the transport is already closed) |
+| **Properties** | Started: `ClientVersion` (the client's self-reported `ClientInfo.Version`; client-controlled text, so sent only when it matches `^[\w.\-+]{1,32}$`, otherwise omitted), `OperatingSystem` (`Windows`/`macOS`/`Linux`/`Other`), `Architecture` (`X64`/`Arm64`/...), `Runtime` (.NET framework description), `StartupMs` (server process launch to LSP handshake complete: it includes time spent waiting for the client's `initialize`/`initialized`, so it is an upper bound on the server's own startup cost). Ended: `SessionSeconds`. Both also carry the stamped `IdeClient`, `ServerVersion` and `SessionId` |
 
 **Analytics use.** Per-IDE active-session counts (`IdeClient`), startup-time distribution by IDE and
 OS/arch (field data for the ~14.6 s cold-start finding), and session length. `ServerSessionEnded` is
-lost when the process dies abruptly, so a `SessionId` with a Started but no Ended event is itself the
-abnormal-end signal (crash, force-quit, IDE kill).
+lost when the process dies abruptly, so a `SessionId` with a Started but no Ended event is a *hint* of an
+abnormal end (crash, force-quit, IDE kill), not proof: an `exit` without `shutdown` or a closed transport
+can also drop the Ended event, so treat it as an upper bound and corroborate with the client-side failure events.
 
 ### `ProjectCharacteristics` (issue #845, from #258)
 | | |
 |---|---|
 | **Emitter** | `ConnectorBindingRegistryProvider` (server) |
 | **When** | After each successful connector discovery run that changed the bindings — the same trigger point as `ReqnrollDiscoveryExecuted`, so it re-fires on every such build with no "already sent" state. A hash-no-op run sends none (nothing changed). A separate event so the discovery event's schema stays stable |
-| **Properties** | `StepDefinitionCount`, `HookCount` (int); `StepBindingClassCount` (int: distinct declaring classes across step definitions and hooks — the method identity minus its last `.`-segment; class names are never sent); `HookCount_<HookType>` (int, flat per-type keys such as `HookCount_BeforeScenario`, only for types present); `FeatureFileCount` (int, omitted when unknown); `ProjectTargetFramework` (string) |
+| **Properties** | `StepDefinitionCount`, `HookCount` (int); `StepBindingClassCount` (int: distinct declaring classes across step definitions and hooks — the method identity cut at the first `(` and then minus its last `.`-segment; class names are never sent. The connector builds identities as namespace-less `{ShortTypeName}.{Signature}` (e.g. `Steps.SetFirstNumber(Int32)`), so on that path same-named classes in different namespaces merge — an accepted undercount; Roslyn identities are `Namespace.Class.Method` and are not merged); `HookCount_<HookType>` (int, flat per-type keys such as `HookCount_BeforeScenario`, only for types present); `FeatureFileCount` (int, from the link-aware membership index — linked files count, `bin`/`obj`/`node_modules` do not; **omitted** until the project's `reqnroll/projectFiles` baseline has arrived, never sent as zero); `ProjectTargetFramework` (string); an undefined hook type is folded into `HookCount_Unknown` |
+
+**Volume.** One event per project per successful, binding-changing connector run, so a full rebuild of an
+N-project solution emits about N extra events (no per-project rate limit; the payload is a handful of ints).
+If this proves noisy, sample or debounce per project.
 
 Excluded on purpose (maintainer decision on #258): step-occurrence count (needs a full scan),
 step-argument-transformation count (the connector reports it but `RunDiscovery` drops it — add once
@@ -366,7 +371,7 @@ only originate here.
 IDEs. In Application Insights: *active users / retention* = distinct `ai.user.id` per day over
 `ServerSessionStarted`; *install* = a user's first-ever `ServerSessionStarted`; *upgrade* = a change in
 `ExtensionVersion` between a user's consecutive sessions; *daily-use count* = days with a session. This
-is retroactively computable, needs no per-IDE client state (`globalState` / `PropertiesComponent`) that
+is retroactively computable (but limited by Application Insights retention, 90 days by default, so an install date older than that is unknowable, and `ai.user.id` is per IDE, so one person using two IDEs counts as two users), needs no per-IDE client state (`globalState` / `PropertiesComponent`) that
 could drift out of sync or reset on a reinstall, and keeps the three IDEs identical. The VS-only events
 stay for continuity with historical data and are not extended; retiring them is left until the derived
 queries have a release of history to compare against.
@@ -401,8 +406,8 @@ server's lookup volume.
 | | |
 |---|---|
 | **Emitter** | Each IDE client, because a dead server cannot report itself. VS: `LspServerConnectionService` (reported through `ServerLifecycleReporter`, which holds events until the host's transmitter is resolved); VS Code: `ServerLifecycleTelemetry` (`src/VSCode/src/lsp/serverLifecycleTelemetry.ts`, from the language client's state changes and a rejected `start()`); Rider: `ReqnrollServerLifecycleTelemetry` (from `LspServerManagerListener` state changes). Three copies of the same names, per the catalog's mirror rule |
-| **When** | `ServerStartFailed`: the server could not be launched, or ended/failed its handshake before ever running. `ServerExitedUnexpectedly`: a running server stopped without the client asking it to (VS: process exited with no `shutdown`/`exit` handshake and the client not disposing). `ServerRestarted`: the client starts the server again after one of those, or after a clean end (VS: a new session, e.g. a solution swap; Rider: a manual restart) |
-| **Properties** | `Reason` — a closed enum, never free text: `ExecutableNotFound` (VS only), `StartFailed`, `ProcessExited`, `SessionEnded` (VS clean relaunch), `UserRestart` (Rider restart after a normal shutdown). `AttemptNumber` — 1-based start attempt in this IDE session (1 = the initial start) |
+| **When** | `ServerStartFailed`: the server could not be launched, or ended/failed its handshake before ever running. `ServerExitedUnexpectedly`: a running server stopped without the client asking it to (VS: process exited with no `shutdown`/`exit` handshake and the client not disposing). `ServerRestarted`: the client starts the server again after one of those, or after a clean end (VS: a new session, e.g. a solution swap; Rider: a restart after a normal shutdown) |
+| **Properties** | `Reason` — a closed enum, never free text: `ExecutableNotFound` (VS only), `StartFailed`, `ProcessExited`, `SessionEnded` (a new start after the previous session ended cleanly: VS relaunch, Rider/VS Code restart after a normal shutdown; whether the user or the IDE initiated it is not observable, so they are not distinguished). `AttemptNumber` — 1-based start attempt in this IDE session (1 = the initial start) |
 
 Client-side exception capture is separate (#621). A crash in the VS host process itself, or an IDE
 killed outright, cannot be reported by anything and shows up only as a `ServerSessionStarted` with no

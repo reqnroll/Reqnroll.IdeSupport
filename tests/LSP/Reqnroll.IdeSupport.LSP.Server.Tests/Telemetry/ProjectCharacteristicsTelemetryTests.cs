@@ -69,6 +69,46 @@ public class ProjectCharacteristicsTelemetryTests
         properties["StepBindingClassCount"].Should().Be(0);
     }
 
+    [Theory]
+    // Connector shape: '{ShortTypeName}.{Signature}', no namespace, parameter list included.
+    [InlineData("Steps.SetFirstNumber(Int32)", "Steps")]
+    [InlineData("Hooks.BeforeScenario()", "Hooks")]
+    [InlineData("Steps.Foo(System.String,List`1)", "Steps")]
+    [InlineData("Steps.Bar(System.Collections.Generic.List`1<System.String>,Int32[])", "Steps")]
+    // Roslyn shape: 'Namespace.Class.Method', no parameters.
+    [InlineData("My.Ns.Steps.GivenA", "My.Ns.Steps")]
+    [InlineData("Ns.Steps.GivenX", "Ns.Steps")]
+    // No class part.
+    [InlineData("NoDots", null)]
+    [InlineData("NoDots(System.String)", null)]
+    [InlineData(null, null)]
+    public void DeclaringClass_handles_both_the_connector_and_roslyn_identity_shapes(string? method, string? expected)
+    {
+        ProjectCharacteristicsTelemetry.DeclaringClass(method).Should().Be(expected);
+    }
+
+    [Fact]
+    public void CountBindingClasses_counts_connector_format_classes_by_short_name()
+    {
+        // Parameter lists contain dots; only the type before the method name may decide the class.
+        var registry = Registry(
+            [Step("Steps.Foo(System.String,List`1)"), Step("Steps.Bar(Int32)"), Step("Other.Baz(System.Int32)")],
+            [Hook("Hooks.Before()", HookType.BeforeScenario), Hook("Steps.Setup()", HookType.BeforeFeature)]);
+
+        ProjectCharacteristicsTelemetry.CountBindingClasses(registry).Should().Be(3);
+    }
+
+    [Fact]
+    public void Build_folds_an_undefined_hook_type_into_Unknown_instead_of_minting_a_key()
+    {
+        var registry = Registry([], [Hook("A.B.M", (HookType)9999)]);
+
+        var properties = ProjectCharacteristicsTelemetry.Build(registry, null, null);
+
+        properties["HookCount_Unknown"].Should().Be(1);
+        properties.Keys.Should().NotContain(k => k.Contains("9999"));
+    }
+
     [Fact]
     public void CountBindingClasses_ignores_identities_without_a_class_part()
     {

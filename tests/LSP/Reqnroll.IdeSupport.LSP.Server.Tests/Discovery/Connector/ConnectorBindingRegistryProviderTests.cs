@@ -452,6 +452,16 @@ namespace S
                 !d.ContainsKey("Error")));
     }
 
+    // ProjectCharacteristics is sent after BindingRegistryChanged (telemetry must not delay consumers),
+    // so tests that assert on it wait for the event itself rather than for the registry change.
+    private static TaskCompletionSource WhenProjectCharacteristicsSent(ILspTelemetryService telemetry)
+    {
+        var sent = new TaskCompletionSource();
+        telemetry.When(t => t.SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => sent.TrySetResult());
+        return sent;
+    }
+
     [Fact]
     public async Task TriggerRefresh_emits_a_ProjectCharacteristics_snapshot_after_a_successful_run()
     {
@@ -469,8 +479,7 @@ namespace S
         var telemetry = Substitute.For<ILspTelemetryService>();
 
         var sut = CreateSutWithTelemetry(telemetry);
-        var changed = new TaskCompletionSource();
-        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+        var changed = WhenProjectCharacteristicsSent(telemetry);
         sut.TriggerRefresh();
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
@@ -482,6 +491,29 @@ namespace S
                 2.Equals(d["StepBindingClassCount"]) &&
                 1.Equals(d["HookCount_BeforeScenario"]) &&
                 !d.ContainsKey("ConnectorArguments")));
+    }
+
+    [Theory]
+    [InlineData(5, true)]
+    [InlineData(null, false)]
+    public async Task TriggerRefresh_ProjectCharacteristics_takes_FeatureFileCount_from_the_membership_lookup_and_omits_it_when_unknown(
+        int? indexed, bool expectedPresent)
+    {
+        GivenDiscoveryReturns(NonInvalidRegistry(hash: 42), "hash-1");
+        var lookup = Substitute.For<IProjectFeatureFileLookup>();
+        lookup.CountFeatureFiles(Arg.Any<IProjectScope>()).Returns(indexed);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var sut = new ConnectorBindingRegistryProvider(_project, _discovery, _logger, telemetry, lookup);
+        var changed = WhenProjectCharacteristicsSent(telemetry);
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ProjectCharacteristics,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                d.ContainsKey("FeatureFileCount") == expectedPresent &&
+                (!expectedPresent || 5.Equals(d["FeatureFileCount"]))));
     }
 
     [Fact]

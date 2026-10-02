@@ -47,6 +47,29 @@ public class ServerSessionTelemetryTests
                 d.Keys.All(k => new[] { "OperatingSystem", "Architecture", "Runtime", "StartupMs" }.Contains(k))));
     }
 
+    [Theory]
+    [InlineData("2025.1", true)]
+    [InlineData("2025.1.3-eap+build.7", true)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData(null, false)]
+    [InlineData("C:\\Users\\someone\\ide.exe", false)]
+    [InlineData("1.0 with spaces", false)]
+    [InlineData("2025.1\n", false)]
+    [InlineData("123456789012345678901234567890123", false)]
+    public void ClientVersion_is_only_sent_when_it_looks_like_a_version(string? version, bool sent)
+    {
+        ServerSessionTelemetry.IsSafeVersion(version).Should().Be(sent);
+
+        var ide = new ClientIdeContext("rider");
+        ide.ApplyClientInfo(new ClientInfo { Name = "Rider", Version = version });
+        CreateSut(ide).ReportStarted();
+
+        _telemetry.Received(1).SendEvent(
+            TelemetryEvents.ServerSessionStarted,
+            Arg.Is<Dictionary<string, object?>>(d => d.ContainsKey("ClientVersion") == sent));
+    }
+
     [Fact]
     public void ReportStarted_sends_only_once()
     {

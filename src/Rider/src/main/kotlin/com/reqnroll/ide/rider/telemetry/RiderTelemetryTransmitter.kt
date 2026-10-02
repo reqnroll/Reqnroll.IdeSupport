@@ -57,7 +57,7 @@ object RiderTelemetryTransmitter {
 
     internal const val SERVER_FAILURE_REASON_START_FAILED = "StartFailed"
     internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
-    internal const val SERVER_FAILURE_REASON_USER_RESTART = "UserRestart"
+    internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
 
     internal const val IDE_CLIENT = "rider"
 

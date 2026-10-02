@@ -22,4 +22,11 @@ public interface IProjectFeatureFileLookup
     /// "unknown", never as "no".
     /// </summary>
     bool? HasFeatureFiles(IProjectScope scope);
+
+    /// <summary>
+    /// Returns how many feature files <paramref name="scope"/> owns (linked files included), or
+    /// <see langword="null"/> when that is not yet known — same contract as <see cref="HasFeatureFiles"/>:
+    /// <see langword="null"/> is "unknown", never zero. An in-memory index query, not a folder walk.
+    /// </summary>
+    int? CountFeatureFiles(IProjectScope scope);
 }

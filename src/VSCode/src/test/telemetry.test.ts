@@ -120,8 +120,10 @@ suite('telemetry', () => {
           Reason: 'StartFailed',
           AttemptNumber: '1',
         });
-        // One reporter, one disposal hook: nothing was registered twice.
-        assert.strictEqual(context.subscriptions.length, 3);
+        // One reporter: ensure-then-register must not create a second one. Counted by the reporter's
+        // dispose hook rather than the total subscription count, which the notification listener also affects.
+        const disposeHooks = context.subscriptions.filter((s) => s instanceof TelemetryReporter);
+        assert.strictEqual(disposeHooks.length, 1);
       });
     });
   });

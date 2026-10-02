@@ -17,7 +17,7 @@ import com.reqnroll.ide.rider.telemetry.RiderTelemetryTransmitter
  * - `ServerStartFailed`: [LspServerState.ShutdownUnexpectedly] before the server ever reached [LspServerState.Running].
  * - `ServerExitedUnexpectedly`: [LspServerState.ShutdownUnexpectedly] after it had been running.
  * - `ServerRestarted`: a new [LspServerState.Initializing] after a failure or exit (`Reason` says which),
- *   or after a normal shutdown (`UserRestart`).
+ *   or after a normal shutdown (`SessionEnded`; the platform does not say whether the user or the IDE initiated it).
  *
  * `AttemptNumber` is the 1-based start attempt in this IDE session. Each attempt reports at most one
  * failure. Pure (the sink is injected) so it is unit-testable without a platform fixture.
@@ -30,6 +30,19 @@ class ReqnrollServerLifecycleTelemetry(
     private var failureReported = false
     private var lastFailureReason: String? = null
 
+    /**
+     * Seeds the tracker with a server that already exists when it starts listening (the listener is
+     * registered from a post-startup activity, which can run after `fileOpened` started the server).
+     * Counts it as attempt 1 without sending anything: how it got into [state] was not observed.
+     */
+    @Synchronized
+    fun seed(state: LspServerState) {
+        if (attempt > 0) return
+        attempt = 1
+        reachedRunning = state == LspServerState.Running
+        failureReported = state == LspServerState.ShutdownUnexpectedly || state == LspServerState.ShutdownNormally
+    }
+
     @Synchronized
     fun onStateChanged(state: LspServerState) {
         when (state) {
@@ -40,7 +53,7 @@ class ReqnrollServerLifecycleTelemetry(
                 if (attempt > 1) {
                     send(
                         RiderTelemetryTransmitter.SERVER_RESTARTED,
-                        properties(lastFailureReason ?: RiderTelemetryTransmitter.SERVER_FAILURE_REASON_USER_RESTART),
+                        properties(lastFailureReason ?: RiderTelemetryTransmitter.SERVER_FAILURE_REASON_SESSION_ENDED),
                     )
                     lastFailureReason = null
                 }
@@ -77,7 +90,12 @@ class ReqnrollServerLifecycleListener : ProjectActivity {
     override suspend fun execute(project: Project) {
         val tracker = ReqnrollServerLifecycleTelemetry(RiderTelemetryTransmitter::transmit)
         val lifetime: Disposable = Disposer.newDisposable(project, "ReqnrollServerLifecycleListener")
-        LspServerManager.getInstance(project).addLspServerManagerListener(
+        val manager = LspServerManager.getInstance(project)
+        // Seed from a server that is already up (its Initializing transition happened before we listened),
+        // otherwise the first real Initializing would be missed and AttemptNumber would be off by one.
+        manager.getServersForProvider(ReqnrollLspServerSupportProvider::class.java).firstOrNull()
+            ?.let { tracker.seed(it.state) }
+        manager.addLspServerManagerListener(
             object : LspServerManagerListener {
                 override fun serverStateChanged(lspServer: LspServer) {
                     if (lspServer.providerClass == ReqnrollLspServerSupportProvider::class.java) {

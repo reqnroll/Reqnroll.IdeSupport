@@ -41,11 +41,12 @@ public static class ServerFailureReason
     /// <summary>A running server process exited without the client having asked it to.</summary>
     public const string ProcessExited = "ProcessExited";
 
-    /// <summary>The previous server session was ended cleanly (e.g. the IDE closed a solution) and a new one was started.</summary>
+    /// <summary>
+    /// The previous server session ended cleanly (a normal shutdown) and a new one was started. Whether the
+    /// user or the IDE itself initiated that restart (a settings change, a solution swap) is not observable
+    /// from any of the three IDEs' APIs, so the two are not distinguished.
+    /// </summary>
     public const string SessionEnded = "SessionEnded";
-
-    /// <summary>The user restarted a cleanly stopped server.</summary>
-    public const string UserRestart = "UserRestart";
 }
 
 /// <summary>

@@ -28,5 +28,4 @@ export const ServerFailureReason = {
   startFailed: 'StartFailed',
   processExited: 'ProcessExited',
   sessionEnded: 'SessionEnded',
-  userRestart: 'UserRestart',
 } as const;

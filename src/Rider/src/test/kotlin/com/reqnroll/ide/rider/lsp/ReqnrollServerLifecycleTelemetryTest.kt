@@ -60,16 +60,43 @@ class ReqnrollServerLifecycleTelemetryTest {
     }
 
     @Test
-    fun `starting again after a normal shutdown is a user restart`() {
+    fun `starting again after a normal shutdown is reported with the SessionEnded reason`() {
         move(
             LspServerState.Initializing, LspServerState.Running, LspServerState.ShutdownNormally,
             LspServerState.Initializing,
         )
 
         assertEquals(
-            listOf("ServerRestarted" to mapOf<String, Any?>("Reason" to "UserRestart", "AttemptNumber" to 2)),
+            listOf("ServerRestarted" to mapOf<String, Any?>("Reason" to "SessionEnded", "AttemptNumber" to 2)),
             sent,
         )
+    }
+
+    @Test
+    fun `a server already running when listening started counts as attempt 1, so its crash and restart are numbered correctly`() {
+        sut.seed(LspServerState.Running)
+        move(LspServerState.ShutdownUnexpectedly, LspServerState.Initializing)
+
+        assertEquals(
+            listOf(
+                "ServerExitedUnexpectedly" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 1),
+                "ServerRestarted" to mapOf<String, Any?>("Reason" to "ProcessExited", "AttemptNumber" to 2),
+            ),
+            sent,
+        )
+    }
+
+    @Test
+    fun `seeding sends nothing and is ignored once a transition has been seen`() {
+        sut.seed(LspServerState.Initializing)
+        assertTrue(sent.isEmpty())
+
+        move(LspServerState.Running, LspServerState.ShutdownUnexpectedly)
+        sut.seed(LspServerState.Initializing)
+        move(LspServerState.Initializing)
+
+        assertEquals(listOf("ServerExitedUnexpectedly", "ServerRestarted"), sent.map { it.first })
+        assertEquals(listOf<Any?>(1, 2), sent.map { it.second["AttemptNumber"] })
     }
 
     @Test

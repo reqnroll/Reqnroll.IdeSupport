@@ -97,6 +97,14 @@ suite('ServerLifecycleTelemetry', () => {
     );
   });
 
+  test('a rejection after the client reached Running is not a start failure', () => {
+    const { sut, sent, move } = setup();
+    move(State.Starting);
+    move(State.Running);
+    sut.reportStartRejected();
+    assert.deepStrictEqual(sent, []);
+  });
+
   test('a deliberate stop is not reported', () => {
     const { sut, sent, move } = setup();
     move(State.Starting);

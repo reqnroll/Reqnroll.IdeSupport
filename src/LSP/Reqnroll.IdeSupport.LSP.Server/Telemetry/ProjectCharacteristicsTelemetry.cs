@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -27,7 +28,11 @@ internal static class ProjectCharacteristicsTelemetry
             [TelemetryProperties.StepBindingClassCount] = CountBindingClasses(registry),
         };
 
-        foreach (var group in registry.Hooks.GroupBy(h => h.HookType).OrderBy(g => g.Key))
+        // The key suffix is a HookType name, so only defined members may reach it; anything else
+        // (a future or corrupt value) is folded into Unknown rather than minting a new column.
+        foreach (var group in registry.Hooks
+                     .GroupBy(h => Enum.IsDefined(typeof(HookType), h.HookType) ? h.HookType : HookType.Unknown)
+                     .OrderBy(g => g.Key))
             properties[TelemetryProperties.HookCountByTypePrefix + group.Key] = group.Count();
 
         if (featureFileCount is { } files)
@@ -38,9 +43,13 @@ internal static class ProjectCharacteristicsTelemetry
     }
 
     /// <summary>
-    /// Distinct declaring classes across step definitions and hooks: the implementation's method
-    /// identity with its last <c>.</c>-segment (the method name) dropped. Identities without a
-    /// <c>.</c> have no class part and are skipped.
+    /// Distinct declaring classes across step definitions and hooks, derived from the implementation's
+    /// method identity. Two shapes exist: the connector's <c>{ShortTypeName}.{Signature}</c> (no namespace,
+    /// with a parameter list, e.g. <c>Steps.SetFirstNumber(Int32)</c>) and Roslyn's
+    /// <c>Namespace.Class.Method</c> (no parameters). Both are handled by cutting at the first <c>(</c>
+    /// and then dropping the last <c>.</c>-segment (the method name). Identities without a <c>.</c>
+    /// have no class part and are skipped. On the connector path classes are therefore namespace-less
+    /// short names, so same-named classes in different namespaces merge: an accepted undercount.
     /// </summary>
     internal static int CountBindingClasses(ProjectBindingRegistry registry) =>
         registry.StepDefinitions.Select(s => s.Implementation?.Method)
@@ -50,11 +59,14 @@ internal static class ProjectCharacteristicsTelemetry
             .Distinct(StringComparer.Ordinal)
             .Count();
 
-    private static string? DeclaringClass(string? method)
+    internal static string? DeclaringClass(string? method)
     {
         if (method is null)
             return null;
-        var dot = method.LastIndexOf('.');
-        return dot > 0 ? method[..dot] : null;
+        // Cut the parameter list first: its types may themselves contain dots (System.String).
+        var paren = method.IndexOf('(');
+        var name = paren >= 0 ? method[..paren] : method;
+        var dot = name.LastIndexOf('.');
+        return dot > 0 ? name[..dot] : null;
     }
 }
