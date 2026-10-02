@@ -33,8 +33,10 @@ Two emission paths exist:
    navigation). VS Code and Rider similarly originate `GoToHook command executed` themselves.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
-kill switch; each host additionally honors its own opt-out (VS telemetry settings,
-`telemetry.telemetryLevel` in VS Code). Debugging: `REQNROLL_TELEMETRY_DEBUG_LOG` mirrors every
+kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
+`RiderTelemetryTransmitter.transmit`, VS Code in its transmitter). VS Code *additionally* honors
+`telemetry.telemetryLevel`; Visual Studio and Rider do not currently consult their IDE's own
+telemetry settings (tracked as a follow-up). Debugging: `REQNROLL_TELEMETRY_DEBUG_LOG` mirrors every
 event (server- and host-side) to a local JSONL file — see the archived
 `docs/Archive/build-plan-telemetry-capture.md` §8.
 
@@ -377,11 +379,16 @@ without leaking paths.
 | | |
 |---|---|
 | **Emitter** | `OperationDurationRecorder` — wired into nearly every interactive LSP handler |
-| **When** | Each instrumented operation completes; emission gated by `IPerfTelemetrySampler` (`REQNROLL_PERF_TELEMETRY_SAMPLE`, fraction in `[0,1]`, default `0.05` = 5%; `0` disables sampling). The `REQNROLL_TELEMETRY_ENABLED` kill switch and each host's opt-out apply as for every event |
+| **When** | Each instrumented operation completes; emission gated by `IPerfTelemetrySampler` (`REQNROLL_PERF_TELEMETRY_SAMPLE`, fraction in `[0,1]`, default `0.05` = 5%; `0` disables sampling). `REQNROLL_PERF_TELEMETRY_SAMPLE` accepts a fraction in `[0,1]`; `0`/`off`/`false`/`no` disable it, unset/empty/`on` use the default, and an invalid value (not a number, NaN, infinite, or > 1) falls back to the default with a Warning in the server log. Housekeeping labels (`internal/featureRescan`, `workspace/*/refresh`) are never sent. The `REQNROLL_TELEMETRY_ENABLED` kill switch applies in every IDE; `telemetry.telemetryLevel` additionally in VS Code |
 | **Properties** | `Operation` (label, e.g. `textDocument/completion#step`; completion is also split into `#keyword` and, nested inside it whenever the tag branch runs, `#tag`), `DurationMs` (rounded ms), `DurationBucket` (`<=50`, `51-100`, …); per-IDE breakdown uses the canonical `IdeClient` stamped on every event (§1; formerly a `PerfSample`-only `IDEClient`) |
 
 **Analytics use.** Real-world P95/P99 per operation per IDE — the field half of the performance
 verification program (Layer 4), collected by default at a 5% sample rate. No URIs or content, ever.
+
+**Volume (estimate, not measured).** Roughly 100-300 `PerfSample` events per hour per actively
+editing user at 5%, from the interactive handlers (completion, semantic tokens, text sync, ...).
+Monitor the daily event count and per-`Operation` share after release; if volume or cost is a
+problem, lower `DefaultSampleRate` or drop chatty labels in `OperationDurationRecorder.IsSampledForTelemetry`.
 
 ### `FeatureUsageSummary` (aggregated)
 | | |

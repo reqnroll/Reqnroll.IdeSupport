@@ -70,7 +70,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
             uri is null ? null : () => uri.ToString());
 
         // Secondary sink: sampled telemetry metric — no URI/path (privacy).
-        if (_telemetry is not null && _sampler.ShouldSample())
+        if (_telemetry is not null && IsSampledForTelemetry(operation) && _sampler.ShouldSample())
         {
             _telemetry.SendEvent(PerfSampleEventName, new Dictionary<string, object?>
             {
@@ -87,6 +87,15 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         if (_counters is not null && FeatureUsageCatalog.TryGet(operation, out var usage))
             _counters.Increment(usage.Key);
     }
+
+    /// <summary>
+    /// Server-initiated housekeeping is high-volume and says nothing about user-facing latency, so it
+    /// is not sent as <c>PerfSample</c>: the debounced feature rescan and the <c>workspace/*/refresh</c>
+    /// notifications. (Still written to the PERF log, traced and, where catalogued, counted.)
+    /// </summary>
+    internal static bool IsSampledForTelemetry(string operation) =>
+        operation != InternalLspMethodNames.InternalFeatureRescan
+        && !operation.EndsWith("/refresh", StringComparison.Ordinal);
 
     /// <summary>Coarse latency buckets for cheap field aggregation without exposing raw paths.</summary>
     internal static string Bucket(double ms) => ms switch

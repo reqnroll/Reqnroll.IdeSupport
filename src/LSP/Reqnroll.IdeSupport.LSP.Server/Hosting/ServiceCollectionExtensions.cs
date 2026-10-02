@@ -113,7 +113,7 @@ public static class ServiceCollectionExtensions
             // Performance Verification, Layer 4: field instrumentation. The recorder writes
             // PERF lines to the log and emits sampled PerfSample telemetry (default 5%;
             // REQNROLL_PERF_TELEMETRY_SAMPLE overrides the rate, 0 disables). Singleton so the sampler's RNG is shared across handlers.
-            .AddSingleton<IPerformanceTelemetrySampler>(_ => PerformanceTelemetrySampler.FromEnvironment())
+            .AddSingleton<IPerformanceTelemetrySampler>(sp => PerformanceTelemetrySampler.FromEnvironment(logger: sp.GetRequiredService<IIdeSupportLogger>()))
             // Feature-usage counting (issue #582): in-memory counters incremented by the recorder
             // below for a closed set of discrete commands, drained and emitted periodically by
             // FeatureUsageFlushService instead of per-invocation telemetry. Singleton so counts
