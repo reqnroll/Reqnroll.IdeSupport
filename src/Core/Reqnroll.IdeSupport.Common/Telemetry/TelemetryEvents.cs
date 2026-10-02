@@ -160,6 +160,32 @@ public static class TelemetryEvents
     /// </summary>
     public const string FeatureUsageSummary = "FeatureUsageSummary";
 
+    /// <summary>
+    /// Sent once per server process by <c>Telemetry.ServerSessionTelemetry</c> after the LSP handshake
+    /// completes (issue #845): client version, OS family, CPU architecture, .NET runtime and
+    /// <c>StartupMs</c> (process start to ready). IDE-agnostic replacement for the VS-only
+    /// <see cref="ExtensionLoaded"/> for analytics: per-IDE active-session counts come from
+    /// <c>IdeClient</c> and <c>SessionId</c>, and install/upgrade/daily-use are derived from it in
+    /// Application Insights (distinct <c>ai.user.id</c> by first/last seen <c>ExtensionVersion</c>).
+    /// </summary>
+    public const string ServerSessionStarted = "ServerSessionStarted";
+
+    /// <summary>
+    /// Best-effort, sent once at graceful shutdown by <c>Telemetry.ServerSessionTelemetry</c> (issue #845)
+    /// with <c>SessionSeconds</c>. Absence for a <c>SessionId</c> that has a <see cref="ServerSessionStarted"/>
+    /// means the session ended abnormally (crash, force-quit); it follows the final <see cref="FeatureUsageSummary"/>.
+    /// </summary>
+    public const string ServerSessionEnded = "ServerSessionEnded";
+
+    /// <summary>
+    /// Sent by <c>Discovery.Connector.ConnectorBindingRegistryProvider</c> after each successful
+    /// connector discovery run that changed the bindings (issue #845, from #258): one snapshot of
+    /// step, hook (total and per hook type), binding-class and feature-file counts plus the target
+    /// framework. Counts only; deliberately separate from <see cref="ReqnrollDiscoveryExecuted"/> so
+    /// that event's schema stays stable.
+    /// </summary>
+    public const string ProjectCharacteristics = "ProjectCharacteristics";
+
     // ── Visual Studio host events (VsGenericEvent → ITelemetryTransmitter) ─────────────────
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProjectSystem</c>) when the extension activates inside an IDE scope.</summary>
@@ -220,4 +246,27 @@ public static class TelemetryEvents
     /// <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>: keep the three copies in sync.
     /// </summary>
     public const string GoToHookCommandExecuted = "GoToHook command executed";
+
+    /// <summary>
+    /// Sent by each IDE client when the language server fails to start or to finish its handshake
+    /// (issue #845): VS (<c>LspServerConnectionService</c>), VS Code (language-client start failure)
+    /// and Rider (server support provider). A dead server cannot report itself, so the client does.
+    /// Properties: <c>Reason</c> (closed enum, see <c>ServerFailureReason</c>) and <c>AttemptNumber</c>.
+    /// Mirrored verbatim in <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>.
+    /// </summary>
+    public const string ServerStartFailed = "ServerStartFailed";
+
+    /// <summary>
+    /// Sent by each IDE client when a running language server stops without the client having asked
+    /// it to (issue #845). Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c> (restarts so far).
+    /// Client-side exception capture is separate (#621). Mirrored in the TS and Kotlin catalogs.
+    /// </summary>
+    public const string ServerExitedUnexpectedly = "ServerExitedUnexpectedly";
+
+    /// <summary>
+    /// Sent by each IDE client when it restarts the language server after a failure or unexpected
+    /// exit (issue #845). Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c>.
+    /// Mirrored in the TS and Kotlin catalogs.
+    /// </summary>
+    public const string ServerRestarted = "ServerRestarted";
 }

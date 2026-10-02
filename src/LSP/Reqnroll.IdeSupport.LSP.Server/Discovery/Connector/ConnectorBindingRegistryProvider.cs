@@ -340,6 +340,15 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, properties);
 
             _bindingRegistryChanged?.Invoke(this, true);
+
+            // Issue #845 (from #258): the project snapshot, a separate event so the discovery
+            // event's schema stays stable. Same trigger point, so it re-sends on every build that
+            // changed the bindings; the hash-noop path above sends none because nothing changed.
+            // Sent after the registry-changed notification because GetFeatureFileCount walks the
+            // project folder: telemetry must never delay consumers of the new bindings.
+            _telemetryService?.SendEvent(
+                TelemetryEvents.ProjectCharacteristics,
+                ProjectCharacteristicsTelemetry.Build(newRegistry, _project.GetFeatureFileCount(), _project.TargetFrameworkMonikers));
         }
         catch (OperationCanceledException)
         {

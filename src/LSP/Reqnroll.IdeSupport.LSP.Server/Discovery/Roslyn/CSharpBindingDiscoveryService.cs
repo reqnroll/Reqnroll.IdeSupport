@@ -124,7 +124,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
         // Telemetry: Roslyn discovery event (membership index / telemetry design §2.3).
         var fileName = Path.GetFileName(filePath);
         var triggerContext = isOpen ? "csOpen" : "csEdit";
-        _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
+        var roslynProperties = new Dictionary<string, object?>
         {
             ["DiscoverySource"] = "Roslyn",
             ["TriggerContext"] = triggerContext,
@@ -132,7 +132,17 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
             ["AffectedFile"] = fileName,
             ["ProjectCount"] = owners.Count,
             ["ProjectTargetFramework"] = owners.FirstOrDefault()?.TargetFrameworkMonikers,
-        });
+        };
+        // Issue #845: binding counts so every discovery variant carries them. Taken from the first
+        // owner's registry after the patch, matching how ProjectTargetFramework is chosen above.
+        if (owners.FirstOrDefault() is { } firstOwner
+            && firstOwner.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var ownerProvider)
+            && ownerProvider is ConnectorBindingRegistryProvider { Current: var registry })
+        {
+            roslynProperties[TelemetryProperties.StepDefinitionCount] = registry.StepDefinitions.Length;
+            roslynProperties[TelemetryProperties.HookCount] = registry.Hooks.Length;
+        }
+        _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, roslynProperties);
     }
 
     /// <summary>Re-parses <paramref name="text"/> directly into <paramref name="project"/>'s binding registry, bypassing membership-index owner resolution.</summary>

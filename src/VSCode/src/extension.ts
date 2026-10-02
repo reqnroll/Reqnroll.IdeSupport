@@ -32,7 +32,8 @@ import {
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
-import { registerTelemetry } from './telemetry';
+import { ensureTelemetryReporter, registerTelemetry, sendTelemetryEvent } from './telemetry';
+import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
@@ -42,6 +43,7 @@ import { showWalkthroughOnFirstActivation } from './walkthrough';
 let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
 let statusBar: StatusBarManager | undefined;
+let serverLifecycle: ServerLifecycleTelemetry | undefined;
 
 /** The .NET RID for the current platform/arch combination the server is published for. */
 export function ridFor(platform: NodeJS.Platform, arch: string): string {
@@ -398,6 +400,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
   statusBar = new StatusBarManager(client, appLogChannel);
   context.subscriptions.push(statusBar);
 
+  // Issue #845: server start-failure / unexpected-exit / restart telemetry. The reporter must exist
+  // before `client.start()` so a server that never comes up can still report; `registerTelemetry`
+  // below reuses it. Attached before start so the first `Starting` transition is seen.
+  ensureTelemetryReporter(context);
+  serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent);
+  context.subscriptions.push(serverLifecycle);
+
   // Issue #8 — per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't
   // depend on the LSP client, so it starts decorating already-open editors immediately.
   context.subscriptions.push(new TableHighlightService());
@@ -430,6 +439,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
       registerTestOutcomeCodeLens(client!, projectManager, context);
     })
     .catch((err: unknown) => {
+      serverLifecycle?.reportStartRejected();
       const msg = err instanceof Error ? err.message : String(err);
       void showError(`Reqnroll LSP server failed to start: ${msg}`);
     });
@@ -441,5 +451,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
 export function deactivate(): Thenable<void> | undefined {
   projectManager?.dispose();
   setAppLogChannel(undefined);
+  // Deliberate stop: the resulting `Stopped` is not an unexpected server exit (issue #845).
+  serverLifecycle?.markIntentionalStop();
   return client?.stop();
 }

@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.Common.Lsp;
@@ -112,6 +113,11 @@ public class Program
             // which would drop the telemetry/event notification.
             using var usageFlushOnShutdown = FeatureUsageFlushService.FlushOnShutdown(usageFlushService, server.Shutdown);
 
+            // Issue #845: ServerSessionEnded, subscribed after the flush above so the final
+            // FeatureUsageSummary precedes it. Once-only, so the post-exit fallback below cannot double-send.
+            var sessionTelemetry = server.Services.GetRequiredService<ServerSessionTelemetry>();
+            using var sessionEndedOnShutdown = sessionTelemetry.EndOnShutdown(server.Shutdown);
+
             await server.Initialize(CancellationToken.None).ConfigureAwait(false);
 
             // The real IDE connection is live; the side channel has no further purpose.
@@ -134,6 +140,7 @@ public class Program
                 // Expected: RunAsync's own Task.Delay observes the cancellation above.
             }
             await usageFlushService.FlushFinalAsync().ConfigureAwait(false);
+            sessionTelemetry.ReportEnded();
         }
         catch (Exception ex)
         {
@@ -261,6 +268,14 @@ public class Program
 
         // Initialize workspace scopes and custom protocol routing
         options.InitializeCustomProtocolRouting();
+
+        // Issue #845: ServerSessionStarted once the LSP handshake has completed (OnStarted runs
+        // after `initialized`, so ClientIdeContext already carries the client's self-reported version).
+        options.OnStarted((languageServer, _) =>
+        {
+            languageServer.Services.GetRequiredService<ServerSessionTelemetry>().ReportStarted();
+            return Task.CompletedTask;
+        });
 
         options.OnInitialized((languageServer, request, response, ct) =>
         {

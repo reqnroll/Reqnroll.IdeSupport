@@ -5,7 +5,13 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
-import { registerTelemetry, sendTelemetryEvent, withClientIdentity } from '../telemetry';
+import {
+  ensureTelemetryReporter,
+  registerTelemetry,
+  resetTelemetryReporterForTests,
+  sendTelemetryEvent,
+  withClientIdentity,
+} from '../telemetry';
 
 function fakeClient(): { client: LanguageClient; fire: (params: unknown) => void } {
   let handler: ((params: unknown) => void) | undefined;
@@ -65,6 +71,9 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
+  // The activated extension owns a module-level reporter (ensureTelemetryReporter, #845); start clean.
+  setup(() => resetTelemetryReporterForTests());
+
   suite('client identity (#844)', () => {
     test('withClientIdentity stamps IdeClient, Ide, IdeVersion and ExtensionVersion', () => {
       const props = withClientIdentity({ a: 1 });
@@ -90,6 +99,29 @@ suite('telemetry', () => {
 
         assert.strictEqual(calls[0].properties?.IdeClient, 'vscode');
         assert.strictEqual(calls[0].properties?.Ide, 'Visual Studio Code');
+      });
+    });
+  });
+
+  suite('ensureTelemetryReporter (#845)', () => {
+    test('lets client-originated events be sent before registerTelemetry has run, and registerTelemetry reuses the reporter', async () => {
+      const context = fakeContext();
+      const { client } = fakeClient();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        ensureTelemetryReporter(context);
+        sendTelemetryEvent('ServerStartFailed', { Reason: 'StartFailed', AttemptNumber: 1 });
+        registerTelemetry(client, context);
+        ensureTelemetryReporter(context);
+
+        assert.strictEqual(calls.length, 1);
+        assert.strictEqual(calls[0].eventName, 'ServerStartFailed');
+        assert.deepStrictEqual(withoutIdentity(calls[0].properties), {
+          Reason: 'StartFailed',
+          AttemptNumber: '1',
+        });
+        // One reporter, one disposal hook: nothing was registered twice.
+        assert.strictEqual(context.subscriptions.length, 3);
       });
     });
   });

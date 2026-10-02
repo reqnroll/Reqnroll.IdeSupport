@@ -54,7 +54,7 @@ favor of `IdeClient` (historical `IDEClient` data is not back-filled). `Ide*`/`E
 remain host-stamped because only the host knows the IDE product and extension build. There is
 no server-stamped IDE version: the host stamps `IdeVersion` on every event it transmits (server-
 and host-originated), whereas `InitializeParams.ClientInfo.Version` is optional, client-defined,
-and absent before `initialize`, so the server records it in its startup log only.
+and absent before `initialize`, so the server does not use it as an IDE-version source: it records it in its startup log and, as `ClientVersion`, on `ServerSessionStarted` only (omitted when the client sent none).
 
 **Schema conventions.** Events are identified by name only — there are no event IDs, and the
 property dictionaries are the schema. Transmitters stringify every property value; booleans
@@ -100,7 +100,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `TriggerContext` | Connector: `"projectLoad"` \| `"build"`; Roslyn: `"csOpen"` \| `"csEdit"` | What triggered the run |
 | `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
-| `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
+| `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn (issue #845): counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
 | `ErrorMessage` | string | Connector failure: the exception message, filesystem-path-scrubbed (`<path>`) |
 | `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
@@ -290,6 +290,33 @@ only — no project, file or tag names. There is deliberately no per-completion 
 fires per keystroke; see `Completion inserted` in §7); steady-state tag-completion latency is
 `PerfSample` with `Operation = textDocument/completion#tag`.
 
+### `ServerSessionStarted` / `ServerSessionEnded` (issue #845)
+| | |
+|---|---|
+| **Emitter** | `ServerSessionTelemetry` (server). Identical from VS, VS Code and Rider; no per-IDE code |
+| **When** | `ServerSessionStarted`: once, from the server's `OnStarted` (after the LSP `initialized` notification). `ServerSessionEnded`: once, best-effort, when the LSP `shutdown` request arrives (a post-`exit` fallback also tries) — subscribed after `FeatureUsageSummary`'s final flush, so the final summary precedes it |
+| **Properties** | Started: `ClientVersion` (the client's self-reported `ClientInfo.Version`; omitted when absent), `OperatingSystem` (`Windows`/`macOS`/`Linux`/`Other`), `Architecture` (`X64`/`Arm64`/...), `Runtime` (.NET framework description), `StartupMs` (server process start to ready). Ended: `SessionSeconds`. Both also carry the stamped `IdeClient`, `ServerVersion` and `SessionId` |
+
+**Analytics use.** Per-IDE active-session counts (`IdeClient`), startup-time distribution by IDE and
+OS/arch (field data for the ~14.6 s cold-start finding), and session length. `ServerSessionEnded` is
+lost when the process dies abruptly, so a `SessionId` with a Started but no Ended event is itself the
+abnormal-end signal (crash, force-quit, IDE kill).
+
+### `ProjectCharacteristics` (issue #845, from #258)
+| | |
+|---|---|
+| **Emitter** | `ConnectorBindingRegistryProvider` (server) |
+| **When** | After each successful connector discovery run that changed the bindings — the same trigger point as `ReqnrollDiscoveryExecuted`, so it re-fires on every such build with no "already sent" state. A hash-no-op run sends none (nothing changed). A separate event so the discovery event's schema stays stable |
+| **Properties** | `StepDefinitionCount`, `HookCount` (int); `StepBindingClassCount` (int: distinct declaring classes across step definitions and hooks — the method identity minus its last `.`-segment; class names are never sent); `HookCount_<HookType>` (int, flat per-type keys such as `HookCount_BeforeScenario`, only for types present); `FeatureFileCount` (int, omitted when unknown); `ProjectTargetFramework` (string) |
+
+Excluded on purpose (maintainer decision on #258): step-occurrence count (needs a full scan),
+step-argument-transformation count (the connector reports it but `RunDiscovery` drops it — add once
+transformations are discovered for other reasons) and step-definition reuse ratios (would force a
+full scan just for telemetry; consider a separate event emitted only when a usages search runs anyway).
+
+**Analytics use.** Project-size distribution (steps, hooks, binding classes, feature files) per TFM,
+and how hook usage splits by type.
+
 ### Bucket schemes (issue #849)
 
 Characteristic properties are counts, flags, small closed enums or *buckets* — never paths or text.
@@ -332,6 +359,25 @@ only originate here.
 `ProjectTargetFramework`, `SingleFileGeneratorUsed` (design-time code-behind generation on),
 `ProgrammingLanguage`, and `LegacySpecFlow` (true only for a SpecFlow project).
 
+**Decision (issue #845): derive, do not port.** VS Code and Rider do *not* get `Extension loaded` /
+`Extension installed` / `Extension upgraded` / `"{N} day usage"`. Every event already carries a stable
+`ai.user.id` (VS's user id, Rider's `PropertiesComponent` id, VS Code's reporter machine id) plus
+`IdeClient` and `ExtensionVersion`, and `ServerSessionStarted` fires once per session from all three
+IDEs. In Application Insights: *active users / retention* = distinct `ai.user.id` per day over
+`ServerSessionStarted`; *install* = a user's first-ever `ServerSessionStarted`; *upgrade* = a change in
+`ExtensionVersion` between a user's consecutive sessions; *daily-use count* = days with a session. This
+is retroactively computable, needs no per-IDE client state (`globalState` / `PropertiesComponent`) that
+could drift out of sync or reset on a reinstall, and keeps the three IDEs identical. The VS-only events
+stay for continuity with historical data and are not extended; retiring them is left until the derived
+queries have a release of history to compare against.
+
+**Status of the VS-host `Project loaded`** (issue #845 item 5): *not yet retired.* The server's
+`OpenProject command executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` now cover
+Reqnroll version, TFM, language and counts, but `LegacySpecFlow` and `SingleFileGeneratorUsed` are not
+reported by the server (the connector does not expose them), and the Reqnroll version arrives on the
+first discovery event rather than on `OpenProject`. Retire it once those two are server-side; until
+then the VS double-count of project opens remains.
+
 **Analytics use.** Adoption lifecycle: install→upgrade funnel, daily-active heartbeat (rollup
 `* day usage` by count), project-scale signals (ReqnrollVersion/TFM distribution,
 SpecFlow migration), wizard abandonment (Started vs Completed) and framework-choice split,
@@ -350,6 +396,21 @@ link/content engagement on the welcome/upgrade surfaces.
 
 **Analytics use.** True Go-to-Hooks navigation rate per IDE — the honest counterpart to the
 server's lookup volume.
+
+### `ServerStartFailed` / `ServerExitedUnexpectedly` / `ServerRestarted` (issue #845)
+| | |
+|---|---|
+| **Emitter** | Each IDE client, because a dead server cannot report itself. VS: `LspServerConnectionService` (reported through `ServerLifecycleReporter`, which holds events until the host's transmitter is resolved); VS Code: `ServerLifecycleTelemetry` (`src/VSCode/src/lsp/serverLifecycleTelemetry.ts`, from the language client's state changes and a rejected `start()`); Rider: `ReqnrollServerLifecycleTelemetry` (from `LspServerManagerListener` state changes). Three copies of the same names, per the catalog's mirror rule |
+| **When** | `ServerStartFailed`: the server could not be launched, or ended/failed its handshake before ever running. `ServerExitedUnexpectedly`: a running server stopped without the client asking it to (VS: process exited with no `shutdown`/`exit` handshake and the client not disposing). `ServerRestarted`: the client starts the server again after one of those, or after a clean end (VS: a new session, e.g. a solution swap; Rider: a manual restart) |
+| **Properties** | `Reason` — a closed enum, never free text: `ExecutableNotFound` (VS only), `StartFailed`, `ProcessExited`, `SessionEnded` (VS clean relaunch), `UserRestart` (Rider restart after a normal shutdown). `AttemptNumber` — 1-based start attempt in this IDE session (1 = the initial start) |
+
+Client-side exception capture is separate (#621). A crash in the VS host process itself, or an IDE
+killed outright, cannot be reported by anything and shows up only as a `ServerSessionStarted` with no
+`ServerSessionEnded`.
+
+**Analytics use.** Server start-failure and crash rate per IDE/OS (`Reason`), restart-loop detection
+(`AttemptNumber`), and a count of users with no working server at all (failure events with no
+`ServerSessionStarted` for the same user).
 
 ---
 
@@ -443,7 +504,9 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Go-to-hooks: lookups vs navigations | `FindHooks command executed` (server) vs `GoToHook command executed` (clients) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |
 | Crash/error rates | `UnhandledException` (server) + VS `ExceptionTelemetry` |
-| Adoption lifecycle | `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events |
+| Adoption lifecycle | VS: `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events; all IDEs (derived, #845): `ServerSessionStarted` by distinct `ai.user.id` |
+| Server health: start failures, crashes, restarts, time-to-ready | `ServerStartFailed`, `ServerExitedUnexpectedly`, `ServerRestarted` (clients); `ServerSessionStarted` (`StartupMs`); Started without Ended per `SessionId` |
+| Project size snapshot (steps, hooks per type, binding classes, feature files) | `ProjectCharacteristics` |
 | Field performance (P95/P99) | `PerfSample` |
 | Volume/passive feature usage (completion, code actions, CodeLens, inlay hints, ...) | `FeatureUsageSummary` |
 | Tag-index cold-scan size and cost | `TagIndexFirstScanCompleted` (`FileCount`, `FilesParsedFromDisk`, `DurationMs`); steady state via `PerfSample` `textDocument/completion#tag` |
@@ -459,5 +522,11 @@ abrupt process death is accepted but detectable via `Sequence`.
 - **#621 — VS Code/Rider have no telemetry path for exceptions in their own client-side code.**
   Server exceptions reach telemetry via `UnhandledException`; a client-side exception path is not
   yet built.
-- **#258 — `ProjectCharacteristics` event** (step/binding/hook/transformation counts as a
-  snapshot) — proposed, not implemented.
+- **#258 — `ProjectCharacteristics` event** — implemented in #845 (step/hook/binding-class/feature-file
+  counts, hooks per type). Transformation counts and reuse ratios remain excluded (see its section).
+- **`UnitTestFramework`** (MSTest/xUnit/NUnit/TUnit, VSTest vs MTP) — not implemented: the connector
+  does not report it. Needs a connector change (or a package-reference scan) first; tracked in #845.
+- **`ReqnrollVersion` / `LegacySpecFlow` on `OpenProject command executed`** — decision (#845): the
+  first `ReqnrollDiscoveryExecuted` is the authoritative source for the Reqnroll version (the connector
+  resolves it; the server's project model does not), so it is not duplicated on `OpenProject`.
+  `LegacySpecFlow` is not available server-side yet (see the `Project loaded` status in section 4).
