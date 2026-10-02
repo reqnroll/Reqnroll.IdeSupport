@@ -930,10 +930,10 @@ in [`Telemetry-Events-Inventory.md`](Telemetry-Events-Inventory.md)):
 The legacy "required data model enhancements" list is now as-built: discovery events carry
 `DiscoverySource`/`TriggerContext` (the proposed `DiscoveryType` idea, renamed); install/upgrade
 events are originated by the VS host (before the LSP server starts); per-IDE breakdown is
-satisfied by each transmitter's environment properties — VS's `ReqnrollTelemetryContextInitializer`
-adds `Ide`/`IdeVersion`/`ExtensionVersion`, Rider adds the same three to every envelope, VS
-Code's `TelemetryReporter` adds its own telemetry-level context — with `PerfSample` additionally
-carrying an explicit `IDEClient` field.
+satisfied by one canonical `IdeClient` key (plus `ServerVersion`/`SessionId`)
+stamped by the server on every event it emits and by each host on every event it transmits, and
+by the host-stamped `Ide`/`IdeVersion`/`ExtensionVersion` (VS, Rider and VS Code) — see
+`Telemetry-Events-Inventory.md` §1 (issue #844).
 
 ### Configuration
 

@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
-import { registerTelemetry, sendTelemetryEvent } from '../telemetry';
+import { registerTelemetry, sendTelemetryEvent, withClientIdentity } from '../telemetry';
 
 function fakeClient(): { client: LanguageClient; fire: (params: unknown) => void } {
   let handler: ((params: unknown) => void) | undefined;
@@ -56,7 +56,44 @@ async function withStubbedSendTelemetryEvent(
   }
 }
 
+const IDENTITY_KEYS = ['IdeClient', 'Ide', 'IdeVersion', 'ExtensionVersion'];
+
+function withoutIdentity(properties?: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(properties ?? {}).filter(([k]) => !IDENTITY_KEYS.includes(k)),
+  );
+}
+
 suite('telemetry', () => {
+  suite('client identity (#844)', () => {
+    test('withClientIdentity stamps IdeClient, Ide, IdeVersion and ExtensionVersion', () => {
+      const props = withClientIdentity({ a: 1 });
+
+      assert.strictEqual(props.a, '1');
+      assert.strictEqual(props.IdeClient, 'vscode');
+      assert.strictEqual(props.Ide, 'Visual Studio Code');
+      assert.strictEqual(props.IdeVersion, vscode.version);
+      assert.ok(props.ExtensionVersion.length > 0);
+    });
+
+    test('withClientIdentity does not override a server-stamped IdeClient', () => {
+      assert.strictEqual(withClientIdentity({ IdeClient: 'explicit' }).IdeClient, 'explicit');
+    });
+
+    test('sendTelemetryEvent stamps identity on host-originated events', async () => {
+      const context = fakeContext();
+      const { client } = fakeClient();
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        sendTelemetryEvent('GoToHook command executed');
+
+        assert.strictEqual(calls[0].properties?.IdeClient, 'vscode');
+        assert.strictEqual(calls[0].properties?.Ide, 'Visual Studio Code');
+      });
+    });
+  });
+
   suite('registerTelemetry', () => {
     const originalEnv = process.env.REQNROLL_TELEMETRY_ENABLED;
 
@@ -114,7 +151,7 @@ suite('telemetry', () => {
 
         assert.strictEqual(calls.length, 1);
         assert.strictEqual(calls[0].eventName, 'reqnroll/stepDefined');
-        assert.deepStrictEqual(calls[0].properties, { count: '3', ok: 'true' });
+        assert.deepStrictEqual(withoutIdentity(calls[0].properties), { count: '3', ok: 'true' });
       });
     });
 
@@ -142,7 +179,7 @@ suite('telemetry', () => {
       });
     });
 
-    test('sends an event with no properties as an empty object', async () => {
+    test('sends an event with no properties as an identity-only object', async () => {
       const { client, fire } = fakeClient();
       const context = fakeContext();
 
@@ -151,7 +188,7 @@ suite('telemetry', () => {
         fire({ eventName: 'reqnroll/noProps' });
 
         assert.strictEqual(calls.length, 1);
-        assert.deepStrictEqual(calls[0].properties, {});
+        assert.deepStrictEqual(withoutIdentity(calls[0].properties), {});
       });
     });
 
@@ -166,7 +203,7 @@ suite('telemetry', () => {
           properties: { present: 'yes', missing: undefined, absent: null },
         });
 
-        assert.deepStrictEqual(calls[0].properties, { present: 'yes' });
+        assert.deepStrictEqual(withoutIdentity(calls[0].properties), { present: 'yes' });
       });
     });
   });

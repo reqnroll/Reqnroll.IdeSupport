@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// wizards, dialogs, project-system open) is a no-op here, same as <see cref="NullLspTelemetryService"/>
 /// — those only make sense from a host UI, which the server doesn't have.
 /// <see cref="IErrorTelemetryService.MonitorError"/> is the one exception: it forwards to
-/// <see cref="ILspTelemetryService"/> as an "Error" <c>telemetry/event</c>, so exceptions raised
+/// <see cref="ILspTelemetryService"/> as an <c>UnhandledException</c> <c>telemetry/event</c>, so exceptions raised
 /// inside LSP.Core (e.g. <c>IdeSupportGherkinParser</c>/<c>IdeSupportTagParser</c> via
 /// <c>IdeSupportLoggerExtensions.LogException</c>) actually reach telemetry instead of being
 /// silently dropped. Previously the server was wired with <see cref="NullLspTelemetryService"/> for
@@ -57,7 +57,7 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings projectSettings) { }
 
     /// <summary>
-    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>. The message is passed
+    /// Sends the exception to the client as an <c>UnhandledException</c> <c>telemetry/event</c>. The message is passed
     /// through raw: <see cref="LspTelemetryService"/> (the last hop before the client) redacts paths via
     /// <see cref="TelemetryScrubber.ScrubProperties"/>, so local logs and the debug-log mirror keep it.
     /// </summary>

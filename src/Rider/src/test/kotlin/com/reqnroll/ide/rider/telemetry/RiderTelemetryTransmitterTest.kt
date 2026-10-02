@@ -39,6 +39,28 @@ class RiderTelemetryTransmitterTest {
     }
 
     @Test
+    fun `stampClientIdentity adds the canonical IdeClient plus host version keys`() {
+        val props = linkedMapOf("Operation" to "x")
+
+        RiderTelemetryTransmitter.stampClientIdentity(props, "2024.3.5", "1.2.3")
+
+        assertEquals("rider", props["IdeClient"])
+        assertEquals("JetBrains Rider", props["Ide"])
+        assertEquals("2024.3.5", props["IdeVersion"])
+        assertEquals("1.2.3", props["ExtensionVersion"])
+        assertEquals("x", props["Operation"])
+    }
+
+    @Test
+    fun `stampClientIdentity does not override a server-stamped IdeClient`() {
+        val props = linkedMapOf("IdeClient" to "explicit")
+
+        RiderTelemetryTransmitter.stampClientIdentity(props, "2024.3.5", "1.2.3")
+
+        assertEquals("explicit", props["IdeClient"])
+    }
+
+    @Test
     fun `buildEnvelope escapes special characters in property values`() {
         val json = RiderTelemetryTransmitter.buildEnvelope(
             eventName = "Test\nEvent \"quoted\"",

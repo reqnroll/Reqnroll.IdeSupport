@@ -228,7 +228,7 @@ default `--log-level Warning` — raise it to `Info` to see it.
 One known limitation: `LspIdeSupportLogger` derives its file prefix from the identity present when
 it is constructed, which is before the client connects. A client that omits `--ide` and is
 identified only via `ClientInfo` therefore still gets the neutral `reqnroll-lsp-server-*.log`
-prefix, while everything else (capabilities, handlers, telemetry `IDEClient`) uses the resolved
+prefix, while everything else (capabilities, handlers, telemetry `IdeClient`) uses the resolved
 identity.
 
 ## Debugging

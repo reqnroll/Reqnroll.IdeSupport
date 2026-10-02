@@ -88,11 +88,15 @@ public static class ServiceCollectionExtensions
             // the debug log is unconfigured the sink is a no-op and it simply forwards.
             .AddSingleton<ITelemetryDebugLog>(_ => TelemetryDebugLog.FromEnvironment())
             .AddSingleton<LspTelemetryService>()
-            .AddSingleton<ILspTelemetryService>(sp => new FileLoggingLspTelemetryService(
-                sp.GetRequiredService<LspTelemetryService>(),
-                sp.GetRequiredService<ITelemetryDebugLog>()))
+            // Outermost decorator stamps the canonical client identity (#844) so the debug-log
+            // mirror below records exactly what is transmitted, identity included.
+            .AddSingleton<ILspTelemetryService>(sp => new IdentityStampingLspTelemetryService(
+                new FileLoggingLspTelemetryService(
+                    sp.GetRequiredService<LspTelemetryService>(),
+                    sp.GetRequiredService<ITelemetryDebugLog>()),
+                sp.GetRequiredService<ClientIdeContext>()))
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
-            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "Error"
+            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "UnhandledException"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server
             // has no equivalent of). Previously registered as NullLspTelemetryService, which silently
             // dropped LSP.Core exceptions (e.g. Gherkin parse errors) — issue #255.
@@ -118,7 +122,6 @@ public static class ServiceCollectionExtensions
                 initialTrace))
             .AddSingleton<IOperationDurationRecorder>(sp => new OperationDurationRecorder(
                 sp.GetRequiredService<IIdeSupportLogger>(),
-                sp.GetRequiredService<ClientIdeContext>(),
                 sp.GetRequiredService<ILspTelemetryService>(),
                 sp.GetRequiredService<IPerformanceTelemetrySampler>(),
                 sp.GetRequiredService<ITraceService>()));

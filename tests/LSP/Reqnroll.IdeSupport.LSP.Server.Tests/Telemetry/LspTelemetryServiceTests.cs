@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Reflection;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -72,6 +73,25 @@ public class LspTelemetryServiceTests
             "telemetry/event", Arg.Is<object>(o => HasProperty(o, "ErrorMessage", "Could not load <path>")));
     }
 
+    [Fact]
+    public void Property_names_keep_their_casing_on_the_wire()
+    {
+        object? sent = null;
+        _languageServer.When(l => l.SendNotification("telemetry/event", Arg.Any<object>()))
+            .Do(c => sent = c.ArgAt<object>(1));
+
+        CreateSut().SendEvent("MyEvent", new Dictionary<string, object?>
+        {
+            ["IdeClient"] = "vscode", ["ServerVersion"] = "1.2.3", ["SessionId"] = "s", ["Nullable"] = null,
+        });
+
+        var wire = JObject.FromObject(sent!, OmniSharp.Extensions.LanguageServer.Protocol.Serialization.LspSerializer.Instance.JsonSerializer);
+        var props = (JObject)wire["properties"]!;
+        props.Properties().Select(p => p.Name)
+            .Should().BeEquivalentTo("IdeClient", "ServerVersion", "SessionId", "Nullable");
+        props["IdeClient"]!.Value<string>().Should().Be("vscode");
+    }
+
     private static bool HasEventName(object obj, string expectedName)
     {
         var eventName = obj.GetType().GetProperty("eventName")?.GetValue(obj) as string;
@@ -81,8 +101,9 @@ public class LspTelemetryServiceTests
     private static bool HasProperty(object obj, string key, object expectedValue)
     {
         var props = obj.GetType().GetProperty("properties")?.GetValue(obj);
-        if (props is not Dictionary<string, object?> dict)
+        if (props is not JObject json)
             return false;
-        return dict.TryGetValue(key, out var val) && val?.Equals(expectedValue) == true;
+        return json.TryGetValue(key, StringComparison.Ordinal, out var val)
+               && JToken.DeepEquals(val, JToken.FromObject(expectedValue));
     }
 }
