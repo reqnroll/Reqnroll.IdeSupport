@@ -2,10 +2,10 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 
@@ -56,7 +56,7 @@ public sealed class CSharpDiagnosticsPublisher : ICSharpDiagnosticsPublisher
         _logger.LogVerbose($"CSharpDiagnosticsPublisher: pushing {diagnostics.Length} diagnostic(s) for {uri}.");
 
         _languageServer.SendNotification(
-            LspMethodNames.TextDocumentPublishDiagnostics,
+            LspStandardMethodNames.TextDocumentPublishDiagnostics,
             new PublishDiagnosticsParams
             {
                 Uri = uri,

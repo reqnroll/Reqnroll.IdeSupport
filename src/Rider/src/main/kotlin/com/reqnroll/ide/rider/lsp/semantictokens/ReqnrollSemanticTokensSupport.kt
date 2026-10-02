@@ -52,7 +52,7 @@ class ReqnrollSemanticTokensSupport : LspSemanticTokensSupport() {
 
     override val tokenModifiers: List<String> = emptyList()
 
-    override fun getTextAttributesKey(tokenType: String, tokenModifiers: List<String>): TextAttributesKey? =
+    override fun getTextAttributesKey(tokenType: String, modifiers: List<String>): TextAttributesKey? =
         KEYS[tokenType]
 
     companion object {

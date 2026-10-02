@@ -1,5 +1,6 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry;
@@ -11,7 +12,7 @@ public class LspErrorTelemetryServiceTests
     private LspErrorTelemetryService CreateSut() => new(_lspTelemetryService);
 
     [Fact]
-    public void MonitorError_sends_an_Error_event_with_exception_type_and_message()
+    public void MonitorError_sends_an_UnhandledException_event_with_exception_type_and_message()
     {
         var sut = CreateSut();
         var exception = new InvalidOperationException("boom");
@@ -19,11 +20,64 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(exception);
 
         _lspTelemetryService.Received(1).SendEvent(
-            "Error",
+            TelemetryEvents.UnhandledException,
             Arg.Is<Dictionary<string, object?>>(props =>
                 (string?)props["ExceptionType"] == typeof(InvalidOperationException).FullName &&
                 (string?)props["Message"] == "boom" &&
                 !props.ContainsKey("IsFatal")));
+    }
+
+    [Fact]
+    public void MonitorError_attributes_a_thrown_exception_to_the_class_it_passed_through()
+    {
+        var thrown = CaptureThrown(() => throw new InvalidOperationException("boom"));
+
+        CreateSut().MonitorError(thrown);
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props =>
+                (string?)props["Source"] == nameof(LspErrorTelemetryServiceTests)));
+    }
+
+    [Fact]
+    public async Task MonitorError_folds_a_compiler_generated_async_type_into_its_declaring_class()
+    {
+        var thrown = await CaptureThrownAsync();
+
+        CreateSut().MonitorError(thrown);
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props =>
+                (string?)props["Source"] == nameof(LspErrorTelemetryServiceTests)));
+    }
+
+    [Fact]
+    public void MonitorError_omits_Source_for_an_exception_that_was_never_thrown()
+    {
+        CreateSut().MonitorError(new InvalidOperationException("never thrown"));
+
+        _lspTelemetryService.Received(1).SendEvent(
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props => !props.ContainsKey("Source")));
+    }
+
+    private static Exception CaptureThrown(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { return ex; }
+        throw new InvalidOperationException("action did not throw");
+    }
+
+    private static async Task<Exception> CaptureThrownAsync()
+    {
+        try
+        {
+            await Task.Yield();
+            throw new InvalidOperationException("async boom");
+        }
+        catch (Exception ex) { return ex; }
     }
 
     [Theory]
@@ -36,25 +90,21 @@ public class LspErrorTelemetryServiceTests
         sut.MonitorError(new Exception("test"), isFatal);
 
         _lspTelemetryService.Received(1).SendEvent(
-            "Error",
+            TelemetryEvents.UnhandledException,
             Arg.Is<Dictionary<string, object?>>(props => (bool)props["IsFatal"]! == isFatal));
     }
 
-    [Theory]
-    [InlineData(@"Error reading C:\Users\alice\project\feature.feature", @"Error reading <path>")]
-    [InlineData(@"Failed at /home/bob/project/feature.feature", @"Failed at <path>")]
-    [InlineData(@"UNC failure \\server\share\file.feature", @"UNC failure <path>")]
-    [InlineData("No paths here", "No paths here")]
-    [InlineData("", "")]
-    public void MonitorError_redacts_filesystem_paths_from_the_message(string message, string expected)
+    [Fact]
+    public void MonitorError_passes_the_message_through_unredacted_because_the_sink_scrubs_it()
     {
         var sut = CreateSut();
+        const string message = @"Error reading C:\Users\alice\project\feature.feature";
 
         sut.MonitorError(new Exception(message));
 
         _lspTelemetryService.Received(1).SendEvent(
-            "Error",
-            Arg.Is<Dictionary<string, object?>>(props => (string?)props["Message"] == expected));
+            TelemetryEvents.UnhandledException,
+            Arg.Is<Dictionary<string, object?>>(props => (string?)props["Message"] == message));
     }
 
     [Fact]

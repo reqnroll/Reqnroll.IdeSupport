@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
+import { sendTelemetryEvent } from '../telemetry';
+import { TelemetryEvents } from '../telemetryEvents';
 import { openAndReveal } from '../util/navigationUtils';
 
-interface GoToHooksResponse {
-  hooks: GoToHookLocation[];
+interface FindHooksResponse {
+  hooks: FindHookLocation[];
 }
 
-interface GoToHookLocation {
+interface FindHookLocation {
   uri: string;
   startLine: number;
   startChar: number;
@@ -47,21 +50,26 @@ export async function doGoToHooks(
   const character = position?.character ?? editor?.selection.active.character;
   if (uri === undefined || line === undefined || character === undefined) return;
 
-  let response: GoToHooksResponse;
+  // A genuine navigation -- unlike VS's classic CodeLens, VS Code's hook-count CodeLens resolves
+  // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
+  // caller and every invocation (palette, keybinding, or a lens click) really is one (issue #698).
+  sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted);
+
+  let response: FindHooksResponse;
   try {
-    response = await client.sendRequest<GoToHooksResponse>(ReqnrollMethods.goToHooks, {
+    response = await client.sendRequest<FindHooksResponse>(ReqnrollMethods.findHooks, {
       textDocument: { uri },
       position: { line, character },
       ownLevelOnly: position?.ownLevelOnly ?? false,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Go to Hooks failed — ${msg}`);
+    void showError(`Reqnroll: Go to Hooks failed — ${msg}`);
     return;
   }
 
   if (!response.hooks || response.hooks.length === 0) {
-    void vscode.window.showInformationMessage('Reqnroll: No hooks found at this position.');
+    void showInfo('Reqnroll: No hooks found at this position.');
     return;
   }
 
@@ -87,6 +95,6 @@ export async function doGoToHooks(
   await navigateToHook(picked.hook);
 }
 
-async function navigateToHook(hook: GoToHookLocation): Promise<void> {
+async function navigateToHook(hook: FindHookLocation): Promise<void> {
   await openAndReveal(vscode.Uri.parse(hook.uri), hook.startLine, hook.startChar);
 }

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { CodeLensRequest, LanguageClient } from 'vscode-languageclient/node';
 import { getCodeLensRefreshEvent } from './codeLensRefresh';
+import { GHERKIN_LANGUAGE_ID } from '../languageIds';
 
 /**
  * Registers the hook-match-count CodeLens provider for `.feature` files (issue #269), querying
@@ -46,6 +47,6 @@ export function registerHookCodeLens(
   };
 
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider),
+    vscode.languages.registerCodeLensProvider({ language: GHERKIN_LANGUAGE_ID }, provider),
   );
 }

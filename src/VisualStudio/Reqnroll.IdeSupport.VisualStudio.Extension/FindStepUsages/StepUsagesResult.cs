@@ -5,7 +5,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 /// <summary>
 /// Three-state result from <see cref="FindStepUsagesService.FindUsagesAsync"/>:
 /// <list type="bullet">
-///   <item><see cref="NotABinding"/> — caret is not on any step-definition binding; Surface 3 should fall through to the built-in command.</item>
+///   <item><see cref="NotABinding"/> — caret is not on any step-definition binding; callers show an
+///         informational message. (There is no takeover of the built-in Find All References command —
+///         Surface 3 in the F14 design doc — that surface was deferred and never implemented.)</item>
 ///   <item><see cref="IsBinding"/> with <c>Locations.Count == 0</c> — binding present but no matching steps; show "0 usages" window.</item>
 ///   <item><see cref="IsBinding"/> with <c>Locations.Count > 0</c> — matching feature-file steps; show them in the results window.</item>
 /// </list>

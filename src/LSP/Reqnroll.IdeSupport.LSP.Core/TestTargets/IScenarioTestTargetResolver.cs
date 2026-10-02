@@ -21,12 +21,6 @@ public interface IScenarioTestTargetResolver
     /// every target for that scenario (e.g. every Outline row); a range within one specific
     /// <c>Examples:</c> row resolves to just that row's target.
     /// </param>
-    /// <param name="projectPackageIds">
-    /// The owning project's referenced NuGet package IDs, used to determine which row-attribute type
-    /// (e.g. <c>Xunit.InlineDataAttribute</c>) identifies a parameterized-row instance for that
-    /// project's test framework. An empty collection is treated as "framework unknown" — Tier 1
-    /// method/class resolution still works, but row-tests parameterization is not detected.
-    /// </param>
     /// <param name="projectFolder">
     /// The owning project's directory (the folder containing its <c>.csproj</c>), used to fall back
     /// to an <c>obj/</c>-relocated code-behind file (Reqnroll 3.3.0+'s
@@ -39,6 +33,29 @@ public interface IScenarioTestTargetResolver
         Uri featureUri,
         IReadOnlyCollection<IdeSupportTag> tags,
         GherkinRange scenarioRange,
-        IReadOnlyCollection<string> projectPackageIds,
+        string? projectFolder = null);
+
+    /// <summary>
+    /// Resolves the test target(s) for every Scenario/Scenario Outline fully contained within
+    /// <paramref name="containerRange"/> — the "Run scenarios" case for a <c>Feature:</c> or
+    /// <c>Rule:</c> block (issue #744), as opposed to <see cref="Resolve"/>'s single-scenario
+    /// resolution. Each contained scenario/Outline contributes every one of its own targets (e.g.
+    /// every Outline row), exactly as if <see cref="Resolve"/> had been called on it individually —
+    /// this method only broadens which scenarios are considered, it does not change how any one
+    /// scenario resolves. <c>Background:</c> blocks and any other non-runnable content in the range
+    /// are ignored.
+    /// </summary>
+    /// <param name="featureUri">The <c>.feature</c> file's URI — used to locate its generated <c>.feature.cs</c> companion.</param>
+    /// <param name="tags">The <c>.feature</c> file's already-parsed Gherkin tag tree (e.g. <c>buffer.Tags</c>).</param>
+    /// <param name="containerRange">
+    /// The Feature's or Rule's own range (its full body, not just its header line) — every
+    /// Scenario/Scenario Outline tag whose own range falls entirely within this range is resolved.
+    /// </param>
+    /// <param name="projectFolder">See <see cref="Resolve"/>.</param>
+    /// <returns>The concatenation of every contained scenario's own resolved target(s), in document order. Never <see langword="null"/>.</returns>
+    IReadOnlyList<ScenarioTestTarget> ResolveAll(
+        Uri featureUri,
+        IReadOnlyCollection<IdeSupportTag> tags,
+        GherkinRange containerRange,
         string? projectFolder = null);
 }

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
-using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
@@ -42,28 +42,28 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensProvider
 {
     private readonly StepCodeLensState _state;
-    private readonly GoToMatchingScenariosState _goToState;
+    private readonly FindMatchingScenariosState _findMatchingScenariosState;
     private readonly ILogger<HookMatchCountCodeLensProvider> _logger;
     private readonly ILoggerFactory _loggerFactory;
 
     /// <summary>Creates the provider over the shared runtime state holders.</summary>
     public HookMatchCountCodeLensProvider(
         StepCodeLensState                        state,
-        GoToMatchingScenariosState               goToState,
+        FindMatchingScenariosState               findMatchingScenariosState,
         ILogger<HookMatchCountCodeLensProvider>  logger,
         ILoggerFactory                            loggerFactory)
     {
-        _state         = state;
-        _goToState     = goToState;
-        _logger        = logger;
-        _loggerFactory = loggerFactory;
+        _state                      = state;
+        _findMatchingScenariosState = findMatchingScenariosState;
+        _logger                     = logger;
+        _loggerFactory              = loggerFactory;
     }
 
     // Apply to C# files only.
     /// <inheritdoc />
     public TextViewExtensionConfiguration TextViewExtensionConfiguration => new()
     {
-        AppliesTo = [DocumentFilter.FromDocumentType("CSharp")]
+        AppliesTo = [DocumentFilter.FromDocumentType(CSharpDocumentType.CSharp)]
     };
 
     // Provider display name shown in VS Tools > Options > Text Editor > Code Lens.
@@ -86,7 +86,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
         var startLine = context.Range.Start.GetContainingLine().LineNumber;
 
         var lens = new HookMatchCountCodeLens(
-            _state, _goToState, _loggerFactory.CreateLogger<HookMatchCountCodeLens>(), fileUri, startLine);
+            _state, _findMatchingScenariosState, _loggerFactory.CreateLogger<HookMatchCountCodeLens>(), fileUri, startLine);
         return Task.FromResult<CodeLens?>(lens);
     }
 }
@@ -99,7 +99,7 @@ internal sealed class HookMatchCountCodeLensProvider : ExtensionPart, ICodeLensP
 internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatableLens
 {
     private readonly StepCodeLensState _state;
-    private readonly GoToMatchingScenariosState _goToState;
+    private readonly FindMatchingScenariosState _findMatchingScenariosState;
     private readonly ILogger<HookMatchCountCodeLens> _logger;
     private readonly Uri _fileUri;
     private readonly int _methodStartLine;
@@ -113,16 +113,16 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
     /// <summary>Creates the lens for a specific method and registers it with the shared state for later invalidation.</summary>
     public HookMatchCountCodeLens(
         StepCodeLensState                state,
-        GoToMatchingScenariosState       goToState,
+        FindMatchingScenariosState       findMatchingScenariosState,
         ILogger<HookMatchCountCodeLens>  logger,
         Uri                              fileUri,
         int                              methodStartLine)
     {
-        _state           = state;
-        _goToState       = goToState;
-        _logger          = logger;
-        _fileUri         = fileUri;
-        _methodStartLine = methodStartLine;
+        _state                      = state;
+        _findMatchingScenariosState = findMatchingScenariosState;
+        _logger                     = logger;
+        _fileUri                    = fileUri;
+        _methodStartLine            = methodStartLine;
         _state.RegisterLens(this, fileUri.ToString());
     }
 
@@ -171,10 +171,17 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
             }
             var tooltip = "Reqnroll scenarios matched by this hook";
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "HookMatchCountCodeLens.GetLabelAsync: {Text} for method at line {CurrentStartLine} in {FileUri}",
                 text, currentStartLine, _fileUri);
             return new CodeLensLabel { Text = text, Tooltip = tooltip };
+        }
+        catch (OperationCanceledException)
+        {
+            // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while the
+            // shared fetch was still in flight (issue #679) -- VS re-requests the label on its
+            // own, so this isn't a failure worth surfacing to the output pane.
+            return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
         }
         catch (Exception ex)
         {
@@ -194,8 +201,8 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
         IClientContext     clientContext,
         CancellationToken  cancellationToken)
     {
-        var goToService = _goToState.Service;
-        if (goToService is null)
+        var findMatchingScenariosService = _findMatchingScenariosState.Service;
+        if (findMatchingScenariosService is null)
         {
             _logger.LogWarning(
                 "HookMatchCountCodeLens.ExecuteAsync: LSP server not yet initialized — cannot go to matching scenarios.");
@@ -227,17 +234,17 @@ internal sealed class HookMatchCountCodeLens : InvokableCodeLens, IInvalidatable
 
             if (firstHook is null) return;
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "HookMatchCountCodeLens.ExecuteAsync: invoking go-to-matching-scenarios at {FileUri}:{ArgLine}:{ArgChar}",
                 _fileUri, firstHook.ArgLine, firstHook.ArgChar);
 
-            var result = await goToService
-                .GoToMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, firstHook.ArgChar, cancellationToken)
+            var result = await findMatchingScenariosService
+                .FindMatchingScenariosAsync(_fileUri.ToString(), firstHook.ArgLine, firstHook.ArgChar, cancellationToken)
                 .ConfigureAwait(false);
 
             if (result.Scenarios.Count == 0)
             {
-                _logger.LogInformation("HookMatchCountCodeLens.ExecuteAsync: no matching scenarios.");
+                _logger.LogDebug("HookMatchCountCodeLens.ExecuteAsync: no matching scenarios.");
                 return;
             }
 

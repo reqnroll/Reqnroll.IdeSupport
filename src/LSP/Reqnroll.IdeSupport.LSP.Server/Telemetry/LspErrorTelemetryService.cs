@@ -1,7 +1,7 @@
 #nullable disable
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// wizards, dialogs, project-system open) is a no-op here, same as <see cref="NullLspTelemetryService"/>
 /// — those only make sense from a host UI, which the server doesn't have.
 /// <see cref="IErrorTelemetryService.MonitorError"/> is the one exception: it forwards to
-/// <see cref="ILspTelemetryService"/> as an "Error" <c>telemetry/event</c>, so exceptions raised
+/// <see cref="ILspTelemetryService"/> as an <c>UnhandledException</c> <c>telemetry/event</c>, so exceptions raised
 /// inside LSP.Core (e.g. <c>IdeSupportGherkinParser</c>/<c>IdeSupportTagParser</c> via
 /// <c>IdeSupportLoggerExtensions.LogException</c>) actually reach telemetry instead of being
 /// silently dropped. Previously the server was wired with <see cref="NullLspTelemetryService"/> for
@@ -31,14 +31,6 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// </summary>
 public sealed class LspErrorTelemetryService : ITelemetryService
 {
-    // Windows absolute/UNC paths (C:\..., \\server\share\...) and POSIX absolute paths (/home/...).
-    // Deliberately broad (over-redacting is safe; under-redacting leaks a path) — see
-    // docs/LSP-IDE-Support-Architecture.md's Privacy Considerations: "The Error event must scrub
-    // exception messages for file paths and user-identifiable strings before transmission."
-    private static readonly Regex PathPattern = new(
-        @"(?:[A-Za-z]:\\|\\\\|/)[^\s""'<>:*?|]+",
-        RegexOptions.Compiled);
-
     private readonly ILspTelemetryService _lspTelemetryService;
 
     /// <summary>Initializes a new instance of the <see cref="LspErrorTelemetryService"/> class.</summary>
@@ -65,20 +57,23 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     public void MonitorCommandAddReqnrollConfigFile(ProjectSettings projectSettings) { }
 
     /// <summary>
-    /// Sends the exception to the client as an "Error" <c>telemetry/event</c>, with the exception
-    /// message redacted via <see cref="RedactPaths"/> first.
+    /// Sends the exception to the client as an <c>UnhandledException</c> <c>telemetry/event</c>. The message is passed
+    /// through raw: <see cref="LspTelemetryService"/> (the last hop before the client) redacts paths via
+    /// <see cref="TelemetryScrubber.ScrubProperties"/>, so local logs and the debug-log mirror keep it.
     /// </summary>
     public void MonitorError(Exception exception, bool? isFatal = null)
     {
         var properties = new Dictionary<string, object>
         {
             ["ExceptionType"] = exception.GetType().FullName,
-            ["Message"] = RedactPaths(exception.Message),
+            ["Message"] = exception.Message,
         };
         if (isFatal.HasValue)
             properties["IsFatal"] = isFatal.Value;
+        if (ResolveSource(exception) is { } source)
+            properties[TelemetryProperties.Source] = source;
 
-        _lspTelemetryService.SendEvent("Error", properties);
+        _lspTelemetryService.SendEvent(TelemetryEvents.UnhandledException, properties);
     }
 
     /// <summary>No-op: the LSP server does not track project-template-wizard-started telemetry.</summary>
@@ -94,7 +89,35 @@ public sealed class LspErrorTelemetryService : ITelemetryService
     /// <summary>No-op: the LSP server does not transmit ad-hoc telemetry events through this channel.</summary>
     public void TransmitEvent(ITelemetryEvent runtimeEvent) { }
 
-    /// <summary>Replaces filesystem-path-shaped substrings with <c>&lt;path&gt;</c>.</summary>
-    internal static string RedactPaths(string message) =>
-        string.IsNullOrEmpty(message) ? message : PathPattern.Replace(message, "<path>");
+    /// <summary>
+    /// The simple name of the class (no namespace, no stack trace) that contains the topmost frame of
+    /// <paramref name="exception"/>'s stack in a <c>Reqnroll.IdeSupport</c> assembly, so an error can be
+    /// attributed to a component without transmitting the stack (issue #849, #620). Compiler-generated
+    /// async/lambda types are folded into the class that declares them. <see langword="null"/> when the
+    /// exception was never thrown or no frame belongs to this product.
+    /// </summary>
+    internal static string ResolveSource(Exception exception)
+    {
+        // MonitorError must never throw: stack metadata can be trimmed or unavailable, so any failure means "unknown".
+        try
+        {
+            foreach (var frame in new StackTrace(exception, fNeedFileInfo: false).GetFrames() ?? Array.Empty<StackFrame>())
+            {
+                var type = frame.GetMethod()?.DeclaringType;
+                if (type?.Namespace is null || !type.Namespace.StartsWith("Reqnroll.IdeSupport", StringComparison.Ordinal))
+                    continue;
+
+                // <Method>d__3 and <>c__DisplayClass are nested, compiler-named types: report their declaring class.
+                while (type.IsNested && type.Name.StartsWith('<') && type.DeclaringType is { } outer)
+                    type = outer;
+                return type.Name;
+            }
+        }
+        catch (Exception)
+        {
+            // fall through: no Source
+        }
+
+        return null;
+    }
 }

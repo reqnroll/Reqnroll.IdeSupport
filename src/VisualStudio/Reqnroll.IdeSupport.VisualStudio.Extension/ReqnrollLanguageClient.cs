@@ -9,8 +9,10 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
-using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
@@ -18,8 +20,10 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 #pragma warning disable VSEXTPREVIEW_LSP
@@ -39,17 +43,20 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private readonly ILoggerFactory _loggerFactory;
     private readonly FindStepUsagesState _findStepUsagesState;
     private readonly FindUnusedStepDefinitionsState _findUnusedStepDefinitionsState;
-    private readonly GoToHooksState _goToHooksState;
-    private readonly GoToMatchingScenariosState _goToMatchingScenariosState;
+    private readonly FindHooksState _goToHooksState;
+    private readonly FindMatchingScenariosState _goToMatchingScenariosState;
     private readonly StepCodeLensState _stepCodeLensState;
-    private readonly CommentToggleState _commentToggleState;
     private readonly RenameStepState _renameStepState;
+    private readonly FormatDocumentState _formatDocumentState;
     private readonly LspServerConnectionService _connectionService;
+    private CommentToggleService? _commentToggleService;
+    private GoToStepDefinitionPresenter? _goToStepDefinitionPresenter;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
     private ScenarioTestTargetService? _scenarioTestTargetService;
     private RunTestCodeLensService? _runTestCodeLensService;
     private RunTestCodeLensResultCache? _runTestCodeLensResultCache;
+    private RunTestOutcomeService? _runTestOutcomeService;
 
     /// <summary>Creates the language client, resolving the shared state holders and the already-launching connection service.</summary>
     public ReqnrollLanguageClient(
@@ -59,11 +66,11 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         ILoggerFactory loggerFactory,
         FindStepUsagesState findStepUsagesState,
         FindUnusedStepDefinitionsState findUnusedStepDefinitionsState,
-        GoToHooksState goToHooksState,
-        GoToMatchingScenariosState goToMatchingScenariosState,
+        FindHooksState goToHooksState,
+        FindMatchingScenariosState goToMatchingScenariosState,
         StepCodeLensState stepCodeLensState,
-        CommentToggleState commentToggleState,
         RenameStepState renameStepState,
+        FormatDocumentState formatDocumentState,
         LspServerConnectionService connectionService)
         : base(container, extensibilityObject)
     {
@@ -74,8 +81,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         _goToHooksState                 = goToHooksState;
         _goToMatchingScenariosState     = goToMatchingScenariosState;
         _stepCodeLensState              = stepCodeLensState;
-        _commentToggleState             = commentToggleState;
         _renameStepState                = renameStepState;
+        _formatDocumentState            = formatDocumentState;
         // LspServerConnectionService is a singleton already resolved (and its eager server launch
         // already kicked off) by ExtensionEntrypoint.OnInitializedAsync well before this class is
         // constructed — this constructor param just retrieves the same instance. It is NOT this
@@ -86,6 +93,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         // same as before this change. See ExtensionEntrypoint.OnInitializedAsync's remarks for the
         // corrected mechanism and the log evidence.
         _connectionService   = connectionService;
+
+        // Tells ReqnrollPluginPackage's scratch-file trigger that VS did activate this provider (issue #533).
+        LanguageServerActivationSignal.Shared.MarkActivated();
+
         _logger.LogInformation(
             "ReqnrollLanguageClient: instance created. VS extension loaded. Assembly: {AssemblyLocation}",
             typeof(ReqnrollLanguageClient).Assembly.Location);
@@ -126,7 +137,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             new[]
             {
                 DocumentFilter.FromDocumentType(GherkinDocumentType.GherkinDocument),
-                DocumentFilter.FromDocumentType("CSharp"),
+                DocumentFilter.FromDocumentType(CSharpDocumentType.CSharp),
             });
 
     /// <inheritdoc />
@@ -176,25 +187,31 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         {
             _findStepUsagesState.Service            = new FindStepUsagesService(interceptingPipe, _loggerFactory.CreateLogger<FindStepUsagesService>());
             _findUnusedStepDefinitionsState.Service = new FindUnusedStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindUnusedStepDefinitionsService>());
-            _goToHooksState.Service                 = new GoToHooksService(interceptingPipe, _loggerFactory.CreateLogger<GoToHooksService>());
-            _goToMatchingScenariosState.Service     = new GoToMatchingScenariosService(interceptingPipe, _loggerFactory.CreateLogger<GoToMatchingScenariosService>());
+            _goToHooksState.Service                 = new FindHooksService(interceptingPipe, _loggerFactory.CreateLogger<FindHooksService>());
+            _goToMatchingScenariosState.Service     = new FindMatchingScenariosService(interceptingPipe, _loggerFactory.CreateLogger<FindMatchingScenariosService>());
             _stepCodeLensState.Service              = new StepCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<StepCodeLensService>());
-            _commentToggleState.Service             = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
+            _commentToggleService                    = new CommentToggleService(interceptingPipe, _loggerFactory.CreateLogger<CommentToggleService>());
             _renameStepState.Service                 = new RenameStepService(interceptingPipe, _loggerFactory.CreateLogger<RenameStepService>());
+            _formatDocumentState.Service             = new FormatDocumentService(interceptingPipe, _loggerFactory.CreateLogger<FormatDocumentService>());
             _navigationBarSymbolService              = new GherkinNavigationBarSymbolService(interceptingPipe, _loggerFactory.CreateLogger<GherkinNavigationBarSymbolService>());
             _hookFeatureCodeLensService               = new HookFeatureCodeLensService(interceptingPipe, _loggerFactory.CreateLogger<HookFeatureCodeLensService>());
             _scenarioTestTargetService                = new ScenarioTestTargetService(interceptingPipe, _loggerFactory.CreateLogger<ScenarioTestTargetService>());
 
-            // Set the VSSDK command filter redirect so the keyboard shortcut interception
-            // for Edit.CommentSelection/UncommentSelection/ToggleLineComment calls our service.
-            CommentToggleRedirect.ToggleCommentAsync = _commentToggleState.Service.ToggleCommentAsync;
+            // Set the VSSDK command filter redirect so Edit.CommentSelection/UncommentSelection/
+            // ToggleLineComment in a .feature file call our service (the only entry point — there
+            // is no Reqnroll-specific Comment/Uncomment command, issue #747).
+            CommentToggleRedirect.ToggleCommentAsync = _commentToggleService.ToggleCommentAsync;
 
             // Set the VSSDK drop-down bar client redirect so the
             // Navigation Bar can fetch the Feature/Scenario/Step symbol tree.
             NavigationBarRedirect.FetchDocumentSymbolsAsync = _navigationBarSymbolService.FetchSymbolsAsync;
 
+            // Set the VSSDK command filter redirect so the keyboard shortcut interception
+            // for Edit.FormatDocument/Edit.FormatSelection calls our service.
+            FormatDocumentRedirect.FormatDocumentAsync = _formatDocumentState.Service.FormatDocumentAsync;
+
             // Set the classic hook-match-count CodeLens bridge (issue #372, unblocking #269 for
-            // Visual Studio) — GetHookDetailsAsync reuses the same GoToHooksService the
+            // Visual Studio) — GetHookDetailsAsync reuses the same FindHooksService the
             // reqnroll.goToHooks command uses, so a lens's Details popup always matches what a
             // manual "Go to Hooks" invocation with ownLevelOnly would return.
             HookCodeLensRedirect.GetLensesAsync      = _hookFeatureCodeLensService.GetLensesAsync;
@@ -207,7 +224,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     return Array.Empty<HookDetailEntry>();
 
                 var result = await service
-                    .GoToHooksAsync(fileUri, line, ch, ownLevelOnly, ct)
+                    .FindHooksAsync(fileUri, line, ch, ownLevelOnly, ct)
                     .ConfigureAwait(false);
                 return result.Hooks
                     .Select(h => new HookDetailEntry(h.HookType, h.MethodName, h.HookOrder, h.Uri, h.StartLine, h.StartChar))
@@ -250,15 +267,37 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 RunTestCodeLensRedirect.GetTagLocationsAsync = _runTestCodeLensService.GetTagLocationsAsync;
                 RunTestCodeLensRedirect.InvalidateCachedFile = _runTestCodeLensResultCache.InvalidateFile;
                 RunTestCodeLensRedirect.InvalidateAllCached = _runTestCodeLensResultCache.InvalidateAll;
+
+                // LSP-server outcome pipeline (run registration + outcome lookup now served by the
+                // LSP server instead of an in-proc, VS-only TestOutcomeListener/TestOutcomeStore).
+                _runTestOutcomeService = new RunTestOutcomeService(
+                    interceptingPipe, _loggerFactory.CreateLogger<RunTestOutcomeService>());
+                RunTestCodeLensRedirect.RegisterTestRunAsync = _runTestOutcomeService.RegisterRunAsync;
+                RunTestCodeLensRedirect.GetTestOutcomeAsync = _runTestOutcomeService.GetOutcomeAsync;
                 _logger.LogInformation(
                     "ReqnrollLanguageClient: ITelemetryTransmitter resolved: {Resolved}",
                     _connectionService.TelemetryTransmitter is not null ? "yes" : "no");
                 _findStepUsagesState.Renderer            = new FindStepUsagesRenderer(serviceProvider, _loggerFactory.CreateLogger<FindStepUsagesRenderer>());
-                _findUnusedStepDefinitionsState.Renderer = new FindUnusedStepDefinitionsRenderer(serviceProvider, _loggerFactory.CreateLogger<FindUnusedStepDefinitionsRenderer>());
+                _findUnusedStepDefinitionsState.Renderer = new StepDefinitionsRenderer(serviceProvider, _loggerFactory.CreateLogger<StepDefinitionsRenderer>());
 
                 // Reuse the Find Step Definition Usages / Find All References components for the code-lens click action.
                 _stepCodeLensState.FindUsagesService  = _findStepUsagesState.Service;
                 _stepCodeLensState.FindUsagesRenderer = _findStepUsagesState.Renderer;
+
+                // Reuse the same FAR-window renderer for Go To Hooks: several applicable hooks are
+                // shown there instead of the NavigationPickerDialog modal popup (issue #315).
+                _goToHooksState.Renderer = _findStepUsagesState.Renderer;
+
+                // Go To Definition in a .feature file (issue #757): the VSSDK command filter takes the
+                // command over so several matching step definitions open the Find All References
+                // window titled after the step, not VS's "'{word}' declarations". Wired here, after
+                // the step-definitions renderer it shares with Find Unused Step Definitions exists.
+                _goToStepDefinitionPresenter = new GoToStepDefinitionPresenter(
+                    new FindStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindStepDefinitionsService>()),
+                    _findUnusedStepDefinitionsState.Renderer,
+                    ExtensionHostLogger.Instance,
+                    _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>());
+                GoToDefinitionRedirect.GoToDefinitionAsync = _goToStepDefinitionPresenter.GoToDefinitionAsync;
 
                 // VS.Extensibility can call this method more than once per session (issue #156):
                 // a second activation must not leave the first ProjectMonitor's DTE event
@@ -311,12 +350,18 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _findUnusedStepDefinitionsState.Service  = null;
             _findUnusedStepDefinitionsState.Renderer = null;
             _goToHooksState.Service                  = null;
+            _goToHooksState.Renderer                 = null;
             _goToMatchingScenariosState.Service      = null;
             _stepCodeLensState.Service           = null;
             _stepCodeLensState.FindUsagesService  = null;
             _stepCodeLensState.FindUsagesRenderer = null;
-            _commentToggleState.Service = null;
+            _commentToggleService = null;
+            CommentToggleRedirect.ToggleCommentAsync = null;
+            _goToStepDefinitionPresenter = null;
+            GoToDefinitionRedirect.GoToDefinitionAsync = null;
             _renameStepState.Service = null;
+            _formatDocumentState.Service = null;
+            FormatDocumentRedirect.FormatDocumentAsync = null;
             _navigationBarSymbolService = null;
             NavigationBarRedirect.FetchDocumentSymbolsAsync = null;
             _hookFeatureCodeLensService = null;
@@ -330,6 +375,9 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             RunTestCodeLensRedirect.GetTagLocationsAsync = null;
             RunTestCodeLensRedirect.InvalidateCachedFile = null;
             RunTestCodeLensRedirect.InvalidateAllCached = null;
+            _runTestOutcomeService = null;
+            RunTestCodeLensRedirect.RegisterTestRunAsync = null;
+            RunTestCodeLensRedirect.GetTestOutcomeAsync = null;
 
             // _connectionService itself is NOT disposed here: it's a DI-owned singleton whose
             // lifetime spans the whole extension session, not just this provider instance.

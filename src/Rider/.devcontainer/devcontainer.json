@@ -24,7 +24,12 @@
     // check silently evaluated false, so it never even added a source for the
     // (correctly, separately published) linux-x64 build, and runIde's LSP server failed
     // to start with "Reqnroll LSP server not found".
-    "ORG_GRADLE_PROJECT_lspServerBuildDir": "${containerWorkspaceFolder}/downloaded-server"
+    "ORG_GRADLE_PROJECT_lspServerBuildDir": "${containerWorkspaceFolder}/downloaded-server",
+    // Same reasoning as lspServerBuildDir above, for the bundled VSTest logger
+    // (LSP-server outcome pipeline, #700/#702): publishTestLogger also shells to
+    // `dotnet publish`, unavailable in this container, so prepareSandbox needs a
+    // pre-published copy here instead.
+    "ORG_GRADLE_PROJECT_lspTestLoggerBuildDir": "${containerWorkspaceFolder}/downloaded-testlogger"
   },
   "mounts": [
     // Docker Desktop's docker.exe is Windows-native, so bind-mount sources

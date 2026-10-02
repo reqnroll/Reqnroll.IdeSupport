@@ -36,6 +36,23 @@ public class TelemetryEventInterceptorTests
     }
 
     [Fact]
+    public async Task FeatureUsageSummary_counts_string_is_forwarded_verbatim()
+    {
+        // The server sends the per-kind counts as a compact JSON *string* (#582) precisely because a
+        // nested object would be re-rendered by JToken.ToString() as multi-line indented JSON.
+        var transmitter = new CapturingTransmitter();
+        var sut = Create(transmitter);
+        const string lookupCounts = "{\"CodeAction\":1,\"Completion.Step\":14}";
+
+        await sut.InterceptAsync(
+            Receive(TelemetryEvent("FeatureUsageSummary", new JObject { ["LookupCounts"] = lookupCounts })),
+            CancellationToken.None);
+
+        transmitter.Events.Should().ContainSingle();
+        transmitter.Events[0].Properties["LookupCounts"].Should().Be(lookupCounts);
+    }
+
+    [Fact]
     public async Task A_telemetry_event_is_forwarded_with_name_and_properties()
     {
         var transmitter = new CapturingTransmitter();

@@ -16,8 +16,8 @@ public class RenameSessionManager
 
     private readonly Func<DateTime> _utcNow;
 
-    // Key: (uri, documentVersion) → (attributeIndex, expiresAt)
-    private readonly ConcurrentDictionary<(string Uri, int Version), (int AttributeIndex, DateTime ExpiresAt)> _sessions = new();
+    // Key: (uri, documentVersion) → (target, expiresAt)
+    private readonly ConcurrentDictionary<(string Uri, int Version), (RenameSessionTarget Target, DateTime ExpiresAt)> _sessions = new();
 
     /// <summary>Initializes a new instance of the <see cref="RenameSessionManager"/> class using the real system clock.</summary>
     public RenameSessionManager() : this(() => DateTime.UtcNow)
@@ -31,21 +31,25 @@ public class RenameSessionManager
     }
 
     /// <summary>Stores a pending rename session with a 30-second expiry.</summary>
-    public void SetSession(string uri, int version, int attributeIndex)
+    public void SetSession(string uri, int version, RenameSessionTarget target)
     {
         var key = (NormalizeUri(uri), version);
-        _sessions[key] = (attributeIndex, _utcNow() + SessionDuration);
+        _sessions[key] = (target, _utcNow() + SessionDuration);
         Cleanup();
     }
 
+    /// <summary>Stores a pending rename session identified only by the picker's positional index.</summary>
+    public void SetSession(string uri, int version, int attributeIndex)
+        => SetSession(uri, version, new RenameSessionTarget(attributeIndex, null));
+
     /// <summary>
     /// Attempts to consume a pending session. Returns true if a valid (non-expired)
-    /// session exists for the given URI+version, and outputs the attributeIndex.
+    /// session exists for the given URI+version, and outputs which binding was picked.
     /// The session is removed on successful consumption.
     /// </summary>
-    public bool TryConsume(string uri, int version, out int attributeIndex)
+    public bool TryConsume(string uri, int version, out RenameSessionTarget target)
     {
-        attributeIndex = 0;
+        target = new RenameSessionTarget(0, null);
         Cleanup();
 
         var key = (NormalizeUri(uri), version);
@@ -53,7 +57,7 @@ public class RenameSessionManager
         {
             if (entry.ExpiresAt > _utcNow())
             {
-                attributeIndex = entry.AttributeIndex;
+                target = entry.Target;
                 return true;
             }
         }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Nerdbank.Streams;
 using Reqnroll.IdeSupport.Common;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
@@ -426,8 +427,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 _serverProcess.StandardInput.BaseStream.UsePipeWriter());
 
             // Build the LSP Inspector log file path, unique per session.
-            var logDir  = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Reqnroll");
-            var logFile = Path.Combine(logDir, $"reqnroll-vs-inspector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+            var logFile = Path.Combine(ReqnrollLogPaths.ResolveLogDirectory(), $"reqnroll-vs-inspector-{DateTime.Now:yyyyMMdd-HHmmss}.log");
             _logger.LogInformation(
                 "LspServerConnectionService: server process started (PID {ProcessId}). Inspector log: {LogFile}",
                 _serverProcess.Id, logFile);
@@ -437,6 +437,12 @@ internal sealed class LspServerConnectionService : IDisposable
             // editor classifier can colour .feature files with Reqnroll's custom classifications,
             // bypassing VS's fixed built-in token-type→classification table. One instance is shared
             // by both pipelines so it sees requests (VS→Server) and their responses (Server→VS).
+            // Drops didOpen/didChange/didClose for shadow documents under %TEMP% or a
+            // copilot-named path (issue #562) before any other interceptor — or the server
+            // itself — ever sees them.
+            var shadowDocumentFilterInterceptor = new ShadowDocumentFilterInterceptor(
+                _loggerFactory.CreateLogger<ShadowDocumentFilterInterceptor>());
+
             var semanticTokensInterceptor = new SemanticTokensClassificationInterceptor(
                 SemanticTokenClassificationStore.Instance, _loggerFactory.CreateLogger<SemanticTokensClassificationInterceptor>());
 
@@ -451,6 +457,11 @@ internal sealed class LspServerConnectionService : IDisposable
             _codeLensRefreshInterceptor = new CodeLensRefreshInterceptor(
                 _stepCodeLensState, _loggerFactory.CreateLogger<CodeLensRefreshInterceptor>());
 
+            // Watches the server's reqnroll/testOutcomes/changed push (LSP-server outcome pipeline
+            // refactor) and refreshes the Run CodeLens taggers.
+            var testOutcomesChangedInterceptor = new TestOutcomesChangedInterceptor(
+                _loggerFactory.CreateLogger<TestOutcomesChangedInterceptor>());
+
             // Drives DocumentActivationState's didOpen/didClose transitions (issue #85) and, in
             // the activation-before-open case, sends reqnroll/documentActivated itself right
             // after re-forwarding didOpen. Uses a lazy reference for the same reason as above:
@@ -463,7 +474,7 @@ internal sealed class LspServerConnectionService : IDisposable
             _shutdownHandshakeInterceptor = new ShutdownHandshakeInterceptor(
                 _loggerFactory.CreateLogger<ShutdownHandshakeInterceptor>());
 
-            // Send pipeline:   VS → [logger, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
+            // Send pipeline:   VS → [logger, shadowDocumentFilter, semanticTokens, scaffold, documentActivation, shutdownHandshake] → Server
             // Receive pipeline: Server → [logger, semanticTokens, scaffold, codeLensRefresh, shutdownHandshake, telemetry] → VS
             // codeLensRefresh is receive-only: it acts solely on the server's reqnroll/refreshCodeLens
             // push. It used to sit on the send pipeline as well, watching .cs didChange to invalidate
@@ -472,14 +483,14 @@ internal sealed class LspServerConnectionService : IDisposable
             // shutdownHandshake is on both pipelines: send captures the outgoing shutdown request id;
             // receive watches for the matching response.
             var sendInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
+                { _inspectorLogger, shadowDocumentFilterInterceptor, semanticTokensInterceptor, scaffoldInterceptor, documentActivationInterceptor, _shutdownHandshakeInterceptor };
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.
             var telemetryInterceptor = new TelemetryEventInterceptor(
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
             var receiveInterceptors = new ILspMessageInterceptor[]
-                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
+                { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
             _interceptingPipe = new LspInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());

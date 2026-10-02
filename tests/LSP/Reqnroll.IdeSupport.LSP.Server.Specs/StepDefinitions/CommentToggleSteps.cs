@@ -17,16 +17,27 @@ public sealed class CommentToggleSteps
     // -- When ------------------------------------------------------------------
 
     [When("the toggle comment command is executed for \"(.*)\" on lines (\\d+) to (\\d+)")]
-    public async Task WhenTheToggleCommentCommandIsExecuted(string fileName, int startLine, int endLine)
+    public Task WhenTheToggleCommentCommandIsExecuted(string fileName, int startLine, int endLine)
+        => ExecuteToggleCommentAsync(fileName, new JArray(startLine, endLine));
+
+    [When("the toggle comment command is executed for \"(.*)\" on lines (\\d+) to (\\d+) with mode \"(.*)\"")]
+    public Task WhenTheToggleCommentCommandIsExecutedWithMode(string fileName, int startLine, int endLine, string mode)
+        => ExecuteToggleCommentAsync(fileName, new JArray(startLine, endLine, mode));
+
+    private async Task ExecuteToggleCommentAsync(string fileName, JArray argumentsAfterUri)
     {
         await _ctx.EnsureStartedAsync().ConfigureAwait(false);
         var uri = _ctx.UriFor(fileName);
         _ctx.LastToggleEdit = null;
 
+        var arguments = new JArray(uri.ToString());
+        foreach (var argument in argumentsAfterUri)
+            arguments.Add(argument);
+
         await _ctx.Harness.Client.RequestCommandAsync(new ExecuteCommandParams
         {
             Command = "reqnroll.toggleComment",
-            Arguments = new JArray(uri.ToString(), startLine, endLine)
+            Arguments = arguments
         }).ConfigureAwait(false);
 
         _ctx.LastToggleEdit = _ctx.Harness.LastApplyEdit;
@@ -38,6 +49,18 @@ public sealed class CommentToggleSteps
     public void ThenAWorkspaceApplyEditRequestIsReceived()
     {
         _ctx.LastToggleEdit.Should().NotBeNull("the server should send workspace/applyEdit as a request");
+    }
+
+    [Then("the edit does not change line (\\d+)")]
+    public void ThenTheEditDoesNotChangeLine(int line)
+    {
+        var edit = _ctx.LastToggleEdit;
+        edit.Should().NotBeNull();
+
+        var docEdit = edit!.Edit.DocumentChanges!.First().TextDocumentEdit;
+        docEdit.Should().NotBeNull("the edit should contain a TextDocumentEdit");
+        docEdit!.Edits.Should().NotContain(e => e.Range.Start.Line == line,
+            $"line {line} should be left untouched");
     }
 
     [Then("the edit replaces line (\\d+) with \"(.*)\"")]

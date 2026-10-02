@@ -1,5 +1,6 @@
-#nullable disable
+﻿#nullable disable
 using EnvDTE;
+using EnvDTE80;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Composition;
@@ -12,8 +13,8 @@ using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
 using NuGet.VisualStudio.Contracts;
-using Reqnroll.IdeSupport.VisualStudio.Interop;
-using System.Reflection;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
+using Microsoft.VisualStudio.Setup.Configuration;
 using System.Windows.Media;
 using IOleServiceProvider = Microsoft.VisualStudio.OLE.Interop.IServiceProvider;
 using IServiceProvider = System.IServiceProvider;
@@ -59,8 +60,6 @@ public static class VsUtils
     //    {
     //        // Get the IVsTextView from the windowFrame.
     //        IVsTextView textView = VsShellUtilities.GetTextView(windowFrame);
-    //        if (!IsInitialized(textView))
-    //            return null;
 
     //        return editorAdaptersFactoryService.GetWpfTextView(textView);
     //    }
@@ -99,22 +98,6 @@ public static class VsUtils
             out _, out _, out _);
     }
 
-    /// <summary>
-    ///     IVsEditorAdaptersFactoryService.GetWpfTextView brings the text view into an inconsistent state when it is not fully
-    ///     initialized (open project with files opened but not activated yet)
-    /// </summary>
-    private static bool IsInitialized(IVsTextView textView)
-    {
-        if (textView == null)
-            return false;
-        var propertyInfo = textView.GetType()
-            .GetProperty("CurrentInitializationState", BindingFlags.Instance | BindingFlags.Public);
-        if (propertyInfo == null)
-            return true; // actually we don't know
-        var value = propertyInfo.GetValue(textView).ToString();
-        return value == "TextViewAvailable";
-    }
-
     /// <summary>Returns the containing <see cref="Project"/> of <paramref name="projectItem"/>, or <see langword="null"/> on failure.</summary>
     public static Project GetProject(ProjectItem projectItem)
     {
@@ -129,14 +112,22 @@ public static class VsUtils
         }
     }
 
-    /// <summary>Returns <see langword="true"/> if <paramref name="project"/> has a resolvable file path (i.e. is a real solution project, not a solution folder).</summary>
+    /// <summary>Returns <see langword="true"/> if <paramref name="project"/> has a resolvable file path (i.e. is a real solution project, not a solution folder) and is not a shared project.</summary>
+    /// <remarks>
+    /// A solution folder is excluded because it has no path at all. A shared project (.shproj) is
+    /// excluded because, although it does have one, it produces no assembly and owns no files of
+    /// its own at build time -- its sources compile into every project that imports its
+    /// .projitems, and sending it as a project makes the server treat it as the owner of those
+    /// files (issue #735).
+    /// </remarks>
     public static bool IsSolutionProject(Project project)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
             return !string.IsNullOrWhiteSpace(project.FullName) &&
-                   Path.GetDirectoryName(project.FullName) != null;
+                   Path.GetDirectoryName(project.FullName) != null &&
+                   !ProjectFileTypes.IsSharedProject(project.FullName);
         }
         catch (Exception ex)
         {
@@ -602,22 +593,123 @@ public static class VsUtils
         return projectItem.FileNames[1];
     }
 
-    //public static IEnumerable<Project> GetAllProjects(DTE dte)
-    //{
-    //    var projects = dte.Solution.Projects.OfType<Project>().ToArray();
-    //    return EnumerateProjectHierarchy(projects);
-    //}
+    /// <summary>
+    /// Returns every real project in the solution, descending into solution folders to arbitrary
+    /// depth. <see cref="EnvDTE.Solution.Projects"/> is flat: it yields solution folders as
+    /// <see cref="Project"/> objects, and the projects nested inside them are reachable only via
+    /// <see cref="ProjectItem.SubProject"/> — so enumerating it directly silently drops every
+    /// nested project (issue #729). Solution folders themselves are not returned.
+    /// </summary>
+    public static IEnumerable<Project> GetAllProjects(Solution solution)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
 
-    //private static IEnumerable<Project> EnumerateProjectHierarchy(IEnumerable<Project> projects)
-    //{
-    //    foreach (var project in projects)
-    //    {
-    //        yield return project;
-    //        var subProjects = project.ProjectItems.OfType<ProjectItem>().Select(x => x.SubProject).OfType<Project>()
-    //            .ToArray();
-    //        foreach (var subProject in EnumerateProjectHierarchy(subProjects)) yield return subProject;
-    //    }
-    //}
+        var roots = solution?.Projects;
+        if (roots == null)
+            return Array.Empty<Project>();
+
+        // Materialised rather than lazy: the traversal touches COM, so it must complete while the
+        // caller is still on the UI thread rather than at some later point of enumeration.
+        return ProjectHierarchyWalker
+            .Flatten(roots.OfType<Project>(), GetProjectKey, GetSubProjects)
+            .ToList();
+    }
+
+    /// <summary>
+    /// A project's identity for hierarchy de-duplication: its file path, or <see langword="null"/>
+    /// when the node is a solution folder (or a project whose path cannot be read), which marks it
+    /// as "descend into but do not return".
+    /// </summary>
+    private static string GetProjectKey(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        try
+        {
+            // Kind first: a solution folder is never a project, even on the project types that
+            // report a non-empty FullName for one.
+            return !IsSolutionFolder(project) && IsSolutionProject(project)
+                ? project.FullName
+                : null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex, $"{nameof(VsUtils)}.{nameof(GetProjectKey)}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort read of a solution folder's nested sub-projects.
+    /// <para>
+    /// Only solution folders are descended into. A real project's <see cref="Project.ProjectItems"/>
+    /// is its file list, which can run to thousands of entries; probing <c>SubProject</c> on each
+    /// would cost a COM round-trip per file on the UI thread, for nodes that cannot contain a
+    /// nested project anyway.
+    /// </para>
+    /// <para>
+    /// Returns empty rather than throwing: <see cref="Project.ProjectItems"/> is null for some
+    /// project types and can throw for unloaded ones, and one bad node must not abort the walk.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<Project> GetSubProjects(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+
+        if (!IsSolutionFolder(project))
+            return Array.Empty<Project>();
+
+        ProjectItems items;
+        try
+        {
+            items = project.ProjectItems;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex, $"{nameof(VsUtils)}.{nameof(GetSubProjects)}");
+            return Array.Empty<Project>();
+        }
+
+        if (items == null)
+            return Array.Empty<Project>();
+
+        var result = new List<Project>();
+        foreach (var item in items.OfType<ProjectItem>())
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            Project subProject;
+            try
+            {
+                subProject = item.SubProject;
+            }
+            catch
+            {
+                continue;   // not a container item, or an unloaded project
+            }
+
+            if (subProject != null)
+                result.Add(subProject);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="project"/> is a solution folder — the
+    /// only kind of node that can contain nested projects.
+    /// </summary>
+    private static bool IsSolutionFolder(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        try
+        {
+            return string.Equals(project.Kind, ProjectKinds.vsProjectKindSolutionFolder, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex, $"{nameof(VsUtils)}.{nameof(IsSolutionFolder)}");
+            return false;
+        }
+    }
 
     /// <summary>Returns the DTE version string (e.g. "17.0"), falling back to a hard-coded default if unavailable.</summary>
     public static string GetVsMainVersion(IServiceProvider serviceProvider)
@@ -636,18 +728,30 @@ public static class VsUtils
         }
     }
 
-    // https://stackoverflow.com/a/55039958
-    /// <summary>Returns the VS product display version (e.g. "17.9.1") via <see cref="IVsAppId"/>, falling back to <see cref="GetVsMainVersion"/> on failure.</summary>
+    /// <summary>
+    /// The running instance's setup-catalog property holding the product display version — the same
+    /// value <c>vswhere</c> reports as <c>catalog_productDisplayVersion</c>.
+    /// </summary>
+    private const string ProductDisplayVersionCatalogProperty = "productDisplayVersion";
+
+    /// <summary>
+    /// Returns the VS product display version (e.g. "17.14.5") from the running instance's setup
+    /// catalog, falling back to <see cref="GetVsMainVersion"/> on failure.
+    /// </summary>
+    /// <remarks>
+    /// Uses the supported Setup Configuration API. This replaced a hand-written COM interop for the
+    /// shell's app-id service, whose interface layout and property IDs appear in no published SDK
+    /// header and so could not be checked.
+    /// </remarks>
     public static string GetVsProductDisplayVersionSafe(IServiceProvider serviceProvider)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            var vsAppId = serviceProvider.GetService<IVsAppId>(typeof(SVsAppId));
-            vsAppId.GetProperty((int) VSAPropID.VSAPROPID_ProductDisplayVersion, out var productDisplayVersion);
-
-            var displayVersion = productDisplayVersion as string;
-            return displayVersion ?? GetVsMainVersion(serviceProvider);
+            var instance = new SetupConfiguration().GetInstanceForCurrentProcess();
+            var catalog = (instance as ISetupInstanceCatalog)?.GetCatalogInfo();
+            var displayVersion = catalog?.GetValue(ProductDisplayVersionCatalogProperty) as string;
+            return string.IsNullOrEmpty(displayVersion) ? GetVsMainVersion(serviceProvider) : displayVersion;
         }
         catch (Exception ex)
         {
@@ -656,7 +760,15 @@ public static class VsUtils
         }
     }
 
-    /// <summary>Retrieves the installed NuGet packages for the project via the NuGet brokered service; blocks synchronously on the async call.</summary>
+    /// <summary>
+    /// Retrieves the installed NuGet packages for the project via the NuGet brokered service; blocks
+    /// synchronously on the async call.
+    /// </summary>
+    /// <exception cref="NuGetProjectNotReadyException">
+    /// NuGet reports <see cref="InstalledPackageResultStatus.ProjectNotReady"/> -- the project
+    /// hasn't been nominated/restored yet. Routine during solution load (issue #690); callers should
+    /// treat this as "try again once restore finishes," not as a failure worth surfacing to the user.
+    /// </exception>
     public static IEnumerable<NuGetInstalledPackage> GetInstalledNuGetPackages(IServiceProvider serviceProvider,
         string projectFullName)
     {
@@ -684,6 +796,8 @@ public static class VsUtils
             {
                 var packagesResult =
                     await projectService.GetInstalledPackagesAsync(projectGuid, CancellationToken.None);
+                if (packagesResult.Status == InstalledPackageResultStatus.ProjectNotReady)
+                    throw new NuGetProjectNotReadyException();
                 if (packagesResult.Status != InstalledPackageResultStatus.Successful)
                     throw new Exception("Unexpected result from GetInstalledPackagesAsync: " + packagesResult.Status);
                 return packagesResult.Packages;

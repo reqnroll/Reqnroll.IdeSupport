@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 using IServiceProvider = System.IServiceProvider;
 
@@ -50,6 +51,8 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
     private DocumentInitializationMonitor? _documentInitializationMonitor;
+    private FeatureBufferContentTypeGuard? _featureBufferContentTypeGuard;
+    private MtpProjectStubSolutionListener? _mtpProjectStubListener;
 
     /// <inheritdoc />
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
@@ -72,11 +75,20 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
         _logger.LogInfo("ReqnrollPluginPackage: InitializeAsync started.");
 
+        // Issue #741: MTP reporter registration is project-local now (obj\<Project>.csproj.reqnroll-ide.targets,
+        // written once the solution is loaded, below). Remove the per-user ImportAfter file earlier
+        // versions dropped, which affected every MSBuild build for this Windows user.
+        MtpProjectStubs.TryRemoveLegacyImportAfterFile(_logger);
+
         // Advise before the solution-load wait, not after: the restored .feature stubs we want to
         // observe are realized *during* restore, so a subscription taken afterwards would miss the
         // very transitions this is here to time (issue #533, phase 2). Diagnostic only — it never
         // forces a document to initialize.
         await AdviseDocumentInitializationMonitorAsync(cancellationToken);
+
+        // Issue #78: before the solution-load wait, for the same reason — restored .feature tabs
+        // exist by now, and one without the Gherkin content type stays inert for its whole life.
+        await StartFeatureBufferContentTypeGuardAsync(cancellationToken);
 
         _logger.LogInfo("Waiting for solution load...");
 
@@ -93,6 +105,21 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         // foreground tab is a .cs file and no feature file is open.
 
         _logger.LogInfo("Solution loaded.");
+
+        // Log whether the undocumented VS command IDs this extension hard-codes still resolve to
+        // the commands they are meant to (see VsWellKnownIds). Diagnostic only. WaitForSolutionLoadAsync
+        // already returns on the UI thread; the switch just makes that explicit.
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        VsWellKnownIdsSelfCheck.Run(this, _logger, _telemetryTransmitter);
+
+        // Issue #533: if VS restored a .feature tab but never activated the language server
+        // provider, open and close a scratch .feature file to activate it. Not awaited: it waits
+        // out a grace period first, and package initialization must not wait for that. A fallback
+        // since issue #78 fixed the restored tab's content type; see the trigger's remarks.
+        _ = JoinableTaskFactory.RunAsync(() => ScratchFileActivationTrigger.RunAsync(
+            this, LanguageServerActivationSignal.Shared, _logger, DisposalToken));
+
+        await StartMtpProjectStubsAsync(cancellationToken);
 
         // Show the Welcome (first install) or Upgrade (version change) dialog
         // if appropriate, after a short delay so VS can finish initializing.
@@ -306,6 +333,31 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         }
     }
 
+    /// <summary>
+    /// Starts <see cref="FeatureBufferContentTypeGuard"/>, which logs the content type VS gave each
+    /// <c>.feature</c> buffer and re-types any that are not <c>Gherkin</c> (issue #78).
+    /// Best-effort: a failure here must not abort package initialization.
+    /// </summary>
+    private async Task StartFeatureBufferContentTypeGuardAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            var componentModel = await GetServiceAsync(typeof(SComponentModel)) as IComponentModel;
+            var rdt = await GetServiceAsync(typeof(SVsRunningDocumentTable)) as IVsRunningDocumentTable;
+            _featureBufferContentTypeGuard = FeatureBufferContentTypeGuard.TryStart(componentModel, rdt, _logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: could not start the feature buffer content-type guard.");
+        }
+    }
+
     private async Task WaitForSolutionLoadAsync(CancellationToken cancellationToken)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
@@ -320,9 +372,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         const int maxAttempts = 40; // ~10 seconds
         for (int i = 0; i < maxAttempts; i++)
         {
-            // The VSPSROPID_IsOpen value is 0x0000000B per the VS SDK headers.
-            solution.GetProperty(0x0000000B, out var isOpen);
-            if (isOpen is true)
+            if (SolutionOpenState.IsOpen(solution))
                 return;
 
             await Task.Delay(250, cancellationToken).ConfigureAwait(false);
@@ -332,12 +382,57 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         _logger.LogInfo("WaitForSolutionLoadAsync: max attempts reached, proceeding anyway.");
     }
 
+    /// <summary>
+    /// Issue #741: resolves the bundled MTP reporter source bundle and starts
+    /// <see cref="MtpProjectStubSolutionListener"/>, which writes each C# project's project-local
+    /// <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c> stub now and on every later solution
+    /// open / project load. Best-effort — any failure here is logged and otherwise ignored; this must
+    /// never prevent the rest of package initialization from completing.
+    /// </summary>
+    private async Task StartMtpProjectStubsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var bundleTargetsPath = MtpReporterPathResolver.Resolve(typeof(ReqnrollPluginPackage).Assembly.Location);
+            if (bundleTargetsPath is null)
+            {
+                _logger.LogVerbose("ReqnrollPluginPackage: bundled MTP reporter not found next to the extension; no MTP reporter stubs will be written.");
+                return;
+            }
+
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            if (await GetServiceAsync(typeof(SVsSolution)) is IVsSolution solution)
+                _mtpProjectStubListener = MtpProjectStubSolutionListener.TryStart(solution, this, bundleTargetsPath, _logger);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogException(ex, "ReqnrollPluginPackage: StartMtpProjectStubsAsync failed.");
+        }
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
             _documentInitializationMonitor?.Dispose();
             _documentInitializationMonitor = null;
+
+            _featureBufferContentTypeGuard?.Dispose();
+            _featureBufferContentTypeGuard = null;
+
+            if (_mtpProjectStubListener is not null)
+            {
+                ThreadHelper.JoinableTaskFactory.Run(async () =>
+                {
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    _mtpProjectStubListener.Dispose();
+                });
+                _mtpProjectStubListener = null;
+            }
 
             if (_telemetryTransmitter is IAsyncDisposable d)
             {

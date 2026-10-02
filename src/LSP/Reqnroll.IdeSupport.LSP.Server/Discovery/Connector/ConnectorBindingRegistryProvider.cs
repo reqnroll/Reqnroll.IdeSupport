@@ -4,6 +4,8 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -68,14 +70,19 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     /// </summary>
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
-        ILspTelemetryService? telemetryService = null)
-        : this(project, CreateDefaultDiscoveryService(logger, fileSystem), logger, telemetryService)
+        ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null)
+        : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService)
     {
     }
 
+    // featureFileLookup reaches the Reqnroll-test-project gate in ConnectorDiscoveryService: it is
+    // how a *linked* feature file, owned by the project but living outside its folder, still counts
+    // (issue #731). Null degrades the gate to the project-folder walk, which is what a caller that
+    // has no membership index (tests) gets.
     private static IConnectorDiscoveryService CreateDefaultDiscoveryService(
-        IIdeSupportLogger logger, IFileSystemForIDE? fileSystem) =>
-        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger), fileSystem ?? new FileSystemForIDE());
+        IIdeSupportLogger logger, IFileSystemForIDE? fileSystem, IProjectFeatureFileLookup? featureFileLookup) =>
+        new ConnectorDiscoveryService(logger, new OutProcReqnrollConnectorFactory(logger),
+            fileSystem ?? new FileSystemForIDE(), featureFileLookup);
 
     /// <summary>
     /// Creates a provider backed by a caller-supplied discovery service.  Used by tests to
@@ -255,6 +262,9 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
     private async Task RunDiscoveryAsync(CancellationToken ct)
     {
+        // Times only the discovery run itself (not the debounce); declared outside the try so the
+        // failure event can report it too.
+        var stopwatch = new System.Diagnostics.Stopwatch();
         try
         {
             // Debounce: absorb file-system churn from incremental builds.
@@ -262,9 +272,11 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
 
             ct.ThrowIfCancellationRequested();
 
+            stopwatch.Start();
             var (newRegistry, newHash) = await Task
                 .Run(() => _discoveryService.RunDiscovery(_project, _current, _lastHash, ct), ct)
                 .ConfigureAwait(false);
+            stopwatch.Stop();
 
             ct.ThrowIfCancellationRequested();
 
@@ -273,11 +285,15 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             {
                 // Lightweight telemetry: connector hash-noop rate (membership index / telemetry
                 // design §4.2).
-                _telemetryService?.SendEvent("Reqnroll Discovery executed", new()
+                _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
                 {
                     ["DiscoverySource"] = "Connector",
                     ["HashMatched"] = true,
                     ["TriggerContext"] = _isFirstRun ? "projectLoad" : "build",
+                    ["IsFailed"] = false,
+                    ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
+                    ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                    ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
                 });
                 if (_isFirstRun) _isFirstRun = false;
                 return;
@@ -306,7 +322,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             _isFirstRun = false;
             // StepArgumentTransformations are not reported: the connector surfaces them, but
             // ProjectBindingRegistry does not model them, so there is no count to emit here.
-            _telemetryService?.SendEvent("Reqnroll Discovery executed", new()
+            var properties = new Dictionary<string, object?>
             {
                 ["DiscoverySource"] = "Connector",
                 ["TriggerContext"] = triggerContext,
@@ -314,7 +330,14 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 ["StepDefinitionCount"] = newRegistry.StepDefinitions.Length,
                 ["HookCount"] = newRegistry.Hooks.Length,
                 ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
-            });
+                ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
+            };
+            // Issue #846: project profile (Reqnroll version, legacy SpecFlow, connector type, exit
+            // code) from the connector run, whitelisted by ConnectorRunTelemetry -- never the
+            // connector's command line or raw error text.
+            _discoveryService.LastRunTelemetry?.AddTo(properties);
+            _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, properties);
 
             _bindingRegistryChanged?.Invoke(this, true);
         }
@@ -331,13 +354,15 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             // IsFailed / §4.3 error recovery).
             // _isFirstRun is intentionally NOT cleared here: a failed initial load is still a load,
             // so a subsequent (hopefully successful) run continues to report "projectLoad".
-            _telemetryService?.SendEvent("Reqnroll Discovery executed", new()
+            _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
             {
                 ["DiscoverySource"] = "Connector",
                 ["TriggerContext"] = _isFirstRun ? "projectLoad" : "build",
                 ["IsFailed"] = true,
                 ["ErrorMessage"] = ex.Message,
                 ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
+                ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
             });
         }
     }

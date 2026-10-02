@@ -178,8 +178,26 @@ internal sealed class RenameBindingResolver
     /// match). Returns <see langword="null"/> when no binding can be resolved at all.
     /// </summary>
     public ProjectStepDefinitionBinding? ResolveBindingForRename(
-        DocumentUri uri, string path, Position position, ProjectBindingRegistry registry)
+        DocumentUri uri, string path, Position position, ProjectBindingRegistry registry) =>
+        ResolveBindingForRename(uri, path, position, registry, out _);
+
+    /// <summary>
+    /// As <see cref="ResolveBindingForRename(DocumentUri, string, Position, ProjectBindingRegistry)"/>,
+    /// additionally reporting via <paramref name="pickedBindingIsGone"/> that a pending
+    /// disambiguation session named a binding which no longer exists at this position.
+    /// </summary>
+    /// <remarks>
+    /// That case must not fall through to position-based resolution (issue #671, R5). The fallback
+    /// picks the first candidate, so silently taking it would rename an arbitrary binding —
+    /// precisely the wrong-binding outcome a stale session causes. Callers are expected to reject
+    /// the rename and tell the user to retry.
+    /// </remarks>
+    public ProjectStepDefinitionBinding? ResolveBindingForRename(
+        DocumentUri uri, string path, Position position, ProjectBindingRegistry registry,
+        out bool pickedBindingIsGone)
     {
+        pickedBindingIsGone = false;
+
         var line   = position.Line + 1;
         var column = position.Character + 1;
 
@@ -190,18 +208,37 @@ internal sealed class RenameBindingResolver
 
         // Use version from request or fallback to 0
         var documentVersion = 0;
-        if (_sessionManager.TryConsume(uri.ToString(), documentVersion, out var sessionAttrIndex))
+        if (_sessionManager.TryConsume(uri.ToString(), documentVersion, out var session))
         {
-            _logger.LogVerbose($"RenameBindingResolver: consumed pending session, attributeIndex={sessionAttrIndex}");
+            _logger.LogVerbose(
+                $"RenameBindingResolver: consumed pending session, attributeIndex={session.AttributeIndex}, identity='{session.BindingIdentity}'");
 
             var bindingsAtLocation = path.EndsWith(".feature", StringComparison.OrdinalIgnoreCase)
                 ? FindBindingsAtFeatureStep(uri, path, position)
                 : FindBindingsAtCSharpMethod(registry, path, line);
 
-            if (sessionAttrIndex >= 0 && sessionAttrIndex < bindingsAtLocation.Count)
+            if (session.BindingIdentity is { } identity)
             {
-                binding = bindingsAtLocation[sessionAttrIndex];
-                _logger.LogVerbose($"RenameBindingResolver: resolved binding via session: '{binding?.Expression}'");
+                // Content-addressed: find the binding the user actually picked, wherever it now
+                // sits in the re-derived list — and treat "no longer there" as a stale session
+                // rather than indexing into a list whose composition may have changed.
+                binding = RenameBindingIdentity.FindIn(bindingsAtLocation, identity);
+                if (binding == null)
+                {
+                    pickedBindingIsGone = true;
+                    _logger.LogVerbose(
+                        $"RenameBindingResolver: the picked binding '{identity}' is no longer among the {bindingsAtLocation.Count} candidate(s) at this position; refusing to guess");
+                    return null;
+                }
+
+                _logger.LogVerbose($"RenameBindingResolver: resolved binding via session identity: '{binding.Expression}'");
+            }
+            else if (session.AttributeIndex >= 0 && session.AttributeIndex < bindingsAtLocation.Count)
+            {
+                // No identity — an older client that sent no position with its selection, so the
+                // index is all there is. Same exposure as before R5.
+                binding = bindingsAtLocation[session.AttributeIndex];
+                _logger.LogVerbose($"RenameBindingResolver: resolved binding via session index: '{binding?.Expression}'");
             }
         }
 

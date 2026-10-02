@@ -3,13 +3,14 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 
@@ -23,30 +24,32 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.References;
 /// </summary>
 /// <remarks>
 /// Primary-owner resolution / shared-feature scoping 2B: the scope is restricted to the
-/// projects that own the queried <c>.cs</c> file.
-/// This prevents cross-project bleed when two projects have step definitions at the same
-/// source location (same file name + line in a shared binding class).
+/// projects that own the queried <c>.cs</c> file, widened per
+/// <see cref="IProjectBindingRegistryLookup.ResolveUsageSearchScope"/> to any other project that
+/// independently reports one of this file's bindings via a real project reference (issue #548).
+/// This still prevents cross-project bleed when two unrelated projects have step definitions at
+/// the same source location (same file name + line in a shared binding class).
 /// </remarks>
 public sealed class ReferencesHandler
 {
     private readonly IBindingMatchService         _matchService;
-    private readonly ILspWorkspaceScopeManager    _scopeManager;
     private readonly IProjectBindingRegistryLookup _registryLookup;
     private readonly IIdeSupportLogger               _logger;
+    private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
 
     /// <summary>Initializes a new instance of the <see cref="ReferencesHandler"/> class.</summary>
     public ReferencesHandler(
         IBindingMatchService          matchService,
-        ILspWorkspaceScopeManager     scopeManager,
         IProjectBindingRegistryLookup registryLookup,
         IIdeSupportLogger               logger,
+        ILspTelemetryService?         telemetryService = null,
         IOperationDurationRecorder?   recorder = null)
     {
         _matchService   = matchService;
-        _scopeManager   = scopeManager;
         _registryLookup = registryLookup;
         _logger         = logger;
+        _telemetryService = telemetryService;
         _recorder       = recorder ?? NullOperationDurationRecorder.Instance;
     }
 
@@ -56,9 +59,10 @@ public sealed class ReferencesHandler
         CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         // Performance Verification (Layer 4): time the workspace-wide references search.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentReferences, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentReferences, uri);
 
         if (!IsCSharp(uri))
         {
@@ -75,15 +79,10 @@ public sealed class ReferencesHandler
         var column = request.Position.Character + 1;
         var bindingLocation = new SourceLocation(filePath, line, column);
 
-        // Primary-owner resolution / shared-feature scoping 2B: restrict search to the projects
-        // that own this .cs file.
-        // ResolveOwners returns an empty list only when no project claims the file; in that
-        // case pass null to FindUsages so it searches all cached match sets (backward compat).
-        var owners = _scopeManager.ResolveOwners(uri);
-        IReadOnlyCollection<ProjectOwner>? projectFilter = owners.Count > 0
-            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker))
-                    .ToArray()
-            : null;
+        // Primary-owner resolution / shared-feature scoping 2B, widened to any other project
+        // whose own registry independently reports one of this file's bindings (issue #548) --
+        // see IProjectBindingRegistryLookup.ResolveUsageSearchScope's remarks.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
 
         var usages = _matchService.FindUsages(bindingLocation, projectFilter);
 
@@ -98,11 +97,15 @@ public sealed class ReferencesHandler
             // request that can carry the full three-state result.
             var hasBinding = _registryLookup.HasBindingAtLocation(uri, bindingLocation);
             if (!hasBinding)
+            {
                 _logger.LogVerbose(
                     $"ReferencesHandler: no binding at {filePath}:{line}");
-            else
-                _logger.LogVerbose(
-                    $"ReferencesHandler: binding at {filePath}:{line} has 0 usages");
+                return Task.FromResult<LocationOrLocationLinks>(new LocationOrLocationLinks());
+            }
+
+            _logger.LogVerbose(
+                $"ReferencesHandler: binding at {filePath}:{line} has 0 usages");
+            SendUsagesTelemetry(0, 0, started, cancellationToken);
             return Task.FromResult<LocationOrLocationLinks>(new LocationOrLocationLinks());
         }
 
@@ -117,9 +120,30 @@ public sealed class ReferencesHandler
             }))
             .ToArray();
 
+        SendUsagesTelemetry(
+            usages.Count, usages.Select(u => u.FeatureDocumentId).Distinct().Count(), started, cancellationToken);
+
         return Task.FromResult<LocationOrLocationLinks>(
             new LocationOrLocationLinks(locations));
     }
+
+    /// <summary>
+    /// Sends the same <c>"FindStepDefinitionUsages command executed"</c> event
+    /// <see cref="Features.References.FindStepUsagesHandler"/> sends for its own
+    /// <c>reqnroll/findStepUsages</c> path (issue #581 finding 3), with a <c>Protocol</c> field
+    /// so the two paths — VS Code/Rider's native Find All References via this handler, versus
+    /// Visual Studio's custom request — produce one comparable usage-count metric instead of an
+    /// undercount that silently excludes two of the three IDE clients.
+    /// </summary>
+    private void SendUsagesTelemetry(int usagesCount, int fileCount, long startedTimestamp, CancellationToken cancellationToken) =>
+        _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionUsagesCommandExecuted, new()
+        {
+            ["UsagesCount"] = usagesCount,
+            ["IsCancelled"] = cancellationToken.IsCancellationRequested,
+            ["Protocol"] = "textDocument/references",
+            [TelemetryProperties.FileCount] = fileCount,
+            [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(startedTimestamp),
+        });
 
     private static bool IsCSharp(DocumentUri uri) =>
         uri.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase);

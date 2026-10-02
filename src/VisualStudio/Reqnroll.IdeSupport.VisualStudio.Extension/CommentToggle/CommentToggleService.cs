@@ -4,12 +4,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 
 /// <summary>
 /// Sends a <c>workspace/executeCommand</c> request for <c>reqnroll.toggleComment</c>
-/// to the LSP server (Comment/Uncomment toggle).
+/// to the LSP server (Comment/Uncomment toggle). Invoked only through
+/// <see cref="CommentToggleRedirect"/>, from the built-in comment commands' VSSDK command filter.
 /// </summary>
 /// <remarks>
 /// The server responds with an acknowledgement and as a side-effect sends a
@@ -18,8 +20,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 /// </remarks>
 internal sealed class CommentToggleService
 {
-    private const string ExecuteCommandMethod = "workspace/executeCommand";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<CommentToggleService> _logger;
 
@@ -32,37 +32,48 @@ internal sealed class CommentToggleService
 
     /// <summary>
     /// Sends a <c>workspace/executeCommand</c> request for <c>reqnroll.toggleComment</c>
-    /// to toggle <c>#</c> comments on the selected lines (0-based, inclusive).
+    /// to comment, uncomment or toggle <c>#</c> comments on the selected lines (0-based, inclusive).
     /// </summary>
     public async Task ToggleCommentAsync(
         string            fileUri,
         int               startLine,
         int               endLine,
+        CommentToggleMode mode,
         CancellationToken cancellationToken)
     {
-        var paramsJson = BuildParams(fileUri, startLine, endLine);
+        var paramsJson = BuildParams(fileUri, startLine, endLine, mode);
 
-        _logger.LogInformation(
-            "CommentToggleService: sending workspace/executeCommand reqnroll.toggleComment uri={FileUri} lines[{StartLine}..{EndLine}]",
-            fileUri, startLine, endLine);
-        _logger.LogInformation(
+        _logger.LogDebug(
+            "CommentToggleService: sending workspace/executeCommand reqnroll.toggleComment uri={FileUri} lines[{StartLine}..{EndLine}] mode={Mode}",
+            fileUri, startLine, endLine, mode);
+        _logger.LogTrace(
             "CommentToggleService: sending reqnroll.toggleComment params={ParamsJson}", paramsJson);
 
         var result = await _pipe
-            .SendRequestToServerAsync(ExecuteCommandMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(LspStandardMethodNames.WorkspaceExecuteCommand, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "CommentToggleService: server response = {Result}", result is null ? "<null>" : result.ToString());
 
-        _logger.LogInformation("CommentToggleService: server acknowledged reqnroll.toggleComment");
+        _logger.LogDebug("CommentToggleService: server acknowledged reqnroll.toggleComment");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static string BuildParams(string fileUri, int startLine, int endLine) =>
+    // internal so Reqnroll.IdeSupport.VisualStudio.Tests can pin the wire format the server parses.
+    internal static string BuildParams(string fileUri, int startLine, int endLine, CommentToggleMode mode) =>
         new LspParamsBuilder()
             .AddString("command", "reqnroll.toggleComment")
-            .AddRaw("arguments", $"[{LspParamsBuilder.EscapeString(fileUri)},{startLine},{endLine}]")
+            .AddRaw("arguments",
+                $"[{LspParamsBuilder.EscapeString(fileUri)},{startLine},{endLine},{LspParamsBuilder.EscapeString(ToWireMode(mode))}]")
             .Build();
+
+    // Must match the mode strings CommentToggleHandler accepts on the server.
+    internal static string ToWireMode(CommentToggleMode mode) => mode switch
+    {
+        CommentToggleMode.Comment   => "comment",
+        CommentToggleMode.Uncomment => "uncomment",
+        _                           => "toggle",
+    };
 }

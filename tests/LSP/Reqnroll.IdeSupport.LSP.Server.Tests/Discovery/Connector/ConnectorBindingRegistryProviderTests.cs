@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
@@ -416,13 +417,85 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
                 false.Equals(d["IsFailed"]) &&
                 0.Equals(d["StepDefinitionCount"]) &&
                 0.Equals(d["HookCount"])));
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_merges_whitelisted_connector_telemetry_into_the_success_event()
+    {
+        GivenDiscoveryReturns(NonInvalidRegistry(hash: 42), "hash-1");
+        _discovery.LastRunTelemetry.Returns(new ConnectorRunTelemetry("2.1", "Generic", 0));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                "2.1".Equals(d["ReqnrollVersion"]) &&
+                !d.ContainsKey("LegacySpecFlow") &&
+                "Generic".Equals(d["ConnectorType"]) &&
+                0.Equals(d["ConnectorExitCode"]) &&
+                d["DurationMs"] is long &&
+                d["DurationBucket"] is string &&
+                !d.ContainsKey("ConnectorArguments") &&
+                !d.ContainsKey("Error")));
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_hash_noop_event_carries_the_same_base_keys_and_a_duration()
+    {
+        GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sent = new TaskCompletionSource();
+        telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => sent.TrySetResult());
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        sut.TriggerRefresh();
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                false.Equals(d["IsFailed"]) &&
+                d.ContainsKey("ProjectTargetFramework") &&
+                d["DurationMs"] is long &&
+                d["DurationBucket"] is string));
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_failure_event_carries_a_duration()
+    {
+        _discovery.RunDiscovery(
+                Arg.Any<IProjectScope>(),
+                Arg.Any<ProjectBindingRegistry>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => throw new InvalidOperationException("boom"));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sent = new TaskCompletionSource();
+        telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => sent.TrySetResult());
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        sut.TriggerRefresh();
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                true.Equals(d["IsFailed"]) && d["DurationMs"] is long && d["DurationBucket"] is string));
     }
 
     [Fact]
@@ -439,7 +512,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 true.Equals(d["HashMatched"])));
@@ -469,10 +542,10 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => "projectLoad".Equals(d["TriggerContext"])));
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => "build".Equals(d["TriggerContext"])));
     }
 
@@ -495,7 +568,7 @@ namespace S
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 "projectLoad".Equals(d["TriggerContext"]) &&
@@ -520,7 +593,7 @@ namespace S
         await Task.WhenAny(changed.Task, Task.Delay(5000));
 
         telemetry.DidNotReceive().SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsFailed"])));
     }
 

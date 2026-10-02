@@ -2,6 +2,8 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Server;
@@ -9,8 +11,10 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
@@ -92,8 +96,8 @@ public class Program
 
             using var preloadCts = new CancellationTokenSource();
             var scopeManager = server.Services.GetRequiredService<ILspWorkspaceScopeManager>();
-            var logger       = server.Services.GetRequiredService<IIdeSupportLogger>();
-            var preloadTask  = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
+            var logger = server.Services.GetRequiredService<IIdeSupportLogger>();
+            var preloadTask = ProjectPreloadListener.RunAsync(scopeManager, logger, preloadCts.Token);
 
             // Issue #582: periodic feature-usage flush, running for the whole server lifetime
             // alongside the request-handling pipeline (a no-op loop when its env var is unset —
@@ -103,6 +107,11 @@ public class Program
             var usageFlushService = server.Services.GetRequiredService<IFeatureUsageFlushService>();
             var usageFlushTask = usageFlushService.RunAsync(usageFlushCts.Token);
 
+            // The final flush rides the LSP shutdown request, not process exit: by the time
+            // WaitForExit completes the client has sent `exit` and the transport may be closed,
+            // which would drop the telemetry/event notification.
+            using var usageFlushOnShutdown = FeatureUsageFlushService.FlushOnShutdown(usageFlushService, server.Shutdown);
+
             await server.Initialize(CancellationToken.None).ConfigureAwait(false);
 
             // The real IDE connection is live; the side channel has no further purpose.
@@ -111,9 +120,10 @@ public class Program
 
             await server.WaitForExit.ConfigureAwait(false);
 
-            // Best-effort final drain-and-emit on a graceful shutdown (e.g. the VS client teardown
-            // in issue #555 sends shutdown+exit) -- not reached on a force-quit, IDE crash, or OS
-            // shutdown; see FeatureUsageFlushService's remarks on the accepted loss profile.
+            // Stop the periodic loop. The final flush already ran on the shutdown request above;
+            // the call below is a fallback for an `exit` without a preceding `shutdown`, and is
+            // silent when the counters are already drained. Neither is reached on a force-quit,
+            // IDE crash, or OS shutdown; see FeatureUsageFlushService's remarks on the loss profile.
             await usageFlushCts.CancelAsync().ConfigureAwait(false);
             try
             {
@@ -129,19 +139,14 @@ public class Program
         {
             try
             {
-                var logDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Reqnroll");
-                Directory.CreateDirectory(logDir);
-                var idePrefix = ideId switch
-                {
-                    "visualstudio" => "vs",
-                    "vscode"       => "vscode",
-                    _              => "lsp",
-                };
-                var logPath = Path.Combine(logDir,
-                    $"reqnroll-{idePrefix}-crash-{DateTime.Now:yyyyMMdd-HHmmss}.log");
-                File.WriteAllText(logPath, ex.ToString());
+                // Reuses SynchronousFileLogger itself (role "crash") rather than one-off
+                // directory/filename/formatting code (issue #628): same
+                // reqnroll-{ide}-{role}-{date}-{pid}.log grammar and canonical preamble as every
+                // other file in the family, instead of a bespoke reqnroll-{ide}-crash-{date-time}.log
+                // with no PID and a raw ex.ToString() dump.
+                var idePrefix = IdeLogPrefix.From(ideId);
+                new SynchronousFileLogger(idePrefix, "crash", TraceLevel.Error)
+                    .LogException(ex, "Unhandled exception - LSP server terminating");
             }
             catch { /* best-effort; never mask the original exception */ }
             throw;
@@ -157,8 +162,14 @@ public class Program
     /// </summary>
     /// <param name="clientIde">
     /// The <c>--ide</c> identifier of the connecting client (e.g. <c>"visualstudio"</c>), or
-    /// <see langword="null"/> when absent.  Currently unused by the semantic-token pipeline
-    /// (the legend is shared across IDEs); retained for features that may vary behaviour per IDE.
+    /// <see langword="null"/> when absent.  Seeds the DI-registered
+    /// <see cref="ClientIdeContext"/> singleton that every per-IDE branch reads, and is therefore
+    /// the server's primary identity source.  It is not the only one: when it is absent,
+    /// <c>OnInitialized</c> falls back to the <c>InitializeParams.ClientInfo</c> the client
+    /// self-reports over the wire (issue #709) — see <see cref="ApplyClientInfo"/>.
+    /// <see cref="ApplySemanticTokensCapability"/> resolves VS-ness through that context rather than
+    /// from this argument directly, so the advertised capability and the handler that later pushes
+    /// tokens can never disagree about which client is connected.
     /// </param>
     /// <param name="logLevel">
     /// The <c>--log-level</c> verbosity requested by the client, defaulting to
@@ -196,6 +207,27 @@ public class Program
             logging.SetMinimumLevel(ToLogLevel(protocolLogLevel));
             logging.AddLanguageProtocolLogging();
             logging.AddProvider(new ProtocolLoggerProvider(clientIde, protocolLogLevel));
+
+            // Issue #660: OmniSharp's own LanguageServerLoggingManager (registered internally for
+            // every LanguageServer, regardless of anything configured here) is an
+            // IPostConfigureOptions<LoggerFilterOptions> that unconditionally overwrites
+            // LoggerFilterOptions.MinLevel from the current $/setTrace level (Off/Messages/Verbose).
+            // IPostConfigureOptions always runs after every IConfigureOptions regardless of
+            // registration order, so it silently discards whatever SetMinimumLevel just set above --
+            // no reordering of the calls in this method can fix that. PostConfigure only ever
+            // reassigns MinLevel, though; it never touches Rules, so an explicit provider-scoped
+            // LoggerFilterRule survives it and takes priority over MinLevel for that provider
+            // (confirmed against OmniSharp.Extensions.LanguageServer 0.19.9 by decompiling
+            // LanguageServerLoggingManager and LanguageServerLoggerExtensions.AddLanguageProtocolLogging).
+            // LanguageServerLoggerProvider (the window/logMessage sink) is internal to OmniSharp and
+            // so can't be named via the generic AddFilter<T>() overload -- the rule below is built
+            // from its known full type name instead, which LoggerRuleSelector matches the same way.
+            logging.Services.Configure<LoggerFilterOptions>(o => o.Rules.Add(new LoggerFilterRule(
+                "OmniSharp.Extensions.LanguageServer.Server.Logging.LanguageServerLoggerProvider",
+                categoryName: null,
+                logLevel: ToLogLevel(protocolLogLevel),
+                filter: null)));
+            logging.AddFilter<ProtocolLoggerProvider>(category: null, level: ToLogLevel(protocolLogLevel));
         });
 
         options.WithServerInfo(new ServerInfo
@@ -213,6 +245,12 @@ public class Program
             // notification to two handler instances (the transient from the scan and 
             // the singleton from the explicit call).
             .AddMediatR(typeof(Program).Assembly)
+            // Replaces the IMediator registration AddMediatR just made (last registration wins)
+            // with one whose notification fan-out isolates handler faults -- stock MediatR awaits
+            // each handler in a bare foreach, so the first to throw suppresses every handler after
+            // it, with the casualties decided by assembly-scan order (issue #575). Must stay
+            // AFTER AddMediatR; registered before it, AddMediatR's own registration would win.
+            .AddTransient<IMediator, ResilientMediator>()
             .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace)
             .AddReqnrollProjectSystem()
             .AddReqnrollEditorServices()
@@ -227,16 +265,19 @@ public class Program
         options.OnInitialized((languageServer, request, response, ct) =>
         {
             // Each capability is configured by its own named local function below rather than
-            // inline, so a mistake in one (e.g. the VS-specific branch in
-            // ApplyTextDocumentSyncCapability) can't silently bleed into an unrelated capability
+            // inline, so a mistake in one (e.g. an IDE-specific branch in
+            // ApplySemanticTokensCapability) can't silently bleed into an unrelated capability
             // assignment sharing the same block.
             ApplyInitialTraceLevel();
+            ApplyClientIdentity();
             ApplySemanticTokensCapability();
             ApplyStaticInlayHintCapability();
             ApplyStaticFoldingCapability();
             ApplyStaticCodeLensCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
+            ApplyTestOutcomesCapability();
+            ApplyCustomProtocolCapabilities();
 
             return Task.CompletedTask;
 
@@ -248,6 +289,36 @@ public class Program
             {
                 var traceService = languageServer.Services.GetRequiredService<ITraceService>();
                 traceService.Level = ResolveInitialTrace(traceService.Level, request.Trace);
+            }
+
+            // Issue #709: record the identity the client self-reports over the wire, and let it fill
+            // in the IDE when --ide was absent. ClientInfo is the only identity signal that travels
+            // in the protocol itself; it arrives here, long after the DI container (and the
+            // ClientIdeContext that --ide seeded) was built, which is why ClientIdeContext has to be
+            // mutable at this one point rather than resolved from the argument alone.
+            //
+            // Ordered first among the Apply* calls: ApplySemanticTokensCapability resolves VS-ness
+            // through ClientIdeContext (see its note), and the identity log line below is most useful
+            // when it precedes the capability decisions it explains. Nothing else here depends on it,
+            // because every other per-IDE branch in the server reads ClientIdeContext lazily, per
+            // request, which is always after this point.
+            void ApplyClientIdentity()
+            {
+                var ideContext = languageServer.Services.GetRequiredService<ClientIdeContext>();
+                ideContext.ApplyClientInfo(request.ClientInfo);
+
+                // Logged at Info: at the default --log-level Warning this line is suppressed, which is
+                // deliberate (a normal session shouldn't grow a log line it never needs), so diagnosing
+                // a misidentified client means re-running with --log-level Info. See CONTRIBUTING.md's
+                // "Server logging and trace verbosity".
+                languageServer.Services.GetRequiredService<IIdeSupportLogger>().LogInfo(
+                    $"Client identity: --ide={Describe(ideContext.IdeArgument)}, "
+                    + $"clientInfo={Describe(ideContext.ClientName)}"
+                    + (ideContext.ClientVersion is null ? string.Empty : $" ({ideContext.ClientVersion})")
+                    + $", effective ide={Describe(ideContext.Ide)}"
+                    + (ideContext.IdeResolvedFromClientInfo ? " (resolved from ClientInfo)" : string.Empty));
+
+                static string Describe(string? value) => string.IsNullOrEmpty(value) ? "<none>" : value;
             }
 
             void ApplySemanticTokensCapability()
@@ -268,7 +339,15 @@ public class Program
                 // version/data), so SemanticTokensClassificationInterceptor.CaptureLegendIfPresent
                 // reads it out of this same initialize response -- omitting the whole capability
                 // for VS would silently break token decoding for the push path too.
-                var isVisualStudio = string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase);
+                //
+                // Resolved through ClientIdeContext rather than the raw clientIde argument (issue
+                // #709) so this agrees with every other per-IDE branch in the server: the push
+                // handler, CodeActionHandler, CompletionHandler, RenameHandler and
+                // CodeLensRefreshRequester all read ClientIdeContext, and it is the only one of the
+                // two that knows the identity resolved from ClientInfo when --ide was absent.
+                // ApplyClientIdentity runs first, above, so the fallback is already applied here.
+                var isVisualStudio = languageServer.Services
+                    .GetRequiredService<ClientIdeContext>().IsVisualStudio;
 
                 var tokenService = languageServer.Services.GetRequiredService<ISemanticTokensService>();
 
@@ -334,19 +413,19 @@ public class Program
                 };
             }
 
-            // vscode-languageclient v10 (used by VS Code and Rider) does not wire its
-            // DidChangeTextDocumentFeature when textDocumentSync is absent from the static
-            // capabilities — dynamic client/registerCapability for textDocument/didChange is
-            // silently ignored and the client never sends content-change notifications.
-            // VS's LSP client handles dynamic-only registration correctly, so this static
-            // entry is only needed for non-VS clients.
+            // Advertised statically to every client:
+            // - vscode-languageclient v10 (VS Code, Rider) does not wire its
+            //   DidChangeTextDocumentFeature when textDocumentSync is absent from the static
+            //   capabilities: a dynamic-only registration is silently ignored.
+            // - Visual Studio (issue #800) handles dynamic registration, but only for documents it
+            //   attaches after the client/registerCapability arrives (~100 ms after `initialized`).
+            //   A document it attached before that (a restored tab, or the open file after a
+            //   solution switch) never got didOpen or didChange for the whole session. VS used to
+            //   be excluded here on the assumption that dynamic-only was enough.
             // Fine-grained selector filtering (*.feature + *.cs) still comes from OmniSharp's
             // dynamic registration once the feature infrastructure is activated.
             void ApplyTextDocumentSyncCapability()
             {
-                if (string.Equals(clientIde, "visualstudio", StringComparison.OrdinalIgnoreCase))
-                    return;
-
                 response.Capabilities.TextDocumentSync = new TextDocumentSyncOptions
                 {
                     Change = TextDocumentSyncKind.Full,
@@ -372,6 +451,91 @@ public class Program
                 {
                     PrepareProvider = true
                 };
+            }
+
+            // Advertises the custom LSP-server outcome pipeline as a typed, top-level sibling of
+            // the spec's own capability fields — `reqnrollTestOutcomesProvider`, keyed and shaped
+            // by ReqnrollTestOutcomesOptions, not nested under `experimental` — mirroring the wire
+            // shape Roslyn's own LSP server uses for its custom capabilities.
+            //
+            // Not a real property on a ServerCapabilities subclass, though: InitializeResult.
+            // Capabilities is init-only (OmniSharp record type), and OnInitialized hands us an
+            // already-constructed InitializeResult with no way to swap what object that property
+            // points to — only to mutate the existing instance's own settable members. So this
+            // goes through ServerCapabilities.ExtensionData, OmniSharp's own [JsonExtensionData]
+            // catch-all, which both writes an extra top-level property during serialization AND
+            // (for a peer with no matching Reqnroll type of its own) captures an unknown one
+            // losslessly on the way in — the same "ignored, not dropped" safety `experimental`
+            // relied on, just without forcing every value into the same shared dictionary key.
+            void ApplyTestOutcomesCapability()
+            {
+                response.Capabilities.ExtensionData ??= new Dictionary<string, JToken>();
+                response.Capabilities.ExtensionData["reqnrollTestOutcomesProvider"] = JObject.FromObject(
+                    new ReqnrollTestOutcomesOptions
+                    {
+                        RegisterRunMethod = CustomLspMethodNames.ReqnrollRegisterTestRun,
+                        GetOutcomeMethod = CustomLspMethodNames.ReqnrollGetTestOutcome,
+                        ChangedNotification = CustomLspMethodNames.ReqnrollTestOutcomesChanged,
+                    });
+            }
+
+            // Advertises the rest of this server's custom reqnroll/* protocol surface -- every
+            // method registered via manual OnRequest/OnNotification routing in
+            // InitializeCustomProtocolRouting that isn't already covered by one of the Apply*
+            // functions above -- as typed, top-level entries in ServerCapabilities.ExtensionData
+            // rather than leaving them undeclared. See ReqnrollMethodProvider's remarks for why
+            // this is documentation (the initialize response as a readable manifest, backed by a
+            // regression test per entry) rather than feature-detection: every one of these methods
+            // has existed since this server's first version, so no client conditionally branches on
+            // whether one is present.
+            void ApplyCustomProtocolCapabilities()
+            {
+                response.Capabilities.ExtensionData ??= new Dictionary<string, JToken>();
+                var extensionData = response.Capabilities.ExtensionData;
+
+                extensionData["reqnrollWorkspaceLifecycleProvider"] = JObject.FromObject(new ReqnrollWorkspaceLifecycleOptions
+                {
+                    ProjectLoadedMethod = CustomLspMethodNames.ReqnrollProjectLoaded,
+                    ProjectUnloadedMethod = CustomLspMethodNames.ReqnrollProjectUnloaded,
+                    ProjectFilesMethod = CustomLspMethodNames.ReqnrollProjectFiles,
+                });
+
+                extensionData["reqnrollFindStepUsagesProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindStepUsages });
+
+                extensionData["reqnrollFindHooksProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindHooks });
+
+                extensionData["reqnrollFindStepDefinitionsProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindStepDefinitions });
+
+                extensionData["reqnrollFindMatchingScenariosProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindMatchingScenarios });
+
+                extensionData["reqnrollResolveTestTargetsProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollResolveTestTargets });
+
+                extensionData["reqnrollFindUnusedStepDefinitionsProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions });
+
+                extensionData["reqnrollStepRenameProvider"] = JObject.FromObject(new ReqnrollStepRenameOptions
+                {
+                    RenameTargetsMethod = CustomLspMethodNames.ReqnrollRenameTargets,
+                    SelectRenameTargetMethod = CustomLspMethodNames.ReqnrollSelectRenameTarget,
+                    RenameAppliedMethod = CustomLspMethodNames.ReqnrollRenameApplied,
+                });
+
+                extensionData["reqnrollRefreshCodeLensProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollRefreshCodeLens });
+
+                extensionData["reqnrollSemanticTokensPushProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollSemanticTokens });
+
+                extensionData["reqnrollDocumentSymbolHierarchicalProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical });
+
+                extensionData["reqnrollDocumentActivatedProvider"] = JObject.FromObject(
+                    new ReqnrollMethodProvider { Method = CustomLspMethodNames.ReqnrollDocumentActivated });
             }
         });
     }

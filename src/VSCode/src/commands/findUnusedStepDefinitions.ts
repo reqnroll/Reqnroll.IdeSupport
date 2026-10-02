@@ -1,30 +1,17 @@
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
+import { showError, showInfo } from '../logging/appNotify';
 import { openAndReveal } from '../util/navigationUtils';
+import {
+  StepDefinitionItem,
+  formatBindingAttribute,
+  formatMethodName,
+  warnSourceNotOnThisMachine,
+} from '../util/stepDefinitionItems';
 
 interface FindUnusedStepDefinitionsResponse {
-  items: UnusedStepDefinitionItem[];
-}
-
-interface UnusedStepDefinitionItem {
-  projectName?: string;
-  className?: string;
-  methodName?: string;
-  bindingExpression?: string;
-  /** Absent when the binding's source file does not exist on this machine — see `isResolved`. */
-  sourceFile?: string;
-  sourceLine: number;
-  sourceChar: number;
-  /**
-   * Whether `sourceFile` names a file that exists here. False when the assembly was built
-   * elsewhere (a container, a CI agent, another machine, an external binding package) and the
-   * source path it recorded could not be mapped onto this workspace. Older servers omit the
-   * field; `?? true` below keeps those behaving exactly as before.
-   */
-  isResolved?: boolean;
-  /** The path the compiled assembly records, when it differs from `sourceFile`. */
-  recordedSourceFile?: string;
+  items: StepDefinitionItem[];
 }
 
 /**
@@ -49,23 +36,23 @@ export async function doFindUnusedStepDefinitions(client: LanguageClient): Promi
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`Reqnroll: Find Unused Step Definitions failed — ${msg}`);
+    void showError(`Reqnroll: Find Unused Step Definitions failed — ${msg}`);
     return;
   }
 
   if (!response.items || response.items.length === 0) {
-    void vscode.window.showInformationMessage('Reqnroll: No unused step definitions found.');
+    void showInfo('Reqnroll: No unused step definitions found.');
     return;
   }
 
   const items = response.items.map((item) => {
-    const name = [item.className, item.methodName].filter(Boolean).join('.');
+    const name = formatMethodName(item);
     // An entry whose source isn't on this machine can't be navigated to, so it gets a different
     // icon and says so in the row rather than looking identical and then doing nothing on click.
     const resolved = item.isResolved ?? true;
     return {
       label: resolved ? `$(warning) ${name}` : `$(error) ${name}`,
-      description: item.bindingExpression,
+      description: formatBindingAttribute(item),
       detail: resolved
         ? item.projectName
         : [item.projectName, 'source not on this machine'].filter(Boolean).join(' — '),
@@ -83,12 +70,7 @@ export async function doFindUnusedStepDefinitions(client: LanguageClient): Promi
   // Explain rather than no-op. The server nulls sourceFile precisely so this branch is reachable
   // instead of us handing vscode.Uri.file a path that cannot open.
   if (!picked.item.sourceFile) {
-    const recorded = picked.item.recordedSourceFile;
-    void vscode.window.showWarningMessage(
-      recorded
-        ? `Reqnroll: this step definition's source isn't on this machine. The compiled assembly records it at "${recorded}". Rebuild the project locally to navigate to it.`
-        : "Reqnroll: this step definition's source isn't on this machine. Rebuild the project locally to navigate to it.",
-    );
+    warnSourceNotOnThisMachine(picked.item);
     return;
   }
 

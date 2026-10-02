@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 
@@ -20,8 +21,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 /// </summary>
 internal sealed class HookFeatureCodeLensService
 {
-    private const string RequestMethod = "textDocument/codeLens";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<HookFeatureCodeLensService> _logger;
 
@@ -43,10 +42,10 @@ internal sealed class HookFeatureCodeLensService
     {
         var paramsJson = BuildParams(fileUri);
 
-        _logger.LogInformation("HookFeatureCodeLensService: requesting {RequestMethod} for {FileUri}", RequestMethod, fileUri);
+        _logger.LogDebug("HookFeatureCodeLensService: requesting {RequestMethod} for {FileUri}", LspStandardMethodNames.TextDocumentCodeLens, fileUri);
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, paramsJson, cancellationToken)
+            .SendRequestToServerAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
         if (result is null || result.Type == JTokenType.Null)
@@ -55,11 +54,11 @@ internal sealed class HookFeatureCodeLensService
         if (result is JArray array)
         {
             var items = ParseItems(array);
-            _logger.LogInformation("HookFeatureCodeLensService: {LensCount} lens(es) returned for {FileUri}", items.Count, fileUri);
+            _logger.LogDebug("HookFeatureCodeLensService: {LensCount} lens(es) returned for {FileUri}", items.Count, fileUri);
             return items;
         }
 
-        _logger.LogInformation("HookFeatureCodeLensService: unexpected result token type {TokenType} for {FileUri}", result.Type, fileUri);
+        _logger.LogDebug("HookFeatureCodeLensService: unexpected result token type {TokenType} for {FileUri}", result.Type, fileUri);
         return System.Array.Empty<HookFeatureLensEntry>();
     }
 
@@ -70,7 +69,7 @@ internal sealed class HookFeatureCodeLensService
     /// <summary>
     /// Maps the server's <c>CodeLens[]</c> for a <c>.feature</c> file into lens entries. Internal
     /// rather than private so it can be unit-tested without a live pipe, matching
-    /// <c>GoToHooksService.MapResult</c> and the other client-side mapping seams.
+    /// <c>FindHooksService.MapResult</c> and the other client-side mapping seams.
     /// </summary>
     internal static List<HookFeatureLensEntry> ParseItems(JArray array)
     {

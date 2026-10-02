@@ -2,9 +2,9 @@ using System.Diagnostics;
 using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 
@@ -25,7 +25,7 @@ public class CodeLensRefreshRequesterTests
             _languageServer, new ClientIdeContext("visualstudio"), _logger, "MyProject", isFullReplacement: true);
 
         _languageServer.Received(1).SendNotification(
-            LspMethodNames.ReqnrollRefreshCodeLens,
+            CustomLspMethodNames.ReqnrollRefreshCodeLens,
             Arg.Is<RefreshCodeLensParams>(p => p.ProjectName == "MyProject" && p.IsFullReplacement));
     }
 
@@ -36,7 +36,7 @@ public class CodeLensRefreshRequesterTests
             _languageServer, new ClientIdeContext("visualstudio"), _logger, "MyProject", isFullReplacement: false);
 
         _languageServer.Received(1).SendNotification(
-            LspMethodNames.ReqnrollRefreshCodeLens,
+            CustomLspMethodNames.ReqnrollRefreshCodeLens,
             Arg.Is<RefreshCodeLensParams>(p => !p.IsFullReplacement));
     }
 
@@ -47,7 +47,7 @@ public class CodeLensRefreshRequesterTests
             _languageServer, new ClientIdeContext("visualstudio"), _logger, "MyProject");
 
         _languageServer.Received(1).SendNotification(
-            LspMethodNames.ReqnrollRefreshCodeLens,
+            CustomLspMethodNames.ReqnrollRefreshCodeLens,
             Arg.Is<RefreshCodeLensParams>(p => !p.IsFullReplacement));
     }
 
@@ -57,7 +57,7 @@ public class CodeLensRefreshRequesterTests
         await CodeLensRefreshRequester.RequestRefreshAsync(
             _languageServer, new ClientIdeContext("vscode"), _logger, "MyProject", isFullReplacement: true);
 
-        _languageServer.Client.Received(1).SendRequest(LspMethodNames.WorkspaceCodeLensRefresh);
+        _languageServer.Client.Received(1).SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
         _languageServer.DidNotReceiveWithAnyArgs().SendNotification(default!, default(object)!);
     }
 
@@ -67,7 +67,7 @@ public class CodeLensRefreshRequesterTests
         await CodeLensRefreshRequester.RequestRefreshAsync(
             _languageServer, new ClientIdeContext(null), _logger, "MyProject");
 
-        _languageServer.Client.Received(1).SendRequest(LspMethodNames.WorkspaceCodeLensRefresh);
+        _languageServer.Client.Received(1).SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
     }
 
     [Fact]

@@ -1,8 +1,8 @@
 using System.Linq;
 using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Server;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 
@@ -22,9 +22,9 @@ public class LanguageServerOptionsExtensionsTests
     /// the client already thinks it's gone (or the reverse, on a rapid solution reload).
     /// </summary>
     [Theory]
-    [InlineData(LspMethodNames.ReqnrollProjectLoaded)]
-    [InlineData(LspMethodNames.ReqnrollProjectUnloaded)]
-    [InlineData(LspMethodNames.ReqnrollProjectFiles)]
+    [InlineData(CustomLspMethodNames.ReqnrollProjectLoaded)]
+    [InlineData(CustomLspMethodNames.ReqnrollProjectUnloaded)]
+    [InlineData(CustomLspMethodNames.ReqnrollProjectFiles)]
     public void Project_lifecycle_notifications_are_registered_as_Serial(string method)
     {
         var options = new LanguageServerOptions();
@@ -48,7 +48,7 @@ public class LanguageServerOptionsExtensionsTests
 
         options.InitializeCustomProtocolRouting();
 
-        var description = options.Handlers.Single(d => GetMethod(d) == LspMethodNames.ReqnrollResolveTestTargets);
+        var description = options.Handlers.Single(d => GetMethod(d) == CustomLspMethodNames.ReqnrollResolveTestTargets);
         description.Options?.RequestProcessType.Should().NotBe(RequestProcessType.Serial);
     }
 

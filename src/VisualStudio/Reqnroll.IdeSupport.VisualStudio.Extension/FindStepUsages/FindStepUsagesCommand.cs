@@ -33,16 +33,6 @@ internal sealed class FindStepUsagesCommand : Command
         _logger = logger;
     }
 
-    // guidSHLMainMenu — the Visual Studio shell's built-in command set (vsshlids.h).
-    // VisualStudio.Extensibility's VsctParent can target groups defined by the shell directly,
-    // so no custom .vsct / VSSDK command-table registration is required.
-    private static readonly Guid GuidSHLMainMenu = new("{D309F791-903F-11D0-9EFC-00A0C911004F}");
-
-    // IDG_VS_CODEWIN_NAVIGATETOLOCATION (vsshlids.h) — the built-in group inside the C# code-editor
-    // context menu (IDM_VS_CTXT_CODEWIN) that hosts "Go To Definition" / "Find All References".
-    // Parenting here places "Find Step Usages" alongside those navigation commands.
-    private const int IDG_VS_CODEWIN_NAVIGATETOLOCATION = 0x02B1;
-
     /// <inheritdoc />
     public override CommandConfiguration CommandConfiguration => new("Find Step Usages")
     {
@@ -52,16 +42,17 @@ internal sealed class FindStepUsagesCommand : Command
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
-        VisibleWhen = ActivationConstraint.EditorContentType("CSharp"),
+        VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
         Placements =
         [
             // Surface 1 — child of the Reqnroll submenu in the Extensions menu (ReqnrollMenu.cs).
 
             // Surface 2 — C# editor context menu, in the built-in navigation group next to
-            // "Find All References".  Targets a shell-defined group, so it needs no .vsct file.
+            // "Find All References".  VisualStudio.Extensibility's VsctParent can target groups
+            // defined by the shell directly, so it needs no .vsct file.
             CommandPlacement.VsctParent(
-                GuidSHLMainMenu, id: IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
+                ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
         ],
     };
 
@@ -70,7 +61,7 @@ internal sealed class FindStepUsagesCommand : Command
     {
         try
         {
-            _logger.LogInformation("FindStepUsagesCommand: invoked.");
+            _logger.LogDebug("FindStepUsagesCommand: invoked.");
 
             var service  = _state.Service;
             var renderer = _state.Renderer;
@@ -96,7 +87,7 @@ internal sealed class FindStepUsagesCommand : Command
             var lineNum  = line.LineNumber;                 // 0-based, matches LSP convention
             var charNum  = caretPos.Offset - line.Text.Start; // 0-based column
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "FindStepUsagesCommand: active view uri={FileUri}, caret line={LineNum} char={CharNum}.", fileUri, lineNum, charNum);
 
             var result = await service.FindUsagesAsync(fileUri, lineNum, charNum, cancellationToken)
@@ -106,6 +97,7 @@ internal sealed class FindStepUsagesCommand : Command
             {
                 _logger.LogInformation(
                     "FindStepUsagesCommand: caret is not on a binding at {FileUri}:{LineNum} — nothing to show.", fileUri, lineNum);
+                VsUtils.ShowStatusBarMessage("Reqnroll: The caret is not on a step definition binding.");
                 return;
             }
 
@@ -119,7 +111,7 @@ internal sealed class FindStepUsagesCommand : Command
 
             await renderer.RenderAsync(label, result, cancellationToken).ConfigureAwait(false);
 
-            _logger.LogInformation("FindStepUsagesCommand: render complete.");
+            _logger.LogDebug("FindStepUsagesCommand: render complete.");
         }
         catch (Exception ex)
         {

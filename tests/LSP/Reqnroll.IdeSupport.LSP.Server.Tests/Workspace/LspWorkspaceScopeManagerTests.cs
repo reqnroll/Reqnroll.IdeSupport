@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
@@ -134,5 +135,150 @@ public class LspWorkspaceScopeManagerTests : IDisposable
 
         var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "a.feature"));
         _sut.GetScopeForUri(uri).Should().BeNull();
+    }
+
+    // ── OpenProject telemetry (issue #581 finding 2) ──────────────────────────
+
+    private ReqnrollProjectLoadedParams ProjectParams(string root, string projectFileName = "Proj.csproj")
+        => new()
+        {
+            WorkspaceFolder        = root,
+            ProjectFile            = Path.Combine(root, projectFileName),
+            ProjectFolder          = root,
+            OutputAssemblyPath     = Path.Combine(root, "bin", "Debug", "Proj.dll"),
+            TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0"
+        };
+
+    // ── Shared projects (issue #735) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_ignores_a_shared_project()
+    {
+        // A .shproj has no output assembly, so its registry could never be populated -- and since
+        // its folder is the innermost one containing its own files, registering it would make it
+        // win ResolvePrimaryOwner for them, resolving those files to that empty registry.
+        _sut.OpenWorkspace(_root1);
+        var discovered = new List<LspReqnrollProject>();
+        _sut.ProjectDiscovered += discovered.Add;
+
+        await _sut.HandleProjectLoadedAsync(ProjectParams(_root1, "Shared.shproj"), CancellationToken.None);
+
+        discovered.Should().BeEmpty();
+        _sut.GetProjectForUri(DocumentUri.FromFileSystemPath(Path.Combine(_root1, "a.feature")))
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_ignores_a_shared_items_file()
+    {
+        _sut.OpenWorkspace(_root1);
+        var discovered = new List<LspReqnrollProject>();
+        _sut.ProjectDiscovered += discovered.Add;
+
+        await _sut.HandleProjectLoadedAsync(ProjectParams(_root1, "Shared.projitems"), CancellationToken.None);
+
+        discovered.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_still_registers_an_ordinary_project()
+    {
+        _sut.OpenWorkspace(_root1);
+        var discovered = new List<LspReqnrollProject>();
+        _sut.ProjectDiscovered += discovered.Add;
+
+        await _sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        discovered.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task HandleProjectFilesAsync_ignores_a_shared_project_baseline()
+    {
+        // Indexing it would attribute the shared files to a project that is deliberately never
+        // registered; they belong to the membership of each project that imports the .projitems.
+        _sut.OpenWorkspace(_root1);
+        var featurePath = Path.Combine(_root1, "Shared", "a.feature");
+
+        await _sut.HandleProjectFilesAsync(new ReqnrollProjectFilesParams
+        {
+            ProjectFile            = Path.Combine(_root1, "Shared.shproj"),
+            TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
+            Kind                   = ProjectFilesKind.Baseline,
+            Files                  = [new ProjectFileEntry { Path = featurePath, Role = ProjectFileRole.Feature, Added = true }]
+        }, CancellationToken.None);
+
+        _sut.GetProjectsForUri(DocumentUri.FromFileSystemPath(featurePath)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_emits_OpenProject_telemetry_for_a_newly_discovered_project()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "OpenProject command executed", Arg.Any<Dictionary<string, object?>>());
+
+        sut.Dispose();
+    }
+
+    [Theory]
+    [InlineData("Proj.csproj", "CSharp")]
+    [InlineData("Proj.vbproj", "VB")]
+    [InlineData("Proj.fsproj", "FSharp")]
+    public async Task HandleProjectLoadedAsync_OpenProject_telemetry_carries_the_project_profile(
+        string projectFileName, string expectedLanguage)
+    {
+        // Issue #846: the profile is emitted server-side so VS Code and Rider get it too.
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1, projectFileName), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "OpenProject command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                ".NETCoreApp,Version=v8.0".Equals(p["ProjectTargetFramework"]) &&
+                expectedLanguage.Equals(p["ProgrammingLanguage"]) &&
+                p.Keys.Count == 3));
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_does_not_re_emit_OpenProject_telemetry_for_a_re_sent_load()
+    {
+        // VS re-sends projectLoaded after every successful build (issue #542) -- that is a
+        // rebuild signal, not a second "project opened" event.
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+        telemetry.ClearReceivedCalls();
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        telemetry.DidNotReceive().SendEvent(
+            "OpenProject command executed", Arg.Any<Dictionary<string, object?>>());
+
+        sut.Dispose();
+    }
+
+    [Fact]
+    public async Task HandleProjectLoadedAsync_reports_a_null_feature_file_count_before_the_membership_baseline_arrives()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new LspWorkspaceScopeManager(_ideScope, _logger, _mediator, telemetry);
+
+        await sut.HandleProjectLoadedAsync(ProjectParams(_root1), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "OpenProject command executed",
+            Arg.Is<Dictionary<string, object?>>(p => p["FeatureFileCount"] == null));
+
+        sut.Dispose();
     }
 }

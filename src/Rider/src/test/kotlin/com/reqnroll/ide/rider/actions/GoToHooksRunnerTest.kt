@@ -1,6 +1,6 @@
 package com.reqnroll.ide.rider.actions
 
-import com.reqnroll.ide.rider.lsp.protocol.GoToHookLocation
+import com.reqnroll.ide.rider.lsp.protocol.FindHookLocation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 class GoToHooksRunnerTest {
     @Test
     fun `renderLabel includes hook type, method name, file name, and 1-based line`() {
-        val item = GoToHookLocation(
+        val item = FindHookLocation(
             uri = "file:///repo/Hooks.cs",
             startLine = 9,
             startChar = 4,
@@ -26,7 +26,7 @@ class GoToHooksRunnerTest {
 
     @Test
     fun `renderLabel falls back gracefully when uri has no path segments`() {
-        val item = GoToHookLocation(
+        val item = FindHookLocation(
             uri = "Hooks.cs",
             startLine = 0,
             hookType = "AfterStep",

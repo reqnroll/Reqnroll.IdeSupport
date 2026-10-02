@@ -4,11 +4,11 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.DocumentOutline;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 
@@ -41,7 +41,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     private readonly IOperationDurationRecorder    _recorder;
 
     private static readonly TextDocumentSelector FeatureSelector = new(
-        new TextDocumentFilter { Pattern = "**/*.feature" });
+        new TextDocumentFilter { Pattern = DocumentGlobPatterns.FeatureFilePattern });
 
     // Set from the client's declared capability in GetRegistrationOptions, which the OmniSharp
     // framework always calls before any Handle call during real capability negotiation. Defaults
@@ -78,7 +78,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     {
         // Benchmarked as load-only in the synthetic harness (no published target); now also
         // has field visibility so a real P95 bar can be set.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentDocumentSymbol, request.TextDocument.Uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentDocumentSymbol, request.TextDocument.Uri);
 
         _logger.LogInfo(
             $"Document Outline textDocument/documentSymbol: {request.TextDocument.Uri} " +
@@ -119,7 +119,7 @@ public sealed class DocumentSymbolHandler : IDocumentSymbolHandler
     public async Task<IReadOnlyList<DocumentSymbol>> HandleHierarchicalAsync(
         DocumentSymbolParams request, CancellationToken ct)
     {
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollDocumentSymbolHierarchical, request.TextDocument.Uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical, request.TextDocument.Uri);
 
         // documentSymbol has no LSP refresh capability (issue #471) -- see the matching
         // FoldingRangeHandler comment.

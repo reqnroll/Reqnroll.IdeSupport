@@ -133,3 +133,21 @@ Scenario: No code action is offered when all steps are already bound
     And code actions are requested for "AllBound.feature" at line 2
     Then no code action titled "Define missing step" is available
     And no code action titled "Define all missing steps in file" is available
+
+# ── Blank step text (issue #622) ────────────────────────────────────────────────
+
+Scenario: No code action is offered for a step consisting of only a keyword
+    When the project is announced with output assembly "Sample.dll" for "Blank.feature"
+    And the C# step definition file "EmptySteps.cs" is opened with
+        """
+        using Reqnroll;
+        namespace Sample { [Binding] public class EmptySteps { } }
+        """
+    And the feature file "Blank.feature" is opened with
+        """
+        Feature: Blank
+        Scenario: S
+            When
+        """
+    And code actions are requested for "Blank.feature" at line 2
+    Then no code action titled "Define missing step" is available

@@ -6,19 +6,20 @@ import kotlin.test.assertEquals
 
 class FindUnusedStepDefinitionsActionTest {
     @Test
-    fun `renderLabel includes class, method, expression, and project when all present`() {
+    fun `renderLabel includes class, method, attribute, and project when all present`() {
         val item = UnusedStepDefinitionItem(
             projectName = "Calculator",
             className = "CalculatorSteps",
             methodName = "GivenIHaveEnteredNumber",
             bindingExpression = "I have entered {int}",
+            stepDefinitionType = "Given",
             sourceFile = "/repo/CalculatorSteps.cs",
             sourceLine = 12,
             sourceChar = 4,
         )
 
         assertEquals(
-            "CalculatorSteps.GivenIHaveEnteredNumber — I have entered {int} [Calculator]",
+            "CalculatorSteps.GivenIHaveEnteredNumber - [Given(\"I have entered {int}\")] [Calculator]",
             FindUnusedStepDefinitionsAction.renderLabel(item),
         )
     }
@@ -70,7 +71,7 @@ class FindUnusedStepDefinitionsActionTest {
         )
 
         assertEquals(
-            "CalculatorSteps.GivenIHaveEnteredNumber — I have entered {int} [Calculator]" +
+            "CalculatorSteps.GivenIHaveEnteredNumber - \"I have entered {int}\" [Calculator]" +
                 " (source not on this machine)",
             FindUnusedStepDefinitionsAction.renderLabel(item),
         )
@@ -90,5 +91,34 @@ class FindUnusedStepDefinitionsActionTest {
             "CalculatorSteps.GivenIHaveEnteredNumber",
             FindUnusedStepDefinitionsAction.renderLabel(item),
         )
+    }
+
+    // ── Binding attribute (issue #757) ──────────────────────────────────────────
+
+    @Test
+    fun `renderAttribute shows the attribute with its expression`() {
+        val item = UnusedStepDefinitionItem(bindingExpression = "the sum is {int}", stepDefinitionType = "Then")
+
+        assertEquals("[Then(\"the sum is {int}\")]", FindUnusedStepDefinitionsAction.renderAttribute(item))
+    }
+
+    @Test
+    fun `renderAttribute shows the bare attribute for a method-name-style binding`() {
+        val item = UnusedStepDefinitionItem(stepDefinitionType = "When")
+
+        assertEquals("[When]", FindUnusedStepDefinitionsAction.renderAttribute(item))
+    }
+
+    @Test
+    fun `renderAttribute quotes the expression alone when the keyword is unknown`() {
+        // An older server omits stepDefinitionType.
+        val item = UnusedStepDefinitionItem(bindingExpression = "a step")
+
+        assertEquals("\"a step\"", FindUnusedStepDefinitionsAction.renderAttribute(item))
+    }
+
+    @Test
+    fun `renderAttribute is null when neither keyword nor expression is known`() {
+        assertEquals(null, FindUnusedStepDefinitionsAction.renderAttribute(UnusedStepDefinitionItem()))
     }
 }

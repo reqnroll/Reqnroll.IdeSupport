@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 /// instance before the real client (symbol-backed combos) was built.
 /// </remarks>
 [Export(typeof(IVsTextViewCreationListener))]
-[ContentType("Gherkin")]
+[ContentType(VsWellKnownIds.GherkinContentType)]
 [TextViewRole(PredefinedTextViewRoles.Document)]
 internal sealed class GherkinDropdownBarTextViewCreationListener : IVsTextViewCreationListener
 {

@@ -1,5 +1,7 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
+
 namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 
 /// <summary>One step-definition binding expression that has zero matching steps across the workspace.</summary>
@@ -23,6 +25,11 @@ namespace Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 /// <paramref name="SourceFile"/>; populated whenever that path was remapped or could not be
 /// resolved, because it is the only thing that explains an unopenable entry to a human.
 /// </param>
+/// <param name="StepDefinitionType">
+/// The binding's step keyword (<c>[Given]</c>/<c>[When]</c>/<c>[Then]</c>). A <c>[StepDefinition]</c>
+/// attribute is registered as one binding per keyword, so it reports whichever of the three this
+/// binding is (issue #757).
+/// </param>
 public sealed record UnusedStepDefinition(
     string? ProjectName,
     string ClassName,
@@ -32,5 +39,6 @@ public sealed record UnusedStepDefinition(
     int SourceLine,   // 1-based
     int SourceColumn, // 1-based
     bool IsResolved = true,
-    string? RecordedSourceFile = null
+    string? RecordedSourceFile = null,
+    ScenarioBlock StepDefinitionType = ScenarioBlock.Unknown
 );

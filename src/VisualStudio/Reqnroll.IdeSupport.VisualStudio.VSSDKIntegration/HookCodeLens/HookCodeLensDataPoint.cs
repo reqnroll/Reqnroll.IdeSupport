@@ -107,8 +107,16 @@ internal sealed class HookCodeLensDataPoint : IAsyncCodeLensDataPoint
         // descriptor no longer carries per-lens nav info.
         _cachedHooks = await FetchHooksAsync(entry.NavLine, entry.NavChar, entry.OwnLevelOnly, token).ConfigureAwait(false);
 
-        return new CodeLensDataPointDescriptor { Description = entry.Title };
+        return new CodeLensDataPointDescriptor { Description = entry.Title, TooltipText = BuildTooltip(_cachedHooks) };
     }
+
+    /// <summary>
+    /// The lens's own inline hover text — left unset (VS falls back to its generic keybinding hint,
+    /// e.g. "Alt+1") when there are no hooks to list, same reasoning as
+    /// <c>RunTestCodeLensDataPoint.BuildTooltip</c>.
+    /// </summary>
+    private static string? BuildTooltip(IReadOnlyList<HookDetailEntry> hooks) =>
+        hooks.Count == 0 ? null : string.Join(Environment.NewLine, hooks.Select(h => $"[{h.HookType}] {h.MethodName}"));
 
     /// <inheritdoc />
     public async Task<CodeLensDetailsDescriptor> GetDetailsAsync(CodeLensDescriptorContext descriptorContext, CancellationToken token)

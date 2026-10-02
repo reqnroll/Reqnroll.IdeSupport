@@ -23,7 +23,7 @@ public class CodeLensResolveHandlerTests
     public async Task ResolveAsync_routes_stepUsage_kind_to_StepCodeLensHandler()
     {
         var uri = DocumentUri.FromFileSystemPath("/workspace/Steps.cs");
-        var stepHandler = new StepCodeLensHandler(_matchService, _scopeManager, _registryLookup, new ClientIdeContext("vscode"), _logger);
+        var stepHandler = new StepCodeLensHandler(_matchService, _registryLookup, new ClientIdeContext("vscode"), _logger);
         var hookHandler = new HookMatchCountCodeLensHandler(_matchService, _scopeManager, _registryLookup, new ClientIdeContext("vscode"), _logger);
         _registryLookup.GetRegistryForUri(uri).Returns(ProjectBindingRegistry.Invalid);
 
@@ -46,7 +46,7 @@ public class CodeLensResolveHandlerTests
     [Fact]
     public async Task ResolveAsync_unknown_kind_returns_the_lens_unchanged()
     {
-        var stepHandler = new StepCodeLensHandler(_matchService, _scopeManager, _registryLookup, new ClientIdeContext("vscode"), _logger);
+        var stepHandler = new StepCodeLensHandler(_matchService, _registryLookup, new ClientIdeContext("vscode"), _logger);
         var hookHandler = new HookMatchCountCodeLensHandler(_matchService, _scopeManager, _registryLookup, new ClientIdeContext("vscode"), _logger);
         var lens = new global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens
         {

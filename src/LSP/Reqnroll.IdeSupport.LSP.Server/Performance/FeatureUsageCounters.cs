@@ -18,8 +18,8 @@ public sealed class FeatureUsageCounters : IFeatureUsageCounters
     private readonly ConcurrentDictionary<string, long> _counts = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
-    public void Increment(string operation) =>
-        _counts.AddOrUpdate(operation, 1, static (_, count) => count + 1);
+    public void Increment(string key) =>
+        _counts.AddOrUpdate(key, 1, static (_, count) => count + 1);
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, long> Drain()

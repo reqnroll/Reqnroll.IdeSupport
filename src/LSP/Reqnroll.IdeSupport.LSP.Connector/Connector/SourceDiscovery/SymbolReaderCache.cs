@@ -71,7 +71,7 @@ public class SymbolReaderCache
         }
         catch (Exception ex)
         {
-            _log.Error(ex.ToString());
+            _log.Error("Failed to create symbol reader", ex);
         }
 
         return null;

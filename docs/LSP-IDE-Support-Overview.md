@@ -71,7 +71,7 @@ graph TB
         Rider["Rider Plugin\n(Kotlin — thin wrapper only)"]
     end
 
-    subgraph Server["LSP Server  ·  Reqnroll.IdeSupport.LSP.Server\n(net9+, cross-platform executable)"]
+    subgraph Server["LSP Server  ·  Reqnroll.IdeSupport.LSP.Server\n(net10.0, cross-platform executable)"]
         direction TB
         Handlers["LSP Handlers\n(OmniSharp.Extensions.LanguageServer)"]
 
@@ -132,7 +132,7 @@ For the detailed internals of each component — the parsing/discovery/matching 
 
 | Phase | Features | Verification Goal |
 |-------|----------|------------------|
-| **1 · Basic Syntax Coloring** | F1 (Semantic Tokens) | Architecture validated: LSP server startup, client wiring (all 3 IDEs), `--client` flag, static vs. dynamic registration, CI pipeline |
+| **1 · Basic Syntax Coloring** | F1 (Semantic Tokens) | Architecture validated: LSP server startup, client wiring (all 3 IDEs), `--ide` flag, static vs. dynamic registration, CI pipeline |
 | **2 · Minimum Viable** | F2 (Binding Discovery), F3+F4 (Diagnostics), F5 (Go to Definition), F6 (Define Steps), F19 (Wizards) | Core value loop: developer can write feature files, get feedback on unmatched steps, navigate to or create bindings; VS wizard enables quick project setup |
 | **3 · Editor Quality** | F7 (Keyword Completion), F9 (Outline), F10 (Folding), F11 (Formatting), F12 (Table Format), F13 (Comment/Uncomment), F17 (Hook Navigation), F20 (Install/Upgrade UX), F23 (Inlay Hints) | Extension is a credible replacement for daily use |
 | **4 · Advanced Navigation** | F8 (Step Completion), F14 (Find Usages), F15 (Find Unused), F16 (Rename, incl. change-annotation previews on supporting clients), F18 (Code Lens) | Feature parity with existing VS extension; Preview designation can be lifted |

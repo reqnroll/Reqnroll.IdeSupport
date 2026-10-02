@@ -16,3 +16,4 @@ CHANGELOG.md
 src/**
 !out/**
 !server/**
+mtpreporter/.bundle-stamp

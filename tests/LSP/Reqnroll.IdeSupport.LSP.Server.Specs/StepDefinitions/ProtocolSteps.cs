@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using Reqnroll;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
@@ -17,8 +19,30 @@ public sealed class ProtocolSteps
     [Given("the LSP server is started")]
     public async Task GivenTheLspServerIsStarted() => await _ctx.EnsureStartedAsync();
 
-    [Given(@"the LSP server is started for IDE ""(.*)""")]
+    // Bound with [^"] rather than (.*) so a longer step that starts the same way — e.g. "...for IDE
+    // "vscode" with the client identifying itself as "Visual Studio"" (issue #709) — is not also
+    // matched by this one and reported as an ambiguous binding.
+    [Given(@"the LSP server is started for IDE ""([^""]*)""")]
     public async Task GivenTheLspServerIsStartedForIde(string ide) => await _ctx.EnsureStartedAsync(ide);
+
+    /// <summary>
+    /// Issue #709: starts the server with NO <c>--ide</c> argument, so the only identity it can have
+    /// is the one the client self-reports in <c>InitializeParams.ClientInfo</c>. This is the shape
+    /// the fallback exists for — a glue component that failed to wire the argument up.
+    /// </summary>
+    [Given(@"the LSP server is started for a client identifying itself as ""([^""]*)"" with no IDE argument")]
+    public async Task GivenTheLspServerIsStartedForClientInfoOnly(string clientName) =>
+        await _ctx.EnsureStartedAsync(
+            ideId: null,
+            clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
+
+    /// <summary>
+    /// Issue #709's cross-check case: an explicit <c>--ide</c> AND a contradicting
+    /// <c>InitializeParams.ClientInfo</c> in the same handshake. The argument must win.
+    /// </summary>
+    [Given(@"the LSP server is started for IDE ""([^""]*)"" with the client identifying itself as ""([^""]*)""")]
+    public async Task GivenTheLspServerIsStartedForIdeWithClientInfo(string ide, string clientName) =>
+        await _ctx.EnsureStartedAsync(ide, clientInfo: new ClientInfo { Name = clientName, Version = "1.0.0" });
 
     // Issue #70: the harness's simulated client negotiates LSP 3.16 change-annotation support
     // only when a scenario opts in via this step — every other scenario keeps the default
@@ -169,7 +193,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 0,    // Baseline
+            kind = 0,    // Baseline
             files = ToFileEntries(table, added: true)
         });
     }
@@ -191,7 +215,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 1,    // Delta
+            kind = 1,    // Delta
             files = ToFileEntries(table, added: false)
         });
 
@@ -215,7 +239,7 @@ public sealed class ProtocolSteps
         {
             projectFile = project.ProjectFile,
             targetFrameworkMoniker = project.TargetFrameworkMoniker,
-            kind  = 1,    // Delta
+            kind = 1,    // Delta
             files = ToFileEntries(table, added: true)
         });
 
@@ -282,16 +306,19 @@ public sealed class ProtocolSteps
     [Then("the server statically advertises textDocumentSync with full sync and openClose")]
     public void ThenTheServerStaticallyAdvertisesTextDocumentSync()
     {
-        var ts = _ctx.Harness.ServerInitializeResult.Capabilities.TextDocumentSync;
+        // Read from the snapshot of the raw initialize response, not ServerSettings: OmniSharp's
+        // client merges the later dynamic client/registerCapability into ServerSettings, which
+        // made a missing static entry look present (issue #800).
+        _ctx.Harness.InitializeResponseSeen.Should().BeTrue();
+        var ts = _ctx.Harness.StaticTextDocumentSync;
         ts.Should().NotBeNull(
-            "non-VS clients need a static textDocumentSync entry to bootstrap their " +
-            "DidChangeTextDocument infrastructure; without it, dynamic registration is silently ignored");
-        ts!.HasOptions.Should().BeTrue(
-            "the static entry must be TextDocumentSyncOptions (not just a kind enum) so that " +
-            "vscode-languageclient v10 recognises it and wires up its DidChangeTextDocument feature");
-        ts.Options!.OpenClose.Should().BeTrue(
-            "OpenClose=true is set explicitly in the static response — its presence in " +
-            "ServerSettings confirms the static entry was included in the InitializeResult");
+            "every client needs a static textDocumentSync entry: vscode-languageclient ignores a " +
+            "dynamic-only one, and Visual Studio never sends didOpen for a document it attached " +
+            "before the dynamic registration arrived (issue #800). It must also be " +
+            "TextDocumentSyncOptions, not just a kind enum (the snapshot is null otherwise), so " +
+            "vscode-languageclient v10 wires up its DidChangeTextDocument feature");
+        ts!.OpenClose.Should().BeTrue("didOpen/didClose must be enabled statically");
+        ts.Change.Should().Be(TextDocumentSyncKind.Full, "the server expects full-document didChange");
     }
 
     [Then("the server advertises renameProvider with prepareProvider")]
@@ -325,6 +352,52 @@ public sealed class ProtocolSteps
                 "inlayHint/foldingRange must be declared statically — dynamic client/registerCapability " +
                 "races VS Code's restore of previously-open .feature tabs on window load, and losing " +
                 "that race silently disables the provider for the rest of the session");
+
+    // Asserted via ExtensionData rather than a typed sibling property: OmniSharp's
+    // InitializeResult.Capabilities is init-only, so the server can't swap in a ServerCapabilities
+    // subclass — it writes reqnrollTestOutcomesProvider into the [JsonExtensionData] catch-all
+    // instead (see ApplyTestOutcomesCapability in Program.cs). A client with no matching Reqnroll
+    // type of its own -- including this harness's plain OmniSharp client -- lands the same data
+    // there on the way in, which is exactly the round trip this asserts.
+    [Then("the server advertises a testOutcomes provider capability")]
+    public void ThenTheServerAdvertisesATestOutcomesProviderCapability()
+    {
+        var extensionData = _ctx.Harness.ServerInitializeResult.Capabilities.ExtensionData;
+        extensionData.Should().NotBeNull("ApplyTestOutcomesCapability always writes this entry");
+        extensionData!.Should().ContainKey("reqnrollTestOutcomesProvider");
+
+        var provider = extensionData["reqnrollTestOutcomesProvider"];
+        provider.Value<string>("registerRunMethod").Should().Be(CustomLspMethodNames.ReqnrollRegisterTestRun);
+        provider.Value<string>("getOutcomeMethod").Should().Be(CustomLspMethodNames.ReqnrollGetTestOutcome);
+        provider.Value<string>("changedNotification").Should().Be(CustomLspMethodNames.ReqnrollTestOutcomesChanged);
+    }
+
+    // Asserted via ExtensionData, not a typed sibling property: OmniSharp's InitializeResult.
+    // Capabilities is init-only, so ApplyCustomProtocolCapabilities (Program.cs) writes each entry
+    // into the [JsonExtensionData] catch-all instead of a ServerCapabilities subclass. A client
+    // with no matching Reqnroll type of its own -- including this harness's plain OmniSharp client
+    // -- lands the same data there on the way in, which is exactly the round trip this asserts.
+    // Each table row names one capability's top-level key, one field on its payload, and the
+    // method name that field must carry -- a single-method capability (e.g.
+    // reqnrollFindStepUsagesProvider) has one row with field "method"; a grouped one (e.g.
+    // reqnrollStepRenameProvider) has one row per method it bundles.
+    [Then("the server advertises the following custom protocol capabilities")]
+    public void ThenTheServerAdvertisesTheFollowingCustomProtocolCapabilities(Table table)
+    {
+        var extensionData = _ctx.Harness.ServerInitializeResult.Capabilities.ExtensionData;
+        extensionData.Should().NotBeNull("ApplyCustomProtocolCapabilities always writes these entries");
+
+        foreach (var row in table.Rows)
+        {
+            var capability = row["capability"];
+            var field = row["field"];
+            var expectedMethod = row["method"];
+
+            extensionData!.Should().ContainKey(capability);
+            extensionData[capability].Value<string>(field).Should().Be(
+                expectedMethod, $"{capability}.{field} should advertise its wired-up method name");
+        }
+    }
 
     [Then("the semantic tokens legend includes the token types")]
     public void ThenTheLegendIncludesTokenTypes(Table table)
@@ -420,8 +493,8 @@ public sealed class ProtocolSteps
     private object[] ToFileEntries(Table table, bool added)
         => table.Rows.Select(r => (object)new
         {
-            path  = _ctx.PathFor(r["path"]),
-            role  = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
+            path = _ctx.PathFor(r["path"]),
+            role = string.Equals(r["role"], "Feature", StringComparison.OrdinalIgnoreCase) ? 0 : 1,
             added
         }).ToArray();
 

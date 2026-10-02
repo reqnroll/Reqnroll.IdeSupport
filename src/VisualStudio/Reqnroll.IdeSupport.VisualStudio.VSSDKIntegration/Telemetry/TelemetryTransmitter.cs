@@ -38,7 +38,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         IEnableTelemetryChecker enableTelemetryChecker,
         IUserUniqueIdStore userUniqueIdStore,
         IVersionProvider versionProvider,
-        Reqnroll.IdeSupport.VisualStudio.Logging.IdeSupportCompositeLogger? logger = null)
+        IIdeSupportLogger? logger = null)
         : this(CreateClient(userUniqueIdStore, versionProvider), enableTelemetryChecker, logger,
             TelemetryDebugLog.FromEnvironment())
     {
@@ -73,10 +73,23 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         var client = new TelemetryClient(config);
         client.Context.User.Id = userStore.GetUserId();
         client.Context.User.AccountId = userStore.GetUserId();
-        client.Context.GlobalProperties["Ide"] = "Microsoft Visual Studio";
-        client.Context.GlobalProperties["IdeVersion"] = versionProvider.GetVsVersion();
-        client.Context.GlobalProperties["ExtensionVersion"] = versionProvider.GetExtensionVersion();
+        ApplyClientIdentity(client.Context.GlobalProperties, versionProvider);
         return client;
+    }
+
+    /// <summary>
+    /// Stamps the host's client identity on every event (issue #844). <c>IdeClient</c> is the
+    /// canonical cross-IDE key, also stamped server-side on server-originated events with the same
+    /// <c>visualstudio</c>/<c>vscode</c>/<c>rider</c> vocabulary; stamping it here as well covers
+    /// host-originated events the server never sees. Per-event properties take precedence over
+    /// these global ones in Application Insights, so a server-stamped value is never overridden.
+    /// </summary>
+    internal static void ApplyClientIdentity(IDictionary<string, string> properties, IVersionProvider versionProvider)
+    {
+        properties["IdeClient"] = "visualstudio";
+        properties["Ide"] = "Microsoft Visual Studio";
+        properties["IdeVersion"] = versionProvider.GetVsVersion();
+        properties["ExtensionVersion"] = versionProvider.GetExtensionVersion();
     }
 
     /// <summary>
@@ -143,33 +156,38 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     private void TransmitException(Exception exception, IEnumerable<KeyValuePair<string, object>> additionalProps)
     {
         var additionalPropsArray = additionalProps.ToArray();
+        var enabled = _enableTelemetryChecker.IsEnabled();
         var transmitted = false;
         string? transmitError = null;
-        try
-        {
-            DumpTelemetryException(exception, additionalPropsArray);
 
-            var exceptionTelemetry = new ExceptionTelemetry(exception) { Timestamp = DateTime.UtcNow };
-            foreach (var prop in additionalPropsArray)
+        DumpTelemetryException(exception, additionalPropsArray);
+
+        if (enabled)
+        {
+            try
             {
-                exceptionTelemetry.Properties.Add(prop.Key, prop.Value?.ToString() ?? string.Empty);
+                var exceptionTelemetry = new ExceptionTelemetry(exception) { Timestamp = DateTime.UtcNow };
+                foreach (var prop in additionalPropsArray)
+                {
+                    exceptionTelemetry.Properties.Add(prop.Key, prop.Value?.ToString() ?? string.Empty);
+                }
+                _telemetryClient.TrackException(exceptionTelemetry);
+                transmitted = true;
             }
-            _telemetryClient.TrackException(exceptionTelemetry);
-            transmitted = true;
-        }
-        catch (Exception ex)
-        {
-            // catch all exceptions since we do not want to break the whole extension simply because data transmission failed
-            transmitError = ex.Message;
-            Debug.WriteLine(ex, "Error during transmitting analytics event.");
+            catch (Exception ex)
+            {
+                // catch all exceptions since we do not want to break the whole extension simply because data transmission failed
+                transmitError = ex.Message;
+                Debug.WriteLine(ex, "Error during transmitting analytics event.");
+            }
         }
 
-        // Mirror the exception telemetry for debugging. The exception path is not gated by the
-        // opt-out checker (hence enabled: null). `error` is a *transmission* failure, distinct from
+        // Mirror the exception telemetry for debugging, recording whether the opt-out gated it,
+        // consistent with TransmitEvent. `error` is a *transmission* failure, distinct from
         // the reported exception's own message, which is carried in props.
         _debugLog.Record("host", $"(exception) {exception.GetType().Name}",
             BuildExceptionProps(exception, additionalPropsArray),
-            enabled: null, transmitted: transmitted, error: transmitError);
+            enabled: enabled, transmitted: transmitted, error: transmitError);
     }
 
     private static Dictionary<string, object?> BuildExceptionProps(

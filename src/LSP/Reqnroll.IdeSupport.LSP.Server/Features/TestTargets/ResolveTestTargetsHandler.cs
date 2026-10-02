@@ -1,11 +1,12 @@
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -49,7 +50,7 @@ public sealed class ResolveTestTargetsHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollResolveTestTargets, uri);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollResolveTestTargets, uri);
 
         if (!IsFeatureFile(uri))
         {
@@ -82,12 +83,6 @@ public sealed class ResolveTestTargetsHandler
         var endOffset = snapshot.ToOffset(request.Range.End.Line, request.Range.End.Character);
         var scenarioRange = Core.Documents.GherkinRange.FromPoint(snapshot, startOffset, Math.Max(0, endOffset - startOffset));
 
-        var packageIds = _scopeManager.ResolveOwners(uri)
-            .SelectMany(p => p.PackageReferences)
-            .Select(p => p.PackageName)
-            .Distinct()
-            .ToArray();
-
         var filePath = uri.GetFileSystemPath();
         if (string.IsNullOrEmpty(filePath))
         {
@@ -97,11 +92,14 @@ public sealed class ResolveTestTargetsHandler
 
         var projectFolder = _scopeManager.ResolvePrimaryOwner(uri)?.ProjectFolder;
 
-        var targets = _resolver.Resolve(new Uri(filePath), buffer.Tags, scenarioRange, packageIds, projectFolder);
+        var targets = _resolver.Resolve(new Uri(filePath), buffer.Tags, scenarioRange, projectFolder);
 
         _logger.LogVerbose($"ResolveTestTargetsHandler: {targets.Count} target(s) at range {request.Range} in {uri}");
 
-        _telemetryService?.SendEvent("ResolveTestTargets command executed", new());
+        var telemetry = new Dictionary<string, object?> { [TelemetryProperties.TargetCount] = targets.Count };
+        if (TestTargetTelemetry.ClassifyScenario(buffer.Tags, scenarioRange) is { } kind)
+            telemetry[TelemetryProperties.Kind] = kind;
+        _telemetryService?.SendEvent(TelemetryEvents.ResolveTestTargetsCommandExecuted, telemetry);
 
         return Task.FromResult(new ResolveTestTargetsResponse { Targets = targets.Select(ToDto).ToList() });
     }

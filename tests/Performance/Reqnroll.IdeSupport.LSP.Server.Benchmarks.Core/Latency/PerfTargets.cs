@@ -87,6 +87,14 @@ public static class PerfTargets
     public static readonly PerfTarget FindUnusedStepDefinitions =
         new("reqnroll/findUnusedStepDefinitions", 0, PerfTargetKind.Batch, "Find unused step definitions, workspace-wide scan (F15)");
 
+    // Issue #671 (R3): the registry/match-cache commit a rename implies moved off the measured
+    // textDocument/rename request onto the client's confirmation (reqnroll/renameApplied) --
+    // StepRename above no longer includes it. Batch-classified like its discovery-scenario
+    // siblings: this is the reparse-on-confirm cost, not a per-request percentile.
+    public static readonly PerfTarget RenameApplyCommit =
+        new("reqnroll/renameApplied", 0, PerfTargetKind.Batch,
+            "Registry/diagnostics reparse cascade triggered by a rename's confirmed apply (#671)");
+
     public static readonly PerfTarget SemanticTokensDelta =
         new("textDocument/semanticTokens/full/delta", 0, PerfTargetKind.InteractiveP95, "Semantic tokens delta pull");
 
@@ -98,15 +106,22 @@ public static class PerfTargets
     public static readonly PerfTarget StepReferences =
         new("textDocument/references", 0, PerfTargetKind.InteractiveP95, "Find references from a .feature step");
 
-    public static readonly PerfTarget GoToHooks =
-        new("reqnroll/goToHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
+    public static readonly PerfTarget FindHooks =
+        new("reqnroll/findHooks", 0, PerfTargetKind.InteractiveP95, "Go to hook bindings for a step/scenario");
+
+    // Issue #757: the same step lookup as textDocument/definition (shared StepAtPositionResolver),
+    // plus per-binding detail — field-instrumented in FindStepDefinitionsHandler, so it gets synthetic
+    // coverage too (the #495 lesson). Load-only: no published threshold of its own.
+    public static readonly PerfTarget FindStepDefinitions =
+        new("reqnroll/findStepDefinitions", 0, PerfTargetKind.InteractiveP95,
+            "Go to step definition with binding detail (VS results window, VS Code picker, #757)");
 
     public static readonly PerfTarget StepCodeLens =
         new("textDocument/codeLens", 0, PerfTargetKind.InteractiveP95, "Step code lens on a .cs binding file (F18)");
 
     // Hook-facing CodeLens/navigation (issues #269/#372/#373): the operation label carries a
     // "#..." suffix (same convention as the completion variants above) because all three share the
-    // raw "textDocument/codeLens"/"reqnroll/goToHooks" wire method with an existing target above —
+    // raw "textDocument/codeLens"/"reqnroll/findHooks" wire method with an existing target above —
     // without it they'd collide in the report and overwrite each other.
     public static readonly PerfTarget FeatureHookCodeLens =
         new("textDocument/codeLens#feature-hooks", 0, PerfTargetKind.InteractiveP95,
@@ -116,8 +131,8 @@ public static class PerfTargets
         new("textDocument/codeLens#hook-match-count", 0, PerfTargetKind.InteractiveP95,
             "Scenario-match-count code lens on a .cs hook binding (F18/#373)");
 
-    public static readonly PerfTarget GoToMatchingScenarios =
-        new("reqnroll/goToMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
+    public static readonly PerfTarget FindMatchingScenarios =
+        new("reqnroll/findMatchingScenarios", 0, PerfTargetKind.InteractiveP95,
             "Go to matching scenarios from a .cs hook binding (#373)");
 
     // Issue #495: the one reqnroll/* operation the Run CodeLens bridge depends on had neither a
@@ -186,6 +201,56 @@ public static class PerfTargets
     public static readonly PerfTarget CSharpRapidEditBurst =
         new("discovery/roslyn-rapid-cs-burst", 0, PerfTargetKind.Batch,
             "Roslyn re-discovery after a rapid burst of superseded .cs edits (staleness short-circuit, #531)");
+
+    // Issue #714: the LSP-server test-outcome pipeline (#700/#702) added a request surface, an
+    // out-of-band TCP ingest path and two stateful singletons, both new handlers already
+    // field-instrumented via IOperationDurationRecorder — so Layer-4 logs emitted labels with no
+    // synthetic counterpart, the same field/synthetic alignment gap #495 closed for
+    // reqnroll/resolveTestTargets. Same measured-but-unpublished convention as everything above
+    // (TargetMs 0, rendered "—", never asserted) until §9 publishes a threshold.
+    //
+    // The "#..." suffix convention (as with the completion/codeLens variants) is what keeps
+    // getOutcome's two genuinely different cost shapes apart — a dictionary hit does a container
+    // stat plus row sort plus DTO build, a miss skips the stat entirely — while GetTestOutcome
+    // below keeps the bare wire-method label the handler actually emits via Measure(), so the
+    // field label and the synthetic label still line up 1:1 (the #714 acceptance criterion).
+    public static readonly PerfTarget GetTestOutcome =
+        new("reqnroll/testOutcomes/getOutcome", 0, PerfTargetKind.InteractiveP95,
+            "Test outcome lookup for a Run CodeLens, aggregate over both variants (#700/#714)");
+
+    public static readonly PerfTarget GetTestOutcomeFound =
+        new("reqnroll/testOutcomes/getOutcome#found", 0, PerfTargetKind.InteractiveP95,
+            "Outcome lookup for a method the store knows (container stat + row sort + DTO build)");
+
+    public static readonly PerfTarget GetTestOutcomeNotFound =
+        new("reqnroll/testOutcomes/getOutcome#not-found", 0, PerfTargetKind.InteractiveP95,
+            "Outcome lookup for an unknown method (dictionary miss, no container stat)");
+
+    // The first call binds a loopback socket and starts the accept loop, and VS blocks a
+    // *synchronous* VSTest AddRunSettings callback on this round trip (5s bound) — so the
+    // scenario reports that first-call cost separately from the steady-state GUID mint.
+    public static readonly PerfTarget RegisterTestRun =
+        new("reqnroll/testOutcomes/registerRun", 0, PerfTargetKind.InteractiveP95,
+            "Mint a test-run registration for the injected runsettings (steady-state; first-call socket bind reported separately)");
+
+    public static readonly PerfTarget TestOutcomesIngestBurst =
+        new("testOutcomes/ingest#results-burst", 0, PerfTargetKind.Batch,
+            "Wall-clock from runStart to runComplete for N synthetic results over one loopback connection, plus the trailing Save");
+
+    // Same shape as workspace/codeLens/refresh: the measured number includes the listener's own
+    // 250ms throttle, which is deliberately not the shared 500ms debouncer.
+    public static readonly PerfTarget TestOutcomesChanged =
+        new("reqnroll/testOutcomes/changed", 0, PerfTargetKind.Batch,
+            "First result recorded -> server-initiated testOutcomes/changed push (ingest throttle)",
+            IncludesFixedDelay: true);
+
+    public static readonly PerfTarget TestOutcomesPersistenceLoad =
+        new("testOutcomes/persistence#load", 0, PerfTargetKind.Batch,
+            "Cold Load of a large persisted outcome file on the session's first outcome lookup");
+
+    public static readonly PerfTarget TestOutcomesPersistenceSave =
+        new("testOutcomes/persistence#save", 0, PerfTargetKind.Batch,
+            "Post-run merge + write of the same large persisted outcome file");
 
     /// <summary>All performance targets, in table order.</summary>
     public static readonly IReadOnlyList<PerfTarget> All = new[]

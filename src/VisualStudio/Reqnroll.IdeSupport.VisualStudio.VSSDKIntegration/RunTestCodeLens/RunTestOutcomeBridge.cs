@@ -11,6 +11,7 @@ using Microsoft.VisualStudio.Imaging;
 using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.TestWindow;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
@@ -54,7 +55,9 @@ internal enum RunTestOutcome
 /// </remarks>
 internal static class RunTestOutcomeBridge
 {
-    private static readonly IIdeSupportLogger Logger = new SynchronousFileLogger("vs", "ext", TraceLevel.Verbose);
+    // Runs only in the CodeLens ServiceHub host (its sole caller is RunTestCodeLensDataPoint), so
+    // it shares that host's logger instead of owning a second one for the same file (issue #748).
+    private static IIdeSupportLogger Logger => CodeLensHostLogger.Instance;
 
     // Stable per-process id for the (never-unsubscribed) implicit "subscription" GetTestOutcomeAsync
     // establishes server-side — reused across every call so a long session accumulates at most one,
@@ -71,6 +74,18 @@ internal static class RunTestOutcomeBridge
     /// yet run, or the underlying (unsupported, internal) API is unavailable for any reason —
     /// including a future VS update changing its shape. Never throws.
     /// </summary>
+    /// <remarks>
+    /// Three stages (issue #590), each independently testable: <b>acquire</b>
+    /// (<see cref="GetOrCreateProxyAsync"/> — locate the assembly, resolve the internal types, bind
+    /// the method handles; fails once, permanently), <b>invoke</b>
+    /// (<see cref="InvokeGetTestOutcomeAsync"/> — call through the bound handle and await the
+    /// returned <c>Task</c>), and <b>map</b> (<see cref="ParseOutcome"/> — translate the internal
+    /// outcome value into <see cref="RunTestOutcome"/>). Each stage's failures are classified and
+    /// dispatched by <see cref="HandleFailure"/>, tagged with the stage name that failed, so a
+    /// future VS servicing update that reshapes this API is distinguishable in the log from "the
+    /// test hasn't been run yet" — both of which surfaced identically as a silent <c>null</c> before
+    /// this split.
+    /// </remarks>
     public static async Task<RunTestOutcome?> TryGetOutcomeAsync(TestMethodIdentifier testMethod, CancellationToken cancellationToken)
     {
         if (_unavailable)
@@ -82,35 +97,42 @@ internal static class RunTestOutcomeBridge
             if (proxy is null || getTestOutcomeMethod is null)
                 return null;
 
-            var resultTask = (Task?)getTestOutcomeMethod.Invoke(proxy, new object[] { DataPointId, testMethod, cancellationToken });
-            if (resultTask is null)
-                return null;
-
-            await resultTask.ConfigureAwait(false);
-
-            var resultProperty = resultTask.GetType().GetProperty("Result")
-                ?? throw new MissingMemberException("GetTestOutcomeAsync's returned Task has no Result property.");
-            var outcomeValue = resultProperty.GetValue(resultTask);
-            return ParseOutcome(outcomeValue?.ToString());
-        }
-        catch (TypeLoadException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            DisablePermanently(ex, "TryGetOutcomeAsync");
-            return null;
-        }
-        catch (MissingMemberException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            DisablePermanently(ex, "TryGetOutcomeAsync");
-            return null;
+            var outcomeName = await InvokeGetTestOutcomeAsync(proxy, getTestOutcomeMethod, testMethod, cancellationToken)
+                .ConfigureAwait(false);
+            return ParseOutcome(outcomeName);
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            // Transient (this type's remarks) — e.g. a stale/dropped connection on an already-cached
-            // proxy. Drop the cache so the next call reconnects from scratch instead of repeatedly
-            // hitting the same dead proxy.
-            ResetForRetry(ex, "TryGetOutcomeAsync");
+            HandleFailure(ex, "TryGetOutcomeAsync");
             return null;
         }
+    }
+
+    /// <summary>
+    /// The <b>invoke</b> stage: calls the bound <c>GetTestOutcomeAsync</c> handle, awaits the
+    /// returned (boxed, since the real return type is internal) <see cref="Task"/>, and reads its
+    /// <c>Result</c> property via reflection. Returns <c>null</c> for a <c>null</c> result task —
+    /// distinct from a resolved-but-unrecognized outcome name, which <see cref="ParseOutcome"/>
+    /// (the map stage) handles instead. <paramref name="testMethod"/> is typed as <see cref="object"/>
+    /// rather than <see cref="TestMethodIdentifier"/> deliberately: this stage only ever forwards it
+    /// opaquely into the reflection-based <see cref="MethodInfo.Invoke"/> call below, so widening the
+    /// parameter type lets this stage be exercised with a substituted handle in isolation, without
+    /// pulling the (unsupported, internal, VS-install-version-pinned) test-window assembly into a
+    /// unit test just to construct a fixture value that is never actually inspected here.
+    /// </summary>
+    internal static async Task<string?> InvokeGetTestOutcomeAsync(
+        object proxy, MethodInfo getTestOutcomeMethod, object testMethod, CancellationToken cancellationToken)
+    {
+        var resultTask = (Task?)getTestOutcomeMethod.Invoke(proxy, new object[] { DataPointId, testMethod, cancellationToken });
+        if (resultTask is null)
+            return null;
+
+        await resultTask.ConfigureAwait(false);
+
+        var resultProperty = resultTask.GetType().GetProperty("Result")
+            ?? throw new MissingMemberException("GetTestOutcomeAsync's returned Task has no Result property.");
+        var outcomeValue = resultProperty.GetValue(resultTask);
+        return outcomeValue?.ToString();
     }
 
     private static async Task<(object? Proxy, MethodInfo? GetTestOutcomeMethod)> GetOrCreateProxyAsync(CancellationToken cancellationToken)
@@ -182,22 +204,9 @@ internal static class RunTestOutcomeBridge
             _getTestOutcomeMethod = getTestOutcomeMethod;
             return (proxy, getTestOutcomeMethod);
         }
-        catch (TypeLoadException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            DisablePermanently(ex, "GetOrCreateProxyAsync");
-            return (null, null);
-        }
-        catch (MissingMemberException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            DisablePermanently(ex, "GetOrCreateProxyAsync");
-            return (null, null);
-        }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
-            // Transient (this type's remarks) — most commonly the outcome service not yet registered
-            // right after a fresh VS launch. Not permanent: the next call (e.g. the next scenario line
-            // CodeLens resolves, or a later refresh) gets a clean retry.
-            ResetForRetry(ex, "GetOrCreateProxyAsync");
+            HandleFailure(ex, "GetOrCreateProxyAsync");
             return (null, null);
         }
         finally
@@ -223,13 +232,40 @@ internal static class RunTestOutcomeBridge
         return new ImageId(moniker.Guid, moniker.Id);
     }
 
-    private static RunTestOutcome? ParseOutcome(string? outcomeName) => outcomeName switch
+    /// <summary>The <b>map</b> stage: translates the raw outcome name into <see cref="RunTestOutcome"/>. Never throws — an unrecognized or absent name renders as no glyph, the same as "not yet run".</summary>
+    internal static RunTestOutcome? ParseOutcome(string? outcomeName) => outcomeName switch
     {
         "Passed" => RunTestOutcome.Passed,
         "Failed" => RunTestOutcome.Failed,
         "Skipped" => RunTestOutcome.Skipped,
         _ => null, // "None", "NotFound", an unrecognized future value, or null — all render as no glyph.
     };
+
+    /// <summary>
+    /// Classifies a caught exception and dispatches to the matching failure handler: a
+    /// <see cref="TypeLoadException"/>, <see cref="MissingMemberException"/> (covers the derived
+    /// <see cref="MissingFieldException"/> too), or <see cref="InvalidCastException"/> means the API's
+    /// shape has changed (permanent for the process's lifetime — see <see cref="DisablePermanently"/>);
+    /// anything else is treated as transient (see <see cref="ResetForRetry"/>). Shared by every
+    /// stage's catch clause so the two-way classification lives in exactly one place.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="InvalidCastException"/> is included because both <see cref="GetOrCreateProxyAsync"/>
+    /// (casting the reflectively-invoked <c>GetServiceStreamAsync</c>/proxy-constructor results to
+    /// <see cref="Task"/>/<see cref="Stream"/>) and <see cref="InvokeGetTestOutcomeAsync"/> (casting
+    /// the reflectively-invoked <c>GetTestOutcomeAsync</c> result to <see cref="Task"/>) rely on those
+    /// internal members still returning the types this class expects. If a future VS update ever
+    /// changes one of those declared return types, the cast failing is exactly the same kind of
+    /// permanent shape change a <see cref="MissingMemberException"/> represents, not a transient
+    /// connection hiccup worth retrying on every subsequent poll.
+    /// </remarks>
+    internal static void HandleFailure(Exception ex, string step)
+    {
+        if (ex is TypeLoadException or MissingMemberException or InvalidCastException)
+            DisablePermanently(ex, step);
+        else
+            ResetForRetry(ex, step);
+    }
 
     /// <summary>Shape change (type/member no longer found) — permanent for the process's lifetime; retrying can't fix a reflection lookup that will keep failing the same way.</summary>
     private static void DisablePermanently(Exception ex, string step)
@@ -251,5 +287,16 @@ internal static class RunTestOutcomeBridge
         _serviceProxy = null;
         _getTestOutcomeMethod = null;
         Logger.LogException(ex, $"RunTestOutcomeBridge: {step} failed transiently — will retry on the next call");
+    }
+
+    /// <summary>Test-only: whether the bridge has latched itself off after a shape-change failure.</summary>
+    internal static bool IsUnavailableForTests => _unavailable;
+
+    /// <summary>Test-only: resets the cached proxy/handle and the permanent-disable latch to their initial state, since every field this class touches is static and would otherwise leak between tests.</summary>
+    internal static void ResetStateForTests()
+    {
+        _unavailable = false;
+        _serviceProxy = null;
+        _getTestOutcomeMethod = null;
     }
 }

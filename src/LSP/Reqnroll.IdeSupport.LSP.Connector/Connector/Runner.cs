@@ -72,7 +72,7 @@ public class Runner
  
     private ExecutionResult HandleException(Exception ex)
     {
-        _log.Error(ex.ToString());
+        _log.Error("Unhandled connector error", ex);
         return ex is ArgumentException 
             ? ExecutionResult.ArgumentError 
             : ExecutionResult.GenericError;

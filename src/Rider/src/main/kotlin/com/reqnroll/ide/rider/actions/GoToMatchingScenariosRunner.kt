@@ -5,14 +5,13 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
-import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
+import com.reqnroll.ide.rider.lsp.protocol.FindMatchingScenariosResponse
 import com.reqnroll.ide.rider.lsp.protocol.MatchingScenarioLocation
 
 /**
- * Shared "run `reqnroll/goToMatchingScenarios` then navigate" logic for the hook-match-count
+ * Shared "run `reqnroll/findMatchingScenarios` then navigate" logic for the hook-match-count
  * CodeVision lens's click action (issue #373) — the inverse of [GoToHooksRunner]. Only ever
  * invoked from a CodeLens click with the lens's own attribute location, so unlike
  * [GoToHooksRunner] (also reachable from a dedicated caret-position action) there's no separate
@@ -25,7 +24,7 @@ object GoToMatchingScenariosRunner {
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Matching Scenarios", true) {
             override fun run(indicator: ProgressIndicator) {
-                val response = ReqnrollRequestSender.goToMatchingScenarios(project, uri, line, character)
+                val response = ReqnrollRequestSender.findMatchingScenarios(project, uri, line, character)
                 ReqnrollDebugLogger.info(
                     "GoToMatchingScenariosRunner: ${response?.scenarios?.size ?: "null"} scenario(s) returned")
                 ApplicationManager.getApplication().invokeLater {
@@ -36,15 +35,15 @@ object GoToMatchingScenariosRunner {
         })
     }
 
-    private fun showResult(project: Project, response: GoToMatchingScenariosResponse?) {
+    private fun showResult(project: Project, response: FindMatchingScenariosResponse?) {
         if (response == null) {
-            Messages.showErrorDialog(
+            ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.", "Go to Matching Scenarios")
             return
         }
 
         if (response.scenarios.isEmpty()) {
-            Messages.showInfoMessage(project, "This hook has no matching scenarios.", "Go to Matching Scenarios")
+            ReqnrollNotify.info(project, "This hook has no matching scenarios.", "Go to Matching Scenarios")
             return
         }
 

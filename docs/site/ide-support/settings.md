@@ -185,6 +185,10 @@ Manages settings for discovering step bindings within the IDE.
 extension's contributed settings.
 
 ![](settings/settings-vscode.png)
+
+One setting of note: `reqnroll.testOutcomes.enabled` (off by default) turns on the read-only
+pass/fail CodeLens described in [Running Scenarios](running-scenarios.md#optional-read-only-passfail-codelens).
+Reload the window after changing it.
 ```
 
 ```{tab-item} Rider

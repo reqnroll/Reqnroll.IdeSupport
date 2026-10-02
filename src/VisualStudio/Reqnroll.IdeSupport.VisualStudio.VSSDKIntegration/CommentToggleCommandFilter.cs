@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
+using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 
@@ -19,13 +20,14 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 /// </summary>
 /// <remarks>
 /// This is a MEF component registered via <c>[Export(typeof(IVsTextViewCreationListener))]</c>
-/// with a <c>[ContentType("Gherkin")]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
+/// with a <c>[ContentType(VsWellKnownIds.GherkinContentType)]</c> and <c>[TextViewRole(PredefinedTextViewRoles.Editable)]</c>
 /// constraint so it only intercepts editable .feature file text views.
 ///
 /// When the user presses <c>Ctrl+K, Ctrl+C</c> (Comment Selection), <c>Ctrl+K, Ctrl+U</c>
-/// (Uncomment Selection), or <c>Ctrl+/</c> (Toggle Line Comment) in a .feature file, this
-/// filter consumes the command and sends a <c>workspace/executeCommand</c> request to the
-/// LSP server instead.
+/// (Uncomment Selection), or <c>Ctrl+/</c> (Toggle Line Comment) in a .feature file — or invokes
+/// those commands any other way (Edit menu, toolbar, custom key binding) — this filter consumes
+/// the command and sends a <c>workspace/executeCommand</c> request to the LSP server instead,
+/// with the <see cref="CommentToggleMode"/> matching the command.
 /// </remarks>
 public sealed class CommentToggleCommandFilter : IOleCommandTarget
 {
@@ -34,7 +36,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     /// <see cref="IVsTextView"/> whose content type is <c>Gherkin</c>.
     /// </summary>
     [Export(typeof(IVsTextViewCreationListener))]
-    [ContentType("Gherkin")]
+    [ContentType(VsWellKnownIds.GherkinContentType)]
     [TextViewRole(PredefinedTextViewRoles.Editable)]
     internal sealed class TextViewCreationListener : IVsTextViewCreationListener
     {
@@ -73,13 +75,11 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
 
     // ── Instance ──────────────────────────────────────────────────────────
 
-    // Command set GUID for the comment commands.
-    // VSConstants.GUID_VSStd2K = {1496A755-94DE-11D0-8C3F-00C04FC2AAE2}
-    private static readonly Guid CommandSet = new("{1496A755-94DE-11D0-8C3F-00C04FC2AAE2}");
-
-    private const uint CmdIdCommentBlock       = 145; // Edit.CommentSelection
-    private const uint CmdIdUncommentBlock     = 146; // Edit.UncommentSelection
-    private const uint CmdIdToggleLineComment  = 147; // Edit.ToggleLineComment
+    // Edit.ToggleLineComment is not in VSStd2K and has no VSConstants entry: it belongs to the
+    // editor's own command set (issue #747). See VsWellKnownIds for provenance; the pair is checked
+    // against the running VS at package load by VsWellKnownIdsSelfCheck.
+    internal static readonly Guid EditorCommandSet = VsWellKnownIds.EditorCommandSet;
+    internal const uint CmdIdToggleLineComment = VsWellKnownIds.CmdIdToggleLineComment;
 
     private readonly IVsTextView                     _vsTextView;
     private readonly IVsEditorAdaptersFactoryService _editorAdapter;
@@ -89,6 +89,11 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     private IWpfTextView? _wpfTextView;
 
     private IOleCommandTarget? _nextCommandTarget;
+
+    // One in-flight comment toggle per view: a newer press supersedes (cancels) the previous one.
+    // Created on first use in Exec — VsShellUtilities.ShutdownToken needs a running VS shell, and
+    // the unit tests construct this filter without one.
+    private SupersedingCancellation? _inFlight;
 
     // internal rather than private so Reqnroll.IdeSupport.VisualStudio.Tests (an InternalsVisibleTo
     // friend assembly — see the VSSDKIntegration csproj) can construct this filter directly to unit
@@ -110,8 +115,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     {
         ThreadHelper.ThrowIfNotOnUIThread();
 
-        if (commandGroup == CommandSet &&
-            (commandId == CmdIdCommentBlock || commandId == CmdIdUncommentBlock || commandId == CmdIdToggleLineComment))
+        if (TryGetCommentMode(commandGroup, commandId, out var mode))
         {
             // Resolve the WPF view lazily — it may not have been available when the filter
             // was installed during VsTextViewCreated (hybrid VS.Extensibility model).
@@ -134,21 +138,42 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                 var endLine   = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
                     startLine, endContainingLine.LineNumber, endPos == endContainingLine.Start);
 
-                _logger.LogInfo(
-                    $"CommentToggleCommandFilter: redirecting command id={commandId} uri='{fileUri}' lines[{startLine}..{endLine}]");
+                _logger.LogVerbose(
+                    $"CommentToggleCommandFilter: redirecting command id={commandId} mode={mode} uri='{fileUri}' lines[{startLine}..{endLine}]");
 
-                _ = Task.Run(async () =>
+                // Same shape as GoToDefinitionCommandFilter (issue #766): a tracked, cancellable
+                // JoinableTask instead of a bare Task.Run, so a newer press supersedes this one,
+                // VS shutdown cancels it, and FileAndForget reports a failure as a VS fault
+                // instead of only logging it.
+                var inFlight  = _inFlight ??= new SupersedingCancellation(VsShellUtilities.ShutdownToken);
+                var operation = inFlight.Begin();
+                var ct        = operation.Token;
+#pragma warning disable VSSDK007
+                ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+#pragma warning restore VSSDK007
                 {
                     try
                     {
-                        await redirect(fileUri, startLine, endLine, CancellationToken.None)
-                            .ConfigureAwait(false);
+                        await TaskScheduler.Default;
+                        await redirect(fileUri, startLine, endLine, mode, ct).ConfigureAwait(false);
                     }
-                    catch (Exception ex)
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        _logger.LogVerbose(
+                            "CommentToggleCommandFilter: comment toggle superseded by a newer request or VS shutdown.");
+                    }
+                    finally
+                    {
+                        inFlight.End(operation);
+                    }
+                }).FileAndForget(
+                    "vs/Reqnroll/CommentToggleCommandFilter/Exec",
+                    "Comment/Uncomment toggle failed in a .feature file",
+                    ex =>
                     {
                         _logger.LogException(ex, "CommentToggleCommandFilter: redirect failed");
-                    }
-                });
+                        return true;
+                    });
             }
             else
             {
@@ -172,15 +197,11 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     {
         ThreadHelper.ThrowIfNotOnUIThread();
 
-        if (commandGroup == CommandSet && commandCount > 0)
+        if (commandCount > 0 && TryGetCommentMode(commandGroup, commands[0].cmdID, out _))
         {
-            var cmdId = commands[0].cmdID;
-            if (cmdId == CmdIdCommentBlock || cmdId == CmdIdUncommentBlock || cmdId == CmdIdToggleLineComment)
-            {
-                // Always supported.
-                commands[0].cmdf = (uint)(OLECMDF.OLECMDF_ENABLED | OLECMDF.OLECMDF_SUPPORTED);
-                return VSConstants.S_OK;
-            }
+            // Always supported.
+            commands[0].cmdf = (uint)(OLECMDF.OLECMDF_ENABLED | OLECMDF.OLECMDF_SUPPORTED);
+            return VSConstants.S_OK;
         }
 
         return _nextCommandTarget?.QueryStatus(ref commandGroup, commandCount, commands, text)
@@ -188,6 +209,43 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Maps a built-in comment command to the <see cref="CommentToggleMode"/> it asks for; returns
+    /// <see langword="false"/> for every other command.
+    /// </summary>
+    /// <remarks>
+    /// Kept pure (no <c>ThreadHelper</c>) so the command IDs can be unit tested — hard-coded wrong
+    /// IDs once left this filter silently intercepting nothing (issue #747). Both VSStd2K spellings
+    /// of Comment/Uncomment Selection are matched: <c>COMMENT_BLOCK</c>/<c>UNCOMMENT_BLOCK</c> is
+    /// what <c>Edit.CommentSelection</c>/<c>Edit.UncommentSelection</c> dispatch today, and the
+    /// older <c>COMMENTBLOCK</c>/<c>UNCOMMENTBLOCK</c> are still routed by some callers.
+    /// </remarks>
+    internal static bool TryGetCommentMode(Guid commandGroup, uint commandId, out CommentToggleMode mode)
+    {
+        if (commandGroup == VSConstants.VSStd2K)
+        {
+            switch ((VSConstants.VSStd2KCmdID)commandId)
+            {
+                case VSConstants.VSStd2KCmdID.COMMENT_BLOCK:
+                case VSConstants.VSStd2KCmdID.COMMENTBLOCK:
+                    mode = CommentToggleMode.Comment;
+                    return true;
+                case VSConstants.VSStd2KCmdID.UNCOMMENT_BLOCK:
+                case VSConstants.VSStd2KCmdID.UNCOMMENTBLOCK:
+                    mode = CommentToggleMode.Uncomment;
+                    return true;
+            }
+        }
+        else if (commandGroup == EditorCommandSet && commandId == CmdIdToggleLineComment)
+        {
+            mode = CommentToggleMode.Toggle;
+            return true;
+        }
+
+        mode = default;
+        return false;
+    }
 
     // internal rather than private so it can be unit tested directly (see the constructor's note above) —
     // unlike Exec/QueryStatus it never touches ThreadHelper, so it doesn't need a real VS UI thread.

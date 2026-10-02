@@ -14,13 +14,14 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Server;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using LspCodeLens = OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Benchmarks.Harness;
@@ -52,6 +53,10 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     private long? _lastSemanticTokensRefreshTimestamp;
     private long? _lastInlayHintRefreshTimestamp;
     private long? _lastCodeLensRefreshTimestamp;
+
+    private readonly object _testOutcomesLock = new();
+    private long _lastTestOutcomesChangedTimestamp; // Stopwatch timestamp, 0 = none received yet
+    private int _testOutcomesChangedCount;
 
     public ILanguageClient Client =>
         _client ?? throw new InvalidOperationException("Harness not started.");
@@ -142,12 +147,12 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
             // Both refresh requests carry no params and expect a void/null result (server sends them
             // via .ReturningVoid(...)) — just timestamp arrival and acknowledge.
-            options.OnRequest(LspMethodNames.WorkspaceSemanticTokensRefresh, (CancellationToken _) =>
+            options.OnRequest(LspStandardMethodNames.WorkspaceSemanticTokensRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastSemanticTokensRefreshTimestamp = Stopwatch.GetTimestamp();
                 return Task.CompletedTask;
             });
-            options.OnRequest(LspMethodNames.WorkspaceInlayHintRefresh, (CancellationToken _) =>
+            options.OnRequest(LspStandardMethodNames.WorkspaceInlayHintRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastInlayHintRefreshTimestamp = Stopwatch.GetTimestamp();
                 return Task.CompletedTask;
@@ -155,9 +160,23 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             // Unlike the two above, workspace/codeLens/refresh is not capability-gated — the server
             // sends it unconditionally (see BindingRegistryChangedHandler.RequestCodeLensRefreshAsync),
             // so no ClientCapabilities.Workspace.CodeLens advertisement is needed for this to fire.
-            options.OnRequest(LspMethodNames.WorkspaceCodeLensRefresh, (CancellationToken _) =>
+            options.OnRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh, (CancellationToken _) =>
             {
                 lock (_refreshLock) _lastCodeLensRefreshTimestamp = Stopwatch.GetTimestamp();
+                return Task.CompletedTask;
+            });
+
+            // reqnroll/testOutcomes/changed: the outcome listener's throttled (250ms) "re-pull your
+            // Run lenses" signal. A notification, not a request — nothing to send back, just a
+            // timestamp and a counter so an ingest can be timed against the push it caused
+            // (issue #714, harness plumbing F).
+            options.OnNotification(CustomLspMethodNames.ReqnrollTestOutcomesChanged, (TestOutcomesChangedParams _) =>
+            {
+                lock (_testOutcomesLock)
+                {
+                    _lastTestOutcomesChangedTimestamp = Stopwatch.GetTimestamp();
+                    _testOutcomesChangedCount++;
+                }
                 return Task.CompletedTask;
             });
         }).ConfigureAwait(false);
@@ -263,7 +282,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<SemanticTokensFullOrDelta?> RequestSemanticTokensDeltaAsync(
         DocumentUri uri, string previousResultId, CancellationToken ct = default) =>
-        RequestAsync<SemanticTokensFullOrDelta?>(LspMethodNames.TextDocumentSemanticTokensFullDelta,
+        RequestAsync<SemanticTokensFullOrDelta?>(LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
             new SemanticTokensDeltaParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -274,7 +293,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<RangeOrPlaceholderRange?> RequestPrepareRenameAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<RangeOrPlaceholderRange?>(LspMethodNames.TextDocumentPrepareRename,
+        RequestAsync<RangeOrPlaceholderRange?>(LspStandardMethodNames.TextDocumentPrepareRename,
             new PrepareRenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -283,7 +302,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<WorkspaceEdit?> RequestRenameAsync(
         DocumentUri uri, int line, int character, string newName, CancellationToken ct = default) =>
-        RequestAsync<WorkspaceEdit?>(LspMethodNames.TextDocumentRename,
+        RequestAsync<WorkspaceEdit?>(LspStandardMethodNames.TextDocumentRename,
             new RenameParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -291,9 +310,22 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 NewName = newName,
             }, ct);
 
+    /// <summary>
+    /// Sends <c>reqnroll/renameApplied</c> — the confirmation that commits (or, with
+    /// <paramref name="applied"/> <see langword="false"/>, drops) the registry/match-cache updates
+    /// a prior <c>textDocument/rename</c> staged for <paramref name="uri"/> (issue #671, R3). A
+    /// notification, not a request: there is no response to await, so callers needing to know when
+    /// the resulting reparse cascade has landed should follow this with
+    /// <see cref="WaitForDiagnosticsAsync"/> against an open document the cascade will republish
+    /// diagnostics for.
+    /// </summary>
+    public void SendRenameApplied(DocumentUri uri, bool applied) =>
+        Client.SendNotification(CustomLspMethodNames.ReqnrollRenameApplied,
+            new RenameAppliedParams { Uri = uri, Applied = applied });
+
     public Task<RenameTargetsResponse?> RequestRenameTargetsAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<RenameTargetsResponse?>(LspMethodNames.ReqnrollRenameTargets,
+        RequestAsync<RenameTargetsResponse?>(CustomLspMethodNames.ReqnrollRenameTargets,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -304,13 +336,13 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<FindUnusedStepDefinitionsResponse?> RequestFindUnusedStepDefinitionsAsync(CancellationToken ct = default) =>
         RequestAsync<FindUnusedStepDefinitionsResponse?>(
-            LspMethodNames.ReqnrollFindUnusedStepDefinitions, new FindUnusedStepDefinitionsParams(), ct);
+            CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, new FindUnusedStepDefinitionsParams(), ct);
 
     // ── References / go-to (F5/F17) ─────────────────────────────────────────────
 
     public Task<FindStepUsagesResponse?> RequestFindStepUsagesAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<FindStepUsagesResponse?>(LspMethodNames.ReqnrollFindStepUsages,
+        RequestAsync<FindStepUsagesResponse?>(CustomLspMethodNames.ReqnrollFindStepUsages,
             new ReferenceParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -320,7 +352,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<LocationOrLocationLinks?> RequestStepReferencesAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<LocationOrLocationLinks?>(LspMethodNames.TextDocumentReferences,
+        RequestAsync<LocationOrLocationLinks?>( LspStandardMethodNames.TextDocumentReferences,
             new ReferenceParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -328,9 +360,9 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
                 Context = new ReferenceContext { IncludeDeclaration = true },
             }, ct);
 
-    public Task<GoToHooksResponse?> RequestGoToHooksAsync(
+    public Task<FindHooksResponse?> RequestFindHooksAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<GoToHooksResponse?>(LspMethodNames.ReqnrollGoToHooks,
+        RequestAsync<FindHooksResponse?>(CustomLspMethodNames.ReqnrollFindHooks,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -338,17 +370,30 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             }, ct);
 
     /// <summary>
-    /// <c>reqnroll/goToMatchingScenarios</c> (issue #373) — the inverse of
-    /// <see cref="RequestGoToHooksAsync"/>: given a `.cs` position pinned to a hook-binding
+    /// <c>reqnroll/findStepDefinitions</c> (issue #757) — the step-definition bindings of the step at a
+    /// <c>.feature</c> position, with class/method/expression detail.
+    /// </summary>
+    public Task<FindStepDefinitionsResponse?> RequestFindStepDefinitionsAsync(
+        DocumentUri uri, int line, int character, CancellationToken ct = default) =>
+        RequestAsync<FindStepDefinitionsResponse?>(CustomLspMethodNames.ReqnrollFindStepDefinitions,
+            new TextDocumentPositionParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = uri },
+                Position = new Position(line, character),
+            }, ct);
+
+    /// <summary>
+    /// <c>reqnroll/findMatchingScenarios</c> (issue #373) — the inverse of
+    /// <see cref="RequestFindHooksAsync"/>: given a `.cs` position pinned to a hook-binding
     /// attribute, returns every scenario its scope matches. <paramref name="line"/>/
     /// <paramref name="character"/> must be the attribute's exact position (0-based), same as a
     /// real client round-trips verbatim from a <see cref="RequestCodeLensAsync"/> hook lens's own
-    /// click arguments — not a proximity search like <see cref="RequestGoToHooksAsync"/>'s cursor
+    /// click arguments — not a proximity search like <see cref="RequestFindHooksAsync"/>'s cursor
     /// resolution.
     /// </summary>
-    public Task<GoToMatchingScenariosResponse?> RequestGoToMatchingScenariosAsync(
+    public Task<FindMatchingScenariosResponse?> RequestFindMatchingScenariosAsync(
         DocumentUri uri, int line, int character, CancellationToken ct = default) =>
-        RequestAsync<GoToMatchingScenariosResponse?>(LspMethodNames.ReqnrollGoToMatchingScenarios,
+        RequestAsync<FindMatchingScenariosResponse?>(CustomLspMethodNames.ReqnrollFindMatchingScenarios,
             new TextDocumentPositionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -358,34 +403,61 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// <summary>
     /// <c>reqnroll/resolveTestTargets</c> (issue #262/#495) — resolves the generated test method(s)
     /// for the scenario/Outline/example-row header at <paramref name="range"/> in <paramref name="uri"/>.
-    /// Backs the Run CodeLens bridge on all three IDE clients; unlike <see cref="RequestGoToHooksAsync"/>
+    /// Backs the Run CodeLens bridge on all three IDE clients; unlike <see cref="RequestFindHooksAsync"/>
     /// (cursor position), this takes an explicit range the same way a real client's per-line
     /// resolution does (VS's <c>RunTestCodeLensDataPoint</c>, VS Code's <c>resolveCodeLens</c>,
     /// Rider's <c>RunLensSupport</c> — see issue #495's per-client split).
     /// </summary>
     public Task<ResolveTestTargetsResponse?> RequestResolveTestTargetsAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<ResolveTestTargetsResponse?>(LspMethodNames.ReqnrollResolveTestTargets,
+        RequestAsync<ResolveTestTargetsResponse?>(CustomLspMethodNames.ReqnrollResolveTestTargets,
             new ResolveTestTargetsParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
                 Range = range,
             }, ct);
 
+    // ── Test outcomes (issues #700/#714) ────────────────────────────────────────
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/registerRun</c> — the IDE's runsettings-injection service's call,
+    /// once per Test Explorer execution request. Idempotent from the client's point of view (the
+    /// listener is started lazily on the first call and lives for the server process), so a scenario
+    /// may call it whenever it needs an endpoint to post synthetic results at.
+    /// </summary>
+    public Task<RegisterTestRunResponse?> RequestRegisterTestRunAsync(CancellationToken ct = default) =>
+        RequestAsync<RegisterTestRunResponse?>(CustomLspMethodNames.ReqnrollRegisterTestRun, new RegisterTestRunParams(), ct);
+
+    /// <summary>
+    /// <c>reqnroll/testOutcomes/getOutcome</c> — the Run CodeLens's outcome lookup.
+    /// <paramref name="assemblyPath"/> is the generated test container (<c>TestOutcomeKey.Source</c>),
+    /// <paramref name="typeFullName"/> the generated feature class and <paramref name="methodName"/>
+    /// the generated method name without its parameter signature.
+    /// </summary>
+    public Task<GetTestOutcomeResponse?> RequestGetTestOutcomeAsync(
+        string assemblyPath, string typeFullName, string methodName, CancellationToken ct = default) =>
+        RequestAsync<GetTestOutcomeResponse?>(CustomLspMethodNames.ReqnrollGetTestOutcome,
+            new GetTestOutcomeParams
+            {
+                AssemblyPath = assemblyPath,
+                TypeFullName = typeFullName,
+                MethodName = methodName,
+            }, ct);
+
     // ── Code lens (F18), inlay hints (F23), code actions (F6) ───────────────────
 
     public Task<LspCodeLens[]?> RequestCodeLensAsync(DocumentUri uri, CancellationToken ct = default) =>
-        RequestAsync<LspCodeLens[]?>(LspMethodNames.TextDocumentCodeLens,
+        RequestAsync<LspCodeLens[]?>(LspStandardMethodNames.TextDocumentCodeLens,
             new CodeLensParams { TextDocument = new TextDocumentIdentifier { Uri = uri } }, ct);
 
     public Task<InlayHintContainer?> RequestInlayHintAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<InlayHintContainer?>(LspMethodNames.TextDocumentInlayHint,
+        RequestAsync<InlayHintContainer?>(LspStandardMethodNames.TextDocumentInlayHint,
             new InlayHintParams { TextDocument = new TextDocumentIdentifier { Uri = uri }, Range = range }, ct);
 
     public Task<CommandOrCodeActionContainer?> RequestCodeActionAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<CommandOrCodeActionContainer?>(LspMethodNames.TextDocumentCodeAction,
+        RequestAsync<CommandOrCodeActionContainer?>(LspStandardMethodNames.TextDocumentCodeAction,
             new CodeActionParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -398,7 +470,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     private static readonly FormattingOptions DefaultFormattingOptions = new() { TabSize = 2, InsertSpaces = true };
 
     public Task<TextEditContainer?> RequestDocumentFormattingAsync(DocumentUri uri, CancellationToken ct = default) =>
-        RequestAsync<TextEditContainer?>(LspMethodNames.TextDocumentFormatting,
+        RequestAsync<TextEditContainer?>(LspStandardMethodNames.TextDocumentFormatting,
             new DocumentFormattingParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -407,7 +479,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<TextEditContainer?> RequestRangeFormattingAsync(
         DocumentUri uri, OmniSharp.Extensions.LanguageServer.Protocol.Models.Range range, CancellationToken ct = default) =>
-        RequestAsync<TextEditContainer?>(LspMethodNames.TextDocumentRangeFormatting,
+        RequestAsync<TextEditContainer?>(LspStandardMethodNames.TextDocumentRangeFormatting,
             new DocumentRangeFormattingParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -417,7 +489,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
 
     public Task<TextEditContainer?> RequestOnTypeFormattingAsync(
         DocumentUri uri, int line, int character, string triggerCharacter, CancellationToken ct = default) =>
-        RequestAsync<TextEditContainer?>(LspMethodNames.TextDocumentOnTypeFormatting,
+        RequestAsync<TextEditContainer?>(LspStandardMethodNames.TextDocumentOnTypeFormatting,
             new DocumentOnTypeFormattingParams
             {
                 TextDocument = new TextDocumentIdentifier { Uri = uri },
@@ -434,7 +506,7 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     /// and forget, like every other <c>workspace/didChangeWatchedFiles</c> notification.
     /// </summary>
     public void SendConfigFileChanged(DocumentUri reqnrollJsonUri) =>
-        Client.SendNotification(LspMethodNames.WorkspaceDidChangeWatchedFiles, new DidChangeWatchedFilesParams
+        Client.SendNotification(LspStandardMethodNames.WorkspaceDidChangeWatchedFiles, new DidChangeWatchedFilesParams
         {
             Changes = new Container<FileEvent>(new FileEvent { Uri = reqnrollJsonUri, Type = FileChangeType.Changed }),
         });
@@ -454,7 +526,46 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
     // the same way — triggered by BindingRegistryChangedHandler's incremental-Roslyn-patch path,
     // not by a plain .feature edit, so callers must edit a .cs binding file to exercise this one.
     public Task<double?> WaitForCodeLensRefreshAsync(long sinceTimestamp, int timeoutMs = 3000) =>
-        WaitForRefreshAsync(() => _lastCodeLensRefreshTimestamp, sinceTimestamp, timeoutMs);
+            WaitForRefreshAsync(() => _lastCodeLensRefreshTimestamp, sinceTimestamp, timeoutMs);
+
+    /// <summary>
+    /// Waits for the next <c>reqnroll/testOutcomes/changed</c> push after <paramref name="sinceTimestamp"/>
+    /// and returns the elapsed milliseconds from that origin, or null on timeout. The listener
+    /// throttles (rather than debounces) at 250ms, so a caller that posts a result should expect
+    /// roughly that fixed delay before the push — which is why that target carries
+    /// <c>IncludesFixedDelay</c>.
+    /// </summary>
+    public Task<double?> WaitForTestOutcomesChangedAsync(long sinceTimestamp, int timeoutMs = 3000) =>
+        WaitForRefreshAsync(() =>
+        {
+            lock (_testOutcomesLock)
+                return _lastTestOutcomesChangedTimestamp == 0 ? null : _lastTestOutcomesChangedTimestamp;
+        }, sinceTimestamp, timeoutMs);
+
+    /// <summary>How many <c>reqnroll/testOutcomes/changed</c> pushes this client has received so far.</summary>
+    public int TestOutcomesChangedCount { get { lock (_testOutcomesLock) return _testOutcomesChangedCount; } }
+
+    /// <summary>
+    /// Waits until <paramref name="path"/> has been written since <paramref name="sinceUtc"/> — the
+    /// observable signal for the outcome listener's one non-LSP side effect, its trailing
+    /// <c>TestOutcomePersistence.Save</c>, which nothing on the wire announces. Returns false on
+    /// timeout. The poll interval is the only imprecision, so a caller folding this into its own
+    /// measured window carries up to one poll interval of slack.
+    /// </summary>
+    public static async Task<bool> WaitForFileWriteAsync(string path, DateTime sinceUtc, int timeoutMs = 5000, int pollMs = 5)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                if (File.Exists(path) && File.GetLastWriteTimeUtc(path) > sinceUtc) return true;
+            }
+            catch (Exception) { }
+            await Task.Delay(pollMs).ConfigureAwait(false);
+        }
+        return false;
+    }
 
     private async Task<double?> WaitForRefreshAsync(Func<long?> readTimestamp, long sinceTimestamp, int timeoutMs)
     {

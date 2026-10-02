@@ -39,24 +39,41 @@ object RiderTelemetryTransmitter {
     // since REQNROLL_TELEMETRY_ENABLED is meant to be a single cross-IDE kill switch.
     internal const val TELEMETRY_ENV_VAR = "REQNROLL_TELEMETRY_ENABLED"
 
+    /**
+     * Client-originated telemetry event names — mirrors `TelemetryEvents.cs` in the shared
+     * `Reqnroll.IdeSupport.Common` project (`src/Core/Reqnroll.IdeSupport.Common/Telemetry/TelemetryEvents.cs`)
+     * and the VS Code copy in `src/VSCode/src/telemetryEvents.ts`. Server-originated events
+     * (forwarded by [ReqnrollTelemetryEventInterceptor]) need no entries here. Keep the three
+     * copies in sync.
+     */
+    internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
+
+    internal const val IDE_CLIENT = "rider"
+
     private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
     private const val USER_ID_PROPERTY_KEY = "com.reqnroll.idesupport.telemetry.userId"
 
     private val httpClient: HttpClient by lazy { HttpClient.newHttpClient() }
 
-    /** Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled. */
+    /**
+     * Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled;
+     * always mirrors the attempt (sent or not) to the local debug log (issue #799), matching VS's
+     * `TelemetryTransmitter.TransmitEvent` and VS Code's `telemetry.ts#sendTelemetryEvent`.
+     */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
-        if (!isEnabled(System.getenv(TELEMETRY_ENV_VAR))) {
-            ReqnrollDebugLogger.info("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
+        val debugLog = RiderTelemetryDebugLog.fromEnvironment()
+        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
+
+        if (!enabled) {
+            ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
+            debugLog.record("host", eventName, properties, enabled = false, transmitted = false)
             return
         }
 
         try {
             val stringProps = LinkedHashMap<String, String>()
             properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
-            stringProps["Ide"] = "JetBrains Rider"
-            stringProps["IdeVersion"] = ideVersion()
-            stringProps["ExtensionVersion"] = extensionVersion()
+            stampClientIdentity(stringProps, ideVersion(), extensionVersion())
 
             val body = buildEnvelope(eventName, userId(), stringProps, Instant.now())
             val request = HttpRequest.newBuilder()
@@ -67,14 +84,34 @@ object RiderTelemetryTransmitter {
 
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
                 .exceptionally { ex ->
-                    ReqnrollDebugLogger.warn("RiderTelemetryTransmitter: failed to send $eventName", ex)
+                    ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: failed to send $eventName", ex)
                     null
                 }
+
+            debugLog.record("host", eventName, properties, enabled = true, transmitted = true)
         } catch (ex: Exception) {
             // A telemetry failure must never break the plugin — same posture as VS's
             // TelemetryTransmitter.TransmitEvent catch-all.
-            ReqnrollDebugLogger.warn("RiderTelemetryTransmitter: error preparing $eventName", ex)
+            ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
+            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = ex.message)
         }
+    }
+
+    /**
+     * Stamps the host's client identity on every event (issue #844). `IdeClient` is the canonical
+     * cross-IDE key, also stamped by the LSP server on server-originated events with the same
+     * `visualstudio`/`vscode`/`rider` vocabulary; it is only added when absent so a server-stamped
+     * value is never overridden, and covers host-originated events (GoToHook) the server never sees.
+     */
+    internal fun stampClientIdentity(
+        properties: MutableMap<String, String>,
+        ideVersion: String,
+        extensionVersion: String,
+    ) {
+        properties.putIfAbsent("IdeClient", IDE_CLIENT)
+        properties["Ide"] = "JetBrains Rider"
+        properties["IdeVersion"] = ideVersion
+        properties["ExtensionVersion"] = extensionVersion
     }
 
     private fun userId(): String {

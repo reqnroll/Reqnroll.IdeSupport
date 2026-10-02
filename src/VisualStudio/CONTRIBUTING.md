@@ -45,6 +45,40 @@ This **also republishes the LSP server** self-contained (win-x64, net10.0) into 
 project to pick it up before testing in VS — a stale bundled server is a common source of "my fix
 doesn't seem to be running" confusion.
 
+## Local install of a dev build
+
+The F5/experimental-instance workflow above is for day-to-day development. To try a build in
+your **regular** VS instance (e.g. to hand a build to someone else, or confirm something outside
+the experimental hive):
+
+```sh
+dotnet build src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/Reqnroll.IdeSupport.VisualStudio.Extension.csproj -c Release
+```
+
+No separate `dotnet publish` step is needed — see "Building" above: `LSP.Server.csproj` sets
+`RuntimeIdentifier`/`SelfContained` as project properties, so plain `dotnet build` already emits a
+self-contained win-x64 server (`coreclr.dll`/`hostfxr.dll` included, not just the managed DLL), and
+its `BuildConnector` target (`BeforeTargets="Build"`, not publish-only) stages every supported
+Connector TFM into that same build output's `Connectors\` folder. `IncludeLspServerInVsix` bundles
+that whole build-output tree — server and connectors together — into the VSIX.
+
+This produces
+`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/Release/net481/Reqnroll.IdeSupport.VisualStudio.Extension.vsix`,
+with the bundled LSP server built `Release` (quiet default logging — see "Server log-level and
+trace defaults" below) rather than the `Debug`/`Verbose` build `dotnet build` alone (no `-c`)
+produces.
+
+Double-click the `.vsix` (or run it via `VSIXInstaller.exe`) to install it into your main VS —
+**not** the experimental instance. If the Preview extension is already installed, VSIX Installer
+offers to update it in place. As with any manual VSIX install, uninstall via **Extensions → Manage
+Extensions** when you're done testing, and restart VS afterward.
+
+VSIX Installer only treats an install as an update when the new `.vsix` has a **higher** manifest
+version (`<ReqnrollMainVersion>.<ReqnrollBuildNumber>`, from `build/Version.props`). CI builds use the
+workflow run number; a local build defaults to `99999`, so it sorts above every CI build — once a
+local build is installed, uninstall it before installing a CI `.vsix`, or the installer will refuse
+it as a downgrade.
+
 ## Running and debugging in VS
 
 The extension deploys into VS's **experimental instance** (a separate hive, e.g.
@@ -52,21 +86,46 @@ The extension deploys into VS's **experimental instance** (a separate hive, e.g.
 Launch it via **Debug → Start New Instance** (or F5) from the Extension project — this starts a
 second `devenv.exe` with the extension loaded, isolated from your main VS install/extensions.
 
-Runtime logs land in `%LocalAppData%\Reqnroll\`:
+Runtime logs land in `%LocalAppData%\Reqnroll\logs\`, one file per process (the PID in the filename is
+the writing process's own — see [../LSP/CONTRIBUTING.md#debugging](../LSP/CONTRIBUTING.md#debugging)
+for the full naming/format convention shared across every log in this family):
 
-- `reqnroll-vs-ext-debug-<date>.log` — the **extension's own** (client-side) log output.
-- `reqnroll-vs-server-debug-<date>.log` — the **LSP server's own** log output (parses, discovery,
-  handler activity). Appended across server process launches sharing a day, so multiple sessions'
-  entries can interleave in one file — check PIDs (`=== Reqnroll LSP Server started — …, PID N ===`)
-  when correlating.
+- `reqnroll-vs-ext-debug-<date>-<pid>.log` — the **extension's own** (client-side, `devenv.exe`)
+  log output, at `Info` by default. Both of the extension's composition roots (VS.Extensibility DI
+  and VSSDK MEF) write through the one shared `ExtensionHostLogger.Instance`, which also feeds the
+  "Reqnroll" Output Window pane. Don't construct another `("vs", "ext")` `SynchronousFileLogger` in
+  `devenv.exe` — two instances on one file drop lines under concurrent writes (issue #748).
+- `reqnroll-vs-codelens-sh-debug-<date>-<pid>.log` — the Run CodeLens components that run
+  out-of-process in VS's own CodeLens ServiceHub host (`RunTestCodeLensDataPointProvider` and
+  friends, issue #372), a different PID than `devenv.exe`. They can't reach the extension's logger
+  across the process boundary, so they share `CodeLensHostLogger.Instance` (file only, `Verbose`)
+  instead.
+- `reqnroll-vs-server-debug-<date>-<pid>.log` — the **LSP server's own** log output (parses,
+  discovery, handler activity), at the level set by `--log-level` (see below). Appended across
+  server process launches sharing a day and PID is generally stable per VS session, but check the
+  `=== Reqnroll LSP Server started — …, PID N ===` banner line when correlating multiple restarts.
 - `reqnroll-vs-inspector-<datetime>.log` — client-side JSON-RPC trace from `LspInspectorLogger` on
   the `LspInterceptingPipe`, one line per message. This is the source of truth for what actually
   crossed the wire (legend negotiation, semanticTokens requests/responses, custom `reqnroll/*`
   traffic) — [lsp-inspector-tool](https://github.com/microsoft/lsp-inspector) compatible format.
+- `reqnroll-lsp-connector-<date>-<pid>.log` — the **out-of-process Connector's** own log, one file
+  per discovery-run child process. Unlike the logs above, this one usually doesn't exist: it's
+  buffered in memory and only written when a discovery run actually fails, or when `--log-level` is
+  raised to `Info`+ (see [../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
+  for the full mechanism). At the DEBUG-configuration/`--log-level Verbose` default below, it *will*
+  be written for every discovery run — don't be surprised to see one per project per session while
+  F5-debugging the extension.
+- `reqnroll-telemetry-<yyyyMMdd>.jsonl` — **off by default**; set `REQNROLL_TELEMETRY_DEBUG_LOG=1`
+  (or a target path) before launching the experimental instance to mirror every telemetry event —
+  server-side and the VS host's own `TelemetryTransmitter` — to this file, independent of whether
+  transmission is enabled. See [../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#debugging) for the
+  full format.
 
 When debugging coloring/binding/CodeLens behavior, the ext-debug and server-debug logs together
 usually tell the whole story; the inspector log is what to reach for when you suspect a protocol
-mismatch specifically.
+mismatch specifically, and the connector log (when present) is the first place to look for a
+discovery-specific failure — its "Discovery complete"/"Discovery failed" line in the server log
+carries a `(connector pid=N)` suffix matching that file's own PID.
 
 ### Server log-level and trace defaults
 
@@ -123,6 +182,15 @@ those scenarios test behavior that now lives server-side and is already covered 
 - **Gate every VS-specific workaround behind `ClientIdeContext.IsVisualStudio`** (or the
   equivalent flag), even in server-side code that happens to be triggered from here — a fix for a
   VS quirk should never silently change behavior for VS Code/Rider.
+- **Never hand-type a Visual Studio identifier** (GUID, command ID, property ID, content-type or
+  classification name). Use the SDK constant (`VSConstants`, `VsMenus`, `__VSPROPID`,
+  `PredefinedClassificationTypeNames`, ...) whenever one exists: a hand-typed value compiles fine
+  and can silently name the wrong thing (issues #747 and #774). When no SDK constant exists, add the value to
+  `VsWellKnownIds` with where it came from, and either a header check in
+  `VsSdkHeaderConstantsTests` (for values defined in a VS SDK header) or an entry in
+  `VsWellKnownIdsSelfCheck` (for undocumented command IDs, checked against the running VS at
+  package load; look for `VsWellKnownIdsSelfCheck` in the `ext` log after a VS update).
+  `MagicValueSourceGuardTests` fails on new GUID or content-type literals outside the allow-list.
 - **VS.Extensibility contribution classes are not documented as injectable into each other.**
   If one `[VisualStudioContribution]` class needs data another one owns, register a small mutable
   "state holder" singleton in `ExtensionEntrypoint.InitializeServices` and inject that into both,

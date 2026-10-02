@@ -60,8 +60,11 @@ public static class FeatureStepTextBuilder
     /// <summary>
     /// Extracts captured parameter values by matching <paramref name="regex"/> against
     /// <paramref name="stepText"/> and injects them into the parameter slots of
-    /// <paramref name="newExpression"/>. Returns <c>null</c> when the regex is absent, does not
-    /// match, or yields no captures, so the caller can try another strategy.
+    /// <paramref name="newExpression"/>, via <see cref="StepExpressionParameters.ReplaceSlotsWithValues"/>
+    /// — the same slot model <see cref="TryBuildViaOutlinePlaceholders"/> uses, rather than a
+    /// second, independent scan for slot boundaries (issue #591). Returns <c>null</c> when the
+    /// regex is absent, does not match, or yields no captures, so the caller can try another
+    /// strategy.
     /// </summary>
     private static string? TryBuildViaRegex(string newExpression, Regex? regex, string stepText)
     {
@@ -80,75 +83,8 @@ public static class FeatureStepTextBuilder
         if (capturedValues.Count == 0)
             return null;
 
-        // Replace parameter slots in the new expression with captured values, in order.
-        var result = new StringBuilder();
-        int groupIdx = 0;
-        int lastEnd = 0;
-
-        for (int i = 0; i < newExpression.Length; i++)
-        {
-            // Detect start of a capturing group: unescaped '(' not followed by '?:' etc.
-            if (newExpression[i] == '(' && !IsEscaped(newExpression, i))
-            {
-                if (i + 1 < newExpression.Length && newExpression[i + 1] == '?' && i + 2 < newExpression.Length)
-                {
-                    var lookahead = newExpression.Substring(i + 2, 1);
-                    if (lookahead is ":" or "=" or "!" or "<")
-                        continue; // non-capturing group, skip
-                }
-
-                int depth = 1;
-                int j = i + 1;
-                while (j < newExpression.Length && depth > 0)
-                {
-                    if (newExpression[j] == '(' && !IsEscaped(newExpression, j)) depth++;
-                    else if (newExpression[j] == ')' && !IsEscaped(newExpression, j)) depth--;
-                    j++;
-                }
-
-                result.Append(newExpression, lastEnd, i - lastEnd);
-                if (groupIdx < capturedValues.Count)
-                    result.Append(capturedValues[groupIdx]);
-                groupIdx++;
-                lastEnd = j;
-                i = j - 1;
-            }
-            else if (newExpression[i] == '{')
-            {
-                int j = i + 1;
-                while (j < newExpression.Length && newExpression[j] != '}') j++;
-                if (j < newExpression.Length)
-                {
-                    result.Append(newExpression, lastEnd, i - lastEnd);
-                    if (groupIdx < capturedValues.Count)
-                        result.Append(capturedValues[groupIdx]);
-                    groupIdx++;
-                    lastEnd = j + 1;
-                    i = j;
-                }
-            }
-        }
-
-        if (lastEnd < newExpression.Length)
-            result.Append(newExpression, lastEnd, newExpression.Length - lastEnd);
-
-        return result.Length > 0 ? result.ToString() : null;
-    }
-
-    /// <summary>
-    /// Returns whether the character at <paramref name="index"/> is escaped — preceded by an odd
-    /// number of consecutive backslashes. A single preceding backslash escapes the character; two
-    /// preceding backslashes form an escaped backslash followed by an unescaped character; and so
-    /// on by parity. Checking only the single immediately-preceding character (as a naive scan
-    /// would) misclassifies a real, unescaped <c>(</c>/<c>)</c> after an escaped backslash (e.g.
-    /// <c>\\(foo)</c> — an escaped backslash followed by a genuine capturing group).
-    /// </summary>
-    private static bool IsEscaped(string text, int index)
-    {
-        int backslashes = 0;
-        for (int i = index - 1; i >= 0 && text[i] == '\\'; i--)
-            backslashes++;
-        return backslashes % 2 != 0;
+        var result = StepExpressionParameters.ReplaceSlotsWithValues(newExpression, capturedValues);
+        return result.Length > 0 ? result : null;
     }
 
     /// <summary>
@@ -229,23 +165,7 @@ public static class FeatureStepTextBuilder
 
         // Replace each parameter slot in the new expression with the corresponding
         // Scenario Outline placeholder, preserving the non-parameter text.
-        var sb = new StringBuilder();
-        int slotIdx = 0;
-        for (int i = 0; i < newExpression.Length; i++)
-        {
-            var slotLength = StepExpressionParameters.SlotLengthAt(newExpression, i);
-            if (slotLength > 0)
-            {
-                sb.Append(stepPlaceholders[slotIdx]);
-                slotIdx++;
-                i += slotLength - 1;
-            }
-            else
-            {
-                sb.Append(newExpression[i]);
-            }
-        }
-        return sb.ToString();
+        return StepExpressionParameters.ReplaceSlotsWithValues(newExpression, stepPlaceholders);
     }
 
     /// <summary>

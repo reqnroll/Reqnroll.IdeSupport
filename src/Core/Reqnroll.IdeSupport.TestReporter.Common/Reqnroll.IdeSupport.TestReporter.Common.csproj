@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Wire-format code shared by every in-process test reporter that streams outcomes to the LSP
+       server's TestOutcomeTcpListener: today Reqnroll.IdeSupport.TestLogger (VSTest), and the planned
+       MTP reporter (issue #715). Both load inside a test-runner process we don't control the
+       dependency closure of, so this project keeps the same constraint TestLogger.csproj documents:
+       netstandard2.0, zero package references, nothing beyond what a plain netstandard2.0 library
+       needs. A ProjectReference to this assembly is safe precisely because it stays that empty. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Reqnroll.IdeSupport.TestReporter.Common</RootNamespace>
+    <AssemblyName>Reqnroll.IdeSupport.TestReporter.Common</AssemblyName>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\..\..\reqnroll.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+</Project>

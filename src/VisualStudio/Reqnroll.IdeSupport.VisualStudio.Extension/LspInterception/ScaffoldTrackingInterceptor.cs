@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -87,7 +88,7 @@ internal sealed class ScaffoldTrackingInterceptor : ILspMessageInterceptor
                     continue;
 
                 _pendingFiles.TryAdd(path, 0);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "ScaffoldTrackingInterceptor: tracking scaffolded file {FileName}",
                     Path.GetFileName(path));
             }
@@ -100,7 +101,7 @@ internal sealed class ScaffoldTrackingInterceptor : ILspMessageInterceptor
         LspMessage        message,
         CancellationToken ct)
     {
-        if (message.Method != "textDocument/didOpen")
+        if (message.Method != LspStandardMethodNames.TextDocumentDidOpen)
             return;
 
         var uri = message.Body["params"]?["textDocument"]?["uri"]?.Value<string>();
@@ -120,7 +121,7 @@ internal sealed class ScaffoldTrackingInterceptor : ILspMessageInterceptor
             return;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "ScaffoldTrackingInterceptor: injecting projectFiles delta before didOpen for {FileName}",
             Path.GetFileName(path));
 

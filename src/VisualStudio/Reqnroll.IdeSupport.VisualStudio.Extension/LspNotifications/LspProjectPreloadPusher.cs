@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.IO.Pipes;
 using System.Text;
@@ -9,6 +11,8 @@ using EnvDTE80;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 
@@ -53,25 +57,41 @@ internal static class LspProjectPreloadPusher
             await pipe.ConnectAsync(15000, cancellationToken).ConfigureAwait(false);
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-            foreach (Project project in solution.Projects)
+            // Materialised on the UI thread before the writes below, which resume off it. The walk
+            // descends into solution folders; a flat Solution.Projects loop drops every nested
+            // project (issue #729).
+            var projects = VsUtils.GetAllProjects(solution).ToList();
+
+            foreach (var project in projects)
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-                if (!VsUtils.IsSolutionProject(project))
-                    continue;
 
-                var loadedJson = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
+                // A ProjectNotReady baseline here (issue #690) is fine to leave as-is: this preload
+                // push is a best-effort head start (see class remarks), always superseded by
+                // VsProjectEventMonitor.SendInitialProjectsAsync's own baseline once the real LSP
+                // connection exists — that path is what subscribes for a NuGet-restore-finished resend.
+                var loadedPayload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
                     project, GetSolutionFolder(solution), serviceProvider, logger);
                 var filesJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, logger);
 
-                await WriteEnvelopeAsync(pipe, "reqnroll/projectLoaded", loadedJson, cancellationToken)
+                await WriteEnvelopeAsync(pipe, CustomLspMethodNames.ReqnrollProjectLoaded, loadedPayload.Json, cancellationToken)
                     .ConfigureAwait(false);
-                await WriteEnvelopeAsync(pipe, "reqnroll/projectFiles", filesJson, cancellationToken)
+                await WriteEnvelopeAsync(pipe, CustomLspMethodNames.ReqnrollProjectFiles, filesJson, cancellationToken)
                     .ConfigureAwait(false);
             }
 
             logger.LogInformation("LspProjectPreloadPusher: pushed initial project state to preload pipe.");
         }
         catch (OperationCanceledException) { /* extension shutting down or pipe never appeared in time */ }
+        catch (IOException ex)
+        {
+            // The server closes the preload pipe once VS's real initialize handshake completes, and
+            // with the language server now activated at restore time (issue #78) that can happen
+            // mid-push. Expected, and harmless: the same baseline goes over the LSP channel.
+            logger.LogDebug(
+                "LspProjectPreloadPusher: preload pipe closed before the push finished ({Message}); the LSP channel delivers the project baseline instead.",
+                ex.Message);
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "LspProjectPreloadPusher: failed to push preload data.");

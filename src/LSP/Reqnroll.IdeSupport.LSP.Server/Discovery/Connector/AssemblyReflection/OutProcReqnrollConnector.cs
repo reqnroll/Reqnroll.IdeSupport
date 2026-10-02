@@ -67,6 +67,12 @@ public abstract class OutProcReqnrollConnector
         arguments.Add(configFilePath);
         if (DebugConnector)
             arguments.Add("--debug");
+        // Distinct from --debug (DebugConnector launches an attached debugger — a user who's just
+        // turned up --log-level wants more logging, not a hung connector waiting for one to attach).
+        // Tied to the server's own configured verbosity so "turn up logging" means the same thing
+        // everywhere, matching every other logger in this family (issue #637).
+        if (_logger.IsLogging(TraceLevel.Info))
+            arguments.Add("--file-log");
 
         // A bare command name (e.g. "dotnet", from GetDotNetCommand()'s non-Windows PATH-resolution
         // fallback) has no directory component and is meant to be resolved by the OS via PATH when
@@ -83,7 +89,8 @@ public abstract class OutProcReqnrollConnector
                 ConnectorType = GetConnectorType()
             };
 
-        var result = ProcessHelper.RunProcess(workingDirectory, connectorPath, arguments, encoding: Encoding.UTF8);
+        var result = ProcessHelper.RunProcess(workingDirectory, connectorPath, arguments, encoding: Encoding.UTF8,
+            logger: _logger);
 
         _logger.LogVerbose($"{workingDirectory}>{connectorPath} {string.Join(" ", arguments)}");
         _logger.LogVerbose($"Exit code: {result.ExitCode}");
@@ -117,6 +124,7 @@ public abstract class OutProcReqnrollConnector
         }
 
         discoveryResult.ConnectorType = GetConnectorType();
+        discoveryResult.ConnectorProcessId = result.ProcessId;
         return discoveryResult;
     }
 
@@ -143,17 +151,11 @@ public abstract class OutProcReqnrollConnector
         }
 
         discoveryResult.ErrorMessage = formatErrorMessage(discoveryResult);
-        discoveryResult.TelemetryProperties ??= new Dictionary<string, object>();
-
-        discoveryResult.TelemetryProperties["ProjectTargetFramework"] = _targetFrameworkMoniker;
-        discoveryResult.TelemetryProperties["ProjectReqnrollVersion"] = ReqnrollVersion;
-        if (_projectSettings.IsSpecFlowProject)             
-            discoveryResult.TelemetryProperties["LegacySpecFlow"] = true;
-        discoveryResult.TelemetryProperties["ConnectorType"] = discoveryResult.ConnectorType;
-        discoveryResult.TelemetryProperties["ConnectorArguments"] = result.Arguments;
-        discoveryResult.TelemetryProperties["ConnectorExitCode"] = result.ExitCode;
-        if (!string.IsNullOrEmpty(discoveryResult.ReqnrollVersion))
-            discoveryResult.TelemetryProperties["ReqnrollVersion"] = discoveryResult.ReqnrollVersion;
+        // The connector's JSON carries neither ConnectorType nor ReqnrollVersion as result fields, so the
+        // type is stamped here (before the telemetry overlay) rather than after Deserialize returns.
+        discoveryResult.ConnectorType = GetConnectorType();
+        ApplyRunTelemetry(discoveryResult, _targetFrameworkMoniker, ReqnrollVersion,
+            result.Arguments, result.ExitCode);
 
         if (!string.IsNullOrEmpty(discoveryResult.ErrorMessage))
             discoveryResult.TelemetryProperties["Error"] = discoveryResult.ErrorMessage;
@@ -162,6 +164,34 @@ public abstract class OutProcReqnrollConnector
 
         return discoveryResult;
     }
+
+    /// <summary>
+    /// Overlays the server-known run facts onto the connector's own telemetry dictionary. The Reqnroll version
+    /// is resolved from, in order: the result's <c>ReqnrollVersion</c>, the connector's <c>SFProductVersion</c>
+    /// (the product version of the Reqnroll assembly it inspected) and the project settings' version, which the
+    /// LSP server does not currently populate.
+    /// </summary>
+    internal static void ApplyRunTelemetry(DiscoveryResult discoveryResult, TargetFrameworkMoniker targetFramework,
+        NuGetVersion projectReqnrollVersion, string arguments, int exitCode)
+    {
+        var telemetry = discoveryResult.TelemetryProperties ??= new Dictionary<string, object>();
+
+        telemetry["ProjectTargetFramework"] = targetFramework;
+        telemetry["ProjectReqnrollVersion"] = projectReqnrollVersion;
+        if (!string.IsNullOrEmpty(discoveryResult.ConnectorType))
+            telemetry["ConnectorType"] = discoveryResult.ConnectorType;
+        telemetry["ConnectorArguments"] = arguments;
+        telemetry["ConnectorExitCode"] = exitCode;
+
+        var version = FirstUsableVersion(discoveryResult.ReqnrollVersion,
+            telemetry.TryGetValue("SFProductVersion", out var productVersion) ? ConnectorRunTelemetry.AsString(productVersion) : null,
+            projectReqnrollVersion?.ToString());
+        if (version != null)
+            telemetry["ReqnrollVersion"] = version;
+    }
+
+    private static string FirstUsableVersion(params string[] candidates)
+        => candidates.FirstOrDefault(c => ConnectorRunTelemetry.NormalizeVersion(c) is not null);
 
     private string GetDetailedErrorMessage(ProcessHelper.RunProcessResult result, string errorMessage, string command)
     {

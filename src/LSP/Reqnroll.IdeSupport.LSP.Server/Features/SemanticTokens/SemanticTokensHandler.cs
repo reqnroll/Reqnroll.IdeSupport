@@ -1,8 +1,8 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using LspSemanticTokens = OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokens;
 using LspSemanticTokensFullOrDelta = OmniSharp.Extensions.LanguageServer.Protocol.Models.SemanticTokensFullOrDelta;
 
@@ -48,7 +48,7 @@ public class SemanticTokensHandler
 
         // Performance Verification (Layer 4): close the gap between the asserted 100ms synthetic
         // target and real-world field data — this operation had none before issue #113.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentSemanticTokensFull, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentSemanticTokensFull, uri);
 
         if (!IsFeatureFile(uri)) return EmptyTokens;
         var version = GetCurrentVersion(uri);
@@ -70,7 +70,7 @@ public class SemanticTokensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentSemanticTokensFullDelta, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentSemanticTokensFullDelta, uri);
 
         if (!IsFeatureFile(uri)) return new LspSemanticTokensFullOrDelta(EmptyTokens);
         var version = GetCurrentVersion(uri);
@@ -92,7 +92,7 @@ public class SemanticTokensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentSemanticTokensRange, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentSemanticTokensRange, uri);
 
         if (!IsFeatureFile(uri)) return EmptyTokens;
         var version = GetCurrentVersion(uri);

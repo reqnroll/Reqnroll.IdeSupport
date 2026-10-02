@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
@@ -17,8 +18,6 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 /// </summary>
 internal sealed class FindUnusedStepDefinitionsService
 {
-    private const string RequestMethod = "reqnroll/findUnusedStepDefinitions";
-
     private readonly LspInterceptingPipe _pipe;
     private readonly ILogger<FindUnusedStepDefinitionsService> _logger;
 
@@ -32,20 +31,20 @@ internal sealed class FindUnusedStepDefinitionsService
     /// <summary>Queries the LSP server for the workspace-wide set of unused step definitions.</summary>
     public async Task<UnusedStepDefinitionsResult> FindUnusedAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("FindUnusedStepDefinitionsService: sending {RequestMethod}", RequestMethod);
+        _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions);
 
         // Empty params object — the server ignores the body.
         const string emptyParams = "{}";
 
         var result = await _pipe
-            .SendRequestToServerAsync(RequestMethod, emptyParams, cancellationToken)
+            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, emptyParams, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogInformation(
+        _logger.LogTrace(
             "FindUnusedStepDefinitionsService: raw result = {Result}", result is null ? "<null>" : result.ToString());
 
         var mapped = MapResult(result);
-        _logger.LogInformation(
+        _logger.LogDebug(
             "FindUnusedStepDefinitionsService: {ItemCount} unused step definition(s)", mapped.Items.Count);
         return mapped;
     }
@@ -67,13 +66,13 @@ internal sealed class FindUnusedStepDefinitionsService
         return UnusedStepDefinitionsResult.Empty;
     }
 
-    private static IReadOnlyList<UnusedStepLocation> ParseItems(JArray array)
+    internal static IReadOnlyList<StepDefinitionListItem> ParseItems(JArray array)
     {
-        var result = new List<UnusedStepLocation>(array.Count);
+        var result = new List<StepDefinitionListItem>(array.Count);
         foreach (var token in array)
         {
             if (token is not JObject item) continue;
-            result.Add(new UnusedStepLocation
+            result.Add(new StepDefinitionListItem
             {
                 ProjectName       = item["projectName"]?.Value<string>(),
                 ClassName         = item["className"]?.Value<string>(),
@@ -86,6 +85,7 @@ internal sealed class FindUnusedStepDefinitionsService
                 // to true there so the row stays navigable exactly as it was (issue #540).
                 IsResolved        = item["isResolved"]?.Value<bool>() ?? true,
                 RecordedSourceFile = item["recordedSourceFile"]?.Value<string>(),
+                StepDefinitionType = item["stepDefinitionType"]?.Value<string>(),
             });
         }
         return result;

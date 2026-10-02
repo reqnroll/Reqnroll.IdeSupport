@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
@@ -64,6 +65,29 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         scope.ProjectName.Returns("MyApp.Tests");
         scope.ProjectFolder.Returns(_projectFolder);
         scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        scope.Properties.Returns(new ConcurrentDictionary<Type, object>());
+        scope.IdeScope.FileSystem.Returns(new FileSystemForIDE());
+        // A Reqnroll package reference, so the issue-#731 gate in ConnectorDiscoveryService lets
+        // discovery through: every test below except the gate's own is about what happens after it.
+        scope.PackageReferences.Returns([
+            new NuGetPackageReference("Reqnroll.MsTest", new NuGetVersion("2.1.0", "2.1.0"), null)
+        ]);
+        return scope;
+    }
+
+    /// <summary>A project the issue-#731 gate must reject: no Reqnroll package reference, and no Reqnroll.dll in its output folder.</summary>
+    private IProjectScope MakeNonReqnrollScope(string assemblyPath)
+    {
+        var scope = Substitute.For<IProjectScope>();
+        scope.OutputAssemblyPath.Returns(assemblyPath);
+        scope.ProjectName.Returns("MyApp.Utilities");
+        scope.ProjectFolder.Returns(_projectFolder);
+        scope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        scope.Properties.Returns(new ConcurrentDictionary<Type, object>());
+        scope.IdeScope.FileSystem.Returns(new FileSystemForIDE());
+        scope.PackageReferences.Returns([
+            new NuGetPackageReference("Newtonsoft.Json", new NuGetVersion("13.0.3", "13.0.3"), null)
+        ]);
         return scope;
     }
 
@@ -87,6 +111,50 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     };
 
     private ConnectorDiscoveryService CreateSut() => new(_logger, _factory, new FileSystemForIDE());
+
+    // ── Connector telemetry whitelist (issue #846) ─────────────────────────────
+
+    [Fact]
+    public void RunDiscovery_exposes_only_whitelisted_connector_telemetry()
+    {
+        var result = SuccessfulResult();
+        result.TelemetryProperties = new Dictionary<string, object>
+        {
+            ["ReqnrollVersion"] = "2.1.3-beta.4",
+            ["ProjectReqnrollVersion"] = "2.1.3",
+            ["ConnectorType"] = "Generic",
+            ["ConnectorExitCode"] = 0,
+            ["ConnectorArguments"] = "C:\\Users\\someone\\proj\\MyApp.Tests.dll",
+            ["Error"] = "Could not load C:\\Users\\someone\\secret.dll",
+            ["ProjectTargetFramework"] = ".NETCoreApp,Version=v8.0",
+        };
+        GivenConnectorReturns(result);
+        var sut = CreateSut();
+
+        sut.RunDiscovery(MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        sut.LastRunTelemetry.Should().Be(new ConnectorRunTelemetry("2.1", "Generic", 0));
+        var sent = new Dictionary<string, object?>();
+        sut.LastRunTelemetry!.AddTo(sent);
+        sent.Keys.Should().BeEquivalentTo("ReqnrollVersion", "ConnectorType", "ConnectorExitCode");
+        sent.Values.OfType<string>().Should().NotContain(v => v.Contains("Users") || v.Contains("secret"));
+    }
+
+    [Fact]
+    public void RunDiscovery_clears_LastRunTelemetry_when_a_later_run_does_not_reach_the_connector()
+    {
+        var result = SuccessfulResult();
+        result.TelemetryProperties = new Dictionary<string, object> { ["ConnectorType"] = "Generic" };
+        GivenConnectorReturns(result);
+        var sut = CreateSut();
+        var scope = MakeScope(_assemblyPath);
+        var (_, hash) = sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+        sut.LastRunTelemetry.Should().NotBeNull();
+
+        sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, hash, CancellationToken.None); // hash match
+
+        sut.LastRunTelemetry.Should().BeNull("a hash-noop run did not invoke the connector, so stale telemetry must not be re-sent");
+    }
 
     // ── Happy path ─────────────────────────────────────────────────────────────
 
@@ -115,6 +183,49 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         _factory.Received(1).Create(scope);
     }
 
+    // ── Connector PID correlation (issue #637) ─────────────────────────────────
+
+    [Fact]
+    public void RunDiscovery_includes_the_connector_pid_in_the_completion_log_line_when_known()
+    {
+        var result = SuccessfulResult();
+        result.ConnectorProcessId = 12345;
+        GivenConnectorReturns(result);
+        var scope = MakeScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Message.Contains("Discovery complete") && m.Message.Contains("connector pid=12345")));
+    }
+
+    [Fact]
+    public void RunDiscovery_omits_the_pid_suffix_when_connector_process_id_is_unknown()
+    {
+        var result = SuccessfulResult();
+        result.ConnectorProcessId = null;
+        GivenConnectorReturns(result);
+        var scope = MakeScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Message.Contains("Discovery complete") && !m.Message.Contains("connector pid=")));
+    }
+
+    [Fact]
+    public void RunDiscovery_includes_the_connector_pid_in_the_failure_log_line_when_known()
+    {
+        var result = new DiscoveryResult { ErrorMessage = "boom", ConnectorProcessId = 999 };
+        GivenConnectorReturns(result);
+        var scope = MakeScope(_assemblyPath);
+
+        CreateSut().RunDiscovery(scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Message.Contains("Discovery failed") && m.Message.Contains("connector pid=999")));
+    }
+
     // ── Hash guard ──────────────────────────────────────────────────────────────
 
     [Fact]
@@ -137,6 +248,52 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         secondRegistry.Should().BeSameAs(firstRegistry);
         secondHash.Should().Be(hash);
         _factory.DidNotReceive().Create(Arg.Any<IProjectScope>());
+    }
+
+    // ── Reqnroll-project gate (issue #731) ───────────────────────────────────────
+
+    [Fact]
+    public void RunDiscovery_does_not_run_the_connector_for_a_non_reqnroll_test_project()
+    {
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+        var lastGood = SuccessfulRegistry();
+
+        var (registry, hash) = CreateSut().RunDiscovery(
+            scope, lastGood, lastHash: "prev", CancellationToken.None);
+
+        registry.Should().BeSameAs(lastGood);
+        hash.Should().Be("prev");
+        _factory.DidNotReceive().Create(Arg.Any<IProjectScope>());
+    }
+
+    [Fact]
+    public void RunDiscovery_runs_for_a_project_whose_output_folder_contains_the_reqnroll_runtime()
+    {
+        // The Rider case: its projectLoaded payload carries no package references at all, so the
+        // gate has to fall back to the runtime assembly sitting next to the output assembly.
+        File.WriteAllText(Path.Combine(_projectFolder, "Reqnroll.dll"), "not a real assembly");
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+
+        var (registry, _) = CreateSut().RunDiscovery(
+            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        registry.StepDefinitions.Should().HaveCount(1);
+        _factory.Received(1).Create(scope);
+    }
+
+    [Fact]
+    public void RunDiscovery_logs_the_non_reqnroll_skip_only_once_per_project()
+    {
+        var scope = MakeNonReqnrollScope(_assemblyPath);
+        var sut = CreateSut();
+
+        sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+        sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Level == TraceLevel.Info && m.Message.Contains("Not a Reqnroll test project")));
     }
 
     // ── Resilience ───────────────────────────────────────────────────────────────

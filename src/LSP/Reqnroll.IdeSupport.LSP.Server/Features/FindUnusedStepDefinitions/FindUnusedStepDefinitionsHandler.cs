@@ -1,7 +1,11 @@
-﻿using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
+﻿using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
@@ -38,7 +42,8 @@ public sealed class FindUnusedStepDefinitionsHandler
     {
         // Performance Verification (Layer 4): time the full-workspace unused-step-definitions scan —
         // the operation shape most likely to regress silently on large solutions.
-        using var _perf = _recorder.Measure(LspMethodNames.ReqnrollFindUnusedStepDefinitions);
+        using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var allRegistries = _registryLookup.GetAllRegistries();
 
@@ -49,7 +54,7 @@ public sealed class FindUnusedStepDefinitionsHandler
                 .Select(r => (r.ProjectName, Path.GetDirectoryName(r.Owner.ProjectFile) ?? string.Empty, r.Registry))
                 .ToList());
 
-        var items = unused.Select(u => new UnusedStepDefinitionItem
+        var items = unused.Select(u => new StepDefinitionItem
         {
             ProjectName = u.ProjectName,
             ClassName = u.ClassName,
@@ -60,15 +65,32 @@ public sealed class FindUnusedStepDefinitionsHandler
             SourceChar = u.SourceColumn - 1,   // 1-based → 0-based
             IsResolved = u.IsResolved,
             RecordedSourceFile = u.RecordedSourceFile,
+            StepDefinitionType = StepDefinitionItem.ToWireType(u.StepDefinitionType),
         }).ToList();
 
-        _telemetryService?.SendEvent("FindUnusedStepDefinitions command executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.FindUnusedStepDefinitionsCommandExecuted, new()
         {
             ["UnusedStepDefinitions"] = items.Count,
             ["ScannedFeatureFiles"] = allRegistries.Count,
             ["IsCancellationRequested"] = false,
+            [TelemetryProperties.TotalStepDefinitions] = CountScannedStepDefinitions(allRegistries.Select(r => r.Registry)),
+            [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(started),
         });
 
         return Task.FromResult(new FindUnusedStepDefinitionsResponse { Items = items });
     }
+
+    /// <summary>
+    /// The denominator for the unused ratio: distinct <see cref="BindingId"/>s among the step
+    /// definitions <see cref="FindUnusedStepDefinitionsService"/> scans (valid, with a source location),
+    /// so a binding reported by several projects counts once, exactly as it does in the unused count.
+    /// </summary>
+    private static int CountScannedStepDefinitions(IEnumerable<ProjectBindingRegistry> registries) =>
+        registries
+            .Where(r => r != ProjectBindingRegistry.Invalid)
+            .SelectMany(r => r.StepDefinitions)
+            .Where(sd => sd.IsValid && sd.Implementation?.SourceLocation is not null)
+            .Select(BindingId.For)
+            .Distinct()
+            .Count();
 }

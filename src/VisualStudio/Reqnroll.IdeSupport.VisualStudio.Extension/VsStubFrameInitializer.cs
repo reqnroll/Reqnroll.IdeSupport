@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
@@ -22,9 +23,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension;
 /// C# code lenses, broken feature state). The provider activates the normal way: when VS realizes a
 /// restored feature tab, or the user opens a feature file. Moving this call any earlier (e.g. to
 /// mirror the eager server-startup work in <c>ExtensionEntrypoint.OnInitializedAsync</c>) would
-/// reintroduce that race — and now also risks handing out an already-consumed connection, since
-/// <c>LspServerConnectionService.GetConnectionAsync</c> returns the same cached pipe on a repeat
-/// <c>CreateServerConnectionAsync</c> call.
+/// reintroduce that race.
+/// </para>
+/// <para>
+/// The two-server bounce itself came from <c>LspServerConnectionService.GetConnectionAsync</c>
+/// returning the same pipe to a second <c>CreateServerConnectionAsync</c> call. Since issue #156 it
+/// returns a fresh pipe per call over one server process, so that failure no longer applies.
+/// <see cref="ScratchFileActivationTrigger"/> (issue #533) now recovers a missed activation, but
+/// it does so by opening a separate scratch file, never by touching the user's documents.
 /// </para>
 /// </remarks>
 internal static class VsStubFrameInitializer
@@ -75,7 +81,7 @@ internal static class VsStubFrameInitializer
             // If document data is already initialized, skip.
             if (docData != IntPtr.Zero)
             {
-                logger.LogInformation(
+                logger.LogDebug(
                     "VsStubFrameInitializer: {Moniker} is already initialized — skipping.", moniker);
                 continue;
             }
@@ -87,21 +93,21 @@ internal static class VsStubFrameInitializer
             if (VsShellUtilities.IsDocumentOpen(serviceProvider, moniker, Guid.Empty,
                     out var hier, out _, out var frame))
             {
-                logger.LogInformation(
+                logger.LogDebug(
                     "VsStubFrameInitializer: forcing init of stub {Moniker} via window frame.", moniker);
                 _ = frame.GetProperty((int)__VSFPROPID.VSFPROPID_DocData, out var _);
 
                 // After initialization, ensure the document has a real project hierarchy
                 // (not the miscellaneous-files bucket).  If it doesn't, reopen via DTE
                 // which registers the document with the owning project's IVsHierarchy.
-                if (hier == null || IsMiscellaneousFilesProject(hier))
+                if (hier == null || IsMiscellaneousFilesProject(hier, serviceProvider, logger))
                 {
                     try
                     {
                         var dte = serviceProvider.GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
                         if (dte != null)
                         {
-                            logger.LogInformation(
+                            logger.LogDebug(
                                 "VsStubFrameInitializer: reopening {Moniker} through DTE for project context.", moniker);
                             dte.ItemOperations.OpenFile(moniker);
                         }
@@ -118,19 +124,68 @@ internal static class VsStubFrameInitializer
         return anyFound;
     }
 
-    private static readonly Guid MiscellaneousFilesProjectGuid = new("{A2FE74E1-B743-11d0-AE1A-00A0C90FFFC3}");
-
-    private static bool IsMiscellaneousFilesProject(IVsHierarchy hier)
+    private static bool IsMiscellaneousFilesProject(
+        IVsHierarchy hier, IServiceProvider serviceProvider, ILogger logger)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            hier.GetGuidProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out var guid);
-            return guid == MiscellaneousFilesProjectGuid;
+            var projectIdHr = hier.GetGuidProperty(
+                VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_ProjectIDGuid, out var projectId);
+            var typeGuidHr = hier.GetGuidProperty(
+                VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_TypeGuid, out var typeGuid);
+
+            var match = MiscellaneousFilesProject.MatchByGuid(projectIdHr, projectId, typeGuidHr, typeGuid);
+            if (match == MiscellaneousFilesMatch.None && IsExternalFilesProject(hier, serviceProvider))
+                match = MiscellaneousFilesMatch.ExternalFilesProjectIdentity;
+
+            // The decision still rests on the ProjectIDGuid comparison alone, as it always has. It
+            // was never verified against a running VS, but acting on the other signals would newly
+            // reopen (and activate) loose .feature tabs through DTE, so they are only logged until a
+            // live session shows which signal VS actually reports for the Misc Files hierarchy.
+            if (match is not MiscellaneousFilesMatch.None and not MiscellaneousFilesMatch.ProjectIdGuid)
+            {
+                logger.LogInformation(
+                    "VsStubFrameInitializer: hierarchy is Misc Files by {Match} but not by ProjectIDGuid ({ProjectIdHr:X8} {ProjectId}); not reopening.",
+                    match, projectIdHr, projectId);
+            }
+            else
+            {
+                logger.LogDebug(
+                    "VsStubFrameInitializer: Misc Files check = {Match} (ProjectIDGuid {ProjectIdHr:X8} {ProjectId}, TypeGuid {TypeGuidHr:X8} {TypeGuid}).",
+                    match, projectIdHr, projectId, typeGuidHr, typeGuid);
+            }
+
+            return match == MiscellaneousFilesMatch.ProjectIdGuid;
         }
         catch
         {
             return true;
+        }
+    }
+
+    /// <summary>
+    /// <see langword="true"/> when <paramref name="hier"/> is the same COM object as the shell's
+    /// Miscellaneous Files project, obtained from the documented <c>SVsExternalFilesManager</c>.
+    /// </summary>
+    private static bool IsExternalFilesProject(IVsHierarchy hier, IServiceProvider serviceProvider)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (serviceProvider.GetService(typeof(SVsExternalFilesManager)) is not IVsExternalFilesManager manager
+            || ErrorHandler.Failed(manager.GetExternalFilesProject(out var externalFilesProject))
+            || externalFilesProject is null)
+            return false;
+
+        var left = Marshal.GetIUnknownForObject(hier);
+        var right = Marshal.GetIUnknownForObject(externalFilesProject);
+        try
+        {
+            return left == right;
+        }
+        finally
+        {
+            Marshal.Release(left);
+            Marshal.Release(right);
         }
     }
 }

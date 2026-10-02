@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- End-to-end fixture for Reqnroll.IdeSupport.TestLogger.Tests: a minimal Reqnroll + MSTest project
+       that the tests run through a real `dotnet test` with the logger registered via
+       -\-test-adapter-path / -\-logger, exactly as an IDE would. Not part of the solution; built on
+       demand by the test. Package versions match the Quickstart sample (cached locally); the TFM matches CI's single installed runtime. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ReqnrollLoggerFixture</RootNamespace>
+    <!-- Keep this fixture's intermediates out of the test project's globs and the repo's Directory.Build.props warnings-as-errors. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="Reqnroll.MsTest" Version="3.3.4" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.1.1" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.1.1" />
+  </ItemGroup>
+</Project>

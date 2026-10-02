@@ -4,12 +4,13 @@ import org.gradle.process.ExecOperations
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
-    kotlin("jvm") version "2.4.10"
-    id("org.jetbrains.intellij.platform") version "2.18.1"
+    kotlin("jvm") version "2.4.20"
+    id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
 group = providers.gradleProperty("pluginGroup").get()
@@ -56,7 +57,7 @@ dependencies {
     // Platform runner so both styles run side by side via a single `./gradlew test`. Pinned to the
     // same 5.10.1 line as the already-resolved junit-jupiter-api/junit-platform-launcher so all
     // JUnit Platform components agree on one release.
-    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.1")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:6.1.3")
 }
 
 kotlin {
@@ -156,15 +157,15 @@ intellijPlatform {
 val execOperations = serviceOf<ExecOperations>()
 
 val repoRoot = layout.projectDirectory.dir("../..").asFile.canonicalFile
-val allServerRids = listOf("win-x64", "linux-x64", "osx-x64", "osx-arm64")
+val allServerRids = listOf("win-x64", "win-arm64", "linux-x64", "linux-arm64", "osx-x64", "osx-arm64")
 
 fun defaultServerRid(): String {
     val os = OperatingSystem.current()
     val arch = System.getProperty("os.arch").lowercase()
     return when {
-        os.isWindows -> "win-x64"
+        os.isWindows -> if (arch.contains("aarch64") || arch.contains("arm64")) "win-arm64" else "win-x64"
         os.isMacOsX -> if (arch.contains("aarch64") || arch.contains("arm")) "osx-arm64" else "osx-x64"
-        else -> "linux-x64"
+        else -> if (arch.contains("aarch64") || arch.contains("arm64")) "linux-arm64" else "linux-x64"
     }
 }
 
@@ -235,7 +236,85 @@ val publishServer by tasks.registering(Exec::class) {
     )
 }
 
-tasks.named<Sync>("prepareSandbox") {
+// ── Bundle the Reqnroll.IdeSupport.TestLogger (LSP-server outcome pipeline, #700/#702) ──
+//
+// Unlike the server above, the logger targets netstandard2.0 with no self-contained runtime
+// (it loads inside whichever dotnet test/vstest process is already running — see its own
+// project file's remarks), so there is no per-RID bundling to do: one framework-dependent
+// publish serves every OS. ReqnrollTestLoggerPathResolver expects
+// testlogger/Reqnroll.IdeSupport.TestLogger.dll directly under the plugin's install directory.
+val testLoggerOutputDir = layout.projectDirectory.dir("testlogger")
+val testLoggerProject = File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestLogger/Reqnroll.IdeSupport.TestLogger.csproj")
+
+// Mirrors -PlspServerBuildDir: ci.yml's build-rider-plugin job sets it to test-lsp.yml's
+// downloaded `testlogger` artifact, so Gradle never needs `dotnet` on the CI runner building
+// the Rider plugin.
+val externalTestLoggerBuildDir = (findProperty("lspTestLoggerBuildDir") as String?)?.let { File(it) }
+
+val publishTestLogger by tasks.registering(Exec::class) {
+    group = "reqnroll"
+    description = "Publishes Reqnroll.IdeSupport.TestLogger into testlogger/. Skipped when -PlspTestLoggerBuildDir is set."
+    onlyIf { externalTestLoggerBuildDir == null }
+
+    inputs.files(
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestLogger")) { exclude("**/bin/**", "**/obj/**") },
+    )
+    outputs.dir(testLoggerOutputDir)
+
+    commandLine(
+        "dotnet", "publish", testLoggerProject.toString(),
+        "--configuration", serverConfiguration,
+        "--nologo",
+        "--output", testLoggerOutputDir.asFile.absolutePath,
+    )
+}
+
+// ── Bundle the Reqnroll.IdeSupport.TestReporter.MTP (issue #715 phase 4) ──
+//
+// The MTP-side counterpart to the VSTest logger above. Issue #741: what ships is the reporter's
+// *source bundle* — Reqnroll.IdeSupport.TestReporter.MTP.targets + ReporterSource/*.cs — written into
+// mtpreporter/ by the reporter project's PublishReporterBundle target (not `dotnet publish`, which would
+// also copy the reporter's assemblies, which nothing uses at run time). RunTestRunner writes each MTP project's
+// project-local obj/<Project>.csproj.reqnroll-ide.targets stub (MtpProjectStubs) importing that
+// .targets file, which compiles the sources into the user's own test assembly;
+// ReqnrollMtpReporterPathResolver expects mtpreporter/Reqnroll.IdeSupport.TestReporter.MTP.targets and
+// mtpreporter/ReporterSource/ directly under the plugin's install directory.
+val mtpReporterOutputDir = layout.projectDirectory.dir("mtpreporter")
+val mtpReporterProject = File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.MTP/Reqnroll.IdeSupport.TestReporter.MTP.csproj")
+
+// Mirrors -PlspTestLoggerBuildDir above.
+val externalMtpReporterBuildDir = (findProperty("lspMtpReporterBuildDir") as String?)?.let { File(it) }
+
+val publishMtpReporter by tasks.registering(Exec::class) {
+    group = "reqnroll"
+    description = "Writes the Reqnroll.IdeSupport.TestReporter.MTP source bundle into mtpreporter/. Skipped when -PlspMtpReporterBuildDir is set."
+    onlyIf { externalMtpReporterBuildDir == null }
+
+    inputs.files(
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.MTP")) { exclude("**/bin/**", "**/obj/**") },
+        fileTree(File(repoRoot, "src/Core/Reqnroll.IdeSupport.TestReporter.Common")) { exclude("**/bin/**", "**/obj/**") },
+    )
+    outputs.dir(mtpReporterOutputDir)
+
+    commandLine(
+        "dotnet", "msbuild", mtpReporterProject.toString(),
+        "-t:PublishReporterBundle",
+        "-p:Configuration=$serverConfiguration",
+        "-p:ReporterBundleDir=${mtpReporterOutputDir.asFile.absolutePath}",
+        "-nologo",
+    )
+}
+
+// The IntelliJ Platform Gradle Plugin registers one PrepareSandboxTask per run/test entry point
+// (prepareSandbox, prepareSandbox_runIde, prepareSandbox_runIdeBackend, prepareSandbox_runIdeFrontend,
+// prepareTestSandbox, ...) — each populating its own separate sandbox directory. Configuring only the
+// plain "prepareSandbox" task by name (the original shape here) left every other variant's sandbox
+// without server/testlogger/mtpreporter: `runIde`, `runIdeBackend`, and `runIdeFrontend` each depend on
+// their own *_runIde*-suffixed task, not on "prepareSandbox" — so a plugin launched via `runIde` got a
+// sandbox with only the plugin jar, and the LSP server failed to start with "server not found" (no
+// server/<rid>/ directory at all). withType(...).configureEach applies this to every current and future
+// PrepareSandboxTask instance uniformly, regardless of which entry point registered it.
+tasks.withType<PrepareSandboxTask>().configureEach {
     val externalDir = externalServerBuildDir
     if (externalDir == null) {
         dependsOn(publishServer)
@@ -250,6 +329,31 @@ tasks.named<Sync>("prepareSandbox") {
                     into("${project.name}/server/$rid")
                 }
             }
+        }
+    }
+
+    val externalLoggerDir = externalTestLoggerBuildDir
+    if (externalLoggerDir == null) {
+        dependsOn(publishTestLogger)
+        from(testLoggerOutputDir) {
+            into("${project.name}/testlogger")
+        }
+    } else {
+        from(externalLoggerDir) {
+            into("${project.name}/testlogger")
+        }
+    }
+
+    val externalMtpDir = externalMtpReporterBuildDir
+    if (externalMtpDir == null) {
+        dependsOn(publishMtpReporter)
+        from(mtpReporterOutputDir) {
+            exclude(".bundle-stamp") // PublishReporterBundle's staleness marker; not part of the bundle.
+            into("${project.name}/mtpreporter")
+        }
+    } else {
+        from(externalMtpDir) {
+            into("${project.name}/mtpreporter")
         }
     }
 }

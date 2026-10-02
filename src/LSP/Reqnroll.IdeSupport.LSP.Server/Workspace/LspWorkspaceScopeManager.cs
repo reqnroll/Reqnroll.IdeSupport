@@ -4,10 +4,12 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -19,6 +21,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     private readonly IIdeScope _ideScope;
     private readonly IIdeSupportLogger _logger;
     private readonly IMediator _mediator;
+    private readonly ILspTelemetryService? _telemetryService;
 
     private readonly ConcurrentDictionary<string, LspProjectScope> _scopes
         = new(StringComparer.OrdinalIgnoreCase);
@@ -29,37 +32,30 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     private readonly MembershipIndex _membershipIndex;
 
     /// <summary>Initializes a new instance of the <see cref="LspWorkspaceScopeManager"/> class.</summary>
-    public LspWorkspaceScopeManager(IIdeScope ideScope, IIdeSupportLogger logger, IMediator mediator)
+    public LspWorkspaceScopeManager(
+        IIdeScope ideScope, IIdeSupportLogger logger, IMediator mediator, ILspTelemetryService? telemetryService = null)
     {
         _ideScope  = ideScope;
         _logger    = logger;
         _mediator  = mediator;
+        _telemetryService = telemetryService;
         _membershipIndex = new MembershipIndex(logger, mediator, FindProjectByKey);
     }
 
     // ── Folder lifecycle ──────────────────────────────────────────────────────
 
-    /// <summary>Raised when a new workspace folder scope is opened.</summary>
-    public event Action<LspProjectScope>? ScopeOpened;
-    /// <summary>Raised when a workspace folder scope is closed.</summary>
-    public event Action<LspProjectScope>? ScopeClosed;
-
-    /// <summary>Creates the workspace scope for <paramref name="rootPath"/> if it does not already exist, raising <see cref="ScopeOpened"/>.</summary>
+    /// <summary>Creates the workspace scope for <paramref name="rootPath"/> if it does not already exist.</summary>
     public void OpenWorkspace(string rootPath)
     {
         var key = Normalise(rootPath);
-        LspProjectScope? added = null;
         _scopes.GetOrAdd(key, k =>
         {
             _logger.LogInfo($"Opening workspace scope: {k}");
-            added = new LspProjectScope(k, _ideScope);
-            return added;
+            return new LspProjectScope(k, _ideScope);
         });
-        if (added is not null)
-            ScopeOpened?.Invoke(added);
     }
 
-    /// <summary>Removes the workspace scope for <paramref name="rootPath"/>, raising <see cref="ProjectRemoved"/> for each of its projects and then <see cref="ScopeClosed"/>, and disposes the scope.</summary>
+    /// <summary>Removes the workspace scope for <paramref name="rootPath"/>, raising <see cref="ProjectRemoved"/> for each of its projects, and disposes the scope.</summary>
     public void CloseWorkspace(string rootPath)
     {
         var key = Normalise(rootPath);
@@ -74,7 +70,6 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             ProjectRemoved?.Invoke(project);
         }
 
-        ScopeClosed?.Invoke(scope);
         scope.Dispose();
     }
 
@@ -90,15 +85,28 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
         ReqnrollProjectLoadedParams parameters,
         CancellationToken cancellationToken)
     {
+        // A shared project (.shproj) is not a project this server can own anything for: it has no
+        // output assembly, so its registry could never be populated, and because its folder is the
+        // innermost one containing its own files it would then win ResolvePrimaryOwner for them --
+        // resolving those files to an empty registry instead of the referencing test project's
+        // populated one, which shows up as every step in a shared .feature file being reported
+        // undefined (issue #735). Its content still reaches the server: each project that imports
+        // the .projitems compiles those files, and lists them in its own membership baseline.
+        if (ProjectFileTypes.IsSharedProject(parameters.ProjectFile))
+        {
+            _logger.LogVerbose(
+                $"Ignoring projectLoaded for shared project '{parameters.ProjectFile}': its files " +
+                "belong to the projects that import it.");
+            return Task.CompletedTask;
+        }
+
         // Ensure the workspace folder exists (create it if the IDE sends the project
         // notification before the LSP initialize workspace-folders arrive).
         var folderKey = Normalise(parameters.WorkspaceFolder);
         var scope = _scopes.GetOrAdd(folderKey, k =>
         {
             _logger.LogInfo($"Auto-creating workspace scope for project notification: {k}");
-            var newScope = new LspProjectScope(k, _ideScope);
-            ScopeOpened?.Invoke(newScope);
-            return newScope;
+            return new LspProjectScope(k, _ideScope);
         });
 
         var (project, isNew, _) = scope.AddOrUpdateProject(parameters);
@@ -112,6 +120,27 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // per-project provider and trigger the initial discovery, so no explicit
             // refresh is needed here for a brand-new project.
             ProjectDiscovered?.Invoke(project);
+
+            // Telemetry (issue #581 finding 2): the design doc's OpenProject event had no
+            // caller anywhere in the LSP-era architecture -- its only implementation,
+            // ProjectSettingsProvider, is legacy infrastructure never instantiated under
+            // src/LSP. Firing it here, server-side, covers VS/VS Code/Rider from one place
+            // (unlike OpenFeatureFile's per-client fix) and only on first discovery, not
+            // every projectLoaded re-send (e.g. VS's post-build resend, handled in the `else`
+            // branch below). FeatureFileCount is best-effort: the membership baseline
+            // (reqnroll/projectFiles) may not have arrived yet at this exact moment -- see the
+            // deferred-rescan handling below -- so null means "not yet known" rather than zero.
+            _telemetryService?.SendEvent(TelemetryEvents.OpenProjectCommandExecuted, new()
+            {
+                ["FeatureFileCount"] = HasBaselineForProject(project)
+                    ? GetIndexedFeatureFiles(project).Count
+                    : (int?)null,
+                // Issue #846: the cross-IDE project profile (previously VS-only). Reqnroll
+                // version arrives on the first ReqnrollDiscoveryExecuted event,
+                // where the connector reports them authoritatively.
+                ["ProjectTargetFramework"] = project.TargetFrameworkMonikers,
+                ["ProgrammingLanguage"] = ProjectProfileTelemetry.GetProgrammingLanguage(project.ProjectFullName),
+            });
         }
         else
         {
@@ -146,7 +175,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
             // own request lifetime, which the background continuation deliberately outlives --
             // forwarding it would let the publish get silently cancelled before it even runs.
             FireAndForgetExtensions.FireAndForget(
-                () => _mediator.Publish(new BindingRegistryChangedNotification(project, true), CancellationToken.None),
+                () => _mediator.Publish(new BindingRegistryReplacedNotification(project), CancellationToken.None),
                 _logger, nameof(HandleProjectLoadedAsync));
         }
 
@@ -262,7 +291,19 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
     public Task HandleProjectFilesAsync(
         ReqnrollProjectFilesParams parameters,
         CancellationToken cancellationToken)
-        => _membershipIndex.HandleProjectFilesAsync(parameters, cancellationToken);
+    {
+        // Same reasoning as HandleProjectLoadedAsync (issue #735): indexing a shared project's
+        // baseline would attribute its files to a project that is deliberately never registered,
+        // so they would resolve to no owner at all rather than to the importing project.
+        if (ProjectFileTypes.IsSharedProject(parameters.ProjectFile))
+        {
+            _logger.LogVerbose(
+                $"Ignoring projectFiles baseline for shared project '{parameters.ProjectFile}'.");
+            return Task.CompletedTask;
+        }
+
+        return _membershipIndex.HandleProjectFilesAsync(parameters, cancellationToken);
+    }
 
     /// <summary>Looks up every project that claims <paramref name="uri"/> via the membership index (does not fall back to folder-prefix matching).</summary>
     public IReadOnlyCollection<LspReqnrollProject> GetProjectsForUri(DocumentUri uri)
@@ -384,7 +425,7 @@ public sealed class LspWorkspaceScopeManager : ILspWorkspaceScopeManager, IDispo
 
     // ── IDisposable ───────────────────────────────────────────────────────────
 
-    /// <summary>Closes every open workspace scope, disposing each one and raising <see cref="ProjectRemoved"/>/<see cref="ScopeClosed"/> as needed.</summary>
+    /// <summary>Closes every open workspace scope, disposing each one and raising <see cref="ProjectRemoved"/> for its projects as needed.</summary>
     public void Dispose()
     {
         foreach (var key in _scopes.Keys.ToArray())

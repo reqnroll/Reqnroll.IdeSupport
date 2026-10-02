@@ -74,9 +74,13 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
          * count.
          */
         internal fun buildEntry(title: String, providerId: String, onClick: () -> Unit): ClickableTextCodeVisionEntry =
+            buildEntry(title, providerId, title, onClick)
+
+        /** [tooltip] variant — e.g. [com.reqnroll.ide.rider.testrunner.RunLensSupport.buildEntry] summarizing a failed row's step text, where the plain title-as-tooltip above is too terse to be useful. */
+        internal fun buildEntry(title: String, providerId: String, tooltip: String, onClick: () -> Unit): ClickableTextCodeVisionEntry =
             ClickableTextCodeVisionEntry(
                 title, providerId, { _, _ -> onClick() },
-                null, title, title, emptyList(),
+                null, title, tooltip, emptyList(),
             )
     }
 

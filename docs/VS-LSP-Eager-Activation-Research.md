@@ -18,7 +18,7 @@ originally written and are wrong in the places noted.**
 ### The everyday symptom does not exist
 
 On a warm start, with a `.feature` file as the only restored tab, VS activates the
-`LanguageServerProvider` **1.1–1.4 s after extension load, every run, on unmodified master**, with
+`LanguageServerProvider` **1.1–1.4 s after extension load, every run, on unmodified main**, with
 no user interaction. Eleven-plus runs across both branches. There is no "restored tab is dead until
 you click it" bug.
 
@@ -58,9 +58,78 @@ itself is measured.)
 | **T3** — `LoadedWhen` | Implemented, measured, **reverted**. It changed nothing. (It was briefly also blamed for regressing cold starts; that charge was withdrawn when a build without it failed the same way.) |
 | **T4** — RDT event sink | Implemented and kept as `DocumentInitializationMonitor`. Every conclusion here rests on it. |
 | **T5** — server prewarm | Not built. Still the only idea that would help the cold case, and only by shortening it. |
-| **T6** — upstream ask | **Now the main lever.** VisualStudio.Extensibility has no equivalent of `ILanguageClientBroker.LoadAsync`, so an extension cannot recover from a missed activation edge. §2.1 and §2.2 below are still accurate and are the substance of that report. |
+| **T6** — upstream ask | Still worth filing. VisualStudio.Extensibility has no equivalent of `ILanguageClientBroker.LoadAsync`, so an extension cannot recover from a missed activation edge *directly*. §2.1 and §2.2 below are still accurate and are the substance of that report. The scratch-file trigger below works around it locally. |
 
 The market survey in §2 stands unchanged — it was never about the mechanism.
+
+### As built: the scratch-file trigger (#767)
+
+Activation applies to the whole provider, not one document. Opening a second, unrelated `.feature`
+file by hand on a failed cold start activated the provider, and VS then sent `didOpen` for **both**
+files, including the dead restored tab (validated 2026-08-31). So a missed edge can be recovered
+by supplying a *different* document open. The user's own document does not need to be closed and
+reopened.
+
+`ScratchFileActivationTrigger`, started by `ReqnrollPluginPackage` after solution load:
+
+1. Waits up to 5 s for VS to activate the provider on its own.
+2. Checks that a `.feature` document is open. It scans the RDT through
+   `IVsRunningDocumentTable4`, which does not load stubs.
+3. Checks that `ReqnrollLanguageClient` was never constructed. The constructor sets
+   `LanguageServerActivationSignal`, which lives in AppDomain data because the package and the
+   VS.Extensibility side may load separate copies of the assembly.
+4. Opens and shows `%TEMP%\Reqnroll\ReqnrollActivation.feature`, waits up to 10 s for activation,
+   and closes it with `NoSave`.
+
+It runs at most once per session. `REQNROLL_IDE_DISABLE_ACTIVATION_TRIGGER` turns it off. Only
+`.feature` documents count for step 2, so the trigger never opens a Reqnroll file in a solution
+that is not using Reqnroll.
+
+**#774 (fixed):** the 5 s grace period in step 1 is measured from "solution loaded", which the
+package derives from an `IVsSolution` polling loop. That loop read a `VSPROPID` value
+(`0x0000000B`) that does not exist, so it always failed and ran to its ~10 s cap before reporting
+the solution loaded — pushing this trigger's earliest possible fire time out by roughly that much
+on every launch, not just the first one after install/update. `SolutionOpenState` now reads
+`__VSPROPID.VSPROPID_IsSolutionOpen` instead, so the wait returns as soon as the solution is
+actually open.
+
+### As built: the restored tab's content type (#78) — the actual root cause
+
+The trigger above was not enough. User logs and a screen recording (2026-09-27) showed it did start
+the server, and VS did send `didOpen` for the restored tab, but the tab stayed plain text with no
+CodeLens and no navigation bar until it was closed and reopened. The Gherkin-scoped navigation-bar
+listener fired for the scratch file's view but never for the restored one, and VS sent no
+`didClose` when the restored tab was closed.
+
+Cause: the `Gherkin` content type existed only as a VisualStudio.Extensibility `DocumentTypeConfiguration`.
+VS's `ExtensionContentTypeSectionTracker` (`Microsoft.VisualStudio.Editor.Implementation.dll`,
+decompiled) registers those asynchronously, fire-and-forget. A tab restored before that finishes
+keeps the generic type `.feature` had at that moment for its whole life, so nothing keyed on
+`[ContentType("Gherkin")]` attaches to it: not our classifier, CodeLens taggers or navigation
+bar, and not the LSP client's view features. This also explains the original "missed activation
+edge": the restored document never opened *as a Gherkin document*.
+
+Fix:
+
+1. `GherkinContentTypeDefinition` (VSSDKIntegration) registers `Gherkin` (base
+   `code-languageserver-preview`, the same base as the document type) and the `.feature` mapping
+   as static MEF exports, which are in the component cache at restore time. The tracker reuses an
+   existing content type of the same name and keeps a mapping that already `IsOfType` it, so the
+   two registrations coexist.
+2. `FeatureBufferContentTypeGuard` (Extension) logs the content type of every `.feature` buffer
+   before changing anything, and re-types any plain-text `.feature` buffer to `Gherkin` with
+   `ITextBuffer.ChangeContentType` — the approach HLSL-LSP uses (§2.1). Re-typing reaches taggers
+   and classifiers but not `IVsTextViewCreationListener`s of existing views, so (1) is the primary fix.
+
+Live result (warm start, experimental instance): VS activates the provider at restore time,
+before the package loads; the restored tab is colored, gets its navigation bar and Run CodeLens
+without being touched, and the scratch trigger logs "provider already activated; nothing to do".
+The trigger stays as a fallback until a cold first-launch-after-install run confirms the same.
+
+The earlier start exposed a Run CodeLens race: a `reqnroll/refreshCodeLens` invalidation
+cancelling an in-flight target lookup, whose cancellation the symbol request turned into an empty
+answer, cached as "no scenario on this line". `GherkinNavigationBarSymbolService` now surfaces
+cancellation, and `RunTestCodeLensResultCache` restarts callers whose computation was invalidated.
 
 ---
 

@@ -1,10 +1,11 @@
 using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Pipeline;
 
@@ -41,7 +42,7 @@ public class CodeLensRefreshHandlerTests : IDisposable
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         _languageServer.Received(1).SendNotification(
-            LspMethodNames.ReqnrollRefreshCodeLens,
+            CustomLspMethodNames.ReqnrollRefreshCodeLens,
             Arg.Is<RefreshCodeLensParams>(p => !p.IsFullReplacement));
     }
 
@@ -55,7 +56,7 @@ public class CodeLensRefreshHandlerTests : IDisposable
             .Handle(new MatchCacheChangedNotification(DocumentUri.From("file:///f.feature"), 1), CancellationToken.None);
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
-        _languageServer.Client.Received(1).SendRequest(LspMethodNames.WorkspaceCodeLensRefresh);
+        _languageServer.Client.Received(1).SendRequest(LspStandardMethodNames.WorkspaceCodeLensRefresh);
         _languageServer.DidNotReceiveWithAnyArgs().SendNotification(default!, default(object)!);
     }
 
@@ -91,7 +92,7 @@ public class CodeLensRefreshHandlerTests : IDisposable
         await Task.WhenAny(sent.Task, Task.Delay(5000));
 
         _languageServer.Received(1).SendNotification(
-            LspMethodNames.ReqnrollRefreshCodeLens,
+            CustomLspMethodNames.ReqnrollRefreshCodeLens,
             Arg.Is<RefreshCodeLensParams>(p => !p.IsFullReplacement));
     }
 }

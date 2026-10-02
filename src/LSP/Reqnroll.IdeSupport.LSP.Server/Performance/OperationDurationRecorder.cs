@@ -1,4 +1,4 @@
-﻿using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -13,8 +13,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 /// </summary>
 /// <remarks>
 /// Privacy: the log line may carry the document URI for local diagnosis, but the telemetry
-/// event must not — it carries only the operation label, the duration, a coarse bucket and the
-/// IDE client, never a path or file content.
+/// event must not — it carries only the operation label, the duration, a coarse bucket (the
+/// client identity is stamped by the telemetry pipeline, #844), never a path or file content.
 /// </remarks>
 public sealed class OperationDurationRecorder : IOperationDurationRecorder
 {
@@ -22,7 +22,6 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     public const string PerfSampleEventName = "PerfSample";
 
     private readonly IIdeSupportLogger _logger;
-    private readonly ClientIdeContext _ide;
     private readonly ILspTelemetryService? _telemetry;
     private readonly IPerformanceTelemetrySampler _sampler;
     private readonly ITraceService? _trace;
@@ -31,14 +30,12 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
     /// <summary>Initializes a new instance of the <see cref="OperationDurationRecorder"/> class.</summary>
     public OperationDurationRecorder(
         IIdeSupportLogger logger,
-        ClientIdeContext ide,
         ILspTelemetryService? telemetry = null,
         IPerformanceTelemetrySampler? sampler = null,
         ITraceService? trace = null,
         IFeatureUsageCounters? counters = null)
     {
         _logger = logger;
-        _ide = ide;
         _telemetry = telemetry;
         _sampler = sampler ?? PerformanceTelemetrySampler.FromEnvironment();
         _trace = trace;
@@ -59,7 +56,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         // ConcurrencyProbeTests for the empirical finding this was added to help confirm/quantify).
         _logger.LogVerbose(() =>
         {
-            var line = $"PERF op={operation} ms={elapsedMs:F1} thread={Environment.CurrentManagedThreadId}";
+            var line = $"PERF op={operation} ms={DurationFormatter.RoundMilliseconds(elapsedMs)} thread={Environment.CurrentManagedThreadId}";
             if (uri is not null) line += $" uri={uri}";
             if (!string.IsNullOrEmpty(detail)) line += $" {detail}";
             return line;
@@ -69,7 +66,7 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
         // client opted into tracing via InitializeParams.Trace or $/setTrace). The URI only goes
         // into the verbose detail, matching the log line's own privacy posture.
         _trace?.Trace(
-            $"{operation}: {elapsedMs:F1}ms",
+            $"{operation}: {DurationFormatter.FormatMilliseconds(elapsedMs)}",
             uri is null ? null : () => uri.ToString());
 
         // Secondary sink: sampled telemetry metric — no URI/path (privacy).
@@ -80,16 +77,15 @@ public sealed class OperationDurationRecorder : IOperationDurationRecorder
                 ["Operation"] = operation,
                 ["DurationMs"] = (long)Math.Round(elapsedMs),
                 ["DurationBucket"] = Bucket(elapsedMs),
-                ["IDEClient"] = _ide.Ide,
             });
         }
 
         // Tertiary sink (issue #582): unsampled, in-memory, no wire traffic here -- counted
         // exactly and flushed periodically by IFeatureUsageFlushService as one aggregated event.
         // Deliberately NOT gated by _sampler above: usage counting needs exact counts, not a
-        // rate -- see FeatureUsageOperations' remarks on why the two mechanisms stay separate.
-        if (_counters is not null && FeatureUsageOperations.IsCounted(operation))
-            _counters.Increment(operation);
+        // rate -- see FeatureUsageCatalog's remarks on why the two mechanisms stay separate.
+        if (_counters is not null && FeatureUsageCatalog.TryGet(operation, out var usage))
+            _counters.Increment(usage.Key);
     }
 
     /// <summary>Coarse latency buckets for cheap field aggregation without exposing raw paths.</summary>

@@ -9,7 +9,7 @@ public sealed class ConsoleLogger : Logger<TextWriter>
         Console.OutputEncoding = Encoding.UTF8;
     }
 
-    protected override string Format(Log log) => log.Message;
+    protected override string Format(Log log) => LogFormatting.AppendExceptionDetail(log.Message, log.Exception);
 
     protected override TextWriter GetTextWriter(LogLevel level)
     {

@@ -6,6 +6,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Core.Imaging;
+using Microsoft.VisualStudio.Imaging;
+using Microsoft.VisualStudio.Imaging.Interop;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.TestWindow;
@@ -38,6 +40,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
     private readonly IIdeSupportLogger _logger;
 
     private IReadOnlyList<TestMethodIdentifier> _cachedMethods = Array.Empty<TestMethodIdentifier>();
+    private RunTestOutcomeEntry? _cachedOutcome;
 
     public RunTestCodeLensDataPoint(CodeLensDescriptor descriptor, ICodeLensCallbackService callbackService, string fileUri, int line, IIdeSupportLogger logger)
     {
@@ -82,6 +85,11 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         {
             _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — no target resolved for line={_line} in {_fileUri}.");
             _cachedMethods = Array.Empty<TestMethodIdentifier>();
+            // Clear alongside _cachedMethods: a stale entry here would leave GetDetailsAsync
+            // rendering a previous outcome's row table for a line that just resolved to no target at
+            // all (fresh-eyes review finding — this can happen on a transient failure of the callback
+            // above, not just a genuinely deleted scenario).
+            _cachedOutcome = null;
             return new CodeLensDataPointDescriptor { Description = string.Empty };
         }
 
@@ -102,20 +110,59 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // IsScenarioOutline value (they come from a single symbol node), so the first is enough.
         var label = onThisLine[0].IsScenarioOutline ? "▶ Run Scenarios" : "▶ Run Scenario";
 
-        // Best-effort pass/fail glyph (issue #504 follow-up) — reflects into an unsupported internal
-        // VS API (see RunTestOutcomeBridge's remarks) that degrades to "no glyph" on any failure, so
-        // this never blocks the lens itself from rendering. Only the first target's outcome is used —
-        // good enough for the common single-method case; a mixed-outcome multi-target Outline
-        // (allowRowTests = false) just shows the first target's state, not an aggregate.
-        ImageId? imageId = null;
-        var outcome = await RunTestOutcomeBridge.TryGetOutcomeAsync(_cachedMethods[0], token).ConfigureAwait(false);
-        if (outcome is { } resolvedOutcome)
-            imageId = RunTestOutcomeBridge.ToImageId(resolvedOutcome);
+        // Pass/fail glyph. Source of truth is the LSP server's TestOutcomeStore, fed by the bundled
+        // VSTest logger (implementation plan §4.2) — it sees every result of an IDE-triggered run, including
+        // each Scenario Outline row (issue #702). Only when the store has never heard of a given method
+        // (no run yet this session, or a project the logger can't reach — e.g. Microsoft.Testing.Platform)
+        // do we fall back to RunTestOutcomeBridge's reflection into VS's own TestStore, which degrades
+        // to "no glyph" on any failure. Every cached method is resolved and combined via
+        // AggregateOutcomes — issue #789 live testing found a Feature/Rule "Run Scenarios" lens (issue
+        // #744) always rendered green because only _cachedMethods[0] was ever consulted, so a later
+        // scenario's failure never reached the glyph.
+        var perMethodOutcomes = new List<RunTestOutcomeEntry?>(_cachedMethods.Count);
+        foreach (var method in _cachedMethods)
+            perMethodOutcomes.Add(await ResolveMethodOutcomeAsync(method, token).ConfigureAwait(false));
 
-        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcome?.ToString() ?? "(none)"}");
+        _cachedOutcome = AggregateOutcomes(perMethodOutcomes);
+
+        ImageId? imageId = _cachedOutcome switch
+        {
+            // A run naming one of these methods is in flight: VS's own lens shows a spinner here.
+            { IsRunning: true } => ToImageId(KnownMonikers.StatusRunning),
+            not null when RunTestOutcomeBridge.ParseOutcome(_cachedOutcome.Aggregate) is { } resolved => RunTestOutcomeBridge.ToImageId(resolved),
+            _ => null,
+        };
+        var outcomeSource = _cachedOutcome is null
+            ? "(none)"
+            : _cachedOutcome.IsRunning ? "running" : _cachedOutcome.Aggregate;
+
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDataAsync — resolved {_cachedMethods.Count} method(s) for line={_line}, label='{label}', outcome={outcomeSource}");
 
         // Pre-fetch/cache now (see this type's remarks) — nothing further to resolve for GetDetailsAsync.
-        return new CodeLensDataPointDescriptor { Description = label, ImageId = imageId };
+        return new CodeLensDataPointDescriptor { Description = label, TooltipText = BuildTooltip(_cachedOutcome), ImageId = imageId };
+    }
+
+    /// <summary>
+    /// The lens's own inline hover text. Left unset (VS falls back to its generic keybinding hint,
+    /// e.g. "Alt+1") when there's no outcome yet to summarize — that's the correct "nothing to say"
+    /// state, not a bug. When there is one, this is the only place the failure detail
+    /// (<see cref="BuildOutcomeTable"/> renders the same data per-row, but only inside the Details
+    /// popup a click opens) reaches the hover a user sees without clicking through.
+    /// </summary>
+    internal static string? BuildTooltip(RunTestOutcomeEntry? outcome)
+    {
+        if (outcome is null || outcome.Rows.Count == 0)
+            return null;
+
+        var failing = outcome.Rows.FirstOrDefault(r => string.Equals(r.Outcome, "Failed", StringComparison.OrdinalIgnoreCase));
+        if (failing is null)
+            return outcome.Aggregate;
+
+        var stepDetail = failing.FailedStepText is null
+            ? string.Empty
+            : $": {failing.FailedStepText} ({DescribeStepOutcome(failing.FailedStepOutcome)})";
+        var message = string.IsNullOrEmpty(failing.ErrorMessage) ? string.Empty : $" — {failing.ErrorMessage}";
+        return $"{outcome.Aggregate}{stepDetail}{message}";
     }
 
     /// <inheritdoc />
@@ -138,14 +185,146 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
             commands.Add(BuildCommand("Show in Test Explorer", TestExplorerCommandIds.SyncCommandId, methods));
         }
 
-        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}");
+        // Per-row outcome table (implementation plan Phase 2): one entry per test case the logger
+        // reported for this method — one per Examples row for an outline — with the failing step
+        // Reqnroll's own trace attributes the failure to (not the last step, which is what the stack
+        // trace would say). Empty when no run has reported this method this session.
+        var (headers, entries) = BuildOutcomeTable(_cachedOutcome);
+
+        _logger.LogVerbose($"RunTestCodeLensDataPoint: GetDetailsAsync — line={_line}, cachedMethods={methods.Count}, commands={commands.Count}, rows={entries.Count}");
 
         return Task.FromResult(new CodeLensDetailsDescriptor
         {
-            Headers = Array.Empty<CodeLensDetailHeaderDescriptor>(),
-            Entries = Array.Empty<CodeLensDetailEntryDescriptor>(),
+            Headers = headers,
+            Entries = entries,
             PaneNavigationCommands = commands,
         });
+    }
+
+    internal static (IReadOnlyList<CodeLensDetailHeaderDescriptor> Headers, IReadOnlyList<CodeLensDetailEntryDescriptor> Entries) BuildOutcomeTable(RunTestOutcomeEntry? outcome)
+    {
+        if (outcome is null || outcome.Rows.Count == 0)
+            return (Array.Empty<CodeLensDetailHeaderDescriptor>(), Array.Empty<CodeLensDetailEntryDescriptor>());
+
+        var headers = new[]
+        {
+            new CodeLensDetailHeaderDescriptor { UniqueName = "example",    DisplayName = "Example",     Width = 0.35 },
+            new CodeLensDetailHeaderDescriptor { UniqueName = "outcome",    DisplayName = "Outcome",     Width = 0.12 },
+            new CodeLensDetailHeaderDescriptor { UniqueName = "duration",   DisplayName = "Duration",    Width = 0.10 },
+            new CodeLensDetailHeaderDescriptor { UniqueName = "failedStep", DisplayName = "Failed step", Width = 0.43 },
+        };
+
+        var entries = outcome.Rows.Select(row =>
+        {
+            var failedStep = row.FailedStepText is null
+                ? string.Empty
+                : $"{row.FailedStepText} ({DescribeStepOutcome(row.FailedStepOutcome)}, step {row.FailedStepIndex + 1} of {row.StepCount})";
+            return new CodeLensDetailEntryDescriptor
+            {
+                Fields = new[]
+                {
+                    new CodeLensDetailEntryField { Text = row.DisplayName },
+                    new CodeLensDetailEntryField { Text = row.Outcome },
+                    new CodeLensDetailEntryField { Text = FormatDuration(row.DurationMs) },
+                    new CodeLensDetailEntryField { Text = failedStep },
+                },
+                Tooltip = row.ErrorMessage ?? row.DisplayName,
+            };
+        }).ToList();
+
+        return (headers, entries);
+    }
+
+    private static ImageId ToImageId(ImageMoniker moniker) => new(moniker.Guid, moniker.Id);
+
+    private static string DescribeStepOutcome(string? stepOutcome) => stepOutcome switch
+    {
+        "Error" => "threw",
+        "BindingError" => "binding error",
+        "Undefined" => "undefined step",
+        null => "failed",
+        _ => stepOutcome,
+    };
+
+    private static string FormatDuration(double milliseconds)
+        => milliseconds >= 1000
+            ? (milliseconds / 1000).ToString("0.0 s", System.Globalization.CultureInfo.InvariantCulture)
+            : milliseconds.ToString("0 ms", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Asks the LSP server's <c>TestOutcomeStore</c> (via the same OOP→in-proc→LSP callback channel as
+    /// target resolution) for this method's last-known outcome. Null on "unknown" <em>and</em> on any failure —
+    /// the caller then consults the reflection bridge, so a broken callback never costs the glyph.
+    /// </summary>
+    private async Task<RunTestOutcomeEntry?> TryGetStoredOutcomeAsync(TestMethodIdentifier method, CancellationToken token)
+    {
+        try
+        {
+            return await _callbackService
+                .InvokeAsync<RunTestOutcomeEntry?>(this, RunTestCodeLensCallbackListener.GetOutcomeMethod,
+                    new object[] { method.OutputFilePath, method.ManagedType, method.ManagedMethod }, token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!token.IsCancellationRequested)
+        {
+            _logger.LogException(ex, $"RunTestCodeLensDataPoint: {RunTestCodeLensCallbackListener.GetOutcomeMethod} failed for {method.ManagedType}.{method.ManagedMethod}; falling back to the bridge");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolves one method's outcome: the store first, falling back to <see cref="RunTestOutcomeBridge"/>
+    /// exactly as the pre-#789-fix single-method path did. A stale store entry (see
+    /// <c>RunTestCodeLensCallbackListener.IsStale</c>'s remarks) returns <see langword="null"/> — say
+    /// nothing rather than something outdated — without consulting the bridge, which would just repeat
+    /// VS's own possibly-stale TestStore value.
+    /// </summary>
+    private async Task<RunTestOutcomeEntry?> ResolveMethodOutcomeAsync(TestMethodIdentifier method, CancellationToken token)
+    {
+        var stored = await TryGetStoredOutcomeAsync(method, token).ConfigureAwait(false);
+        if (stored is { IsRunning: true })
+            return stored;
+        if (stored is { IsStale: true })
+            return null;
+        if (stored is not null)
+            return stored;
+
+        var bridged = await RunTestOutcomeBridge.TryGetOutcomeAsync(method, token).ConfigureAwait(false);
+        return bridged is { } resolvedOutcome
+            ? new RunTestOutcomeEntry(resolvedOutcome.ToString(), Array.Empty<RunTestOutcomeRow>(), DateTime.UtcNow)
+            : null;
+    }
+
+    /// <summary>
+    /// Combines every cached method's outcome the same worst-wins way Test Explorer aggregates a
+    /// hierarchical (Feature/Rule/class) node: a run in flight always wins (spinner); otherwise any
+    /// failure wins (red); otherwise an unresolved method (not yet run, or stale) means say nothing
+    /// rather than a false green; otherwise Skipped beats Passed; Passed only when every method agrees.
+    /// Fixes issue #789 live testing — the Feature/Rule "Run Scenarios" lens (issue #744) previously
+    /// only ever consulted <c>_cachedMethods[0]</c>, so a later scenario's failure never reached the
+    /// glyph and it rendered green regardless.
+    /// </summary>
+    internal static RunTestOutcomeEntry? AggregateOutcomes(IReadOnlyList<RunTestOutcomeEntry?> outcomes)
+    {
+        if (outcomes.Count == 0)
+            return null;
+
+        var running = outcomes.FirstOrDefault(o => o is { IsRunning: true });
+        if (running is not null)
+            return running;
+
+        if (outcomes.Any(o => o is null))
+            return null;
+
+        var aggregate =
+            outcomes.Any(o => string.Equals(o!.Aggregate, "Failed", StringComparison.OrdinalIgnoreCase)) ? "Failed" :
+            outcomes.All(o => string.Equals(o!.Aggregate, "Passed", StringComparison.OrdinalIgnoreCase)) ? "Passed" :
+            outcomes.Any(o => string.Equals(o!.Aggregate, "Skipped", StringComparison.OrdinalIgnoreCase)) ? "Skipped" :
+            "None";
+
+        var rows = outcomes.SelectMany(o => o!.Rows).ToList();
+        var lastUpdatedUtc = outcomes.Max(o => o!.LastUpdatedUtc);
+        return new RunTestOutcomeEntry(aggregate, rows, lastUpdatedUtc);
     }
 
     private static CodeLensDetailPaneCommand BuildCommand(string displayName, int commandId, IReadOnlyList<TestMethodIdentifier> methods) =>

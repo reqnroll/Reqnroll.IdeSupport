@@ -47,7 +47,7 @@ public sealed class LspScenarioContext
     public SemanticTokens? LastTokens { get; set; }
     public LocationOrLocationLinks? LastReferences { get; set; }
     public FindStepUsagesResponse? LastFindStepUsages { get; set; }
-    public GoToHooksResponse? LastGoToHooks { get; set; }
+    public FindHooksResponse? LastFindHooks { get; set; }
     public CodeLens[]? LastCodeLens { get; set; }
     public CompletionList? LastCompletions { get; set; }
     public TextEdit[]? LastFormattingEdits { get; set; }
@@ -62,6 +62,12 @@ public sealed class LspScenarioContext
     public WorkspaceEdit? LastRenameEdit { get; set; }
     public RenameTargetsResponse? LastRenameTargets { get; set; }
     public OmniSharp.Extensions.LanguageServer.Protocol.Models.RangeOrPlaceholderRange? LastPrepareRenameRange { get; set; }
+    /// <summary>
+    /// The exception a failed <c>textDocument/rename</c> request threw client-side (issue #650):
+    /// OmniSharp's client turns the server's <c>RpcErrorException</c>/<c>ResponseError</c> into a
+    /// <see cref="OmniSharp.Extensions.JsonRpc.Server.JsonRpcException"/>, not a null result.
+    /// </summary>
+    public Exception? LastRenameError { get; set; }
 
     // F5 — Go To Step Definition
     public LocationOrLocationLinks? LastDefinitions { get; set; }
@@ -73,7 +79,7 @@ public sealed class LspScenarioContext
     public Reqnroll.IdeSupport.LSP.Server.Features.TestTargets.ResolveTestTargetsResponse? LastTestTargets { get; set; }
 
     // F24 — Hook Match CodeLens navigation
-    public GoToMatchingScenariosResponse? LastMatchingScenarios { get; set; }
+    public FindMatchingScenariosResponse? LastMatchingScenarios { get; set; }
 
     // F6 — Define Steps (code actions)
     public CommandOrCodeActionContainer? LastCodeActions { get; set; }
@@ -176,9 +182,10 @@ public sealed class LspScenarioContext
 
     /// <summary>A project as the spec harness announces it over <c>reqnroll/projectLoaded</c>.</summary>
     /// <param name="PackageIds">
-    /// NuGet package ids announced with the project. Only the ids matter to the server —
-    /// TestFrameworkDetection reads them to decide which row-test attribute F26's resolver should
-    /// count on a generated Scenario Outline method — so versions are left empty.
+    /// NuGet package ids announced with the project. Only the ids matter to the specs (they feed
+    /// <c>ProjectSettingsProvider</c>'s Reqnroll/test-framework detection), so versions are left
+    /// empty. The test-target resolver no longer reads them at all — it counts row attributes in
+    /// the generated code-behind directly (issue #455).
     /// </param>
     public sealed record SpecProject(
         string ProjectFile,
@@ -186,10 +193,14 @@ public sealed class LspScenarioContext
         string TargetFrameworkMoniker,
         IReadOnlyList<string> PackageIds);
 
-    public async Task EnsureStartedAsync(string? ideId = null, bool supportsChangeAnnotations = false)
+    public async Task EnsureStartedAsync(
+        string? ideId = null,
+        bool supportsChangeAnnotations = false,
+        ClientInfo? clientInfo = null)
     {
         if (Started) return;
-        await Harness.StartAsync(WorkspaceFolder, ideId, supportsChangeAnnotations).ConfigureAwait(false);
+        await Harness.StartAsync(WorkspaceFolder, ideId, supportsChangeAnnotations, clientInfo)
+            .ConfigureAwait(false);
         Started = true;
     }
 

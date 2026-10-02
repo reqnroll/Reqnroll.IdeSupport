@@ -10,7 +10,7 @@ public interface IFeatureUsageFlushService
     /// <summary>
     /// Runs the periodic flush loop until <paramref name="cancellationToken"/> is cancelled.
     /// A no-op (returns immediately) when the flush interval is not configured — see
-    /// <see cref="FeatureUsageFlushService.FlushIntervalEnvVar"/> — so counting stays in-memory
+    /// <see cref="FeatureUsageFlushService.ResolveInterval"/> — so counting stays in-memory
     /// only and no telemetry is ever sent unless explicitly opted in.
     /// </summary>
     Task RunAsync(CancellationToken cancellationToken);

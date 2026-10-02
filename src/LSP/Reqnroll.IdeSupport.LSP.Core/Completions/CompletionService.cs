@@ -93,7 +93,11 @@ public sealed class CompletionService : ICompletionService
                 entries.Add(Kw("#language: ", "Specifies the language of the feature file"));
                 break;
             case TokenType.TagLine:
-                entries.Add(Kw("@tag1 ", "Labels a scenario, a feature or an examples block"));
+                // A bare "@" tag-prefix entry. Real tag completions (built-in @ignore plus the
+                // tags already used across the project) are served by GetTagCompletions — this
+                // placeholder remains only as the ParserErrorActionBuilder quick-fix candidate
+                // ("Insert '@'") for a position where Gherkin expected a tag (issue #828).
+                entries.Add(Kw("@", "Tag prefix — completes to a tag used in the project or the built-in @ignore"));
                 break;
         }
     }
@@ -143,6 +147,61 @@ public sealed class CompletionService : ICompletionService
                 InsertText: sc.Sample,
                 FilterText: sc.Sample,
                 SortText:   i.ToString("D6")))
+            .ToList();
+
+        return new CompletionResult(entries, matcher.IsIncomplete);
+    }
+
+    // ── Tag completion ────────────────────────────────────────────────────────
+
+    private const string IgnoreTagDetail =
+        "Excludes the tagged feature/scenario from the test run (built-in Reqnroll tag)";
+
+    /// <summary>Builds tag completion entries: the built-in tags plus the tags already used across the project, minus the tags already typed on the completing line, ranked by usage count.</summary>
+    public CompletionResult GetTagCompletions(
+        IReadOnlyCollection<StepCandidate> projectTags,
+        IReadOnlyCollection<string> tagsOnTheLine,
+        string typedAfterAt,
+        ICompletionMatcher matcher)
+    {
+        // Start from the built-in set so a project that has never used any tag still gets
+        // candidates; a project tag with the same name as a built-in keeps its own usage count
+        // so ranking below reflects real usage.
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            [BuiltInTagNames.Ignore] = 0
+        };
+
+        foreach (var tag in projectTags)
+        {
+            counts[tag.Sample] = counts.TryGetValue(tag.Sample, out var existing)
+                ? existing + tag.UsageCount
+                : tag.UsageCount;
+        }
+
+        foreach (var usedTag in tagsOnTheLine)
+            counts.Remove(usedTag);
+
+        if (counts.Count == 0)
+            return CompletionResult.Empty;
+
+        // Most-used first (ties broken ordinally for a stable list); the matcher may then re-rank
+        // or trim server-side (the FuzzySharp contingency) just like step samples.
+        var candidates = counts
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => new StepCandidate(kv.Key, kv.Value))
+            .ToList();
+
+        var ranked = matcher.Rank(typedAfterAt, candidates);
+        var entries = ranked
+            .Select((sc, i) => new CompletionEntry(
+                Label: sc.Sample,
+                Detail: sc.Sample == BuiltInTagNames.Ignore ? IgnoreTagDetail : null,
+                Kind: CompletionEntryKind.Keyword,
+                InsertText: sc.Sample,
+                FilterText: sc.Sample,
+                SortText: i.ToString("D6")))
             .ToList();
 
         return new CompletionResult(entries, matcher.IsIncomplete);

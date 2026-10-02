@@ -2,12 +2,12 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -70,7 +70,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         var uri = notification.Uri;
 
         // Performance Verification (Layer 4): time the diagnostics aggregate-and-push (match-cache change → push sent).
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentPublishDiagnostics, uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentPublishDiagnostics, uri);
 
         if (!_documentBufferService.TryGet(uri, out var buffer) || buffer?.Tags is null)
         {
@@ -109,7 +109,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
             $"DiagnosticsPublishHandler: pushing {lspDiagnostics.Length} diagnostic(s) for {uri} v{notification.Version}");
 
         _languageServer.SendNotification(
-            LspMethodNames.TextDocumentPublishDiagnostics,
+            LspStandardMethodNames.TextDocumentPublishDiagnostics,
             new PublishDiagnosticsParams
             {
                 Uri         = uri,
@@ -122,7 +122,14 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static Diagnostic ToLspDiagnostic(GherkinDiagnostic d)
+    /// <summary>
+    /// Converts a protocol-agnostic <see cref="GherkinDiagnostic"/> to its LSP wire form. Shared
+    /// (internal, not private) with <see cref="Features.CodeActions.CodeActionHandler"/> so a
+    /// <c>CodeAction</c> can reference the exact diagnostic shape this handler publishes — the two
+    /// must produce identical <c>Diagnostic</c> values for a client to associate the two by
+    /// range/source (issue #563).
+    /// </summary>
+    internal static Diagnostic ToLspDiagnostic(GherkinDiagnostic d)
         => new()
         {
             Range    = d.Range.ToLspRange(),

@@ -23,27 +23,27 @@ public class OperationDurationRecorderTests
         public bool ShouldSample() => _sample;
     }
 
-    private static ClientIdeContext Ide(string? ide = "visualstudio") => new(ide);
 
     [Fact]
     public void Record_writes_a_PERF_log_line_with_operation_and_duration()
     {
         var logger = new CapturingLogger();
-        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+        var sut = new OperationDurationRecorder(logger, telemetry: null, sampler: new FixedSampler(false));
 
         sut.Record("textDocument/completion#step", 42.5);
 
         var line = logger.Messages.Should().ContainSingle().Subject;
         line.Should().StartWith("PERF ");
         line.Should().Contain("op=textDocument/completion#step");
-        line.Should().Contain("ms=42.5");
+        // Rounded to the nearest whole millisecond (issue #627) - previously "ms=42.5" (tenths).
+        line.Should().Contain("ms=43");
     }
 
     [Fact]
     public void Record_includes_uri_in_log_line_when_provided()
     {
         var logger = new CapturingLogger();
-        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+        var sut = new OperationDurationRecorder(logger, telemetry: null, sampler: new FixedSampler(false));
 
         var uri = DocumentUri.FromFileSystemPath(@"C:\ws\Sample.feature");
         sut.Record("textDocument/definition", 10, uri);
@@ -56,7 +56,7 @@ public class OperationDurationRecorderTests
     {
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide("vscode"), telemetry, new FixedSampler(true));
+            new CapturingLogger(), telemetry, new FixedSampler(true));
 
         sut.Record("textDocument/definition", 123.4,
             DocumentUri.FromFileSystemPath(@"C:\ws\Secret.feature"));
@@ -67,7 +67,7 @@ public class OperationDurationRecorderTests
                 (string)d["Operation"]! == "textDocument/definition" &&
                 (long)d["DurationMs"]! == 123L &&
                 (string)d["DurationBucket"]! == "<=250" &&
-                (string)d["IDEClient"]! == "vscode"));
+                !d.ContainsKey("IDEClient")));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class OperationDurationRecorderTests
             .Do(ci => captured = ci.Arg<Dictionary<string, object?>>());
 
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry, new FixedSampler(true));
+            new CapturingLogger(), telemetry, new FixedSampler(true));
 
         sut.Record("textDocument/completion#step", 5,
             DocumentUri.FromFileSystemPath(@"C:\Users\someone\Secret.feature"));
@@ -96,7 +96,7 @@ public class OperationDurationRecorderTests
     {
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry, new FixedSampler(false));
+            new CapturingLogger(), telemetry, new FixedSampler(false));
 
         sut.Record("textDocument/definition", 10);
 
@@ -107,7 +107,7 @@ public class OperationDurationRecorderTests
     public void Measure_records_on_dispose()
     {
         var logger = new CapturingLogger();
-        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+        var sut = new OperationDurationRecorder(logger, telemetry: null, sampler: new FixedSampler(false));
 
         using (sut.Measure("textDocument/semanticTokens/full"))
         {
@@ -123,11 +123,12 @@ public class OperationDurationRecorderTests
     {
         var trace = Substitute.For<ITraceService>();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false), trace: trace);
+            new CapturingLogger(), telemetry: null, sampler: new FixedSampler(false), trace: trace);
 
         sut.Record("textDocument/completion#step", 42.5);
 
-        trace.Received(1).Trace("textDocument/completion#step: 42.5ms", Arg.Any<Func<string>?>());
+        // Rounded to the nearest whole millisecond (issue #627) - previously "42.5ms" (tenths).
+        trace.Received(1).Trace("textDocument/completion#step: 43ms", Arg.Any<Func<string>?>());
     }
 
     [Fact]
@@ -135,7 +136,7 @@ public class OperationDurationRecorderTests
     {
         var trace = Substitute.For<ITraceService>();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false), trace: trace);
+            new CapturingLogger(), telemetry: null, sampler: new FixedSampler(false), trace: trace);
 
         sut.Record("textDocument/definition", 10);
 
@@ -146,9 +147,9 @@ public class OperationDurationRecorderTests
     public void Record_works_without_a_trace_service()
     {
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false));
+            new CapturingLogger(), telemetry: null, sampler: new FixedSampler(false));
 
-        var act = () => sut.Record("textDocument/definition", 10);
+        var act = () => sut.Record("textDocument/codeAction", 10);
 
         act.Should().NotThrow();
     }
@@ -157,7 +158,7 @@ public class OperationDurationRecorderTests
     public void Record_includes_detail_in_log_line_when_provided()
     {
         var logger = new CapturingLogger();
-        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+        var sut = new OperationDurationRecorder(logger, telemetry: null, sampler: new FixedSampler(false));
 
         sut.Record("internal/bindingRegistryReconcile", 10, detail: "scannedFiles=3 reparsedFiles=2");
 
@@ -168,7 +169,7 @@ public class OperationDurationRecorderTests
     public void Record_includes_the_current_managed_thread_id_in_every_log_line()
     {
         var logger = new CapturingLogger();
-        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+        var sut = new OperationDurationRecorder(logger, telemetry: null, sampler: new FixedSampler(false));
 
         sut.Record("textDocument/foldingRange", 1);
 
@@ -179,7 +180,7 @@ public class OperationDurationRecorderTests
     public void Measure_carries_detail_through_to_the_recorded_line_on_dispose()
     {
         var logger = new CapturingLogger();
-        var sut = new OperationDurationRecorder(logger, Ide(), telemetry: null, sampler: new FixedSampler(false));
+        var sut = new OperationDurationRecorder(logger, telemetry: null, sampler: new FixedSampler(false));
 
         using (sut.Measure("textDocument/codeLens", detail: "cacheDocs=50 cacheSteps=1350"))
         {
@@ -201,25 +202,26 @@ public class OperationDurationRecorderTests
     // ── Feature usage counting (issue #582) ───────────────────────────────────
 
     [Fact]
-    public void Record_increments_the_feature_usage_counter_for_an_allowlisted_operation()
+    public void Record_increments_the_feature_usage_counter_for_a_catalogued_operation()
     {
         var counters = new FeatureUsageCounters();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false), counters: counters);
+            new CapturingLogger(), telemetry: null, sampler: new FixedSampler(false), counters: counters);
 
-        sut.Record("textDocument/definition", 10);
+        sut.Record("textDocument/completion#step", 10);
 
-        counters.Drain()["textDocument/definition"].Should().Be(1);
+        counters.Drain()["Completion.Step"].Should().Be(1);
     }
 
     [Fact]
-    public void Record_does_not_increment_the_counter_for_a_non_allowlisted_operation()
+    public void Record_does_not_increment_the_counter_for_an_uncatalogued_operation()
     {
         var counters = new FeatureUsageCounters();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false), counters: counters);
+            new CapturingLogger(), telemetry: null, sampler: new FixedSampler(false), counters: counters);
 
-        sut.Record("textDocument/completion#step", 10);
+        // A discrete command: it sends its own per-call event, so it must not also be counted.
+        sut.Record("textDocument/rename", 10);
 
         counters.Drain().Should().BeEmpty();
     }
@@ -231,19 +233,19 @@ public class OperationDurationRecorderTests
         // not a rate.
         var counters = new FeatureUsageCounters();
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: Substitute.For<ILspTelemetryService>(),
+            new CapturingLogger(), telemetry: Substitute.For<ILspTelemetryService>(),
             sampler: new FixedSampler(false), counters: counters);
 
-        sut.Record("textDocument/rename", 10);
+        sut.Record("textDocument/codeAction", 10);
 
-        counters.Drain()["textDocument/rename"].Should().Be(1);
+        counters.Drain()["CodeAction"].Should().Be(1);
     }
 
     [Fact]
     public void Record_works_without_a_feature_usage_counters_service()
     {
         var sut = new OperationDurationRecorder(
-            new CapturingLogger(), Ide(), telemetry: null, sampler: new FixedSampler(false));
+            new CapturingLogger(), telemetry: null, sampler: new FixedSampler(false));
 
         var act = () => sut.Record("textDocument/definition", 10);
 

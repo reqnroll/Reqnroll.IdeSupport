@@ -38,13 +38,16 @@ public static class IdeSupportLogLevelConverter
 /// <summary>Adapts a single <see cref="Microsoft.Extensions.Logging"/> category onto an <see cref="IIdeSupportLogger"/> sink.</summary>
 public sealed class IdeSupportLoggerAdapter : ILogger
 {
-    private readonly string _categoryName;
+    private readonly string _shortCategoryName;
     private readonly IIdeSupportLogger _logger;
 
     /// <summary>Initializes a new instance of the <see cref="IdeSupportLoggerAdapter"/> class.</summary>
     public IdeSupportLoggerAdapter(string categoryName, IIdeSupportLogger logger)
     {
-        _categoryName = categoryName;
+        // Shortened to the simple type name (issue #626): categoryName is usually a
+        // fully-qualified name (e.g. from ILogger<T>), and the direct IIdeSupportLogger call
+        // sites already render just a short source name, not a namespace-qualified one.
+        _shortCategoryName = ShortenCategoryName(categoryName);
         _logger = logger;
     }
 
@@ -55,8 +58,16 @@ public sealed class IdeSupportLoggerAdapter : ILogger
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
+        // No method-name equivalent is available through ILogger - CallerMethod is left empty so
+        // LogLineFormatter renders the category alone rather than "Category." with nothing after it.
         _logger.Log(new LogMessage(IdeSupportLogLevelConverter.ToTraceLevel(logLevel), formatter(state, exception),
-            _categoryName, exception));
+            CallerMethod: string.Empty, exception, Source: _shortCategoryName));
+    }
+
+    private static string ShortenCategoryName(string categoryName)
+    {
+        var lastDot = categoryName.LastIndexOf('.');
+        return lastDot >= 0 && lastDot < categoryName.Length - 1 ? categoryName.Substring(lastDot + 1) : categoryName;
     }
 
     /// <summary>Begins a logical operation scope.</summary>
@@ -85,8 +96,14 @@ public sealed class IdeSupportLoggerFactory : ILoggerFactory
     /// <summary>Creates an <see cref="ILogger"/> for the given category, backed by the shared <see cref="IIdeSupportLogger"/> sink.</summary>
     public ILogger CreateLogger(string categoryName) => new IdeSupportLoggerAdapter(categoryName, _logger);
 
-    // Single sink by design - IIdeSupportLogger already fans out via IdeSupportCompositeLogger when needed.
-    /// <summary>No-op: additional providers are not supported since there is a single fixed sink.</summary>
+    // A single IIdeSupportLogger is wired into this factory - that logger is typically itself an
+    // IdeSupportCompositeLogger fanning out to several destinations (e.g. issue #651's debug +
+    // file + VS output pane sinks), so "single sink" here means "single ILoggerFactory backend",
+    // not "only one place messages end up". ILoggerProvider is Microsoft.Extensions.Logging's own
+    // extension point for adding backends; it's unsupported here because backends are composed on
+    // the IIdeSupportLogger side instead (IdeSupportCompositeLogger.Add), before this factory ever
+    // sees it.
+    /// <summary>No-op: additional providers are not supported here - compose sinks on the underlying <see cref="IIdeSupportLogger"/> instead.</summary>
     public void AddProvider(ILoggerProvider provider) { }
 
     /// <summary>No-op: this factory holds no disposable resources of its own.</summary>

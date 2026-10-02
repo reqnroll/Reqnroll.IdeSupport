@@ -8,7 +8,6 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import com.reqnroll.ide.rider.lsp.protocol.UnusedStepDefinitionItem
@@ -43,14 +42,14 @@ class FindUnusedStepDefinitionsAction : AnAction() {
 
     private fun showResult(project: Project, response: FindUnusedStepDefinitionsResponse?) {
         if (response == null) {
-            Messages.showErrorDialog(
+            ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.",
                 "Find Unused Step Definitions")
             return
         }
 
         if (response.items.isEmpty()) {
-            Messages.showInfoMessage(project, "No unused step definitions found.", "Find Unused Step Definitions")
+            ReqnrollNotify.info(project, "No unused step definitions found.", "Find Unused Step Definitions")
             return
         }
 
@@ -72,7 +71,7 @@ class FindUnusedStepDefinitionsAction : AnAction() {
         if (item.sourceFile.isNullOrBlank()) {
             val recorded = item.recordedSourceFile
             val where = if (recorded != null) " The compiled assembly records it at \"$recorded\"." else ""
-            Messages.showWarningDialog(
+            ReqnrollNotify.warn(
                 project,
                 "This step definition's source isn't on this machine.$where " +
                     "Rebuild the project locally to navigate to it.",
@@ -87,12 +86,29 @@ class FindUnusedStepDefinitionsAction : AnAction() {
         /** Pulled out to `internal` (rather than a private member function) purely so it's unit-testable without an AnAction/platform fixture. */
         internal fun renderLabel(item: UnusedStepDefinitionItem): String {
             val name = listOfNotNull(item.className, item.methodName).joinToString(".")
-            val expression = item.bindingExpression?.let { " — $it" } ?: ""
+            val attribute = renderAttribute(item)?.let { " - $it" } ?: ""
             val project = item.projectName?.let { " [$it]" } ?: ""
             // Marks a row that cannot be navigated to, so the popup doesn't present it as
             // identical to the rest and then do nothing when it's chosen (issue #540).
             val unresolved = if (item.isResolved) "" else " (source not on this machine)"
-            return "$name$expression$project$unresolved"
+            return "$name$attribute$project$unresolved"
+        }
+
+        /**
+         * The binding attribute as it would appear on the method (issue #757) — `[Given("the sum is {int}")]`,
+         * or `[Given]` for a method-name-style binding with no expression. With no known keyword the
+         * expression is shown quoted on its own; with neither, null. Matches the Visual Studio and
+         * VS Code step-definition lists.
+         */
+        internal fun renderAttribute(item: UnusedStepDefinitionItem): String? {
+            val keyword = item.stepDefinitionType?.takeIf { it.isNotEmpty() }
+            val expression = item.bindingExpression?.takeIf { it.isNotEmpty() }
+            return when {
+                keyword != null && expression != null -> "[$keyword(\"$expression\")]"
+                keyword != null -> "[$keyword]"
+                expression != null -> "\"$expression\""
+                else -> null
+            }
         }
     }
 }

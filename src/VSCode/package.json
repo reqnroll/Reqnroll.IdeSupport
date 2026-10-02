@@ -22,7 +22,6 @@
     "feature"
   ],
   "activationEvents": [
-    "onLanguage:gherkin",
     "onLanguage:plaintext",
     "workspaceContains:**/*.feature"
   ],
@@ -176,6 +175,23 @@
           ],
           "default": "off",
           "description": "Traces the communication between VS Code and the Reqnroll LSP server, and also controls the server's own log verbosity ('off' -> Warning, 'messages' -> Info, 'verbose' -> Verbose). When set to 'verbose', a log file is also written to the Reqnroll log directory. Requires a window reload to take effect on the running server."
+        },
+        "reqnroll.protocolLogLevel": {
+          "type": "string",
+          "enum": [
+            "Off",
+            "Error",
+            "Warning",
+            "Info",
+            "Verbose"
+          ],
+          "default": "Warning",
+          "description": "Controls the verbosity of the Reqnroll LSP server's own internal protocol diagnostics (OmniSharp request dispatch, DryIoc, JSON-RPC plumbing), passed to the server as --protocol-log-level and written to both window/logMessage and the dedicated reqnroll-vscode-protocol-*.log file. Independent of reqnroll.trace.server, which drives the server's --log-level. Requires a window reload to take effect on the running server."
+        },
+        "reqnroll.testOutcomes.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in (LSP-server outcome pipeline, #700/#702). C# Dev Kit owns test discovery/execution in VS Code, not this extension (issue #504) -- when enabled, Reqnroll registers a run with the LSP server and merges the bundled VSTest logger into the 'dotnet.unitTests.runSettingsPath' setting C# Dev Kit already reads, so per-row Scenario Outline outcomes and failed-step detail become available without changing how you run tests. Off by default because this writes to a setting your workspace may already have its own value for; your existing runsettings file's content is preserved and merged, never replaced. Requires a window reload to take effect."
         }
       }
     },
@@ -224,6 +240,23 @@
           ]
         }
       }
+    ],
+    "walkthroughs": [
+      {
+        "id": "reqnroll.getStarted",
+        "title": "Get Started with Reqnroll",
+        "description": "Welcome to Reqnroll for VS Code — write BDD tests in plain language. This page links to the full end-user documentation.",
+        "steps": [
+          {
+            "id": "welcome",
+            "title": "Welcome to Reqnroll",
+            "description": "Reqnroll brings Gherkin / BDD support to VS Code. This page points you to the full documentation on the Reqnroll website.",
+            "media": {
+              "markdown": "media/walkthroughs/welcome.md"
+            }
+          }
+        ]
+      }
     ]
   },
   "main": "./out/extension.js",
@@ -239,6 +272,10 @@
     "package": "vsce package",
     "build:server": "bash scripts/publish-server.sh",
     "build:server:dev": "node scripts/dev-publish-server.mjs",
+    "build:testlogger": "bash scripts/publish-testlogger.sh",
+    "build:testlogger:dev": "node scripts/dev-publish-testlogger.mjs",
+    "build:mtpreporter": "bash scripts/publish-mtpreporter.sh",
+    "build:mtpreporter:dev": "node scripts/dev-publish-mtpreporter.mjs",
     "build:vsix": "bash scripts/build-vsix.sh",
     "validate:tokens": "node scripts/validate-semantic-token-scopes.mjs",
     "prepare": "cd ../.. && node src/VSCode/node_modules/husky/bin.js"
@@ -249,18 +286,19 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/mocha": "^10.0.0",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.6.2",
     "@types/vscode": "~1.96.0",
+    "@types/xml2js": "^0.4.14",
     "@vscode/test-electron": "^3.1.0",
-    "@vscode/vsce": "^3.0.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.8.1",
+    "eslint": "^10.11.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.4.1",
-    "mocha": "^11.8.0",
-    "prettier": "^3.9.6",
+    "lint-staged": "^17.5.1",
+    "mocha": "^12.0.2",
+    "prettier": "^3.9.9",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
+    "typescript-eslint": "^8.70.1",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   },
@@ -270,6 +308,7 @@
   },
   "dependencies": {
     "@vscode/extension-telemetry": "^1.5.2",
-    "vscode-languageclient": "^10.1.0"
+    "vscode-languageclient": "^10.1.1",
+    "xml2js": "^0.6.2"
   }
 }

@@ -8,6 +8,7 @@ import './lsp/projectManager.test';
 import './lsp/watcherExclude.test';
 import './lsp/defineStepRecovery.test';
 import './lsp/lspInspectorLogger.test';
+import './lsp/lspInspectorFormatConformance.test';
 import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
 import './lsp/manualDocumentSync.test';
@@ -22,6 +23,7 @@ import './commands/renameStep.test';
 import './tableHighlightService.test';
 import './commands/stepNavigation.test';
 import './statusBar.test';
+import './walkthrough.test';
 import './commands/stepUsages.test';
 import './commands/findUnusedStepDefinitions.test';
 import './commands/goToHooks.test';
@@ -31,7 +33,19 @@ import './commands/hookCodeLens.test';
 import './commands/commentToggle.test';
 import './util/selectionUtils.test';
 import './util/navigationUtils.test';
+import './util/stepDefinitionItems.test';
 import './grammar.test';
+import './logging/logPaths.test';
+import './logging/generalFileLog.test';
+import './logging/appNotify.test';
+import './logging/telemetryDebugLog.test';
+import './testOutcomes/runSettingsInjector.test';
+import './testOutcomes/testLoggerPath.test';
+import './testOutcomes/testOutcomeCodeLens.test';
+import './testOutcomes/mtpProjectDetection.test';
+import './testOutcomes/mtpReporterPath.test';
+import './testOutcomes/mtpProjectStubs.test';
+import './testOutcomes/testOutcomesService.test';
 
 /**
  * Waits for the language client to reach `State.Running`, per issue #205's suggested fix.

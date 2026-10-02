@@ -58,7 +58,14 @@ public static class FixtureDiscovery
             ProjectFile            = Path.Combine(FixtureFolder, "ReqnrollBindingsFixture.csproj"),
             ProjectFolder          = FixtureFolder,
             OutputAssemblyPath     = FixtureAssemblyPath,
-            TargetFrameworkMoniker = ".NETCoreApp,Version=v10.0"
+            TargetFrameworkMoniker = ".NETCoreApp,Version=v10.0",
+            // The fixture is a Reqnroll project, but only its own assembly is deployed next to
+            // the test host -- no Reqnroll.dll in that folder -- so state the package reference
+            // explicitly for the issue-#731 gate in ConnectorDiscoveryService.
+            PackageReferences      =
+            [
+                new PackageReferenceInfo { PackageId = "Reqnroll", Version = "2.1.0" }
+            ]
         };
         return new LspReqnrollProject(info, ideScope);
     }

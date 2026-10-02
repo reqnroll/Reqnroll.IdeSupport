@@ -82,7 +82,23 @@ internal sealed class RunTestCodeLensResultCache
 
         public CancellationTokenSource Cts { get; }
         public AsyncLazy<IReadOnlyList<RunTestTargetEntry>> Lazy { get; }
+
+        /// <summary>
+        /// Set (before cancelling <see cref="Cts"/>) when the entry is dropped as stale, so a waiter
+        /// can tell "invalidated — recompute" apart from the computation timing out.
+        /// </summary>
+        public volatile bool Invalidated;
     }
+
+    /// <summary>
+    /// How many times one caller restarts after its computation was invalidated mid-flight. A
+    /// refresh storm at startup (binding discovery finishing project by project) can invalidate a
+    /// few times in a row; the bound only stops a pathological loop.
+    /// </summary>
+    internal const int MaxInvalidationRestarts = 3;
+
+    /// <summary>Pause before restarting after <see cref="LspContentModifiedException"/>.</summary>
+    internal static readonly TimeSpan ContentModifiedRestartDelay = TimeSpan.FromMilliseconds(100);
 
     private readonly Func<string, int, CancellationToken, Task<IReadOnlyList<RunTestTargetEntry>>> _inner;
     private readonly ILogger<RunTestCodeLensResultCache> _logger;
@@ -128,17 +144,61 @@ internal sealed class RunTestCodeLensResultCache
     /// <paramref name="callerToken"/> only governs how long this particular call is willing to wait
     /// — it never cancels the shared computation itself (see this type's remarks).
     /// </summary>
+    /// <remarks>
+    /// An invalidation that lands while a computation is in flight cancels it, and that must mean
+    /// "recompute", not "fail": the lens's element description is unchanged, so VS does not ask
+    /// again, and a failed call left the Run lens empty for the session (seen live at startup, when
+    /// <c>reqnroll/refreshCodeLens</c> arrives while the first lens request is still resolving).
+    /// Such a caller restarts against the fresh entry, up to <see cref="MaxInvalidationRestarts"/> times.
+    /// </remarks>
     public async Task<IReadOnlyList<RunTestTargetEntry>> GetTargetsAsync(string fileUri, int line, CancellationToken callerToken)
     {
         var key = new Key(fileUri, line);
-        var lazyEntry = _entries.AddOrUpdate(
-            key,
-            addValueFactory: static (k, self) => new Lazy<Entry>(() => self.CreateEntry(k)),
-            updateValueFactory: static (k, existing, self) => self.IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => self.CreateEntry(k)),
-            factoryArgument: this);
+        for (var restarts = 0; ; restarts++)
+        {
+            var lazyEntry = _entries.AddOrUpdate(
+                key,
+                addValueFactory: static (k, self) => new Lazy<Entry>(() => self.CreateEntry(k)),
+                updateValueFactory: static (k, existing, self) => self.IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => self.CreateEntry(k)),
+                factoryArgument: this);
 
-        var entry = lazyEntry.Value;
-        return await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
+            var entry = lazyEntry.Value;
+            try
+            {
+                var result = await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
+
+                // An invalidated computation's result is stale even if it "succeeded": a layer below
+                // may have turned the cancellation into an empty answer instead of throwing (seen
+                // live: the Run lens cached 0 entries for a real scenario line).
+                if (entry.Invalidated && restarts < MaxInvalidationRestarts)
+                {
+                    _logger.LogDebug(
+                        "RunTestCodeLensResultCache: result for {FileUri}:{Line} came from an invalidated computation; restarting.",
+                        fileUri, line);
+                    continue;
+                }
+
+                return result;
+            }
+            catch (OperationCanceledException) when (
+                entry.Invalidated && !callerToken.IsCancellationRequested && restarts < MaxInvalidationRestarts)
+            {
+                _logger.LogDebug(
+                    "RunTestCodeLensResultCache: computation for {FileUri}:{Line} was invalidated mid-flight; restarting.",
+                    fileUri, line);
+            }
+            catch (LspContentModifiedException) when (
+                !callerToken.IsCancellationRequested && restarts < MaxInvalidationRestarts)
+            {
+                // The server's state changed under the lookup (issue #800 follow-up). The faulted
+                // entry is not reused (IsUsable), so the next pass starts a fresh computation. A
+                // short pause lets the burst of notifications that caused it finish first.
+                _logger.LogDebug(
+                    "RunTestCodeLensResultCache: lookup for {FileUri}:{Line} hit ContentModified; restarting.",
+                    fileUri, line);
+                await Task.Delay(ContentModifiedRestartDelay, callerToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Drops every cached/in-flight result for every line of <paramref name="fileUri"/>, cancelling each computation.</summary>
@@ -160,7 +220,10 @@ internal sealed class RunTestCodeLensResultCache
     private void InvalidateKey(Key key)
     {
         if (_entries.TryRemove(key, out var lazyEntry) && lazyEntry.IsValueCreated)
+        {
+            lazyEntry.Value.Invalidated = true;
             lazyEntry.Value.Cts.Cancel();
+        }
     }
 
     private Entry CreateEntry(Key key)
@@ -185,9 +248,9 @@ internal sealed class RunTestCodeLensResultCache
 
     private async Task<IReadOnlyList<RunTestTargetEntry>> RunAsync(Key key, CancellationToken ct)
     {
-        _logger.LogInformation("RunTestCodeLensResultCache: starting shared computation for {FileUri}:{Line}", key.FileUri, key.Line);
+        _logger.LogDebug("RunTestCodeLensResultCache: starting shared computation for {FileUri}:{Line}", key.FileUri, key.Line);
         var result = await _inner(key.FileUri, key.Line, ct).ConfigureAwait(false);
-        _logger.LogInformation("RunTestCodeLensResultCache: shared computation for {FileUri}:{Line} completed with {Count} entr{Suffix}",
+        _logger.LogDebug("RunTestCodeLensResultCache: shared computation for {FileUri}:{Line} completed with {Count} entr{Suffix}",
             key.FileUri, key.Line, result.Count, result.Count == 1 ? "y" : "ies");
         return result;
     }

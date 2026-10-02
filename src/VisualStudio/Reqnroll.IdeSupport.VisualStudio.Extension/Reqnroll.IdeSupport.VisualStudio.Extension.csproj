@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net481</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -85,6 +85,36 @@
         <Name>Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration</Name>
         <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
     </ProjectReference>
+    <!-- VSTest logger bundled under TestLogger\ (NOT the extension root, and NOT referenced by any
+         extension assembly): VSSDKIntegration's IRunSettingsService export points each Test Explorer
+         run's TestAdaptersPaths at that sub-folder, and vstest picks the logger up by its
+         *TestLogger.dll file-name suffix. Keeping it in its own folder keeps vstest's extension scan
+         away from the rest of the VSIX. BuiltProjectOutputGroup for the logger's own assembly, plus
+         ReferenceCopyLocalPathsOutputGroup so its Reqnroll.IdeSupport.TestReporter.Common
+         ProjectReference (the shared NDJSON/wire-format code) is bundled alongside it — its
+         compile-time Microsoft.TestPlatform.ObjectModel reference (supplied by the runner at run
+         time) is excluded from that group by ExcludeAssets="runtime" on the PackageReference
+         itself, so it still isn't bundled. -->
+    <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.TestLogger\Reqnroll.IdeSupport.TestLogger.csproj">
+        <Name>Reqnroll.IdeSupport.TestLogger</Name>
+        <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+        <VSIXSubPath>TestLogger</VSIXSubPath>
+        <IncludeOutputGroupsInVSIX>BuiltProjectOutputGroup%3bReferenceCopyLocalPathsOutputGroup%3b</IncludeOutputGroupsInVSIX>
+    </ProjectReference>
+    <!-- MTP reporter SOURCE bundle under MtpReporter\ (issue #741): Reqnroll.IdeSupport.TestReporter.MTP.targets
+         + ReporterSource\*.cs, both Content items of that project, hence ContentFilesProjectOutputGroup
+         only — no reporter assembly ships: MtpProjectStubs writes each C# project's project-local
+         obj\<Project>.csproj.reqnroll-ide.targets stub importing the .targets file, which compiles the
+         sources into the user's own test assembly. ReferenceOutputAssembly=false + explicit output
+         group: same cross-TFM pattern already used below for the net10.0 LSP server reference from
+         this net481 project. -->
+    <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.TestReporter.MTP\Reqnroll.IdeSupport.TestReporter.MTP.csproj">
+        <Name>Reqnroll.IdeSupport.TestReporter.MTP</Name>
+        <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+        <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+        <VSIXSubPath>MtpReporter</VSIXSubPath>
+        <IncludeOutputGroupsInVSIX>ContentFilesProjectOutputGroup%3b</IncludeOutputGroupsInVSIX>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- ================================================================
@@ -137,5 +167,10 @@
       </VSIXSourceItem>
     </ItemGroup>
   </Target>
+
+  <!-- Feeds the Identity Version token in source.extension.vsixmanifest. VS decides whether an
+       install is an upgrade from that version alone, so it must carry the build number (issue #746).
+       VersionPrefix, not Version: the manifest needs a plain System.Version, so no -alpha suffix. -->
+  <Target Name="GetVsixVersion" Returns="$(VersionPrefix)" />
 
 </Project>

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { LanguageClient } from 'vscode-languageclient/node';
+import { LanguageClient, ResponseError } from 'vscode-languageclient/node';
 import {
   collapseActiveSelectionForFeatureStepRename,
   createRenameMiddleware,
@@ -19,7 +19,13 @@ function fakeClient(overrides: {
   asWorkspaceEdit?: (edit: unknown) => Promise<vscode.WorkspaceEdit>;
 }): LanguageClient {
   return {
-    sendRequest: overrides.sendRequest ?? (() => Promise.resolve(null)),
+    // Production code passes either a method string (custom reqnroll/* requests) or a typed
+    // descriptor such as RenameRequest.type (standard requests); normalise so fakes match on the
+    // method name either way.
+    sendRequest: overrides.sendRequest
+      ? (method: string | { method: string }, params: unknown) =>
+          overrides.sendRequest!(typeof method === 'string' ? method : method.method, params)
+      : () => Promise.resolve(null),
     sendNotification: overrides.sendNotification ?? (() => Promise.resolve(undefined)),
     protocol2CodeConverter: {
       asWorkspaceEdit:
@@ -47,7 +53,7 @@ async function withStub<TNamespace extends object, TKey extends keyof TNamespace
 suite('renameStep', () => {
   suite('ReqnrollMethods', () => {
     test('defines the rename LSP method names the server implements', () => {
-      // Mirrors LspMethodNames.cs — a mismatch here means the client and server drift apart.
+      // Mirrors CustomLspMethodNames.cs — a mismatch here means the client and server drift apart.
       assert.strictEqual(ReqnrollMethods.renameTargets, 'reqnroll/renameTargets');
       assert.strictEqual(ReqnrollMethods.selectRenameTarget, 'reqnroll/selectRenameTarget');
     });
@@ -130,7 +136,7 @@ suite('renameStep', () => {
   });
 
   suite('selectRenameTarget', () => {
-    test('sends reqnroll/selectRenameTarget with the chosen attributeIndex', async () => {
+    test('sends reqnroll/selectRenameTarget with the chosen attributeIndex and the invoking position', async () => {
       let sentMethod: string | undefined;
       let sentParams: unknown;
       const client = fakeClient({
@@ -141,13 +147,16 @@ suite('renameStep', () => {
         },
       });
 
-      await selectRenameTarget(client, 'file:///Steps.cs', 1);
+      await selectRenameTarget(client, 'file:///Steps.cs', 1, new vscode.Position(12, 34));
 
       assert.strictEqual(sentMethod, ReqnrollMethods.selectRenameTarget);
+      // The position is what lets the server resolve attributeIndex to a specific binding while
+      // the candidate list it indexes into is still current (issue #671, R5).
       assert.deepStrictEqual(sentParams, {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 1,
+        position: { line: 12, character: 34 },
       });
     });
   });
@@ -310,6 +319,7 @@ suite('renameStep', () => {
             uri: 'file:///Steps.cs',
             version: 0,
             attributeIndex: 1,
+            position: { line: 0, character: 0 },
           });
           assert.ok(result);
         } finally {
@@ -474,11 +484,11 @@ suite('renameStep', () => {
     });
 
     test('single target: skips the picker, prompts with its expression, sends rename, applies the edit', async () => {
-      let selectTargetParams: unknown;
       let renameParams: unknown;
       let inputBoxOptions: vscode.InputBoxOptions | undefined;
       let asWorkspaceEditCalledWith: unknown;
       let appliedEdit: vscode.WorkspaceEdit | undefined;
+      const notifications: { method: string; params: unknown }[] = [];
 
       const client = fakeClient({
         sendRequest: (method: string, params: unknown) => {
@@ -495,8 +505,8 @@ suite('renameStep', () => {
           }
           return Promise.resolve(null);
         },
-        sendNotification: (_method, params) => {
-          selectTargetParams = params;
+        sendNotification: (method, params) => {
+          notifications.push({ method, params });
           return Promise.resolve();
         },
         asWorkspaceEdit: (edit: unknown) => {
@@ -526,10 +536,14 @@ suite('renameStep', () => {
           ),
       );
 
-      assert.deepStrictEqual(selectTargetParams, {
+      const selectTarget = notifications.find(
+        (n) => n.method === ReqnrollMethods.selectRenameTarget,
+      );
+      assert.deepStrictEqual(selectTarget?.params, {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 0,
+        position: { line: 4, character: 10 },
       });
       assert.strictEqual(inputBoxOptions?.value, 'a first number');
       assert.deepStrictEqual(renameParams, {
@@ -539,6 +553,11 @@ suite('renameStep', () => {
       });
       assert.ok(asWorkspaceEditCalledWith, 'the raw rename result should be converted');
       assert.strictEqual(appliedByWorkspace, appliedEdit);
+
+      // issue #671 (R3): the server staged the registry/match-cache updates this edit implies and
+      // is waiting to hear whether the client actually applied it.
+      const renameApplied = notifications.find((n) => n.method === ReqnrollMethods.renameApplied);
+      assert.deepStrictEqual(renameApplied?.params, { uri: 'file:///Steps.cs', applied: true });
     });
 
     test('falls back to the label text when expression is empty (method-name-style binding)', async () => {
@@ -605,6 +624,7 @@ suite('renameStep', () => {
         uri: 'file:///Steps.cs',
         version: 0,
         attributeIndex: 1,
+        position: { line: 4, character: 10 },
       });
     });
 
@@ -701,6 +721,43 @@ suite('renameStep', () => {
 
       assert.ok(shownError?.includes('Rename failed'));
       assert.strictEqual(applyEditCalled, false);
+    });
+
+    test('shows the server-provided error message when textDocument/rename rejects (issue #650)', async () => {
+      // The server now rejects an invalid rename with a real JSON-RPC error response instead of a
+      // null result — sendRequest surfaces that as a rejected promise, not a resolved null.
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+            });
+          }
+          if (method === 'textDocument/rename') {
+            return Promise.reject(new ResponseError(-32803, 'Parameter count mismatch'));
+          }
+          return Promise.resolve(null);
+        },
+      });
+
+      let shownError: string | undefined;
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        () => Promise.resolve('a new name'),
+        () =>
+          withStub(
+            vscode.window,
+            'showErrorMessage',
+            (message: string) => {
+              shownError = message;
+              return Promise.resolve(undefined);
+            },
+            () => renameStepFromCSharp(client, fakeEditor()),
+          ),
+      );
+
+      assert.strictEqual(shownError, 'Reqnroll: Parameter count mismatch');
     });
   });
 });

@@ -1,0 +1,503 @@
+#nullable enable
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
+using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+
+namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
+
+/// <summary>What <see cref="RegisterTestRunHandler"/> hands back for one run.</summary>
+public sealed record TestRunRegistration(string RunId, string Endpoint);
+
+/// <summary>
+/// Server-side receiving end of the bundled VSTest logger: one TCP loopback listener per server
+/// process, one connection per logger instance (one or more per test run), newline-delimited JSON in,
+/// nothing out. Feeds
+/// <see cref="TestOutcomeStore"/> and, debounced, pushes <c>reqnroll/testOutcomes/changed</c> to the
+/// connected client so it re-pulls fresh outcomes.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is the LSP-server-side successor to the Visual Studio-only <c>TestOutcomeListener</c>: the same
+/// receiver, store, and persistence now live once in the server, shared by every IDE, instead of VS
+/// growing its own and Rider/VS Code eventually growing two more independent copies.
+/// </para>
+/// <para>
+/// <b>No per-connection secret.</b> An earlier revision minted a single-use token per
+/// <see cref="RegisterRun"/> call and rejected any <c>hello</c> that didn't present it. That broke down
+/// for VS Code, which mints one registration per extension activation (there is no "a run is about to
+/// start" hook to rotate a token against) but can see several test-host connections against that one
+/// registration in a session — every connection after the first was rejected as "unknown or expired
+/// token". Since the token never protected anything a loopback bind doesn't already: it is handed to
+/// the runner process via the very runsettings file that names this listener's port, so "must have read
+/// the token" and "must be a local process" were already the same bar. Removing it turns that
+/// coincidence into the actual contract — any local process that can reach <see cref="Endpoint"/> may
+/// connect and post outcomes, same as before in practice, just without the pretense of a lock.
+/// </para>
+/// <para>
+/// <b>Lifetime.</b> Started lazily on the first registration, lives for the server process. Connection
+/// handling is fully asynchronous on the thread pool. Every fault is logged and contained — a broken
+/// listener degrades to "no live glyphs", exactly like the reflection bridge it supersedes.
+/// </para>
+/// </remarks>
+public sealed class TestOutcomeTcpListener : IDisposable
+{
+    internal static readonly TimeSpan RefreshDebounce = TimeSpan.FromMilliseconds(250);
+
+    private readonly TestOutcomeStore _store;
+    private readonly TestOutcomePersistence? _persistence;
+    private readonly TestOutcomeSessionBreadcrumb? _breadcrumb;
+    private readonly Func<string?> _resolveWorkspaceRoot;
+    private readonly IIdeSupportLogger _logger;
+    private readonly Action _notifyChanged;
+    private readonly IErrorTelemetryService? _telemetryService;
+    private readonly ILspTelemetryService? _lspTelemetryService;
+    private readonly IOperationDurationRecorder _recorder;
+    private readonly object _gate = new();
+    private TcpListener? _listener;
+    private Timer? _refreshTimer;
+    private int _refreshScheduled;
+    private int _connectionSeq;
+    private bool _disposed;
+
+    /// <summary>DI entry point: pushes <c>reqnroll/testOutcomes/changed</c> to the connected client on change.</summary>
+    public TestOutcomeTcpListener(TestOutcomeStore store, TestOutcomePersistence persistence, TestOutcomeSessionBreadcrumb breadcrumb, ILanguageServerFacade languageServer, IIdeSupportLogger logger,
+        IErrorTelemetryService telemetryService, ILspTelemetryService lspTelemetryService, IOperationDurationRecorder recorder)
+        : this(store, logger, () => TestOutcomesChangedRequester.NotifyChanged(languageServer, logger), persistence, breadcrumb, () => ResolveWorkspaceRoot(languageServer),
+            telemetryService, lspTelemetryService, recorder)
+    {
+    }
+
+    /// <summary>
+    /// Test seam: <paramref name="notifyChanged"/> replaces the LSP push; <paramref name="persistence"/>,
+    /// <paramref name="breadcrumb"/>, <paramref name="resolveWorkspaceRoot"/>, <paramref name="telemetryService"/>,
+    /// <paramref name="lspTelemetryService"/> and <paramref name="recorder"/> may be null/omitted.
+    /// </summary>
+    internal TestOutcomeTcpListener(TestOutcomeStore store, IIdeSupportLogger logger, Action notifyChanged,
+        TestOutcomePersistence? persistence = null, TestOutcomeSessionBreadcrumb? breadcrumb = null, Func<string?>? resolveWorkspaceRoot = null,
+        IErrorTelemetryService? telemetryService = null, ILspTelemetryService? lspTelemetryService = null, IOperationDurationRecorder? recorder = null)
+    {
+        _store = store ?? throw new ArgumentNullException(nameof(store));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _notifyChanged = notifyChanged ?? throw new ArgumentNullException(nameof(notifyChanged));
+        _persistence = persistence;
+        _breadcrumb = breadcrumb;
+        _resolveWorkspaceRoot = resolveWorkspaceRoot ?? (() => null);
+        _telemetryService = telemetryService;
+        _lspTelemetryService = lspTelemetryService;
+        _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _store.Changed += (_, _) => ScheduleRefresh();
+    }
+
+    /// <summary>
+    /// The first non-empty workspace-folder path the client reported at <c>initialize</c> time — a
+    /// best-effort single root for the breadcrumb's <c>workspaceRoot</c> field. A multi-folder
+    /// workspace has more than one candidate; picking the right one for a given test project is a
+    /// reporter-side matching concern (issue #715 plan §7 risk #3: deepest-match-wins), not this
+    /// listener's — it only needs to publish something a reporter can use as a starting point.
+    /// </summary>
+    /// <remarks>
+    /// Falls back to the legacy single-root <c>InitializeParams.RootPath</c>/<c>RootUri</c> fields
+    /// when <c>WorkspaceFolders</c> is empty — live-verified against VS: its LSP client only ever
+    /// advertises the <em>capability</em> (<c>capabilities.workspace.workspaceFolders</c>), it never
+    /// actually sends the <c>workspaceFolders</c> array param itself, so <c>ClientSettings.WorkspaceFolders</c>
+    /// is always empty for a VS session and this resolved to null unconditionally — silently disabling
+    /// the whole MTP breadcrumb-matching mechanism (the reporter's <c>SessionBreadcrumbMatcher.FindBestMatch</c>
+    /// skips any candidate whose <c>WorkspaceRoot</c> is null), even once every other piece of the
+    /// pipeline worked. VS does send <c>rootUri</c>/<c>rootPath</c> (confirmed live via the raw
+    /// <c>initialize</c> request), which <c>RootPath</c> exposes pre-resolved to a file-system path.
+    /// </remarks>
+    internal static string? ResolveWorkspaceRoot(ILanguageServerFacade languageServer)
+        => languageServer.ClientSettings.WorkspaceFolders?
+            .Select(f => f.Uri.GetFileSystemPath())
+            .FirstOrDefault(p => !string.IsNullOrEmpty(p))
+           ?? (string.IsNullOrEmpty(languageServer.ClientSettings.RootPath) ? null : languageServer.ClientSettings.RootPath);
+
+    /// <summary>
+    /// Logs an exception and, when a telemetry service was supplied, forwards it via the
+    /// telemetry-reporting overload — every fault site in this listener routes through here so none
+    /// are silently local-log-only (issue #722).
+    /// </summary>
+    private void LogException(Exception ex, string message)
+    {
+        if (_telemetryService is not null)
+            _logger.LogException(_telemetryService, ex, message);
+        else
+            _logger.LogException(ex, message);
+    }
+
+    /// <summary>The bound loopback endpoint once started, e.g. <c>127.0.0.1:53412</c>; null before the first registration.</summary>
+    public string? Endpoint
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _listener?.LocalEndpoint is IPEndPoint ep ? $"{ep.Address}:{ep.Port}" : null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts the listener if needed and mints a fresh run id to correlate with. Returns null if the
+    /// listener cannot be started (port exhaustion, socket policy) — the caller then injects nothing.
+    /// </summary>
+    public TestRunRegistration? RegisterRun()
+    {
+        if (!EnsureStarted())
+            return null;
+
+        return new TestRunRegistration(Guid.NewGuid().ToString("N"), Endpoint!);
+    }
+
+    private bool EnsureStarted()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            if (_listener is not null) return true;
+            try
+            {
+                var listener = new TcpListener(IPAddress.Loopback, 0);
+                listener.Start(backlog: 8);
+                _listener = listener;
+                _ = Task.Run(() => AcceptLoopAsync(listener));
+                _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: listening on {Endpoint}");
+                _breadcrumb?.Write(Endpoint!, _resolveWorkspaceRoot());
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LogException(ex, $"{nameof(TestOutcomeTcpListener)}: failed to start loopback listener");
+                return false;
+            }
+        }
+    }
+
+    private async Task AcceptLoopAsync(TcpListener listener)
+    {
+        while (!_disposed)
+        {
+            TcpClient client;
+            try
+            {
+                client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException) { return; }
+            catch (Exception ex)
+            {
+                if (_disposed) return;
+                LogException(ex, $"{nameof(TestOutcomeTcpListener)}: accept failed");
+                continue;
+            }
+            _ = Task.Run(() => HandleConnectionAsync(client));
+        }
+    }
+
+    private async Task HandleConnectionAsync(TcpClient client)
+    {
+        string? runId = null;
+        string? connectionId = null;
+        var results = 0;
+        var started = false;
+        var completed = false;
+        var passed = 0;
+        var failed = 0;
+        var skipped = 0;
+        string reporterKind = "unknown";
+        string targetFramework = string.Empty;
+        Stopwatch? runStopwatch = null;
+        try
+        {
+            client.NoDelay = true;
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: false, bufferSize: 64 * 1024);
+
+            var helloLine = await reader.ReadLineAsync().ConfigureAwait(false);
+            if (helloLine is null) return;
+            var hello = JObject.Parse(helloLine);
+            if (!string.Equals(hello.Value<string>("type"), "hello", StringComparison.Ordinal))
+            {
+                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: first line was not a hello; closing.");
+                return;
+            }
+
+            runId = hello.Value<string>("runId") ?? Guid.NewGuid().ToString("N");
+            // The store's running marks are owned per *connection*, not per registration id. VS Code
+            // registers once per session and bakes that one id into a static runsettings file, and
+            // vstest.console in design mode re-Initializes the logger several times per Run click, so
+            // several live connections can share a runId — a stale, idle one dropping mid-run must not
+            // clear the marks the real one set.
+            connectionId = $"{runId}/{Interlocked.Increment(ref _connectionSeq)}";
+            var protocol = hello.Value<int?>("protocol") ?? 0;
+            targetFramework = hello.Value<string>("targetFramework") ?? string.Empty;
+            // Reporter kind: prefer the explicit "reporterKind" field both loggers now send (issue #722
+            // suggested fix (c), made explicit). Fall back to the old presence-of-"targetFramework"
+            // inference for hello lines from older loggers that predate the field — the VSTest logger
+            // always carried a (possibly empty) "targetFramework" key, the MTP reporter never did.
+            reporterKind = hello.Value<string>("reporterKind")
+                ?? (hello.ContainsKey("targetFramework") ? "VSTestLogger" : "MTP");
+            _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} connected (protocol {protocol}, runner pid {hello.Value<string>("runnerPid")}, tfm {hello.Value<string>("targetFramework")})");
+            if (protocol != 1)
+                _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: logger protocol {protocol} differs from expected 1; parsing best-effort.");
+
+            // Perf instrumentation (issue #722): the NDJSON ingestion hot path, timed from the
+            // connection's hello to its runComplete — not covered by the two thin RPC handlers'
+            // Measure() calls, which only time registerRun/getOutcome themselves.
+            runStopwatch = Stopwatch.StartNew();
+
+            string? line;
+            while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) is not null)
+            {
+                if (line.Length == 0) continue;
+                JObject message;
+                try { message = JObject.Parse(line); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: unparseable line from run {runId}: {ex.Message}");
+                    continue;
+                }
+
+                switch (message.Value<string>("type"))
+                {
+                    case "runStart":
+                        started = true;
+                        var running = _store.MarkRunning(connectionId, ParseRunStartTests(message));
+                        _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: run {runId} started, {message.Value<int?>("testCount") ?? 0} test(s), {running.Count} method(s) marked running");
+                        break;
+                    case "result":
+                        var record = ToRecord(connectionId, message);
+                        if (_store.Record(record) is not null)
+                        {
+                            results++;
+                            switch (record.Outcome)
+                            {
+                                case TestOutcomeKind.Passed: passed++; break;
+                                case TestOutcomeKind.Failed: failed++; break;
+                                case TestOutcomeKind.Skipped: skipped++; break;
+                            }
+                        }
+                        break;
+                    case "runComplete":
+                        completed = true;
+                        // Clear the running marks now rather than at socket close: the logger closes
+                        // right after this line, but the glyph should follow the protocol, not the FIN.
+                        _store.CompleteRun(connectionId);
+                        var aborted = message.Value<bool?>("aborted") ?? false;
+                        var canceled = message.Value<bool?>("canceled") ?? false;
+                        _logger.LogInfo($"{nameof(TestOutcomeTcpListener)}: run {runId} complete — executed {message.Value<int?>("executed") ?? 0}, aborted={aborted}, canceled={canceled}, {results} result(s) stored");
+
+                        runStopwatch.Stop();
+                        var executed = message.Value<int?>("executed") ?? 0;
+                        _recorder.Record(CustomLspMethodNames.ReqnrollTestOutcomesIngestRun, runStopwatch.Elapsed.TotalMilliseconds,
+                            detail: $"results={results} reporterKind={reporterKind}");
+                        // Product telemetry (issue #722 fix (b)/(c)): counts/flags only — no paths, no
+                        // test names, no content — plus which reporter sent the run, so MTP ephemeral
+                        // injection's real-world adoption is visible in aggregate without a dedicated
+                        // client→server telemetry channel for it.
+                        SendRunCompletedTelemetry(results, passed, failed, skipped, executed, aborted, canceled,
+                            completedNormally: !aborted && !canceled, reporterKind, targetFramework, runStopwatch.Elapsed.TotalMilliseconds);
+                        break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or SocketException)
+        {
+            _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: connection for run {runId ?? "?"} dropped: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            LogException(ex, $"{nameof(TestOutcomeTcpListener)}: connection handler failed for run {runId ?? "?"}");
+        }
+        finally
+        {
+            if (connectionId is not null && !completed)
+            {
+                // A connection that never even sent runStart is vstest.console's spare logger
+                // instance (it Initializes the logger more than once per run and only closes the idle
+                // sockets later) — routine, not a lost run.
+                if (started || results > 0)
+                {
+                    _logger.LogWarning($"{nameof(TestOutcomeTcpListener)}: run {runId} closed without runComplete after {results} result(s) — treated as aborted.");
+                    // The most interesting runs (killed test host, crashed MTP process) never send
+                    // runComplete; count them too so aborted runs aren't undercounted (issue #848).
+                    // ExecutedCount is what we saw (no runComplete to read it from).
+                    runStopwatch?.Stop();
+                    SendRunCompletedTelemetry(results, passed, failed, skipped, executed: results, aborted: true, canceled: false,
+                        completedNormally: false, reporterKind, targetFramework, runStopwatch?.Elapsed.TotalMilliseconds ?? 0);
+                }
+                else
+                    _logger.LogVerbose($"{nameof(TestOutcomeTcpListener)}: idle connection for run {runId} closed without a runStart; ignoring.");
+            }
+            try { client.Dispose(); } catch (Exception) { }
+            if (connectionId is not null)
+            {
+                // Whether the run completed or the runner died: nothing this connection marked is
+                // running any more, and whatever arrived is worth keeping for the next session.
+                _store.CompleteRun(connectionId);
+                if (results > 0)
+                    _persistence?.Save(_store.Snapshot());
+            }
+            // Make sure the client catches up even if the debounce timer was cancelled by disposal ordering.
+            if (results > 0) ScheduleRefresh();
+        }
+    }
+
+    /// <summary>
+    /// Product telemetry (issues #722, #848): counts, flags, a duration and the target framework moniker
+    /// only — no paths, no test names, no content. Run mode / scope (Run vs Debug, Scenario vs Feature)
+    /// are not sent: <c>reqnroll/registerTestRun</c> takes no parameters and is called once per client
+    /// session (VS Code), not per Run click, so the server never learns them.
+    /// </summary>
+    private void SendRunCompletedTelemetry(int results, int passed, int failed, int skipped, int executed,
+        bool aborted, bool canceled, bool completedNormally, string reporterKind, string targetFramework, double elapsedMs)
+        => _lspTelemetryService?.SendEvent(TelemetryEvents.TestOutcomesRunCompleted, new Dictionary<string, object?>
+        {
+            ["ResultCount"] = results,
+            ["PassedCount"] = passed,
+            ["FailedCount"] = failed,
+            ["SkippedCount"] = skipped,
+            ["ExecutedCount"] = executed,
+            ["Aborted"] = aborted,
+            ["Canceled"] = canceled,
+            ["CompletedNormally"] = completedNormally,
+            ["ReporterKind"] = reporterKind,
+            ["TargetFramework"] = targetFramework,
+            ["DurationMs"] = (long)Math.Round(elapsedMs),
+            ["DurationBucket"] = OperationDurationRecorder.Bucket(elapsedMs),
+        });
+
+    /// <summary>Mirror of the logger's <c>ReqnrollIdeTestLogger.TestIdentitySeparator</c> (U+001F).</summary>
+    internal const char TestIdentitySeparator = (char)0x1f;
+
+    /// <summary>
+    /// <c>runStart.tests</c>: one packed identity per selected test case
+    /// (<c>source␟managedType␟managedMethod␟fqn␟displayName</c>, U+001F-separated — see the logger's
+    /// <c>FormatRunStart</c>). Absent for source-based runs.
+    /// </summary>
+    internal static IReadOnlyList<TestOutcomeKey> ParseRunStartTests(JObject message)
+    {
+        var keys = new List<TestOutcomeKey>();
+        if (message["tests"] is not JArray tests) return keys;
+        foreach (var entry in tests)
+        {
+            var packed = entry.Value<string>();
+            if (string.IsNullOrEmpty(packed)) continue;
+            var parts = packed!.Split(TestIdentitySeparator);
+            if (parts.Length < 4) continue;
+            var key = TestOutcomeKey.From(parts[0], parts[1], parts[2], parts[3]);
+            if (key is not null && !keys.Contains(key, TestOutcomeKey.Comparer))
+                keys.Add(key);
+        }
+        return keys;
+    }
+
+    /// <summary>
+    /// <paramref name="connectionId"/> becomes the record's <see cref="TestResultRecord.RunId"/> — the
+    /// store matches it against the mark <see cref="TestOutcomeStore.MarkRunning"/> set for the same
+    /// connection, so the wire message's own <c>runId</c> (shared across connections) is not used.
+    /// </summary>
+    internal static TestResultRecord ToRecord(string connectionId, JObject message) => new(
+        RunId: connectionId,
+        Source: message.Value<string>("source") ?? string.Empty,
+        ManagedType: message.Value<string>("managedType"),
+        ManagedMethod: message.Value<string>("managedMethod"),
+        FullyQualifiedName: message.Value<string>("fqn") ?? string.Empty,
+        DisplayName: message.Value<string>("displayName") ?? message.Value<string>("fqn") ?? string.Empty,
+        Outcome: TestOutcomeStore.ParseOutcome(message.Value<string>("outcome")),
+        DurationMs: message.Value<double?>("durationMs") ?? 0,
+        ErrorMessage: message.Value<string>("errorMessage"),
+        ErrorStackTrace: message.Value<string>("errorStackTrace"),
+        Stdout: message.Value<string>("stdout"),
+        StdoutTruncated: message.Value<bool?>("stdoutTruncated") ?? false);
+
+    /// <summary>
+    /// Throttle, not debounce: once a fire is scheduled, further calls during the wait are absorbed
+    /// (a single <see cref="Interlocked.CompareExchange(ref int, int, int)"/>, no <see cref="Timer.Change"/>
+    /// call) rather than each resetting the wait, so a fast, continuous stream of results — e.g. a
+    /// large Scenario Outline finishing in well under <see cref="RefreshDebounce"/> — fires at a
+    /// bounded, predictable cadence instead of two failure modes a reset-on-every-call debounce is
+    /// prone to: many redundant <c>Timer.Change</c> calls during the burst, or, if results keep
+    /// arriving faster than the debounce interval for long enough, never firing at all until the
+    /// stream finally goes quiet (starvation — the exact opposite of "live" outcomes). Deliberately NOT
+    /// the shared <c>IRefreshDebouncer</c> used elsewhere in this server: that is a reset-on-every-call
+    /// debounce by design (see its remarks), which is exactly the starvation-prone shape this throttle
+    /// was built to avoid.
+    /// </summary>
+    /// <remarks>
+    /// This does <em>not</em> bound how often a full invalidation happens when results are spaced
+    /// <em>further</em> apart than <see cref="RefreshDebounce"/> (e.g. a slow-running suite) — each
+    /// such result still triggers its own fire, same as before. Scoping invalidation to only the
+    /// files/lines an outcome change actually affects (rather than every open <c>.feature</c> file)
+    /// would need the store's changed keys mapped back to file/line, which the client side resolves
+    /// lazily and deliberately never does today — left as a known follow-up.
+    /// </remarks>
+    private void ScheduleRefresh()
+    {
+        if (Interlocked.CompareExchange(ref _refreshScheduled, 1, 0) != 0)
+            return; // Already queued to fire within the interval; this event will be covered by it.
+
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                Interlocked.Exchange(ref _refreshScheduled, 0);
+                return;
+            }
+            _refreshTimer ??= new Timer(_ => FireRefresh(), null, Timeout.Infinite, Timeout.Infinite);
+            _refreshTimer.Change(RefreshDebounce, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void FireRefresh()
+    {
+        Interlocked.Exchange(ref _refreshScheduled, 0);
+        try { _notifyChanged(); }
+        catch (Exception ex) { LogException(ex, $"{nameof(TestOutcomeTcpListener)}: change notification failed"); }
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            _disposed = true;
+            try { _listener?.Stop(); } catch (Exception) { }
+            _listener = null;
+            _refreshTimer?.Dispose();
+            _refreshTimer = null;
+        }
+        _breadcrumb?.Delete();
+    }
+}
+
+/// <summary>Sends the <c>reqnroll/testOutcomes/changed</c> notification to the connected client. Mirrors <see cref="Reqnroll.IdeSupport.LSP.Server.Features.CodeLens.CodeLensRefreshRequester"/>.</summary>
+internal static class TestOutcomesChangedRequester
+{
+    public static void NotifyChanged(ILanguageServerFacade languageServer, IIdeSupportLogger logger)
+    {
+        try
+        {
+            languageServer.SendNotification(CustomLspMethodNames.ReqnrollTestOutcomesChanged, new TestOutcomesChangedParams());
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning($"{CustomLspMethodNames.ReqnrollTestOutcomesChanged} failed: {ex.Message}");
+        }
+    }
+}

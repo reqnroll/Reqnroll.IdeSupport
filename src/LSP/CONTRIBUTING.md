@@ -120,6 +120,24 @@ configurable fraction cancelled mid-flight to exercise `$/cancelRequest`. It mea
 *under load*, so its numbers will be ≥ the isolated `run` numbers by design; it's report-only
 (no `--assert`), meant to catch load-dependent regressions the isolated numbers can't see.
 
+The suite also covers the LSP-server test-outcome pipeline (#700/#702, benchmarked by #714): the
+outcome store, the loopback NDJSON ingest path, the throttled `reqnroll/testOutcomes/changed` push
+and persistence. The scenarios drive the listener directly over a loopback socket the way the bundled
+VSTest logger does, instead of shelling out to `vstest` — that is what keeps them hermetic and
+reproducible. Two things to know before extending them:
+
+- **The outcome store is redirected for the whole run.** Both `run` and `session` point the server at
+  a per-run temp file via `REQNROLL_TEST_OUTCOMES_PATH` before the first server starts
+  (`TestOutcomePersistence.FilePathEnvironmentVariable` — the same seam `REQNROLL_MTP_SESSIONS_DIR`
+  and `REQNROLL_TESTLOGGER_FILE` give their own state files). Without it, any
+  `getOutcome`/`registerRun` scenario would measure *and overwrite* your real 30-day
+  `%LOCALAPPDATA%\Reqnroll\test-outcomes.json`. The variable is unset in every normal session, and the
+  redirect covers `--out-of-process` too, since the spawned exe inherits the benchmark's environment.
+- **The persistence-scale scenario deliberately writes ~10k methods**, across containers that are
+  missing, rebuilt-since and fresh, because that mix is what a real 30-day history looks like. Its
+  `testOutcomes/persistence#load` and `#save` numbers are therefore dominated by JSON parsing and
+  container stats — do not read them as the lookup's own cost; that is `getOutcome#found`.
+
 **Regenerating the corpus** (only when you deliberately want to change its size/shape — e.g. you
 changed the generator's feature/pattern counts):
 
@@ -153,7 +171,7 @@ normal session doesn't write maximum-verbosity output indefinitely. All are pars
 
 | Flag | Values | Default | Controls |
 |---|---|---|---|
-| `--log-level` | `Off`/`Error`/`Warning`/`Info`/`Verbose` | `Warning` | The server's own app-level `IDeveroomLogger` file (`reqnroll-*-server-*.log`) — parses, discovery, handler activity. |
+| `--log-level` | `Off`/`Error`/`Warning`/`Info`/`Verbose` | `Warning` | The server's own app-level `IDeveroomLogger` file (`reqnroll-*-server-*.log`) — parses, discovery, handler activity. Also decides whether the out-of-process **Connector** persists its own log file for a routine run — see [Connector logging](#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch) below; there is no separate flag for that. |
 | `--protocol-log-level` | `Off`/`Error`/`Warning`/`Info`/`Verbose` | `Warning` | OmniSharp's own internal diagnostics (request dispatch, DryIoc, JSON-RPC plumbing), fed to both `window/logMessage` and a dedicated `reqnroll-*-protocol-*.log` file. Deliberately independent of `--log-level` — turning up app logging shouldn't also flood the client's Output panel with library internals, and vice versa. |
 | `--trace` | `Off`/`Messages`/`Verbose` | `Off` | F41: seeds the LSP protocol trace level (`$/logTrace`) before the client connects. |
 
@@ -172,19 +190,145 @@ Each IDE's glue component sets its own defaults for these three flags when spawn
 see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md) and
 [../VSCode/CONTRIBUTING.md](../VSCode/CONTRIBUTING.md) for what each one passes.
 
+## Server IDE identity (`--ide`) and its `ClientInfo` fallback
+
+`--ide <identifier>` (`visualstudio` / `vscode` / `rider`) is the fourth startup argument, and the
+only one that isn't about verbosity. It is parsed in `Program.Main` and handed to
+`ClientIdeContext`, the singleton every per-IDE branch reads (`IsVisualStudio`, `IsVSCode`,
+`SupportsCodeLensResolve`). Read the class's own remarks before adding another per-IDE branch.
+
+It has **two** sources, resolved in this order (issue #709):
+
+1. **`--ide`** — the primary source, and the only one available before the client connects. That
+   matters: the log-file prefix (`LspIdeSupportLogger` reads it in its constructor) and the
+   `initialize`-time capability decisions in `Program.ConfigureServer` both depend on it, so a
+   client that fails to pass it would otherwise stay unidentified for the whole session.
+2. **`InitializeParams.ClientInfo`** — the LSP-standard `{name, version}` the client self-reports
+   in the `initialize` request. It arrives *after* the DI container was built, so
+   `ClientIdeContext.ApplyClientInfo` (called from `OnInitialized`) fills the identity in only when
+   `--ide` was absent. `ClientInfo.Name` is a free-form product name ("Visual Studio Code"), not an
+   identifier, so it is mapped by an ordered, case-insensitive **substring** table in
+   `MapClientInfoNameToIde` — order is load-bearing there ("visual studio code" must be tested
+   before "visual studio", or every VS Code client would be handed Visual Studio's push-based
+   semantic-token path). An unrecognized name resolves to nothing rather than being guessed at.
+
+`--ide` always wins, so this changes behaviour only for a client that omits the flag; every shipped
+client still passes it, and no client's capability negotiation moves.
+
+Because the identity is only fully known at `initialize`, the server logs it there, at Info:
+
+```
+2026-09-28T11:02:14.517Z [Info   ] Program+<>c.ApplyClientIdentity (tid=1): Client identity: --ide=visualstudio, clientInfo=Visual Studio (17.14.0), effective ide=visualstudio
+```
+
+`--ide=<none>` with a resolved `effective ide=…  (resolved from ClientInfo)` is the fallback firing;
+`clientInfo=<none>` means the client sent no `ClientInfo` at all. The line is suppressed at the
+default `--log-level Warning` — raise it to `Info` to see it.
+
+One known limitation: `LspIdeSupportLogger` derives its file prefix from the identity present when
+it is constructed, which is before the client connects. A client that omits `--ide` and is
+identified only via `ClientInfo` therefore still gets the neutral `reqnroll-lsp-server-*.log`
+prefix, while everything else (capabilities, handlers, telemetry `IdeClient`) uses the resolved
+identity.
+
 ## Debugging
 
-Runtime logs land in `%LocalAppData%\Reqnroll\` (Windows) / `~/.local/share/Reqnroll/`
-(macOS/Linux):
+Runtime logs land in `%LocalAppData%\Reqnroll\logs\` (Windows) / `~/.local/share/Reqnroll/logs/`
+(macOS/Linux), pruned after 10 days (`ReqnrollLogPaths`/`ConnectorLogPaths`). Every .NET-side log
+file (server, Connector, VS/VS Code file sinks) shares one canonical preamble — UTC timestamp,
+level, origin, thread id (`LogLineFormatter.FormatPreamble`) — so entries from different
+files/processes can be correlated by timestamp alone:
 
-- `reqnroll-<ide>-debug-<date>.log` — the server's own log output (parses, discovery, handler
-  activity, stack traces on server-side failures). Appended across runs/processes sharing a day.
+```
+2026-09-07T14:13:02.891Z [Info   ] ConnectorDiscoveryService.RunDiscovery (tid=17): [DemoProjectWithExternalAssembly] Discovery complete in 566ms (connector pid=36644): 7 step definition(s), 0 hook(s).
+```
+
+Rider's `reqnroll-rider-ext-*.log` is the one exception: `ReqnrollDebugLogger.kt` deliberately omits
+the origin/tid segment (Kotlin has no `[CallerFilePath]` equivalent, and tid isn't meaningful for a
+mostly-single-threaded plugin glue log — see that file's own doc comment) — timestamp and level
+still match, just without the trailing `origin (tid=n):` part:
+
+```
+2026-09-07T14:45:48.580Z [Warning] ReqnrollRequestSender: no Reqnroll LSP server running
+```
+
+File names follow `reqnroll-{ide}-{role}[-debug]-{yyyyMMdd}-{pid}.log` — the PID (of the process
+that wrote it, resolved once at construction) makes concurrent instances (two VS windows, an LSP
+server plus its Connector children) never collide on one file, and lets you match a specific run
+back to a specific process. The `-debug` segment only appears in DEBUG builds (`SynchronousFileLogger.GetLogFile`).
+
+The PID only separates *processes*. Within one process, create exactly one `SynchronousFileLogger`
+per `{ide, role}` and share it: each instance serializes writes only with its own lock, so two
+instances on the same file hit a sharing violation under concurrent writes, and the swallowed
+error silently drops the line (issue #748). The VS extension shares `ExtensionHostLogger.Instance`
+in `devenv.exe` and `CodeLensHostLogger.Instance` in the CodeLens ServiceHub host for this reason
+(see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md)).
+
+- `reqnroll-<ide>-server-[debug-]<date>-<pid>.log` — the server's own log output (parses,
+  discovery, handler activity, stack traces on server-side failures), at the level set by
+  `--log-level` (see below).
 - `reqnroll-<ide>-inspector-<datetime>.log` (or the client's own equivalent) — client-side JSON-RPC
   trace of everything that actually crossed the wire; the source of truth for "what did the client
   send/receive."
+- `reqnroll-lsp-connector-<date>-<pid>.log` — **the out-of-process Connector's own log**, one file
+  per Connector process invocation. The `ide` segment is always the literal `lsp`, not the actual
+  client (VS/VS Code/Rider) — the Connector has no way to know which IDE launched its parent
+  server. See the next section — unlike every other log here, this one usually doesn't exist at
+  all.
+- `reqnroll-telemetry-<yyyyMMdd>.jsonl` (UTC date) — **off by default.** Set the
+  `REQNROLL_TELEMETRY_DEBUG_LOG` environment variable before launching the IDE to mirror every
+  `telemetry/event` the server emits, and every event each host-side transmitter (VS's
+  `TelemetryTransmitter`, VS Code's `telemetry.ts`, Rider's `RiderTelemetryTransmitter`) attempts to
+  send, to this file as newline-delimited JSON — one line per event: `ts`, `source`, `event`,
+  `props`, plus `enabled`/`transmitted`/`error` on the host-side sink. `1`/`true` writes to the
+  default path above (`TelemetryDebugLog.DefaultPath`, in this same log directory); any other value
+  is treated as an explicit target file path; unset/`0`/`false` disables it. The mirror is
+  independent of `REQNROLL_TELEMETRY_ENABLED` (the transmission opt-out) and of whether the event is
+  actually transmitted downstream, so it records exactly what was *produced* even when transmission
+  is disabled or the event gets dropped — see `TelemetryDebugLog.cs`
+  (`src/Core/Reqnroll.IdeSupport.Common/Logging/TelemetryDebugLog.cs`),
+  `FileLoggingLspTelemetryService.cs`, `telemetryDebugLog.ts`
+  (`src/VSCode/src/logging/telemetryDebugLog.ts`) and `RiderTelemetryDebugLog.kt`
+  (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/telemetry/RiderTelemetryDebugLog.kt`).
 
-When a bug report only makes sense with both, ask for both logs together rather than guessing from
-one side.
+When a bug report only makes sense with more than one of these, ask for them together rather than
+guessing from one side.
+
+### Connector logging: buffered, and gated by `--log-level`, not a separate switch
+
+The Connector (`src/LSP/Reqnroll.IdeSupport.LSP.Connector`) is a short-lived child process, one per
+binding-discovery run, so unconditionally writing a log file per invocation used to leave a
+dozen-plus small files behind after a single IDE session touching a handful of projects — every one
+of them empty of anything worth reading, since almost every discovery run succeeds cleanly (issue
+#637). `FileLogger` (`Connector/Logging/FileLogger.cs`) fixes this by buffering every line in memory
+and only ever touching disk when one of two things happens:
+
+- **A `LogLevel.Error` is logged** — the whole buffer (everything logged so far, not just the error
+  line) is flushed, giving you the context leading up to the failure, and every line after that is
+  written live. This always happens, regardless of verbosity — a Connector crash or discovery
+  failure always leaves an artifact.
+- **The Connector was launched with `--file-log`** — every line is written live from the start, same
+  as before #637. `OutProcReqnrollConnector.RunDiscovery` adds this flag itself, automatically,
+  whenever the LSP server's own `_logger.IsLogging(TraceLevel.Info)` is true — i.e. whenever
+  `--log-level` is `Info` or `Verbose`. **There is no separate Connector-logging setting**: turning
+  up the server's own verbosity is what turns on Connector file logging too, matching every other
+  lever in this family (see [Server logging and trace
+  verbosity](#server-logging-and-trace-verbosity) above). The pre-existing `--debug` flag
+  (`Debugger.Launch()`) also implies `--file-log`, on the theory that someone attaching a debugger
+  almost certainly wants the log too — but `--file-log` is the primary, correctly-wired mechanism;
+  don't reuse `--debug` for this.
+
+A run at the default `--log-level Warning` that never hits an error therefore leaves **no
+`reqnroll-lsp-connector-*.log` file at all** — no directory is even created. `FileLogger.LogFilePath`
+is `null` until the first flush.
+
+When a file *is* written (error, or `--log-level Info`+), correlate it back to the server-side run
+that spawned it via the connector PID both sides now share: `ConnectorDiscoveryService`'s
+"Discovery complete"/"Discovery failed" lines append `(connector pid=<n>)`, and that same PID is the
+one baked into the Connector log's own filename — so `reqnroll-lsp-connector-20260907-36644.log`
+is exactly the run behind a server-log line ending `(connector pid=36644)`. This matters because
+overlapping discovery runs (several projects loading at once) each get their own Connector process
+and their own PID-suffixed file — there's no shared/interleaved Connector log to untangle.
 
 ## Multi-IDE considerations
 

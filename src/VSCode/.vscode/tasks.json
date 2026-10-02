@@ -20,9 +20,28 @@
       "detail": "Republish the LSP server for F5 dev-mode if source has changed (see issue #44)"
     },
     {
+      "type": "npm",
+      "script": "build:testlogger:dev",
+      "problemMatcher": [],
+      "label": "npm: build:testlogger:dev",
+      "detail": "Republish the bundled TestLogger for F5 dev-mode if source has changed (LSP-server outcome pipeline, #700/#702)"
+    },
+    {
+      "type": "npm",
+      "script": "build:mtpreporter:dev",
+      "problemMatcher": [],
+      "label": "npm: build:mtpreporter:dev",
+      "detail": "Republish the bundled TestReporter.MTP for F5 dev-mode if source has changed (LSP-server outcome pipeline, issue #715 phase 4)"
+    },
+    {
       "label": "Run Extension: prelaunch",
       "dependsOrder": "sequence",
-      "dependsOn": ["npm: build:server:dev", "npm: compile"]
+      "dependsOn": [
+        "npm: build:server:dev",
+        "npm: build:testlogger:dev",
+        "npm: build:mtpreporter:dev",
+        "npm: compile"
+      ]
     },
     {
       "type": "npm",

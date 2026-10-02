@@ -6,6 +6,7 @@ using OmniSharp.Extensions.JsonRpc;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Server;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 using Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 using Reqnroll.IdeSupport.LSP.Server.Features.Commenting;
@@ -20,10 +21,10 @@ using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -117,17 +118,17 @@ public static class LanguageServerOptionsExtensions
         var serialOptions = new JsonRpcHandlerOptions { RequestProcessType = RequestProcessType.Serial };
 
         options.OnNotification<ReqnrollProjectLoadedParams>(
-            LspMethodNames.ReqnrollProjectLoaded,
+            CustomLspMethodNames.ReqnrollProjectLoaded,
             (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectLoadedAsync(p, ct),
             serialOptions);
 
         options.OnNotification<ReqnrollProjectUnloadedParams>(
-            LspMethodNames.ReqnrollProjectUnloaded,
+            CustomLspMethodNames.ReqnrollProjectUnloaded,
             (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectUnloadedAsync(p, ct),
             serialOptions);
 
         options.OnNotification<ReqnrollProjectFilesParams>(
-            LspMethodNames.ReqnrollProjectFiles,
+            CustomLspMethodNames.ReqnrollProjectFiles,
             (p, ct) => resolver!.Get<ILspWorkspaceScopeManager>().HandleProjectFilesAsync(p, ct),
             serialOptions);
 
@@ -135,7 +136,7 @@ public static class LanguageServerOptionsExtensions
         // diagnostics/semantic-tokens republish for a document the client has just detected
         // becoming the active tab, independent of whatever normally triggers that.
         options.OnNotification<DocumentActivatedParams>(
-            LspMethodNames.ReqnrollDocumentActivated,
+            CustomLspMethodNames.ReqnrollDocumentActivated,
             (p, ct) => resolver!.Get<DocumentActivatedHandler>().HandleAsync(p, ct));
 
         // ── Manual request routing to bypass dynamic registration limitations ─────────
@@ -143,26 +144,26 @@ public static class LanguageServerOptionsExtensions
         // through MeasuredAsync(...) so Layer 4 field instrumentation times the manual-route handler
         // at one site. The same helper can wrap the other manual routes below as needed.
         options.OnRequest<SemanticTokensParams, SemanticTokens>(
-            LspMethodNames.TextDocumentSemanticTokensFull,
-            (request, ct) => MeasuredAsync(resolver!, LspMethodNames.TextDocumentSemanticTokensFull,
+            LspStandardMethodNames.TextDocumentSemanticTokensFull,
+            (request, ct) => MeasuredAsync(resolver!, LspStandardMethodNames.TextDocumentSemanticTokensFull,
                 request.TextDocument.Uri, () => resolver!.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
 
         options.OnRequest<SemanticTokensDeltaParams, SemanticTokensFullOrDelta>(
-            LspMethodNames.TextDocumentSemanticTokensFullDelta,
-            (request, ct) => MeasuredAsync(resolver!, LspMethodNames.TextDocumentSemanticTokensFullDelta,
+            LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
+            (request, ct) => MeasuredAsync(resolver!, LspStandardMethodNames.TextDocumentSemanticTokensFullDelta,
                 request.TextDocument.Uri, () => resolver!.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
 
         options.OnRequest<SemanticTokensRangeParams, SemanticTokens>(
-            LspMethodNames.TextDocumentSemanticTokensRange,
-            (request, ct) => MeasuredAsync(resolver!, LspMethodNames.TextDocumentSemanticTokensRange,
+            LspStandardMethodNames.TextDocumentSemanticTokensRange,
+            (request, ct) => MeasuredAsync(resolver!, LspStandardMethodNames.TextDocumentSemanticTokensRange,
                 request.TextDocument.Uri, () => resolver!.Get<SemanticTokensHandler>().HandleAsync(request, ct)));
 
         options.OnRequest<ReferenceParams, LocationOrLocationLinks>(
-            LspMethodNames.TextDocumentReferences,
+            LspStandardMethodNames.TextDocumentReferences,
             (request, ct) => resolver!.Get<ReferencesHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ReferenceParams, FindStepUsagesResponse>(
-            LspMethodNames.ReqnrollFindStepUsages,
+            CustomLspMethodNames.ReqnrollFindStepUsages,
             (request, ct) => resolver!.Get<FindStepUsagesHandler>().HandleAsync(request, ct));
 
         // Always-hierarchical documentSymbol for the VS extension's own Navigation Bar (Issue #5
@@ -171,20 +172,42 @@ public static class LanguageServerOptionsExtensions
         // real client's declared hierarchicalDocumentSymbolSupport capability. See remarks on
         // DocumentSymbolHandler.HandleHierarchicalAsync.
         options.OnRequest<DocumentSymbolParams, IReadOnlyList<DocumentSymbol>>(
-            LspMethodNames.ReqnrollDocumentSymbolHierarchical,
+            CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical,
             (request, ct) => resolver!.Get<DocumentSymbolHandler>().HandleHierarchicalAsync(request, ct));
 
-        options.OnRequest<GoToHooksParams, GoToHooksResponse>(
-            LspMethodNames.ReqnrollGoToHooks,
-            (request, ct) => resolver!.Get<GoToHooksHandler>().HandleAsync(request, ct));
+        options.OnRequest<FindHooksParams, FindHooksResponse>(
+            CustomLspMethodNames.ReqnrollFindHooks,
+            (request, ct) => resolver!.Get<FindHooksHandler>().HandleAsync(request, ct));
 
-        options.OnRequest<TextDocumentPositionParams, GoToMatchingScenariosResponse>(
-            LspMethodNames.ReqnrollGoToMatchingScenarios,
-            (request, ct) => resolver!.Get<GoToMatchingScenariosHandler>().HandleAsync(request, ct));
+        // Go to Step Definition with per-binding detail for the VS extension's results list (issue
+        // #757) — textDocument/definition only carries Locations. Same bindings as DefinitionHandler.
+        options.OnRequest<TextDocumentPositionParams, FindStepDefinitionsResponse>(
+            CustomLspMethodNames.ReqnrollFindStepDefinitions,
+            (request, ct) => resolver!.Get<FindStepDefinitionsHandler>().HandleAsync(request, ct));
+
+        options.OnRequest<TextDocumentPositionParams, FindMatchingScenariosResponse>(
+            CustomLspMethodNames.ReqnrollFindMatchingScenarios,
+            (request, ct) => resolver!.Get<FindMatchingScenariosHandler>().HandleAsync(request, ct));
 
         options.OnRequest<ResolveTestTargetsParams, ResolveTestTargetsResponse>(
-            LspMethodNames.ReqnrollResolveTestTargets,
+            CustomLspMethodNames.ReqnrollResolveTestTargets,
             (request, ct) => resolver!.Get<ResolveTestTargetsHandler>().HandleAsync(request, ct));
+
+        options.OnRequest<ResolveContainerTestTargetsParams, ResolveContainerTestTargetsResponse>(
+            CustomLspMethodNames.ReqnrollResolveContainerTestTargets,
+            (request, ct) => resolver!.Get<ResolveContainerTestTargetsHandler>().HandleAsync(request, ct));
+
+        // LSP-server outcome pipeline (VSTest logger → server → every connected IDE): the run
+        // registration and outcome lookup that used to be an in-proc, VS-only pair
+        // (TestOutcomeListener/RunTestCodeLensCallbackListener) are now custom requests any IDE's
+        // glue component can call the same way.
+        options.OnRequest<RegisterTestRunParams, RegisterTestRunResponse>(
+            CustomLspMethodNames.ReqnrollRegisterTestRun,
+            (request, ct) => resolver!.Get<RegisterTestRunHandler>().HandleAsync(request, ct));
+
+        options.OnRequest<GetTestOutcomeParams, GetTestOutcomeResponse>(
+            CustomLspMethodNames.ReqnrollGetTestOutcome,
+            (request, ct) => resolver!.Get<GetTestOutcomeHandler>().HandleAsync(request, ct));
 
         // A single manual registration handles textDocument/codeLens for every lens kind:
         // StepCodeLensHandler (.cs step usages), HookCodeLensHandler (.feature hook matches,
@@ -202,7 +225,7 @@ public static class LanguageServerOptionsExtensions
             (req, ct) => resolver!.Get<HookMatchCountCodeLensHandler>().HandleAsync(req, ct),
         };
         options.OnRequest<CodeLensParams, CodeLens[]>(
-            LspMethodNames.TextDocumentCodeLens,
+            LspStandardMethodNames.TextDocumentCodeLens,
             async (request, ct) =>
             {
                 var results = await Task.WhenAll(codeLensHandlers.Select(h => h(request, ct)));
@@ -212,22 +235,22 @@ public static class LanguageServerOptionsExtensions
         // codeLens/resolve: dispatches to whichever handler produced the lens, based on the
         // "kind" discriminator embedded in CodeLens.Data (issue #471, non-VS deferred-resolve path).
         options.OnRequest<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens, global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>(
-            LspMethodNames.CodeLensResolve,
+            LspStandardMethodNames.CodeLensResolve,
             (lens, ct) => resolver!.Get<CodeLensResolveHandler>().ResolveAsync(lens, ct));
 
         // inlayHint/foldingRange are routed manually (rather than via AddHandler's dynamic
         // registration) so that inlayHintProvider/foldingRangeProvider can be declared
         // statically in the initialize response — see Program.ConfigureServer for why.
         options.OnRequest<InlayHintParams, InlayHintContainer?>(
-            LspMethodNames.TextDocumentInlayHint,
+            LspStandardMethodNames.TextDocumentInlayHint,
             (request, ct) => resolver!.Get<InlayHintHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FoldingRangeRequestParam, Container<FoldingRange>?>(
-            LspMethodNames.TextDocumentFoldingRange,
+            LspStandardMethodNames.TextDocumentFoldingRange,
             (request, ct) => resolver!.Get<FoldingRangeHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FindUnusedStepDefinitionsParams, FindUnusedStepDefinitionsResponse>(
-            LspMethodNames.ReqnrollFindUnusedStepDefinitions,
+            CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions,
             (_, ct) => resolver!.Get<FindUnusedStepDefinitionsHandler>().HandleAsync(ct));
 
         // ── Step Rename refactoring ──────────────────────────────────────────────
@@ -247,28 +270,49 @@ public static class LanguageServerOptionsExtensions
         // non-null JToken that *represents* JSON null) instead of a null reference sidesteps that
         // library bug while still round-tripping as a null prepareRename result on the wire.
         options.OnRequest<PrepareRenameParams, JToken>(
-            LspMethodNames.TextDocumentPrepareRename,
+            LspStandardMethodNames.TextDocumentPrepareRename,
             async (request, ct) =>
             {
                 var result = await resolver!.Get<RenameHandler>().HandlePrepareRenameAsync(request, ct);
                 return result != null ? (JToken)JObject.FromObject(result, CamelCaseSerializer) : JValue.CreateNull();
             });
 
+        // Serial (issue #671, R8) — not the OmniSharp default of Parallel for a manually-routed
+        // OnRequest. A rename computes one edit spanning several documents at once: it reads the
+        // binding registry, the C# live-text cache, and the match caches of every feature file
+        // containing a usage. A didChange landing partway through that read yields an edit built
+        // from a mix of old and new state — fresh offsets in one file, stale offsets in another.
+        // Roslyn's LSP server avoids this with immutable per-request solution snapshots; lacking
+        // any snapshot mechanism, the Serial lane is how we get the same guarantee. Affordable for
+        // the same reason as the project-lifecycle notifications above: renames are user-driven and
+        // rare, unlike the per-keystroke handlers this codebase deliberately keeps off that lane.
+        //
+        // This also makes the request immune to OmniSharp's global Parallel→Serial ContentModified
+        // cancellation (issue #654) — but that is a secondary benefit, not the reason: R1 already
+        // removes the self-inflicted didOpen that triggered it, by moving the workspace/applyEdit
+        // push out of the request. Note R1 is a *prerequisite* for this line, not merely a
+        // companion: holding this shared lane across a client round-trip would block every other
+        // didOpen/didChange and the start of all newly-arriving Parallel requests for its duration.
         options.OnRequest<RenameParams, WorkspaceEdit>(
-            LspMethodNames.TextDocumentRename,
+            LspStandardMethodNames.TextDocumentRename,
             async (request, ct) =>
                 await resolver!.Get<RenameHandler>().HandleRenameAsync(request, ct)
-                ?? new WorkspaceEdit());
+                ?? new WorkspaceEdit(),
+            serialOptions);
 
         options.OnRequest<RenameTargetsParams, RenameTargetsResponse>(
-            LspMethodNames.ReqnrollRenameTargets,
+            CustomLspMethodNames.ReqnrollRenameTargets,
             async (request, ct) =>
                 await resolver!.Get<RenameTargetsHandler>().HandleRenameTargetsAsync(request, ct)
                 ?? new RenameTargetsResponse());
 
         options.OnNotification<SelectRenameTargetParams>(
-            LspMethodNames.ReqnrollSelectRenameTarget,
+            CustomLspMethodNames.ReqnrollSelectRenameTarget,
             (request, ct) => resolver!.Get<RenameHandler>().HandleSelectRenameTargetAsync(request, ct));
+
+        options.OnNotification<RenameAppliedParams>(
+            CustomLspMethodNames.ReqnrollRenameApplied,
+            (request, ct) => resolver!.Get<RenameHandler>().HandleRenameAppliedAsync(request, ct));
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
@@ -71,7 +72,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
         LspMessage        message,
         CancellationToken cancellationToken)
     {
-        if (message.Method == "textDocument/didClose")
+        if (message.Method == LspStandardMethodNames.TextDocumentDidClose)
         {
             if (UriToFeatureFilePath(message) is { } closedPath)
             {
@@ -83,7 +84,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             return LspInterceptorResult.PassThrough;
         }
 
-        if (message.Method != "textDocument/didOpen")
+        if (message.Method != LspStandardMethodNames.TextDocumentDidOpen)
             return LspInterceptorResult.PassThrough;
 
         if (UriToFeatureFilePath(message) is not { } path)
@@ -129,7 +130,7 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
         lock (_selfForwardedLock) { _selfForwardedPaths.Add(path); }
         try
         {
-            await pipe.SendNotificationToServerAsync("textDocument/didOpen", paramsJson, cancellationToken)
+            await pipe.SendNotificationToServerAsync(LspStandardMethodNames.TextDocumentDidOpen, paramsJson, cancellationToken)
                       .ConfigureAwait(false);
         }
         finally
@@ -137,12 +138,12 @@ internal sealed class DocumentActivationTrackingInterceptor : ILspMessageInterce
             lock (_selfForwardedLock) { _selfForwardedPaths.Remove(path); }
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "DocumentActivationTrackingInterceptor: activation preceded didOpen for {FileName}; sending reqnroll/documentActivated now.",
             Path.GetFileName(path));
 
         var activatedParamsJson = $"{{\"uri\":{Newtonsoft.Json.JsonConvert.ToString(docUri)}}}";
-        await pipe.SendNotificationToServerAsync("reqnroll/documentActivated", activatedParamsJson, cancellationToken)
+        await pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollDocumentActivated, activatedParamsJson, cancellationToken)
                   .ConfigureAwait(false);
 
         return LspInterceptorResult.Consume;

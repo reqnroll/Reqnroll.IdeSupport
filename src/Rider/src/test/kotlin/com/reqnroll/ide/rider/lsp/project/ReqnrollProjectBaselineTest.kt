@@ -2,8 +2,11 @@ package com.reqnroll.ide.rider.lsp.project
 
 import com.jetbrains.rider.model.RdTargetFrameworkId
 import com.jetbrains.rider.model.RdVersionInfo
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ReqnrollProjectBaselineTest {
     @Test
@@ -31,5 +34,23 @@ class ReqnrollProjectBaselineTest {
         )
 
         assertEquals("netstandard2.0", ReqnrollProjectBaseline.toClassicMoniker(tfm))
+    }
+
+    private val sep = File.separator
+    private val folder = "${sep}work${sep}App"
+
+    @Test
+    fun `isBuildOutput matches the project-root bin and obj folders and their contents`() {
+        assertTrue(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}obj", folder))
+        assertTrue(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}bin", folder))
+        assertTrue(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}obj${sep}Debug${sep}net8.0${sep}App.AssemblyInfo.cs", folder))
+        assertTrue(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}OBJ${sep}x.cs", folder))
+    }
+
+    @Test
+    fun `isBuildOutput ignores nested bin folders and look-alike names`() {
+        assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}Features${sep}bin${sep}A.feature", folder))
+        assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}objects${sep}A.cs", folder))
+        assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}Steps.cs", folder))
     }
 }

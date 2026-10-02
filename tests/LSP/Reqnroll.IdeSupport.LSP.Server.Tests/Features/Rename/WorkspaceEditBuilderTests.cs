@@ -143,4 +143,68 @@ public class WorkspaceEditBuilderTests
 
         builder.GetEditsByUri()[FeatureUri].Single().Should().NotBeOfType<AnnotatedTextEdit>();
     }
+
+    // ── Issue #671 (R2): DocumentChanges carry the document version the edit was computed
+    //    against, which is what OptionalVersionedTextDocumentIdentifier exists for — "to allow
+    //    clients to check the text document version before an edit is applied." ────────────────
+
+    private static OptionalVersionedTextDocumentIdentifier DocumentIdentifierFor(
+        WorkspaceEdit edit, DocumentUri uri)
+        => edit.DocumentChanges!
+            .Select(change => change.TextDocumentEdit!)
+            .Single(textDocumentEdit => textDocumentEdit.TextDocument.Uri == uri)
+            .TextDocument;
+
+    [Fact]
+    public void Build_stamps_each_DocumentChange_with_the_resolved_document_version()
+    {
+        var builder = new WorkspaceEditBuilder(
+            supportsChangeAnnotations: true,
+            resolveVersion: uri => uri == FeatureUri ? 7 : 42);
+        builder.Add(FeatureUri, SomeRange, "new text");
+        builder.Add(CsUri, SomeRange, "new literal");
+
+        var edit = builder.Build();
+
+        DocumentIdentifierFor(edit, FeatureUri).Version.Should().Be(7);
+        DocumentIdentifierFor(edit, CsUri).Version.Should().Be(42);
+    }
+
+    [Fact]
+    public void Build_stamps_a_null_version_for_a_document_the_client_has_not_opened()
+    {
+        // Per the spec, null here means "the content on disk is the master" — the correct and
+        // common case for a rename, which routinely edits closed .feature files.
+        var builder = new WorkspaceEditBuilder(
+            supportsChangeAnnotations: true,
+            resolveVersion: _ => null);
+        builder.Add(FeatureUri, SomeRange, "new text");
+
+        DocumentIdentifierFor(builder.Build(), FeatureUri).Version.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_stamps_a_null_version_when_no_resolver_is_supplied()
+    {
+        var builder = new WorkspaceEditBuilder(supportsChangeAnnotations: true);
+        builder.Add(FeatureUri, SomeRange, "new text");
+
+        DocumentIdentifierFor(builder.Build(), FeatureUri).Version.Should().BeNull();
+    }
+
+    [Fact]
+    public void The_legacy_Changes_shape_is_unaffected_by_the_version_resolver()
+    {
+        // The legacy map has nowhere to carry a version, so a resolver must neither appear in the
+        // output nor change its shape.
+        var builder = new WorkspaceEditBuilder(
+            supportsChangeAnnotations: false,
+            resolveVersion: _ => 7);
+        builder.Add(FeatureUri, SomeRange, "new text");
+
+        var edit = builder.Build();
+
+        edit.Changes.Should().ContainKey(FeatureUri);
+        edit.DocumentChanges.Should().BeNull();
+    }
 }

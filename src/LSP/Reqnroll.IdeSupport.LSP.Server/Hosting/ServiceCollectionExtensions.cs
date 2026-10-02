@@ -21,6 +21,7 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
+using Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Core.TestTargets;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
@@ -38,10 +39,13 @@ using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
 using Reqnroll.IdeSupport.LSP.Server.Features.References;
 using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
+using Reqnroll.IdeSupport.LSP.Server.Concurrency;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Features.TextSync;
 using Reqnroll.IdeSupport.LSP.Server.Logging;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -84,11 +88,15 @@ public static class ServiceCollectionExtensions
             // the debug log is unconfigured the sink is a no-op and it simply forwards.
             .AddSingleton<ITelemetryDebugLog>(_ => TelemetryDebugLog.FromEnvironment())
             .AddSingleton<LspTelemetryService>()
-            .AddSingleton<ILspTelemetryService>(sp => new FileLoggingLspTelemetryService(
-                sp.GetRequiredService<LspTelemetryService>(),
-                sp.GetRequiredService<ITelemetryDebugLog>()))
+            // Outermost decorator stamps the canonical client identity (#844) so the debug-log
+            // mirror below records exactly what is transmitted, identity included.
+            .AddSingleton<ILspTelemetryService>(sp => new IdentityStampingLspTelemetryService(
+                new FileLoggingLspTelemetryService(
+                    sp.GetRequiredService<LspTelemetryService>(),
+                    sp.GetRequiredService<ITelemetryDebugLog>()),
+                sp.GetRequiredService<ClientIdeContext>()))
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
-            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "Error"
+            // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "UnhandledException"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server
             // has no equivalent of). Previously registered as NullLspTelemetryService, which silently
             // dropped LSP.Core exceptions (e.g. Gherkin parse errors) — issue #255.
@@ -113,9 +121,9 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IFeatureUsageCounters, FeatureUsageCounters>()
             .AddSingleton<IFeatureUsageFlushService>(sp => new FeatureUsageFlushService(
                 sp.GetRequiredService<IFeatureUsageCounters>(),
-                sp.GetRequiredService<ClientIdeContext>(),
                 sp.GetRequiredService<IIdeSupportLogger>(),
-                sp.GetRequiredService<ILspTelemetryService>()))
+                sp.GetRequiredService<ILspTelemetryService>(),
+                FeatureUsageFlushService.ResolveIntervalFromEnvironment()))
             // F41: tracks the LSP `trace` level (--trace / InitializeParams.Trace / $/setTrace) and
             // issues $/logTrace notifications. Singleton so the level set by $/setTrace is visible
             // to every consumer (currently OperationDurationRecorder's PERF lines).
@@ -124,7 +132,6 @@ public static class ServiceCollectionExtensions
                 initialTrace))
             .AddSingleton<IOperationDurationRecorder>(sp => new OperationDurationRecorder(
                 sp.GetRequiredService<IIdeSupportLogger>(),
-                sp.GetRequiredService<ClientIdeContext>(),
                 sp.GetRequiredService<ILspTelemetryService>(),
                 sp.GetRequiredService<IPerformanceTelemetrySampler>(),
                 sp.GetRequiredService<ITraceService>(),
@@ -144,6 +151,10 @@ public static class ServiceCollectionExtensions
             // each feature file is resolved against only its own project's bindings.
             .AddSingleton<BindingRegistryProviderRouter>()
             .AddSingleton<IProjectBindingRegistryLookup>(sp => sp.GetRequiredService<BindingRegistryProviderRouter>())
+            // Per-project tag index feeding tag completion (issue #828): tags in use across the
+            // owning project's feature files, kept current from open buffers + disk, cached per
+            // file and re-validated on access (no event wiring needed).
+            .AddSingleton<IFeatureTagIndex, FeatureTagIndex>()
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
             // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).
@@ -184,6 +195,7 @@ public static class ServiceCollectionExtensions
             // the Go to Definition / diagnostics consumers (readers).
             .AddSingleton<IBindingMatchService, BindingMatchService>()
             .AddSingleton<IGherkinDocumentTaggerService, GherkinDocumentTaggerService>()
+            .AddSingleton<IFeatureDocumentReparser, FeatureDocumentReparser>()
             .AddSingleton<ISemanticTokensService, SemanticTokensService>()
             .AddSingleton<IDiagnosticsAggregator, DiagnosticsAggregator>()
             .AddSingleton<ICSharpDiagnosticsAggregator, CSharpDiagnosticsAggregator>()
@@ -220,9 +232,11 @@ public static class ServiceCollectionExtensions
             .AddSingleton<ICompletionService, CompletionService>()
             .AddSingleton<ICompletionMatcher, ReturnAllCompletionMatcher>()
             .AddSingleton<DefinitionHandler>()
-            .AddSingleton<GoToHooksHandler>()
-            .AddSingleton<GoToMatchingScenariosHandler>()
+            .AddSingleton<FindHooksHandler>()
+            .AddSingleton<FindStepDefinitionsHandler>()
+            .AddSingleton<FindMatchingScenariosHandler>()
             .AddSingleton<ResolveTestTargetsHandler>()
+            .AddSingleton<ResolveContainerTestTargetsHandler>()
             .AddSingleton<StepCodeLensHandler>()
             .AddSingleton<HookCodeLensHandler>()
             .AddSingleton<HookMatchCountCodeLensHandler>()
@@ -244,6 +258,16 @@ public static class ServiceCollectionExtensions
             .AddSingleton<CSharpAttributeLiteralResolver>()
             .AddSingleton<RenameTargetsHandler>()
             .AddSingleton<InlayHintHandler>()
-            .AddSingleton<SetTraceNotificationHandler>();
+            .AddSingleton<SetTraceNotificationHandler>()
+            // LSP-server outcome pipeline: persistence and the store are singletons so the same
+            // instance backs every request; the listener is a singleton so its TCP port and
+            // subscribed store.Changed handler are created exactly once and live for the server's
+            // lifetime, not per-request.
+            .AddSingleton<TestOutcomePersistence>()
+            .AddSingleton<TestOutcomeSessionBreadcrumb>()
+            .AddSingleton<TestOutcomeStore>()
+            .AddSingleton<TestOutcomeTcpListener>()
+            .AddSingleton<RegisterTestRunHandler>()
+            .AddSingleton<GetTestOutcomeHandler>();
     }
 }

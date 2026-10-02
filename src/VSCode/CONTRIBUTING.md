@@ -29,13 +29,18 @@ src/VSCode/               ← this directory (TypeScript extension)
     msbuildEvaluator.ts   ← dotnet msbuild property evaluation
     lspInspectorLogger.ts ← optional JSON-RPC file logger
     statusBar.ts          ← LSP server status bar item
+    testOutcomes/         ← LSP-server outcome pipeline VS Code leg (#700/#702, opt-in)
     test/                 ← Mocha suite (runs in an Extension Development Host)
   syntaxes/               ← TextMate grammar (.tmLanguage.json)
   scripts/
-    publish-server.sh     ← publishes the LSP server for all RIDs
-    build-vsix.sh         ← packages the .vsix
+    publish-server.sh      ← publishes the LSP server for all RIDs
+    publish-testlogger.sh  ← publishes the bundled TestLogger (no RID needed)
+    publish-mtpreporter.sh ← publishes the bundled TestReporter.MTP (no RID needed)
+    build-vsix.sh          ← packages the .vsix
     validate-semantic-token-scopes.mjs  ← CI validation
 src/LSP/                  ← the shared LSP server (C#)
+src/Core/Reqnroll.IdeSupport.TestLogger/      ← the bundled VSTest logger (C#, shared with VS/Rider)
+src/Core/Reqnroll.IdeSupport.TestReporter.MTP/ ← the bundled MTP in-process reporter (C#, shared with VS/Rider)
 ```
 
 ## Activation events
@@ -61,6 +66,41 @@ npm run build:server
 ```
 
 This runs `scripts/publish-server.sh`, which publishes the server for your host platform into `src/VSCode/server/<rid>/`.
+
+### 1b. Build the TestLogger (opt-in feature, LSP-server outcome pipeline #700/#702)
+
+Only needed if you're working on `src/testOutcomes/` or testing `reqnroll.testOutcomes.enabled`
+(off by default — see that setting's own description, and `testOutcomesService.ts`'s doc comment
+for why: it merges into the shared `dotnet.unitTests.runSettingsPath` setting C# Dev Kit reads,
+not something namespaced under `reqnroll.*`). Skippable for everything else.
+
+```sh
+cd src/VSCode
+npm run build:testlogger
+```
+
+This runs `scripts/publish-testlogger.sh`, which publishes `Reqnroll.IdeSupport.TestLogger` into
+`src/VSCode/testlogger/`. Unlike the server, there's no RID to choose — the logger targets
+netstandard2.0 with no self-contained runtime, so one build serves every OS.
+
+### 1c. Build the TestReporter.MTP (opt-in feature, LSP-server outcome pipeline, issue #715 phase 4)
+
+Only needed if you're working on `src/testOutcomes/mtpEphemeralInjection.ts` or testing
+`reqnroll.testOutcomes.enabled` against an MTP-mode (Microsoft.Testing.Platform) test project.
+Same opt-in setting as the TestLogger above — skippable for everything else.
+
+```sh
+cd src/VSCode
+npm run build:mtpreporter
+```
+
+This runs `scripts/publish-mtpreporter.sh`, which writes the reporter's *source bundle* (issue #741),
+`Reqnroll.IdeSupport.TestReporter.MTP.targets` plus `ReporterSource/*.cs`, into `src/VSCode/mtpreporter/`
+via the reporter project's `PublishReporterBundle` target. Like the TestLogger, there's no RID to choose,
+and no reporter assembly ships. At activation the extension writes a project-local
+`obj/<Project>.csproj.reqnroll-ide.targets` stub into each MTP-capable project, importing that
+`.targets` file, which compiles the reporter into the project's own test assembly (see
+`mtpProjectStubs.ts`'s doc comment). No environment variable and no global state is involved.
 
 ### 2. Install npm dependencies
 
@@ -122,50 +162,96 @@ cd src/VSCode
 npm run build:vsix
 ```
 
-This publishes the server for all four RIDs and packages the `.vsix` in one step. Requires Docker or cross-compilation support for non-host RIDs.
+This publishes the server for all six RIDs and packages the `.vsix` in one step. Requires Docker or cross-compilation support for non-host RIDs.
+
+The bundled LSP server is published `Release` by default (`publish-server.sh`'s configuration
+argument defaults to `Release`) — quiet logging unless `reqnroll.trace.server` is raised, as
+described below.
+
+## Local install of a dev build
+
+The `.vsix` from either packaging step above installs the same way a Marketplace release would,
+just without publishing it:
+
+```sh
+cd src/VSCode
+npm run build:vsix           # or: bash scripts/build-vsix.sh <rid>, for a non-host RID
+code --install-extension reqnroll-ide-support-<version>.vsix
+```
+
+(`<version>` comes from `package.json`.) Or, from VS Code's UI: Extensions view → **...** menu →
+**Install from VSIX...**, and pick the file from `src/VSCode/`.
+
+This installs into your regular VS Code, not an Extension Development Host — reload/restart VS
+Code to activate it, and uninstall from the Extensions view when you're done testing.
+
+## Output channels
+
+The extension writes to two Output panel channels, each with a distinct purpose:
+
+- **Reqnroll** — the curated app-status channel (issue #661): extension activation, LSP client
+  start/connect/stop, and each command's one-line result (mirroring the popup notification you
+  also see). This is the one to check first for "is the extension doing something" — it also
+  auto-reveals itself on a warning or worse, and `Reqnroll: Show Output Channel` opens it
+  directly. Also teed to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
+- **Reqnroll LSP** — `vscode-languageclient`'s own general client channel: connection-level
+  diagnostics. Also teed to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.
+
+The per-message JSON-RPC wire trace (used to exist as a visible "Reqnroll LSP Trace" Output
+pane) was removed in issue #792 — the log file is the only trace artifact now.
 
 ## LSP tracing
 
-To see raw JSON-RPC traffic, open VS Code Settings and set:
+To see raw JSON-RPC traffic, set `reqnroll.trace.server` to `"verbose"` in
+VS Code Settings. A timestamped trace file is written to
+`%LOCALAPPDATA%\Reqnroll\logs\` (Windows) or
+`~/.local/share/Reqnroll/logs/` (macOS/Linux):
+`reqnroll-vscode-inspector-<timestamp>.log`.
 
-```
-reqnroll.trace.server: verbose
-```
+There is no visible Output panel for the wire trace — the log file is the
+intended artifact for debugging and support (issue #792).
 
-Traffic appears in the **Output** panel under **Reqnroll LSP Trace**. When set to `verbose`, a timestamped log file is also written to `%LOCALAPPDATA%\Reqnroll\` (Windows) or `~/.local/share/Reqnroll/` (macOS/Linux).
-
-Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--trace` or
-`--protocol-log-level` — `reqnroll.trace.server` is the one setting that drives both sides:
+Unlike the Visual Studio extension, VS Code doesn't spawn the server with `--trace` — the
+wire-level trace and the server's log verbosity are driven by two separate settings:
 
 - The wire-level trace (`InitializeParams.Trace` at startup, `$/setTrace` on later changes) is
   handled entirely by `vscode-languageclient` itself, via the `LogOutputChannel` returned from
-  `createTraceChannel()` (`src/lspInspectorLogger.ts`) — `off` maps to `vscode.LogLevel.Off`
-  (client sends `trace: "off"`), anything else to `vscode.LogLevel.Trace` (client sends
-  `trace: "messages"`/`"verbose"` matching the setting). No `--trace` CLI flag is involved.
-- `traceServerToLogLevel()` (same file) separately maps the setting onto the server's
+  `createTraceChannel()` (`src/lspInspectorLogger.ts`) — `reqnroll.trace.server` `off` maps to
+  `vscode.LogLevel.Off` (client sends `trace: "off"`), anything else to `vscode.LogLevel.Trace`
+  (client sends `trace: "messages"`/`"verbose"` matching the setting). No `--trace` CLI flag is
+  involved.
+- `traceServerToLogLevel()` (same file) maps `reqnroll.trace.server` onto the server's
   `--log-level` CLI argument passed in `extension.ts` (`off` → `Warning`, `messages` → `Info`,
   `verbose` → `Verbose`), so the same lever also controls the server's own file/protocol log
-  verbosity. `--protocol-log-level` is left at the server's own default (`Warning`) — there's no
-  VS Code setting for it yet.
+  verbosity.
+- The separate `reqnroll.protocolLogLevel` setting (`Off`/`Error`/`Warning`/`Info`/`Verbose`,
+  default `Warning`) maps onto the server's `--protocol-log-level` CLI argument via
+  `protocolLogLevelToArg()` (same file), giving VS Code users the independent dial for
+  OmniSharp's own internal protocol diagnostics (request dispatch, DryIoc, JSON-RPC plumbing)
+  that the VS extension's `--protocol-log-level` already provides (issue #665).
 
-Changing `reqnroll.trace.server` requires a window reload to take effect on the already-running
-server (the `--log-level` it maps to is fixed at process launch).
+Changing either setting requires a window reload to take effect on the already-running server
+(the `--log-level`/`--protocol-log-level` they map to are fixed at process launch).
 
-**The Output panel can appear empty even with tracing on.** `reqnroll.trace.server: verbose`
-correctly drives `vscode-languageclient` to trace (`InitializeParams.Trace`/`$/setTrace` as
-above), but the **Reqnroll LSP Trace** channel is a `vscode.LogOutputChannel`, which has its own
-independent display-level filter — set only by the user, via that channel's own dropdown in the
-Output panel (or Command Palette → "Developer: Set Log Level…" → pick the channel). Nothing in
-`reqnroll.trace.server`, or anywhere else in the extension, can raise that filter programmatically,
-so a channel left at its default level will silently show nothing even while tracing is fully
-active. If the panel looks empty, check the timestamped file log under `%LOCALAPPDATA%\Reqnroll\`
-(or the platform equivalent above) instead — it's written directly to disk and isn't subject to
-this filter, so it's the more reliable place to look.
+Since `reqnroll.trace.server` is the one setting driving the server's `--log-level`, it also
+decides whether the out-of-process **Connector** (the child process that runs reflection-based
+binding discovery) persists its own log file for a routine, successful run — there's no separate
+VS Code setting for it. At `messages` or `verbose` (→ `--log-level Info`/`Verbose`) every discovery
+run writes its own `reqnroll-lsp-connector-<date>-<pid>.log` alongside the server's file; at the
+default `off` (→ `Warning`) no Connector log is written at all unless a discovery run actually
+fails. See
+[../LSP/CONTRIBUTING.md](../LSP/CONTRIBUTING.md#connector-logging-buffered-and-gated-by---log-level-not-a-separate-switch)
+for the full mechanism.
+
+**The log file is the only place to look.** `FileLspTraceChannel` (in `lspInspectorLogger.ts`) is a
+file-only `LogOutputChannel` passed to `vscode-languageclient` as its `traceOutputChannel` — the
+client's sole trace hook, and one that requires that type. Its display members are deliberate
+no-ops, so no Output panel exists for the wire trace (removed in issue #792).
 
 ## CI
 
 The GitHub Actions workflow [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs its VS Code jobs (`build-vscode-extension`, `tsc-only`) whenever a push or PR touches VS Code, Core, or LSP paths. It:
 
-1. Publishes the server for all four RIDs in parallel
+1. Publishes the server for all six RIDs in parallel
 2. Compiles TypeScript, lints, format-checks, and validates semantic token scopes
 3. Packages the `.vsix`

@@ -479,6 +479,9 @@ Pressing **Go to Definition** (F12 / Ctrl+Click) on a step in a `.feature` file 
 |-----------|--------|---------|
 | Client → Server | `textDocument/definition` | Request location of step definition |
 | Server → Client | `Location` / `Location[]` response | C# file URI + range |
+| Client → Server | `reqnroll/findStepDefinitions` | Same bindings (shared `StepAtPositionResolver`), plus class/method/binding attribute and unresolved-source rows — VS's Go To Definition command and VS Code's "Go to Step Definition" picker |
+
+**As-built (issue #757)**: with several matching bindings, VS's own LSP client titled its results window after the single word under the caret (`'50' declarations`) and listed bare declaration lines. VS now handles Edit.GoToDefinition itself (`GoToDefinitionCommandFilter` → `GoToStepDefinitionPresenter`) using `reqnroll/findStepDefinitions`, opening Find All References titled `Reqnroll: N step definitions for '<step>'` with rows like `Steps.GivenX - [Given("the first number is {int}")]`. VS Code's command picker uses the same request and row format. F12/Peek in VS Code, Ctrl+Click in VS (#761) and Rider still use `textDocument/definition`.
 
 #### Sequence diagram
 
@@ -575,10 +578,13 @@ sequenceDiagram
 - **Dialect fallback**: `new GherkinDialectProvider(lang).DefaultDialect` (public API) rather than the `internal` `ReqnrollGherkinDialectProvider`.
 - **Insert text**: `TextEditOrInsertReplaceEdit` wrapping a `TextEdit` spanning the keyword range on the current line.
 - **Tests**: `CompletionServiceKeywordTests` (19 unit tests) + `KeywordCompletion.feature` spec (5 scenarios).
+- **Tag completion** (issue #828): a tag position (`TagLine` among the expected tokens) completes to the tags already used across the project — open sibling files counted from their already-parsed buffer tags (best-effort: a tag typed while the background parse is pending shows up a moment later, never reparsed on the completion path), closed files indexed from disk once and cached until their write time changes — plus the built-in `@ignore` tag (`BuiltInTagNames`), ranked by usage count through the same matcher step completion uses. The completing line's own tags are excluded, the replacement range spans only the in-progress tag (so accepting a second tag never deletes the first), and the old generic `@tag1` placeholder is gone — its keyword-path `TagLine` entry is now a bare `@`, kept only as the parser-error quick fix ("Insert '@'"). The index is per project (`FeatureTagIndex` in `LSP.Server/Features/Completions/`), fed by the membership index's per-project file list with a disk-scan-plus-open-buffers fallback before the baseline arrives. The completion registration declares `@` and space as trigger characters, so the popup also opens after the space separating two tags.
 
 #### End-user experience
 
 Typing at the start of a line in a Gherkin scenario offers completions for keywords valid in the current context (`Given`, `When`, `Then`, `And`, `But`, `Scenario:`, `Feature:`, etc.). Completions are context-sensitive: `Examples:` only appears inside a Scenario Outline; `Background:` only at feature level.
+
+Typing `@` on a tag line — in any state, first tag or a second tag after a completed one — offers the tags already used elsewhere in the project, ranked by how often they are used, plus the built-in `@ignore` tag (issue #828). A tag already typed on the current line is not re-offered, and accepting a suggestion replaces only the tag being typed, never an already-typed tag before it (issue #561's range rule applied per tag word).
 
 > **Gherkin dialect note**: Completion items are sourced from the active Gherkin dialect configured in the project's `reqnroll.json`. If the project specifies `"language": "de"`, completions offer `Gegeben`, `Wenn`, `Dann` rather than `Given`, `When`, `Then`.
 
@@ -799,7 +805,9 @@ F10 is **implemented** (issue #162), following the same manual-glue pattern as F
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| ✅ Generic | ✅ Generic | ⚠️ Config |
+| ✅ Generic | 🔧 Plugin | ⚠️ Config |
+
+**Visual Studio note**: unlike VS Code, VS's out-of-process `LanguageServerProvider` model does not route the native `Edit.FormatDocument`/`Edit.FormatSelection` commands to `textDocument/formatting`/`rangeFormatting` on its own, even though the server advertises the capability — the same gap already worked around for Comment/Uncomment (F13). `FormatDocumentCommandFilter` (`VSSDKIntegration/FormatDocumentCommandFilter.cs`) is a VSSDK `IOleCommandTarget` filter that intercepts both commands, sends the standard LSP request itself via `FormatDocumentService` (`Extension/FormatDocument/FormatDocumentService.cs`), and — since this is a plain request/response rather than a server-pushed `workspace/applyEdit` — applies the returned `TextEdit`(s) to the VS text buffer directly.
 
 **Rider note**: `textDocument/formatting` takes priority via an opt-in `lspFormattingSupport` property override on the LSP server descriptor, which activates Rider's generic `LspFormattingService` — Rider's own formatter framework does not compete for `.feature` files.
 
@@ -939,7 +947,7 @@ All three IDEs require a small amount of custom code to:
 
 | Direction | Method | Purpose |
 |-----------|--------|---------|
-| Client → Server | `workspace/executeCommand` (`reqnroll.toggleComment`) | Toggle comment on lines in range |
+| Client → Server | `workspace/executeCommand` (`reqnroll.toggleComment`, `[uri, startLine, endLine, mode?]`) | Toggle comment on lines in range. Optional `mode`: `"toggle"` (default — uncomment if every line is commented, else comment), `"comment"` (always add `#`) or `"uncomment"` (remove one `#` from each commented line) |
 | Server → Client | `workspace/applyEdit` | Text insertions/deletions for `#` |
 
 #### Sequence diagram
@@ -966,6 +974,18 @@ sequenceDiagram
 #### VS Code
 
 `package.json` `contributes.keybindings` binds `ctrl+/` (`cmd+/` on macOS) to `reqnroll.toggleComment`, scoped by `"when": "editorTextFocus && editorLangId == gherkin"` — VS Code's own comment-toggle keybinding does not fire for `gherkin`-language documents. The command (registered in [`extension.ts`](../src/VSCode/src/extension.ts)) delegates to `doToggleComment` in [`commentToggle.ts`](../src/VSCode/src/commands/commentToggle.ts), which normalizes the selection via `normalizeSelectionLines` ([`selectionUtils.ts`](../src/VSCode/src/util/selectionUtils.ts)) — trimming a trailing selected line when VS Code reports the selection ending at `(line, 0)`, i.e. the user dragged past the end of the previous line without selecting any character on the next one, so that line is not spuriously toggled — then sends `workspace/executeCommand` (`reqnroll.toggleComment`, `[uri, startLine, endLine]`) via `client.sendRequest(ExecuteCommandRequest.type, ...)` and lets the returned `WorkspaceEdit` apply through the standard LSP client machinery; failures surface via `vscode.window.showErrorMessage`. Also available via editor context menu (`editor/context`, group `1_modification`) and the command palette, both gated on `editorLangId == gherkin`.
+
+#### Visual Studio
+
+VS's out-of-process `LanguageServerProvider` model does not route the built-in comment commands to anything for `.feature` files, so a classic VSSDK `IOleCommandTarget` filter does it: [`CommentToggleCommandFilter`](../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/CommentToggleCommandFilter.cs), installed per editable `Gherkin` text view via an `IVsTextViewCreationListener`, consumes the three standard commands and sends `reqnroll.toggleComment` through the static `CommentToggleRedirect` bridge (populated by `ReqnrollLanguageClient` once the server connection is live, cleared on dispose). Because it hooks the commands rather than keystrokes, the user's own key bindings and the Edit menu work too. Each command keeps its usual VS meaning via the `mode` argument (issue #747):
+
+| VS command | Default binding | Command set : ID | `mode` |
+|---|---|---|---|
+| `Edit.CommentSelection` | Ctrl+K, Ctrl+C | VSStd2K : 136 `COMMENT_BLOCK` (legacy alias 98) | `comment` |
+| `Edit.UncommentSelection` | Ctrl+K, Ctrl+U | VSStd2K : 137 `UNCOMMENT_BLOCK` (legacy alias 99) | `uncomment` |
+| `Edit.ToggleLineComment` | Ctrl+/ | `{160961B3-909D-4B28-9353-A1BEF587B4A6}` : 48 | `toggle` |
+
+`Edit.ToggleLineComment` has no `VSConstants` entry; its ID comes from the `CommandBindings` of VS's `Microsoft.VisualStudio.Editor.Implementation.dll`. The filter originally matched hard-coded IDs 145–147, which are unrelated VSStd2K commands, so none of the shortcuts reached the server; `CommentToggleCommandFilter.TryGetCommentMode` is kept `ThreadHelper`-free so the IDs are unit tested. There is no Reqnroll-specific Comment/Uncomment context-menu command any more — it was a stop-gap for the broken key bindings. The server's `workspace/applyEdit` is applied by VS's LSP client natively.
 
 #### Rider
 
@@ -1039,7 +1059,7 @@ F14 is **implemented**. VS does not dispatch `textDocument/references` to second
 | VS command — Surface 1 (Extensions menu) | `FindStepUsagesCommand` ([FindStepUsages/FindStepUsagesCommand.cs](../src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/FindStepUsages/FindStepUsagesCommand.cs)) — `[VisualStudioContribution]` VS.Extensibility command; `GetActiveTextViewAsync` → `(fileUri, line0, char0)` → `FindStepUsagesService.FindUsagesAsync` → `FindStepUsagesRenderer.RenderAsync`. |
 | VS command — Surface 2 (C# editor context menu) | Same command, second placement: `CommandPlacement.VsctParent(guidSHLMainMenu, IDG_VS_CODEWIN_NAVIGATETOLOCATION=0x02B1, priority=0x0100)`. Item appears next to "Find All References" in the code-window context menu. No `.vsct`, no VSSDK command table — targets the shell's built-in group directly. Requires experimental-instance reset after first deploy. |
 | VS command — Surface 3 (Shift+F12 takeover) | **Deferred.** Would require an `IOleCommandTarget` editor command filter (MEF) intercepting GUID `{1496A755-94DE-11D0-8C3F-00C04FC2AAE2}` ID 97. Not implemented. |
-| Owned-pipe RPC | `LspInterceptingPipe.SendRequestToServerAsync` injects a JSON-RPC request with id prefix `reqnroll-far-{guid}`. `TryCompleteCorrelatedResponse` consumes the matching response (never forwarded to VS) and completes the awaiting TCS. The response bypasses the LSP inspector log — the `FindStepUsagesService` file logger is the only diagnostic window. |
+| Owned-pipe RPC | `LspInterceptingPipe.SendRequestToServerAsync` injects a JSON-RPC request with id prefix `reqnroll-rpc-{guid}`. `LspRequestCorrelator.Consume` consumes the matching response (never forwarded to VS) and completes the awaiting TCS. Both directions run through the interceptors, so the LSP inspector log records the pair and its latency ([#491](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/491)). A JSON-RPC error is logged at Warning and every round trip at Debug in the application log; a request with no response is abandoned after `DefaultOwnedRequestTimeout` (60s), also at Warning ([#764](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/764)). |
 | Results rendering | `FindStepUsagesRenderer` switches to UI thread (`JoinableTaskFactory`), locates `IFindAllReferencesService` via `SVsFindAllReferences`, calls `StartSearch(label)` → `window.Manager.AddSource(FeatureReferencesDataSource)`. `FeatureReferencesDataSource` pushes all `FeatureReferenceTableEntry` items in `Subscribe`. |
 | DI injection | `FindStepUsagesState` singleton registered in `ExtensionEntrypoint.InitializeServices`. `ReqnrollLanguageClient` populates it on server-init / clears on dispose. `FindStepUsagesCommand` injects `(FindStepUsagesState, TraceSource)` only — both guaranteed resolvable from the VS.Extensibility DI container. (Injecting `ReqnrollLanguageClient` directly caused silent construction failure because contribution classes are not resolvable as injection targets.) |
 
@@ -1139,14 +1159,14 @@ The `RenameHandler` applies the following validations in order. Any validation f
 |---|------|---------------|-------|
 | 1 | Cursor must resolve to a single binding at the given position | `"No step definition found at this position"` | `prepareRename` + `rename` |
 | 2 | Binding expression must be a valid string literal (not a constant, concatenation, or expression) | `"Step definition expression cannot be detected"` | `prepareRename` |
-| 3 | Non-parameter parts of the new expression must not contain regex / Cucumber expression operators (`?`, `*`, `+`, `[`, `]`, `{`, `}`, `(`, `)`, `^`, `$`, `\|`) | `"The non-parameter parts cannot contain expression operators"` | `rename` |
+| 3 | Non-parameter parts of the new expression must not contain operators of the binding's *own* expression syntax: Cucumber Expression (`{`, `}`, `(`, `)`, `\`, `/`) or, for a regex-authored binding, the full regex operator set (`?`, `*`, `+`, `[`, `]`, `{`, `}`, `(`, `)`, `^`, `$`, `\|`) | `"The non-parameter parts cannot contain expression operators"` | `rename` |
 | 4 | Parameter count in the new expression must match the original | `"Parameter count mismatch"` | `rename` |
 | 5 | Explicit parameter expressions (e.g., `(\d+)` → `(/d)`) must be compatible — same type, same allowed value range | `"Parameter expression mismatch"` | `rename` |
 | 6 | Step text in matching `.feature` files must not contain Scenario Outline placeholders (`<param>`) | `"Could not rename step with placeholders in scenario outline: {step text}"` | `rename` |
 | 7 | The owning project must have a valid (non-`Invalid`) binding registry with membership index populated | `"The project is not initialized yet"` / `"No Reqnroll project with feature files found"` | `prepareRename` |
 | 8 | For linked bindings: the rename must be able to reach every including project's feature files | Handled by fallback: un-reachable files logged, user warned via `window/showMessage` | `rename` (post-WorkspaceEdit) |
 
-> **Design note on operator validation (Rule 3):** The non-parameter parts of a Cucumber expression must remain literal text. Operators like `?`, `*`, `+`, `[...]`, `{...}`, `(...)`, `^`, `$`, `|` change the generated regex semantics. This validation parses the new expression by splitting on parameter slots and scanning each non-parameter segment for these operator characters. Escaped operators (e.g., `\(`, `\)`, `\\`) are excluded from the scan. The same validation is already implemented in the existing VS `RenameStepCommand`; the LSP server reuses the same parsing logic.
+> **Design note on operator validation (Rule 3):** The non-parameter parts of the new expression must remain literal text in whichever syntax the binding actually uses. Cucumber Expressions only treat `{`, `}`, `(`, `)`, `\`, `/` as special — characters like `?`, `*`, `+`, `[...]`, `^`, `$`, `|` are plain literals there (e.g. a currency amount like `${float}`), unlike in a regex, where the full operator set changes the matching semantics. `StepRenameValidator.ValidateNewName` uses `CucumberExpressionDetector.IsCucumberExpression` (the same classification binding discovery already uses to decide how to compile a binding's expression) on the *original* expression to pick the correct forbidden-character set, then scans each non-parameter segment of the new expression for those characters (issue #649). Escaped operators (e.g., `\(`, `\)`, `\\`) are excluded from the scan. The same validation is already implemented in the existing VS `RenameStepCommand`; the LSP server reuses the same parsing logic.
 
 #### C# attribute resolution (via `StepDefinitionFileParser.GetAttributeStringInfo`)
 
@@ -1290,18 +1310,18 @@ sequenceDiagram
 
 - **LSP handler placement.** `RenameHandler` lives in `src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/`. The handler registers for `textDocument/prepareRename` and `textDocument/rename` via the OmniSharp `ILanguageServer` router (same pattern as `DefinitionHandler`).
 - **Validator class.** The validation rules (Rules 1-8) are extracted to a shared `StepRenameValidator` in `LSP.Core/Rename/` to separate concerns from the OmniSharp handler layer and enable unit testing.
-- **Parameter-slot detection.** `StepRenameValidator` (`LSP.Core/Rename/StepRenameValidator.cs`) is self-contained: it detects parameter slots via its own `ParameterSlotPattern` regex (`(\([^)]*\)|\{\w+\})`, matching both regex capture groups and Cucumber Expression `{param}` placeholders) and its own `ExpressionOperators` character set, rather than delegating to a shared parsing library.
+- **Parameter-slot detection.** `StepRenameValidator` (`LSP.Core/Rename/StepRenameValidator.cs`) detects parameter slots via its own `ParameterSlotPattern` regex (`(\([^)]*\)|\{\w+\})`, matching both regex capture groups and Cucumber Expression `{param}` placeholders). For Rule 3's forbidden-operator check it picks between two of its own character sets — `CucumberExpressionOperators` (`{ } ( ) \ /`) or `RegexOperators` (the full regex operator set) — based on `CucumberExpressionDetector.IsCucumberExpression(originalExpression)` (`LSP.Core/Parsing/CSharp/CucumberExpressionDetector.cs`, the same classifier binding discovery already uses to decide how to compile an expression), since characters like `$ ^ * + [ ] |` are plain literals in Cucumber Expression syntax but real operators in a regex (issue #649).
 - **WorkspaceEdit construction.** The `WorkspaceEdit` builder (`Changes` / `DocumentChanges` dictionary) is populated from two sources: (a) `StepDefinitionFileParser.GetAttributeStringInfo` result for the C# attribute string edit (span + replacement text with correct escaping), and (b) each matching `.feature` step location from the binding-match result (step `SourceLocation` → `TextEdit` replacing the step text).
 - **Phase 4 migration path for VS.** The existing `RenameStepCommand` (VSSDK) is retained and acts as a façade: for single-binding positions it delegates to the LSP `textDocument/rename` flow (via the same `LspInterceptingPipe` used by F14's custom command). For multi-attribute positions it shows the existing picker + `RenameStepViewModel` dialog. This dual-path approach lets the LSP rename ship in Phase 4 without regressing the rich VS validation UX, and the VS-specific code can be retired in a later release once the LSP dialog ecosystem catches up.
 - **Linked files.** When the membership index (Q17) reports that a binding `.cs` file belongs to multiple projects, the rename handler unions the feature files from **all** including projects into the WorkspaceEdit. The handler calls `ILspWorkspaceScopeManager.GetProjectsForUri(bindingCsFile)` to get the owning set, then iterates each project's registry to find matching feature steps. This is the same multi-project routing already designed for F14/F15; the rename handler uses the same `GetProjectsForUri` API.
 
 #### VS Code
 
-F16's **single-binding** case is implemented on `master` as a thin pass-through to VS Code's native rename gesture: `reqnroll.renameStep` (bound to F2 for `gherkin`-language documents, `package.json` `contributes.keybindings`) calls `vscode.commands.executeCommand('editor.action.rename')`, which drives the standard `textDocument/prepareRename` / `textDocument/rename` flow already implemented server-side. No VS Code-specific validation or edit-application code exists — `vscode-languageclient` applies the returned `WorkspaceEdit` (spanning the `.cs` attribute and every matching `.feature` step) through its normal rename UI.
+F16's **single-binding** case is implemented on `main` as a thin pass-through to VS Code's native rename gesture: `reqnroll.renameStep` (bound to F2 for `gherkin`-language documents, `package.json` `contributes.keybindings`) calls `vscode.commands.executeCommand('editor.action.rename')`, which drives the standard `textDocument/prepareRename` / `textDocument/rename` flow already implemented server-side. No VS Code-specific validation or edit-application code exists — `vscode-languageclient` applies the returned `WorkspaceEdit` (spanning the `.cs` attribute and every matching `.feature` step) through its normal rename UI.
 
-**Multi-attribute disambiguation is not yet on `master`.** As designed above, when the cursor resolves to more than one candidate binding, the server returns `null` from `prepareRename`, which makes VS Code report the standard "You cannot rename this element" message with no path to disambiguate — there is currently no VS Code-side consumer of the server's `reqnroll/renameTargets` / `reqnroll/selectRenameTarget` custom requests. This matches the "⚠️ Config" (not "🔧 Plugin") rating in the IDE support matrix above: today, VS Code relies entirely on the user manually clicking into the specific attribute string before invoking rename.
+**Multi-attribute disambiguation is not yet on `main`.** As designed above, when the cursor resolves to more than one candidate binding, the server returns `null` from `prepareRename`, which makes VS Code report the standard "You cannot rename this element" message with no path to disambiguate — there is currently no VS Code-side consumer of the server's `reqnroll/renameTargets` / `reqnroll/selectRenameTarget` custom requests. This matches the "⚠️ Config" (not "🔧 Plugin") rating in the IDE support matrix above: today, VS Code relies entirely on the user manually clicking into the specific attribute string before invoking rename.
 
-An open PR ([#27](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/27), branch `feat/vscode-rename-disambiguation`, unmerged as of this writing) adds a client-side `RenameMiddleware.prepareRename` override (`src/VSCode/src/renameDisambiguation.ts`) that queries `reqnroll/renameTargets` first: 0–1 candidates pass straight through to native `prepareRename` (no behavior change from what's on `master` today); 2+ candidates show a `vscode.window.showQuickPick` and send `reqnroll/selectRenameTarget` with the chosen index before letting the native rename input box open. The PR requires no server-side changes, since `reqnroll/renameTargets` and `reqnroll/selectRenameTarget` already exist for the Visual Studio disambiguation dialog. Until it merges, this parity gap with Visual Studio's picker-based disambiguation remains open.
+An open PR ([#27](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/27), branch `feat/vscode-rename-disambiguation`, unmerged as of this writing) adds a client-side `RenameMiddleware.prepareRename` override (`src/VSCode/src/renameDisambiguation.ts`) that queries `reqnroll/renameTargets` first: 0–1 candidates pass straight through to native `prepareRename` (no behavior change from what's on `main` today); 2+ candidates show a `vscode.window.showQuickPick` and send `reqnroll/selectRenameTarget` with the chosen index before letting the native rename input box open. The PR requires no server-side changes, since `reqnroll/renameTargets` and `reqnroll/selectRenameTarget` already exist for the Visual Studio disambiguation dialog. Until it merges, this parity gap with Visual Studio's picker-based disambiguation remains open.
 
 #### Rename change annotations — as-built
 
@@ -1345,9 +1365,9 @@ All results are filtered by the tags in scope at the cursor position matched aga
 
 "Go to Hooks" does not map onto any standard IDE command (unlike Go to Definition, which has a universal F12 keybinding). Each IDE client requires custom plugin code to expose the feature.
 
-Using `textDocument/definition` for this feature is not viable: F5 already uses that message to navigate to the step binding on step lines, so the server would have no way to distinguish "find step definition" from "find hooks" when the cursor is on a step line. Step-level hooks (`[BeforeStep]`/`[AfterStep]`) would be unreachable. Instead, the plugin sends a dedicated custom request `reqnroll/goToHooks`, which the server handles independently of the standard definition pipeline.
+Using `textDocument/definition` for this feature is not viable: F5 already uses that message to navigate to the step binding on step lines, so the server would have no way to distinguish "find step definition" from "find hooks" when the cursor is on a step line. Step-level hooks (`[BeforeStep]`/`[AfterStep]`) would be unreachable. Instead, the plugin sends a dedicated custom request `reqnroll/findHooks`, which the server handles independently of the standard definition pipeline.
 
-**Rider note (as-built)**: Unlike F5 (generic LSP Go to Definition, no Rider-specific code needed), hook navigation has no standard IDE gesture to piggyback on, so it uses the separate `reqnroll/goToHooks` custom request via a request-sender pattern — not a PSI bridge. See the `#### Rider` subsection below and [Architecture §6.3](LSP-IDE-Support-Architecture.md#63-rider).
+**Rider note (as-built)**: Unlike F5 (generic LSP Go to Definition, no Rider-specific code needed), hook navigation has no standard IDE gesture to piggyback on, so it uses the separate `reqnroll/findHooks` custom request via a request-sender pattern — not a PSI bridge. See the `#### Rider` subsection below and [Architecture §6.3](LSP-IDE-Support-Architecture.md#63-rider).
 
 #### Visual Studio — surface and UX details
 
@@ -1363,8 +1383,8 @@ The picker logic is encapsulated in a shared `NavigationPickerHelper` (static he
 
 | Direction | Method | Purpose |
 |-----------|--------|---------|
-| Client → Server | `reqnroll/goToHooks` (uri, position) | Request hook locations for context |
-| Server → Client | `GoToHooksResponse` (`hooks[]`) | C# hook method locations + metadata |
+| Client → Server | `reqnroll/findHooks` (uri, position) | Request hook locations for context |
+| Server → Client | `FindHooksResponse` (`hooks[]`) | C# hook method locations + metadata |
 
 #### Sequence diagram
 
@@ -1374,19 +1394,19 @@ sequenceDiagram
     participant IDE
 
     box LightBlue LSP Server
-        participant HH as GoToHooksHandler
+        participant HH as FindHooksHandler
         participant DB as Document Buffer
         participant BR as Binding Registry
     end
 
     User->>IDE: Right-click → "Go to Hooks" in .feature editor
-    IDE->>HH: reqnroll/goToHooks (uri, position)
+    IDE->>HH: reqnroll/findHooks (uri, position)
     HH->>DB: Retrieve AST + tags by URI
     DB-->>HH: Gherkin AST + IdeSupportTags
     HH->>HH: Determine position context (Feature/Scenario/Step level)\nand collect tags in scope
     HH->>BR: Filter Hooks by context level + scope expressions
-    BR-->>HH: GoToHooksResponse { hooks[] }
-    HH-->>IDE: GoToHooksResponse
+    BR-->>HH: FindHooksResponse { hooks[] }
+    HH-->>IDE: FindHooksResponse
     alt single result
         IDE-->>User: Navigate directly to hook method
     else multiple results
@@ -1398,11 +1418,11 @@ sequenceDiagram
 
 #### VS Code
 
-`reqnroll.goToHooks` is available via editor context menu (`editor/context`, group `navigation@90`, `when: editorLangId == gherkin`) and the command palette, with no default keybinding. `doGoToHooks` ([`goToHooks.ts`](../src/VSCode/src/commands/goToHooks.ts)) reads the active editor's cursor position and sends the custom `reqnroll/goToHooks` request with `{textDocument, position}`. A single hook navigates directly via `openAndReveal`; multiple hooks show a `vscode.window.showQuickPick` with one entry per hook (`$(symbol-event) HookType`, method name as description, `Order: N` as detail when `hookOrder !== 0`) — the VS Code-idiomatic equivalent of the VS `NavigationPickerDialog` modal described above. `navigateToHook` opens the target `.cs` file and reveals the hook method's location via the shared `openAndReveal` helper (also used by F14 and F15).
+`reqnroll.goToHooks` is available via editor context menu (`editor/context`, group `navigation@90`, `when: editorLangId == gherkin`) and the command palette, with no default keybinding. `doGoToHooks` ([`goToHooks.ts`](../src/VSCode/src/commands/goToHooks.ts)) reads the active editor's cursor position and sends the custom `reqnroll/findHooks` request with `{textDocument, position}`. A single hook navigates directly via `openAndReveal`; multiple hooks show a `vscode.window.showQuickPick` with one entry per hook (`$(symbol-event) HookType`, method name as description, `Order: N` as detail when `hookOrder !== 0`) — the VS Code-idiomatic equivalent of the VS `NavigationPickerDialog` modal described above. `navigateToHook` opens the target `.cs` file and reveals the hook method's location via the shared `openAndReveal` helper (also used by F14 and F15).
 
 #### Rider
 
-F17 (issue #158) mirrors the F15/F16 request-sender pattern rather than a PSI bridge handler: `ReqnrollLanguageServer.goToHooks` (`ReqnrollLanguageServer.kt`), a `@JsonRequest("reqnroll/goToHooks")` taking the standard LSP4J `TextDocumentPositionParams`, is called via `ReqnrollRequestSender.goToHooks(project, uri, line, character)`, following the `findStepUsages`/`findUnusedStepDefinitions` pattern of `sendRequestSync` from a `Task.Backgroundable`. `Reqnroll.GoToHooks` (`GoToHooksAction.kt`) is enabled only when the caret is in a `.feature` file editor (mirroring `FindStepUsagesAction`'s `.cs`-only gating) and is registered in the `Reqnroll.ActionGroup` Tools-menu group and in `EditorPopupMenu`. `GoToHooksRunner` navigates directly via `ReqnrollResultPopup.navigateToUri` for a single hook; multiple hooks show `ReqnrollResultPopup`'s chooser popup (the same `JBPopupFactory` list used by Find Step Usages / Find Unused Step Definitions), each entry rendered as `[HookType] MethodName (filename:line)`.
+F17 (issue #158) mirrors the F15/F16 request-sender pattern rather than a PSI bridge handler: `ReqnrollLanguageServer.findHooks` (`ReqnrollLanguageServer.kt`), a `@JsonRequest("reqnroll/findHooks")` taking the standard LSP4J `TextDocumentPositionParams`, is called via `ReqnrollRequestSender.findHooks(project, uri, line, character)`, following the `findStepUsages`/`findUnusedStepDefinitions` pattern of `sendRequestSync` from a `Task.Backgroundable`. `Reqnroll.GoToHooks` (`GoToHooksAction.kt`) is enabled only when the caret is in a `.feature` file editor (mirroring `FindStepUsagesAction`'s `.cs`-only gating) and is registered in the `Reqnroll.ActionGroup` Tools-menu group and in `EditorPopupMenu`. `GoToHooksRunner` navigates directly via `ReqnrollResultPopup.navigateToUri` for a single hook; multiple hooks show `ReqnrollResultPopup`'s chooser popup (the same `JBPopupFactory` list used by Find Step Usages / Find Unused Step Definitions), each entry rendered as `[HookType] MethodName (filename:line)`.
 
 ---
 
@@ -1596,11 +1616,11 @@ Like [F10 Folding](#f10--code-folding), `inlayHintProvider` is declared statical
 |-----------|--------|---------|
 | Client → Server | `textDocument/codeLens` | Request code lens items for a `.feature` document |
 | Server → Client | `CodeLens[]` response | Hook-count annotations, one per own-level tag block plus one step-hooks lens per scenario |
-| Client → Server | `reqnroll.goToHooks` (via `workspace/executeCommand`, reusing [F17](#f17--hook-navigation)'s `reqnroll/goToHooks`) | Lens click, with `ownLevelOnly` and (for the step-hooks lens) an extra flag distinguishing it from the own-level lens |
+| Client → Server | `reqnroll.goToHooks` (via `workspace/executeCommand`, reusing [F17](#f17--hook-navigation)'s `reqnroll/findHooks`) | Lens click, with `ownLevelOnly` and (for the step-hooks lens) an extra flag distinguishing it from the own-level lens |
 
 #### Implementation notes
 
-`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `GoToHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`). This server-side piece is unchanged by the Visual Studio work below — it was already shipped for VS Code/Rider.
+`HookCodeLensHandler` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/HookCodeLensHandler.cs`) handles `textDocument/codeLens` for `.feature` URIs only (it returns an empty result for `.cs` files, which `StepCodeLensHandler`/[F25](#f25--hook-match-count-codelens-hook-bindings)'s `HookMatchCountCodeLensHandler` own). It delegates all applicability/matching to `HookMatching` — the same helper `FindHooksHandler` (F17) uses — via `HookMatching.GetOwnLevelHookTypes`/`ResolveMatchingHooks`, so a lens's count can never disagree with what clicking it shows. `AddOwnLevelLens` emits the per-tag-block lens; `AddStepHooksLens` emits the scenario-level step-hooks lens. The three CodeLens handlers (`StepCodeLensHandler`, `HookCodeLensHandler`, `HookMatchCountCodeLensHandler`) are combined into a single `textDocument/codeLens` `OnRequest` registration and their results concatenated (`LanguageServerOptionsExtensions.cs`). This server-side piece is unchanged by the Visual Studio work below — it was already shipped for VS Code/Rider.
 
 **VS Code**: `registerHookCodeLens` (`src/VSCode/src/commands/hookCodeLens.ts`) calls `vscode.languages.registerCodeLensProvider({ language: 'gherkin' }, provider)` directly (same pattern as F18's `stepCodeLens.ts`), sending the raw `textDocument/codeLens` request. Clicks are handled by `doGoToHooks` (`src/VSCode/src/commands/goToHooks.ts`), which gates auto-navigate on `!position?.alwaysShowPicker` — set only for CodeLens-sourced clicks, so a lens click always opens the QuickPick while a manual "Go to Hooks" invocation from the cursor still auto-navigates on a single match.
 
@@ -1626,9 +1646,9 @@ The classic `Microsoft.VisualStudio.Language.CodeLens` API (`ITagger<ICodeLensTa
 | `HookCodeLensCallbackListener` | `devenv.exe` (in-process MEF part) | `ICodeLensCallbackListener` — the devenv-side JSON-RPC target the OOP data point calls back into (`ICodeLensCallbackService.InvokeAsync`), over the *same* duplex stream the ServiceHub connection already uses. Delegates to `HookCodeLensRedirect`, same as the tagger. Must carry `[ContentType("Gherkin")]` metadata — VS's devenv-side `CodeLensHubClient` filters callback listeners by content type before wiring them onto the RPC target list at all; without it, the listener composes as a valid MEF part but is never actually reachable, and every callback fails with `RemoteMethodNotFoundException`. |
 | `HookCodeLensRedirect` | `devenv.exe` (in-process, `static`) | The actual LSP bridge, mirroring `CommentToggleRedirect`/`NavigationBarRedirect`. Populated by `ReqnrollLanguageClient` once the LSP connection is live. Used directly by the in-process tagger, and indirectly (via the callback listener) on behalf of the out-of-process data point. |
 | `HookFeatureCodeLensService` | `devenv.exe` (in-process) | Sends `textDocument/codeLens` over `LspInterceptingPipe` and parses the response into `HookFeatureLensEntry[]`. |
-| `GoToHooksService` (`ownLevelOnly` overload) | `devenv.exe` (in-process) | Sends `reqnroll/goToHooks` for the Details popup — reused from [F17](#f17--hook-navigation) so a lens's Details popup always matches what a manual "Go to Hooks" invocation with the same `ownLevelOnly` would return. |
+| `FindHooksService` (`ownLevelOnly` overload) | `devenv.exe` (in-process) | Sends `reqnroll/findHooks` for the Details popup — reused from [F17](#f17--hook-navigation) so a lens's Details popup always matches what a manual "Go to Hooks" invocation with the same `ownLevelOnly` would return. |
 | `ReqnrollPluginPackage` (`IOleCommandTarget`) / `HookCodeLensCommands.vsct` / `HookCodeLensCommandIds` | `devenv.exe` (in-process) | Routes the Details popup's navigate-to-hook command. `CodeLensDetailEntryCommand` only supports a `CommandSet`+`CommandId` pair on Windows, not a VS.Extensibility command, so this mirrors Microsoft's own `CodeLensOopSample` sample rather than the VS.Extensibility command pattern used elsewhere in this repo. |
-| `HookCodeLensHandler` / `GoToHooksHandler` | LSP Server | Pre-existing (#269 / F17); unchanged by this work. |
+| `HookCodeLensHandler` / `FindHooksHandler` | LSP Server | Pre-existing (#269 / F17); unchanged by this work. |
 
 **Platform requirements found only by live debugging** (none apparent from the classic CodeLens SDK docs, which describe an older/simpler model this VS build has partially superseded):
 
@@ -1654,7 +1674,7 @@ sequenceDiagram
 
     box LightBlue LSP Server
         participant HCH as HookCodeLensHandler
-        participant GTH as GoToHooksHandler
+        participant GTH as FindHooksHandler
     end
 
     User->>IDE: Opens / scrolls a .feature file
@@ -1684,8 +1704,8 @@ sequenceDiagram
     else
         Note over DP,IDE: GetDataAsync also eagerly fetches and caches the Details-popup content here (requirement 5 above)
         DP->>IDE: ICodeLensCallbackService.InvokeAsync GetHookDetails(fileUri, navLine, navChar, ownLevelOnly) - nav args from the resolved entry
-        IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to GoToHooksService
-        IDE->>GTH: reqnroll/goToHooks (ownLevelOnly)
+        IDE->>IDE: HookCodeLensCallbackListener routes to HookCodeLensRedirect to FindHooksService
+        IDE->>GTH: reqnroll/findHooks (ownLevelOnly)
         GTH-->>IDE: matching hooks
         IDE-->>DP: HookDetailEntry list, cached on the data point instance
 
@@ -1731,7 +1751,7 @@ sequenceDiagram
 
 The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): each hook-binding C# method (`[BeforeScenario]`/`[AfterScenario]`/`[BeforeStep]`/`[AfterStep]`/etc.) shows a CodeLens with the count of features/scenarios that hook currently matches, given its scope/tag expression — conceptually the same shape as [F18](#f18--code-lens-step-usage-counts)'s step-usage lens, but for hooks. `[BeforeTestRun]`/`[AfterTestRun]` hooks are excluded (not scenario-countable — they run once per test run, not per feature/scenario). Unlike F18 and F24, a hook with **zero** matches still renders "0 scenarios matched" rather than being suppressed — deliberate, since a zero-match hook (e.g. a stale tag scope that no longer matches anything) is often exactly what the user needs to notice. Clicking the lens always shows a picker/results list of the matching scenarios, never auto-navigating directly even for a single match.
 
-**Unscoped hooks (issue #403).** A hook with no `[Scope]` at all matches every scenario in the project — an actual count here would be unbounded and uninformative (and expensive to compute for no benefit), so the lens renders the static label "all scenarios" instead of "N scenarios matched" and skips the scenario-corpus walk entirely for that hook. The click action is unaffected — `reqnroll/goToMatchingScenarios` still resolves and returns the full scenario list on demand, same as any other hook. VS's `HookMatchCountCodeLensProvider` (which aggregates multiple hook lenses in a method's attribute window by parsing the numeric prefix off each lens's title) special-cases the "all scenarios" label so it isn't misread as a zero count when aggregated alongside scoped hooks in the same window.
+**Unscoped hooks (issue #403).** A hook with no `[Scope]` at all matches every scenario in the project — an actual count here would be unbounded and uninformative (and expensive to compute for no benefit), so the lens renders the static label "all scenarios" instead of "N scenarios matched" and skips the scenario-corpus walk entirely for that hook. The click action is unaffected — `reqnroll/findMatchingScenarios` still resolves and returns the full scenario list on demand, same as any other hook. VS's `HookMatchCountCodeLensProvider` (which aggregates multiple hook lenses in a method's attribute window by parsing the numeric prefix off each lens's title) special-cases the "all scenarios" label so it isn't misread as a zero count when aggregated alongside scoped hooks in the same window.
 
 #### IDE support matrix
 
@@ -1746,8 +1766,8 @@ The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): e
 | Direction | Method | Purpose |
 |-----------|--------|---------|
 | Client → Server | `textDocument/codeLens` | `.cs` file — combined in the same response as F18's step-usage lenses |
-| Client → Server | `reqnroll/goToMatchingScenarios` (uri, line, character) | Lens click — request matching feature/scenario locations |
-| Server → Client | `GoToMatchingScenariosResponse` (`scenarios[]`) | Matching feature/scenario locations for the picker/results list |
+| Client → Server | `reqnroll/findMatchingScenarios` (uri, line, character) | Lens click — request matching feature/scenario locations |
+| Server → Client | `FindMatchingScenariosResponse` (`scenarios[]`) | Matching feature/scenario locations for the picker/results list |
 
 #### Implementation notes
 
@@ -1755,7 +1775,7 @@ The reverse direction of [F24](#f24--hook-match-codelens-featurescenariostep): e
 
 **VS Code**: click handling in `doGoToMatchingScenarios` (`src/VSCode/src/commands/goToMatchingScenarios.ts`); the lens provider shares the same `.cs` `CodeLensProvider` registration as F18's `stepCodeLens.ts`.
 
-**Rider**: `GoToMatchingScenariosRunner` (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/actions/GoToMatchingScenariosRunner.kt`) drives navigation via `ReqnrollRequestSender.goToMatchingScenarios`; dispatch from the lens click lives in `StepUsagesCodeVisionProvider` (see Coexistence above).
+**Rider**: `GoToMatchingScenariosRunner` (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/actions/GoToMatchingScenariosRunner.kt`) drives navigation via `ReqnrollRequestSender.findMatchingScenarios`; dispatch from the lens click lives in `StepUsagesCodeVisionProvider` (see Coexistence above).
 
 **Visual Studio**: `HookMatchCountCodeLensProvider` (`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/HookMatchCountCodeLens/HookMatchCountCodeLensProvider.cs`), a second `ICodeLensProvider`. Its `ExecuteAsync` reuses the Find-Usages results-window renderer (the same one [F14](#f14--find-step-definition-usages) uses) to present matches, rather than the `NavigationPickerDialog` modal F17/F24 use.
 

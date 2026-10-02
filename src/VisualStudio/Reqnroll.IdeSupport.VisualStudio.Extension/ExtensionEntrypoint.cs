@@ -4,12 +4,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
-using Reqnroll.IdeSupport.VisualStudio.Extension.GoToMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
@@ -60,11 +61,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             // classes each `new`'d their own SynchronousFileLogger (mostly defaulting to
             // TraceLevel.Warning, silently dropping LogInfo) while also taking a DI-injected
             // TraceSource that nothing ever attached a listener to. One IdeSupportCompositeLogger,
-            // registered once and consumed everywhere via ILogger<T>, replaces both.
-            var logger = new IdeSupportCompositeLogger()
-                .Add(new IdeSupportDebugLogger())
-                .Add(new SynchronousFileLogger("vs", "ext", TraceLevel.Info));
-            serviceCollection.AddSingleton<IIdeSupportLogger>(logger);
+            // registered once and consumed everywhere via ILogger<T>, replaces both. It is the same
+            // process-wide instance the VSSDK/MEF side exports (issue #748), so both composition
+            // roots share one file logger and one "Reqnroll" Output Window pane.
+            serviceCollection.AddSingleton<IIdeSupportLogger>(ExtensionHostLogger.Instance);
             serviceCollection.AddSingleton<ILoggerFactory>(sp =>
                 new IdeSupportLoggerFactory(sp.GetRequiredService<IIdeSupportLogger>()));
             serviceCollection.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
@@ -76,11 +76,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension
             // another.
             serviceCollection.AddSingleton<FindStepUsagesState>();
             serviceCollection.AddSingleton<FindUnusedStepDefinitionsState>();
-            serviceCollection.AddSingleton<GoToHooksState>();
-            serviceCollection.AddSingleton<GoToMatchingScenariosState>();
+            serviceCollection.AddSingleton<FindHooksState>();
+            serviceCollection.AddSingleton<FindMatchingScenariosState>();
             serviceCollection.AddSingleton<StepCodeLensState>();
-            serviceCollection.AddSingleton<CommentToggleState>();
             serviceCollection.AddSingleton<RenameStepState>();
+            serviceCollection.AddSingleton<FormatDocumentState>();
             // ExtensionPart subclasses are not auto-registered by the framework; must be explicit.
             serviceCollection.AddSingleton<StepCodeLensProvider>();
             serviceCollection.AddSingleton<HookMatchCountCodeLensProvider>();

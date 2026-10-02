@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- End-to-end fixture for Reqnroll.IdeSupport.TestReporter.MTP.Tests: a minimal Reqnroll + MSTest
+       project running under Microsoft.Testing.Platform (MTP), MtpCompat mode (EnableMSTestRunner +
+       TestingPlatformDotnetTestSupport, plain `dotnet test`). Mirrors
+       tests/Core/TestLoggerFixtures/MsTestReqnroll (the VSTest-logger fixture) as closely as MTP's own
+       project shape allows. Not part of the solution's normal build graph beyond housing this project;
+       built on demand by the test.
+
+       Deliberately has NO reference to the reporter: DotnetTestEndToEndTests copies this fixture to a
+       throwaway workspace and connects it to the reporter exactly the way the IDEs do (issue #741) —
+       a project-local obj/<Project>.csproj.reqnroll-ide.targets stub importing the source bundle. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>ReqnrollMtpReporterFixture</RootNamespace>
+    <!-- Keep this fixture's intermediates out of the test project's globs and the repo's Directory.Build.props warnings-as-errors. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableMSTestRunner>true</EnableMSTestRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Reqnroll.MsTest" Version="3.3.4" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.2.3" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.2.3" />
+  </ItemGroup>
+</Project>

@@ -64,7 +64,7 @@ class ReqnrollStructurePanel(private val project: Project) : Disposable {
     private var activeStructureView: StructureView? = null
 
     init {
-        ReqnrollDebugLogger.info("ReqnrollStructurePanel: created (this=${System.identityHashCode(this)})")
+        ReqnrollDebugLogger.verbose("ReqnrollStructurePanel: created (this=${System.identityHashCode(this)})")
 
         project.messageBus.connect(this).subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
@@ -79,7 +79,7 @@ class ReqnrollStructurePanel(private val project: Project) : Disposable {
             AppLifecycleListener.TOPIC,
             object : AppLifecycleListener {
                 override fun appWillBeClosed(isRestart: Boolean) {
-                    ReqnrollDebugLogger.info("ReqnrollStructurePanel: appWillBeClosed fired (this=${System.identityHashCode(this@ReqnrollStructurePanel)})")
+                    ReqnrollDebugLogger.verbose("ReqnrollStructurePanel: appWillBeClosed fired (this=${System.identityHashCode(this@ReqnrollStructurePanel)})")
                     clearStructureView()
                 }
             },
@@ -91,7 +91,7 @@ class ReqnrollStructurePanel(private val project: Project) : Disposable {
     }
 
     override fun dispose() {
-        ReqnrollDebugLogger.info("ReqnrollStructurePanel: dispose() called (this=${System.identityHashCode(this)})")
+        ReqnrollDebugLogger.verbose("ReqnrollStructurePanel: dispose() called (this=${System.identityHashCode(this)})")
         activePanels.remove(project, this)
         clearStructureView()
     }
@@ -109,7 +109,7 @@ class ReqnrollStructurePanel(private val project: Project) : Disposable {
         val structureView = ReqnrollFeatureStructureViewBuilder(project, virtualFile).createStructureView(fileEditor, project)
         activeStructureView = structureView
         Disposer.register(this, structureView)
-        ReqnrollDebugLogger.info(
+        ReqnrollDebugLogger.verbose(
             "ReqnrollStructurePanel: created StructureView (this=${System.identityHashCode(this)}, view=${System.identityHashCode(structureView)}) for $virtualFile")
 
         cards.add(structureView.component, STRUCTURE_CARD)
@@ -120,7 +120,7 @@ class ReqnrollStructurePanel(private val project: Project) : Disposable {
         val structureView = activeStructureView ?: return
         activeStructureView = null
         cards.remove(structureView.component)
-        ReqnrollDebugLogger.info(
+        ReqnrollDebugLogger.verbose(
             "ReqnrollStructurePanel: disposing StructureView (this=${System.identityHashCode(this)}, view=${System.identityHashCode(structureView)})")
         Disposer.dispose(structureView)
     }

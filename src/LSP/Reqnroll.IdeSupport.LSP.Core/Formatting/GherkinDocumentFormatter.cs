@@ -53,6 +53,10 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
                     var examplesBlockIndentLevel =
                         indentLevel + formatSettings.ExamplesBlockIndentLevelWithinScenarioOutline;
                     SetTagsAndLine(lines, example, GetIndent(formatSettings, examplesBlockIndentLevel));
+                    // An Examples: block whose table was deleted has no table rows; Gherkin's
+                    // Examples.Rows throws on that, so skip table formatting and keep the block as-is.
+                    if (example.TableHeader == null)
+                        continue;
                     FormatTable(lines, example, formatSettings,
                         examplesBlockIndentLevel + formatSettings.ExamplesTableIndentLevelWithinExamplesBlock);
                 }
@@ -116,8 +120,11 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
 
     internal int[] GetTableWidths(IHasRows hasRows)
     {
-        var widths = new int[hasRows.Rows.Max(r => r.Cells.Count())];
-        foreach (var row in hasRows.Rows)
+        var rows = hasRows.GetRowsOrEmpty().ToArray();
+        if (rows.Length == 0)
+            return Array.Empty<int>();
+        var widths = new int[rows.Max(r => r.Cells.Count())];
+        foreach (var row in rows)
         foreach (var item in row.Cells.Select((c, i) => new { c, i }))
             widths[item.i] = Math.Max(widths[item.i], EscapeTableCellValue(item.c.Value).Length);
         return widths;
@@ -141,6 +148,19 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
     private static bool IsTableCellContentRightAligned(string cellValue, GherkinFormatSettings formatSettings) =>
         formatSettings.RightAlignNumericTableCells && IsTableCellContentNumeric(cellValue);
 
+    /// <summary>
+    /// Pads <paramref name="displayValue"/> to <paramref name="width"/>, right-aligning it when
+    /// <paramref name="rawValueForAlignment"/> is numeric (per <see cref="IsTableCellContentRightAligned"/>).
+    /// The alignment check uses the raw, unescaped cell value — escaping only affects <c>\</c>/<c>|</c>/
+    /// newlines, none of which appear in numeric content, but keeping the two separate matches the
+    /// original per-cell behaviour exactly.
+    /// </summary>
+    private static string PadCell(string displayValue, int width, string rawValueForAlignment,
+        GherkinFormatSettings formatSettings) =>
+        IsTableCellContentRightAligned(rawValueForAlignment, formatSettings)
+            ? displayValue.PadLeft(width)
+            : displayValue.PadRight(width);
+
     private static string? GetUnfinishedTableCell(string lineText)
     {
         var match = Regex.Match(lineText, @"(?<!\\)(\\\\)*\|(?<remaining>.*?)$", RegexOptions.RightToLeft);
@@ -161,7 +181,7 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
         string indent, int[]? widths = null)
     {
         widths ??= GetTableWidths(hasRows);
-        foreach (var row in hasRows.Rows)
+        foreach (var row in hasRows.GetRowsOrEmpty())
         {
             var result = new StringBuilder();
             result.Append(indent);
@@ -171,10 +191,7 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
                 result.Append(formatSettings.TableCellPadding);
                 var escapedCellValue = EscapeTableCellValue(item.c.Value);
                 var width = widths[item.i];
-                var paddedCell = IsTableCellContentRightAligned(item.c.Value, formatSettings)
-                    ? escapedCellValue.PadLeft(width)
-                    : escapedCellValue.PadRight(width);
-                result.Append(paddedCell);
+                result.Append(PadCell(escapedCellValue, width, item.c.Value, formatSettings));
                 result.Append(formatSettings.TableCellPadding);
                 result.Append('|');
             }
@@ -184,10 +201,9 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
             {
                 result.Append(formatSettings.TableCellPadding);
                 var cellIndex = row.Cells.Count();
-                if (cellIndex < widths.Length)
-                    result.Append(unfinishedCell.PadRight(widths[cellIndex]));
-                else
-                    result.Append(unfinishedCell);
+                result.Append(cellIndex < widths.Length
+                    ? PadCell(unfinishedCell, widths[cellIndex], unfinishedCell, formatSettings)
+                    : unfinishedCell);
                 result.Append(formatSettings.TableCellPadding);
                 result.Append('|');
             }

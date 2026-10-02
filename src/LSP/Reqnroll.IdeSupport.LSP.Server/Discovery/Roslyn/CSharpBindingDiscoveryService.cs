@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
@@ -123,7 +124,7 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
         // Telemetry: Roslyn discovery event (membership index / telemetry design §2.3).
         var fileName = Path.GetFileName(filePath);
         var triggerContext = isOpen ? "csOpen" : "csEdit";
-        _telemetryService?.SendEvent("Reqnroll Discovery executed", new()
+        _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, new()
         {
             ["DiscoverySource"] = "Roslyn",
             ["TriggerContext"] = triggerContext,

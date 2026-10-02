@@ -69,8 +69,10 @@ public static class SourceLocationExtensions
             for (var i = startIdx; i >= endIdx; i--)
             {
                 var col = lines[i].IndexOf(simpleName, StringComparison.Ordinal);
+                // WithPosition, not the public constructor: keeps RecordedSourceFile/IsResolved, so a
+                // path remapped from a foreign build keeps its provenance (issue #540, #757).
                 if (col >= 0)
-                    return new SourceLocation(loc.SourceFile, i + 1, col + 1, i + 1, col + simpleName.Length);
+                    return loc.WithPosition(i + 1, col + 1, i + 1, col + simpleName.Length);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException

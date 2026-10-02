@@ -72,7 +72,7 @@ public class MatchResult
         {
             var ambiguousMatches = items.Where(m => m.Type == MatchResultType.Ambiguous);
             var ambiguousErrorMessage =
-                $"Ambiguous steps: {Environment.NewLine}{string.Join(Environment.NewLine, ambiguousMatches.Select(sd => sd.MatchedStepDefinition.ToString()))}";
+                $"Ambiguous steps (use Go To Definition to navigate):{Environment.NewLine}{string.Join(Environment.NewLine, ambiguousMatches.Select(sd => sd.MatchedStepDefinition.ToString()))}";
             errors = errors.Concat(new[] {ambiguousErrorMessage});
         }
 

@@ -44,6 +44,26 @@ public class ProcessHelperTests
     }
 
     [Fact]
+    public void RunProcess_records_the_processId_of_a_process_that_actually_started()
+    {
+        // Issue #637: lets a caller (OutProcReqnrollConnector) point a reader at the matching
+        // reqnroll-*-connector-*-{pid}.log file for this specific invocation.
+        var result = ProcessHelper.RunProcess(WorkingDirectory, "dotnet", new[] { "--version" });
+
+        result.ProcessId.Should().NotBeNull().And.BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void RunProcess_leaves_processId_null_when_the_process_never_started()
+    {
+        var missingDir = Path.Combine(WorkingDirectory, "does-not-exist-" + Guid.NewGuid());
+
+        var result = ProcessHelper.RunProcess(missingDir, "dotnet", new[] { "--version" });
+
+        result.ProcessId.Should().BeNull();
+    }
+
+    [Fact]
     public void RunProcess_with_a_missing_working_directory_returns_a_failure_result_by_default()
     {
         var missingDir = Path.Combine(WorkingDirectory, "does-not-exist-" + Guid.NewGuid());

@@ -1,17 +1,26 @@
 package com.reqnroll.ide.rider.lsp
 
 import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.runBlockingCancellable
 import com.intellij.openapi.project.Project
 import com.intellij.platform.lsp.api.LspServerManager
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import com.reqnroll.ide.rider.lsp.protocol.FindStepUsagesResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
-import com.reqnroll.ide.rider.lsp.protocol.GoToHooksRequestParams
-import com.reqnroll.ide.rider.lsp.protocol.GoToHooksResponse
-import com.reqnroll.ide.rider.lsp.protocol.GoToMatchingScenariosResponse
+import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeParams
+import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
+import com.reqnroll.ide.rider.lsp.protocol.FindHooksRequestParams
+import com.reqnroll.ide.rider.lsp.protocol.FindHooksResponse
+import com.reqnroll.ide.rider.lsp.protocol.FindMatchingScenariosResponse
+import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetsResponse
+import com.reqnroll.ide.rider.lsp.protocol.ResolveContainerTestTargetsParams
+import com.reqnroll.ide.rider.lsp.protocol.ResolveContainerTestTargetsResponse
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsParams
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsResponse
 import org.eclipse.lsp4j.CodeLens
@@ -43,6 +52,11 @@ import org.eclipse.lsp4j.Range as Lsp4jRange
  * response arrives or the timeout elapses — callers must invoke this from a background thread
  * (e.g. inside a `Task.Backgroundable`), never directly from `AnAction.actionPerformed`'s EDT
  * dispatch.
+ *
+ * [rename] is the one exception: it uses the suspend `sendRequest` instead, because
+ * `sendRequestSync` cannot surface the server's rejection reason (issue #655 — see that method's
+ * own documentation). It blocks its calling thread too, via [runBlockingCancellable], so the
+ * background-thread requirement above applies to it identically.
  */
 object ReqnrollRequestSender {
     private const val FIND_UNUSED_TIMEOUT_MS = 30_000
@@ -51,13 +65,16 @@ object ReqnrollRequestSender {
     private const val INLAY_HINT_TIMEOUT_MS = 10_000
     private const val ON_TYPE_FORMATTING_TIMEOUT_MS = 10_000
     private const val FOLDING_RANGE_TIMEOUT_MS = 10_000
-    private const val GO_TO_HOOKS_TIMEOUT_MS = 10_000
-    private const val GO_TO_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
+    private const val FIND_HOOKS_TIMEOUT_MS = 10_000
+    private const val FIND_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
     private const val TOGGLE_COMMENT_TIMEOUT_MS = 10_000
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
     private const val RESOLVE_TEST_TARGETS_TIMEOUT_MS = 10_000
+    private const val RESOLVE_CONTAINER_TEST_TARGETS_TIMEOUT_MS = 10_000
+    private const val REGISTER_TEST_RUN_TIMEOUT_MS = 10_000
+    private const val GET_TEST_OUTCOME_TIMEOUT_MS = 10_000
 
     /** Runs `reqnroll/findUnusedStepDefinitions`. Returns null if no Reqnroll LSP server is running, or on failure. */
     fun findUnusedStepDefinitions(project: Project): FindUnusedStepDefinitionsResponse? {
@@ -110,7 +127,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("codeLens: request failed", ex)
+            ReqnrollDebugLogger.verbose("codeLens: request failed", ex)
             null
         }
     }
@@ -127,7 +144,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("inlayHint: request failed", ex)
+            ReqnrollDebugLogger.verbose("inlayHint: request failed", ex)
             null
         }
     }
@@ -156,7 +173,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("onTypeFormatting: request failed", ex)
+            ReqnrollDebugLogger.verbose("onTypeFormatting: request failed", ex)
             null
         }
     }
@@ -176,47 +193,47 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("foldingRange: request failed", ex)
+            ReqnrollDebugLogger.verbose("foldingRange: request failed", ex)
             null
         }
     }
 
     /**
-     * Runs `reqnroll/goToHooks` for the position (uri, line, character) in a `.feature` file.
+     * Runs `reqnroll/findHooks` for the position (uri, line, character) in a `.feature` file.
      * [ownLevelOnly] is forwarded from the hook-count CodeVision lens's `command.arguments`
      * (see HookCodeVisionProvider) so the response matches exactly what the lens counted; manual
      * invocations (GoToHooksAction) leave it at the default `false` (cumulative). Returns null if
      * no Reqnroll LSP server is running, or on failure.
      */
-    fun goToHooks(
+    fun findHooks(
         project: Project, uri: String, line: Int, character: Int, ownLevelOnly: Boolean = false,
-    ): GoToHooksResponse? {
+    ): FindHooksResponse? {
         val server = firstRunningServer(project) ?: return null
-        val params = GoToHooksRequestParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), ownLevelOnly)
+        val params = FindHooksRequestParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), ownLevelOnly)
         return try {
-            server.sendRequestSync(GO_TO_HOOKS_TIMEOUT_MS) { languageServer ->
-                (languageServer as ReqnrollLanguageServer).goToHooks(params)
+            server.sendRequestSync(FIND_HOOKS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).findHooks(params)
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("goToHooks: request failed", ex)
+            ReqnrollDebugLogger.warn("findHooks: request failed", ex)
             null
         }
     }
 
-    /** Runs `reqnroll/goToMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file (issue #373). Returns null if no Reqnroll LSP server is running, or on failure. */
-    fun goToMatchingScenarios(project: Project, uri: String, line: Int, character: Int): GoToMatchingScenariosResponse? {
+    /** Runs `reqnroll/findMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file (issue #373). Returns null if no Reqnroll LSP server is running, or on failure. */
+    fun findMatchingScenarios(project: Project, uri: String, line: Int, character: Int): FindMatchingScenariosResponse? {
         val server = firstRunningServer(project) ?: return null
         val params = TextDocumentPositionParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character))
         return try {
-            server.sendRequestSync(GO_TO_MATCHING_SCENARIOS_TIMEOUT_MS) { languageServer ->
-                (languageServer as ReqnrollLanguageServer).goToMatchingScenarios(params)
+            server.sendRequestSync(FIND_MATCHING_SCENARIOS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).findMatchingScenarios(params)
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("goToMatchingScenarios: request failed", ex)
+            ReqnrollDebugLogger.warn("findMatchingScenarios: request failed", ex)
             null
         }
     }
@@ -224,7 +241,7 @@ object ReqnrollRequestSender {
     /**
      * Runs the *standard* `workspace/executeCommand` request for `reqnroll.toggleComment`
      * (Comment/Uncomment toggle — see CommentToggleHandler.cs). There is no dedicated,
-     * reqnroll-prefixed custom method for this feature, unlike findStepUsages/goToHooks — the server responds
+     * reqnroll-prefixed custom method for this feature, unlike findStepUsages/findHooks — the server responds
      * by sending a `workspace/applyEdit` *request back to the client*, which Rider's platform
      * `Lsp4jClient.applyEdit` already applies natively (confirmed by decompiling — it's a `final`
      * method on the base class, not something [ReqnrollLspServerDescriptor.createLsp4jClient]'s
@@ -269,21 +286,106 @@ object ReqnrollRequestSender {
      * or cast to `ReqnrollLanguageServer` is needed. Rider has no native rename bridge (confirmed
      * by decompiling `LspServerDescriptor` — no `lspRenameSupport`-style customization exists),
      * so callers must apply the returned `WorkspaceEdit` themselves; see `RenameWorkspaceEditApplier`.
+     *
+     * Returns [RenameOutcome.Failed] with the server's own human-readable reason (issue #650) when
+     * the server rejects the rename — e.g. a step-rename validation failure — rather than the
+     * blanket "request failed" `null` every other method in this file returns on any exception.
+     * A rejected rename follows a modal "pick a target, type a new expression" flow the user just
+     * completed, so [RenameStepRunner] showing no explanation at all (like a routine navigation
+     * miss would) is worse here than for the rest of this file's silently-null methods.
+     *
+     * **The only method here that does not use `sendRequestSync` (issue #655).** That API cannot
+     * deliver the reason above: `LspRequestExecutorImpl`'s private await helper catches the
+     * `ExecutionException` carrying the server's `ResponseErrorException`, logs the cause at WARN
+     * to `idea.log`, and returns `null` — indistinguishable from a legitimately empty response, so
+     * [extractResponseErrorMessage] never had an exception to unwrap and the user always saw the
+     * generic fallback. Confirmed by decompiling Rider 2024.3.5's bytecode; the helper sorts four
+     * exception types and rethrows two, so the swallow is deliberate platform behaviour, not a bug
+     * to wait out.
+     *
+     * The suspend `sendRequest` takes the other path — it awaits the future through
+     * `kotlinx.coroutines.future.FutureKt.await`, whose `ContinuationHandler` unwraps
+     * `CompletionException` and resumes with the failure — so the real `ResponseErrorException`
+     * reaches the catch below. Both APIs are non-deprecated (unlike `getLsp4jServer`/
+     * `getRequestExecutor`, whose deprecation message points at `sendRequest` precisely), so this
+     * is the sanctioned route rather than a workaround.
+     *
+     * Two things `sendRequestSync` provided have to be rebuilt around it:
+     * [runBlockingCancellable] (not a plain `runBlocking`) restores the
+     * `ProgressManager.checkCanceled()` responsiveness its helper polled for, so cancelling the
+     * "Reqnroll: Renaming Step" background task still interrupts the wait; and `withTimeout`
+     * reinstates [RENAME_TIMEOUT_MS], since `sendRequest` takes no timeout at all.
+     *
+     * One accepted regression: the sync helper called `Future.cancel(...)` on timeout, which makes
+     * LSP4J send `$/cancelRequest`. Awaiting a `CompletionStage` does not cancel the underlying
+     * future, so a timed-out rename keeps computing server-side. Tolerable because the server-side
+     * handler returns in single-digit milliseconds once the edit is built (the applyEdit push moved
+     * out of the request in #671/R1) and this timeout is a backstop, not a routine path.
+     *
+     * Deliberately not applied to the rest of this file: every other method's "null on any failure"
+     * is the intended contract — a navigation miss or an empty folding response must not raise
+     * anything — so converting them would add coroutine plumbing and re-implemented timeouts for no
+     * user-visible gain.
      */
-    fun rename(project: Project, uri: String, line: Int, character: Int, newName: String): WorkspaceEdit? {
-        val server = firstRunningServer(project) ?: return null
+    fun rename(project: Project, uri: String, line: Int, character: Int, newName: String): RenameOutcome {
+        val server = firstRunningServer(project)
+            ?: return RenameOutcome.Failed("The Reqnroll LSP server is not running or did not respond.")
         val params = RenameParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character), newName)
         return try {
-            server.sendRequestSync(RENAME_TIMEOUT_MS) { languageServer ->
-                languageServer.textDocumentService.rename(params)
+            val edit = runBlockingCancellable {
+                withTimeout(RENAME_TIMEOUT_MS.toLong()) {
+                    server.sendRequest { languageServer ->
+                        languageServer.textDocumentService.rename(params)
+                    }
+                }
+            }
+            if (edit != null) {
+                RenameOutcome.Success(edit)
+            } else {
+                RenameOutcome.Failed("Rename failed — the new expression may be invalid, or nothing to rename.")
             }
         } catch (ex: ProcessCanceledException) {
             throw ex
+        } catch (ex: TimeoutCancellationException) {
+            // Caught ahead of the generic handler below: TimeoutCancellationException is a
+            // CancellationException, so it would otherwise fall through and be reported as though
+            // the server had rejected the rename — exactly the misleading message issue #650 set
+            // out to remove.
+            ReqnrollDebugLogger.warn("rename: request timed out after ${RENAME_TIMEOUT_MS}ms", ex)
+            RenameOutcome.Failed("The rename request timed out.")
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("rename: request failed", ex)
-            null
+            val serverReason = extractResponseErrorMessage(ex)
+            if (serverReason != null) {
+                // An error *response* is the server doing its job — rejecting an invalid new
+                // expression, say — not a plugin failure, so no stack trace: the Reqnroll tool
+                // window prints throwables in full and auto-activates on Warning, which would put
+                // lsp4j internals in front of the user for an expected outcome (issue #655).
+                ReqnrollDebugLogger.info("rename: rejected by server: $serverReason")
+                RenameOutcome.Failed(serverReason)
+            } else {
+                ReqnrollDebugLogger.warn("rename: request failed", ex)
+                RenameOutcome.Failed("Rename failed — the new expression may be invalid, or nothing to rename.")
+            }
         }
     }
+
+    /**
+     * Unwraps the server's human-readable reason (issue #650) from a failed `textDocument/rename`
+     * request, when the failure was a real JSON-RPC error response rather than some other
+     * exception (timeout, I/O error, cancellation). Returns null for any other kind of failure, so
+     * callers fall back to a generic message instead of showing something misleading.
+     *
+     * Checks the exception itself and one level of [Throwable.cause]. Since [rename] moved to the
+     * suspend `sendRequest` (issue #655), the direct case is the one that actually occurs:
+     * `kotlinx.coroutines.future.FutureKt.await` resumes with the cause already unwrapped out of
+     * `CompletionException`, so a [ResponseErrorException] arrives bare. The `cause` check is kept
+     * as cheap insurance against a future call site routing through something that wraps again —
+     * it is no longer covering for an undocumented platform guarantee, which is what the previous
+     * version of this comment recorded as unknown.
+     */
+    internal fun extractResponseErrorMessage(ex: Throwable): String? =
+        ((ex as? ResponseErrorException) ?: (ex.cause as? ResponseErrorException))
+            ?.responseError?.message
 
     /**
      * Runs the *standard* `textDocument/documentSymbol` request (Feature/Rule/Scenario/Step)
@@ -305,7 +407,7 @@ object ReqnrollRequestSender {
         } catch (ex: ProcessCanceledException) {
             throw ex
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("documentSymbol: request failed", ex)
+            ReqnrollDebugLogger.verbose("documentSymbol: request failed", ex)
             null
         }
     }
@@ -336,12 +438,90 @@ object ReqnrollRequestSender {
         }
     }
 
+    /**
+     * Runs `reqnroll/resolveContainerTestTargets` for the full-body range of a Feature/Rule
+     * container [(startLine, startChar), (endLine, endChar)] in a `.feature` file (issue #744,
+     * "Run scenarios") — resolves the generated test method(s) for every Scenario/Outline the
+     * container holds, in one call. Returns null if no Reqnroll LSP server is running, or on failure.
+     */
+    fun resolveContainerTestTargets(
+        project: Project, uri: String, startLine: Int, startChar: Int, endLine: Int, endChar: Int,
+    ): ResolveContainerTestTargetsResponse? {
+        val server = firstRunningServer(project) ?: return null
+        val params = ResolveContainerTestTargetsParams(
+            TextDocumentIdentifier(uri),
+            Lsp4jRange(Lsp4jPosition(startLine, startChar), Lsp4jPosition(endLine, endChar)),
+        )
+        return try {
+            server.sendRequestSync(RESOLVE_CONTAINER_TEST_TARGETS_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).resolveContainerTestTargets(params)
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("resolveContainerTestTargets: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs `reqnroll/testOutcomes/registerRun` (LSP-server outcome pipeline, #700/#702). Returns
+     * null if no Reqnroll LSP server is running, or on failure — [RunTestRunner]
+     * [com.reqnroll.ide.rider.testrunner.RunTestRunner] treats that the same as
+     * [RegisterTestRunResponse.success] `false`: fall back to the TRX-only path for this run.
+     */
+    fun registerTestRun(project: Project): RegisterTestRunResponse? {
+        val server = firstRunningServer(project) ?: return null
+        return try {
+            server.sendRequestSync(REGISTER_TEST_RUN_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).registerTestRun(ReqnrollEmptyParams())
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("registerTestRun: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs `reqnroll/testOutcomes/getOutcome` for one generated test method (LSP-server outcome
+     * pipeline, #700/#702). [assemblyPath] must be the compiled test container path, matching
+     * what the bundled VSTest logger reports as `TestCase.Source` — not the `.csproj` path.
+     * Returns null if no Reqnroll LSP server is running, or on failure.
+     */
+    fun getTestOutcome(project: Project, assemblyPath: String, typeFullName: String, methodName: String): GetTestOutcomeResponse? {
+        val server = firstRunningServer(project) ?: return null
+        val params = GetTestOutcomeParams(assemblyPath, typeFullName, methodName)
+        return try {
+            server.sendRequestSync(GET_TEST_OUTCOME_TIMEOUT_MS) { languageServer ->
+                (languageServer as ReqnrollLanguageServer).getTestOutcome(params)
+            }
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.warn("getTestOutcome: request failed", ex)
+            null
+        }
+    }
+
     private fun firstRunningServer(project: Project) =
         LspServerManager.getInstance(project)
             .getServersForProvider(ReqnrollLspServerSupportProvider::class.java)
             .firstOrNull()
             .also {
                 if (it == null)
-                    ReqnrollDebugLogger.warn("ReqnrollRequestSender: no Reqnroll LSP server running")
+                    ReqnrollDebugLogger.verbose("ReqnrollRequestSender: no Reqnroll LSP server running")
             }
+}
+
+/**
+ * Outcome of [ReqnrollRequestSender.rename]: either a [WorkspaceEdit] to apply, or a reason it
+ * couldn't be produced. Distinguishes "the server rejected this rename for an explainable reason"
+ * (issue #650) from every other request in this file's blanket "something went wrong" `null`, so
+ * [com.reqnroll.ide.rider.actions.RenameStepRunner] can show the server's actual message.
+ */
+sealed interface RenameOutcome {
+    data class Success(val edit: WorkspaceEdit) : RenameOutcome
+    data class Failed(val message: String) : RenameOutcome
 }

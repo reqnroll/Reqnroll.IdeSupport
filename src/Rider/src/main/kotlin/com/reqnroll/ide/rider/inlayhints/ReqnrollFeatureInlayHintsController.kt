@@ -154,7 +154,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
 
                 val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
                 val hints = ReqnrollRequestSender.inlayHint(project, uri, 0, editor.document.lineCount)
-                ReqnrollDebugLogger.info("ReqnrollFeatureInlayHintsController: ${hints?.size ?: "null"} hint(s) for $uri")
+                ReqnrollDebugLogger.verbose("ReqnrollFeatureInlayHintsController: ${hints?.size ?: "null"} hint(s) for $uri")
 
                 ApplicationManager.getApplication().invokeLater(
                     {

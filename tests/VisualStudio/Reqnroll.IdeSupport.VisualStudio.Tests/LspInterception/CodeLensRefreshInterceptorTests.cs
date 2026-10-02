@@ -24,8 +24,15 @@ namespace Reqnroll.VisualStudio.Tests.LspInterception;
 /// </remarks>
 public class CodeLensRefreshInterceptorTests
 {
-    // Comfortably longer than the interceptor's 400ms debounce window.
+    // Comfortably longer than the interceptor's 400ms debounce window. Used for the *absence* checks
+    // (nothing fired after disposal), where the wait is paid in full on every run.
     private const int DebounceSettleMs = 1_500;
+
+    // Upper bound for *presence* checks. The debounce is a System.Threading.Timer, whose callback is
+    // queued to the thread pool; on a loaded net481 CI runner, with the pool busy with parallel test
+    // classes, that callback can land well after the 400ms window (issue #725). WaitForFirst returns
+    // as soon as the signal arrives, so this ceiling costs nothing on a passing run.
+    private const int InvalidationArrivalTimeoutMs = 15_000;
 
     private static CodeLensRefreshInterceptor Create(Action? onInvalidate = null) =>
         new(new StepCodeLensState(), NullLogger<CodeLensRefreshInterceptor>.Instance, onInvalidate);
@@ -55,7 +62,7 @@ public class CodeLensRefreshInterceptorTests
 
         public int Count => Volatile.Read(ref _count);
         public Action Action => () => { Interlocked.Increment(ref _count); _fired.Set(); };
-        public bool WaitForFirst(int ms = DebounceSettleMs) => _fired.Wait(ms);
+        public bool WaitForFirst(int ms = InvalidationArrivalTimeoutMs) => _fired.Wait(ms);
     }
 
     private static JObject DidChange(string uri) => new()

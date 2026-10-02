@@ -1,6 +1,8 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -9,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.FindUnusedStepDefinition
 
 /// <summary>
 /// Adapter-level tests for <see cref="FindUnusedStepDefinitionsHandler"/>: resolving registries,
-/// mapping <see cref="UnusedStepDefinition"/> to the wire <see cref="UnusedStepDefinitionItem"/>
+/// mapping <see cref="UnusedStepDefinition"/> to the wire <see cref="StepDefinitionItem"/>
 /// shape (incl. the 1-based → 0-based position conversion), and firing telemetry.
 /// The scan/dedupe/match algorithm itself is covered by
 /// <c>Reqnroll.IdeSupport.LSP.Core.Tests.FindUnusedStepDefinitions.FindUnusedStepDefinitionsServiceTests</c>.
@@ -66,12 +68,14 @@ public class FindUnusedStepDefinitionsHandlerTests
                         BindingExpression: "the sum is {int}",
                         SourceFile: "/ws/MySteps.cs",
                         SourceLine: 10,
-                        SourceColumn: 5),
+                        SourceColumn: 5,
+                        StepDefinitionType: ScenarioBlock.Given),
                 });
 
         var result = await CreateSut().HandleAsync(CancellationToken.None);
 
         var item = result.Items.Single();
+        item.StepDefinitionType.Should().Be("Given");
         item.ProjectName.Should().Be("MyProject");
         item.ClassName.Should().Be("StepDefs");
         item.MethodName.Should().Be("GivenSomething");
@@ -178,6 +182,34 @@ public class FindUnusedStepDefinitionsHandlerTests
             Arg.Is<Dictionary<string, object?>>(d =>
                 1.Equals(d["UnusedStepDefinitions"]) &&
                 1.Equals(d["ScannedFeatureFiles"]) &&
-                false.Equals(d["IsCancellationRequested"])));
+                false.Equals(d["IsCancellationRequested"]) &&
+                0.Equals(d["TotalStepDefinitions"]) &&
+                d["DurationBucket"] is string));
+    }
+
+    [Fact]
+    public async Task HandleAsync_reports_the_distinct_step_definition_total_so_the_unused_ratio_is_computable()
+    {
+        ProjectStepDefinitionBinding Step(string expression, int line) => new(
+            ScenarioBlock.Given,
+            new System.Text.RegularExpressions.Regex($"^{expression}$"),
+            null,
+            new ProjectBindingImplementation("C.M", null, new SourceLocation("/ws/Steps.cs", line, 5)),
+            expression);
+
+        // The same two bindings reported by two projects (a shared/referenced assembly) count once each.
+        var shared = ProjectBindingRegistry.FromBindings(new[] { Step("one", 10), Step("two", 20) });
+        SetupRegistries(
+            ("A", new ProjectOwner("/ws/A/A.csproj", "net8.0"), shared),
+            ("B", new ProjectOwner("/ws/B/B.csproj", "net8.0"), shared));
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
+                .Returns(Array.Empty<UnusedStepDefinition>());
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        await CreateSutWithTelemetry(telemetry).HandleAsync(CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "FindUnusedStepDefinitions command executed",
+            Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["TotalStepDefinitions"]) && 2.Equals(d["ScannedFeatureFiles"])));
     }
 }

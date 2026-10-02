@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
@@ -351,7 +352,7 @@ namespace S
         await sut.UpdateFromSourceAsync(csUri, "class C {}", false, CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Roslyn".Equals(d["DiscoverySource"]) &&
                 "csEdit".Equals(d["TriggerContext"]) &&
@@ -376,7 +377,7 @@ namespace S
         await sut.UpdateFromSourceAsync(csUri, "class C {}", true, CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "Reqnroll Discovery executed",
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Roslyn".Equals(d["DiscoverySource"]) &&
                 "csOpen".Equals(d["TriggerContext"])));

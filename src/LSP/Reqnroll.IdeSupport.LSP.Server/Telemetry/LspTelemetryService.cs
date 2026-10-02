@@ -1,8 +1,9 @@
 #nullable enable
 
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
+using Reqnroll.IdeSupport.Common.Lsp;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -20,13 +21,27 @@ public sealed class LspTelemetryService : ILspTelemetryService
         _languageServer = languageServer;
     }
 
-    /// <summary>Sends the event and its properties to the LSP client as a <c>telemetry/event</c> notification.</summary>
+    /// <summary>
+    /// Sends the event and its properties to the LSP client as a <c>telemetry/event</c> notification.
+    /// The properties travel as a <see cref="JObject"/>, not a dictionary: the LSP serializer
+    /// camelCases dictionary keys (<c>IdeClient</c> would arrive as <c>ideClient</c>), but never
+    /// rewrites the names of a <see cref="JObject"/>, so every host forwards the PascalCase names
+    /// the schema documents (issue #844).
+    /// </summary>
     public void SendEvent(string eventName, Dictionary<string, object?> properties)
     {
-        _languageServer.SendNotification(LspMethodNames.TelemetryEvent, new
+        _languageServer.SendNotification(LspStandardMethodNames.TelemetryEvent, new
         {
             eventName,
-            properties
+            properties = ToJObject(TelemetryScrubber.ScrubProperties(properties))
         });
+    }
+
+    private static JObject ToJObject(Dictionary<string, object?> properties)
+    {
+        var result = new JObject();
+        foreach (var (key, value) in properties)
+            result[key] = value is null ? JValue.CreateNull() : JToken.FromObject(value);
+        return result;
     }
 }

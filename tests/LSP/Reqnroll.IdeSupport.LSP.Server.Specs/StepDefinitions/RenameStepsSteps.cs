@@ -23,6 +23,26 @@ public sealed class RenameStepsSteps
             .ConfigureAwait(false);
     }
 
+    [When(@"rename is requested at line (\d+) column (\d+) in ""(.*)"" with new name ""(.*)"" and an error is expected")]
+    public async Task WhenRenameIsRequestedExpectingAnError(int line, int column, string fileName, string newName)
+    {
+        var uri = _ctx.UriFor(fileName);
+        _ctx.LastRenameEdit = null;
+        _ctx.LastRenameError = null;
+        try
+        {
+            _ctx.LastRenameEdit = await _ctx.Harness.Client
+                .RequestRenameAsync(uri, line, column, newName)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // A failed rename now surfaces client-side as the JSON-RPC error response the server
+            // threw (RpcErrorException), not as a null result (issue #650).
+            _ctx.LastRenameError = ex;
+        }
+    }
+
     [When(@"prepare rename is requested at line (\d+) column (\d+) in ""(.*)""")]
     public async Task WhenPrepareRenameIsRequested(int line, int column, string fileName)
     {
@@ -64,6 +84,15 @@ public sealed class RenameStepsSteps
     {
         (_ctx.LastRenameEdit is null || _ctx.LastRenameEdit.Changes is null || !_ctx.LastRenameEdit.Changes.Any())
             .Should().BeTrue("the server should return null or an empty WorkspaceEdit for an invalid rename position");
+    }
+
+    [Then(@"the rename fails with error message ""(.*)""")]
+    public void ThenTheRenameFailsWithErrorMessage(string expectedMessage)
+    {
+        _ctx.LastRenameEdit.Should().BeNull("a rejected rename must not also return a WorkspaceEdit");
+        _ctx.LastRenameError.Should().NotBeNull(
+            "a rejected rename must surface as a JSON-RPC error response (issue #650), not a silent null result");
+        _ctx.LastRenameError!.Message.Should().Contain(expectedMessage);
     }
 
     [Then("no prepare rename range is returned")]

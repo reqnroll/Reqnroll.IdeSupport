@@ -9,9 +9,12 @@ import com.intellij.openapi.ui.Messages
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollNotificationSender
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
+import com.reqnroll.ide.rider.lsp.RenameOutcome
 import com.reqnroll.ide.rider.lsp.isDocumentStale
+import com.reqnroll.ide.rider.lsp.protocol.RenameAppliedParams
 import com.reqnroll.ide.rider.lsp.protocol.RenameTargetItem
 import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
+import org.eclipse.lsp4j.Position
 
 /**
  * Shared "disambiguate, prompt, rename" logic for [RenameFeatureStepAction]/[RenameCSharpStepAction]
@@ -28,11 +31,6 @@ import com.reqnroll.ide.rider.lsp.protocol.SelectRenameTargetParams
 object RenameStepRunner {
     fun run(project: Project, uri: String, line: Int, character: Int) {
         ReqnrollDebugLogger.info("RenameStepRunner: invoked for $uri at $line:$character")
-        // Captured once, up front, so the edit-application step at the end of this flow can
-        // detect whether the document changed at any point in between -- including across the
-        // modal "Enter the new step expression" dialog, which gives the user arbitrary time to
-        // edit the file before the rename request is even sent (issue #326).
-        val requestModificationStamp = RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Renaming Step", true) {
             override fun run(indicator: ProgressIndicator) {
@@ -40,7 +38,7 @@ object RenameStepRunner {
 
                 if (response == null) {
                     showOnEdt(project) {
-                        Messages.showErrorDialog(
+                        ReqnrollNotify.error(
                             project, "The Reqnroll LSP server is not running or did not respond.", "Rename Step")
                     }
                     return
@@ -48,13 +46,13 @@ object RenameStepRunner {
 
                 if (response.targets.isEmpty()) {
                     showOnEdt(project) {
-                        Messages.showInfoMessage(project, "No renameable step at this position.", "Rename Step")
+                        ReqnrollNotify.info(project, "No renameable step at this position.", "Rename Step")
                     }
                     return
                 }
 
                 if (response.targets.size == 1) {
-                    continueWithTarget(project, uri, line, character, response.targets[0], requestModificationStamp)
+                    continueWithTarget(project, uri, line, character, response.targets[0])
                     return
                 }
 
@@ -71,7 +69,7 @@ object RenameStepRunner {
                         render = { it.label },
                         onChosen = { target ->
                             ApplicationManager.getApplication().executeOnPooledThread {
-                                continueWithTarget(project, uri, line, character, target, requestModificationStamp)
+                                continueWithTarget(project, uri, line, character, target)
                             }
                         },
                     )
@@ -87,10 +85,16 @@ object RenameStepRunner {
         line: Int,
         character: Int,
         target: RenameTargetItem,
-        requestModificationStamp: Long?,
     ) {
         ReqnrollNotificationSender.sendSelectRenameTarget(
-            project, SelectRenameTargetParams(uri, version = 0, attributeIndex = target.attributeIndex))
+            project,
+            SelectRenameTargetParams(
+                uri,
+                version = 0,
+                attributeIndex = target.attributeIndex,
+                position = Position(line, character),
+            ),
+        )
 
         var input: String? = null
         showOnEdt(project) {
@@ -100,32 +104,79 @@ object RenameStepRunner {
         val newExpression = if (isValidNewExpression(target.expression, input)) input else null
         if (newExpression == null) return
 
-        val edit = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
-        if (edit == null) {
-            showOnEdt(project) {
-                Messages.showErrorDialog(
-                    project, "Rename failed — the new expression may be invalid, or nothing to rename.", "Rename Step")
+        // Captured here, immediately before the request — NOT when the action was invoked
+        // (issue #671, R4; originally #326).
+        //
+        // The server computes the edit's offsets fresh inside `textDocument/rename`, from its own
+        // current view of the document, and that request is dispatched on its Serial lane, so any
+        // didChange the user made while the modal was open has already been applied to the state
+        // those offsets came from. The window where the document can still shift out from under
+        // them is therefore only the request's own round trip — not the arbitrarily long stretch
+        // the modal dialog was open for.
+        //
+        // Spanning the modal made this fire on changes that could not invalidate the edit, and
+        // (via a stamp bumped by a VFS reload rather than a real edit) on changes that had not
+        // happened at all — discarding the user's rename and leaving the server's registry
+        // describing a step present in no file, since the discard went unreported (issue #670).
+        val requestModificationStamp =
+            RenameWorkspaceEditApplier.documentForUriWithoutRefresh(uri)?.modificationStamp
+
+        val outcome = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
+        val edit = when (outcome) {
+            is RenameOutcome.Failed -> {
+                showOnEdt(project) {
+                    ReqnrollNotify.error(project, outcome.message, "Rename Step")
+                }
+                return
             }
-            return
+            is RenameOutcome.Success -> outcome.edit
         }
 
         ApplicationManager.getApplication().invokeLater {
             if (project.isDisposed) return@invokeLater
-            if (isDocumentStale(RenameWorkspaceEditApplier.documentForUri(uri)?.modificationStamp, requestModificationStamp)) {
-                ReqnrollDebugLogger.warn(
-                    "RenameStepRunner: $uri changed since the rename was requested; discarding the " +
-                        "edit to avoid applying it at stale offsets.",
+            if (isDocumentStale(
+                    RenameWorkspaceEditApplier.documentForUriWithoutRefresh(uri)?.modificationStamp,
+                    requestModificationStamp,
                 )
+            ) {
+                ReqnrollDebugLogger.warn(
+                    "RenameStepRunner: $uri changed while the rename request was in flight; " +
+                        "discarding the edit to avoid applying it at stale offsets.",
+                )
+                // The server has staged the binding-registry/match-cache updates this edit implies
+                // and is waiting to hear whether we applied it. Reporting the discard drops them;
+                // staying silent is what used to leave the registry describing a step expression
+                // present in no file — "0 step usages" plus unbound-step diagnostics surviving a
+                // rebuild and a close/reopen (issue #670).
+                reportRenameApplied(project, uri, applied = false)
                 showOnEdt(project) {
-                    Messages.showErrorDialog(
+                    ReqnrollNotify.error(
                         project,
-                        "The file changed while the rename dialog was open. Please try again.",
+                        "The file changed while the rename was being prepared. Please try again.",
                         "Rename Step",
                     )
                 }
                 return@invokeLater
             }
             RenameWorkspaceEditApplier.apply(project, edit)
+            reportRenameApplied(project, uri, applied = true)
+        }
+    }
+
+    /**
+     * Tells the server whether the returned edit was applied, so it can commit or drop the cache
+     * updates it staged (issue #671 R3).
+     *
+     * Dispatched off the EDT because both call sites sit inside the `invokeLater` block that owns
+     * the document write — matching every other notification in this flow, which is sent from a
+     * pooled thread. Nothing waits on the result, so there is no ordering requirement against the
+     * write command itself.
+     */
+    private fun reportRenameApplied(project: Project, uri: String, applied: Boolean) {
+        ApplicationManager.getApplication().executeOnPooledThread {
+            if (project.isDisposed) return@executeOnPooledThread
+            ReqnrollDebugLogger.verbose("RenameStepRunner: reporting renameApplied=$applied for $uri")
+            ReqnrollNotificationSender.sendRenameApplied(project, RenameAppliedParams(uri, applied))
         }
     }
 

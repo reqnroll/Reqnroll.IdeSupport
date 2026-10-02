@@ -117,4 +117,39 @@ public class GherkinNavigationBarSymbolServiceMapResultTests
 
         result[0].Detail.Should().BeNull();
     }
+
+    // ── IsContentModified (issue #671, R6a): the retry decision for FetchSymbolsAsync. Only the
+    //    pure decision is unit-tested here — the retry orchestration around the live
+    //    LspInterceptingPipe has no test seam, matching this class's existing boundary (transport
+    //    methods like the pre-R6a FetchSymbolsAsync were likewise untested; only pure mapping was). ─
+
+    [Fact]
+    public void IsContentModified_is_true_for_the_LSP_ContentModified_error_code()
+    {
+        var error = new JObject { ["code"] = -32801, ["message"] = "Content Modified" };
+
+        GherkinNavigationBarSymbolService.IsContentModified(error).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsContentModified_is_false_for_a_null_error()
+    {
+        GherkinNavigationBarSymbolService.IsContentModified(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsContentModified_is_false_for_a_different_error_code()
+    {
+        var error = new JObject { ["code"] = -32602, ["message"] = "Invalid params" };
+
+        GherkinNavigationBarSymbolService.IsContentModified(error).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsContentModified_is_false_when_the_error_has_no_code_field()
+    {
+        var error = new JObject { ["message"] = "Something went wrong" };
+
+        GherkinNavigationBarSymbolService.IsContentModified(error).Should().BeFalse();
+    }
 }

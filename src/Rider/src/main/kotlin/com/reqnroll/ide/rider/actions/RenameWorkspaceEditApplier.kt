@@ -4,8 +4,9 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
 import org.eclipse.lsp4j.TextEdit
 import org.eclipse.lsp4j.WorkspaceEdit
 
@@ -26,7 +27,8 @@ object RenameWorkspaceEditApplier {
             for ((uri, edits) in byUri) {
                 val document = documentForUri(uri)
                 if (document == null) {
-                    ReqnrollDebugLogger.warn("RenameWorkspaceEditApplier: could not resolve document for $uri")
+                    ReqnrollDebugLogger.warn(
+                        "RenameWorkspaceEditApplier: could not resolve document for $uri")
                     continue
                 }
                 applyEdits(document, edits)
@@ -34,9 +36,32 @@ object RenameWorkspaceEditApplier {
         }
     }
 
-    /** `internal` so callers (e.g. [RenameStepRunner]) can capture/compare a document's [Document.modificationStamp] around a request, without duplicating this URI-to-Document lookup. */
+    /** `internal` so callers (e.g. [RenameStepRunner]) can reuse this URI-to-Document lookup. */
     internal fun documentForUri(uri: String): Document? {
-        val file = VirtualFileManager.getInstance().findFileByUrl(uri) ?: return null
+        val path = lspUriToLocalPath(uri) ?: return null
+        val file = LocalFileSystem.getInstance().refreshAndFindFileByPath(path) ?: return null
+        return FileDocumentManager.getInstance().getDocument(file)
+    }
+
+    /**
+     * [documentForUri] without the VFS refresh — for reading a [Document.modificationStamp] to
+     * compare against a previously captured one (issue #671, R4).
+     *
+     * `refreshAndFindFileByPath` performs a synchronous VFS refresh, and a refresh that decides the
+     * file changed on disk makes `FileDocumentManager` reload the document, which assigns a **new
+     * modification stamp even when the content is byte-identical**. Using it on both sides of a
+     * staleness comparison therefore manufactures the very "the file changed" verdict the
+     * comparison exists to detect — a false positive that discarded the user's rename and left the
+     * server's binding registry describing a step that exists in no file (issue #670). Bind-mounted
+     * workspaces (the Rider devcontainer's Windows-host mount) make this markedly more likely,
+     * since their mtimes are not reliably stable.
+     *
+     * Nothing is applied through this lookup, so skipping the refresh costs nothing: a document
+     * that is not already in the VFS has no stamp worth comparing anyway.
+     */
+    internal fun documentForUriWithoutRefresh(uri: String): Document? {
+        val path = lspUriToLocalPath(uri) ?: return null
+        val file = LocalFileSystem.getInstance().findFileByPath(path) ?: return null
         return FileDocumentManager.getInstance().getDocument(file)
     }
 

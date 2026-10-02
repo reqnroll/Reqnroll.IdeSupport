@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Xunit;
@@ -211,5 +211,162 @@ public class StepDefinitionFileBuilderAppendTests
         var result = StepDefinitionFileBuilder.AppendToFile(existing, Array.Empty<string>(), "    ", "\r\n");
 
         result.Should().Be(existing);
+    }
+    // ── Roslyn-based class-body location (issue #586) ────────────────────────────
+    // The first case below is the one the previous hand-rolled scan genuinely got wrong.
+    // The rest are characterization tests: the old scan handled them correctly too (its
+    // quote-pairing happened to mask the offending braces), and they are pinned here so a
+    // future change to the locator cannot quietly regress them.
+
+    [Fact]
+    public void Appends_when_a_raw_string_literal_contains_a_quote_run()
+    {
+        // The previously-failing case. A four-quote raw string whose body contains a literal
+        // `"""` defeats naive quote pairing: the old scan mis-tracked where the literal ended,
+        // saw the unbalanced `{` inside it as real code, failed to balance the class braces, and
+        // returned null — silently downgrading "Define missing step" to "create new file".
+        // Built by concatenation rather than a raw string, since the fixture itself contains
+        // raw-string delimiters.
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "[Binding]\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    private const string Json = \"\"\"\"\r\n" +
+            "        say \"\"\" and an unbalanced {\r\n" +
+            "        \"\"\"\";\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("WhenIPressAdd");
+        result.Should().Contain("unbalanced");
+    }
+
+    [Fact]
+    public void Appends_when_an_interpolated_string_contains_braces()
+    {
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "[Binding]\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    [Given(@\"a step\")]\r\n" +
+            "    public void GivenAStep()\r\n" +
+            "    {\r\n" +
+            "        var s = $\"x {(true ? \"}\" : \"y\")} z\";\r\n" +
+            "    }\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("WhenIPressAdd");
+        result.Should().Contain("GivenAStep");
+    }
+
+    [Fact]
+    public void Appends_when_a_verbatim_interpolated_string_contains_a_brace()
+    {
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "[Binding]\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    public void M()\r\n" +
+            "    {\r\n" +
+            "        var s = $@\"a {1} b } c\";\r\n" +
+            "    }\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("WhenIPressAdd");
+    }
+
+    [Fact]
+    public void Appends_when_a_char_literal_holds_a_brace()
+    {
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "[Binding]\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    private char _c = '}';\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("WhenIPressAdd");
+    }
+
+    [Fact]
+    public void Appends_to_the_first_class_when_the_file_declares_several()
+    {
+        // Matches the previous scan's "first `class` keyword wins" behaviour.
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "public class FirstStepDefinitions\r\n" +
+            "{\r\n" +
+            "}\r\n" +
+            "\r\n" +
+            "public class SecondStepDefinitions\r\n" +
+            "{\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        var firstIndex  = result!.IndexOf("FirstStepDefinitions", StringComparison.Ordinal);
+        var appendIndex = result.IndexOf("WhenIPressAdd", StringComparison.Ordinal);
+        var secondIndex = result.IndexOf("SecondStepDefinitions", StringComparison.Ordinal);
+
+        appendIndex.Should().BeGreaterThan(firstIndex);
+        appendIndex.Should().BeLessThan(secondIndex);
+    }
+
+    [Fact]
+    public void Returns_null_when_a_block_comment_is_unterminated()
+    {
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    /* never closed\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Appends_despite_an_ordinary_syntax_error_elsewhere_in_the_file()
+    {
+        // Only unterminated lexical structure blocks the append. A missing semicolon leaves the
+        // class braces perfectly locatable, and the previous scan tolerated it too — so a file
+        // that is merely mid-edit must not be downgraded to the create-new-file fallback.
+        var existing =
+            "namespace MyNamespace.MyProject;\r\n" +
+            "\r\n" +
+            "[Binding]\r\n" +
+            "public class CalculatorStepDefinitions\r\n" +
+            "{\r\n" +
+            "    private int _x = 1\r\n" +
+            "}\r\n";
+
+        var result = StepDefinitionFileBuilder.AppendToFile(existing, new[] { Snippet }, "    ", "\r\n");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("WhenIPressAdd");
     }
 }

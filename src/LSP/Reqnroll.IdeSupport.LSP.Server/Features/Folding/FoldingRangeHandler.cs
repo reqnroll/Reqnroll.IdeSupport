@@ -1,10 +1,10 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Core.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Pipeline;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 
@@ -51,7 +51,7 @@ public sealed class FoldingRangeHandler
     {
         // Benchmarked as load-only in the synthetic harness (no published target); now also
         // has field visibility so a real P95 bar can be set.
-        using var _perf = _recorder.Measure(LspMethodNames.TextDocumentFoldingRange, request.TextDocument.Uri);
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentFoldingRange, request.TextDocument.Uri);
 
         _logger.LogInfo($"Code Folding textDocument/foldingRange: {request.TextDocument.Uri}");
 
