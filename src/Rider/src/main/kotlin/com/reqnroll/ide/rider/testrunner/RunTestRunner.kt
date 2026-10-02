@@ -136,6 +136,18 @@ object RunTestRunner {
                     if (scenarioLine != startLine) RunTestResultStore.set(uri, scenarioLine, scenarioResult)
                 }
 
+                // Failed-step gutter marks (issue #451): one scenario for a plain run, each contained
+                // scenario for a Feature/Rule run (the container's own line is not a scenario header).
+                val scenarioLines = if (scenarios.isEmpty()) {
+                    mapOf(startLine to result)
+                } else {
+                    // Scenarios without a per-scenario result still get an (empty) entry so any mark
+                    // left by an earlier run is cleared rather than left describing stale state.
+                    scenarios.associate { it.startLine to RunResult(RunOutcome.FAILED) } +
+                        scenarioResults(scenarios, serverOutcomes, fallbackResult)
+                }
+                FailedStepGutterMarks.update(project, uri, scenarioLines)
+
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) RunTestCodeVisionProvider.refreshOpenFeatureEditors(project)
                 }
@@ -323,6 +335,8 @@ object RunTestRunner {
                     displayName = row.displayName,
                     outcome = if (row.outcome == "Failed") RunOutcome.FAILED else RunOutcome.PASSED,
                     failedStepText = row.failedStepText,
+                    failedStepIndex = row.failedStepIndex,
+                    errorMessage = row.errorMessage,
                 )
             }
         }
