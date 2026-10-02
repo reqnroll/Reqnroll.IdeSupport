@@ -162,11 +162,14 @@ suite('telemetry', () => {
 
       await withStubbedSendTelemetryEvent(context, (calls) => {
         registerTelemetry(client, context);
-        fire({ eventName: 'FeatureUsageSummary', properties: { LookupCounts: lookupCounts, Sequence: 2 } });
+        fire({
+          eventName: 'FeatureUsageSummary',
+          properties: { LookupCounts: lookupCounts, Sequence: 2 },
+        });
 
         assert.strictEqual(calls.length, 1);
-        assert.strictEqual(calls[0].properties.LookupCounts, lookupCounts);
-        assert.strictEqual(calls[0].properties.Sequence, '2');
+        assert.strictEqual(calls[0].properties?.LookupCounts, lookupCounts);
+        assert.strictEqual(calls[0].properties?.Sequence, '2');
       });
     });
 
