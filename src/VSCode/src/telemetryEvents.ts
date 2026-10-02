@@ -12,3 +12,24 @@ export const TelemetryEvents = {
   /** A genuine "Go to Hooks" navigation via `doGoToHooks` (issue #698) — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
   goToHookCommandExecuted: 'GoToHook command executed',
 } as const;
+
+/**
+ * Property keys of client-originated events, mirroring `TelemetryProperties` in the LSP server
+ * (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Telemetry/TelemetryProperties.cs`). PascalCase on the wire.
+ */
+export const TelemetryProperties = {
+  /** How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}. */
+  source: 'Source',
+} as const;
+
+/** Closed set of `Source` values on "GoToHook command executed"; identical in VS, VS Code and Rider. */
+export const GoToHookSource = {
+  /** Command palette, keybinding or menu command with no editor-menu context. */
+  command: 'Command',
+  /** The editor right-click context menu. */
+  contextMenu: 'ContextMenu',
+  /** A click on the hook-count CodeLens. */
+  codeLens: 'CodeLens',
+} as const;
+
+export type GoToHookSource = (typeof GoToHookSource)[keyof typeof GoToHookSource];

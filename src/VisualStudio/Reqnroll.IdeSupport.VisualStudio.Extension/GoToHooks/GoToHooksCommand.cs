@@ -80,7 +80,7 @@ internal sealed class GoToHooksCommand : Command
             // (which never runs through this command) — emit here, not from the server's
             // reqnroll/findHooks handler, which cannot tell the two apart (issue #698).
             _connectionService.TelemetryTransmitter?.TransmitEvent(
-                new GenericEvent(TelemetryEvents.GoToHookCommandExecuted, []));
+                GoToHookTelemetry.CreateEvent(GoToHookSources.ContextMenu));
 
             var textView = await context.GetActiveTextViewAsync(cancellationToken).ConfigureAwait(false);
             if (textView is null)
@@ -160,6 +160,23 @@ internal sealed class GoToHooksCommand : Command
         }
         return targets;
     }
+}
+
+/// <summary>
+/// Builds the client-originated "GoToHook command executed" event (issue #861). Kept on a plain
+/// static class for the same unit-testability reason as <see cref="HookLocationsMapper"/>.
+/// </summary>
+/// <remarks>
+/// The command's only placement is the editor context menu, so every invocation reports
+/// <see cref="GoToHookSources.ContextMenu"/>. The classic CodeLens click path does not run through
+/// the command and (issue #698) cannot be told apart from the Details-popup prefetch, so it emits
+/// nothing; a keyboard binding the user assigns to the command is indistinguishable from the menu.
+/// </remarks>
+internal static class GoToHookTelemetry
+{
+    public static GenericEvent CreateEvent(string source) =>
+        new(TelemetryEvents.GoToHookCommandExecuted,
+            [new KeyValuePair<string, object>(GoToHookSources.PropertyName, source)]);
 }
 
 /// <summary>

@@ -4,6 +4,7 @@ import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { doGoToHooks } from '../../commands/goToHooks';
 import { registerTelemetry } from '../../telemetry';
+import { GoToHookSource } from '../../telemetryEvents';
 
 /** Minimal stand-in for LanguageClient's sendRequest surface used by doGoToHooks. */
 function fakeClient(sendRequest: () => Promise<unknown>): LanguageClient {
@@ -225,7 +226,10 @@ suite('goToHooks', () => {
       assert.strictEqual((sentParams as { ownLevelOnly?: boolean })?.ownLevelOnly, true);
     });
 
-    test('sends "GoToHook command executed" telemetry directly on a genuine invocation (issue #698)', async () => {
+    /** Runs `invoke` with the reporter stubbed and returns every [eventName, properties] sent. */
+    async function captureTelemetry(
+      invoke: (client: LanguageClient) => Promise<void>,
+    ): Promise<Array<[string, Record<string, string> | undefined]>> {
       const client = {
         sendRequest: () => Promise.resolve({ hooks: [] }),
         onNotification: () => ({ dispose: () => undefined }),
@@ -233,23 +237,60 @@ suite('goToHooks', () => {
       const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
 
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (eventName: string) => void;
+        sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
       };
       const original = proto.sendTelemetryEvent;
-      const sentEventNames: string[] = [];
-      proto.sendTelemetryEvent = (eventName: string) => {
-        sentEventNames.push(eventName);
+      const sent: Array<[string, Record<string, string> | undefined]> = [];
+      proto.sendTelemetryEvent = (eventName: string, properties?: Record<string, string>) => {
+        sent.push([eventName, properties]);
       };
 
       try {
         registerTelemetry(client, telemetryContext);
-        await doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 });
-
-        assert.deepStrictEqual(sentEventNames, ['GoToHook command executed']);
+        await invoke(client);
+        return sent;
       } finally {
         proto.sendTelemetryEvent = original;
         for (const sub of telemetryContext.subscriptions) sub.dispose();
       }
+    }
+
+    test('sends "GoToHook command executed" telemetry directly on a genuine invocation (issue #698)', async () => {
+      const sent = await captureTelemetry((client) =>
+        doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 }),
+      );
+
+      assert.deepStrictEqual(
+        sent.map(([name]) => name),
+        ['GoToHook command executed'],
+      );
+    });
+
+    // Issue #861: the entry point is reported as the closed Source enum shared with VS and Rider.
+    test('reports Source=Command for a palette/keybinding invocation (no position, no explicit source)', async () => {
+      const sent = await captureTelemetry((client) => doGoToHooks(client));
+
+      assert.strictEqual(sent[0][1]?.Source, 'Command');
+    });
+
+    test('reports Source=ContextMenu when the caller says the editor context menu started it', async () => {
+      const sent = await captureTelemetry((client) =>
+        doGoToHooks(client, undefined, GoToHookSource.contextMenu),
+      );
+
+      assert.strictEqual(sent[0][1]?.Source, 'ContextMenu');
+    });
+
+    test('reports Source=CodeLens for a lens-click invocation', async () => {
+      const sent = await captureTelemetry((client) =>
+        doGoToHooks(
+          client,
+          { uri: editor.document.uri.toString(), line: 0, character: 0, alwaysShowPicker: true },
+          GoToHookSource.codeLens,
+        ),
+      );
+
+      assert.strictEqual(sent[0][1]?.Source, 'CodeLens');
     });
   });
 });

@@ -1,6 +1,8 @@
 package com.reqnroll.ide.rider.actions
 
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.reqnroll.ide.rider.lsp.protocol.FindHookLocation
+import com.reqnroll.ide.rider.telemetry.RiderTelemetryTransmitter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,6 +45,28 @@ class GoToHooksRunnerTest {
     // always show the picker, even for a single match, so the user can see which hook it refers
     // to rather than being jumped straight there. The manual "Go to Hooks" action keeps the
     // direct-navigate shortcut for a single match.
+
+    // Issue #861: the entry point reported as the closed Source enum shared with VS and VS Code.
+
+    @Test
+    fun `telemetryProperties carries Source under the cross-IDE property name`() {
+        assertEquals(mapOf("Source" to "CodeLens"), GoToHooksRunner.telemetryProperties("CodeLens"))
+    }
+
+    @Test
+    fun `sourceForPlace maps the editor popup to ContextMenu and any other place to Command`() {
+        assertEquals("ContextMenu", GoToHooksRunner.sourceForPlace(ActionPlaces.EDITOR_POPUP))
+        assertEquals("Command", GoToHooksRunner.sourceForPlace(ActionPlaces.KEYBOARD_SHORTCUT))
+        assertEquals("Command", GoToHooksRunner.sourceForPlace(ActionPlaces.ACTION_SEARCH))
+    }
+
+    @Test
+    fun `source constants match the closed enum shared with VS and VS Code`() {
+        assertEquals("Source", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_PROPERTY)
+        assertEquals("Command", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_COMMAND)
+        assertEquals("ContextMenu", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CONTEXT_MENU)
+        assertEquals("CodeLens", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CODE_LENS)
+    }
 
     @Test
     fun `shouldNavigateDirectly is true for a single hook when alwaysShowPicker is not set`() {

@@ -3,7 +3,7 @@ import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
 import { sendTelemetryEvent } from '../telemetry';
-import { TelemetryEvents } from '../telemetryEvents';
+import { GoToHookSource, TelemetryEvents, TelemetryProperties } from '../telemetryEvents';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface FindHooksResponse {
@@ -33,6 +33,8 @@ interface FindHookLocation {
  * the `QuickPick` even for a single match, so clicking a lens always lets the user see which hook
  * it refers to rather than jumping straight there; the keybinding/command-palette path keeps the
  * original single-match shortcut.
+ *
+ * `source` is the entry point reported on the telemetry event (see {@link GoToHookSource}).
  */
 export async function doGoToHooks(
   client: LanguageClient,
@@ -43,6 +45,7 @@ export async function doGoToHooks(
     ownLevelOnly?: boolean;
     alwaysShowPicker?: boolean;
   },
+  source?: GoToHookSource,
 ): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   const uri = position?.uri ?? editor?.document.uri.toString();
@@ -53,7 +56,12 @@ export async function doGoToHooks(
   // A genuine navigation -- unlike VS's classic CodeLens, VS Code's hook-count CodeLens resolves
   // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
   // caller and every invocation (palette, keybinding, or a lens click) really is one (issue #698).
-  sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted);
+  // `Source` defaults to CodeLens for a position-carrying call (only the lens click supplies one)
+  // and to Command otherwise; the `reqnroll.goToHooks` handler passes ContextMenu explicitly.
+  sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted, {
+    [TelemetryProperties.source]:
+      source ?? (position ? GoToHookSource.codeLens : GoToHookSource.command),
+  });
 
   let response: FindHooksResponse;
   try {

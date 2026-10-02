@@ -11,6 +11,10 @@ public sealed record GherkinCommentEdit(
 
 /// <summary>
 /// The result of a comment-toggle operation: a set of per-line text replacements.
+/// <paramref name="Uncommented"/> is the direction the request resolved to: <c>true</c> when it
+/// removed comments, <c>false</c> when it added them. It is how a Toggle's effective outcome is
+/// reported (telemetry), since the edits alone can be empty.
 /// </summary>
 public sealed record GherkinCommentToggleResult(
-    IReadOnlyList<GherkinCommentEdit> Edits);
+    IReadOnlyList<GherkinCommentEdit> Edits,
+    bool Uncommented = false);

@@ -47,6 +47,8 @@ public static class TelemetryProperties
     public const string MatchCount = "MatchCount";
     /// <summary>Requested comment mode (<c>Toggle</c>, <c>Comment</c> or <c>Uncomment</c>).</summary>
     public const string Mode = "Mode";
+    /// <summary>Direction the comment command actually took (<c>Comment</c> or <c>Uncomment</c>); differs from <see cref="Mode"/> only for a requested <c>Toggle</c>.</summary>
+    public const string ResolvedMode = "ResolvedMode";
     /// <summary>Lines the comment command covered, bucketed by <see cref="TelemetryBuckets.LineCount(int)"/>.</summary>
     public const string LineCountBucket = "LineCountBucket";
     /// <summary>Text edits a formatting request returned that actually change the text (0 = already formatted).</summary>

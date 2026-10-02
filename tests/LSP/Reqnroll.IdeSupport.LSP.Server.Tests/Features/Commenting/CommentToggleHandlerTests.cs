@@ -224,6 +224,31 @@ public class CommentToggleHandlerTests
                 (string)p["Mode"]! == "Toggle" && (string)p["LineCountBucket"]! == "1"));
     }
 
+    // Issue #861: Mode is the requested mode; ResolvedMode is the direction the request actually took.
+    [Theory]
+    [InlineData("toggle",    false, "Toggle",    "Comment")]
+    [InlineData("toggle",    true,  "Toggle",    "Uncomment")]
+    [InlineData("comment",   false, "Comment",   "Comment")]
+    [InlineData("uncomment", true,  "Uncomment", "Uncomment")]
+    public async Task Handle_emits_requested_and_resolved_mode_in_telemetry(
+        string modeArg, bool uncommented, string expectedMode, string expectedResolved)
+    {
+        SetupBuffer(FeatureUri, "Feature: F\nScenario: S\n    Given a step\n");
+        SetupApplyEditRequest();
+        _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
+            .Returns(new GherkinCommentToggleResult(new List<GherkinCommentEdit>(), uncommented));
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        await CreateSutWithTelemetry(telemetry).Handle(
+            MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0, modeArg),
+            CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "CommentUncomment command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (string)p["Mode"]! == expectedMode && (string)p["ResolvedMode"]! == expectedResolved));
+    }
+
     [Fact]
     public async Task Handle_does_not_emit_telemetry_on_wrong_command()
     {
