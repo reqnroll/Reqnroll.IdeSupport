@@ -771,6 +771,21 @@ line-background highlighting — with a hover tooltip showing the failure output
 info/hint severity, not error severity, to stay visually low-noise against genuine diagnostics
 ([F3](LSP-IDE-Support-Feature-Designs.md#f3--gherkin-file-diagnostics)'s error/warning squiggles).
 
+**Rider failed-step gutter mark - as built (issue #451).** Rider keeps own execution (the issue's
+option 2: no `SMTestProxy` subscription - see the correction above, there is nothing to subscribe to)
+and adds the failed-step mark on top of the existing LSP-server outcome pipeline. The server's step-trace
+parser (`StepTraceParser`, all seven outcome kinds) already reports each failed row's `failedStepIndex`/
+`failedStepText`/`failedStepOutcome`; `FailedStepLocator` maps that execution index to a `.feature` line
+using the `textDocument/documentSymbol` tree (Background steps of the Feature, then the enclosing Rule,
+then the scenario's own steps - the same order Reqnroll traces them), and `FailedStepGutterMarks` adds a
+`RangeHighlighter` with a red test-failed `GutterIconRenderer` and a hover tooltip (traced step plus the
+first line of each failed row's error) to each open editor's markup model - not `LineMarkerProvider`,
+since `.feature` has no PSI. A Scenario Outline whose rows fail on different steps gets one mark per
+distinct step. Marks are in-memory (like the lens glyph), replaced when the scenario is re-run, and all
+of a file's marks are dropped on its first edit. A TRX-only/exit-code fallback result has no step detail,
+so it produces no mark. Unit-tested (locator, mark grouping, tooltip, row mapping); the editor
+rendering itself has not been live-verified in Rider.
+
 **What still needs a live session, concretely:**
 
 1. ~~**Visual Studio**~~ Resolved (2026-08-27) — **pass/fail glyph implemented via reflection**, guarded

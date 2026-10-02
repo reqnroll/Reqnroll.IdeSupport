@@ -26,7 +26,7 @@ public sealed class LspTelemetryService : ILspTelemetryService
         _languageServer.SendNotification(LspStandardMethodNames.TelemetryEvent, new
         {
             eventName,
-            properties
+            properties = TelemetryScrubber.ScrubProperties(properties)
         });
     }
 }

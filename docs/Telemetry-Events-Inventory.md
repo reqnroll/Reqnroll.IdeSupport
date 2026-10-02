@@ -69,8 +69,12 @@ back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExec
 `UnhandledException` (#627) as the precedent: confirm with the team before renaming any event.
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
-are transmitted. The `UnhandledException` message is scrubbed for filesystem paths
-(`<path>`) before transmission. `AffectedFile` on the Roslyn discovery event carries the file
+are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
+`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed for filesystem paths (`<path>`) at the
+last server hop before the event goes to the client (`LspTelemetryService` →
+`TelemetryScrubber.ScrubProperties`, #843), so emit sites and the local debug-log mirror keep the raw text for
+debugging. Other string properties are fixed literals
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
 *name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
@@ -95,7 +99,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `IsFailed` | bool | Omitted on the connector hash-noop outcome; otherwise false (success) or true (failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
-| `ErrorMessage` | string | Connector failure: the exception message |
+| `ErrorMessage` | string | Connector failure: the exception message, filesystem-path-scrubbed (`<path>`) |
 | `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector: the project's TFM |
@@ -240,12 +244,17 @@ succeeds.
 | | |
 |---|---|
 | **Emitter** | `TestOutcomeTcpListener` |
-| **When** | The bundled VSTest-logger socket delivers the `runComplete` message for a test run |
-| **Properties** | `ResultCount` (int), `Aborted` (bool), `Canceled` (bool), `ReporterKind` (string — which reporter flavor, incl. the MTP source-compiled one, sent the run) |
+| **When** | A test run's socket connection ends: the bundled VSTest logger / MTP reporter delivers `runComplete`, **or** the connection closes after `runStart`/results without one (killed test host, crashed MTP process — sent with `Aborted=true`, `CompletedNormally=false`). Idle spare connections that never started a run send nothing |
+| **Properties** | `ResultCount` (int — results stored), `PassedCount` / `FailedCount` / `SkippedCount` (int — stored results by outcome), `ExecutedCount` (int — the runner's `executed` from `runComplete`; results seen so far on a dropped connection), `Aborted` (bool), `Canceled` (bool), `CompletedNormally` (bool — `false` when aborted, canceled or dropped), `ReporterKind` (string — which reporter flavor, incl. the MTP source-compiled one, sent the run), `TargetFramework` (string — the hello line's TFM moniker, e.g. `.NETCoreApp,Version=v8.0`; empty if not sent), `DurationMs` (long — hello to runComplete/drop), `DurationBucket` (string — same buckets as `PerfSample`) |
 
 **Analytics use.** Run CodeLens actual-run volume (the completion side of the
-`ResolveTestTargets…` lookup events), abort/cancel rates, and MTP source-compiled reporter
-adoption in the wild (issue #722). Counts/flags only — no paths, no test names.
+`ResolveTestTargets…` lookup events), abort/cancel/crash rates (dropped runs are now counted rather
+than only logged), pass/fail mix, run duration, TFM distribution, and MTP source-compiled reporter
+adoption in the wild (issue #722). Counts/flags/durations/TFM only — no paths, no test names.
+
+**Not sent (issue #848).** Run vs Debug and Scenario/Feature/Rule/Project scope: `reqnroll/registerTestRun`
+takes no parameters and is called once per client session, not per Run click, so the server cannot
+learn them. A user-click event would have to be emitted by each client.
 
 ### `TagIndexFirstScanCompleted`
 | | |

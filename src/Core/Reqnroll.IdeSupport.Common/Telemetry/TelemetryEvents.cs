@@ -131,8 +131,9 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent by <c>Features.TestOutcomes.TestOutcomeTcpListener</c> when a test run's
-    /// <c>runComplete</c> message arrives over the bundled VSTest-logger socket. Counts and
-    /// flags only — no paths, no test names, no content — plus which reporter sent the run,
+    /// <c>runComplete</c> message arrives over the bundled VSTest-logger socket, or the connection
+    /// drops after the run started without one (sent as aborted, issue #848). Counts, flags, a
+    /// duration and the target framework only — no paths, no test names, no content — plus which reporter sent the run,
     /// so MTP's ephemeral source-compiled reporter's real-world adoption is visible in
     /// aggregate (issue #722).
     /// </summary>
