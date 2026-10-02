@@ -113,10 +113,11 @@ path). All are emitted once per request; none contain file content.
 |---|---|
 | **Emitters** | `ResolveTestTargetsHandler` / `ResolveContainerTestTargetsHandler` |
 | **When** | A Run CodeLens resolves a scenario's (or Feature/Rule container's) test targets (`reqnroll/resolveTestTargets` / `reqnroll/resolveContainerTestTargets`) |
-| **Properties** | — (fire-and-count) |
+| **Properties** | `TargetCount` (int): targets resolved (0 = project not built yet / no generated method); `Kind` (string): single-scenario event — `Scenario` \| `Outline` \| `ExampleRow` (omitted when the range intersects no scenario); container event — `Feature` \| `Rule` |
 
 **Analytics use.** Run CodeLens adoption: how often Run/Debug targets are resolved, container
-("Run Scenarios") vs single-scenario split. Fire rate is high (resolves on lens render) — read
+("Run Scenarios") vs single-scenario split, which kind of block is being run, and how often a
+resolution comes back empty (`TargetCount = 0`). Fire rate is high (resolves on lens render) — read
 as *lookups*, not *runs*.
 
 ### `GoToStepDefinitionCommandExecuted`
@@ -124,17 +125,19 @@ as *lookups*, not *runs*.
 |---|---|
 | **Emitters** | `DefinitionHandler` (`textDocument/definition`) and `FindStepDefinitionsHandler` (`reqnroll/findStepDefinitions`, Visual Studio's path — issue #757) — one event for the same user command across both protocols |
 | **When** | After a step is resolved at the cursor (guard-clause rejections don't emit) |
-| **Properties** | `LocationCount` (int): navigable rows offered |
+| **Properties** | `LocationCount` (int): navigable rows offered; `Status` (string): `Bound` (defined, at least one navigable row) \| `Ambiguous` \| `Undefined` (no defined binding) \| `Unresolved` (defined, but no binding source exists on this machine — issue #540); `Protocol` (`"textDocument/definition"` \| `"reqnroll/findStepDefinitions"`) |
 
 **Analytics use.** Go to Step Definition usage, including the ambiguous-match frequency
-(`LocationCount > 1`).
+(`Status = Ambiguous`), how often the command lands on an undefined step, how often navigation
+is impossible because the binding source is not local (`Unresolved`), and the per-IDE path via
+`Protocol`.
 
 ### `FindHooksCommandExecuted` (server) vs `GoToHookCommandExecuted` (clients)
 | | |
 |---|---|
 | **Emitter (server)** | `FindHooksHandler` |
 | **When (server)** | Every `reqnroll/findHooks` request — including the classic VS CodeLens Details-popup prefetch, which hits the same handler on every lens render |
-| **Properties** | — |
+| **Properties** | `HookCount` (int): hook locations returned (navigable only; hooks with no local source are not counted) |
 
 **Analytics use.** *Lookup* volume only (issue #698). The server cannot tell a navigation from a
 prefetch, so genuine-navigation telemetry is emitted client-side as
@@ -155,9 +158,10 @@ Acceptance rate is not measurable server-side by design.
 |---|---|
 | **Emitter** | `FindUnusedStepDefinitionsHandler` |
 | **When** | After a Find Unused Step Definitions request completes |
-| **Properties** | `UnusedStepDefinitions` (int), `ScannedFeatureFiles` (int), `IsCancellationRequested` (bool) |
+| **Properties** | `UnusedStepDefinitions` (int), `ScannedFeatureFiles` (int — in practice the number of project registries scanned), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
 
-**Analytics use.** Feature hygiene: unused-step counts and scan cost (files scanned); the
+**Analytics use.** Feature hygiene: unused-step counts, the unused *ratio*
+(`UnusedStepDefinitions / TotalStepDefinitions`) and scan cost (duration bucket); the
 cancellation flag captures user impatience on large solutions.
 
 ### `RenameStepCommandExecuted`
@@ -165,40 +169,44 @@ cancellation flag captures user impatience on large solutions.
 |---|---|
 | **Emitter** | `RenameHandler` |
 | **When** | *Every* terminal path of a Step Rename — success **and** each validation/rejection branch (issue #581 finding 4: `Erroneous` used to be hardcoded `false`) |
-| **Properties** | `Erroneous` (bool); `Reason` (string, rejection path, omitted on success); `ChangeAnnotationsUsed` (bool?, success only); `EditedFileCount` (int?, success only) |
+| **Properties** | `Erroneous` (bool); `Reason` (string, rejection path, omitted on success); `ChangeAnnotationsUsed` (bool?, success only); `EditedFileCount` (int?, success only); `Origin` (`"Feature"` \| `"CSharpBinding"` — the file type the rename was invoked in; every path); `OccurrenceCount` (int?, success only — step occurrences in `.feature` files the rename covers); `DurationBucket` (string, every path; see "Bucket schemes" below) |
 
 **Analytics use.** Step Rename usage and failure modes: the `Reason` histogram tells you *which*
 validation is rejecting users, `ChangeAnnotationsUsed` tracks atomic-edit adoption (needed for
 multi-file rename in clients without LSP change-annotation support), `EditedFileCount` the
-typical rename blast radius.
+typical rename blast radius, `Origin` whether users rename from the feature step or from the
+binding, `OccurrenceCount` how many steps a rename rewrites, and `DurationBucket` its latency.
 
 ### `FindStepDefinitionUsagesCommandExecuted`
 | | |
 |---|---|
 | **Emitters** | `FindStepUsagesHandler` (`reqnroll/findStepUsages`, VS) and `ReferencesHandler` (`textDocument/references`, VS Code/Rider — issue #581 finding 3) — one event so the metric doesn't undercount by excluding two of three IDEs |
 | **When** | After a usage lookup on a binding ("is a binding" gate passed) |
-| **Properties** | `UsagesCount` (int), `IsCancelled` (bool), `Protocol` (`"reqnroll/findStepUsages"` \| `"textDocument/references"`) |
+| **Properties** | `UsagesCount` (int), `IsCancelled` (bool), `Protocol` (`"reqnroll/findStepUsages"` \| `"textDocument/references"`), `FileCount` (int — distinct `.feature` files in the result), `DurationBucket` (string, see "Bucket schemes" below) |
 
-**Analytics use.** Find Step Definition Usages frequency and result distribution; `Protocol`
-breaks out the per-IDE path so a client-specific regression is visible.
+**Analytics use.** Find Step Definition Usages frequency and result distribution (usages vs
+files spread); `Protocol` breaks out the per-IDE path so a client-specific regression is
+visible; `DurationBucket` the search cost.
 
 ### `CommentUncommentCommandExecuted`
 | | |
 |---|---|
 | **Emitter** | `CommentToggleHandler` |
 | **When** | After a comment/uncomment `workspace/executeCommand` round trip |
-| **Properties** | — |
+| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*; a `Toggle` is not resolved to Comment/Uncomment server-side), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below) |
 
-**Analytics use.** Comment-toggle usage (a proxy for "users authoring Gherkin interactively").
+**Analytics use.** Comment-toggle usage (a proxy for "users authoring Gherkin interactively"),
+which command flavor is used, and whether it is applied to single lines or blocks.
 
 ### `AutoFormatDocumentCommandExecuted`
 | | |
 |---|---|
 | **Emitter** | `FormattingHandler` |
 | **When** | After `textDocument/formatting` (whole document) or `textDocument/rangeFormatting` (selection) |
-| **Properties** | `IsSelectionFormatting` (bool) |
+| **Properties** | `IsSelectionFormatting` (bool), `EditCount` (int — edits returned that change the text; the handler returns one whole-range replacement, so this is 0 or 1, and 0 = already formatted), `DocumentLineBucket` (string — document length in lines; see "Bucket schemes" below) |
 
-**Analytics use.** Format-on-demand usage, whole-document vs selection split. (On-type table
+**Analytics use.** Format-on-demand usage, whole-document vs selection split, how often the
+command is a no-op (`EditCount = 0`), and the document sizes it runs on. (On-type table
 formatting is deliberately *not* telemetried — see the retired-event table below.)
 
 ### `GoToMatchingScenariosCommandExecuted`
@@ -206,9 +214,10 @@ formatting is deliberately *not* telemetried — see the retired-event table bel
 |---|---|
 | **Emitter** | `FindMatchingScenariosHandler` |
 | **When** | After a Go To Matching Scenarios (`reqnroll/findMatchingScenarios`) request |
-| **Properties** | — |
+| **Properties** | `MatchCount` (int): scenarios returned |
 
-**Analytics use.** Hook CodeLens clicks / matching-scenario lookups on `.cs` hook bindings.
+**Analytics use.** Hook CodeLens clicks / matching-scenario lookups on `.cs` hook bindings, and
+how many scenarios a hook typically applies to.
 
 ### `OpenProjectCommandExecuted`
 | | |
@@ -260,6 +269,21 @@ checks (current design) are enough or watched-file invalidation is needed. Count
 only — no project, file or tag names. There is deliberately no per-completion event (completion
 fires per keystroke; see `Completion inserted` in §7); steady-state tag-completion latency is
 `PerfSample` with `Operation = textDocument/completion#tag`.
+
+### Bucket schemes (issue #849)
+
+Characteristic properties are counts, flags, small closed enums or *buckets* — never paths or text.
+Key names live in `TelemetryProperties` (LSP.Server); bucketing in `TelemetryBuckets`.
+
+| Property | Scheme |
+|---|---|
+| `DurationBucket` | Same scheme as `PerfSample`'s: `<=10`, `<=25`, `<=50`, `<=100`, `<=250`, `<=500`, `<=1000`, `<=5000`, `>5000` (ms of handler wall-clock time) |
+| `LineCountBucket`, `DocumentLineBucket` | `0`, `1`, `2-10`, `11-50`, `51-200`, `201-1000`, `1000+` |
+
+**Not yet implemented from issue #849** (needs client work or a design decision): the client-side
+`Source` (`Command` \| `ContextMenu` \| `CodeLens`) on `GoToHookCommandExecuted` (three IDE
+clients, three languages); the `Mode` on `CommentUncomment` is the requested mode, not a resolved
+Comment/Uncomment; `DefineSteps` properties are tracked separately in #847.
 
 ---
 
@@ -316,7 +340,7 @@ server's lookup volume.
 |---|---|
 | **Emitter** | `LspErrorTelemetryService.MonitorError` — the LSP server's `ITelemetryService` implementation; every other `Monitor*` member is a no-op there |
 | **When** | Any exception reported through `IErrorTelemetryService` (e.g. `IdeSupportGherkinParser`, `IdeSupportTagParser`, `CompletionContextResolver`, `WatchedFilesHandler` config loads), driven by `IdeSupportLoggerExtensions.LogException` |
-| **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it) |
+| **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is never sent) |
 
 ### VS host exception transmission (not an event name)
 The VS host transmits exceptions with Application Insights' `ExceptionTelemetry` (fatal when

@@ -546,7 +546,10 @@ public class DefinitionHandlerTests
 
         telemetry.Received(1).SendEvent(
             "GoToStepDefinition command executed",
-            Arg.Is<Dictionary<string, object?>>(p => (int)p["LocationCount"]! == 1));
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["LocationCount"]! == 1
+                && (string)p["Status"]! == "Bound"
+                && (string)p["Protocol"]! == "textDocument/definition"));
     }
 
     [Fact]
@@ -565,7 +568,44 @@ public class DefinitionHandlerTests
 
         telemetry.Received(1).SendEvent(
             "GoToStepDefinition command executed",
-            Arg.Is<Dictionary<string, object?>>(p => (int)p["LocationCount"]! == 0));
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["LocationCount"]! == 0 && (string)p["Status"]! == "Unresolved"));
+    }
+
+    [Fact]
+    public async Task Handle_ambiguous_step_emits_telemetry_with_ambiguous_status()
+    {
+        var step = MakeAmbiguousMatch(new[] { ("A.cs", 10, 5), ("B.cs", 20, 5) });
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "GoToStepDefinition command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["LocationCount"]! == 2 && (string)p["Status"]! == "Ambiguous"));
+    }
+
+    [Fact]
+    public async Task Handle_undefined_step_emits_telemetry_with_undefined_status()
+    {
+        var snapshot = new LspTextSnapshot(FeatureUri.ToString(), 1, FeatureText);
+        var step = new StepBindingMatch(
+            FeatureUri.ToString(), GherkinRange.FromPoint(snapshot, 33, 6), MatchResult.NoMatch);
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry).Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "GoToStepDefinition command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (int)p["LocationCount"]! == 0 && (string)p["Status"]! == "Undefined"));
     }
 
     [Fact]

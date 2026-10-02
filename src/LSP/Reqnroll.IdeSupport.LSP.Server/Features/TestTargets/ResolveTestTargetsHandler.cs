@@ -96,7 +96,10 @@ public sealed class ResolveTestTargetsHandler
 
         _logger.LogVerbose($"ResolveTestTargetsHandler: {targets.Count} target(s) at range {request.Range} in {uri}");
 
-        _telemetryService?.SendEvent(TelemetryEvents.ResolveTestTargetsCommandExecuted, new());
+        var telemetry = new Dictionary<string, object?> { [TelemetryProperties.TargetCount] = targets.Count };
+        if (TestTargetTelemetry.ClassifyScenario(buffer.Tags, scenarioRange) is { } kind)
+            telemetry[TelemetryProperties.Kind] = kind;
+        _telemetryService?.SendEvent(TelemetryEvents.ResolveTestTargetsCommandExecuted, telemetry);
 
         return Task.FromResult(new ResolveTestTargetsResponse { Targets = targets.Select(ToDto).ToList() });
     }

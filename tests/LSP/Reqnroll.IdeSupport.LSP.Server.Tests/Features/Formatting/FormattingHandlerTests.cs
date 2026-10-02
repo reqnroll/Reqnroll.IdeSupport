@@ -52,7 +52,10 @@ public class FormattingHandlerTests
 
         _telemetryService.Received(1).SendEvent(
             "AutoFormatDocument command executed",
-            Arg.Is<Dictionary<string, object?>>(p => (bool)p["IsSelectionFormatting"]! == false));
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (bool)p["IsSelectionFormatting"]! == false
+                && (int)p["EditCount"]! == 1
+                && (string)p["DocumentLineBucket"]! == "2-10"));
     }
 
     [Fact]
@@ -69,7 +72,59 @@ public class FormattingHandlerTests
 
         _telemetryService.Received(1).SendEvent(
             "AutoFormatDocument command executed",
-            Arg.Is<Dictionary<string, object?>>(p => (bool)p["IsSelectionFormatting"]! == true));
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (bool)p["IsSelectionFormatting"]! == true && p.ContainsKey("EditCount")));
+    }
+
+    [Fact]
+    public async Task Handle_document_formatting_of_an_already_formatted_document_reports_no_edits()
+    {
+        var first = await CreateSut().Handle(new DocumentFormattingParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = FeatureUri },
+            Options = Options()
+        }, CancellationToken.None);
+        var formatted = first!.Single().NewText;
+        var settled = DocumentUri.FromFileSystemPath("/workspace/settled.feature");
+        _bufferService.TryGet(settled, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(settled, 1, formatted);
+                return true;
+            });
+        _telemetryService.ClearReceivedCalls();
+
+        await CreateSut().Handle(new DocumentFormattingParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = settled },
+            Options = Options()
+        }, CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "AutoFormatDocument command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["EditCount"]! == 0));
+    }
+
+    [Fact]
+    public async Task Handle_document_formatting_of_a_misformatted_document_reports_one_edit()
+    {
+        var messy = DocumentUri.FromFileSystemPath("/workspace/messy.feature");
+        _bufferService.TryGet(messy, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(messy, 1, "Feature: F\n      Scenario: S\nGiven a step\n");
+                return true;
+            });
+
+        await CreateSut().Handle(new DocumentFormattingParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = messy },
+            Options = Options()
+        }, CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "AutoFormatDocument command executed",
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["EditCount"]! == 1));
     }
 
     [Fact]

@@ -218,7 +218,10 @@ public class CommentToggleHandlerTests
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
             CancellationToken.None);
 
-        telemetry.Received(1).SendEvent("CommentUncomment command executed", Arg.Any<Dictionary<string, object?>>());
+        telemetry.Received(1).SendEvent(
+            "CommentUncomment command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (string)p["Mode"]! == "Toggle" && (string)p["LineCountBucket"]! == "1"));
     }
 
     [Fact]

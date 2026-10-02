@@ -2466,7 +2466,11 @@ public class StepRenameHandlerTests
         result.Should().NotBeNull();
         telemetry.Received(1).SendEvent(
             "Rename step command executed",
-            Arg.Is<Dictionary<string, object?>>(d => false.Equals(d["Erroneous"])));
+            Arg.Is<Dictionary<string, object?>>(d =>
+                false.Equals(d["Erroneous"])
+                && (string)d["Origin"]! == "CSharpBinding"
+                && 0.Equals(d["OccurrenceCount"])
+                && d["DurationBucket"] is string));
     }
 
     [Fact]
@@ -2488,6 +2492,28 @@ public class StepRenameHandlerTests
             "Rename step command executed",
             Arg.Is<Dictionary<string, object?>>(d =>
                 true.Equals(d["Erroneous"]) && "InvalidRequest".Equals(d["Reason"])));
+    }
+
+    [Fact]
+    public async Task HandleRenameAsync_reports_feature_origin_and_duration_on_a_rejected_rename()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/test.feature");
+
+        var act = () => CreateSutWithTelemetry(telemetry).HandleRenameAsync(
+            new RenameParams
+            {
+                TextDocument = new TextDocumentIdentifier { Uri = featureUri },
+                Position = new Position(2, 10),
+                NewName = ""
+            },
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<RpcErrorException>();
+        telemetry.Received(1).SendEvent(
+            "Rename step command executed",
+            Arg.Is<Dictionary<string, object?>>(d =>
+                "Feature".Equals(d["Origin"]) && d["DurationBucket"] is string && !d.ContainsKey("OccurrenceCount")));
     }
 
     [Fact]

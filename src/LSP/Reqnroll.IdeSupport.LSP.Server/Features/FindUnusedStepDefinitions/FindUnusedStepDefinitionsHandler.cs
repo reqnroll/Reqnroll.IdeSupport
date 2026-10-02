@@ -1,5 +1,7 @@
 ﻿using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
@@ -41,6 +43,7 @@ public sealed class FindUnusedStepDefinitionsHandler
         // Performance Verification (Layer 4): time the full-workspace unused-step-definitions scan —
         // the operation shape most likely to regress silently on large solutions.
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions);
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
 
         var allRegistries = _registryLookup.GetAllRegistries();
 
@@ -70,8 +73,24 @@ public sealed class FindUnusedStepDefinitionsHandler
             ["UnusedStepDefinitions"] = items.Count,
             ["ScannedFeatureFiles"] = allRegistries.Count,
             ["IsCancellationRequested"] = false,
+            [TelemetryProperties.TotalStepDefinitions] = CountScannedStepDefinitions(allRegistries.Select(r => r.Registry)),
+            [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(started),
         });
 
         return Task.FromResult(new FindUnusedStepDefinitionsResponse { Items = items });
     }
+
+    /// <summary>
+    /// The denominator for the unused ratio: distinct <see cref="BindingId"/>s among the step
+    /// definitions <see cref="FindUnusedStepDefinitionsService"/> scans (valid, with a source location),
+    /// so a binding reported by several projects counts once, exactly as it does in the unused count.
+    /// </summary>
+    private static int CountScannedStepDefinitions(IEnumerable<ProjectBindingRegistry> registries) =>
+        registries
+            .Where(r => r != ProjectBindingRegistry.Invalid)
+            .SelectMany(r => r.StepDefinitions)
+            .Where(sd => sd.IsValid && sd.Implementation?.SourceLocation is not null)
+            .Select(BindingId.For)
+            .Distinct()
+            .Count();
 }

@@ -1,4 +1,5 @@
 ﻿using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
@@ -181,6 +182,34 @@ public class FindUnusedStepDefinitionsHandlerTests
             Arg.Is<Dictionary<string, object?>>(d =>
                 1.Equals(d["UnusedStepDefinitions"]) &&
                 1.Equals(d["ScannedFeatureFiles"]) &&
-                false.Equals(d["IsCancellationRequested"])));
+                false.Equals(d["IsCancellationRequested"]) &&
+                0.Equals(d["TotalStepDefinitions"]) &&
+                d["DurationBucket"] is string));
+    }
+
+    [Fact]
+    public async Task HandleAsync_reports_the_distinct_step_definition_total_so_the_unused_ratio_is_computable()
+    {
+        ProjectStepDefinitionBinding Step(string expression, int line) => new(
+            ScenarioBlock.Given,
+            new System.Text.RegularExpressions.Regex($"^{expression}$"),
+            null,
+            new ProjectBindingImplementation("C.M", null, new SourceLocation("/ws/Steps.cs", line, 5)),
+            expression);
+
+        // The same two bindings reported by two projects (a shared/referenced assembly) count once each.
+        var shared = ProjectBindingRegistry.FromBindings(new[] { Step("one", 10), Step("two", 20) });
+        SetupRegistries(
+            ("A", new ProjectOwner("/ws/A/A.csproj", "net8.0"), shared),
+            ("B", new ProjectOwner("/ws/B/B.csproj", "net8.0"), shared));
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
+                .Returns(Array.Empty<UnusedStepDefinition>());
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        await CreateSutWithTelemetry(telemetry).HandleAsync(CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "FindUnusedStepDefinitions command executed",
+            Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["TotalStepDefinitions"]) && 2.Equals(d["ScannedFeatureFiles"])));
     }
 }
