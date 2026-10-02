@@ -517,6 +517,27 @@ namespace S
     }
 
     [Fact]
+    public async Task TriggerRefresh_a_failing_snapshot_lookup_does_not_turn_a_successful_run_into_a_failure_event()
+    {
+        GivenDiscoveryReturns(NonInvalidRegistry(hash: 42), "hash-1");
+        var lookup = Substitute.For<IProjectFeatureFileLookup>();
+        lookup.CountFeatureFiles(Arg.Any<IProjectScope>()).Returns(_ => throw new InvalidOperationException("index fault"));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var sut = new ConnectorBindingRegistryProvider(_project, _discovery, _logger, telemetry, lookup);
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+        await Task.Delay(300);
+
+        telemetry.DidNotReceive().SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsFailed"])));
+        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
     public async Task TriggerRefresh_hash_noop_sends_no_ProjectCharacteristics()
     {
         GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);

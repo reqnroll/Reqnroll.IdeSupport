@@ -94,7 +94,7 @@ public sealed class ServerSessionTelemetry
     public IDisposable EndOnShutdown(IObservable<bool> shutdown) => shutdown.Subscribe(new ShutdownObserver(this));
 
     private static readonly System.Text.RegularExpressions.Regex SafeVersion =
-        new(@"^[\w.\-+]{1,32}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        new(@"^[A-Za-z0-9_.\-+]{1,32}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>
     /// The client version is client-controlled text, so it is only sent when it looks like a version

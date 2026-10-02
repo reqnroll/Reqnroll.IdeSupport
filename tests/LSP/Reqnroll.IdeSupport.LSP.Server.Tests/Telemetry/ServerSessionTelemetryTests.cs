@@ -55,6 +55,7 @@ public class ServerSessionTelemetryTests
     [InlineData(null, false)]
     [InlineData("C:\\Users\\someone\\ide.exe", false)]
     [InlineData("1.0 with spaces", false)]
+    [InlineData("１２３", false)]
     [InlineData("2025.1\n", false)]
     [InlineData("123456789012345678901234567890123", false)]
     public void ClientVersion_is_only_sent_when_it_looks_like_a_version(string? version, bool sent)

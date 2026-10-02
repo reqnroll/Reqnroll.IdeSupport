@@ -351,10 +351,19 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             // Sent after the registry-changed notification so telemetry can never delay consumers
             // of the new bindings. FeatureFileCount comes from the link-aware membership index (an
             // in-memory query, no folder walk) and is omitted until the baseline has arrived.
-            _telemetryService?.SendEvent(
-                TelemetryEvents.ProjectCharacteristics,
-                ProjectCharacteristicsTelemetry.Build(
-                    newRegistry, _featureFileLookup?.CountFeatureFiles(_project), _project.TargetFrameworkMonikers));
+            // Guarded: the registry already changed successfully, so a fault while building this
+            // snapshot must not fall into the catch below and be reported as a failed discovery.
+            try
+            {
+                _telemetryService?.SendEvent(
+                    TelemetryEvents.ProjectCharacteristics,
+                    ProjectCharacteristicsTelemetry.Build(
+                        newRegistry, _featureFileLookup?.CountFeatureFiles(_project), _project.TargetFrameworkMonikers));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogVerbose($"[{_project.ProjectName}] ProjectCharacteristics telemetry failed: {ex.Message}");
+            }
         }
         catch (OperationCanceledException)
         {
