@@ -615,6 +615,62 @@ public class CodeActionHandlerTests
     }
 
     [Fact]
+    public async Task Offer_records_only_the_step_at_the_cursor_when_the_cap_dropped_the_define_all_group()
+    {
+        var tracker = Substitute.For<IDefineStepsOfferTracker>();
+        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var featureUri = DocumentUri.FromFileSystemPath(Path.Combine(tempDir, "calculator.feature"));
+            var matches = new List<StepBindingMatch>();
+            for (int i = 0; i < 6; i++)
+            {
+                var candidatePath = Path.Combine(tempDir, $"CandidateSteps{i}.cs");
+                File.WriteAllText(candidatePath, ValidBindingClass);
+                matches.Add(DefinedMatch($"defined step {i}", ScenarioBlock.Given, featureUri, candidatePath, lineOffset: 0));
+            }
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            _scopeManager.ResolvePrimaryOwner(featureUri).Returns((LspReqnrollProject?)null);
+            matches.Add(UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41));
+            matches.Add(UndefinedMatch("another step", ScenarioBlock.When, featureUri, lineOffset: 25));
+            SeedMatchServiceFor(featureUri, matches.ToArray());
+
+            var result = await CreateSut(offerTracker: tracker).Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
+
+            // 5 append candidates + new file for the per-step group fill the cap; "define all" is dropped.
+            result!.Should().HaveCount(6);
+            result!.Select(a => a.CodeAction!.Title).Should().OnlyContain(t => t.StartsWith("Define step: "));
+            tracker.Received(1).RecordOffer(
+                featureUri.ToString(),
+                Arg.Is<IEnumerable<StepBindingMatch>>(steps =>
+                    steps.Count() == 1 && steps.Single().Result.Items[0].UndefinedStep!.StepText == "I press add"),
+                Arg.Any<SnippetExpressionStyle>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>());
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Offer_records_every_undefined_step_when_the_define_all_action_survives()
+    {
+        var tracker = Substitute.For<IDefineStepsOfferTracker>();
+        SeedMatchService(
+            UndefinedMatch("I press add", ScenarioBlock.When, lineOffset: 41),
+            UndefinedMatch("another step", ScenarioBlock.When, lineOffset: 25));
+
+        var result = await CreateSut(offerTracker: tracker).Handle(RequestAt(FeatureUri, line: 3), CancellationToken.None);
+
+        result!.Select(a => a.CodeAction!.Title).Should().Contain("Define all missing steps in file");
+        tracker.Received(1).RecordOffer(
+            FeatureUri.ToString(),
+            Arg.Is<IEnumerable<StepBindingMatch>>(steps => steps.Count() == 2),
+            Arg.Any<SnippetExpressionStyle>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>());
+    }
+
+    [Fact]
     public async Task Offer_is_not_recorded_when_no_define_action_is_offered()
     {
         var tracker = Substitute.For<IDefineStepsOfferTracker>();

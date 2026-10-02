@@ -216,6 +216,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
             }
 
             var firstCreatesFile = DescribeEditTarget(offeredDefineActions[0].CodeAction).CreatesFile;
+            var allScopeOffered  = offeredDefineActions.Any(a => defineScopes[a] == TelemetryProperties.DefineScope.All);
             _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandOffered, new()
             {
                 ["UndefinedStepCount"] = matchSet.Undefined.Count(),
@@ -224,13 +225,19 @@ public sealed class CodeActionHandler : ICodeActionHandler
                     ? TelemetryProperties.DefineTarget.NewFile
                     : TelemetryProperties.DefineTarget.ExistingFile,
                 [TelemetryProperties.ExpressionStyle] = TelemetryProperties.ExpressionStyleFor(defineOffer.Target.Style),
-                [TelemetryProperties.Scope] = offeredDefineActions.Any(a => defineScopes[a] == TelemetryProperties.DefineScope.All)
+                [TelemetryProperties.Scope] = allScopeOffered
                     ? TelemetryProperties.DefineScope.All
                     : TelemetryProperties.DefineScope.Single,
                 [TelemetryProperties.CandidateFileCount] = appendFilePaths.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             });
 
-            _offerTracker?.RecordOffer(uri.ToString(), defineOffer.Undefined, defineOffer.Target.Style, newFilePaths, appendFilePaths);
+            // Track only the steps the surviving actions would actually define: when the cap or the
+            // context-diagnostic filter dropped the "define all" group, only the step under the
+            // cursor was offered, so defining another undefined step by hand must not be counted.
+            IReadOnlyList<StepBindingMatch> coveredSteps = allScopeOffered || stepAtCursor is null
+                ? defineOffer.Undefined
+                : new[] { stepAtCursor };
+            _offerTracker?.RecordOffer(uri.ToString(), coveredSteps, defineOffer.Target.Style, newFilePaths, appendFilePaths);
         }
 
         return Task.FromResult<CommandOrCodeActionContainer?>(

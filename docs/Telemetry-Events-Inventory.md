@@ -170,24 +170,47 @@ prefetch, so genuine-navigation telemetry is emitted client-side as
 | **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user accepts it — the `WorkspaceEdit` is applied client-side, so the server can't observe acceptance directly (see [`StepDefined`](#stepdefined) for the inferred signal) |
 | **Properties** | `UndefinedStepCount` (int), `ActionsOffered` (int, counted from the final post-filter/post-cap list), `Target` (`NewFile` \| `ExistingFile` — what the first, preferred action does: create a file or append to an existing one), `ExpressionStyle` (`CucumberExpression` \| `RegularExpression` — the configured snippet style; async variants fold into their sync style), `Scope` (`Single` \| `All` — `All` when a "define all missing steps" action is among those offered, i.e. more than one undefined step), `CandidateFileCount` (int — distinct existing files offered as append targets, 0 when only the new-file action exists) |
 
-**Analytics use.** Undefined-step pressure (how often the quick fix is needed), offer rate, and
-which flavours are on offer (new file vs. append, regex vs. Cucumber, single vs. all). Acceptance is
-measured by [`StepDefined`](#stepdefined), not by this event.
+**Not a count of distinct lightbulb opens.** VS and Rider may request code actions on every caret
+move, and each request that offers the action emits this event, so offer-event counts overstate how
+often a user actually *opened* the lightbulb. Use the event for the mix of offered flavours and for
+"is the fix available", not as an exposure count.
+
+**Analytics use.** Undefined-step pressure (how often the quick fix is needed), the flavours on offer
+(new file vs. append, regex vs. Cucumber, single vs. all). Acceptance is measured by
+[`StepDefined`](#stepdefined), not by this event.
 
 ### `StepDefined`
 | | |
 |---|---|
 | **Emitter** | `DefineStepsOfferTracker`, driven by `GherkinDocumentTaggerService.ParseAsync` (every re-match of an open feature: Roslyn `csOpen`/`csEdit` or connector rediscovery) |
-| **When** | A step the "Define step(s)" quick fix was offered for (within the last 10 minutes, measured from the most recent offer for that feature) is re-matched as *defined*. Nothing is sent without a prior offer. One event per distinct `Via` per re-match |
-| **Properties** | `Count` (int — distinct step texts that became defined in this re-match), `Via` (`QuickFixNewFile` \| `QuickFixAppend` \| `Other` — where the binding lives relative to the files the offered actions would have created/edited; `Other` includes hand-written definitions), `ExpressionStyle` (as in the offer) |
+| **When** | A step the "Define step(s)" quick fix was offered for (within 10 minutes of that step's *first* offer: repeated offers while the user stays in the file do not extend the window) is re-matched as *defined*. Nothing is sent without a prior offer. One event per distinct `Via` per re-match |
+| **Properties** | `Count` (int — distinct step texts that became defined in this re-match), `Via` (`QuickFixNewFile` \| `QuickFixAppend` \| `Other` — *where the binding landed* relative to the files the offered actions would have created/edited, not *how it was created*), `ExpressionStyle` (as in the offer) |
 
 **Inference, not acknowledgement.** The edit is applied client-side, so the server infers acceptance
-from its consequence. The tracker is an in-memory map keyed by feature URI holding the offered step
-texts (never transmitted), at most 64 features x 100 steps, expiring after 10 minutes, never persisted.
-It also counts a definition written by hand for an offered step (`Via = Other`), which is the honest
-measure of "undefined-step pressure resolved"; it cannot tell a click on the lightbulb from the user
-typing the same binding into the same file. An offer whose step text is later edited in the feature
-file is not correlated. An exact client acknowledgement (proposal B of #847) is deliberately not built.
+from its consequence. The tracker is an in-memory map keyed by feature URI. Per feature it holds the
+offered step texts with the time each was *first* offered (re-offers are merged; a step's window is
+never extended), plus the target file paths of the offered actions. Step texts and paths are never
+transmitted. Bounds: 64 features, 100 steps and 32+32 file paths per feature, 10-minute per-step
+expiry, nothing persisted. Only the steps covered by the *surviving* actions are tracked: if the cap
+or a diagnostic-scoped request dropped the "define all" action, only the step under the cursor is
+tracked, so defining some other undefined step by hand is not counted.
+
+**What `Via` does and does not tell you.** `Via` is purely a location classification. A binding found in
+a file the offered new-file action would have created is `QuickFixNewFile`; one found in an existing
+file offered as an append target is `QuickFixAppend`; anything else is `Other`. A hand-written
+definition can land in any of the three: append candidates are exactly the files most likely to be
+hand-edited, so `QuickFixAppend` in particular includes hand-typed bindings, and the server cannot tell
+a click on the lightbulb from the user typing the same binding. Treat `QuickFixAppend`/`QuickFixNewFile`
+as "resolved where the quick fix would have put it" (an upper bound on accepted quick fixes), and
+`Other` as "resolved elsewhere". Path comparison uses `PathUtils.NormalizeForComparison`: Roslyn
+bindings carry the buffer URI's absolute file path (the same form as the offered `CreateFile` URI
+path), and connector bindings carry the PDB path after `ISourceFileResolver` mapped it onto this
+machine; an unmappable foreign path never equals an offered path and classifies as `Other`.
+
+**Known gaps.** An offered step whose text is edited in the `.feature` file afterwards is not
+correlated (the key is the step text). Closed-file scans (`ScanClosedFileAsync`) do not feed the
+tracker; only re-matches of open documents do. An exact client acknowledgement (proposal B of #847)
+is deliberately not built.
 
 **Analytics use.** Resolution rate = `StepDefined.Count` / `DefineStepsCommandOffered.UndefinedStepCount`,
 split by `Via` to see how much of it goes through the quick fix.

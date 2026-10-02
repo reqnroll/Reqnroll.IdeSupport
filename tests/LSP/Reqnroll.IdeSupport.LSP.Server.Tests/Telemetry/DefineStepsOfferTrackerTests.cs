@@ -220,17 +220,127 @@ public class DefineStepsOfferTrackerTests
     }
 
     [Fact]
-    public void A_repeated_offer_refreshes_the_window()
+    public void A_repeated_offer_does_not_extend_the_window_of_an_already_offered_step()
     {
         var sut = CreateSut(window: TimeSpan.FromMinutes(10));
         Offer(sut, Step("I press   add"));
         _time.Advance(TimeSpan.FromMinutes(8));
-        Offer(sut, Step("I press   add"));
-        _time.Advance(TimeSpan.FromMinutes(8));
+        Offer(sut, Step("I press   add")); // e.g. a code-action request on a caret move
+        _time.Advance(TimeSpan.FromMinutes(3)); // 11 minutes after the FIRST offer
 
         sut.Observe(SetOf(FeatureId, Step("I press   add", definedIn: NewFile)));
 
-        SingleSentEvent();
+        _telemetry.ReceivedCalls().Should().BeEmpty();
+        sut.TrackedFeatureCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void A_newly_offered_step_gets_its_own_window_while_the_older_one_expires()
+    {
+        var sut = CreateSut(window: TimeSpan.FromMinutes(10));
+        Offer(sut, Step("I press   add"));
+        _time.Advance(TimeSpan.FromMinutes(8));
+        Offer(sut, Step("I press   add"), Step("I press subtract"));
+        _time.Advance(TimeSpan.FromMinutes(3));
+
+        sut.Observe(SetOf(FeatureId,
+            Step("I press   add", definedIn: NewFile),
+            Step("I press subtract", definedIn: NewFile)));
+
+        SingleSentEvent()[TelemetryProperties.Count].Should().Be(1, "only the step offered 3 minutes ago is still inside its window");
+    }
+
+    [Fact]
+    public void Re_offers_merge_target_files_instead_of_replacing_them()
+    {
+        var sut = CreateSut();
+        sut.RecordOffer(FeatureId, new[] { Step("I press   add") }, SnippetExpressionStyle.CucumberExpression,
+            new[] { NewFile }, new[] { ExistingFile });
+        sut.RecordOffer(FeatureId, new[] { Step("I press subtract") }, SnippetExpressionStyle.CucumberExpression,
+            new[] { "C:/proj/StepDefinitions/Another.cs" }, Array.Empty<string>());
+
+        sut.Observe(SetOf(FeatureId,
+            Step("I press   add", definedIn: NewFile),
+            Step("I press subtract", definedIn: ExistingFile)));
+
+        _telemetry.Received(1).SendEvent(TelemetryEvents.StepDefined,
+            Arg.Is<Dictionary<string, object?>>(p => (string?)p[TelemetryProperties.Via] == TelemetryProperties.StepDefinedVia.QuickFixNewFile));
+        _telemetry.Received(1).SendEvent(TelemetryEvents.StepDefined,
+            Arg.Is<Dictionary<string, object?>>(p => (string?)p[TelemetryProperties.Via] == TelemetryProperties.StepDefinedVia.QuickFixAppend));
+    }
+
+    [Fact]
+    public void Bounds_still_hold_when_many_re_offers_are_merged()
+    {
+        var sut = CreateSut();
+        var count = DefineStepsOfferTracker.MaxStepsPerOffer + 50;
+        var text = "Feature: F\n  Scenario: S\n"
+            + string.Join("\n", Enumerable.Range(0, count).Select(i => $"    Given step number {i:D4}")) + "\n";
+        var steps = Enumerable.Range(0, count).Select(i => Step($"step number {i:D4}", documentText: text)).ToArray();
+
+        // Offer in overlapping batches, as successive caret-move polls would.
+        for (var start = 0; start < count; start += 25)
+            Offer(sut, steps.Skip(start).Take(60).ToArray());
+        for (var i = 0; i < DefineStepsOfferTracker.MaxFilesPerFeature + 10; i++)
+            sut.RecordOffer(FeatureId, new[] { steps[0] }, SnippetExpressionStyle.CucumberExpression,
+                new[] { $"C:/proj/New{i}.cs" }, new[] { $"C:/proj/Existing{i}.cs" });
+
+        sut.TrackedFeatureCount.Should().Be(1);
+        sut.Observe(SetOf(FeatureId,
+            Enumerable.Range(0, count).Select(i => Step($"step number {i:D4}", NewFile, documentText: text)).ToArray()));
+        SingleSentEvent()[TelemetryProperties.Count].Should().Be(DefineStepsOfferTracker.MaxStepsPerOffer);
+    }
+
+    [Fact]
+    public void Multi_line_step_text_is_normalised_so_indentation_and_line_endings_do_not_break_correlation()
+    {
+        var sut = CreateSut();
+        var offeredText = "Feature: F\r\n  Scenario: S\r\n    Given I press\r\n        add\r\n      | a | b |\r\n      | 1 | 2 |\r\n";
+        var matchedText = "Feature: F\n  Scenario: S\n    Given I press\n    add\n      | a | b |\n";
+        Offer(sut, Step("I press\r\n        add", documentText: offeredText));
+
+        sut.Observe(SetOf(FeatureId, Step("I press\n    add", definedIn: NewFile, documentText: matchedText)));
+
+        SingleSentEvent()[TelemetryProperties.Count].Should().Be(1);
+    }
+
+    [Fact]
+    public void Concurrent_observers_report_a_defined_step_exactly_once()
+    {
+        var sut = CreateSut();
+        Offer(sut, Step("I press   add"));
+        var defined = SetOf(FeatureId, Step("I press   add", definedIn: NewFile));
+
+        Parallel.For(0, 16, _ => sut.Observe(defined));
+
+        _telemetry.Received(1).SendEvent(TelemetryEvents.StepDefined, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public void Observe_racing_RecordOffer_neither_throws_nor_double_reports()
+    {
+        var sut = CreateSut();
+        var sends = 0;
+        _telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => Interlocked.Increment(ref sends));
+        var features = Enumerable.Range(0, 8).Select(i => $"file:///workspace/race{i}.feature").ToArray();
+        var offered = features.Select(f => Step("I press   add", featureId: f)).ToArray();
+        var defined = features.Select(f => SetOf(f, Step("I press   add", definedIn: NewFile, featureId: f))).ToArray();
+
+        var act = () => Parallel.For(0, 400, i =>
+        {
+            var f = i % features.Length;
+            if (i % 2 == 0)
+                sut.RecordOffer(features[f], new[] { offered[f] }, SnippetExpressionStyle.CucumberExpression, new[] { NewFile }, Array.Empty<string>());
+            else
+                sut.Observe(defined[f]);
+        });
+
+        act.Should().NotThrow();
+        // A step can be re-offered after it was reported (a new offer), so only an upper bound holds:
+        // never more reports than offers made.
+        sends.Should().BeLessThanOrEqualTo(200);
+        sut.TrackedFeatureCount.Should().BeLessThanOrEqualTo(DefineStepsOfferTracker.MaxTrackedFeatures);
     }
 
     [Fact]

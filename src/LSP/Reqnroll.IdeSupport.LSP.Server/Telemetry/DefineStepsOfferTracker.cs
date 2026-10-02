@@ -1,6 +1,7 @@
 #nullable enable
 using System.Text.RegularExpressions;
 using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
@@ -54,18 +55,26 @@ public sealed class DefineStepsOfferTracker : IDefineStepsOfferTracker
     /// <summary>Most features with a pending offer; the least recently offered is evicted beyond this.</summary>
     public const int MaxTrackedFeatures = 64;
 
-    /// <summary>Most steps remembered per feature offer; further steps are not tracked.</summary>
+    /// <summary>Most steps remembered per feature; further steps are not tracked until others expire or are defined.</summary>
     public const int MaxStepsPerOffer = 100;
 
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
 
+    /// <summary>Most distinct created/edited file paths remembered per feature (each of the two sets).</summary>
+    public const int MaxFilesPerFeature = 32;
+
+    /// <summary>
+    /// Everything offered so far for one feature. Re-offers are merged, never replaced: a step keeps
+    /// the time of its FIRST offer, so the correlation window cannot be extended by an IDE that polls
+    /// code actions on every caret move.
+    /// </summary>
     private sealed class PendingOffer
     {
-        public required DateTimeOffset OfferedAt { get; init; }
-        public required HashSet<string> Steps { get; init; }
-        public required string ExpressionStyle { get; init; }
+        public required Dictionary<string, DateTimeOffset> Steps { get; init; }
+        public required string ExpressionStyle { get; set; }
         public required HashSet<string> NewFiles { get; init; }
         public required HashSet<string> AppendFiles { get; init; }
+        public required DateTimeOffset LastOfferedAt { get; set; }
     }
 
     private readonly Dictionary<string, PendingOffer> _offers = new(StringComparer.OrdinalIgnoreCase);
@@ -101,32 +110,53 @@ public sealed class DefineStepsOfferTracker : IDefineStepsOfferTracker
     {
         if (string.IsNullOrEmpty(featureDocumentId)) return;
 
-        var steps = new HashSet<string>(StringComparer.Ordinal);
+        var keys = new HashSet<string>(StringComparer.Ordinal);
         var keyer = new StepKeyer();
         foreach (var step in undefinedSteps)
         {
             var key = keyer.KeyOf(step);
-            if (key.Length > 0 && steps.Count < MaxStepsPerOffer)
-                steps.Add(key);
+            if (key.Length > 0) keys.Add(key);
         }
-        if (steps.Count == 0) return;
+        if (keys.Count == 0) return;
 
-        var offer = new PendingOffer
-        {
-            OfferedAt = _time.GetUtcNow(),
-            Steps = steps,
-            ExpressionStyle = TelemetryProperties.ExpressionStyleFor(style),
-            NewFiles = new HashSet<string>(newFilePaths.Select(NormalizePath), StringComparer.OrdinalIgnoreCase),
-            AppendFiles = new HashSet<string>(appendFilePaths.Select(NormalizePath), StringComparer.OrdinalIgnoreCase),
-        };
+        var styleName = TelemetryProperties.ExpressionStyleFor(style);
+        var newFiles = newFilePaths.Select(NormalizePath).ToList();
+        var appendFiles = appendFilePaths.Select(NormalizePath).ToList();
+        var now = _time.GetUtcNow();
 
         lock (_gate)
         {
-            PurgeExpired(offer.OfferedAt);
-            _offers[featureDocumentId] = offer;
+            PurgeExpired(now);
+
+            if (!_offers.TryGetValue(featureDocumentId, out var offer))
+            {
+                offer = new PendingOffer
+                {
+                    Steps = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal),
+                    ExpressionStyle = styleName,
+                    NewFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    AppendFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                    LastOfferedAt = now,
+                };
+                _offers[featureDocumentId] = offer;
+            }
+
+            foreach (var key in keys)
+            {
+                // Keep the ORIGINAL offer time of an already-tracked step.
+                if (offer.Steps.Count < MaxStepsPerOffer)
+                    offer.Steps.TryAdd(key, now);
+            }
+            foreach (var f in newFiles)
+                if (offer.NewFiles.Count < MaxFilesPerFeature) offer.NewFiles.Add(f);
+            foreach (var f in appendFiles)
+                if (offer.AppendFiles.Count < MaxFilesPerFeature) offer.AppendFiles.Add(f);
+            offer.ExpressionStyle = styleName;
+            offer.LastOfferedAt = now;
+
             while (_offers.Count > MaxTrackedFeatures)
             {
-                var oldest = _offers.MinBy(kv => kv.Value.OfferedAt).Key;
+                var oldest = _offers.MinBy(kv => kv.Value.LastOfferedAt).Key;
                 _offers.Remove(oldest);
             }
         }
@@ -142,7 +172,8 @@ public sealed class DefineStepsOfferTracker : IDefineStepsOfferTracker
             if (!_offers.TryGetValue(matchSet.DocumentId, out var offer))
                 return;
 
-            if (_time.GetUtcNow() - offer.OfferedAt > _window)
+            PurgeExpiredSteps(offer, _time.GetUtcNow());
+            if (offer.Steps.Count == 0)
             {
                 _offers.Remove(matchSet.DocumentId);
                 return;
@@ -154,7 +185,7 @@ public sealed class DefineStepsOfferTracker : IDefineStepsOfferTracker
             {
                 if (!step.IsDefined) continue;
                 var key = keyer.KeyOf(step);
-                if (!offer.Steps.Contains(key) || !seen.Add(key)) continue;
+                if (!offer.Steps.ContainsKey(key) || !seen.Add(key)) continue;
 
                 (defined ??= new()).Add((ClassifyVia(offer, step), offer.ExpressionStyle));
             }
@@ -163,7 +194,7 @@ public sealed class DefineStepsOfferTracker : IDefineStepsOfferTracker
 
             // Each step is reported once: drop what was just observed, and the whole offer once
             // nothing is left to observe.
-            offer.Steps.ExceptWith(seen);
+            foreach (var key in seen) offer.Steps.Remove(key);
             if (offer.Steps.Count == 0)
                 _offers.Remove(matchSet.DocumentId);
         }
@@ -194,12 +225,29 @@ public sealed class DefineStepsOfferTracker : IDefineStepsOfferTracker
 
     private void PurgeExpired(DateTimeOffset now)
     {
-        var expired = _offers.Where(kv => now - kv.Value.OfferedAt > _window).Select(kv => kv.Key).ToList();
-        foreach (var key in expired)
-            _offers.Remove(key);
+        foreach (var (key, offer) in _offers.ToList())
+        {
+            PurgeExpiredSteps(offer, now);
+            if (offer.Steps.Count == 0) _offers.Remove(key);
+        }
     }
 
-    private static string NormalizePath(string path) => (path ?? string.Empty).Replace('\\', '/').Trim();
+    private void PurgeExpiredSteps(PendingOffer offer, DateTimeOffset now)
+    {
+        var expired = offer.Steps.Where(kv => now - kv.Value > _window).Select(kv => kv.Key).ToList();
+        foreach (var key in expired)
+            offer.Steps.Remove(key);
+    }
+
+    /// <summary>
+    /// Canonical path for comparing an offered target file with a binding's <c>SourceFile</c>. Both are
+    /// absolute: offered paths come from <c>DocumentUri.GetFileSystemPath()</c>, and bindings carry either the
+    /// same kind of path (Roslyn, from the buffer's URI) or the connector's PDB path after
+    /// <c>ISourceFileResolver</c> mapped it onto this machine. A foreign, unmappable PDB path is left
+    /// unnormalised and so never equals an offered path (it classifies as <c>Other</c>).
+    /// </summary>
+    private static string NormalizePath(string? path) =>
+        PathUtils.NormalizeForComparison(path).Replace('\\', '/');
 
     /// <summary>
     /// Computes a step's identity within one feature: its step text with whitespace collapsed. Kept in
