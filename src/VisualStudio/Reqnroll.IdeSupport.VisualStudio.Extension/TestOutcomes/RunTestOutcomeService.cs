@@ -33,6 +33,15 @@ internal sealed class RunTestOutcomeService
     }
 
     /// <summary>
+    /// The <c>registerRun</c> params: <c>runMode</c> lets the server count the Run/Debug request as a passive
+    /// feature (issue #850). Visual Studio can only observe a Test Explorer <em>execution request</em> (the
+    /// runsettings hook has no Run-versus-Debug flag, and the CodeLens Run/Debug buttons invoke VS's own
+    /// commands without passing through this extension), so every request is reported as
+    /// <see cref="TestRunModes.Unknown"/>.
+    /// </summary>
+    internal const string RegisterRunParamsJson = "{\"runMode\":\"" + TestRunModes.Unknown + "\"}";
+
+    /// <summary>
     /// Asks the server for its listening endpoint and a fresh run id to correlate with. Returns null
     /// on any failure (server not reachable, malformed response) — the caller then injects nothing for
     /// this run, exactly like the old in-proc listener's "couldn't start" path.
@@ -42,7 +51,7 @@ internal sealed class RunTestOutcomeService
         try
         {
             var result = await _pipe
-                .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollRegisterTestRun, "{}", cancellationToken)
+                .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollRegisterTestRun, RegisterRunParamsJson, cancellationToken)
                 .ConfigureAwait(false);
 
             return MapRegistration(result as JObject);

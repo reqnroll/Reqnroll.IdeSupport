@@ -42,6 +42,7 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
     private readonly ILanguageServerFacade    _languageServer;
     private readonly IIdeSupportLogger           _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IFeatureUsageCounters? _usage;
 
     /// <summary>Initializes a new instance of the <see cref="DiagnosticsPublishHandler"/> class.</summary>
     public DiagnosticsPublishHandler(
@@ -52,8 +53,10 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
         IDiagnosticsAggregator    aggregator,
         ILanguageServerFacade     languageServer,
         IIdeSupportLogger            logger,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IFeatureUsageCounters? usage = null)
     {
+        _usage                 = usage;
         _documentBufferService = documentBufferService;
         _bindingMatchService   = bindingMatchService;
         _registryLookup        = registryLookup;
@@ -101,6 +104,8 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
 
         var gherkinDiagnostics = _aggregator.Aggregate(buffer.Tags, matchSet);
 
+        ObserveDiagnosticPeaks(gherkinDiagnostics);
+
         var lspDiagnostics = gherkinDiagnostics
             .Select(ToLspDiagnostic)
             .ToArray();
@@ -121,6 +126,35 @@ public sealed class DiagnosticsPublishHandler : INotificationHandler<MatchCacheC
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Feeds the "undefined-step pressure" gauges (issue #850): the worst single document's undefined,
+    /// ambiguous and parse-error counts, kept as per-window maxima. Only the numbers leave this method —
+    /// no URI, range or message is retained.
+    /// </summary>
+    private void ObserveDiagnosticPeaks(IReadOnlyList<GherkinDiagnostic> diagnostics)
+    {
+        if (_usage is null)
+            return;
+
+        // Classified from what is actually published (so the not-yet-ready registry suppression above is
+        // honoured): binding warnings are undefined steps, binding errors are ambiguous steps.
+        int undefined = 0, ambiguous = 0, parse = 0;
+        foreach (var d in diagnostics)
+        {
+            if (d.Source == DiagnosticsAggregator.ParserSource)
+                parse++;
+            else if (d.Source == DiagnosticsAggregator.BindingSource)
+            {
+                if (d.Severity == GherkinDiagnosticSeverity.Error) ambiguous++;
+                else undefined++;
+            }
+        }
+
+        _usage.Observe(FeatureUsageCatalog.DirectKeys.UndefinedStepsPeak, undefined);
+        _usage.Observe(FeatureUsageCatalog.DirectKeys.AmbiguousStepsPeak, ambiguous);
+        _usage.Observe(FeatureUsageCatalog.DirectKeys.ParseErrorsPeak, parse);
+    }
 
     /// <summary>
     /// Converts a protocol-agnostic <see cref="GherkinDiagnostic"/> to its LSP wire form. Shared

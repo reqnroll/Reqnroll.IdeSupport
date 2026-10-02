@@ -10,6 +10,13 @@ public enum FeatureUsageKind
 
     /// <summary>Requested by the editor on its own schedule (inlay hints, folding, outline, CodeLens render, on-type formatting).</summary>
     Passive,
+
+    /// <summary>
+    /// A gauge, not a count: the highest value observed in the flush window (e.g. the most undefined steps
+    /// any one document showed). Reported in its own <c>PeakCounts</c> property because a maximum must
+    /// never be summed with counts.
+    /// </summary>
+    Peak,
 }
 
 /// <summary>One counted feature: the stable counter key it is reported under, and its <see cref="FeatureUsageKind"/>.</summary>
@@ -30,8 +37,10 @@ public readonly record struct FeatureUsageEntry(string Key, FeatureUsageKind Kin
 /// events. A guard test pins that no catalogue operation is also a per-call command.
 /// </para>
 /// <para>
-/// Membership is a strawman pending the scope decision in issue #583 / coverage gaps in #850.
-/// Continuous plumbing (document sync, semantic tokens, diagnostics publication, workspace refresh
+/// Membership was settled in #583 (counts are exact, passive features may be counted) and extended in #850
+/// (Run/Debug requests as a passive feature; diagnostics peaks as <see cref="FeatureUsageKind.Peak"/> gauges).
+/// There is no hover key: the server has no hover handler (hover tooltips are client-side), so there is
+/// nothing to observe. Continuous plumbing (document sync, semantic tokens, diagnostics publication, workspace refresh
 /// notifications, internal reconciliation) says nothing about feature use and is excluded.
 /// </para>
 /// <para>
@@ -65,9 +74,51 @@ public static class FeatureUsageCatalog
         [LspStandardMethodNames.TextDocumentOnTypeFormatting] = new("OnTypeFormatting", FeatureUsageKind.Passive),
     };
 
+    /// <summary>
+    /// Counter keys written directly by their owning component rather than derived from an
+    /// <see cref="IOperationDurationRecorder"/> operation label: the Run/Debug click signal (#850), which
+    /// arrives as a client-supplied <c>runMode</c> on <c>reqnroll/testOutcomes/registerRun</c>, and the
+    /// diagnostics peaks, observed on publish.
+    /// </summary>
+    public static class DirectKeys
+    {
+        /// <summary>A test run the user started from Reqnroll's Run affordance (Rider's Run lens).</summary>
+        public const string TestRunRun = "TestRun.Run";
+
+        /// <summary>A test run the user started in Debug mode. Reserved for clients that can tell; none can today.</summary>
+        public const string TestRunDebug = "TestRun.Debug";
+
+        /// <summary>A test execution the client could not classify as Run or Debug (Visual Studio's Test Explorer hook).</summary>
+        public const string TestRunUnknown = "TestRun.Unknown";
+
+        /// <summary>Most undefined steps any single document showed in the window.</summary>
+        public const string UndefinedStepsPeak = "UndefinedStepsPeak";
+
+        /// <summary>Most ambiguous steps any single document showed in the window.</summary>
+        public const string AmbiguousStepsPeak = "AmbiguousStepsPeak";
+
+        /// <summary>Most Gherkin parse errors any single document showed in the window.</summary>
+        public const string ParseErrorsPeak = "ParseErrorsPeak";
+    }
+
+    private static readonly Dictionary<string, FeatureUsageKind> DirectEntries = new(StringComparer.Ordinal)
+    {
+        [DirectKeys.TestRunRun] = FeatureUsageKind.Passive,
+        [DirectKeys.TestRunDebug] = FeatureUsageKind.Passive,
+        [DirectKeys.TestRunUnknown] = FeatureUsageKind.Passive,
+        [DirectKeys.UndefinedStepsPeak] = FeatureUsageKind.Peak,
+        [DirectKeys.AmbiguousStepsPeak] = FeatureUsageKind.Peak,
+        [DirectKeys.ParseErrorsPeak] = FeatureUsageKind.Peak,
+    };
+
     private static readonly Dictionary<string, FeatureUsageKind> KindsByKey = Entries.Values
         .DistinctBy(e => e.Key)
-        .ToDictionary(e => e.Key, e => e.Kind, StringComparer.Ordinal);
+        .ToDictionary(e => e.Key, e => e.Kind, StringComparer.Ordinal)
+        .Concat(DirectEntries)
+        .ToDictionary(e => e.Key, e => e.Value, StringComparer.Ordinal);
+
+    /// <summary>Every counter key written directly rather than through an operation label.</summary>
+    public static IEnumerable<string> DirectCounterKeys => DirectEntries.Keys;
 
     /// <summary>Looks up the counter entry for an <see cref="IOperationDurationRecorder"/> operation label.</summary>
     public static bool TryGet(string operation, out FeatureUsageEntry entry) => Entries.TryGetValue(operation, out entry);

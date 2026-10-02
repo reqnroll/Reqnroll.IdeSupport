@@ -16,10 +16,20 @@ namespace Reqnroll.IdeSupport.LSP.Server.Performance;
 public sealed class FeatureUsageCounters : IFeatureUsageCounters
 {
     private readonly ConcurrentDictionary<string, long> _counts = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _peaks = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public void Increment(string key) =>
         _counts.AddOrUpdate(key, 1, static (_, count) => count + 1);
+
+    /// <inheritdoc/>
+    /// <remarks>The update factory is pure (<see cref="Math.Max(long,long)"/>), per the class remarks.</remarks>
+    public void Observe(string key, long value)
+    {
+        if (value <= 0)
+            return;
+        _peaks.AddOrUpdate(key, static (_, v) => v, static (_, current, v) => Math.Max(current, v), value);
+    }
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<string, long> Drain()
@@ -28,6 +38,11 @@ public sealed class FeatureUsageCounters : IFeatureUsageCounters
         foreach (var key in _counts.Keys.ToList())
         {
             if (_counts.TryRemove(key, out var value))
+                result[key] = value;
+        }
+        foreach (var key in _peaks.Keys.ToList())
+        {
+            if (_peaks.TryRemove(key, out var value))
                 result[key] = value;
         }
         return result;

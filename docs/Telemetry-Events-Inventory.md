@@ -388,7 +388,7 @@ verification program (Layer 4). No URIs or content, ever.
 |---|---|
 | **Emitter** | `FeatureUsageFlushService`, draining `FeatureUsageCounters`; counters are incremented from `OperationDurationRecorder.Record` for operations in `FeatureUsageCatalog` (issue #582) |
 | **When** | Every flush interval, plus once on the LSP `shutdown` request (`IsFinal=true`); a window in which nothing was counted sends nothing. **On by default**, every 10 minutes (`FeatureUsageFlushService.EnabledByDefault`/`DefaultInterval`); `REQNROLL_FEATURE_USAGE_FLUSH_INTERVAL_SECONDS` overrides the interval (a non-positive value disables the event). The `REQNROLL_TELEMETRY_ENABLED` kill switch applies as for every event |
-| **Properties** | `LookupCounts` and `PassiveCounts` (string - compact, key-sorted JSON object of feature key to count, e.g. `{"CodeAction":3,"Completion.Step":41}`; a kind with no counts is omitted), `WindowSeconds` (seconds covered by this window), `SessionSeconds` (seconds since the flush service started, approximately server uptime), `Sequence` (long - 1, 2, 3... per `SessionId`, advanced only by emitted events, so a gap marks a lost flush), `IsFinal` (bool - the shutdown flush); identity (`IdeClient`, `ServerVersion`, `SessionId`) is stamped like every server event (section 1) |
+| **Properties** | `LookupCounts`, `PassiveCounts` and `PeakCounts` (string - compact, key-sorted JSON object of feature key to count, e.g. `{"CodeAction":3,"Completion.Step":41}`; a kind with no entries is omitted; `PeakCounts` holds per-window *maxima*, not counts - never sum them across windows), `WindowSeconds` (seconds covered by this window), `SessionSeconds` (seconds since the flush service started, approximately server uptime), `Sequence` (long - 1, 2, 3... per `SessionId`, advanced only by emitted events, so a gap marks a lost flush), `IsFinal` (bool - the shutdown flush); identity (`IdeClient`, `ServerVersion`, `SessionId`) is stamped like every server event (section 1) |
 
 Counts are sent as a JSON *string*, not a nested object, because the three IDE forwarders
 stringify values differently (VS Code `String(value)` gives `[object Object]`, Rider `toString()`
@@ -401,13 +401,27 @@ them unchanged. Parse with `parse_json(tostring(customDimensions.LookupCounts))`
 |---|---|---|
 | `Lookup` - requested by the editor on a gesture or typing | `Completion.Step`, `Completion.Keyword`, `Completion.Tag` (a *subset* of `Completion.Keyword`), `Completion.Other`, `CodeAction` (also fires on cursor moves in VS/VS Code, not only on click) | `textDocument/completion#step`/`#keyword`/`#tag`/bare, `textDocument/codeAction` |
 | `Passive` - requested by the editor on its own schedule | `CodeLens`, `InlayHint`, `FoldingRange`, `DocumentSymbol`, `OnTypeFormatting` (the aggregate stand-in for the never-implemented `CommandAutoFormatTable`) | `textDocument/codeLens`/`inlayHint`/`foldingRange`/`documentSymbol` (+ `reqnroll/documentSymbolHierarchical`)/`onTypeFormatting` |
+| `Passive` - a test run the user started (#850) | `TestRun.Run`, `TestRun.Debug`, `TestRun.Unknown` | not an operation label: counted by `RegisterTestRunHandler` from the `runMode` property of `reqnroll/testOutcomes/registerRun` (see below) |
+| `Peak` - high-water mark of a gauge in the window (#850) | `UndefinedStepsPeak`, `AmbiguousStepsPeak`, `ParseErrorsPeak`: the most undefined / ambiguous steps / parse errors any *single document* showed in a `textDocument/publishDiagnostics` push during the window. Zero is never reported; no URI, range or message is kept | observed by `DiagnosticsPublishHandler` via `IFeatureUsageCounters.Observe` |
 
 **Not counted here, by design:** every discrete command (Go to Step Definition, Find Usages, Rename,
 Find Unused, Comment/Uncomment, Format, Run lens lookups, Find Hooks, Go to Matching Scenarios).
 They send their own per-call events with characteristic properties (#849), so counting them again
 would double-count each invocation; their adoption comes from those events. Plumbing (document sync,
 semantic tokens, diagnostics publication, refresh notifications) says nothing about feature use.
-The membership is a strawman pending issue #583 / #850.
+Membership was settled in #583 (exact counts; passive features may be counted) and extended in #850.
+
+**Hover is not counted:** the server has no `textDocument/hover` handler (hover tooltips come from the client, which shows the published diagnostic message), so there is nothing server-side to observe.
+
+**Run/Debug requests (`TestRun.*`).** The click is only observable in the IDE, so the client says so on the existing `reqnroll/testOutcomes/registerRun` request via an optional `runMode` (`Run`, `Debug` or `Unknown`, from `Reqnroll.IdeSupport.Common.Lsp.TestRunModes`). The server counts a registration only when `runMode` is one of those three values: a registration without it (VS Code registers once at activation) or with any other string is not counted, so a client string can never become a counter key. What each IDE can report:
+
+| IDE | Reports | Why |
+|---|---|---|
+| Rider | `TestRun.Run` per Run lens click that reaches `dotnet test` | `RunTestRunner` registers once per run; Rider has no Debug lens yet |
+| Visual Studio | `TestRun.Unknown` per Test Explorer *execution request* containing a Reqnroll test container (lens Run/Debug, Test Explorer Run/Debug, Run All) | The runsettings hook is the only per-run call VS makes into the extension and carries no Run-versus-Debug flag; the CodeLens Run/Debug buttons invoke VS's own commands. A command hook on the Test Explorer command ids is a possible follow-up |
+| VS Code | nothing | The extension has no Run/Debug affordance (runs happen in C# Dev Kit's Test Explorer, which never calls into this extension) |
+
+So the three IDEs count slightly different things (a Reqnroll Run lens click versus any Test Explorer run containing Reqnroll tests); compare within an IDE, not across them.
 
 **Analytics use.** How often the volume features are exercised per session, per IDE, per version;
 `LookupCounts`/`PassiveCounts` divided by `SessionSeconds` gives a rate comparable across sessions of
@@ -446,6 +460,8 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Adoption lifecycle | `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events |
 | Field performance (P95/P99) | `PerfSample` |
 | Volume/passive feature usage (completion, code actions, CodeLens, inlay hints, ...) | `FeatureUsageSummary` |
+| Run/Debug requests | `FeatureUsageSummary` `PassiveCounts` (`TestRun.*`), alongside `TestOutcomesRunCompleted` for runs that finished |
+| Undefined-step pressure (worst single document per window) | `FeatureUsageSummary` `PeakCounts` (`UndefinedStepsPeak`, `AmbiguousStepsPeak`, `ParseErrorsPeak`) |
 | Tag-index cold-scan size and cost | `TagIndexFirstScanCompleted` (`FileCount`, `FilesParsedFromDisk`, `DurationMs`); steady state via `PerfSample` `textDocument/completion#tag` |
 
 ---

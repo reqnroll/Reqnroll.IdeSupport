@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Pipeline;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
@@ -43,6 +44,63 @@ public class DiagnosticsPublishHandlerTests
 
     private DiagnosticsPublishHandler CreateSut() =>
         new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger);
+
+    // ── Usage gauges (#850) ───────────────────────────────────────────────────
+
+    private DiagnosticsPublishHandler CreateSut(IFeatureUsageCounters counters) =>
+        new(_bufferService, _matchService, _registryLookup, _scopeManager, _aggregator, _facade, _logger, usage: counters);
+
+    [Fact]
+    public async Task Observes_per_document_peaks_of_undefined_ambiguous_and_parse_errors()
+    {
+        var counters = new FeatureUsageCounters();
+        var sut = CreateSut(counters);
+        const string text = "Feature: X\n";
+        SetupBuffer(new List<IdeSupportTag>());
+
+        GherkinDiagnostic D(GherkinDiagnosticSeverity sev, string source) => MakeDiagnostic(text, 0, 1, sev, source, "m");
+        SetupAggregator(
+            D(GherkinDiagnosticSeverity.Warning, DiagnosticsAggregator.BindingSource),
+            D(GherkinDiagnosticSeverity.Warning, DiagnosticsAggregator.BindingSource),
+            D(GherkinDiagnosticSeverity.Warning, DiagnosticsAggregator.BindingSource),
+            D(GherkinDiagnosticSeverity.Error, DiagnosticsAggregator.BindingSource),
+            D(GherkinDiagnosticSeverity.Error, DiagnosticsAggregator.ParserSource));
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        // A later, cleaner publish must not lower the window's high-water mark.
+        SetupAggregator(D(GherkinDiagnosticSeverity.Warning, DiagnosticsAggregator.BindingSource));
+        await sut.Handle(new MatchCacheChangedNotification(FeatureUri, 2), CancellationToken.None);
+
+        counters.Drain().Should().BeEquivalentTo(new Dictionary<string, long>
+        {
+            [FeatureUsageCatalog.DirectKeys.UndefinedStepsPeak] = 3,
+            [FeatureUsageCatalog.DirectKeys.AmbiguousStepsPeak] = 1,
+            [FeatureUsageCatalog.DirectKeys.ParseErrorsPeak] = 1,
+        });
+    }
+
+    [Fact]
+    public async Task Observes_nothing_for_a_clean_document()
+    {
+        var counters = new FeatureUsageCounters();
+        SetupBuffer(new List<IdeSupportTag>());
+        SetupAggregator();
+
+        await CreateSut(counters).Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        counters.Drain().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Observes_nothing_when_there_is_no_buffer()
+    {
+        var counters = new FeatureUsageCounters();
+        SetupNoBuffer();
+
+        await CreateSut(counters).Handle(new MatchCacheChangedNotification(FeatureUri, 1), CancellationToken.None);
+
+        counters.Drain().Should().BeEmpty();
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 

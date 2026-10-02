@@ -152,10 +152,11 @@ public sealed class FeatureUsageFlushService : IFeatureUsageFlushService
 
         var lookup = SerializeCounts(counts, FeatureUsageKind.Lookup);
         var passive = SerializeCounts(counts, FeatureUsageKind.Passive);
+        var peak = SerializeCounts(counts, FeatureUsageKind.Peak);
 
         // Nothing allowlisted was drained (the usual idle case; or only unknown keys, which the
         // privacy guarantee must not depend on every IFeatureUsageCounters caller avoiding).
-        if (lookup is null && passive is null)
+        if (lookup is null && passive is null && peak is null)
             return;
 
         var properties = new Dictionary<string, object?>
@@ -167,6 +168,7 @@ public sealed class FeatureUsageFlushService : IFeatureUsageFlushService
         };
         if (lookup is not null) properties[TelemetryProperties.LookupCounts] = lookup;
         if (passive is not null) properties[TelemetryProperties.PassiveCounts] = passive;
+        if (peak is not null) properties[TelemetryProperties.PeakCounts] = peak;
 
         _telemetry?.SendEvent(TelemetryEvents.FeatureUsageSummary, properties);
     }

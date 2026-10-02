@@ -159,6 +159,9 @@ export async function activateTestOutcomes(
 
   let registration: RegisterTestRunResponse | undefined;
   try {
+    // `{}` deliberately omits `runMode`: this registration happens once at activation, not per run, so
+    // the server must not count it as a Run/Debug request (#850). Runs started from C# Dev Kit's Test
+    // Explorer never pass through this extension, so VS Code cannot report them.
     registration = await client.sendRequest<RegisterTestRunResponse>(
       ReqnrollMethods.registerTestRun,
       {},

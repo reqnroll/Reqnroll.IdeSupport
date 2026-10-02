@@ -53,6 +53,37 @@ public class FeatureUsageFlushServiceTests
     }
 
     [Fact]
+    public async Task Peaks_are_reported_in_their_own_property_apart_from_counts()
+    {
+        var counters = new FeatureUsageCounters();
+        counters.Increment("CodeAction");
+        counters.Observe("UndefinedStepsPeak", 7);
+        counters.Observe("ParseErrorsPeak", 2);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new FeatureUsageFlushService(counters, _logger, telemetry, Enabled);
+
+        await sut.FlushFinalAsync();
+
+        var sent = Sent(telemetry);
+        sent[TelemetryProperties.PeakCounts].Should().Be("""{"ParseErrorsPeak":2,"UndefinedStepsPeak":7}""");
+        sent[TelemetryProperties.LookupCounts].Should().Be("""{"CodeAction":1}""", "a maximum must never be mixed into a count");
+        sent.Should().NotContainKey(TelemetryProperties.PassiveCounts);
+    }
+
+    [Fact]
+    public async Task A_window_with_only_a_peak_still_emits_an_event()
+    {
+        var counters = new FeatureUsageCounters();
+        counters.Observe("AmbiguousStepsPeak", 1);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new FeatureUsageFlushService(counters, _logger, telemetry, Enabled);
+
+        await sut.FlushFinalAsync();
+
+        Sent(telemetry)[TelemetryProperties.PeakCounts].Should().Be("""{"AmbiguousStepsPeak":1}""");
+    }
+
+    [Fact]
     public async Task Counts_are_sent_as_plain_strings_so_every_ide_forwarder_preserves_them()
     {
         var counters = new FeatureUsageCounters();

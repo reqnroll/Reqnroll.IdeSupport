@@ -29,6 +29,8 @@ public static class TelemetryProperties
     public const string LookupCounts = "LookupCounts";
     /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
     public const string PassiveCounts = "PassiveCounts";
+    /// <summary>Compact key-sorted JSON object (string) of gauge high-water marks (e.g. <c>UndefinedStepsPeak</c>, the most undefined steps any one document showed) in a <c>FeatureUsageSummary</c> window. Maxima, not counts: never sum them across windows.</summary>
+    public const string PeakCounts = "PeakCounts";
     /// <summary>Seconds covered by a <c>FeatureUsageSummary</c> window.</summary>
     public const string WindowSeconds = "WindowSeconds";
     /// <summary><c>true</c> for the best-effort flush at graceful shutdown.</summary>

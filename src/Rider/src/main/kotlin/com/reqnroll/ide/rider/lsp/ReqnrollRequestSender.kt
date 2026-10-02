@@ -15,6 +15,7 @@ import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindHooksRequestParams
 import com.reqnroll.ide.rider.lsp.protocol.FindHooksResponse
 import com.reqnroll.ide.rider.lsp.protocol.FindMatchingScenariosResponse
+import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunParams
 import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollEmptyParams
 import com.reqnroll.ide.rider.lsp.protocol.ReqnrollLanguageServer
@@ -23,6 +24,7 @@ import com.reqnroll.ide.rider.lsp.protocol.ResolveContainerTestTargetsParams
 import com.reqnroll.ide.rider.lsp.protocol.ResolveContainerTestTargetsResponse
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsParams
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsResponse
+import com.reqnroll.ide.rider.lsp.protocol.TestRunMode
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
@@ -469,12 +471,15 @@ object ReqnrollRequestSender {
      * null if no Reqnroll LSP server is running, or on failure — [RunTestRunner]
      * [com.reqnroll.ide.rider.testrunner.RunTestRunner] treats that the same as
      * [RegisterTestRunResponse.success] `false`: fall back to the TRX-only path for this run.
+     *
+     * [runMode] rides along so the server can count the Run/Debug click as a passive feature (#850).
+     * Rider only has a Run lens today, hence the default.
      */
-    fun registerTestRun(project: Project): RegisterTestRunResponse? {
+    fun registerTestRun(project: Project, runMode: String = TestRunMode.RUN): RegisterTestRunResponse? {
         val server = firstRunningServer(project) ?: return null
         return try {
             server.sendRequestSync(REGISTER_TEST_RUN_TIMEOUT_MS) { languageServer ->
-                (languageServer as ReqnrollLanguageServer).registerTestRun(ReqnrollEmptyParams())
+                (languageServer as ReqnrollLanguageServer).registerTestRun(RegisterTestRunParams(runMode))
             }
         } catch (ex: ProcessCanceledException) {
             throw ex

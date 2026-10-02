@@ -17,6 +17,7 @@ import com.reqnroll.ide.rider.lsp.ReqnrollTestLoggerPathResolver
 import com.reqnroll.ide.rider.lsp.lspUriToLocalPath
 import com.reqnroll.ide.rider.lsp.protocol.GetTestOutcomeResponse
 import com.reqnroll.ide.rider.lsp.protocol.RegisterTestRunResponse
+import com.reqnroll.ide.rider.lsp.protocol.TestRunMode
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
 import java.io.File
 import java.nio.file.Files
@@ -95,7 +96,7 @@ object RunTestRunner {
                 // A null/unsuccessful registration (no server running, or it couldn't start its
                 // listener) just means the extra arguments/injection are omitted — the run
                 // proceeds exactly as it did before #700, TRX-only (VsTest) or exit-code-only (MTP).
-                val registration = ReqnrollRequestSender.registerTestRun(project)
+                val registration = ReqnrollRequestSender.registerTestRun(project, TestRunMode.RUN)
                     ?.takeIf { it.success }
                 val mode = detectDotnetTestMode(runnableProject.projectFilePath)
                 val loggerDirectory = registration?.takeIf { mode == DotnetTestMode.VS_TEST }?.let { ReqnrollTestLoggerPathResolver.resolve() }

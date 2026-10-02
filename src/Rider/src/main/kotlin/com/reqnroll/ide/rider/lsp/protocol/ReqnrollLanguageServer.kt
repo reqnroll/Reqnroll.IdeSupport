@@ -122,7 +122,7 @@ interface ReqnrollLanguageServer : LanguageServer {
      * `--logger`.
      */
     @JsonRequest("reqnroll/testOutcomes/registerRun")
-    fun registerTestRun(params: ReqnrollEmptyParams): CompletableFuture<RegisterTestRunResponse>
+    fun registerTestRun(params: RegisterTestRunParams): CompletableFuture<RegisterTestRunResponse>
 
     /**
      * LSP-server outcome pipeline (#700/#702) — the outcome lookup for one generated test method,

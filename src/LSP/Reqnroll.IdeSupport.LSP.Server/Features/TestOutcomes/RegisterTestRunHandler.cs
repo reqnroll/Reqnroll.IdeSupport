@@ -18,18 +18,28 @@ public sealed class RegisterTestRunHandler
     private readonly TestOutcomeTcpListener _listener;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
+    private readonly IFeatureUsageCounters? _usage;
 
-    public RegisterTestRunHandler(TestOutcomeTcpListener listener, IIdeSupportLogger logger, IOperationDurationRecorder? recorder = null)
+    public RegisterTestRunHandler(
+        TestOutcomeTcpListener listener,
+        IIdeSupportLogger logger,
+        IOperationDurationRecorder? recorder = null,
+        IFeatureUsageCounters? usage = null)
     {
         _listener = listener;
         _logger = logger;
         _recorder = recorder ?? NullOperationDurationRecorder.Instance;
+        _usage = usage;
     }
 
     /// <summary>Handles a <c>reqnroll/testOutcomes/registerRun</c> request.</summary>
     public Task<RegisterTestRunResponse> HandleAsync(RegisterTestRunParams request, CancellationToken cancellationToken)
     {
         using var _perf = _recorder.Measure(CustomLspMethodNames.ReqnrollRegisterTestRun);
+
+        // Counted before registration so a run whose listener fails to start (Success=false) is still a
+        // run the user asked for. Only the three known modes become keys.
+        CountRunRequest(request?.RunMode);
 
         var registration = _listener.RegisterRun();
         if (registration is null)
@@ -44,5 +54,18 @@ public sealed class RegisterTestRunHandler
             RunId = registration.RunId,
             Endpoint = registration.Endpoint,
         });
+    }
+
+    private void CountRunRequest(string? runMode)
+    {
+        var key = runMode switch
+        {
+            TestRunModes.Run => FeatureUsageCatalog.DirectKeys.TestRunRun,
+            TestRunModes.Debug => FeatureUsageCatalog.DirectKeys.TestRunDebug,
+            TestRunModes.Unknown => FeatureUsageCatalog.DirectKeys.TestRunUnknown,
+            _ => null,
+        };
+        if (key is not null)
+            _usage?.Increment(key);
     }
 }

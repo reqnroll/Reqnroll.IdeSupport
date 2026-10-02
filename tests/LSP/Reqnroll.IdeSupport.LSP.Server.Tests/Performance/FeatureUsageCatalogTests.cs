@@ -79,4 +79,28 @@ public class FeatureUsageCatalogTests
     [Fact]
     public void KindOf_returns_null_for_a_key_outside_the_catalogue()
         => FeatureUsageCatalog.KindOf("C:/Users/someone/secret.feature").Should().BeNull();
+
+    [Theory]
+    [InlineData(FeatureUsageCatalog.DirectKeys.TestRunRun, FeatureUsageKind.Passive)]
+    [InlineData(FeatureUsageCatalog.DirectKeys.TestRunDebug, FeatureUsageKind.Passive)]
+    [InlineData(FeatureUsageCatalog.DirectKeys.TestRunUnknown, FeatureUsageKind.Passive)]
+    [InlineData(FeatureUsageCatalog.DirectKeys.UndefinedStepsPeak, FeatureUsageKind.Peak)]
+    [InlineData(FeatureUsageCatalog.DirectKeys.AmbiguousStepsPeak, FeatureUsageKind.Peak)]
+    [InlineData(FeatureUsageCatalog.DirectKeys.ParseErrorsPeak, FeatureUsageKind.Peak)]
+    public void KindOf_knows_the_directly_written_keys(string key, FeatureUsageKind kind)
+        => FeatureUsageCatalog.KindOf(key).Should().Be(kind);
+
+    [Fact]
+    public void Direct_keys_do_not_collide_with_operation_derived_keys()
+    {
+        var derived = FeatureUsageCatalog.Operations
+            .Select(op => { FeatureUsageCatalog.TryGet(op, out var e); return e.Key; });
+
+        derived.Should().NotIntersectWith(FeatureUsageCatalog.DirectCounterKeys);
+    }
+
+    [Fact]
+    public void Run_and_debug_are_counted_through_registerRun_params_not_the_operation_label()
+        => FeatureUsageCatalog.IsCounted(CustomLspMethodNames.ReqnrollRegisterTestRun).Should().BeFalse(
+            "registerRun is also called once at VS Code activation; counting its label would count that");
 }

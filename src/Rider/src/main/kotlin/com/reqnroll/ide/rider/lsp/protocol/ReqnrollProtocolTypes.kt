@@ -276,7 +276,23 @@ data class ResolveContainerTestTargetsResponse(
     val targets: List<ScenarioTestTargetItem> = emptyList(),
 )
 
-/** Response for `reqnroll/testOutcomes/registerRun` (takes [ReqnrollEmptyParams] — see its doc comment) — mirrors RegisterTestRunResponse.cs field-for-field. [success] false means "the server couldn't start its loopback listener"; the caller falls back to its own execution's TRX output. */
+/**
+ * Params for `reqnroll/testOutcomes/registerRun` — mirrors RegisterTestRunParams.cs. [runMode] is one of
+ * [TestRunMode]; the server counts it as a Run/Debug request in its passive-feature usage summary (#850).
+ * Null (omitted on the wire) means "not a user-started run" and is not counted.
+ */
+data class RegisterTestRunParams(
+    val runMode: String? = null,
+)
+
+/** Wire values of [RegisterTestRunParams.runMode] — mirrors the server's `TestRunModes`. */
+object TestRunMode {
+    const val RUN = "Run"
+    const val DEBUG = "Debug"
+    const val UNKNOWN = "Unknown"
+}
+
+/** Response for `reqnroll/testOutcomes/registerRun` (takes [RegisterTestRunParams]) — mirrors RegisterTestRunResponse.cs field-for-field. [success] false means "the server couldn't start its loopback listener"; the caller falls back to its own execution's TRX output. */
 data class RegisterTestRunResponse(
     val success: Boolean = false,
     val runId: String? = null,
