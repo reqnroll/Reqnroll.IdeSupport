@@ -373,15 +373,15 @@ the server-side counterpart for LSP.Core exceptions.
 fatal alerts). The scrubbed message histogram ranks the most frequent *kinds* of failure
 without leaking paths.
 
-### `PerfSample` (sampled, opt-in)
+### `PerfSample` (sampled, on by default at 5%)
 | | |
 |---|---|
 | **Emitter** | `OperationDurationRecorder` — wired into nearly every interactive LSP handler |
-| **When** | Each instrumented operation completes; emission gated by `IPerfTelemetrySampler` (`REQNROLL_PERF_TELEMETRY_SAMPLE`, fraction in `[0,1]`, default `0` = off) |
+| **When** | Each instrumented operation completes; emission gated by `IPerfTelemetrySampler` (`REQNROLL_PERF_TELEMETRY_SAMPLE`, fraction in `[0,1]`, default `0.05` = 5%; `0` disables sampling). The `REQNROLL_TELEMETRY_ENABLED` kill switch and each host's opt-out apply as for every event |
 | **Properties** | `Operation` (label, e.g. `textDocument/completion#step`; completion is also split into `#keyword` and, nested inside it whenever the tag branch runs, `#tag`), `DurationMs` (rounded ms), `DurationBucket` (`<=50`, `51-100`, …); per-IDE breakdown uses the canonical `IdeClient` stamped on every event (§1; formerly a `PerfSample`-only `IDEClient`) |
 
 **Analytics use.** Real-world P95/P99 per operation per IDE — the field half of the performance
-verification program (Layer 4). No URIs or content, ever.
+verification program (Layer 4), collected by default at a 5% sample rate. No URIs or content, ever.
 
 ### `FeatureUsageSummary` (aggregated)
 | | |
