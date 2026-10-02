@@ -102,6 +102,13 @@ public static class TelemetryEvents
     /// <summary>Sent by <c>Features.CodeActions.CodeActionHandler</c> when the "Define step" quick fix is offered.</summary>
     public const string DefineStepsCommandOffered = "DefineSteps command offered";
 
+    /// <summary>
+    /// Sent by <c>Telemetry.DefineStepsOfferTracker</c> when a step the "Define step(s)" quick fix was
+    /// recently offered for is re-matched as defined (issue #847). Inferred server-side, so it also
+    /// counts hand-written definitions (<c>Via = Other</c>).
+    /// </summary>
+    public const string StepDefined = "StepDefined";
+
     /// <summary>Sent by <c>Features.FindUnusedStepDefinitions.FindUnusedStepDefinitionsHandler</c> after handling a Find Unused Step Definitions request.</summary>
     public const string FindUnusedStepDefinitionsCommandExecuted = "FindUnusedStepDefinitions command executed";
 

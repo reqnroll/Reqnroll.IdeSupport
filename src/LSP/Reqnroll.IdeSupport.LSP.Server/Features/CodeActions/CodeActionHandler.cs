@@ -52,6 +52,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
     private readonly IIdeSupportLogger               _logger;
     private readonly ClientIdeContext              _clientIde;
     private readonly ILspTelemetryService?         _telemetryService;
+    private readonly IDefineStepsOfferTracker?     _offerTracker;
     private readonly IOperationDurationRecorder    _recorder;
     private readonly StepDefinitionTargetResolver  _targetResolver;
     private readonly DefineStepsActionBuilder      _actionBuilder;
@@ -71,7 +72,8 @@ public sealed class CodeActionHandler : ICodeActionHandler
         IErrorTelemetryService    errorTelemetryService,
         ClientIdeContext          clientIde,
         ILspTelemetryService?     telemetryService = null,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        IDefineStepsOfferTracker? offerTracker = null)
     {
         _matchService    = matchService;
         _scopeManager    = scopeManager;
@@ -79,6 +81,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _logger          = logger;
         _clientIde       = clientIde;
         _telemetryService = telemetryService;
+        _offerTracker    = offerTracker;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
         _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache);
@@ -136,7 +139,8 @@ public sealed class CodeActionHandler : ICodeActionHandler
         var stepAtCursor = offset is int o ? matchSet.FindAt(o) : null;
 
         var actions = new List<CommandOrCodeAction>();
-        var isDefineAction = new HashSet<CommandOrCodeAction>();
+        var defineScopes = new Dictionary<CommandOrCodeAction, string>();
+        DefineActions? defineOffer = null;
 
         // ── "Define missing step" actions ───────────────────────────────────────
         // Only offered when the request's cursor position actually falls on an undefined step
@@ -148,9 +152,12 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // binding, since there is no text to build one from (issue #622).
         if (stepAtCursor is { IsUndefined: true } && !string.IsNullOrWhiteSpace(GetStepText(stepAtCursor)))
         {
-            var defineActions = BuildDefineStepActions(uri, primaryOwner, matchSet, stepAtCursor);
-            isDefineAction.UnionWith(defineActions);
-            actions.AddRange(defineActions);
+            defineOffer = BuildDefineStepActions(uri, primaryOwner, matchSet, stepAtCursor);
+            foreach (var (action, scope) in defineOffer.Actions)
+            {
+                defineScopes[action] = scope;
+                actions.Add(action);
+            }
         }
 
         // ── "Go to '<method>'" actions for an ambiguous step under the cursor ───
@@ -191,14 +198,39 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // trip, the server has no signal for whether the lightbulb was actually clicked. Counted
         // from the final, post-filter/post-cap list — not the raw count built above — so this
         // never reports more than what the client actually received.
-        var defineActionsOffered = actions.Count(isDefineAction.Contains);
-        if (defineActionsOffered > 0)
+        //
+        // Issue #847 enriches the event with what the lightbulb actually offered (Target/Scope/
+        // CandidateFileCount, read back from the surviving actions' edits so they match what the
+        // client received) and remembers the offer so a later Undefined->Defined re-match can be
+        // reported as StepDefined (IDefineStepsOfferTracker).
+        var offeredDefineActions = actions.Where(defineScopes.ContainsKey).ToList();
+        if (offeredDefineActions.Count > 0 && defineOffer is not null)
         {
+            var newFilePaths    = new List<string>();
+            var appendFilePaths = new List<string>();
+            foreach (var action in offeredDefineActions)
+            {
+                var (createsFile, path) = DescribeEditTarget(action.CodeAction);
+                if (path is null) continue;
+                (createsFile ? newFilePaths : appendFilePaths).Add(path);
+            }
+
+            var firstCreatesFile = DescribeEditTarget(offeredDefineActions[0].CodeAction).CreatesFile;
             _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandOffered, new()
             {
                 ["UndefinedStepCount"] = matchSet.Undefined.Count(),
-                ["ActionsOffered"] = defineActionsOffered,
+                ["ActionsOffered"] = offeredDefineActions.Count,
+                [TelemetryProperties.Target] = firstCreatesFile
+                    ? TelemetryProperties.DefineTarget.NewFile
+                    : TelemetryProperties.DefineTarget.ExistingFile,
+                [TelemetryProperties.ExpressionStyle] = TelemetryProperties.ExpressionStyleFor(defineOffer.Target.Style),
+                [TelemetryProperties.Scope] = offeredDefineActions.Any(a => defineScopes[a] == TelemetryProperties.DefineScope.All)
+                    ? TelemetryProperties.DefineScope.All
+                    : TelemetryProperties.DefineScope.Single,
+                [TelemetryProperties.CandidateFileCount] = appendFilePaths.Distinct(StringComparer.OrdinalIgnoreCase).Count(),
             });
+
+            _offerTracker?.RecordOffer(uri.ToString(), defineOffer.Undefined, defineOffer.Target.Style, newFilePaths, appendFilePaths);
         }
 
         return Task.FromResult<CommandOrCodeActionContainer?>(
@@ -207,12 +239,47 @@ public sealed class CodeActionHandler : ICodeActionHandler
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private List<CommandOrCodeAction> BuildDefineStepActions(
+    /// <summary>The Define Steps actions built for one request, each tagged with its <see cref="TelemetryProperties.Scope"/>, plus what they were built from.</summary>
+    private sealed record DefineActions(
+        List<(CommandOrCodeAction Action, string Scope)> Actions,
+        StepDefinitionTarget Target,
+        IReadOnlyList<StepBindingMatch> Undefined);
+
+    /// <summary>
+    /// Reads where a Define Steps action's edit lands: whether it creates the file (a <c>CreateFile</c>
+    /// document change) and the file's path; <see langword="null"/> when the action carries no file edit.
+    /// </summary>
+    private static (bool CreatesFile, string? Path) DescribeEditTarget(CodeAction? action)
+    {
+        var changes = action?.Edit?.DocumentChanges;
+        if (changes is null) return (false, null);
+
+        var createsFile = false;
+        string? path = null;
+        foreach (var change in changes)
+        {
+            if (change.IsCreateFile)
+            {
+                createsFile = true;
+                path = change.CreateFile!.Uri.GetFileSystemPath();
+            }
+            else if (change.IsTextDocumentEdit && path is null)
+            {
+                path = change.TextDocumentEdit!.TextDocument.Uri.GetFileSystemPath();
+            }
+        }
+        return (createsFile, path);
+    }
+
+    private DefineActions BuildDefineStepActions(
         DocumentUri uri,
         LspReqnrollProject? primaryOwner,
         FeatureBindingMatchSet matchSet,
         StepBindingMatch stepAtCursor)
     {
+        static List<(CommandOrCodeAction, string)> Tag(IEnumerable<CommandOrCodeAction> built, string scope) =>
+            built.Select(a => (a, scope)).ToList();
+
         var allUndefined = matchSet.Undefined.ToList();
         var featurePath  = uri.GetFileSystemPath();
         var target       = _targetResolver.Resolve(uri, featurePath, primaryOwner, matchSet);
@@ -222,17 +289,19 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // action - show it once, with the generic singular title.
         if (allUndefined.Count == 1)
         {
-            return _actionBuilder.Build(target, "Define missing step", allUndefined);
+            return new DefineActions(
+                Tag(_actionBuilder.Build(target, "Define missing step", allUndefined), TelemetryProperties.DefineScope.Single),
+                target, allUndefined);
         }
 
         // Per-step action first, so it survives the MaxTargetedActions cap in Handle when
         // both this and the "all" group are present.
         var stepText = GetStepText(stepAtCursor);
-        var actions  = _actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor });
+        var actions  = Tag(_actionBuilder.Build(target, $"Define step: {stepText}", new[] { stepAtCursor }), TelemetryProperties.DefineScope.Single);
 
-        actions.AddRange(_actionBuilder.Build(target, "Define all missing steps in file", allUndefined));
+        actions.AddRange(Tag(_actionBuilder.Build(target, "Define all missing steps in file", allUndefined), TelemetryProperties.DefineScope.All));
 
-        return actions;
+        return new DefineActions(actions, target, allUndefined);
     }
 
     private static bool IsFeatureFile(DocumentUri uri) =>

@@ -118,6 +118,10 @@ public static class ServiceCollectionExtensions
             // below for a closed set of discrete commands, drained and emitted periodically by
             // FeatureUsageFlushService instead of per-invocation telemetry. Singleton so counts
             // accumulate across the whole session.
+            // Remembers recent Define Steps offers so a later Undefined->Defined re-match can be
+            // reported as StepDefined (issue #847). In-memory, bounded, expiring.
+            .AddSingleton<IDefineStepsOfferTracker>(sp => new DefineStepsOfferTracker(
+                sp.GetRequiredService<ILspTelemetryService>()))
             .AddSingleton<IFeatureUsageCounters, FeatureUsageCounters>()
             .AddSingleton<IFeatureUsageFlushService>(sp => new FeatureUsageFlushService(
                 sp.GetRequiredService<IFeatureUsageCounters>(),

@@ -63,10 +63,10 @@ public class CodeActionHandlerTests
 
     // Defaults to VS Code so existing tests (written before the #563 follow-up VS-Code-only gate)
     // keep exercising the ambiguous-step "Go to" actions without each having to opt in.
-    private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null) =>
+    private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null, IDefineStepsOfferTracker? offerTracker = null) =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem,
             _csharpFileTextCache, _completionService, _errorTelemetryService, clientIde ?? new ClientIdeContext("vscode"),
-            _telemetryService);
+            _telemetryService, offerTracker: offerTracker);
 
     private static CodeActionParams RequestAt(
         DocumentUri uri, int line = 0, int character = 0, CodeActionContext? context = null) =>
@@ -521,6 +521,107 @@ public class CodeActionHandlerTests
         await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
 
         _telemetryService.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+    }
+
+    // ── Offer enrichment + offer tracking (issue #847) ─────────────────────────
+
+    [Fact]
+    public async Task Offer_event_reports_NewFile_target_single_scope_and_no_candidates_for_a_lone_undefined_step()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "DefineSteps command offered",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (string)p["Target"]! == "NewFile"
+                && (string)p["ExpressionStyle"]! == "CucumberExpression"
+                && (string)p["Scope"]! == "Single"
+                && (int)p["CandidateFileCount"]! == 0));
+    }
+
+    [Fact]
+    public async Task Offer_event_reports_All_scope_when_a_define_all_action_is_offered()
+    {
+        SeedMatchService(
+            UndefinedMatch("I press add", ScenarioBlock.When, lineOffset: 41),
+            UndefinedMatch("I press subtract", ScenarioBlock.When, lineOffset: 41));
+
+        await CreateSut().Handle(RequestAt(FeatureUri, line: 3), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "DefineSteps command offered",
+            Arg.Is<Dictionary<string, object?>>(p => (string)p["Scope"]! == "All"));
+    }
+
+    [Fact]
+    public async Task Offer_event_reports_regex_style_when_configured()
+    {
+        _configProvider.GetConfiguration().Returns(
+            new IdeSupportConfiguration { SnippetExpressionStyle = SnippetExpressionStyle.RegularExpression });
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            "DefineSteps command offered",
+            Arg.Is<Dictionary<string, object?>>(p => (string)p["ExpressionStyle"]! == "RegularExpression"));
+    }
+
+    [Fact]
+    public async Task Offer_event_reports_ExistingFile_target_and_candidate_count_when_an_append_candidate_exists()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var candidate = Path.Combine(tempDir, "CandidateSteps.cs");
+            File.WriteAllText(candidate, ValidBindingClass);
+            var featureUri = DocumentUri.FromFileSystemPath(Path.Combine(tempDir, "test.feature"));
+            _scopeManager.GetConfigurationProviderForUri(featureUri).Returns(_configProvider);
+            _scopeManager.ResolvePrimaryOwner(featureUri).Returns((LspReqnrollProject?)null);
+            SeedMatchServiceFor(featureUri,
+                DefinedMatch("defined step", ScenarioBlock.Given, featureUri, candidate, lineOffset: 0),
+                UndefinedMatch("I press add", ScenarioBlock.When, featureUri, lineOffset: 41));
+
+            await CreateSut().Handle(RequestAt(featureUri, line: 3), CancellationToken.None);
+
+            _telemetryService.Received(1).SendEvent(
+                "DefineSteps command offered",
+                Arg.Is<Dictionary<string, object?>>(p =>
+                    (string)p["Target"]! == "ExistingFile" && (int)p["CandidateFileCount"]! == 1));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Offer_is_recorded_with_the_undefined_steps_and_the_offered_target_files()
+    {
+        var tracker = Substitute.For<IDefineStepsOfferTracker>();
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        await CreateSut(offerTracker: tracker).Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        tracker.Received(1).RecordOffer(
+            FeatureUri.ToString(),
+            Arg.Is<IEnumerable<StepBindingMatch>>(steps => steps.Count() == 1),
+            SnippetExpressionStyle.CucumberExpression,
+            Arg.Is<IEnumerable<string>>(created => created.Count() == 1 && created.First().EndsWith(".cs")),
+            Arg.Is<IEnumerable<string>>(appended => !appended.Any()));
+    }
+
+    [Fact]
+    public async Task Offer_is_not_recorded_when_no_define_action_is_offered()
+    {
+        var tracker = Substitute.For<IDefineStepsOfferTracker>();
+
+        await CreateSut(offerTracker: tracker).Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        tracker.DidNotReceiveWithAnyArgs().RecordOffer(default!, default!, default, default!, default!);
     }
 
     // ── CodeAction.Diagnostics association (issue #563) ─────────────────────────

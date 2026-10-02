@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tagging;
@@ -27,6 +28,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
     private readonly IDocumentBufferService        _documentBufferService;
     private readonly ILspWorkspaceScopeManager     _scopeManager;
     private readonly IFileSystemForIDE             _fileSystem;
+    private readonly IDefineStepsOfferTracker?     _offerTracker;
 
     /// <summary>Creates the tagger service with its collaborating document, registry, and match-set dependencies.</summary>
     public GherkinDocumentTaggerService(
@@ -37,7 +39,8 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         IBindingMatchService          bindingMatchService,
         ILspWorkspaceScopeManager     scopeManager,
         IIdeSupportLogger               logger,
-        IFileSystemForIDE             fileSystem)
+        IFileSystemForIDE             fileSystem,
+        IDefineStepsOfferTracker?     offerTracker = null)
     {
         _documentBufferService = documentBufferService;
         _tagParser             = tagParser;
@@ -47,6 +50,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         _scopeManager          = scopeManager;
         _logger                = logger;
         _fileSystem            = fileSystem;
+        _offerTracker          = offerTracker;
     }
 
     /// <inheritdoc/>
@@ -90,6 +94,12 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         var matchSet = FeatureBindingMatchSet.FromTags(
             uri.ToString(), snapshot.Version, registry.Version, tags, owner);
         _bindingMatchService.Store(matchSet);
+
+        // Issue #847: a re-match (Roslyn csOpen/csEdit or connector rediscovery both land here for
+        // an open feature) may show a step the Define Steps quick fix was offered for as now defined.
+        // Telemetry must never break parsing, so a failure here is logged and dropped.
+        try { _offerTracker?.Observe(matchSet); }
+        catch (Exception ex) { _logger.LogWarning($"Define Steps offer tracking failed for {uri}: {ex.Message}"); }
 
         // Evict the semantic token cache for this URI. The cache is keyed on (uri, documentVersion);
         // it must be invalidated here because binding discovery can update the tags for a document

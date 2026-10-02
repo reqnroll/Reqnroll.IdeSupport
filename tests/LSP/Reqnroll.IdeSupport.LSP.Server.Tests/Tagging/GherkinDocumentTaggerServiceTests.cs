@@ -11,6 +11,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.SemanticTokens;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Tagging;
@@ -37,9 +38,9 @@ public class GherkinDocumentTaggerServiceTests
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>()).Returns((LspReqnrollProject?)null);
     }
 
-    private GherkinDocumentTaggerService CreateSut() =>
+    private GherkinDocumentTaggerService CreateSut(IDefineStepsOfferTracker? offerTracker = null) =>
         new(_bufferService, _tagParser, _registryLookup, _semanticTokenService,
-            _bindingMatchService, _scopeManager, _logger, _fileSystem);
+            _bindingMatchService, _scopeManager, _logger, _fileSystem, offerTracker);
 
     private static LspReqnrollProject MakeProject(string folder = "/workspace")
     {
@@ -118,6 +119,40 @@ public class GherkinDocumentTaggerServiceTests
             Arg.Any<ProjectBindingRegistry>());
         _bindingMatchService.Received(1).Store(
             Arg.Is<FeatureBindingMatchSet>(s => s.DocumentId == FeatureUri.ToString()));
+        _semanticTokenService.Received(1).InvalidateCache(FeatureUri);
+    }
+
+    [Fact]
+    public async Task ParseAsync_hands_the_new_match_set_to_the_define_steps_offer_tracker()
+    {
+        var tracker = Substitute.For<IDefineStepsOfferTracker>();
+        var buf = new DocumentBuffer(FeatureUri, 1, "Feature: X\n");
+        DocumentBuffer? ignored;
+        _bufferService.TryGet(FeatureUri, out ignored).Returns(x => { x[1] = buf; return true; });
+        _tagParser.Parse(Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+                         Arg.Any<ProjectBindingRegistry>())
+                  .Returns(Array.Empty<IdeSupportTag>());
+
+        await CreateSut(tracker).ParseAsync(FeatureUri, version: 1);
+
+        tracker.Received(1).Observe(Arg.Is<FeatureBindingMatchSet>(s => s.DocumentId == FeatureUri.ToString()));
+    }
+
+    [Fact]
+    public async Task ParseAsync_survives_a_throwing_offer_tracker_and_still_invalidates_the_semantic_token_cache()
+    {
+        var tracker = Substitute.For<IDefineStepsOfferTracker>();
+        tracker.When(t => t.Observe(Arg.Any<FeatureBindingMatchSet>())).Do(_ => throw new InvalidOperationException("boom"));
+        var buf = new DocumentBuffer(FeatureUri, 1, "Feature: X\n");
+        DocumentBuffer? ignored;
+        _bufferService.TryGet(FeatureUri, out ignored).Returns(x => { x[1] = buf; return true; });
+        _tagParser.Parse(Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+                         Arg.Any<ProjectBindingRegistry>())
+                  .Returns(Array.Empty<IdeSupportTag>());
+
+        var act = async () => await CreateSut(tracker).ParseAsync(FeatureUri, version: 1);
+
+        await act.Should().NotThrowAsync();
         _semanticTokenService.Received(1).InvalidateCache(FeatureUri);
     }
 

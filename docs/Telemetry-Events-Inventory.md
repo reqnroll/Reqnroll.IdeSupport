@@ -167,11 +167,30 @@ prefetch, so genuine-navigation telemetry is emitted client-side as
 | | |
 |---|---|
 | **Emitter** | `CodeActionHandler` |
-| **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user accepts it — the `WorkspaceEdit` is applied client-side, so the server can't observe acceptance |
-| **Properties** | `UndefinedStepCount` (int), `ActionsOffered` (int, counted from the final post-filter/post-cap list) |
+| **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user accepts it — the `WorkspaceEdit` is applied client-side, so the server can't observe acceptance directly (see [`StepDefined`](#stepdefined) for the inferred signal) |
+| **Properties** | `UndefinedStepCount` (int), `ActionsOffered` (int, counted from the final post-filter/post-cap list), `Target` (`NewFile` \| `ExistingFile` — what the first, preferred action does: create a file or append to an existing one), `ExpressionStyle` (`CucumberExpression` \| `RegularExpression` — the configured snippet style; async variants fold into their sync style), `Scope` (`Single` \| `All` — `All` when a "define all missing steps" action is among those offered, i.e. more than one undefined step), `CandidateFileCount` (int — distinct existing files offered as append targets, 0 when only the new-file action exists) |
 
-**Analytics use.** Undefined-step pressure (how often the quick fix is needed) and offer rate.
-Acceptance rate is not measurable server-side by design.
+**Analytics use.** Undefined-step pressure (how often the quick fix is needed), offer rate, and
+which flavours are on offer (new file vs. append, regex vs. Cucumber, single vs. all). Acceptance is
+measured by [`StepDefined`](#stepdefined), not by this event.
+
+### `StepDefined`
+| | |
+|---|---|
+| **Emitter** | `DefineStepsOfferTracker`, driven by `GherkinDocumentTaggerService.ParseAsync` (every re-match of an open feature: Roslyn `csOpen`/`csEdit` or connector rediscovery) |
+| **When** | A step the "Define step(s)" quick fix was offered for (within the last 10 minutes, measured from the most recent offer for that feature) is re-matched as *defined*. Nothing is sent without a prior offer. One event per distinct `Via` per re-match |
+| **Properties** | `Count` (int — distinct step texts that became defined in this re-match), `Via` (`QuickFixNewFile` \| `QuickFixAppend` \| `Other` — where the binding lives relative to the files the offered actions would have created/edited; `Other` includes hand-written definitions), `ExpressionStyle` (as in the offer) |
+
+**Inference, not acknowledgement.** The edit is applied client-side, so the server infers acceptance
+from its consequence. The tracker is an in-memory map keyed by feature URI holding the offered step
+texts (never transmitted), at most 64 features x 100 steps, expiring after 10 minutes, never persisted.
+It also counts a definition written by hand for an offered step (`Via = Other`), which is the honest
+measure of "undefined-step pressure resolved"; it cannot tell a click on the lightbulb from the user
+typing the same binding into the same file. An offer whose step text is later edited in the feature
+file is not correlated. An exact client acknowledgement (proposal B of #847) is deliberately not built.
+
+**Analytics use.** Resolution rate = `StepDefined.Count` / `DefineStepsCommandOffered.UndefinedStepCount`,
+split by `Via` to see how much of it goes through the quick fix.
 
 ### `FindUnusedStepDefinitionsCommandExecuted`
 | | |
@@ -303,7 +322,7 @@ Key names live in `TelemetryProperties` (LSP.Server); bucketing in `TelemetryBuc
 **Not yet implemented from issue #849** (needs client work or a design decision): the client-side
 `Source` (`Command` \| `ContextMenu` \| `CodeLens`) on `GoToHookCommandExecuted` (three IDE
 clients, three languages); the `Mode` on `CommentUncomment` is the requested mode, not a resolved
-Comment/Uncomment; `DefineSteps` properties are tracked separately in #847.
+Comment/Uncomment; `DefineSteps` properties are documented with [`DefineStepsCommandOffered`](#definestepscommandoffered) (#847).
 
 ---
 
@@ -439,6 +458,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Project profile, all IDEs (Reqnroll version, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `ConnectorType`) |
 | Command usage & adoption | all `* command executed` / `* command offered` events |
 | Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
+| Undefined-step pressure resolved (quick fix vs. hand-written) | `DefineSteps command offered` (offer) + `StepDefined` (`Count`, `Via`) |
 | Picker UI trigger rate | `RenameTargetsResolved` (`TargetCount > 1` share) |
 | Go-to-hooks: lookups vs navigations | `FindHooks command executed` (server) vs `GoToHook command executed` (clients) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |

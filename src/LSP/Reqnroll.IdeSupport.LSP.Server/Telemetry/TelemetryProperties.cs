@@ -1,5 +1,6 @@
 #nullable enable
 using System.Diagnostics;
+using Reqnroll.IdeSupport.Common.Configuration;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
@@ -55,6 +56,64 @@ public static class TelemetryProperties
     public const string DocumentLineBucket = "DocumentLineBucket";
     /// <summary>Class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</summary>
     public const string Source = "Source";
+
+    /// <summary>Whether the default Define Steps action edits an existing file or creates one; one of the <see cref="DefineTarget"/> values.</summary>
+    public const string Target = "Target";
+    /// <summary>Snippet style of the generated step definitions; one of the <see cref="ExpressionStyles"/> values.</summary>
+    public const string ExpressionStyle = "ExpressionStyle";
+    /// <summary>Whether a Define Steps offer covers one step or all undefined steps; one of the <see cref="DefineScope"/> values.</summary>
+    public const string Scope = "Scope";
+    /// <summary>Existing binding files offered as append targets for a Define Steps offer.</summary>
+    public const string CandidateFileCount = "CandidateFileCount";
+    /// <summary>Distinct steps a <c>StepDefined</c> event covers.</summary>
+    public const string Count = "Count";
+    /// <summary>How a defined step's binding came to exist; one of the <see cref="StepDefinedVia"/> values.</summary>
+    public const string Via = "Via";
+
+    /// <summary>Maps the configured snippet style to the closed <see cref="ExpressionStyles"/> set (async variants fold into their sync style).</summary>
+    public static string ExpressionStyleFor(SnippetExpressionStyle style) =>
+        style is SnippetExpressionStyle.RegularExpression
+            or SnippetExpressionStyle.AsyncRegularExpression
+            ? ExpressionStyles.RegularExpression
+            : ExpressionStyles.CucumberExpression;
+
+    /// <summary>Values of <see cref="Target"/>.</summary>
+    public static class DefineTarget
+    {
+        /// <summary>The default action creates a new step-definition file.</summary>
+        public const string NewFile = "NewFile";
+        /// <summary>The default action appends to an existing step-definition file.</summary>
+        public const string ExistingFile = "ExistingFile";
+    }
+
+    /// <summary>Values of <see cref="ExpressionStyle"/>.</summary>
+    public static class ExpressionStyles
+    {
+        /// <summary>Cucumber Expression attributes.</summary>
+        public const string CucumberExpression = "CucumberExpression";
+        /// <summary>Regular-expression attributes.</summary>
+        public const string RegularExpression = "RegularExpression";
+    }
+
+    /// <summary>Values of <see cref="Scope"/>.</summary>
+    public static class DefineScope
+    {
+        /// <summary>Only one undefined step exists, so the offer defines just that step.</summary>
+        public const string Single = "Single";
+        /// <summary>Several undefined steps exist and a "define all" action is offered.</summary>
+        public const string All = "All";
+    }
+
+    /// <summary>Values of <see cref="Via"/>.</summary>
+    public static class StepDefinedVia
+    {
+        /// <summary>The binding lives in a file the offered quick fix would have created.</summary>
+        public const string QuickFixNewFile = "QuickFixNewFile";
+        /// <summary>The binding lives in an existing file the offered quick fix would have edited.</summary>
+        public const string QuickFixAppend = "QuickFixAppend";
+        /// <summary>Anywhere else, including a hand-written definition.</summary>
+        public const string Other = "Other";
+    }
 
     /// <summary>Values of <see cref="Status"/>.</summary>
     public static class StepStatus
