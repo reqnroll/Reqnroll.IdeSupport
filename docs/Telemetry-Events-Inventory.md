@@ -383,6 +383,38 @@ without leaking paths.
 **Analytics use.** Real-world P95/P99 per operation per IDE — the field half of the performance
 verification program (Layer 4). No URIs or content, ever.
 
+### `FeatureUsageSummary` (aggregated)
+| | |
+|---|---|
+| **Emitter** | `FeatureUsageFlushService`, draining `FeatureUsageCounters`; counters are incremented from `OperationDurationRecorder.Record` for operations in `FeatureUsageCatalog` (issue #582) |
+| **When** | Every flush interval, plus once on the LSP `shutdown` request (`IsFinal=true`); a window in which nothing was counted sends nothing. **On by default**, every 10 minutes (`FeatureUsageFlushService.EnabledByDefault`/`DefaultInterval`); `REQNROLL_FEATURE_USAGE_FLUSH_INTERVAL_SECONDS` overrides the interval (a non-positive value disables the event). The `REQNROLL_TELEMETRY_ENABLED` kill switch applies as for every event |
+| **Properties** | `LookupCounts` and `PassiveCounts` (string - compact, key-sorted JSON object of feature key to count, e.g. `{"CodeAction":3,"Completion.Step":41}`; a kind with no counts is omitted), `WindowSeconds` (seconds covered by this window), `SessionSeconds` (seconds since the flush service started, approximately server uptime), `Sequence` (long - 1, 2, 3... per `SessionId`, advanced only by emitted events, so a gap marks a lost flush), `IsFinal` (bool - the shutdown flush); identity (`IdeClient`, `ServerVersion`, `SessionId`) is stamped like every server event (section 1) |
+
+Counts are sent as a JSON *string*, not a nested object, because the three IDE forwarders
+stringify values differently (VS Code `String(value)` gives `[object Object]`, Rider `toString()`
+gives `{k=1.0}`, VS `JToken.ToString()` gives multi-line JSON); a plain string passes through all of
+them unchanged. Parse with `parse_json(tostring(customDimensions.LookupCounts))` in Application Insights.
+
+**Counted features** (`FeatureUsageCatalog`; keys are fixed identifiers, the closed set is the privacy guarantee):
+
+| Kind | Keys | Recorded operation |
+|---|---|---|
+| `Lookup` - requested by the editor on a gesture or typing | `Completion.Step`, `Completion.Keyword`, `Completion.Tag` (a *subset* of `Completion.Keyword`), `Completion.Other`, `CodeAction` (also fires on cursor moves in VS/VS Code, not only on click) | `textDocument/completion#step`/`#keyword`/`#tag`/bare, `textDocument/codeAction` |
+| `Passive` - requested by the editor on its own schedule | `CodeLens`, `InlayHint`, `FoldingRange`, `DocumentSymbol`, `OnTypeFormatting` (the aggregate stand-in for the never-implemented `CommandAutoFormatTable`) | `textDocument/codeLens`/`inlayHint`/`foldingRange`/`documentSymbol` (+ `reqnroll/documentSymbolHierarchical`)/`onTypeFormatting` |
+
+**Not counted here, by design:** every discrete command (Go to Step Definition, Find Usages, Rename,
+Find Unused, Comment/Uncomment, Format, Run lens lookups, Find Hooks, Go to Matching Scenarios).
+They send their own per-call events with characteristic properties (#849), so counting them again
+would double-count each invocation; their adoption comes from those events. Plumbing (document sync,
+semantic tokens, diagnostics publication, refresh notifications) says nothing about feature use.
+The membership is a strawman pending issue #583 / #850.
+
+**Analytics use.** How often the volume features are exercised per session, per IDE, per version;
+`LookupCounts`/`PassiveCounts` divided by `SessionSeconds` gives a rate comparable across sessions of
+different length. Idle sessions send nothing, so pair with `SessionId`-bearing events (or
+`ServerSessionStarted`, once #845 lands) when a session denominator is needed. Window loss on an
+abrupt process death is accepted but detectable via `Sequence`.
+
 ---
 
 ## 7. Retired / deliberately absent events
@@ -392,7 +424,7 @@ verification program (Layer 4). No URIs or content, ever.
 | `Feature file parsed` | Removed (`MonitorParserParse` deleted) | VS no longer parses `.feature` files locally — parsing moved server-side, uniformly, where `PerfSample` timing replaces it (issue #255/#259) |
 | `Reqnroll Generation executed` | Removed (`MonitorReqnrollGeneration` deleted) | The single-file code-behind generation feature it monitored has no implementation anywhere in the product; the event would never fire |
 | `Notification shown` / `Notification dismissed` | Not carried over | No notification system in the current extension (commented out in the interface — do not resurrect without the feature) |
-| `CommandAutoFormatTable` (a.k.a. on-type table formatting) | Never implemented | Fires on every keystroke inside a table — not a discrete user command; perf sampling covers it (`PerfTargets.OnTypeFormatting`) |
+| `CommandAutoFormatTable` (a.k.a. on-type table formatting) | Never implemented as an event | Fires on every keystroke inside a table — not a discrete user command; perf sampling covers latency (`PerfTargets.OnTypeFormatting`) and `FeatureUsageSummary`'s `OnTypeFormatting` count covers volume |
 | `Completion inserted` | Deferred | Standard LSP gives the server no signal when a completion item is accepted; a future VS-client commit hook could emit it (see archived build plan §4.1) |
 
 ---
@@ -413,6 +445,7 @@ verification program (Layer 4). No URIs or content, ever.
 | Crash/error rates | `UnhandledException` (server) + VS `ExceptionTelemetry` |
 | Adoption lifecycle | `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events |
 | Field performance (P95/P99) | `PerfSample` |
+| Volume/passive feature usage (completion, code actions, CodeLens, inlay hints, ...) | `FeatureUsageSummary` |
 | Tag-index cold-scan size and cost | `TagIndexFirstScanCompleted` (`FileCount`, `FilesParsedFromDisk`, `DurationMs`); steady state via `PerfSample` `textDocument/completion#tag` |
 
 ---

@@ -155,6 +155,24 @@ suite('telemetry', () => {
       });
     });
 
+    test('forwards FeatureUsageSummary counts (#582) as the exact JSON string the server sent', async () => {
+      const { client, fire } = fakeClient();
+      const context = fakeContext();
+      const lookupCounts = '{"CodeAction":1,"Completion.Step":14}';
+
+      await withStubbedSendTelemetryEvent(context, (calls) => {
+        registerTelemetry(client, context);
+        fire({
+          eventName: 'FeatureUsageSummary',
+          properties: { LookupCounts: lookupCounts, Sequence: 2 },
+        });
+
+        assert.strictEqual(calls.length, 1);
+        assert.strictEqual(calls[0].properties?.LookupCounts, lookupCounts);
+        assert.strictEqual(calls[0].properties?.Sequence, '2');
+      });
+    });
+
     test('ignores a notification with no eventName', async () => {
       const { client, fire } = fakeClient();
       const context = fakeContext();

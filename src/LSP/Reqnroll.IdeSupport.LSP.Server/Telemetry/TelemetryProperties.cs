@@ -25,6 +25,18 @@ public static class TelemetryProperties
     public const string OccurrenceCount = "OccurrenceCount";
     /// <summary>Valid step definitions considered by Find Unused Step Definitions (distinct across projects).</summary>
     public const string TotalStepDefinitions = "TotalStepDefinitions";
+    /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
+    public const string LookupCounts = "LookupCounts";
+    /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
+    public const string PassiveCounts = "PassiveCounts";
+    /// <summary>Seconds covered by a <c>FeatureUsageSummary</c> window.</summary>
+    public const string WindowSeconds = "WindowSeconds";
+    /// <summary><c>true</c> for the best-effort flush at graceful shutdown.</summary>
+    public const string IsFinal = "IsFinal";
+    /// <summary>Per-<c>SessionId</c> monotonically increasing number of emitted <c>FeatureUsageSummary</c> events; a gap marks a lost flush.</summary>
+    public const string Sequence = "Sequence";
+    /// <summary>Seconds since the flush service started (≈ server uptime), the denominator for a window's counts.</summary>
+    public const string SessionSeconds = "SessionSeconds";
     /// <summary>Number of test targets a Run lens lookup resolved.</summary>
     public const string TargetCount = "TargetCount";
     /// <summary>What the Run lens lookup was for; one of the <see cref="TestTargetKind"/> values.</summary>

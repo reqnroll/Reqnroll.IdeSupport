@@ -150,6 +150,16 @@ public static class TelemetryEvents
     /// </summary>
     public const string TagIndexFirstScanCompleted = "TagIndexFirstScanCompleted";
 
+    /// <summary>
+    /// Sent periodically, and once more at graceful shutdown, by
+    /// <c>Performance.FeatureUsageFlushService</c> (issue #582): in-process counts of high-volume
+    /// lookup and passive editor requests (completion, code actions, CodeLens, inlay hints, folding,
+    /// outline, on-type formatting) that are too frequent to send as one event each. Discrete
+    /// commands are not counted here — they send their own per-call events. Keys come from a closed
+    /// catalogue and values are integers; no paths, text or document identifiers.
+    /// </summary>
+    public const string FeatureUsageSummary = "FeatureUsageSummary";
+
     // ── Visual Studio host events (VsGenericEvent → ITelemetryTransmitter) ─────────────────
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProjectSystem</c>) when the extension activates inside an IDE scope.</summary>
