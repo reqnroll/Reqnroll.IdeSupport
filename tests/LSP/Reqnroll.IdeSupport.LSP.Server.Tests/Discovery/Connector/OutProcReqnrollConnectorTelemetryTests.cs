@@ -32,6 +32,36 @@ public class OutProcReqnrollConnectorTelemetryTests
         return ConnectorRunTelemetry.FromConnectorProperties(result.TelemetryProperties);
     }
 
+    // Round-trips real connector output through the production deserializer, where dictionary
+    // values become JsonElements rather than strings.
+    private static DiscoveryResult DeserializedConnectorResult()
+        => ConnectorJsonSerialization.DeserializeObjectWithMarker<DiscoveryResult>(
+            ConnectorJsonSerialization.StartMarker + """
+            {"telemetryProperties":{"ConnectorType":"Reqnroll-Generic-net8.0","SFFileVersion":"3.0.0",
+             "SFProductVersion":"3.3.4+33eeea22","StepDefinitions":"8"}}
+            """ + ConnectorJsonSerialization.EndMarker)!;
+
+    [Fact]
+    public void ReqnrollVersion_is_read_from_a_deserialized_connector_result()
+    {
+        var result = DeserializedConnectorResult();
+        result.ConnectorType = "Generic";
+
+        Apply(result).ReqnrollVersion.Should().Be("3.3");
+    }
+
+    [Fact]
+    public void Connectors_own_ConnectorType_survives_deserialization_when_server_type_is_unknown()
+    {
+        var result = DeserializedConnectorResult();
+
+        OutProcReqnrollConnector.ApplyRunTelemetry(result, Tfm, null, "args", 0);
+
+        // The connector's own value is still a JsonElement; ConnectorRunTelemetry must read it.
+        ConnectorRunTelemetry.FromConnectorProperties(result.TelemetryProperties).ConnectorType
+            .Should().Be("Reqnroll-Generic-net8.0");
+    }
+
     [Fact]
     public void ConnectorType_is_forwarded()
         => Apply(ConnectorResult()).ConnectorType.Should().Be("Generic");

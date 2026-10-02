@@ -184,7 +184,7 @@ public abstract class OutProcReqnrollConnector
         telemetry["ConnectorExitCode"] = exitCode;
 
         var version = FirstUsableVersion(discoveryResult.ReqnrollVersion,
-            telemetry.TryGetValue("SFProductVersion", out var productVersion) ? productVersion as string : null,
+            telemetry.TryGetValue("SFProductVersion", out var productVersion) ? ConnectorRunTelemetry.AsString(productVersion) : null,
             projectReqnrollVersion?.ToString());
         if (version != null)
             telemetry["ReqnrollVersion"] = version;

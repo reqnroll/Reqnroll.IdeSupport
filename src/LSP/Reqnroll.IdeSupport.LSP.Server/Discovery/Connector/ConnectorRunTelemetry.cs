@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
@@ -33,11 +34,12 @@ public sealed record ConnectorRunTelemetry(
         properties.TryGetValue("ConnectorExitCode", out var exitCode);
 
         return new ConnectorRunTelemetry(
-            NormalizeVersion(version as string),
-            connectorType as string,
+            NormalizeVersion(AsString(version)),
+            AsString(connectorType),
             exitCode switch
             {
                 int i => i,
+                JsonElement { ValueKind: JsonValueKind.Number } e when e.TryGetInt32(out var ei) => ei,
                 long l when l is >= int.MinValue and <= int.MaxValue => (int)l,
                 _ => null,
             });
@@ -53,6 +55,18 @@ public sealed record ConnectorRunTelemetry(
         if (ConnectorExitCode is not null)
             target["ConnectorExitCode"] = ConnectorExitCode;
     }
+
+    /// <summary>
+    /// Reads a string out of a connector telemetry value. The connector's JSON is deserialized with
+    /// System.Text.Json into <c>Dictionary&lt;string, object&gt;</c>, so values that crossed the process
+    /// boundary are <see cref="JsonElement"/>s, while values the server added itself are plain strings.
+    /// </summary>
+    internal static string? AsString(object? value) => value switch
+    {
+        string s => s,
+        JsonElement { ValueKind: JsonValueKind.String } e => e.GetString(),
+        _ => null,
+    };
 
     private static readonly Regex MajorMinor = new(@"^\s*v?(\d+)(?:\.(\d+))?", RegexOptions.Compiled);
 
