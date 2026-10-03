@@ -8,6 +8,8 @@ import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { setAppLogChannel } from '../logging/appNotify';
 import { TELEMETRY_UNAVAILABLE_NOTICE, TelemetryCircuitBreaker } from '../telemetryCircuitBreaker';
 import {
+  deferTelemetryTeardownUntil,
+  drainTelemetryTeardown,
   ensureTelemetryReporter,
   registerTelemetry,
   resetTelemetryReporterForTests,
@@ -122,10 +124,90 @@ suite('telemetry', () => {
           Reason: 'StartFailed',
           AttemptNumber: '1',
         });
-        // One reporter: ensure-then-register must not create a second one. Counted by the reporter's
-        // dispose hook rather than the total subscription count, which the notification listener also affects.
-        const disposeHooks = context.subscriptions.filter((s) => s instanceof TelemetryReporter);
-        assert.strictEqual(disposeHooks.length, 1);
+      });
+
+      // One reporter: ensure-then-register must not create a second one, so disposing the subscriptions
+      // disposes exactly one reporter.
+      const proto = TelemetryReporter.prototype as unknown as { dispose: () => Promise<unknown> };
+      const originalDispose = proto.dispose;
+      let disposed = 0;
+      proto.dispose = () => {
+        disposed++;
+        return Promise.resolve();
+      };
+      try {
+        await Promise.all(
+          context.subscriptions.map((s) => Promise.resolve(s.dispose()).then(() => undefined)),
+        );
+      } finally {
+        proto.dispose = originalDispose;
+      }
+      assert.strictEqual(disposed, 1);
+    });
+  });
+
+  suite('shutdown-time telemetry (#845)', () => {
+    /** A client whose notification disposable really detaches the handler, like vscode-languageclient's. */
+    function detachingClient(): { client: LanguageClient; fire: (params: unknown) => void } {
+      let handler: ((params: unknown) => void) | undefined;
+      const client = {
+        onNotification: (_type: unknown, listener: (params: unknown) => void) => {
+          handler = listener;
+          return {
+            dispose: () => {
+              handler = undefined;
+            },
+          };
+        },
+      } as unknown as LanguageClient;
+      return { client, fire: (params: unknown) => handler?.(params) };
+    }
+
+    test('events the server sends while stop() is in flight are still forwarded; teardown completes afterwards', async () => {
+      const context = fakeContext();
+      const { client, fire } = detachingClient();
+      let releaseStop!: () => void;
+      const stopping = new Promise<void>((resolve) => (releaseStop = resolve));
+
+      await withStubbedSendTelemetryEvent(context, async (calls) => {
+        registerTelemetry(client, context);
+
+        // What deactivate() does, then what VS Code does right after deactivate() returns.
+        deferTelemetryTeardownUntil(stopping);
+        for (const sub of context.subscriptions) void sub.dispose();
+
+        fire({ eventName: 'ServerSessionEnded', properties: { SessionSeconds: 5 } });
+        assert.deepStrictEqual(
+          calls.map((c) => c.eventName),
+          ['ServerSessionEnded'],
+        );
+
+        releaseStop();
+        await drainTelemetryTeardown();
+
+        fire({ eventName: 'AfterStop' });
+        assert.deepStrictEqual(
+          calls.map((c) => c.eventName),
+          ['ServerSessionEnded'],
+          'the forwarder is detached once stop() has settled',
+        );
+      });
+    });
+
+    test('teardown still completes when stop() rejects', async () => {
+      const context = fakeContext();
+      const { client, fire } = detachingClient();
+      const stopping = Promise.reject(new Error('stop failed'));
+
+      await withStubbedSendTelemetryEvent(context, async (calls) => {
+        registerTelemetry(client, context);
+        deferTelemetryTeardownUntil(stopping);
+        for (const sub of context.subscriptions) void sub.dispose();
+
+        await drainTelemetryTeardown();
+
+        fire({ eventName: 'AfterStop' });
+        assert.strictEqual(calls.length, 0);
       });
     });
   });

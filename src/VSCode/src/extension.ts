@@ -32,7 +32,13 @@ import {
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
-import { ensureTelemetryReporter, registerTelemetry, sendTelemetryEvent } from './telemetry';
+import {
+  deferTelemetryTeardownUntil,
+  drainTelemetryTeardown,
+  ensureTelemetryReporter,
+  registerTelemetry,
+  sendTelemetryEvent,
+} from './telemetry';
 import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
@@ -467,5 +473,11 @@ export function deactivate(): Thenable<void> | undefined {
   setAppLogChannel(undefined);
   // Deliberate stop: the resulting `Stopped` is not an unexpected server exit (issue #845).
   serverLifecycle?.markIntentionalStop();
-  return client?.stop();
+  const stopping = client?.stop();
+  if (!stopping) return undefined;
+  // The server's shutdown-time telemetry (final FeatureUsageSummary, ServerSessionEnded) arrives while
+  // stop() is in flight, but VS Code disposes the subscriptions holding the telemetry forwarder and
+  // reporter as soon as this function returns; hold their disposal until stop() has settled (#845).
+  deferTelemetryTeardownUntil(stopping);
+  return stopping.finally(() => drainTelemetryTeardown());
 }

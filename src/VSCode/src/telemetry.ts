@@ -35,6 +35,41 @@ function isTelemetryEnabledByEnv(): boolean {
 // that never call registerTelemetry at all).
 let reporter: TelemetryReporter | undefined;
 
+// Issue #845: the server emits its final events (`FeatureUsageSummary`, `ServerSessionEnded`) while
+// handling the LSP `shutdown` request, i.e. during `client.stop()`. VS Code disposes
+// `context.subscriptions` as soon as `deactivate()` has been *called* (it does not wait for the returned
+// promise), which would detach the notification forwarder and the reporter before those events arrive.
+// While a gate is set (see `deferTelemetryTeardownUntil`) their disposal therefore waits for it.
+let teardownGate: Promise<void> | undefined;
+const deferredTeardowns: Promise<void>[] = [];
+
+/**
+ * Makes the forwarder / reporter disposals wait until `gate` (the client's `stop()`) settles, so the
+ * server's shutdown-time telemetry is still relayed. Call before `deactivate()` returns, and return
+ * `drainTelemetryTeardown()` after the gate so the host stays alive for the final flush.
+ */
+export function deferTelemetryTeardownUntil(gate: Thenable<unknown>): void {
+  teardownGate = Promise.resolve(gate).then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
+/** Resolves once every disposal deferred by `deferTelemetryTeardownUntil` has run; clears the gate. */
+export function drainTelemetryTeardown(): Thenable<void> {
+  return Promise.all(deferredTeardowns.splice(0)).then(() => {
+    teardownGate = undefined;
+  });
+}
+
+/** Runs `action` now, or after the teardown gate when one is set. */
+function afterTeardownGate(action: () => void | Thenable<void>): Thenable<void> {
+  if (!teardownGate) return Promise.resolve(action());
+  const deferred = teardownGate.then(action);
+  deferredTeardowns.push(deferred);
+  return deferred;
+}
+
 /** Upper bound on the flush performed when the reporter is disposed (extension deactivate). */
 const DISPOSE_TIMEOUT_MS = 500;
 
@@ -82,11 +117,14 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
   breaker = newBreaker();
   const created = new TelemetryReporter(CONNECTION_STRING);
   reporter = created;
-  context.subscriptions.push({ dispose: () => disposeReporterBounded(created) });
   context.subscriptions.push({
-    dispose: () => {
-      reporter = undefined;
-    },
+    dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),
+  });
+  context.subscriptions.push({
+    dispose: () =>
+      afterTeardownGate(() => {
+        reporter = undefined;
+      }),
   });
 }
 
@@ -111,14 +149,18 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
   ensureTelemetryReporter(context);
   if (!reporter) return;
 
-  context.subscriptions.push(
-    client.onNotification(TelemetryEventNotification.type, (params: unknown) => {
-      const { eventName, properties } = (params ?? {}) as TelemetryEventParams;
-      if (!eventName) return;
+  const listener = client.onNotification(TelemetryEventNotification.type, (params: unknown) => {
+    const { eventName, properties } = (params ?? {}) as TelemetryEventParams;
+    if (!eventName) return;
 
-      sendTelemetryEvent(eventName, properties);
-    }),
-  );
+    sendTelemetryEvent(eventName, properties);
+  });
+  context.subscriptions.push({
+    dispose: () =>
+      afterTeardownGate(() => {
+        listener.dispose();
+      }),
+  });
 }
 
 /**
