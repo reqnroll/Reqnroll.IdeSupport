@@ -546,14 +546,26 @@ single-scenario gutter action are the same code path.
   `TestStatusProvider` only showed a single-element usage (`new TestMethodIdentifier[1] { testMethod }`),
   but `.TestExplorer.RunTestsFromCodeLens`/`DebugTestsFromCodeLens` are the same commands Test Explorer's
   own "run selected tests" multi-select action drives, so passing an N-element `TestMethodIdentifier[]`
-  built from all N resolved targets is expected to work the same way. **Not yet confirmed** — the VS
-  live check already needed for §6's ServiceHub wiring should also verify multi-target `CommandArgs`
-  specifically, since only the single-target shape has been observed in the decompiled source.
-- **Rider**: whether a single `RunLineMarkerContributor` action can target multiple discovered test
-  items in one invocation, or whether it's constrained to one per marker, **hasn't been checked** — a
-  follow-up for whoever implements the Rider side, likely resolvable by looking at how Rider's own
-  built-in `[Fact]`/`[Test]`-class-level line marker (which already offers "run all tests in this class")
-  is implemented, since that's the same shape of problem.
+  built from all N resolved targets is expected to work the same way.
+  **As built (issue #454): no extra work needed.** `RunTestCodeLensDataPoint` already collapses the
+  resolved targets to distinct `(assembly, type, method)` identifiers and hands the whole array to
+  `BuildCommand` for Run, Debug and Show-in-Test-Explorer — one element for a row-tests Outline, N for an
+  individual-methods Outline or a Feature/Rule container (§4a), through the same code path. The
+  multi-element shape is therefore already the shipped behavior for container runs; the Outline case adds
+  no new invocation shape. The one residual risk is that this has only been exercised live through the
+  container lens, so the next live VS pass should explicitly run an individual-methods-mode Outline and
+  confirm every row's method executes. If Test Explorer ever honors only the first element, the fallback is
+  one `CodeLensDetailPaneCommand` per method rather than any change to the resolver.
+- **Rider**: **no native multi-target invocation exists to adopt — own execution is the answer.** The
+  open question (can one marker target several discovered tests) presupposed a native-runner integration
+  point. §6's native-tree feasibility finding rules that out: Rider's unit testing exposes no JVM-side
+  extension point, and the lens is a `CodeVisionProvider` (not a `RunLineMarkerContributor`; see §5's
+  Rider note) that shells to `dotnet test` via `RunTestRunner`. That path already handles individual-methods
+  Outlines: `RunTestRunner.buildTestFilter` ORs one `FullyQualifiedName=` term per distinct generated
+  method (and collapses row-tests targets to one), and `pollServerOutcomes`/`combineServerOutcomes`
+  require and aggregate every method's outcome. Covered by `RunTestRunnerTest`'s "individual-methods
+  targets with distinct method names each get their own term". A native multi-target action would only
+  become relevant if the ReSharperHost-backend route (§6) were ever taken, and should be designed with it.
 
 ---
 
@@ -867,14 +879,14 @@ rendering itself has not been live-verified in Rider.
    initial implementation for any IDE (VS Code's own-execution design, §5, could add it later via
    `dotnet test --filter` with a `DisplayName`-based filter expression per row, since it owns the
    invocation — worth revisiting post-implementation, not blocking now).
-7. **Multi-target "run all examples" invocation for individual-methods-mode Outlines, per IDE** (§5, new
-   subsection). VS Code's own-execution design handles this trivially (OR'd `dotnet test --filter`
-   expression). VS's multi-element `TestMethodIdentifier[]` `CommandArgs` is plausible but unconfirmed —
-   only a single-target usage was observed in the decompiled `TestStatusProvider` source; fold into the
-   same live VS check §6 already calls for. Rider's multi-target line-marker capability is unchecked
-   entirely — a follow-up for Rider implementation, likely answerable by looking at how Rider's own
-   built-in per-class "run all tests" line marker works. Neither blocks starting implementation, since
-   row-tests mode (the framework default) doesn't need this at all.
+7. ~~**Multi-target "run all examples" invocation for individual-methods-mode Outlines, per IDE**~~
+   **Resolved (issue #454; design only, no behavior change).** VS Code and Rider own their `dotnet test`
+   invocation and already OR one exact-FQN term per distinct method (`buildTestFilter`). VS already passes
+   a multi-element `TestMethodIdentifier[]` for Outlines and Feature/Rule containers alike
+   (`RunTestCodeLensDataPoint`); the only outstanding item is a live check that Test Explorer runs every
+   element for an individual-methods Outline (fallback: one command per method). Rider has no native
+   multi-target mechanism to adopt (§6 — no JVM-side unit-testing extension point); own execution is the
+   design. See §5 "Scenario Outline — run all examples".
 8. ~~**AST-transforming generator plugins (e.g. `Reqnroll.ExternalData`)**~~ **Resolved (2026-08-05,
    flagged by Chris).** Confirmed against Reqnroll's actual source that such plugins (which inject
    `Examples:` rows into the AST after parsing but before codegen, so the `.feature` file can show zero
