@@ -1,8 +1,9 @@
-using System.Collections.Immutable;
+﻿using System.Collections.Immutable;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
 
@@ -16,6 +17,10 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.Telemetry;
 public class TelemetryTransmitterTests
 {
     private InMemoryTelemetryChannel _telemetryChannel;
+    // VS writes no user-facing notice when the endpoint is unreachable, and its "flush did not
+    // finish" notes are verbose-only (#859 asymmetry), so both levels are captured separately.
+    private readonly List<string> _infoLogLines = new();
+    private readonly List<string> _verboseLogLines = new();
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
     private readonly CapturingDebugLog _debugLog = new();
 
@@ -130,7 +135,90 @@ public class TelemetryTransmitterTests
             ConnectionString = $"InstrumentationKey={Guid.NewGuid():N}"
         };
         var telemetryClient = new TelemetryClient(config);
-        return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, null, _debugLog);
+        var logger = Substitute.For<IIdeSupportLogger>();
+        logger.Level.Returns(System.Diagnostics.TraceLevel.Verbose);
+        logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(c =>
+        {
+            var m = c.Arg<LogMessage>();
+            if (m.Level == System.Diagnostics.TraceLevel.Info) _infoLogLines.Add(m.Message);
+            else if (m.Level == System.Diagnostics.TraceLevel.Verbose) _verboseLogLines.Add(m.Message);
+        });
+        return new VsTelemetryTransmitter(telemetryClient, _enableTelemetryCheckerStub, logger, _debugLog);
+    }
+
+    // ── Unreachable endpoint (#859) ───────────────────────────────────────────────
+    //
+    // Visual Studio's contract differs from VS Code's and Rider's. The Application Insights channel
+    // hands events to a background sender and swallows the outcome (ETW/self-diagnostics only), so
+    // this class never learns that a send failed: there is no breaker here and no "telemetry is
+    // being dropped" notice. These tests pin the behaviour that actually ships — silent drop, no
+    // self-amplifying second event, and a flush at shutdown that is bounded rather than blocking
+    // the UI thread for the SDK's 100 s HTTP timeout.
+
+    [Fact]
+    public void Should_NotTransmitASecondEvent_WhenTheChannelThrowsOnSend()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        _telemetryChannel.ThrowOnSend = true;
+
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+
+        // One hand-off only: a failed transmission is never re-reported as an exception event to
+        // the same unreachable endpoint.
+        _telemetryChannel.SendAttempts.Should().Be(1);
+        _debugLog.Records.Should().ContainSingle(r => r.Transmitted == false && r.Error != null);
+    }
+
+    [Fact]
+    public void Should_DropEventsSilently_WhenTheEndpointIsUnreachable()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        _telemetryChannel.SimulateUnreachableEndpoint = true;
+
+        for (var i = 0; i < 25; i++)
+            sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+        sut.TransmitFatalExceptionEvent(new InvalidOperationException("boom"), isFatal: true);
+
+        // No notice: the host cannot see the failure, so it must not claim it can.
+        _infoLogLines.Should().BeEmpty();
+        // Exactly one hand-off per event: no retry storm, no feedback event, nothing delivered.
+        _telemetryChannel.SendAttempts.Should().Be(26);
+        _telemetryChannel.SentTelemtries.Should().BeEmpty();
+        // Hand-off (not delivery) is still mirrored for debugging — the SDK gives no better signal.
+        _debugLog.Records.Should().HaveCount(26).And.OnlyContain(r => r.Transmitted == true);
+    }
+
+    [Fact]
+    public async Task Should_BoundDispose_WhenTheFlushIsBlackHoled()
+    {
+        var sut = CreateSut();
+        using var gate = new System.Threading.ManualResetEventSlim(false);
+        _telemetryChannel.BlockFlush = gate;
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await sut.DisposeAsync();
+        sw.Stop();
+        gate.Set();
+
+        // Bounded, not announced: shutdown waits at most FlushTimeout, then abandons the flush.
+        sw.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3));
+        _infoLogLines.Should().BeEmpty();
+        _verboseLogLines.Should().Contain(line => line.Contains("did not finish"));
+    }
+
+    [Fact]
+    public async Task Should_NotThrow_WhenTheFlushFails()
+    {
+        var sut = CreateSut();
+        _telemetryChannel.ThrowOnFlush = true;
+
+        var exception = await Record.ExceptionAsync(() => sut.DisposeAsync().AsTask());
+
+        Assert.Null(exception);
+        _infoLogLines.Should().BeEmpty();
+        _verboseLogLines.Should().Contain(line => line.Contains("flush failed"));
     }
 
     // ── Debug-log mirror (host side) ──────────────────────────────────────────────
@@ -254,21 +342,46 @@ public class TelemetryTransmitterTests
     }
 }
 
+/// <summary>
+/// Test double for the Application Insights channel. By default it mirrors the SDK's
+/// <c>InMemoryChannel</c> as it behaves for an unreachable endpoint: <see cref="Send"/> only buffers
+/// and never throws, so a dead endpoint produces no failure signal in the transmitter (the SDK
+/// swallows the outcome inside <c>InMemoryTransmitter</c>).
+/// <see cref="ThrowOnSend"/>/<see cref="ThrowOnFlush"/> simulate a *synchronous* channel fault, which
+/// the real channel does not produce for a network failure but which the transmitter's defensive
+/// catches must survive.
+/// </summary>
 public class InMemoryTelemetryChannel : ITelemetryChannel
 {
     public List<ITelemetry> SentTelemtries { get; } = new();
     public bool IsFlushed { get; private set; }
     public bool ThrowOnSend { get; set; }
+    public bool ThrowOnFlush { get; set; }
+    /// <summary>Endpoint unreachable: hand-offs are counted, nothing is buffered, nothing is signalled.</summary>
+    public bool SimulateUnreachableEndpoint { get; set; }
     public bool? DeveloperMode { get; set; }
     public string EndpointAddress { get; set; }
 
     public void Send(ITelemetry item)
     {
+        SendAttempts++;
         if (ThrowOnSend)
             throw new InvalidOperationException("Simulated AppInsights failure");
+        if (SimulateUnreachableEndpoint)
+            return;
         SentTelemtries.Add(item);
     }
 
-    public void Flush() => IsFlushed = true;
+    public int SendAttempts { get; private set; }
+    public System.Threading.ManualResetEventSlim BlockFlush { get; set; }
+
+    public void Flush()
+    {
+        // Bounded so an abandoned flush cannot keep the test process alive.
+        BlockFlush?.Wait(TimeSpan.FromSeconds(10));
+        if (ThrowOnFlush)
+            throw new InvalidOperationException("Simulated AppInsights flush failure");
+        IsFlushed = true;
+    }
     public void Dispose() { }
 }

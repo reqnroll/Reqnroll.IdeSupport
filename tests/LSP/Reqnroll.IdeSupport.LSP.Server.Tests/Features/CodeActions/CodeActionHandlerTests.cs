@@ -118,6 +118,21 @@ public class CodeActionHandlerTests
         action.Kind.Should().Be(CodeActionKind.QuickFix);
     }
 
+    [Fact]
+    public async Task Define_action_carries_the_server_command_that_reports_the_trigger()
+    {
+        // The client runs this command after applying the edit; it is the only signal the server
+        // gets that the quick fix was picked (issue #847).
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        var result = await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        var command = result!.Single().CodeAction!.Command;
+        command.Should().NotBeNull();
+        command!.Name.Should().Be(DefineStepsTriggeredHandler.CommandName);
+        command.Arguments.Should().HaveCount(1, "the single argument is the file the edit lands in");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

@@ -29,7 +29,8 @@
     // (LSP-server outcome pipeline, #700/#702): publishTestLogger also shells to
     // `dotnet publish`, unavailable in this container, so prepareSandbox needs a
     // pre-published copy here instead.
-    "ORG_GRADLE_PROJECT_lspTestLoggerBuildDir": "${containerWorkspaceFolder}/downloaded-testlogger"
+    "ORG_GRADLE_PROJECT_lspTestLoggerBuildDir": "${containerWorkspaceFolder}/downloaded-testlogger",
+    "REQNROLL_TELEMETRY_DEBUG_LOG": "${localEnv:REQNROLL_TELEMETRY_DEBUG_LOG}"
   },
   "mounts": [
     // Docker Desktop's docker.exe is Windows-native, so bind-mount sources

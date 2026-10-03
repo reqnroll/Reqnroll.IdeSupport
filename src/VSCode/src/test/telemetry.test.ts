@@ -5,6 +5,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
+import { setAppLogChannel } from '../logging/appNotify';
+import { TELEMETRY_UNAVAILABLE_NOTICE, TelemetryCircuitBreaker } from '../telemetryCircuitBreaker';
 import { registerTelemetry, sendTelemetryEvent, withClientIdentity } from '../telemetry';
 
 function fakeClient(): { client: LanguageClient; fire: (params: unknown) => void } {
@@ -301,6 +303,147 @@ suite('telemetry', () => {
       assert.strictEqual(records.length, 1);
       assert.strictEqual(records[0].enabled, false);
       assert.strictEqual(records[0].transmitted, false);
+    });
+  });
+  suite('unreachable endpoint (#859)', () => {
+    const originalEnv = process.env.REQNROLL_TELEMETRY_ENABLED;
+    const proto = TelemetryReporter.prototype as unknown as {
+      sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+      dispose: () => Promise<unknown>;
+    };
+    const originalSend = proto.sendTelemetryEvent;
+    const originalDispose = proto.dispose;
+    let infoLines: string[];
+
+    setup(() => {
+      process.env.REQNROLL_TELEMETRY_ENABLED = '1';
+      infoLines = [];
+      setAppLogChannel({
+        info: (m: string) => infoLines.push(m),
+        warn: () => undefined,
+        error: () => undefined,
+      } as unknown as vscode.LogOutputChannel);
+    });
+
+    teardown(() => {
+      proto.sendTelemetryEvent = originalSend;
+      proto.dispose = originalDispose;
+      setAppLogChannel(undefined);
+      if (originalEnv === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
+      else process.env.REQNROLL_TELEMETRY_ENABLED = originalEnv;
+    });
+
+    test('a throwing reporter never throws out of sendTelemetryEvent and logs one notice', () => {
+      let attempts = 0;
+      proto.sendTelemetryEvent = () => {
+        attempts++;
+        throw new Error('getaddrinfo ENOTFOUND dc.services.visualstudio.com');
+      };
+      proto.dispose = () => Promise.resolve();
+      const context = fakeContext();
+      registerTelemetry(fakeClient().client, context);
+
+      for (let i = 0; i < 25; i++) assert.doesNotThrow(() => sendTelemetryEvent('reqnroll/x'));
+
+      assert.strictEqual(attempts, 1, 'breaker must stop further reporter calls');
+      assert.deepStrictEqual(
+        infoLines.filter((l) => l === TELEMETRY_UNAVAILABLE_NOTICE),
+        [TELEMETRY_UNAVAILABLE_NOTICE],
+      );
+      assert.strictEqual(
+        infoLines.filter((l) => !l.startsWith('Telemetry failure')).length,
+        1,
+        'only the single notice is non-verbose',
+      );
+      for (const sub of context.subscriptions) sub.dispose();
+    });
+
+    test('dispose is bounded when the flush never completes', async () => {
+      proto.sendTelemetryEvent = () => undefined;
+      proto.dispose = () => new Promise(() => undefined); // black hole
+      const context = fakeContext();
+      registerTelemetry(fakeClient().client, context);
+
+      const started = Date.now();
+      await Promise.all(
+        context.subscriptions.map((s) => Promise.resolve(s.dispose()).then(() => undefined)),
+      );
+
+      assert.ok(Date.now() - started < 3000, 'deactivate must not wait on a black-holed flush');
+    });
+
+    test('dispose does not wait for the flush once the breaker is open', async () => {
+      proto.sendTelemetryEvent = () => {
+        throw new Error('offline');
+      };
+      proto.dispose = () => new Promise(() => undefined);
+      const context = fakeContext();
+      registerTelemetry(fakeClient().client, context);
+      sendTelemetryEvent('reqnroll/x');
+
+      const started = Date.now();
+      await Promise.all(
+        context.subscriptions.map((s) => Promise.resolve(s.dispose()).then(() => undefined)),
+      );
+
+      assert.ok(Date.now() - started < 200);
+    });
+
+    test('a rejecting dispose does not surface as an unhandled rejection', async () => {
+      proto.sendTelemetryEvent = () => undefined;
+      proto.dispose = () => Promise.reject(new Error('flush failed'));
+      const context = fakeContext();
+      registerTelemetry(fakeClient().client, context);
+
+      await assert.doesNotReject(
+        Promise.all(
+          context.subscriptions.map((s) => Promise.resolve(s.dispose()).then(() => undefined)),
+        ),
+      );
+    });
+
+    test('the debug log still records the failed attempt as transmitted:false with the error', () => {
+      const file = path.join(os.tmpdir(), `reqnroll-859-${Date.now()}.jsonl`);
+      const prior = process.env.REQNROLL_TELEMETRY_DEBUG_LOG;
+      process.env.REQNROLL_TELEMETRY_DEBUG_LOG = file;
+      try {
+        proto.sendTelemetryEvent = () => {
+          throw new Error('boom');
+        };
+        proto.dispose = () => Promise.resolve();
+        const context = fakeContext();
+        registerTelemetry(fakeClient().client, context);
+
+        sendTelemetryEvent('reqnroll/x');
+
+        const firstLine = fs.readFileSync(file, 'utf8').trim().split(/\r?\n/)[0];
+        const record = JSON.parse(firstLine) as { transmitted: boolean; error: string };
+        assert.strictEqual(record.transmitted, false);
+        assert.strictEqual(record.error, 'boom');
+        for (const sub of context.subscriptions) sub.dispose();
+      } finally {
+        if (prior === undefined) delete process.env.REQNROLL_TELEMETRY_DEBUG_LOG;
+        else process.env.REQNROLL_TELEMETRY_DEBUG_LOG = prior;
+        fs.rmSync(file, { force: true });
+      }
+    });
+
+    test('TelemetryCircuitBreaker emits the notice exactly once', () => {
+      const notices: string[] = [];
+      const verbose: string[] = [];
+      const b = new TelemetryCircuitBreaker(
+        (n) => notices.push(n),
+        (m) => verbose.push(m),
+      );
+
+      for (let i = 0; i < 50; i++) b.recordFailure('x');
+
+      assert.deepStrictEqual(notices, [TELEMETRY_UNAVAILABLE_NOTICE]);
+      assert.strictEqual(verbose.length, 50);
+      assert.strictEqual(
+        TELEMETRY_UNAVAILABLE_NOTICE,
+        'Telemetry endpoint unreachable; telemetry for this session will be dropped',
+      );
     });
   });
 });
