@@ -50,9 +50,30 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         IUserUniqueIdStore userUniqueIdStore,
         IVersionProvider versionProvider,
         IIdeSupportLogger? logger = null)
-        : this(CreateClient(userUniqueIdStore, versionProvider), enableTelemetryChecker, logger,
+        : this(CreateClient(userUniqueIdStore, versionProvider), ApplyDebugBuildGuard(enableTelemetryChecker), logger,
             TelemetryDebugLog.FromEnvironment())
     {
+    }
+
+#if DEBUG
+    private const bool IsDebugBuild = true;
+#else
+    private const bool IsDebugBuild = false;
+#endif
+
+    /// <summary>
+    /// Debug-build guard (#889): without a <c>REQNROLL_TELEMETRY_CONNECTION_STRING</c> override a Debug
+    /// build is treated as telemetry-disabled, so a developer's F5 session never reaches the
+    /// production resource (events are still mirrored to the debug log, flagged as not transmitted).
+    /// </summary>
+    internal static IEnableTelemetryChecker ApplyDebugBuildGuard(IEnableTelemetryChecker inner, bool isDebugBuild = IsDebugBuild)
+        => TelemetryConnectionOverride.BlocksBuiltIn(isDebugBuild, TelemetryConnectionOverride.FromEnvironment())
+            ? new DisabledTelemetryChecker()
+            : inner;
+
+    private sealed class DisabledTelemetryChecker : IEnableTelemetryChecker
+    {
+        public bool IsEnabled() => false;
     }
 
     /// <summary>
@@ -72,6 +93,16 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         _debugLog = debugLog ?? NullTelemetryDebugLog.Instance;
     }
 
+    private static string? ReadBuiltInConnectionString()
+    {
+        var assembly = typeof(TelemetryTransmitter).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .Single(n => n.EndsWith("InstrumentationKey.txt", StringComparison.Ordinal));
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        using var reader = new StreamReader(stream!);
+        return reader.ReadLine();
+    }
+
     private static TelemetryClient CreateClient(IUserUniqueIdStore userStore, IVersionProvider versionProvider)
     {
         // Best-effort delivery (#859). InMemoryChannel is already what a default
@@ -87,12 +118,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         {
             TelemetryChannel = new InMemoryChannel { MaxTelemetryBufferCapacity = 100, SendingInterval = TimeSpan.FromSeconds(30) },
         };
-        var assembly = typeof(TelemetryTransmitter).Assembly;
-        var resourceName = assembly.GetManifestResourceNames()
-            .Single(n => n.EndsWith("InstrumentationKey.txt", StringComparison.Ordinal));
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        using var reader = new StreamReader(stream!);
-        config.ConnectionString = reader.ReadLine();
+        config.ConnectionString = TelemetryConnectionOverride.FromEnvironment() ?? ReadBuiltInConnectionString();
         var client = new TelemetryClient(config);
         client.Context.User.Id = userStore.GetUserId();
         client.Context.User.AccountId = userStore.GetUserId();
