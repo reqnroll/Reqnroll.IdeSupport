@@ -452,6 +452,107 @@ namespace S
                 !d.ContainsKey("Error")));
     }
 
+    // ProjectCharacteristics is sent after BindingRegistryChanged (telemetry must not delay consumers),
+    // so tests that assert on it wait for the event itself rather than for the registry change.
+    private static TaskCompletionSource WhenProjectCharacteristicsSent(ILspTelemetryService telemetry)
+    {
+        var sent = new TaskCompletionSource();
+        telemetry.When(t => t.SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => sent.TrySetResult());
+        return sent;
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_emits_a_ProjectCharacteristics_snapshot_after_a_successful_run()
+    {
+        var registry = new ProjectBindingRegistry(
+            ImmutableArray.Create(new ProjectStepDefinitionBinding(
+                Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin.ScenarioBlock.Given, new System.Text.RegularExpressions.Regex("^x$"), null,
+                new ProjectBindingImplementation("Ns.Steps.GivenX", null,
+                    new Reqnroll.IdeSupport.LSP.Core.Documents.SourceLocation("S.cs", 1, 1)))),
+            ImmutableArray.Create(new ProjectHookBinding(
+                new ProjectBindingImplementation("Ns.Hooks.Before", null,
+                    new Reqnroll.IdeSupport.LSP.Core.Documents.SourceLocation("H.cs", 1, 1)),
+                null, HookType.BeforeScenario, null, null)),
+            42);
+        GivenDiscoveryReturns(registry, "hash-1");
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        var changed = WhenProjectCharacteristicsSent(telemetry);
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ProjectCharacteristics,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                1.Equals(d["StepDefinitionCount"]) &&
+                1.Equals(d["HookCount"]) &&
+                2.Equals(d["StepBindingClassCount"]) &&
+                1.Equals(d["HookCount_BeforeScenario"]) &&
+                !d.ContainsKey("ConnectorArguments")));
+    }
+
+    [Theory]
+    [InlineData(5, true)]
+    [InlineData(null, false)]
+    public async Task TriggerRefresh_ProjectCharacteristics_takes_FeatureFileCount_from_the_membership_lookup_and_omits_it_when_unknown(
+        int? indexed, bool expectedPresent)
+    {
+        GivenDiscoveryReturns(NonInvalidRegistry(hash: 42), "hash-1");
+        var lookup = Substitute.For<IProjectFeatureFileLookup>();
+        lookup.CountFeatureFiles(Arg.Any<IProjectScope>()).Returns(indexed);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var sut = new ConnectorBindingRegistryProvider(_project, _discovery, _logger, telemetry, lookup);
+        var changed = WhenProjectCharacteristicsSent(telemetry);
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ProjectCharacteristics,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                d.ContainsKey("FeatureFileCount") == expectedPresent &&
+                (!expectedPresent || 5.Equals(d["FeatureFileCount"]))));
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_a_failing_snapshot_lookup_does_not_turn_a_successful_run_into_a_failure_event()
+    {
+        GivenDiscoveryReturns(NonInvalidRegistry(hash: 42), "hash-1");
+        var lookup = Substitute.For<IProjectFeatureFileLookup>();
+        lookup.CountFeatureFiles(Arg.Any<IProjectScope>()).Returns(_ => throw new InvalidOperationException("index fault"));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var sut = new ConnectorBindingRegistryProvider(_project, _discovery, _logger, telemetry, lookup);
+        var changed = new TaskCompletionSource();
+        sut.BindingRegistryChanged += (_, _) => changed.TrySetResult();
+        sut.TriggerRefresh();
+        await Task.WhenAny(changed.Task, Task.Delay(5000));
+        await Task.Delay(300);
+
+        telemetry.DidNotReceive().SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsFailed"])));
+        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_hash_noop_sends_no_ProjectCharacteristics()
+    {
+        GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sent = new TaskCompletionSource();
+        telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => sent.TrySetResult());
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        sut.TriggerRefresh();
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        telemetry.DidNotReceive().SendEvent(TelemetryEvents.ProjectCharacteristics, Arg.Any<Dictionary<string, object?>>());
+    }
+
     [Fact]
     public async Task TriggerRefresh_hash_noop_event_carries_the_same_base_keys_and_a_duration()
     {

@@ -11,8 +11,25 @@
 export const TelemetryEvents = {
   /** A genuine "Go to Hooks" navigation via `doGoToHooks` (issue #698) — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
   goToHookCommandExecuted: 'GoToHook command executed',
+  /** The language server failed to start or complete its handshake (issue #845). `Reason`, `AttemptNumber`. */
+  serverStartFailed: 'ServerStartFailed',
+  /** A running language server stopped without the client asking it to (issue #845). `Reason`, `AttemptNumber`. */
+  serverExitedUnexpectedly: 'ServerExitedUnexpectedly',
+  /** The client started the language server again after a failure or exit (issue #845). `Reason`, `AttemptNumber`. */
+  serverRestarted: 'ServerRestarted',
   /** An exception thrown in this extension's own code (issue #621): the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
   unhandledException: 'UnhandledException',
+} as const;
+
+/**
+ * Closed set of `Reason` values for the server-lifecycle events; mirrors `ServerFailureReason` in
+ * `ServerLifecycleTelemetry.cs`. Never free text.
+ */
+export const ServerFailureReason = {
+  executableNotFound: 'ExecutableNotFound',
+  startFailed: 'StartFailed',
+  processExited: 'ProcessExited',
+  sessionEnded: 'SessionEnded',
 } as const;
 
 /**

@@ -74,7 +74,15 @@ internal sealed class LspServerConnectionService : IDisposable
     private ChildProcessJob? _childJob;
     private ShutdownHandshakeInterceptor? _shutdownHandshakeInterceptor;
     private CodeLensRefreshInterceptor? _codeLensRefreshInterceptor;
+    private volatile TelemetryEventInterceptor? _telemetryInterceptor;
     private bool _disposed;
+
+    // Client-originated server-lifecycle telemetry (issue #845). Holds events raised before
+    // TelemetryTransmitter is resolved, which is the normal case for a start failure.
+    private readonly ServerLifecycleReporter _lifecycleReporter = new();
+    // Highest generation whose unexpected exit has been reported; the process Exited handler and
+    // EnsureServerStarted both detect it, and only one may report.
+    private int _unexpectedExitReportedGeneration;
 
     // How long to wait for the server to self-terminate after a graceful `exit` before falling
     // back to Kill(). See Dispose()/ShutdownServerAsync.
@@ -118,7 +126,18 @@ internal sealed class LspServerConnectionService : IDisposable
     /// available (post-init, main thread). Read lazily by <see cref="TelemetryEventInterceptor"/>,
     /// which is constructed before this is known.
     /// </summary>
-    public ITelemetryTransmitter? TelemetryTransmitter { get; set; }
+    public ITelemetryTransmitter? TelemetryTransmitter
+    {
+        get => _lifecycleReporter.Transmitter;
+        // Assigning also flushes any server-lifecycle events (issue #845) raised before it was known,
+        // and any server telemetry the interceptor held while waiting for it.
+        set
+        {
+            _lifecycleReporter.Transmitter = value;
+            if (value is not null)
+                _telemetryInterceptor?.Flush();
+        }
+    }
 
     /// <summary>
     /// Set by <see cref="ReqnrollLanguageClient"/> once the project monitor is constructed
@@ -218,8 +237,20 @@ internal sealed class LspServerConnectionService : IDisposable
                 return _startTask;
 
             var previousGeneration = _generation;
+            // Evaluated before DiscardDeadGeneration nulls the interceptors it reads. A server VS ended
+            // with shutdown+exit is a normal session turnover, not a failure (issue #555).
+            var wasUnexpected = IsUnexpectedExit(
+                _disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated);
+            if (wasUnexpected)
+                ReportUnexpectedExit(previousGeneration);
             DiscardDeadGeneration();
             _generation++;
+            _lifecycleReporter.Report(
+                TelemetryEvents.ServerRestarted,
+                wasUnexpected || _unexpectedExitReportedGeneration == previousGeneration
+                    ? ServerFailureReason.ProcessExited
+                    : ServerFailureReason.SessionEnded,
+                _generation);
 
             _logger.LogInformation(
                 "LspServerConnectionService: server generation #{Previous} is gone (VS ended the LSP session, " +
@@ -337,6 +368,34 @@ internal sealed class LspServerConnectionService : IDisposable
     }
 
     /// <summary>
+    /// Whether a server process that is gone ended without the client having asked it to: the connection
+    /// service is not shutting down, no LSP <c>shutdown</c> was observed and the pipe was not yet marked
+    /// terminated (it is marked as the <c>exit</c> notification goes out). <paramref name="pipeTerminated"/>
+    /// is <see langword="null"/> when there is no pipe (already discarded), which is never unexpected.
+    /// </summary>
+    internal static bool IsUnexpectedExit(bool disposed, bool shutdownObserved, bool? pipeTerminated) =>
+        !disposed && !shutdownObserved && pipeTerminated == false;
+
+    /// <summary>Reports that the server process started but VS's LSP initialize handshake with it failed (issue #845).</summary>
+    internal void ReportHandshakeFailed() =>
+        _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.StartFailed, _generation);
+
+    private void ReportUnexpectedExit(int generation)
+    {
+        // Interlocked max-style guard: only the first detector for a generation reports.
+        int seen;
+        do
+        {
+            seen = Volatile.Read(ref _unexpectedExitReportedGeneration);
+            if (seen >= generation)
+                return;
+        }
+        while (Interlocked.CompareExchange(ref _unexpectedExitReportedGeneration, generation, seen) != seen);
+
+        _lifecycleReporter.Report(TelemetryEvents.ServerExitedUnexpectedly, ServerFailureReason.ProcessExited, generation);
+    }
+
+    /// <summary>
     /// Resolves the bundled LSP server executable path relative to the extension assembly's own
     /// location. Pure/deterministic — extracted so the path-building logic is unit-testable
     /// without touching <see cref="Process"/> or <see cref="ThreadHelper"/>.
@@ -376,6 +435,7 @@ internal sealed class LspServerConnectionService : IDisposable
         if (!File.Exists(serverExe))
         {
             _logger.LogError("LspServerConnectionService: server executable not found at {ServerExe}.", serverExe);
+            _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.ExecutableNotFound, generation);
             return null;
         }
 
@@ -419,6 +479,17 @@ internal sealed class LspServerConnectionService : IDisposable
                     _logger.LogWarning("LSPServer stderr: {StdErr}", e.Data);
             };
             _serverProcess.BeginErrorReadLine();
+
+            // Detect a crash when it happens rather than only when VS next asks for a connection
+            // (issue #845); a dead server cannot report itself, so the client does.
+            var startedProcess = _serverProcess;
+            startedProcess.EnableRaisingEvents = true;
+            startedProcess.Exited += (_, _) =>
+            {
+                if (IsUnexpectedExit(_disposed, _shutdownHandshakeInterceptor?.ShutdownObserved ?? false, _interceptingPipe?.ServerTerminated)
+                    && ReferenceEquals(startedProcess, _serverProcess))
+                    ReportUnexpectedExit(generation);
+            };
 
             _logger.LogInformation("LspServerConnectionService: server process started (PID {ProcessId}).", _serverProcess.Id);
 
@@ -487,8 +558,10 @@ internal sealed class LspServerConnectionService : IDisposable
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.
+            // It holds events (bounded, TTL) until the transmitter resolves; the TelemetryTransmitter setter flushes it.
             var telemetryInterceptor = new TelemetryEventInterceptor(
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
+            _telemetryInterceptor = telemetryInterceptor;
             var receiveInterceptors = new ILspMessageInterceptor[]
                 { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
@@ -504,6 +577,7 @@ internal sealed class LspServerConnectionService : IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "LspServerConnectionService: failed to start server.");
+            _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.StartFailed, generation);
             return null;
         }
     }

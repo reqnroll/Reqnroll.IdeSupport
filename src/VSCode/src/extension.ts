@@ -32,7 +32,14 @@ import {
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
-import { ensureTelemetryReporter, registerTelemetry } from './telemetry';
+import {
+  deferTelemetryTeardownUntil,
+  drainTelemetryTeardown,
+  ensureTelemetryReporter,
+  registerTelemetry,
+  sendTelemetryEvent,
+} from './telemetry';
+import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
 import {
   SOURCE_ACTIVATION,
   createReportingErrorHandler,
@@ -49,6 +56,7 @@ import { showWalkthroughOnFirstActivation } from './walkthrough';
 let client: LanguageClient | undefined;
 let projectManager: ProjectManager | undefined;
 let statusBar: StatusBarManager | undefined;
+let serverLifecycle: ServerLifecycleTelemetry | undefined;
 
 /** The .NET RID for the current platform/arch combination the server is published for. */
 export function ridFor(platform: NodeJS.Platform, arch: string): string {
@@ -436,37 +444,53 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   statusBar = new StatusBarManager(client, appLogChannel);
   context.subscriptions.push(statusBar);
 
+  // Issue #845: server start-failure / unexpected-exit / restart telemetry. The reporter must exist
+  // before `client.start()` so a server that never comes up can still report; `registerTelemetry`
+  // below reuses it. Attached before start so the first `Starting` transition is seen.
+  ensureTelemetryReporter(context);
+  serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent);
+  context.subscriptions.push(serverLifecycle);
+
   // Issue #8 — per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't
   // depend on the LSP client, so it starts decorating already-open editors immediately.
   context.subscriptions.push(new TableHighlightService());
 
   client
     .start()
-    .then(() => {
-      projectManager = new ProjectManager(client!);
-      // Step usage count CodeLens for C# files (registered after client is running)
-      registerStepCodeLens(client!, context);
-      // Hook-match count CodeLens for .feature files (issue #269)
-      registerHookCodeLens(client!, context);
-      // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
-      // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
-      // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"
-      // action and a later vscode.TestController migration were both tried and reverted here.
-      // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
-      // above) instead of relying on vscode-languageclient's built-in sync feature.
-      context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
-      // Forward server-emitted telemetry/event notifications to Application Insights.
-      registerTelemetry(client!, context);
-      // LSP-server outcome pipeline (#700/#702), opt-in via reqnroll.testOutcomes.enabled —
-      // registers this session with the server and merges the bundled VSTest logger into
-      // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
-      // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
-      // blocks activation, and every failure degrades silently (see the module's own doc comment).
-      void activateTestOutcomes(context, client!);
-      // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
-      // doc comment for why it carries no real Run/Debug action (issue #504).
-      registerTestOutcomeCodeLens(client!, projectManager, context);
-    })
+    .then(
+      () => {
+        projectManager = new ProjectManager(client!);
+        // Step usage count CodeLens for C# files (registered after client is running)
+        registerStepCodeLens(client!, context);
+        // Hook-match count CodeLens for .feature files (issue #269)
+        registerHookCodeLens(client!, context);
+        // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
+        // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
+        // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"
+        // action and a later vscode.TestController migration were both tried and reverted here.
+        // Manually sync .cs documents (see manualDocumentSync.ts / createManualSyncMiddleware
+        // above) instead of relying on vscode-languageclient's built-in sync feature.
+        context.subscriptions.push(new ManualDocumentSync(client!, isCSharpDocument));
+        // Forward server-emitted telemetry/event notifications to Application Insights.
+        registerTelemetry(client!, context);
+        // LSP-server outcome pipeline (#700/#702), opt-in via reqnroll.testOutcomes.enabled —
+        // registers this session with the server and merges the bundled VSTest logger into
+        // whatever dotnet.unitTests.runSettingsPath already resolves to, so C# Dev Kit's own test
+        // runs report per-row/Scenario-Outline outcomes to the server. Fire-and-forget: never
+        // blocks activation, and every failure degrades silently (see the module's own doc comment).
+        void activateTestOutcomes(context, client!);
+        // Read-only outcome CodeLens on .feature Scenario/Outline lines — see that module's own
+        // doc comment for why it carries no real Run/Debug action (issue #504).
+        registerTestOutcomeCodeLens(client!, projectManager, context);
+      },
+      // Second argument of then(), not a trailing catch(): only a rejected start() is a server start
+      // failure. A throw in the success handler above (CodeLens registration etc.) happens after a
+      // successful start and must not be reported as ServerStartFailed (issue #845).
+      (err: unknown) => {
+        serverLifecycle?.reportStartRejected();
+        throw err;
+      },
+    )
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       void showError(`Reqnroll LSP server failed to start: ${msg}`);
@@ -479,5 +503,13 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
 export function deactivate(): Thenable<void> | undefined {
   projectManager?.dispose();
   setAppLogChannel(undefined);
-  return client?.stop();
+  // Deliberate stop: the resulting `Stopped` is not an unexpected server exit (issue #845).
+  serverLifecycle?.markIntentionalStop();
+  const stopping = client?.stop();
+  if (!stopping) return undefined;
+  // The server's shutdown-time telemetry (final FeatureUsageSummary, ServerSessionEnded) arrives while
+  // stop() is in flight, but VS Code disposes the subscriptions holding the telemetry forwarder and
+  // reporter as soon as this function returns; hold their disposal until stop() has settled (#845).
+  deferTelemetryTeardownUntil(stopping);
+  return stopping.finally(() => drainTelemetryTeardown());
 }

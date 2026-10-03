@@ -362,6 +362,41 @@ namespace S
     }
 
     [Fact]
+    public async Task UpdateFromSourceAsync_roslyn_event_carries_the_owner_registry_binding_counts()
+    {
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>())
+            .Returns(new[] { project });
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = CreateSutWithTelemetry(telemetry);
+        var csUri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "Steps.cs"));
+        const string source = """
+            using Reqnroll;
+            [Binding]
+            public class S
+            {
+                [Given("a thing")] public void A() { }
+                [BeforeScenario] public void B() { }
+            }
+            """;
+
+        await sut.UpdateFromSourceAsync(csUri, source, false, CancellationToken.None);
+
+        provider.Current.StepDefinitions.Length.Should().BeGreaterThan(0);
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                "Roslyn".Equals(d["DiscoverySource"]) &&
+                provider.Current.StepDefinitions.Length.Equals(d["StepDefinitionCount"]) &&
+                provider.Current.Hooks.Length.Equals(d["HookCount"])));
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    [Fact]
     public async Task UpdateFromSourceAsync_sets_csOpen_trigger_when_isOpen_true()
     {
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);

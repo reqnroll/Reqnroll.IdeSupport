@@ -124,6 +124,12 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IIdeSupportLogger>(),
                 sp.GetRequiredService<ILspTelemetryService>(),
                 FeatureUsageFlushService.ResolveIntervalFromEnvironment()))
+            // Server lifecycle telemetry (issue #845): ServerSessionStarted after the handshake,
+            // best-effort ServerSessionEnded at shutdown. Singleton so the session clock spans the process.
+            .AddSingleton(sp => new ServerSessionTelemetry(
+                sp.GetRequiredService<ILspTelemetryService>(),
+                sp.GetRequiredService<ClientIdeContext>(),
+                sp.GetRequiredService<IIdeSupportLogger>()))
             // F41: tracks the LSP `trace` level (--trace / InitializeParams.Trace / $/setTrace) and
             // issues $/logTrace notifications. Singleton so the level set by $/setTrace is visible
             // to every consumer (currently OperationDurationRecorder's PERF lines).

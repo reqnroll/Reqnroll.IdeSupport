@@ -71,6 +71,27 @@ public static class TelemetryProperties
     /// </summary>
     public const string StackFrames = "StackFrames";
 
+    /// <summary>Client (IDE) version the client reported in <c>InitializeParams.ClientInfo</c>; omitted when absent.</summary>
+    public const string ClientVersion = "ClientVersion";
+    /// <summary>OS family of the server process: <c>Windows</c>, <c>macOS</c>, <c>Linux</c> or <c>Other</c>.</summary>
+    public const string OperatingSystem = "OperatingSystem";
+    /// <summary>CPU architecture of the server process (<c>X64</c>, <c>Arm64</c>, ...).</summary>
+    public const string Architecture = "Architecture";
+    /// <summary>.NET runtime description of the server process (e.g. <c>.NET 10.0.0</c>).</summary>
+    public const string Runtime = "Runtime";
+    /// <summary>Milliseconds from server process start until the LSP handshake completed (<c>ServerSessionStarted</c>).</summary>
+    public const string StartupMs = "StartupMs";
+    /// <summary>Project-profile: distinct <c>.feature</c> files the project owns (best-effort; omitted when unknown).</summary>
+    public const string FeatureFileCount = "FeatureFileCount";
+    /// <summary>Project-profile: step definitions in the registry.</summary>
+    public const string StepDefinitionCount = "StepDefinitionCount";
+    /// <summary>Project-profile: distinct classes declaring step definitions or hooks (class names are never sent).</summary>
+    public const string StepBindingClassCount = "StepBindingClassCount";
+    /// <summary>Prefix of the flat per-hook-type count keys (<c>HookCount_BeforeScenario</c>, ...); the suffix is a <c>HookType</c> enum name.</summary>
+    public const string HookCountByTypePrefix = "HookCount_";
+    /// <summary>The project's target framework moniker(s).</summary>
+    public const string ProjectTargetFramework = "ProjectTargetFramework";
+
     /// <summary>Values of <see cref="Status"/>.</summary>
     public static class StepStatus
     {

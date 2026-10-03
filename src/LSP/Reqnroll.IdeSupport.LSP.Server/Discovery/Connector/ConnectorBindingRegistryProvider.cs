@@ -36,6 +36,7 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     private readonly IConnectorDiscoveryService _discoveryService;
     private readonly IIdeSupportLogger _logger;
     private readonly ILspTelemetryService? _telemetryService;
+    private readonly IProjectFeatureFileLookup? _featureFileLookup;
 
     // Last-good state.  Volatile so readers always see the latest write.
     private volatile ProjectBindingRegistry _current = ProjectBindingRegistry.Invalid;
@@ -71,7 +72,8 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
     public ConnectorBindingRegistryProvider(
         LspReqnrollProject project, IIdeSupportLogger logger, IFileSystemForIDE? fileSystem = null,
         ILspTelemetryService? telemetryService = null, IProjectFeatureFileLookup? featureFileLookup = null)
-        : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService)
+        : this(project, CreateDefaultDiscoveryService(logger, fileSystem, featureFileLookup), logger, telemetryService,
+            featureFileLookup)
     {
     }
 
@@ -104,8 +106,10 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
         LspReqnrollProject project,
         IConnectorDiscoveryService discoveryService,
         IIdeSupportLogger logger,
-        ILspTelemetryService? telemetryService)
+        ILspTelemetryService? telemetryService,
+        IProjectFeatureFileLookup? featureFileLookup = null)
     {
+        _featureFileLookup = featureFileLookup;
         _project          = project;
         _logger           = logger;
         _discoveryService = discoveryService;
@@ -340,6 +344,26 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, properties);
 
             _bindingRegistryChanged?.Invoke(this, true);
+
+            // Issue #845 (from #258): the project snapshot, a separate event so the discovery
+            // event's schema stays stable. Same trigger point, so it re-sends on every build that
+            // changed the bindings; the hash-noop path above sends none because nothing changed.
+            // Sent after the registry-changed notification so telemetry can never delay consumers
+            // of the new bindings. FeatureFileCount comes from the link-aware membership index (an
+            // in-memory query, no folder walk) and is omitted until the baseline has arrived.
+            // Guarded: the registry already changed successfully, so a fault while building this
+            // snapshot must not fall into the catch below and be reported as a failed discovery.
+            try
+            {
+                _telemetryService?.SendEvent(
+                    TelemetryEvents.ProjectCharacteristics,
+                    ProjectCharacteristicsTelemetry.Build(
+                        newRegistry, _featureFileLookup?.CountFeatureFiles(_project), _project.TargetFrameworkMonikers));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogVerbose($"[{_project.ProjectName}] ProjectCharacteristics telemetry failed: {ex.Message}");
+            }
         }
         catch (OperationCanceledException)
         {

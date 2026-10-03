@@ -49,6 +49,17 @@ object RiderTelemetryTransmitter {
      */
     internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
 
+    // Server-lifecycle events (issue #845): sent by the client because a dead server cannot report
+    // itself. `Reason` is always one of the SERVER_FAILURE_REASON_* values below, `AttemptNumber` the
+    // 1-based start attempt in this IDE session. Mirror of ServerLifecycleTelemetry.cs.
+    internal const val SERVER_START_FAILED = "ServerStartFailed"
+    internal const val SERVER_EXITED_UNEXPECTEDLY = "ServerExitedUnexpectedly"
+    internal const val SERVER_RESTARTED = "ServerRestarted"
+
+    internal const val SERVER_FAILURE_REASON_START_FAILED = "StartFailed"
+    internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
+    internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
+
     /** Exception caught in the plugin's own code (issue #621); same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
     internal const val UNHANDLED_EXCEPTION = "UnhandledException"
 

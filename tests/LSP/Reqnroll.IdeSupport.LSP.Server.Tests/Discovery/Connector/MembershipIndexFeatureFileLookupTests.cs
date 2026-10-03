@@ -58,6 +58,38 @@ public class MembershipIndexFeatureFileLookupTests
     }
 
     [Fact]
+    public void Counts_the_linked_feature_files_the_baseline_lists()
+    {
+        var project = MakeProject();
+        _scopeManager.HasBaselineForProject(project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(project)
+            .Returns([@"C:\repos\MyApp\specs\A.feature", @"C:\repos\Shared\B.feature"]);
+
+        CreateSut().CountFeatureFiles(project).Should().Be(2);
+    }
+
+    [Fact]
+    public void Count_is_zero_when_the_baseline_has_arrived_and_lists_none()
+    {
+        var project = MakeProject();
+        _scopeManager.HasBaselineForProject(project).Returns(true);
+        _scopeManager.GetIndexedFeatureFiles(project).Returns([]);
+
+        CreateSut().CountFeatureFiles(project).Should().Be(0);
+    }
+
+    [Fact]
+    public void Count_is_unknown_not_zero_until_the_baseline_arrives_or_for_a_non_lsp_scope()
+    {
+        var project = MakeProject();
+        _scopeManager.HasBaselineForProject(project).Returns(false);
+        _scopeManager.GetIndexedFeatureFiles(project).Returns([]);
+
+        CreateSut().CountFeatureFiles(project).Should().BeNull();
+        CreateSut().CountFeatureFiles(Substitute.For<IProjectScope>()).Should().BeNull();
+    }
+
+    [Fact]
     public void Reports_unknown_for_a_scope_that_is_not_an_lsp_project()
     {
         // e.g. the scope the spec fixtures build directly; there is no membership index entry to

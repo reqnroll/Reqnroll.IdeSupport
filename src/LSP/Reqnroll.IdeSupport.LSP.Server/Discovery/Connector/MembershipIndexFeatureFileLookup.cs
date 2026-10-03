@@ -25,9 +25,15 @@ public sealed class MembershipIndexFeatureFileLookup : IProjectFeatureFileLookup
         // re-scan for), so "no baseline yet" has to surface as unknown rather than as "no feature
         // files" -- otherwise the very first discovery run after a solution opens would be
         // skipped for every project.
+        return CountFeatureFiles(scope) is { } count ? count > 0 : null;
+    }
+
+    /// <inheritdoc/>
+    public int? CountFeatureFiles(IProjectScope scope)
+    {
         if (scope is not LspReqnrollProject project || !_scopeManager.HasBaselineForProject(project))
             return null;
 
-        return _scopeManager.GetIndexedFeatureFiles(project).Count > 0;
+        return _scopeManager.GetIndexedFeatureFiles(project).Count;
     }
 }

@@ -49,4 +49,23 @@ public class LspServerConnectionServiceTests
             "--ide visualstudio --log-level Warning --protocol-log-level Warning --trace Off");
 #endif
     }
+
+    [Theory]
+    // disposed, shutdownObserved, pipeTerminated, expected
+    [InlineData(false, false, false, true)]   // process died with the pipe still live: a crash
+    [InlineData(false, true, false, false)]   // VS's client sent shutdown first: a normal end
+    [InlineData(false, false, true, false)]   // exit already went out (pipe marked terminated): a normal end (issue #555)
+    [InlineData(true, false, false, false)]   // we are disposing: our own teardown, not a failure
+    public void IsUnexpectedExit_only_flags_a_dead_server_the_client_did_not_ask_to_stop(
+        bool disposed, bool shutdownObserved, bool pipeTerminated, bool expected)
+    {
+        LspServerConnectionService.IsUnexpectedExit(disposed, shutdownObserved, pipeTerminated).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsUnexpectedExit_is_false_when_the_pipe_has_already_been_discarded()
+    {
+        LspServerConnectionService.IsUnexpectedExit(disposed: false, shutdownObserved: false, pipeTerminated: null)
+            .Should().BeFalse();
+    }
 }

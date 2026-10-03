@@ -154,10 +154,30 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
         {
             _logger.LogError("ReqnrollLanguageClient: LSP server connection unavailable. Disabling.");
             Enabled = false;
+            await ResolveTransmitterForStartFailureAsync(cancellationToken).ConfigureAwait(false);
             return null;
         }
 
         return pipe;
+    }
+
+    /// <summary>
+    /// A server that never started never reaches <see cref="OnServerInitializationResultAsync"/>, which is
+    /// where the transmitter is normally resolved, so the start-failure event (issue #845) raised by
+    /// <see cref="LspServerConnectionService"/> would stay queued forever. Resolve it here, best-effort,
+    /// so that queue is flushed.
+    /// </summary>
+    private async Task ResolveTransmitterForStartFailureAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            _connectionService.TelemetryTransmitter ??= ResolveMefService<ITelemetryTransmitter>(ServiceProvider.GlobalProvider);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "ReqnrollLanguageClient: could not resolve the telemetry transmitter after a start failure.");
+        }
     }
 
     /// <inheritdoc />
@@ -174,6 +194,9 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             _logger.LogError(
                 "ReqnrollLanguageClient: server initialization failed. Info: {FailMessage}", failMsg);
             Enabled = false;
+            // The process started but VS's handshake with it failed (issue #845).
+            _connectionService.ReportHandshakeFailed();
+            await ResolveTransmitterForStartFailureAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -240,7 +263,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     .SwitchToMainThreadAsync(cancellationToken);
 
                 var serviceProvider = ServiceProvider.GlobalProvider;
-                _connectionService.TelemetryTransmitter = ResolveMefService<ITelemetryTransmitter>(serviceProvider);
+                _connectionService.TelemetryTransmitter ??= ResolveMefService<ITelemetryTransmitter>(serviceProvider);
 
                 // Run CodeLens bridge (design doc §5/§6, issue #262) — needs a DTE-resolvable
                 // IServiceProvider for the owning project's output assembly path, so it's
