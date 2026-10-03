@@ -91,6 +91,10 @@ public static class TelemetryProperties
     public const string HookCountByTypePrefix = "HookCount_";
     /// <summary>The project's target framework moniker(s).</summary>
     public const string ProjectTargetFramework = "ProjectTargetFramework";
+    /// <summary>Project-profile: unit test framework inferred from package references (<c>MSTest</c>, <c>xUnit</c>, <c>NUnit</c>, <c>TUnit</c>, <c>Multiple</c>); omitted when unknown.</summary>
+    public const string UnitTestFramework = "UnitTestFramework";
+    /// <summary>Project-profile: test platform inferred from package references (<c>VSTest</c> or <c>MTP</c>); omitted when unknown.</summary>
+    public const string TestPlatform = "TestPlatform";
 
     /// <summary>Values of <see cref="Status"/>.</summary>
     public static class StepStatus
