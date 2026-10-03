@@ -13,6 +13,7 @@ import {
   ensureTelemetryReporter,
   registerTelemetry,
   resetTelemetryReporterForTests,
+  resolveConnectionString,
   sendTelemetryEvent,
   withClientIdentity,
 } from '../telemetry';
@@ -75,6 +76,43 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
+  suite('resolveConnectionString (#889)', () => {
+    const builtIn = resolveConnectionString(undefined);
+
+    test('unset or blank falls back to the built-in connection without complaint', () => {
+      const messages: string[] = [];
+      assert.strictEqual(
+        resolveConnectionString('', (m) => messages.push(m)),
+        builtIn,
+      );
+      assert.strictEqual(
+        resolveConnectionString('   ', (m) => messages.push(m)),
+        builtIn,
+      );
+      assert.deepStrictEqual(messages, []);
+    });
+
+    test('a connection string with an InstrumentationKey is used, trimmed', () => {
+      const value = 'InstrumentationKey=abc;IngestionEndpoint=https://localhost:1234/';
+      assert.strictEqual(resolveConnectionString(`  ${value} `), value);
+      assert.strictEqual(
+        resolveConnectionString('IngestionEndpoint=https://x/;instrumentationkey=abc'),
+        'IngestionEndpoint=https://x/;instrumentationkey=abc',
+      );
+    });
+
+    test('a value without a usable InstrumentationKey is ignored and reported', () => {
+      for (const bad of ['nonsense', 'InstrumentationKey=', 'IngestionEndpoint=https://x/']) {
+        const messages: string[] = [];
+        assert.strictEqual(
+          resolveConnectionString(bad, (m) => messages.push(m)),
+          builtIn,
+        );
+        assert.strictEqual(messages.length, 1);
+      }
+    });
+  });
+
   // The activated extension owns a module-level reporter (ensureTelemetryReporter, #845); start clean.
   setup(() => resetTelemetryReporterForTests());
 

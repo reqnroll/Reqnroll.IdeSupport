@@ -6,9 +6,30 @@ import { logInfo } from './logging/appNotify';
 import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
 
 // Same Application Insights resource VS's AnalyticsTransmitter uses (see
-// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Analytics/InstrumentationKey.txt)
+// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt)
 // so usage events from every Reqnroll IDE client land in the same place.
 const CONNECTION_STRING = 'InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d20b';
+
+/**
+ * Developer override (issue #889): REQNROLL_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
+ * replaces the built-in connection string when it carries a non-empty `InstrumentationKey`.
+ * Anything else is ignored (`onInvalid` is told why) so a typo never silently drops events.
+ */
+export function resolveConnectionString(
+  override: string | undefined,
+  onInvalid?: (message: string) => void,
+): string {
+  const value = override?.trim();
+  if (!value) return CONNECTION_STRING;
+  const hasKey = value.split(';').some((part) => /^\s*InstrumentationKey\s*=\s*\S/i.test(part));
+  if (!hasKey) {
+    onInvalid?.(
+      'REQNROLL_TELEMETRY_CONNECTION_STRING has no InstrumentationKey; using the built-in connection.',
+    );
+    return CONNECTION_STRING;
+  }
+  return value;
+}
 
 type TelemetryPropertyValue = string | number | boolean | null | undefined;
 
@@ -115,7 +136,9 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
   if (reporter || !isTelemetryEnabledByEnv()) return;
 
   breaker = newBreaker();
-  const created = new TelemetryReporter(CONNECTION_STRING);
+  const created = new TelemetryReporter(
+    resolveConnectionString(process.env.REQNROLL_TELEMETRY_CONNECTION_STRING, logInfo),
+  );
   reporter = created;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),

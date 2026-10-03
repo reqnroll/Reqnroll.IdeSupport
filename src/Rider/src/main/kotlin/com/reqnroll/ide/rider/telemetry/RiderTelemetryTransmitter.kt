@@ -35,6 +35,39 @@ object RiderTelemetryTransmitter {
     private const val INSTRUMENTATION_KEY = "3fd018ff-819d-4685-a6e1-6f09bc98d20b"
     private const val INGESTION_ENDPOINT = "https://dc.services.visualstudio.com/v2/track"
 
+    /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
+    internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_TELEMETRY_CONNECTION_STRING"
+
+    internal data class Connection(val instrumentationKey: String, val endpoint: String)
+
+    private val BUILT_IN_CONNECTION = Connection(INSTRUMENTATION_KEY, INGESTION_ENDPOINT)
+
+    /**
+     * Pure/parameterized like [isEnabled]. Uses [envValue] when it carries a non-empty
+     * `InstrumentationKey` (and, optionally, an `IngestionEndpoint`, to which `/v2/track` is
+     * appended); anything else falls back to the built-in connection and is reported to [onInvalid].
+     */
+    internal fun resolveConnection(envValue: String?, onInvalid: (String) -> Unit = {}): Connection {
+        val value = envValue?.trim()
+        if (value.isNullOrEmpty()) return BUILT_IN_CONNECTION
+        val parts = value.split(';').mapNotNull { part ->
+            val idx = part.indexOf('=')
+            if (idx > 0) part.substring(0, idx).trim().lowercase() to part.substring(idx + 1).trim() else null
+        }.toMap()
+        val key = parts["instrumentationkey"]
+        if (key.isNullOrEmpty()) {
+            onInvalid("$CONNECTION_STRING_ENV_VAR has no InstrumentationKey; using the built-in connection.")
+            return BUILT_IN_CONNECTION
+        }
+        val endpoint = parts["ingestionendpoint"]?.takeIf { it.isNotEmpty() }
+            ?.let { it.trimEnd('/') + "/v2/track" } ?: INGESTION_ENDPOINT
+        return Connection(key, endpoint)
+    }
+
+    private val connection: Connection by lazy {
+        resolveConnection(System.getenv(CONNECTION_STRING_ENV_VAR)) { ReqnrollDebugLogger.info(it) }
+    }
+
     // Same env-var opt-out contract as Reqnroll.IdeSupport.Common.Telemetry.EnableTelemetryChecker
     // (used by VS's transmitter) — kept identical rather than inventing a Rider-specific setting,
     // since REQNROLL_TELEMETRY_ENABLED is meant to be a single cross-IDE kill switch.
@@ -118,8 +151,8 @@ object RiderTelemetryTransmitter {
             properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
             stampClientIdentity(stringProps, ideVersion(), extensionVersion())
 
-            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now())
-            post(httpClient, URI.create(INGESTION_ENDPOINT), body, breaker) { reason ->
+            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
+            post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
                 debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = reason)
             }
 
@@ -219,10 +252,11 @@ object RiderTelemetryTransmitter {
         userId: String,
         properties: Map<String, String>,
         timestamp: Instant,
+        instrumentationKey: String = INSTRUMENTATION_KEY,
     ): String {
         val propsJson = properties.entries.joinToString(",") { (key, value) -> "${jsonString(key)}:${jsonString(value)}" }
         return """
-            {"name":"Microsoft.ApplicationInsights.Event","time":"$timestamp","iKey":"$INSTRUMENTATION_KEY","tags":{"ai.user.id":${jsonString(userId)}},"data":{"baseType":"EventData","baseData":{"ver":2,"name":${jsonString(eventName)},"properties":{$propsJson}}}}
+            {"name":"Microsoft.ApplicationInsights.Event","time":"$timestamp","iKey":${jsonString(instrumentationKey)},"tags":{"ai.user.id":${jsonString(userId)}},"data":{"baseType":"EventData","baseData":{"ver":2,"name":${jsonString(eventName)},"properties":{$propsJson}}}}
         """.trimIndent()
     }
 

@@ -72,6 +72,16 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         _debugLog = debugLog ?? NullTelemetryDebugLog.Instance;
     }
 
+    private static string? ReadBuiltInConnectionString()
+    {
+        var assembly = typeof(TelemetryTransmitter).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .Single(n => n.EndsWith("InstrumentationKey.txt", StringComparison.Ordinal));
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        using var reader = new StreamReader(stream!);
+        return reader.ReadLine();
+    }
+
     private static TelemetryClient CreateClient(IUserUniqueIdStore userStore, IVersionProvider versionProvider)
     {
         // Best-effort delivery (#859). InMemoryChannel is already what a default
@@ -87,12 +97,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         {
             TelemetryChannel = new InMemoryChannel { MaxTelemetryBufferCapacity = 100, SendingInterval = TimeSpan.FromSeconds(30) },
         };
-        var assembly = typeof(TelemetryTransmitter).Assembly;
-        var resourceName = assembly.GetManifestResourceNames()
-            .Single(n => n.EndsWith("InstrumentationKey.txt", StringComparison.Ordinal));
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        using var reader = new StreamReader(stream!);
-        config.ConnectionString = reader.ReadLine();
+        config.ConnectionString = TelemetryConnectionOverride.FromEnvironment() ?? ReadBuiltInConnectionString();
         var client = new TelemetryClient(config);
         client.Context.User.Id = userStore.GetUserId();
         client.Context.User.AccountId = userStore.GetUserId();

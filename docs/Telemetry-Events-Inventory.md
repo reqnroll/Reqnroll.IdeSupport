@@ -32,6 +32,14 @@ Two emission paths exist:
    link clicks), or describe something only the IDE client can observe (a genuine "Go to Hooks"
    navigation). VS Code and Rider similarly originate `GoToHook command executed` themselves.
 
+Connection override (issue #889): `REQNROLL_TELEMETRY_CONNECTION_STRING`, an Application Insights
+connection string (`InstrumentationKey=...[;IngestionEndpoint=...]`), replaces the built-in
+connection in all three hosts (VS via `TelemetryConnectionOverride`, VS Code via
+`resolveConnectionString`, Rider via `resolveConnection`) so developers can send to their own
+resource. Unset uses the built-in connection; a value with no `InstrumentationKey` is logged and
+ignored. `REQNROLL_TELEMETRY_ENABLED` still takes precedence. The LSP server never transmits, so it
+needs no change.
+
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
 `RiderTelemetryTransmitter.transmit`, VS Code in its transmitter). VS Code *additionally* honors
