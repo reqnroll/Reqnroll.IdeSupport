@@ -24,7 +24,7 @@ public sealed record ClientFacets
     /// <c>full</c>/<c>range</c> from the advertised <c>semanticTokensProvider</c>. The legend is
     /// still advertised: the push path decodes against it.
     /// </summary>
-    public bool PushesSemanticTokens { get; init; }
+    public bool RequiresPushedSemanticTokens { get; init; }
 
     /// <summary>
     /// The client is refreshed with the custom <c>reqnroll/refreshCodeLens</c> notification instead

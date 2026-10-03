@@ -7,7 +7,7 @@ public class ClientFacetResolverTests
 {
     private static readonly ClientFacets VisualStudioFacets = new()
     {
-        PushesSemanticTokens = true,
+        RequiresPushedSemanticTokens = true,
         UsesCustomCodeLensRefresh = true,
         RejectsEmptyTriggerCompletion = true,
         AppliesRenameViaPush = true,

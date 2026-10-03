@@ -361,20 +361,20 @@ public class Program
                 // CodeLensRefreshRequester all read ClientIdeContext, and it is the only one of the
                 // two that knows the identity resolved from ClientInfo when --ide was absent.
                 // ApplyClientIdentity runs first, above, so the fallback is already applied here.
-                var pushesSemanticTokens = languageServer.Services
-                    .GetRequiredService<ClientIdeContext>().Facets.PushesSemanticTokens;
+                var requiresPushedSemanticTokens = languageServer.Services
+                    .GetRequiredService<ClientIdeContext>().Facets.RequiresPushedSemanticTokens;
 
                 var tokenService = languageServer.Services.GetRequiredService<ISemanticTokensService>();
 
                 response.Capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
                 {
                     Legend = tokenService.Legend,
-                    Full = !pushesSemanticTokens,
+                    Full = !requiresPushedSemanticTokens,
                     // VS Code's and Rider's built-in LSP clients both support range requests (used as a
                     // large-file/viewport optimization); advertise it since SemanticTokensHandler already
                     // implements textDocument/semanticTokens/range (issue #123). Withheld for VS along
                     // with Full above, per the note at the top of this method.
-                    Range = !pushesSemanticTokens
+                    Range = !requiresPushedSemanticTokens
                 };
             }
 

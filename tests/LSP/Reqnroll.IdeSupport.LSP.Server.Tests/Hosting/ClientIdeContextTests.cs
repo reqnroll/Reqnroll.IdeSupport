@@ -29,7 +29,7 @@ public class ClientIdeContextTests
         var context = new ClientIdeContext("visualstudio", TraceLevel.Verbose);
 
         context.Ide.Should().Be("visualstudio");
-        context.Facets.PushesSemanticTokens.Should().BeTrue();
+        context.Facets.RequiresPushedSemanticTokens.Should().BeTrue();
     }
 
     // ── codeLens/resolve opt-in allowlist (issue #471) ─────────────────────────
@@ -105,7 +105,7 @@ public class ClientIdeContextTests
         // The cross-check half of issue #709: the disagreement is recorded (ClientName), but it never
         // changes which IDE the server thinks it is talking to.
         context.Ide.Should().Be("vscode");
-        context.Facets.PushesSemanticTokens.Should().BeFalse();
+        context.Facets.RequiresPushedSemanticTokens.Should().BeFalse();
         context.IdeResolvedFromClientInfo.Should().BeFalse();
         context.ClientName.Should().Be("Visual Studio");
         context.ClientVersion.Should().Be("17.14.0");
@@ -143,7 +143,7 @@ public class ClientIdeContextTests
 
             context.ApplyClientInfo(new ClientInfo { Name = name });
 
-            context.Facets.PushesSemanticTokens.Should().BeFalse($"'{name}' is a VS Code client");
+            context.Facets.RequiresPushedSemanticTokens.Should().BeFalse($"'{name}' is a VS Code client");
             context.Facets.RunsVscodeOpenCommandLocally.Should().BeTrue($"'{name}' is a VS Code client");
         }
     }

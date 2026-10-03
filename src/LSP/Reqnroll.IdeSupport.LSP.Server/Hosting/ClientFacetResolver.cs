@@ -55,7 +55,7 @@ internal static class ClientFacetResolver
         {
             return new ClientFacets
             {
-                PushesSemanticTokens = true,
+                RequiresPushedSemanticTokens = true,
                 UsesCustomCodeLensRefresh = true,
                 RejectsEmptyTriggerCompletion = true,
                 AppliesRenameViaPush = true,
