@@ -210,12 +210,12 @@ internal sealed class DefineStepsActionBuilder
             Kind        = CodeActionKind.QuickFix,
             Edit        = edit,
             Diagnostics = diagnostics,
-            // VS Code executes this command after applying the edit, opening the target file.
-            // Other clients receive an unknown command they can safely ignore.
+            // Clients run this command after applying the edit; the server handler reports the
+            // trigger (issue #847) and, for VS Code, reveals the file.
             Command     = new Command
             {
                 Title     = "Open step definition file",
-                Name      = "vscode.open",
+                Name      = DefineStepsTriggeredHandler.CommandName,
                 Arguments = new JArray(targetUri.ToString())
             },
             IsPreferred = isPreferred
