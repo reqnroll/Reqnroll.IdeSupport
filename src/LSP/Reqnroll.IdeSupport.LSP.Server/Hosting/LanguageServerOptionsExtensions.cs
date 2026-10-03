@@ -63,6 +63,7 @@ public static class LanguageServerOptionsExtensions
                .AddHandler<FormattingHandler>()
                .AddHandler<DocumentSymbolHandler>()
                .AddHandler<CommentToggleHandler>()
+               .AddHandler<DefineStepsTriggeredHandler>()
                // F41: standard $/setTrace notification, letting the client change the trace
                // level at runtime.
                .AddHandler<SetTraceNotificationHandler>();

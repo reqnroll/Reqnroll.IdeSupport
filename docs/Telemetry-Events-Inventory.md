@@ -40,6 +40,36 @@ telemetry settings (tracked as a follow-up). Debugging: `REQNROLL_TELEMETRY_DEBU
 event (server- and host-side) to a local JSONL file — see the archived
 `docs/Archive/build-plan-telemetry-capture.md` §8.
 
+**Delivery policy: best-effort, bounded, silent (issue #859).** Telemetry must be invisible when it
+cannot be delivered (offline, DNS failure, blocked or black-holed endpoint): no exception reaches the
+user, nothing on the UI thread or in the shutdown path waits on the network, and no retry storm or
+unbounded queue builds up. How a host *detects* the failure differs, because its client API does:
+
+| Host | Failure detection | User-visible |
+|---|---|---|
+| **VS** | none during the session. `Microsoft.ApplicationInsights` hands the event to a background sender that swallows the outcome (`CoreEventSource`/ETW only); non-2xx and timeout responses are not surfaced either. Only the flush in `DisposeAsync` can be observed. | **No notice** — deliberate: a host that cannot detect the failure must not claim it can. Events are simply lost. |
+| **VS Code** | `telemetryCircuitBreaker.ts`: guarded `sendTelemetryEvent` plus a bounded reporter dispose. | One line on the first failure: `Telemetry endpoint unreachable; telemetry for this session will be dropped`. |
+| **Rider** | `TelemetryCircuitBreaker.kt`: 5 s connect/request timeouts and non-2xx (403/407) counted as failures — Rider observes every send. | Same single line. |
+
+Common to all three:
+
+- **Dropped, not queued.** VS uses the SDK's `InMemoryChannel` (which is already the default channel):
+  no on-disk buffer, so nothing is replayed later. `MaxTelemetryBufferCapacity = 100` only sets how many
+  items trigger an immediate send; the hard cap is the SDK's own `TelemetryBuffer.BacklogSize`
+  (1,000,000 items), past which items are dropped rather than queued. VS Code and Rider drop on their
+  own send paths.
+- **No exception reaches the user, and no unobserved task exception is produced.** VS never reports a
+  failed transmission as a new exception event (it would go to the same unreachable endpoint), and the
+  flush it abandons at shutdown is observed explicitly.
+- **Shutdown is never delayed by a flush that cannot succeed.** VS bounds the flush to 500 ms and no
+  longer waits an unconditional extra second; VS Code bounds the reporter's dispose to 500 ms; Rider's
+  send path is timeout-bounded.
+- The `REQNROLL_TELEMETRY_ENABLED` kill switch and the local debug log
+  (`REQNROLL_TELEMETRY_DEBUG_LOG`, #799) are unchanged. Caveat on the debug log: it records
+  `transmitted:true` at *hand-off*, which is all VS can know — a `transmitted:false` with an error
+  appears there only if the channel faults synchronously, not when the endpoint is merely unreachable.
+  Rider and VS Code record the real outcome.
+
 **Client identity (issue #844).** Every event carries one canonical client identity so
 cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniformly. The decision:
 
@@ -169,11 +199,20 @@ prefetch, so genuine-navigation telemetry is emitted client-side as
 | | |
 |---|---|
 | **Emitter** | `CodeActionHandler` |
-| **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user accepts it — the `WorkspaceEdit` is applied client-side, so the server can't observe acceptance |
+| **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user picks it — see [`DefineStepsCommandExecuted`](#definestepscommandexecuted) |
 | **Properties** | `UndefinedStepCount` (int), `ActionsOffered` (int, counted from the final post-filter/post-cap list) |
 
-**Analytics use.** Undefined-step pressure (how often the quick fix is needed) and offer rate.
-Acceptance rate is not measurable server-side by design.
+**Analytics use.** Undefined-step pressure (how often the quick fix is needed) and offer availability.
+VS and Rider may request code actions on every caret move, so this is not a count of lightbulb opens.
+
+### `DefineStepsCommandExecuted`
+| | |
+|---|---|
+| **Emitter** | `DefineStepsTriggeredHandler` |
+| **When** | A client runs the `reqnroll.defineStepsTriggered` command that every "Define step(s)" code action carries. Clients run a code action's command after applying its edit, so this is the user picking the quick fix (any of its variants). Not sent for hand-written definitions |
+| **Properties** | none |
+
+**Analytics use.** Acceptance rate = `DefineSteps command executed` / `DefineSteps command offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, replacing the former client-side `vscode.open` command (a code action has one command slot).
 
 ### `FindUnusedStepDefinitionsCommandExecuted`
 | | |

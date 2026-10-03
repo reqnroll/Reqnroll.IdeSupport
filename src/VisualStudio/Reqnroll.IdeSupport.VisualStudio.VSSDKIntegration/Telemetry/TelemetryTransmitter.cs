@@ -3,6 +3,7 @@ using System.ComponentModel.Composition;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -23,6 +24,15 @@ namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 /// (<see cref="ITelemetryTransmitter"/>, <see cref="ITelemetryEvent"/>) stay in
 /// Core/Common so the cross-platform server's dependency graph never pulls in AppInsights.
 /// </para>
+/// <para>
+/// Delivery policy (#859): best-effort and silent. Events are handed to an in-memory channel that is
+/// never persisted, and a send that cannot reach the endpoint is dropped by the SDK without any
+/// signal reaching this class — so VS neither queues for later nor tells the user. Only shutdown is
+/// actively bounded (see <see cref="DisposeAsync"/>). The one-line "telemetry is being dropped"
+/// notice that the VS Code and Rider transmitters write has no VS counterpart, because this host
+/// cannot detect the failure; the asymmetry is deliberate and documented in
+/// <c>docs/Telemetry-Events-Inventory.md</c> §1.
+/// </para>
 /// </summary>
 [Export(typeof(ITelemetryTransmitter))]
 public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
@@ -31,6 +41,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
     private readonly IEnableTelemetryChecker _enableTelemetryChecker;
     private readonly IIdeSupportLogger? _logger;
     private readonly ITelemetryDebugLog _debugLog;
+    private static readonly TimeSpan FlushTimeout = TimeSpan.FromMilliseconds(500);
 
     /// <summary>MEF importing constructor; builds a real <see cref="TelemetryClient"/> backed by Application Insights.</summary>
     [ImportingConstructor]
@@ -63,7 +74,19 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
 
     private static TelemetryClient CreateClient(IUserUniqueIdStore userStore, IVersionProvider versionProvider)
     {
-        var config = new TelemetryConfiguration();
+        // Best-effort delivery (#859). InMemoryChannel is already what a default
+        // TelemetryConfiguration uses (TelemetrySink creates one), so naming it here only makes the
+        // delivery policy explicit and lets both knobs be seen:
+        // - SendingInterval: how often the buffered items are POSTed (the SDK default, 30 s);
+        // - MaxTelemetryBufferCapacity: how many items trigger an immediate send, *not* a hard cap.
+        // The hard cap is TelemetryBuffer.BacklogSize (SDK default: 1,000,000 items): past it items
+        // are dropped rather than queued, and there is no on-disk buffer, so nothing is replayed
+        // later. A failed send is swallowed by the channel's transmitter (CoreEventSource/ETW only)
+        // and never reaches this class — see DisposeAsync for what that means for the host.
+        var config = new TelemetryConfiguration
+        {
+            TelemetryChannel = new InMemoryChannel { MaxTelemetryBufferCapacity = 100, SendingInterval = TimeSpan.FromSeconds(30) },
+        };
         var assembly = typeof(TelemetryTransmitter).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
             .Single(n => n.EndsWith("InstrumentationKey.txt", StringComparison.Ordinal));
@@ -123,9 +146,12 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         }
         catch (Exception ex)
         {
+            // Never report a failed transmission as a new exception event: it would go to the same
+            // unreachable endpoint (#859). This catch is defensive only — the channel hands the
+            // event off to a background sender and does not throw for an unreachable endpoint, so
+            // in practice a dead endpoint shows up here only as a synchronous channel fault.
             _debugLog.Record("host", telemetryEvent.EventName, telemetryEvent.Properties,
                 enabled: enabled, transmitted: false, error: ex.Message);
-            TransmitExceptionEvent(ex, ImmutableDictionary<string, object>.Empty);
         }
     }
 
@@ -227,10 +253,41 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             exception is HttpRequestException;
     }
 
-    /// <summary>Flushes any queued telemetry to Application Insights before this transmitter is disposed.</summary>
+    /// <summary>
+    /// Flushes any queued telemetry to Application Insights before this transmitter is disposed,
+    /// bounded so an unreachable endpoint cannot delay host shutdown (#859).
+    /// </summary>
+    /// <remarks>
+    /// The flush is the only place where this class can observe an unreachable endpoint: the channel
+    /// delivers asynchronously and swallows background send failures (they reach ETW/self-diagnostics
+    /// only), so nothing can be detected earlier in the session — hence no breaker and no session
+    /// notice here. The wait is bounded by <see cref="FlushTimeout"/>; an abandoned flush keeps
+    /// running on the thread pool until the SDK's own 100 s HTTP timeout elapses.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
-        _telemetryClient.Flush();
-        await Task.Delay(1000);
+        try
+        {
+            var flush = Task.Run(() => _telemetryClient.Flush());
+            if (await Task.WhenAny(flush, Task.Delay(FlushTimeout)).ConfigureAwait(false) != flush)
+            {
+                // Abandon the still-running flush; observe its eventual fault so it is never unobserved.
+                _ = flush.ContinueWith(t => _ = t.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                _logger?.LogVerbose(() => $"Telemetry flush did not finish within {FlushTimeout.TotalMilliseconds} ms; abandoning it.");
+            }
+            else if (flush.IsFaulted)
+            {
+                // Reading Exception observes it, so a failed flush can never surface as an unobserved
+                // task exception.
+                _logger?.LogVerbose(() => $"Telemetry flush failed: {flush.Exception?.GetBaseException().Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // The endpoint is unreachable or the channel is already gone: telemetry is lost either
+            // way, and shutdown must not fail because of it.
+            _logger?.LogVerbose(() => $"Telemetry flush failed: {ex.Message}");
+        }
     }
 }
