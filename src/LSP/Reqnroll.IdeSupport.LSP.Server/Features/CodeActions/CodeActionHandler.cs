@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// Handles <c>textDocument/codeAction</c> requests for <c>*.feature</c> files: generates C#
 /// step-definition stubs for undefined steps (Define Steps), offers "Insert '&lt;keyword&gt;'"
 /// fixes for Gherkin syntax errors, and offers "Go to '&lt;method&gt;'" navigation for ambiguous
-/// steps — the last of these only for VS Code (see <see cref="ClientIdeContext.IsVSCode"/>).
+/// steps — the last of these only for VS Code (see <see cref="ClientFacets.RunsVscodeOpenCommandLocally"/>).
 /// Registered via OmniSharp dynamic registration (<see cref="ICodeActionHandler"/>), scoped to
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
@@ -158,8 +158,8 @@ public sealed class CodeActionHandler : ICodeActionHandler
         // no Edit. VS Code's LSP client recognizes that command name and runs it locally; Visual
         // Studio and Rider have no such special-casing, forward it to the server via
         // workspace/executeCommand instead, and get back "Method not found" (confirmed live in
-        // VS) — so the action would silently do nothing there. See ClientIdeContext.IsVSCode.
-        if (stepAtCursor is { IsAmbiguous: true } && _clientIde.IsVSCode)
+        // VS) — so the action would silently do nothing there. See ClientFacets.RunsVscodeOpenCommandLocally.
+        if (stepAtCursor is { IsAmbiguous: true } && _clientIde.Facets.RunsVscodeOpenCommandLocally)
         {
             actions.AddRange(_ambiguousActionBuilder.Build(stepAtCursor));
         }

@@ -24,12 +24,12 @@ public class ClientIdeContextTests
     }
 
     [Fact]
-    public void Ide_and_IsVisualStudio_are_unaffected_by_log_level()
+    public void Ide_and_Facets_are_unaffected_by_log_level()
     {
         var context = new ClientIdeContext("visualstudio", TraceLevel.Verbose);
 
         context.Ide.Should().Be("visualstudio");
-        context.IsVisualStudio.Should().BeTrue();
+        context.Facets.RequiresPushedSemanticTokens.Should().BeTrue();
     }
 
     // ── codeLens/resolve opt-in allowlist (issue #471) ─────────────────────────
@@ -51,7 +51,7 @@ public class ClientIdeContextTests
     [InlineData(null)]
     public void SupportsCodeLensResolve_is_false_for_every_shipped_client(string? ide)
     {
-        new ClientIdeContext(ide).SupportsCodeLensResolve.Should().BeFalse();
+        new ClientIdeContext(ide).Facets.SupportsCodeLensResolve.Should().BeFalse();
     }
 
     [Fact]
@@ -59,9 +59,9 @@ public class ClientIdeContextTests
     {
         // Keeps the deferred-resolve branch in the CodeLens handlers reachable from unit tests
         // while the production allowlist stays empty.
-        new ClientIdeContext("vscode", supportsCodeLensResolve: true)
-            .SupportsCodeLensResolve.Should().BeTrue();
-        new ClientIdeContext("vscode", supportsCodeLensResolve: true, TraceLevel.Verbose)
+        new ClientIdeContext("vscode", new ClientFacets { SupportsCodeLensResolve = true })
+            .Facets.SupportsCodeLensResolve.Should().BeTrue();
+        new ClientIdeContext("vscode", new ClientFacets { SupportsCodeLensResolve = true }, TraceLevel.Verbose)
             .LogLevel.Should().Be(TraceLevel.Verbose);
     }
 
@@ -105,7 +105,7 @@ public class ClientIdeContextTests
         // The cross-check half of issue #709: the disagreement is recorded (ClientName), but it never
         // changes which IDE the server thinks it is talking to.
         context.Ide.Should().Be("vscode");
-        context.IsVisualStudio.Should().BeFalse();
+        context.Facets.RequiresPushedSemanticTokens.Should().BeFalse();
         context.IdeResolvedFromClientInfo.Should().BeFalse();
         context.ClientName.Should().Be("Visual Studio");
         context.ClientVersion.Should().Be("17.14.0");
@@ -143,8 +143,8 @@ public class ClientIdeContextTests
 
             context.ApplyClientInfo(new ClientInfo { Name = name });
 
-            context.IsVisualStudio.Should().BeFalse($"'{name}' is a VS Code client");
-            context.IsVSCode.Should().BeTrue($"'{name}' is a VS Code client");
+            context.Facets.RequiresPushedSemanticTokens.Should().BeFalse($"'{name}' is a VS Code client");
+            context.Facets.RunsVscodeOpenCommandLocally.Should().BeTrue($"'{name}' is a VS Code client");
         }
     }
 

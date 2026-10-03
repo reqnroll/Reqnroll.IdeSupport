@@ -48,7 +48,7 @@ public class HookMatchCountCodeLensHandlerTests
     /// </summary>
     private HookMatchCountCodeLensHandler CreateSut(string ide = "visualstudio", bool supportsCodeLensResolve = false) =>
         new(_matchService, _scopeManager, _registryLookup,
-            new ClientIdeContext(ide, supportsCodeLensResolve), _logger);
+            new ClientIdeContext(ide, new ClientFacets { SupportsCodeLensResolve = supportsCodeLensResolve }), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
@@ -317,7 +317,7 @@ public class HookMatchCountCodeLensHandlerTests
     [InlineData(null)]
     public async Task Handle_computes_every_scoped_hook_lens_eagerly_for_all_shipped_clients(string? ide)
     {
-        new ClientIdeContext(ide).SupportsCodeLensResolve.Should()
+        new ClientIdeContext(ide).Facets.SupportsCodeLensResolve.Should()
             .BeFalse("no shipped client implements the codeLens/resolve round trip yet");
 
         var hook = MakeScopedHook(HookType.BeforeScenario);

@@ -97,7 +97,7 @@ object RenameWorkspaceEditApplier {
      * and falling back to the legacy `changes` map — defensive, since this plugin doesn't control
      * exactly which `workspace.workspaceEdit` capabilities Rider's platform LSP client advertises
      * to the server (unlike VS Code, which explicitly enables `documentChanges`, or VS, which the
-     * server special-cases to the legacy shape via `ClientIdeContext.IsVisualStudio`).
+     * server special-cases to the legacy shape via `ClientFacets.AppliesRenameResponseEditNatively`).
      *
      * `internal` so it's unit-testable with plain LSP4J POJOs, without a platform `Document` fixture.
      */
