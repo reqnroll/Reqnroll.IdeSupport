@@ -235,7 +235,10 @@ public sealed class CompletionHandler : ICompletionHandler
         // the LEFT of the caret, never anything to the right of it. Clamping the start down to
         // the (possibly earlier) cursor position too guards against a reversed range in case
         // cursorChar ever lands before the first non-whitespace column.
-        var kwRangeEnd = cursorChar;
+        //
+        // Issue #871: the request position can be stale relative to the snapshot (rapid typing),
+        // so the cursor may lie beyond the end of the line we read; clamp it into the line.
+        var kwRangeEnd = Math.Clamp(cursorChar, 0, lineText.Length);
         var kwRangeStart = Math.Min(kwStart, kwRangeEnd);
 
         var typedFromLineStart = lineText.Substring(kwRangeStart, kwRangeEnd - kwRangeStart);
