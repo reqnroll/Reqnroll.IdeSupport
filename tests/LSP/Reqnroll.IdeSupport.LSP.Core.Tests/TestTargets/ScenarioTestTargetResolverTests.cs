@@ -316,14 +316,23 @@ public class ScenarioTestTargetResolverTests : IDisposable
 
         """;
 
+    // Mirrors real generator output: Reqnroll emits the attribute-less parameterized template method
+    // named exactly like the Outline alongside the attributed per-row variant methods.
     private const string IndividualMethodsGeneratedCs = """
         namespace Tests
         {
             public class FFeature
             {
-                public void CheckValue__1() { }
-                public void CheckValue__2() { }
-                public void CheckValue_Extra__3() { }
+                public void CheckValue(string v, string pickleIndex, string[] exampleTags) { }
+
+                [Fact]
+                public void CheckValue_1() { }
+
+                [Fact]
+                public void CheckValue_2() { }
+
+                [Fact]
+                public void CheckValue_Extra_3() { }
             }
         }
         """;
@@ -338,8 +347,98 @@ public class ScenarioTestTargetResolverTests : IDisposable
 
         result.Should().HaveCount(3);
         result.Should().OnlyContain(t => !t.IsParameterized && t.RowIndex == null);
+        result.Should().NotContain(t => t.MethodName == "CheckValue");
         result.Select(t => t.MethodName).Should()
-            .BeEquivalentTo(new[] { "CheckValue__1", "CheckValue__2", "CheckValue_Extra__3" });
+            .BeEquivalentTo(new[] { "CheckValue_1", "CheckValue_2", "CheckValue_Extra_3" });
+    }
+
+    [Fact]
+    public void IndividualMethods_template_method_is_never_returned_as_a_target()
+    {
+        var tags = ParseTags(IndividualMethodsFeatureText);
+        var uri = WriteGeneratedFixture(IndividualMethodsGeneratedCs);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
+
+        result.Should().NotContain(t => t.MethodName == "CheckValue");
+    }
+
+    [Fact]
+    public void ResolveAll_includes_every_variant_method_of_a_contained_individual_methods_Outline()
+    {
+        var tags = ParseTags(IndividualMethodsFeatureText);
+        var uri = WriteGeneratedFixture(IndividualMethodsGeneratedCs);
+
+        var result = CreateSut().ResolveAll(uri, tags, RangeOfTag(tags, IdeSupportTagTypes.FeatureBlock));
+
+        result.Select(t => t.MethodName).Should()
+            .BeEquivalentTo(new[] { "CheckValue_1", "CheckValue_2", "CheckValue_Extra_3" });
+    }
+
+    [Fact]
+    public void IndividualMethods_attributed_exact_method_without_variants_still_resolves_as_a_plain_test()
+    {
+        var text = "Feature: F\nScenario: Plain\n    Given a step\n";
+        var generatedCs = """
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    [Fact]
+                    public void Plain() { }
+
+                    [Fact]
+                    public void Plain_Other() { }
+                }
+            }
+            """;
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixture(generatedCs);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
+
+        result.Should().ContainSingle().Which.MethodName.Should().Be("Plain");
+    }
+
+    [Fact]
+    public void IndividualMethods_example_set_index_counts_named_blocks_too()
+    {
+        var text = """
+            Feature: F
+            Scenario Outline: Check value
+                Given the value is <v>
+
+                Examples: Named
+                    | v |
+                    | a |
+
+                Examples:
+                    | v |
+                    | b |
+
+                Examples:
+                    | v |
+                    | c |
+
+            """;
+        var generatedCs = """
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    public void CheckValue(string v, string pickleIndex, string[] exampleTags) { }
+                    [Fact] public void CheckValue_Named_A() { }
+                    [Fact] public void CheckValue_ExampleSet1_B() { }
+                    [Fact] public void CheckValue_ExampleSet2_C() { }
+                }
+            }
+            """;
+        var tags = ParseTags(text);
+        var uri = WriteGeneratedFixture(generatedCs);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, text, "| c |"));
+
+        result.Should().ContainSingle().Which.MethodName.Should().Be("CheckValue_ExampleSet2_C");
     }
 
     [Fact]
@@ -351,7 +450,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         var result = CreateSut().Resolve(uri, tags, RangeAtLineContaining(tags, IndividualMethodsFeatureText, "| 3 |"));
 
         result.Should().HaveCount(1);
-        result[0].MethodName.Should().Be("CheckValue_Extra__3");
+        result[0].MethodName.Should().Be("CheckValue_Extra_3");
     }
 
     [Fact]
@@ -373,8 +472,9 @@ public class ScenarioTestTargetResolverTests : IDisposable
             {
                 public class FFeature
                 {
-                    public void CheckValue_Variant0() { }
-                    public void CheckValue_Variant1() { }
+                    public void CheckValue(string v, string w, string pickleIndex, string[] exampleTags) { }
+                    [Fact] public void CheckValue_Variant0() { }
+                    [Fact] public void CheckValue_Variant1() { }
                 }
             }
             """;

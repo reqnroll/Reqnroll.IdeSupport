@@ -534,7 +534,14 @@ native runner executes every `InlineData`/`TestCase`/`DataRow`/`Arguments` row a
 one method. No extra invocation logic needed in any IDE; the Outline-level gutter action and the
 single-scenario gutter action are the same code path.
 
-**Individual-methods mode (`allowRowTests = false`) — needs a real multi-target invocation, one per IDE:**
+**Individual-methods mode (`allowRowTests = false`) — needs a real multi-target invocation, one per IDE.**
+Reqnroll emits one test method per Examples row named `{Scenario}_{ExampleSet?}_{Variant}` (see §2),
+*and* — in both modes — an attribute-less, public parameterized **template** method named exactly like the
+Outline (`CheckValue(string v, string pickleIndex, string[] exampleTags)`), which is not itself a test.
+The resolver must therefore return the variant methods, never the template (issue #454): a method whose
+exact name matches but carries no attributes is treated as the template and the `{name}_` variant methods
+are used instead; real tests (plain scenarios, row-tests Outlines) always carry at least a test attribute.
+The per-IDE invocation then receives that full variant set:
 
 - **VS Code**: owns its own `dotnet test` invocation, so this is the simplest case — OR the resolved
   targets' exact FQNs into one filter expression, `dotnet test --filter "FullyQualifiedName=A|FullyQualifiedName=B|..."`,
@@ -880,13 +887,17 @@ rendering itself has not been live-verified in Rider.
    `dotnet test --filter` with a `DisplayName`-based filter expression per row, since it owns the
    invocation — worth revisiting post-implementation, not blocking now).
 7. ~~**Multi-target "run all examples" invocation for individual-methods-mode Outlines, per IDE**~~
-   **Resolved (issue #454; design only, no behavior change).** VS Code and Rider own their `dotnet test`
-   invocation and already OR one exact-FQN term per distinct method (`buildTestFilter`). VS already passes
-   a multi-element `TestMethodIdentifier[]` for Outlines and Feature/Rule containers alike
-   (`RunTestCodeLensDataPoint`); the only outstanding item is a live check that Test Explorer runs every
-   element for an individual-methods Outline (fallback: one command per method). Rider has no native
-   multi-target mechanism to adopt (§6 — no JVM-side unit-testing extension point); own execution is the
-   design. See §5 "Scenario Outline — run all examples".
+   **Resolved (issue #454).** The real defect was server-side: `ScenarioTestTargetResolver` matched the
+   Outline's non-test template method as an "exact" method and never reached the variant methods, so no
+   IDE ever received more than that one non-test target. Fixed in the resolver (attribute-less exact
+   match defers to the `{name}_` variant methods); the variant-name port used for single-row selection was
+   also brought in line with `UnitTestMethodGenerator`. With the full variant set resolved, VS Code and
+   Rider's own `dotnet test` invocations OR one exact-FQN term per method (`buildTestFilter`) and VS
+   already passes a multi-element `TestMethodIdentifier[]` (`RunTestCodeLensDataPoint`, same shape as the
+   Feature/Rule lens). Rider has no native multi-target mechanism to adopt (§6 — no JVM-side
+   unit-testing extension point); own execution is the design. Still outstanding: a live VS check that
+   Test Explorer runs every element for an individual-methods Outline (fallback: one command per
+   method). See §5 "Scenario Outline — run all examples".
 8. ~~**AST-transforming generator plugins (e.g. `Reqnroll.ExternalData`)**~~ **Resolved (2026-08-05,
    flagged by Chris).** Confirmed against Reqnroll's actual source that such plugins (which inject
    `Examples:` rows into the AST after parsing but before codegen, so the `.feature` file can show zero
