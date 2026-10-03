@@ -264,6 +264,22 @@ prioritizing it.
 
 ## Where does telemetry data go?
 
-TODO: document the extension's telemetry policy here once finalized (what
-is/isn't collected, and how to opt out) — cross-reference the relevant
-privacy documentation once published.
+The extension sends anonymous usage and diagnostic telemetry to help the
+maintainers locate bugs and performance problems. It consists of event names,
+counts, flags, durations and coarse duration buckets, plus the IDE kind and
+extension/server versions. It never includes file paths, step text, test
+names or source content (exception messages are scrubbed of paths). This
+includes a sampled `PerfSample` event (operation label, duration and duration
+bucket) sent for about 5% of operations by default. The full list of events
+and properties is in the
+[telemetry events inventory](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/Telemetry-Events-Inventory.md).
+
+To opt out, set the environment variable `REQNROLL_TELEMETRY_ENABLED=0` for
+the IDE process; this works in Visual Studio, Rider and VS Code. VS Code also
+honors its own `telemetry.telemetryLevel` setting. Visual Studio and Rider do
+not currently consult their own IDE-level telemetry settings.
+
+`REQNROLL_PERF_TELEMETRY_SAMPLE` overrides only the `PerfSample` rate (a
+fraction from 0 to 1; `0` or `off` disables just that event). To see exactly
+what would be sent, set `REQNROLL_TELEMETRY_DEBUG_LOG` to mirror every event
+to a local file.

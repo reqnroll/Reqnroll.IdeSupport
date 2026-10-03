@@ -17,6 +17,8 @@ export const TelemetryEvents = {
   serverExitedUnexpectedly: 'ServerExitedUnexpectedly',
   /** The client started the language server again after a failure or exit (issue #845). `Reason`, `AttemptNumber`. */
   serverRestarted: 'ServerRestarted',
+  /** An exception thrown in this extension's own code (issue #621): the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
+  unhandledException: 'UnhandledException',
 } as const;
 
 /**

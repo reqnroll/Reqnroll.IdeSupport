@@ -70,6 +70,23 @@ public class OperationDurationRecorderTests
                 !d.ContainsKey("IDEClient")));
     }
 
+    [Theory]
+    [InlineData("internal/featureRescan", false)]
+    [InlineData("workspace/codeLens/refresh", false)]
+    [InlineData("workspace/inlayHint/refresh", false)]
+    [InlineData("workspace/semanticTokens/refresh", false)]
+    [InlineData("textDocument/completion#step", true)]
+    [InlineData("internal/renamePostResponseApply", true)]
+    public void Record_does_not_send_PerfSample_for_housekeeping_labels(string operation, bool expectSent)
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = new OperationDurationRecorder(new CapturingLogger(), telemetry, new FixedSampler(true));
+
+        sut.Record(operation, 5);
+
+        telemetry.ReceivedCalls().Count().Should().Be(expectSent ? 1 : 0);
+    }
+
     [Fact]
     public void Record_telemetry_payload_never_contains_the_uri_or_path()
     {

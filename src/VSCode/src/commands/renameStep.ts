@@ -11,6 +11,7 @@ import {
 import { GHERKIN_LANGUAGE_ID } from '../languageIds';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
+import { executeForeignCommand } from '../clientExceptionTelemetry';
 
 /** One renameable binding attribute at the queried position (mirrors RenameTargetItem.cs). */
 export interface RenameTargetItem {
@@ -293,7 +294,7 @@ export async function renameStepFromCSharp(
   });
   if (targets.length === 0) {
     if (options?.fallbackToNativeRename) {
-      await vscode.commands.executeCommand('editor.action.rename');
+      await executeForeignCommand('editor.action.rename');
       return;
     }
     void showInfo('Reqnroll: No step definition found to rename at this position.');

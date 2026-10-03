@@ -60,6 +60,9 @@ object RiderTelemetryTransmitter {
     internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
     internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
 
+    /** Exception caught in the plugin's own code (issue #621); same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
+    internal const val UNHANDLED_EXCEPTION = "UnhandledException"
+
     /**
      * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED] (issue #861): how the navigation was
      * started. Closed set shared with VS and VS Code (`GoToHookSources.cs` / `GoToHookSource` in
