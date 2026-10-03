@@ -21,14 +21,29 @@ export function resolveConnectionString(
 ): string {
   const value = override?.trim();
   if (!value) return CONNECTION_STRING;
-  const hasKey = value.split(';').some((part) => /^\s*InstrumentationKey\s*=\s*\S/i.test(part));
-  if (!hasKey) {
-    onInvalid?.(
-      'REQNROLL_TELEMETRY_CONNECTION_STRING has no InstrumentationKey; using the built-in connection.',
-    );
+  if (!hasInstrumentationKey(value)) {
+    onInvalid?.('REQNROLL_TELEMETRY_CONNECTION_STRING has no InstrumentationKey; ignoring it.');
     return CONNECTION_STRING;
   }
   return value;
+}
+
+function hasInstrumentationKey(value: string): boolean {
+  return value.split(';').some((part) => /^\s*InstrumentationKey\s*=\s*\S/i.test(part));
+}
+
+/**
+ * Debug-build guard (issue #889): an extension running from source (F5, `ExtensionMode.Development`)
+ * must not send to the built-in production resource, so without a usable override it sends nothing.
+ */
+export function isBuiltInConnectionBlocked(
+  extensionMode: vscode.ExtensionMode,
+  override: string | undefined,
+): boolean {
+  return (
+    extensionMode === vscode.ExtensionMode.Development &&
+    !hasInstrumentationKey(override?.trim() ?? '')
+  );
 }
 
 type TelemetryPropertyValue = string | number | boolean | null | undefined;
@@ -135,10 +150,16 @@ function disposeReporterBounded(r: TelemetryReporter): Thenable<void> {
 export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {
   if (reporter || !isTelemetryEnabledByEnv()) return;
 
+  const connectionOverride = process.env.REQNROLL_TELEMETRY_CONNECTION_STRING;
+  if (isBuiltInConnectionBlocked(context.extensionMode, connectionOverride)) {
+    logInfo(
+      'Telemetry is not sent from a development build unless REQNROLL_TELEMETRY_CONNECTION_STRING is set.',
+    );
+    return;
+  }
+
   breaker = newBreaker();
-  const created = new TelemetryReporter(
-    resolveConnectionString(process.env.REQNROLL_TELEMETRY_CONNECTION_STRING, logInfo),
-  );
+  const created = new TelemetryReporter(resolveConnectionString(connectionOverride, logInfo));
   reporter = created;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),

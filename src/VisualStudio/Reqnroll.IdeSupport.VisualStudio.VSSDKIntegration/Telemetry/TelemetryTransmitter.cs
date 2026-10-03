@@ -50,9 +50,30 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         IUserUniqueIdStore userUniqueIdStore,
         IVersionProvider versionProvider,
         IIdeSupportLogger? logger = null)
-        : this(CreateClient(userUniqueIdStore, versionProvider), enableTelemetryChecker, logger,
+        : this(CreateClient(userUniqueIdStore, versionProvider), ApplyDebugBuildGuard(enableTelemetryChecker), logger,
             TelemetryDebugLog.FromEnvironment())
     {
+    }
+
+#if DEBUG
+    private const bool IsDebugBuild = true;
+#else
+    private const bool IsDebugBuild = false;
+#endif
+
+    /// <summary>
+    /// Debug-build guard (#889): without a <c>REQNROLL_TELEMETRY_CONNECTION_STRING</c> override a Debug
+    /// build is treated as telemetry-disabled, so a developer's F5 session never reaches the
+    /// production resource (events are still mirrored to the debug log, flagged as not transmitted).
+    /// </summary>
+    internal static IEnableTelemetryChecker ApplyDebugBuildGuard(IEnableTelemetryChecker inner, bool isDebugBuild = IsDebugBuild)
+        => TelemetryConnectionOverride.BlocksBuiltIn(isDebugBuild, TelemetryConnectionOverride.FromEnvironment())
+            ? new DisabledTelemetryChecker()
+            : inner;
+
+    private sealed class DisabledTelemetryChecker : IEnableTelemetryChecker
+    {
+        public bool IsEnabled() => false;
     }
 
     /// <summary>

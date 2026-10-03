@@ -5,6 +5,16 @@ namespace Reqnroll.IdeSupport.Common.Tests.Telemetry;
 public class TelemetryConnectionOverrideTests
 {
     [Theory]
+    [InlineData(true, null, true)]
+    [InlineData(true, "InstrumentationKey=abc", false)]
+    [InlineData(false, null, false)]
+    [InlineData(false, "InstrumentationKey=abc", false)]
+    public void BlocksBuiltIn_only_for_a_debug_build_without_an_override(bool isDebug, string? resolved, bool expected)
+    {
+        TelemetryConnectionOverride.BlocksBuiltIn(isDebug, resolved).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]

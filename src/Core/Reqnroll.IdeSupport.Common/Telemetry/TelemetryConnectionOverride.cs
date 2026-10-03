@@ -13,6 +13,13 @@ public static class TelemetryConnectionOverride
     public const string EnvironmentVariable = "REQNROLL_TELEMETRY_CONNECTION_STRING";
 
     /// <summary>
+    /// Debug-build guard (issue #889): a Debug build must not send to the built-in (production)
+    /// connection, so with no usable override its telemetry is not transmitted at all.
+    /// </summary>
+    public static bool BlocksBuiltIn(bool isDebugBuild, string? resolvedOverride)
+        => isDebugBuild && resolvedOverride is null;
+
+    /// <summary>
     /// Returns the override from the environment, or <see langword="null"/> when it is unset or not a
     /// usable connection string (in which case <paramref name="onInvalid"/> is told why).
     /// </summary>
@@ -35,7 +42,7 @@ public static class TelemetryConnectionOverride
                 return trimmed;
         }
 
-        onInvalid?.Invoke($"{EnvironmentVariable} has no InstrumentationKey; using the built-in connection.");
+        onInvalid?.Invoke($"{EnvironmentVariable} has no InstrumentationKey; ignoring it.");
         return null;
     }
 }
