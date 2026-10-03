@@ -451,7 +451,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   ensureTelemetryReporter(context);
   // Issue #875: install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
   void reportExtensionLifecycle(context, sendTelemetryEvent);
-  serverLifecycle =new ServerLifecycleTelemetry(client, sendTelemetryEvent);
+  serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent);
   context.subscriptions.push(serverLifecycle);
 
   // Issue #8 — per-pipe-character / per-cell decorations for Gherkin data tables. Doesn't

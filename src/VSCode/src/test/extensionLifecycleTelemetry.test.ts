@@ -24,14 +24,22 @@ suite('extensionLifecycleTelemetry (#875)', () => {
     });
 
     test('same-day, same-version activation sends only loaded', () => {
-      const stored: LifecycleState = { installedVersion: '1.2.0', lastUsedDate: '2026-10-03', usageDays: 4 };
+      const stored: LifecycleState = {
+        installedVersion: '1.2.0',
+        lastUsedDate: '2026-10-03',
+        usageDays: 4,
+      };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.2.0');
       assert.deepStrictEqual(names(events), ['Extension loaded']);
       assert.deepStrictEqual(state, stored);
     });
 
     test('a new day increments usage days and names the count in the event', () => {
-      const stored: LifecycleState = { installedVersion: '1.2.0', lastUsedDate: '2026-10-02', usageDays: 6 };
+      const stored: LifecycleState = {
+        installedVersion: '1.2.0',
+        lastUsedDate: '2026-10-02',
+        usageDays: 6,
+      };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.2.0');
       assert.deepStrictEqual(names(events), ['Extension loaded', '7 day usage']);
       assert.strictEqual(state.usageDays, 7);
@@ -39,7 +47,11 @@ suite('extensionLifecycleTelemetry (#875)', () => {
     });
 
     test('a version increase sends upgraded with OldExtensionVersion and records the new version', () => {
-      const stored: LifecycleState = { installedVersion: '1.2.0', lastUsedDate: '2026-10-03', usageDays: 2 };
+      const stored: LifecycleState = {
+        installedVersion: '1.2.0',
+        lastUsedDate: '2026-10-03',
+        usageDays: 2,
+      };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.10.0');
       assert.deepStrictEqual(names(events), ['Extension loaded', 'Extension upgraded']);
       assert.deepStrictEqual(events[1].properties, { OldExtensionVersion: '1.2.0' });
@@ -47,7 +59,11 @@ suite('extensionLifecycleTelemetry (#875)', () => {
     });
 
     test('a downgrade sends no upgraded event and keeps the stored version', () => {
-      const stored: LifecycleState = { installedVersion: '1.3.0', lastUsedDate: '2026-10-03', usageDays: 2 };
+      const stored: LifecycleState = {
+        installedVersion: '1.3.0',
+        lastUsedDate: '2026-10-03',
+        usageDays: 2,
+      };
       const { state, events } = computeLifecycle(stored, '2026-10-03', '1.2.0');
       assert.deepStrictEqual(names(events), ['Extension loaded']);
       assert.strictEqual(state.installedVersion, '1.3.0');
