@@ -183,15 +183,10 @@ Scenario: A delta that re-adds an excluded binding file restores its bindings
 # file case. Only Linking declares a binding for the step. Per the design, "a step is unmatched
 # only if unmatched in all owners", so the step should read as bound.
 #
-# KNOWN GAP (issue #558) — ignored, not deleted. This scenario fails today: an OPEN feature
-# file's match set is built against ResolvePrimaryOwner alone
-# (GherkinDocumentTaggerService.ScanAsync), so only
-# the primary owner's registry is consulted. Home wins primary-owner resolution because the file
-# sits inside its folder, and Home has no binding for the step, so it reads as undefined even
-# though Linking binds it. The closed-file path (RescanClosedFile) already iterates every owner,
-# so the two paths disagree. Un-ignore this scenario with the fix for #558.
+# Issue #558: an OPEN linked feature file's steps are matched against every owner's registry
+# (GherkinDocumentTaggerService.ParseAsync; primary owner first), so a step is undefined only if it
+# is unmatched in all owners, matching the closed-file path (RescanClosedFile).
 
-@ignore
 Scenario: A step in a linked feature file is bound when any owning project binds it
 	When the project "Home.csproj" is announced in folder "Home"
 	And the project "Linking.csproj" is announced in folder "Linking"
