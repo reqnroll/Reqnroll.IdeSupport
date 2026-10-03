@@ -14,3 +14,29 @@ export const TelemetryEvents = {
   /** An exception thrown in this extension's own code (issue #621): the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
   unhandledException: 'UnhandledException',
 } as const;
+
+/**
+ * Property keys of client-originated events, mirroring `TelemetryProperties` in the LSP server
+ * (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Telemetry/TelemetryProperties.cs`). PascalCase on the wire.
+ */
+export const TelemetryProperties = {
+  /**
+   * Event-scoped key: on "GoToHook command executed" it is the enum below; the server's
+   * `TelemetryProperties.Source` (same literal) is a class name on `UnhandledException`. Keep the
+   * literal in step with `GoToHookSources.PropertyName` (C#) and Rider's `GO_TO_HOOK_SOURCE_PROPERTY`.
+   * How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}.
+   */
+  source: 'Source',
+} as const;
+
+/** Closed set of `Source` values on "GoToHook command executed"; identical in VS, VS Code and Rider. */
+export const GoToHookSource = {
+  /** Command palette, keybinding or menu command with no editor-menu context. */
+  command: 'Command',
+  /** The editor right-click context menu. */
+  contextMenu: 'ContextMenu',
+  /** A click on the hook-count CodeLens. */
+  codeLens: 'CodeLens',
+} as const;
+
+export type GoToHookSource = (typeof GoToHookSource)[keyof typeof GoToHookSource];

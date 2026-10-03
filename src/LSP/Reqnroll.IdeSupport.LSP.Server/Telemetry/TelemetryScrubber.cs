@@ -55,7 +55,7 @@ public static class TelemetryScrubber
     // Free-text properties that carry exception-derived text. Scrubbed by key (not every string
     // value) because the path pattern would also mangle legitimate values such as LSP method names
     // ("textDocument/definition").
-    private static readonly string[] FreeTextKeys = ["ErrorMessage", "Message"];
+    private static readonly string[] FreeTextKeys = ["ErrorMessage", "Message", TelemetryProperties.StackFrames];
 
     /// <summary>
     /// Returns <paramref name="properties"/> with filesystem paths redacted from the free-text

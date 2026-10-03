@@ -2,8 +2,9 @@ Feature: Define Steps (F6)
 
 The server offers a code action to generate a C# step-definition stub when the
 editor is positioned on an undefined step. The action returns a WorkspaceEdit that
-creates the new .cs file and inserts the skeleton, then supplies a vscode.open
-command so editors can open the new file immediately after applying the edit.
+creates the new .cs file and inserts the skeleton, then supplies a reqnroll.defineStepsTriggered
+command that clients run after applying the edit (the server reports the trigger and, for VS Code,
+opens the new file).
 
 Background:
     Given the LSP server is started
@@ -48,7 +49,7 @@ Scenario: The code action workspace edit creates and populates a step definition
 
 # ── Open command ──────────────────────────────────────────────────────────────
 
-Scenario: The code action includes a vscode.open command to show the new file
+Scenario: The code action includes a defineStepsTriggered command for the new file the new file
     When the project is announced with output assembly "Sample.dll" for "Open.feature"
     And the C# step definition file "EmptySteps.cs" is opened with
         """
@@ -63,7 +64,7 @@ Scenario: The code action includes a vscode.open command to show the new file
         """
     And code actions are requested for "Open.feature" at line 2
     Then a code action titled "Define missing step" is available
-    And the code action has a "vscode.open" command to open the new file
+    And the code action has a "reqnroll.defineStepsTriggered" command to open the new file
 
 # ── Multiple undefined steps ─────────────────────────────────────────────────
 

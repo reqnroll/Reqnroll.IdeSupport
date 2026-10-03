@@ -527,40 +527,66 @@ When one or more steps have no matching binding, a code action "Define missing s
 | Direction | Method | Purpose |
 |-----------|--------|---------|
 | Client → Server | `textDocument/codeAction` | Request available actions at cursor/selection |
-| Server → Client | `CodeAction[]` response | List including "Define missing steps" |
-| Client → Server | `codeAction/resolve` (optional) | Resolve edit lazily |
-| Server → Client | `workspace/applyEdit` | Apply generated step file content |
+| Server → Client | `CodeAction[]` response | "Define missing step" / "Define step: …" / "Define all missing steps in file" actions, each with an embedded `WorkspaceEdit` and a `Command` |
+| Client → Server | `workspace/executeCommand` (`reqnroll.defineStepsTriggered`) | Sent by the client **after it has applied the chosen action's edit**; the server's only exact signal that the quick fix was picked (issue #847) |
+| Server → Client | `window/showDocument` | VS Code only: reveal the edited/created file (the action's single command slot used to carry `vscode.open` for this) |
 
-> **Note**: When the client applies a `WorkspaceEdit` that creates or modifies a `.cs` file, the resulting `textDocument/didChange` reaches `TextDocumentSyncHandler`, which calls `ICSharpBindingDiscoveryService` directly (see [F2](#f2--binding-discovery)) and keeps the Binding Registry current.
+> **Note**: The `WorkspaceEdit` is applied entirely client-side; there is no `workspace/applyEdit` or `codeAction/resolve` round trip. When the client applies an edit that creates or modifies a `.cs` file, the resulting `textDocument/didOpen`/`didChange` reaches `TextDocumentSyncHandler`, which calls `ICSharpBindingDiscoveryService` directly (see [F2](#f2--binding-discovery)) and keeps the Binding Registry current.
+
+#### Telemetry
+
+- `DefineSteps command offered` — sent by `CodeActionHandler` each time the action is offered (not a count of lightbulb opens: VS and Rider may request code actions on every caret move).
+- `DefineSteps command executed` — sent by `DefineStepsTriggeredHandler` (`LSP.Server/Features/CodeActions/`) when the client runs the `reqnroll.defineStepsTriggered` command. It has no properties and is exact: it is not sent for a hand-written definition. See the [Telemetry Events Inventory](Telemetry-Events-Inventory.md#definestepscommandexecuted).
+- The server emits telemetry as `telemetry/event` notifications; each IDE host (the extension "glue": VS `TelemetryEventInterceptor`, VS Code `telemetry.ts`, Rider) stamps `IdeClient` and transmits it to Application Insights.
+
+#### IDE glue
+
+Apart from telemetry, Define Steps needs no glue in VS Code and Rider: the IDE's LSP client talks to the server directly. Visual Studio has one piece: `ScaffoldTrackingInterceptor` (`LspInterception/`) watches the `codeAction` response for a `CreateFile` of a `.cs` file and, when VS later sends `didOpen` for that file, first injects a `reqnroll/projectFiles` delta into the server so the new file is known to belong to the project before binding discovery runs.
 
 #### Sequence diagram
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant IDE
+    participant IDE as IDE (editor + LSP client)
+    participant Glue as IDE glue (extension)
 
     box LightBlue LSP Server
         participant FCAH as CodeActionHandler
         participant BM as Binding Match Service
         participant SS as StepScaffoldService
+        participant DSTH as DefineStepsTriggeredHandler
         participant TDS as TextDocumentSyncHandler
         participant CDS as ICSharpBindingDiscoveryService
     end
 
-    User->>IDE: Click lightbulb on unmatched step
+    participant AI as Telemetry sink (Application Insights)
+
+    User->>IDE: Click lightbulb on undefined step
     IDE->>FCAH: textDocument/codeAction (range, diagnostics context)
-    FCAH->>BM: Get unmatched steps in range from match cache
-    BM-->>FCAH: Unmatched step list
-    FCAH->>SS: Generate step stubs
-    SS-->>FCAH: WorkspaceEdit (new/modified .cs file)
-    FCAH-->>IDE: CodeAction[] with embedded WorkspaceEdit
-    User->>IDE: Selects "Define missing steps"
-    IDE->>FCAH: codeAction/resolve or direct apply
-    FCAH-->>IDE: workspace/applyEdit
-    IDE-->>User: Step definition file created/updated
-    IDE->>TDS: textDocument/didChange (.cs file created/modified)
+    FCAH->>BM: Get undefined steps / step at cursor from match cache
+    BM-->>FCAH: Match set
+    FCAH->>SS: Build step skeletons
+    SS-->>FCAH: Snippets (rendered into create-file or append edits)
+    FCAH-->>IDE: CodeAction[] (WorkspaceEdit + Command reqnroll.defineStepsTriggered [fileUri])
+    Note over Glue: VS only: ScaffoldTrackingInterceptor notes any CreateFile .cs
+    FCAH-)Glue: telemetry/event "DefineSteps command offered"
+    Glue-)AI: transmit (stamped with IdeClient)
+
+    User->>IDE: Picks "Define missing step"
+    IDE->>IDE: Apply WorkspaceEdit (create / append to binding .cs)
+    IDE->>DSTH: workspace/executeCommand reqnroll.defineStepsTriggered [fileUri]
+    DSTH-)Glue: telemetry/event "DefineSteps command executed"
+    Glue-)AI: transmit (stamped with IdeClient)
+    opt VS Code only
+        DSTH->>IDE: window/showDocument (reveal the file)
+    end
+    DSTH-->>IDE: executeCommand response
+
+    Note over Glue: VS only: injects reqnroll/projectFiles delta before didOpen is forwarded
+    IDE->>TDS: textDocument/didOpen / didChange (.cs buffer)
     TDS->>CDS: Parse changed file, patch the Binding Registry
+    Note over TDS,CDS: Step now matches; not part of the telemetry
 ```
 
 ---

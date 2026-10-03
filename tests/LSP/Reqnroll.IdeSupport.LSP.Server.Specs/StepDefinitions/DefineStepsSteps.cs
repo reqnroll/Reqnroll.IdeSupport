@@ -110,7 +110,7 @@ public sealed class DefineStepsSteps
         action.Command.Should().NotBeNull(
             "the code action should include a Command so editors can open the newly created file");
         action.Command!.Name.Should().Be(commandName,
-            $"the command should be '{commandName}' so VS Code opens the file after applying the edit");
+            $"the command should be '{commandName}' so the server learns the quick fix was picked");
         action.Command.Arguments.Should().NotBeNullOrEmpty(
             "the command should pass the new file's URI as an argument");
     }

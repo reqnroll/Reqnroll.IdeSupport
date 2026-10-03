@@ -104,6 +104,9 @@ public static class TelemetryEvents
     /// <summary>Sent by <c>Features.CodeActions.CodeActionHandler</c> when the "Define step" quick fix is offered.</summary>
     public const string DefineStepsCommandOffered = "DefineSteps command offered";
 
+    /// <summary>Sent by <c>Features.CodeActions.DefineStepsTriggeredHandler</c> when the client runs the command of a "Define step(s)" quick fix, i.e. the user picked it (issue #847).</summary>
+    public const string DefineStepsCommandExecuted = "DefineSteps command executed";
+
     /// <summary>Sent by <c>Features.FindUnusedStepDefinitions.FindUnusedStepDefinitionsHandler</c> after handling a Find Unused Step Definitions request.</summary>
     public const string FindUnusedStepDefinitionsCommandExecuted = "FindUnusedStepDefinitions command executed";
 
