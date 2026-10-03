@@ -69,7 +69,7 @@ public sealed class DefineStepsTriggeredHandler : IExecuteCommandHandler
         // convenience, so it must never fail the command or lose the event sent above. It is also
         // skipped for a client that does not advertise window/showDocument, so the command's response
         // is never held open on a request that client will not answer.
-        if (_clientIde.IsVSCode
+        if (_clientIde.Facets.RevealsFileViaShowDocument
             && request.Arguments is [JValue { Type: JTokenType.String } uriArgument, ..]
             && uriArgument.Value<string>() is { Length: > 0 } uriText
             && _languageServer.ClientSettings.Capabilities?.Window?.ShowDocument is { IsSupported: true, Value.Support: true })

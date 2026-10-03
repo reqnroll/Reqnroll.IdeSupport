@@ -445,7 +445,7 @@ public sealed class RenameHandler
         // against the already-renamed text and corrupts every touched file. This was latent on
         // main: the in-request push cancelled this very request (issue #654), so VS never got
         // a response to apply. The Rename Step command ignores the result either way.
-        return _clientIdeContext.IsVisualStudio ? new WorkspaceEdit() : workspaceEdit;
+        return _clientIdeContext.Facets.AppliesRenameViaPush ? new WorkspaceEdit() : workspaceEdit;
     }
 
     /// <summary>

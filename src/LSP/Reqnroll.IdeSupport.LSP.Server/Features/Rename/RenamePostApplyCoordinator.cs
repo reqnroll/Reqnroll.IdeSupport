@@ -162,7 +162,7 @@ internal sealed class RenamePostApplyCoordinator
     /// </remarks>
     public void SchedulePostResponseApply(DocumentUri renameUri, WorkspaceEditBuilder builder)
     {
-        if (!_clientIdeContext.IsVisualStudio)
+        if (!_clientIdeContext.Facets.AppliesRenameViaPush)
             return;
 
         _ = Task.Run(() => PushAndCompleteAsync(renameUri, builder));

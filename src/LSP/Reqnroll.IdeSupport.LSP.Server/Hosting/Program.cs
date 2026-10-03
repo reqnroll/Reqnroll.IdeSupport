@@ -361,20 +361,20 @@ public class Program
                 // CodeLensRefreshRequester all read ClientIdeContext, and it is the only one of the
                 // two that knows the identity resolved from ClientInfo when --ide was absent.
                 // ApplyClientIdentity runs first, above, so the fallback is already applied here.
-                var isVisualStudio = languageServer.Services
-                    .GetRequiredService<ClientIdeContext>().IsVisualStudio;
+                var pushesSemanticTokens = languageServer.Services
+                    .GetRequiredService<ClientIdeContext>().Facets.PushesSemanticTokens;
 
                 var tokenService = languageServer.Services.GetRequiredService<ISemanticTokensService>();
 
                 response.Capabilities.SemanticTokensProvider = new SemanticTokensRegistrationOptions.StaticOptions
                 {
                     Legend = tokenService.Legend,
-                    Full = !isVisualStudio,
+                    Full = !pushesSemanticTokens,
                     // VS Code's and Rider's built-in LSP clients both support range requests (used as a
                     // large-file/viewport optimization); advertise it since SemanticTokensHandler already
                     // implements textDocument/semanticTokens/range (issue #123). Withheld for VS along
                     // with Full above, per the note at the top of this method.
-                    Range = !isVisualStudio
+                    Range = !pushesSemanticTokens
                 };
             }
 
@@ -414,7 +414,7 @@ public class Program
             // No shipped client currently uses it: neither VS Code nor Rider nor Visual Studio
             // issues codeLens/resolve today, so every lens is still returned fully computed. The
             // decision of whether to hand out an unresolved placeholder lens is NOT made here —
-            // it is made per client by ClientIdeContext.SupportsCodeLensResolve, an opt-in
+            // it is made per client by ClientFacets.SupportsCodeLensResolve, an opt-in
             // allowlist that is deliberately empty (see the note on that allowlist for the
             // evidence and the criteria for adding a client). Advertising resolveProvider while
             // that allowlist is empty is harmless — a spec-compliant client only resolves a lens

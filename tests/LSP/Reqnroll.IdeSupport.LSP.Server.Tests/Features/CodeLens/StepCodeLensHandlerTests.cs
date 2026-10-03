@@ -42,7 +42,7 @@ public class StepCodeLensHandlerTests
     /// </summary>
     private StepCodeLensHandler CreateSut(string ide = "visualstudio", bool supportsCodeLensResolve = false) =>
         new(_matchService, _registryLookup,
-            new ClientIdeContext(ide, supportsCodeLensResolve), _logger);
+            new ClientIdeContext(ide, new ClientFacets { SupportsCodeLensResolve = supportsCodeLensResolve }), _logger);
 
     private static CodeLensParams RequestFor(DocumentUri uri) =>
         new() { TextDocument = new TextDocumentIdentifier { Uri = uri } };
@@ -376,7 +376,7 @@ public class StepCodeLensHandlerTests
     [InlineData(null)]
     public async Task Handle_computes_every_lens_eagerly_for_all_shipped_clients(string? ide)
     {
-        new ClientIdeContext(ide).SupportsCodeLensResolve.Should()
+        new ClientIdeContext(ide).Facets.SupportsCodeLensResolve.Should()
             .BeFalse("no shipped client implements the codeLens/resolve round trip yet");
 
         var csPath  = CsUri.GetFileSystemPath()!;

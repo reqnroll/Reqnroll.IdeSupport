@@ -49,7 +49,7 @@ these DTOs don't implement OmniSharp's `IRequest` marker interfaces).
 
 | Method | Params | Gating |
 |---|---|---|
-| `reqnroll/refreshCodeLens` | `RefreshCodeLensParams` — projectName, isFullReplacement | VS only ([`ClientIdeContext.IsVisualStudio`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/ClientIdeContext.cs)); other IDEs get the standard `workspace/codeLens/refresh` request instead — see [`CodeLensRefreshRequester.cs:29`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/CodeLensRefreshRequester.cs) |
+| `reqnroll/refreshCodeLens` | `RefreshCodeLensParams` — projectName, isFullReplacement | VS only ([`ClientFacets.UsesCustomCodeLensRefresh`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/ClientFacets.cs)); other IDEs get the standard `workspace/codeLens/refresh` request instead — see [`CodeLensRefreshRequester.cs:29`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeLens/CodeLensRefreshRequester.cs) |
 | `reqnroll/semanticTokens` | `PublishSemanticTokensParams` — uri, version, data[] | Push path used because VS doesn't reliably pull semantic tokens; VS Code and Rider pull via the standard `textDocument/semanticTokens/*` requests and ignore this push |
 
 ### Client coverage

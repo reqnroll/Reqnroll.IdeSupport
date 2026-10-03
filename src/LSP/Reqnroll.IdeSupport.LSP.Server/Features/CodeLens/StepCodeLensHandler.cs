@@ -104,11 +104,11 @@ public sealed class StepCodeLensHandler
         var seen = new HashSet<(int line, int col)>();
 
         // Defer the per-binding FindUsages scan to codeLens/resolve ONLY for clients on the
-        // opt-in allowlist in ClientIdeContext.CodeLensResolveCapableIdes — that set is empty
+        // opt-in allowlist in ClientFacetResolver (ClientFacets.SupportsCodeLensResolve) — that set is empty
         // today, so every shipped client (VS Code, Rider, Visual Studio) takes the eager path
         // below. None of them issue codeLens/resolve, and a deferred lens simply never renders
         // for them (issue #471; see the allowlist note for the evidence).
-        var deferToResolve = _clientIde.SupportsCodeLensResolve;
+        var deferToResolve = _clientIde.Facets.SupportsCodeLensResolve;
 
         foreach (var binding in registry.StepDefinitions)
         {
@@ -172,7 +172,7 @@ public sealed class StepCodeLensHandler
 
     /// <summary>
     /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
-    /// <see cref="ClientIdeContext.SupportsCodeLensResolve"/>) into its final <c>Command</c> —
+    /// <see cref="ClientFacets.SupportsCodeLensResolve"/>) into its final <c>Command</c> —
     /// backs <c>codeLens/resolve</c> (issue #471). Falls back to the non-actionable "0 step
     /// usages" shape if the binding can no longer be located (e.g. the file changed between the
     /// initial <c>textDocument/codeLens</c> call and this resolve).
