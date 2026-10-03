@@ -2,6 +2,7 @@
 
 using System.Collections.Immutable;
 using System.Text.RegularExpressions;
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
@@ -20,6 +21,9 @@ public class ProjectCharacteristicsTelemetryTests
 
     private static ProjectHookBinding Hook(string method, HookType type) =>
         new(Impl(method), null, type, null, null);
+
+    private static NuGetPackageReference Package(string name) =>
+        new(name, new NuGetVersion("1.0.0", "1.0.0"), null!);
 
     private static ProjectBindingRegistry Registry(
         IEnumerable<ProjectStepDefinitionBinding> steps, IEnumerable<ProjectHookBinding> hooks) =>
@@ -56,6 +60,35 @@ public class ProjectCharacteristicsTelemetryTests
         properties.Values.Should().OnlyContain(v => v is int || (v is string && (string)v == "net8.0"));
         properties.Keys.Should().OnlyContain(k => k == "StepDefinitionCount" || k == "HookCount" || k == "StepBindingClassCount"
             || k == "FeatureFileCount" || k == "ProjectTargetFramework" || k.StartsWith("HookCount_"));
+    }
+
+    [Fact]
+    public void Build_adds_the_test_framework_and_platform_inferred_from_package_references()
+    {
+        var packages = new[]
+        {
+            Package("Reqnroll.xUnit"),
+            Package("Microsoft.NET.Test.Sdk"),
+        };
+
+        var properties = ProjectCharacteristicsTelemetry.Build(Registry([], []), 1, "net8.0", packages);
+
+        properties["UnitTestFramework"].Should().Be("xUnit");
+        properties["TestPlatform"].Should().Be("VSTest");
+    }
+
+    [Fact]
+    public void Build_omits_the_test_framework_and_platform_when_package_references_are_unknown_or_unrecognised()
+    {
+        var unrecognised = new[] { Package("Newtonsoft.Json") };
+
+        foreach (var packages in new IEnumerable<NuGetPackageReference>?[] { null, [], unrecognised })
+        {
+            var properties = ProjectCharacteristicsTelemetry.Build(Registry([], []), 1, "net8.0", packages);
+
+            properties.Should().NotContainKey("UnitTestFramework");
+            properties.Should().NotContainKey("TestPlatform");
+        }
     }
 
     [Fact]
