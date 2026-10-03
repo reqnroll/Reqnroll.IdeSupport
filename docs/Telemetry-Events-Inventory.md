@@ -214,6 +214,24 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 
 **Analytics use.** Acceptance rate = `DefineSteps command executed` / `DefineSteps command offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, replacing the former client-side `vscode.open` command (a code action has one command slot).
 
+### `InsertKeywordCommandOffered`
+| | |
+|---|---|
+| **Emitter** | `CodeActionHandler` |
+| **When** | One or more "Insert '\<keyword\>'" lightbulb actions are *offered* for a Gherkin parser error under the cursor; not when the user picks one — see [`InsertKeywordCommandExecuted`](#insertkeywordcommandexecuted) |
+| **Properties** | `ActionsOffered` (int, counted from the final post-filter/post-cap list) |
+
+**Analytics use.** How often syntax-error quick fixes are available. Clients may request code actions on every caret move, so this is not a count of lightbulb opens.
+
+### `InsertKeywordCommandExecuted`
+| | |
+|---|---|
+| **Emitter** | `InsertKeywordTriggeredHandler` |
+| **When** | A client runs the `reqnroll.insertKeywordTriggered` command that every "Insert '\<keyword\>'" code action carries. Clients run a code action's command after applying its edit, so this is the user picking the quick fix (any keyword) |
+| **Properties** | none |
+
+**Analytics use.** Acceptance rate = `InsertKeyword command executed` / `InsertKeyword command offered` (offers are inflated by caret-move polling; compare trends, not absolutes).
+
 ### `FindUnusedStepDefinitionsCommandExecuted`
 | | |
 |---|---|

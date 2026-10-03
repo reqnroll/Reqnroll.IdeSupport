@@ -81,6 +81,13 @@ internal sealed class ParserErrorActionBuilder
             Kind        = CodeActionKind.QuickFix,
             Diagnostics = diagnostics,
             IsPreferred = index == preferredIndex,
+            // Clients run this command after applying the edit; the server handler reports the
+            // trigger (issue #877), the only acceptance signal since the edit is applied client-side.
+            Command = new Command
+            {
+                Title = "Insert keyword",
+                Name  = InsertKeywordTriggeredHandler.CommandName
+            },
             Edit = new WorkspaceEdit
             {
                 DocumentChanges = new Container<WorkspaceEditDocumentChange>(
