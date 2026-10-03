@@ -20,6 +20,18 @@ interface FindHookLocation {
 }
 
 /**
+ * Classifies the arguments `reqnroll.goToHooks` was invoked with (issue #861): the hook-count
+ * CodeLens passes `[uri, line, ...]` (string, number); the editor context menu passes the document
+ * `vscode.Uri`; the command palette and keybindings pass nothing (or anything else) -> Command.
+ */
+export function sourceForArgs(args: readonly unknown[]): GoToHookSource {
+  if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
+    return GoToHookSource.codeLens;
+  }
+  return args[0] instanceof vscode.Uri ? GoToHookSource.contextMenu : GoToHookSource.command;
+}
+
+/**
  * Implements Hook Navigation ("Go to Hooks"): queries the server for hooks applicable at
  * `position` (defaulting to the active editor's cursor when omitted — the command-palette/
  * keybinding invocation path). When invoked from the hook-count CodeLens (issue #269) the server
@@ -38,14 +50,16 @@ interface FindHookLocation {
  */
 export async function doGoToHooks(
   client: LanguageClient,
-  position?: {
-    uri: string;
-    line: number;
-    character: number;
-    ownLevelOnly?: boolean;
-    alwaysShowPicker?: boolean;
-  },
-  source?: GoToHookSource,
+  position:
+    | {
+        uri: string;
+        line: number;
+        character: number;
+        ownLevelOnly?: boolean;
+        alwaysShowPicker?: boolean;
+      }
+    | undefined,
+  source: GoToHookSource,
 ): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   const uri = position?.uri ?? editor?.document.uri.toString();
@@ -56,11 +70,9 @@ export async function doGoToHooks(
   // A genuine navigation -- unlike VS's classic CodeLens, VS Code's hook-count CodeLens resolves
   // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
   // caller and every invocation (palette, keybinding, or a lens click) really is one (issue #698).
-  // `Source` defaults to CodeLens for a position-carrying call (only the lens click supplies one)
-  // and to Command otherwise; the `reqnroll.goToHooks` handler passes ContextMenu explicitly.
+  // `source` is mandatory: every caller states how the navigation started (see sourceForArgs).
   sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted, {
-    [TelemetryProperties.source]:
-      source ?? (position ? GoToHookSource.codeLens : GoToHookSource.command),
+    [TelemetryProperties.source]: source,
   });
 
   let response: FindHooksResponse;

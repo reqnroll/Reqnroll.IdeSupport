@@ -55,7 +55,12 @@ public static class TelemetryProperties
     public const string EditCount = "EditCount";
     /// <summary>Document length in lines, bucketed by <see cref="TelemetryBuckets.LineCount(int)"/>.</summary>
     public const string DocumentLineBucket = "DocumentLineBucket";
-    /// <summary>Class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</summary>
+    /// <summary>
+    /// Event-scoped key: a class name on <c>UnhandledException</c>; on the client-originated
+    /// <c>GoToHook command executed</c> it is the <c>Command|ContextMenu|CodeLens</c> enum
+    /// (<c>GoToHookSources.PropertyName</c> in Common, mirrored in VS Code and Rider).
+    /// </summary>
+    /// <remarks>On <c>UnhandledException</c>: class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</remarks>
     public const string Source = "Source";
 
     /// <summary>Values of <see cref="Status"/>.</summary>

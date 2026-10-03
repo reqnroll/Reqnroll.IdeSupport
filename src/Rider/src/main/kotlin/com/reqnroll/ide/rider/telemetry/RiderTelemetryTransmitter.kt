@@ -51,7 +51,8 @@ object RiderTelemetryTransmitter {
     /**
      * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED] (issue #861): how the navigation was
      * started. Closed set shared with VS and VS Code (`GoToHookSources.cs` / `GoToHookSource` in
-     * `telemetryEvents.ts`); keep the copies in sync.
+     * `telemetryEvents.ts`); keep the copies in sync. Event-scoped key: the LSP server's
+     * `TelemetryProperties.Source` uses the same literal for a class name on `UnhandledException`.
      */
     internal const val GO_TO_HOOK_SOURCE_PROPERTY = "Source"
     internal const val GO_TO_HOOK_SOURCE_COMMAND = "Command"

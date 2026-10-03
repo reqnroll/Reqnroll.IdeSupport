@@ -48,9 +48,17 @@ class GoToHooksRunnerTest {
 
     // Issue #861: the entry point reported as the closed Source enum shared with VS and VS Code.
 
+    // The property bag the runner transmits per entry point, pinned to the literals shared with
+    // VS and VS Code: the action maps its event place, the lens passes CodeLens.
     @Test
-    fun `telemetryProperties carries Source under the cross-IDE property name`() {
-        assertEquals(mapOf("Source" to "CodeLens"), GoToHooksRunner.telemetryProperties("CodeLens"))
+    fun `transmitted property bag per entry point carries the cross-IDE Source literal`() {
+        val fromContextMenu = GoToHooksRunner.telemetryProperties(GoToHooksRunner.sourceForPlace(ActionPlaces.EDITOR_POPUP))
+        val fromShortcut = GoToHooksRunner.telemetryProperties(GoToHooksRunner.sourceForPlace(ActionPlaces.KEYBOARD_SHORTCUT))
+        val fromLens = GoToHooksRunner.telemetryProperties(RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CODE_LENS)
+
+        assertEquals(mapOf("Source" to "ContextMenu"), fromContextMenu)
+        assertEquals(mapOf("Source" to "Command"), fromShortcut)
+        assertEquals(mapOf("Source" to "CodeLens"), fromLens)
     }
 
     @Test
@@ -58,14 +66,6 @@ class GoToHooksRunnerTest {
         assertEquals("ContextMenu", GoToHooksRunner.sourceForPlace(ActionPlaces.EDITOR_POPUP))
         assertEquals("Command", GoToHooksRunner.sourceForPlace(ActionPlaces.KEYBOARD_SHORTCUT))
         assertEquals("Command", GoToHooksRunner.sourceForPlace(ActionPlaces.ACTION_SEARCH))
-    }
-
-    @Test
-    fun `source constants match the closed enum shared with VS and VS Code`() {
-        assertEquals("Source", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_PROPERTY)
-        assertEquals("Command", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_COMMAND)
-        assertEquals("ContextMenu", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CONTEXT_MENU)
-        assertEquals("CodeLens", RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CODE_LENS)
     }
 
     @Test

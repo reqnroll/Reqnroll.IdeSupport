@@ -8,7 +8,12 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// </summary>
 public static class GoToHookSources
 {
-    /// <summary>The event property carrying the source (PascalCase on the wire, like every other property).</summary>
+    /// <summary>
+    /// The event property carrying the source (PascalCase on the wire, like every other property).
+    /// Event-scoped: the LSP server's <c>TelemetryProperties.Source</c> uses the same literal for the
+    /// class name on <c>UnhandledException</c>. Keep in step with <c>TelemetryProperties.source</c>
+    /// (<c>telemetryEvents.ts</c>) and Rider's <c>GO_TO_HOOK_SOURCE_PROPERTY</c>.
+    /// </summary>
     public const string PropertyName = "Source";
 
     /// <summary>A keybinding, command palette / action search, or a menu command with no editor-menu context.</summary>

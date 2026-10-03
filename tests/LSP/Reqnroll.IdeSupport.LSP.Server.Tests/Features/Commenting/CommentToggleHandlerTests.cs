@@ -105,7 +105,7 @@ public class CommentToggleHandlerTests
             .Returns(new GherkinCommentToggleResult(new[]
             {
                 new GherkinCommentEdit(0, 0, "# Feature: F")
-            }));
+            }, Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
@@ -124,7 +124,7 @@ public class CommentToggleHandlerTests
             .Returns(new GherkinCommentToggleResult(new[]
             {
                 new GherkinCommentEdit(0, 0, "# Feature: F")
-            }));
+            }, Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
@@ -141,7 +141,7 @@ public class CommentToggleHandlerTests
         SetupBuffer(FeatureUri, "Given a step\nWhen step2\n");
         SetupApplyEditRequest();
         _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
-            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>(), Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 1, 2),
@@ -163,7 +163,7 @@ public class CommentToggleHandlerTests
             .Returns(new GherkinCommentToggleResult(new[]
             {
                 new GherkinCommentEdit(0, 0, "# " + lineContent)
-            }));
+            }, Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
@@ -190,7 +190,7 @@ public class CommentToggleHandlerTests
             .Returns(new GherkinCommentToggleResult(new[]
             {
                 new GherkinCommentEdit(0, 0, "# Feature: F")
-            }));
+            }, Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
@@ -211,7 +211,7 @@ public class CommentToggleHandlerTests
         SetupBuffer(FeatureUri, "Feature: F\nScenario: S\n    Given a step\n");
         SetupApplyEditRequest();
         _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
-            .Returns(new GherkinCommentToggleResult(new List<GherkinCommentEdit>()));
+            .Returns(new GherkinCommentToggleResult(new List<GherkinCommentEdit>(), Uncommented: false));
 
         var telemetry = Substitute.For<ILspTelemetryService>();
         await CreateSutWithTelemetry(telemetry).Handle(
@@ -236,7 +236,7 @@ public class CommentToggleHandlerTests
         SetupBuffer(FeatureUri, "Feature: F\nScenario: S\n    Given a step\n");
         SetupApplyEditRequest();
         _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
-            .Returns(new GherkinCommentToggleResult(new List<GherkinCommentEdit>(), uncommented));
+            .Returns(new GherkinCommentToggleResult(new List<GherkinCommentEdit>(), Uncommented: uncommented));
 
         var telemetry = Substitute.For<ILspTelemetryService>();
         await CreateSutWithTelemetry(telemetry).Handle(
@@ -271,7 +271,7 @@ public class CommentToggleHandlerTests
         SetupBuffer(FeatureUri, "Given a step\n");
         SetupApplyEditRequest();
         _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
-            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>(), Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0, modeArg),
@@ -286,7 +286,7 @@ public class CommentToggleHandlerTests
         SetupBuffer(FeatureUri, "Given a step\n");
         SetupApplyEditRequest();
         _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
-            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>(), Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
@@ -316,7 +316,7 @@ public class CommentToggleHandlerTests
         SetupBuffer(FeatureUri, "Given a step\n");
         SetupApplyEditRequest();
         _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CommentToggleMode>())
-            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>()));
+            .Returns(new GherkinCommentToggleResult(Array.Empty<GherkinCommentEdit>(), Uncommented: false));
 
         await CreateSut().Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0, "uncomment"),

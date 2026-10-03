@@ -17,4 +17,4 @@ public sealed record GherkinCommentEdit(
 /// </summary>
 public sealed record GherkinCommentToggleResult(
     IReadOnlyList<GherkinCommentEdit> Edits,
-    bool Uncommented = false);
+    bool Uncommented);

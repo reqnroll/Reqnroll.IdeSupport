@@ -14,8 +14,7 @@ import { StatusBarManager } from './statusBar';
 import { doToggleComment } from './commands/commentToggle';
 import { doFindStepUsages } from './commands/stepUsages';
 import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinitions';
-import { doGoToHooks } from './commands/goToHooks';
-import { GoToHookSource } from './telemetryEvents';
+import { doGoToHooks, sourceForArgs } from './commands/goToHooks';
 import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
@@ -244,16 +243,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
             ownLevelOnly: typeof args[3] === 'boolean' ? args[3] : false,
             alwaysShowPicker: true,
           },
-          GoToHookSource.codeLens,
+          sourceForArgs(args),
         );
       } else {
         // The editor/context menu passes the document Uri as the first argument; the command
         // palette and keybinding pass none.
-        await doGoToHooks(
-          client,
-          undefined,
-          args[0] instanceof vscode.Uri ? GoToHookSource.contextMenu : GoToHookSource.command,
-        );
+        await doGoToHooks(client, undefined, sourceForArgs(args));
       }
     }),
 

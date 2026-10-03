@@ -352,7 +352,9 @@ link/content engagement on the welcome/upgrade surfaces.
 |---|---|---|---|
 | VS Code | command palette, keybinding (no editor-menu argument) | editor right-click menu (VS Code passes the document `Uri` to `editor/context` commands) | hook-count CodeLens click |
 | Rider | any action place other than the editor popup (shortcut, action search, main menu) | `ActionPlaces.EDITOR_POPUP` | hook-count CodeVision click |
-| Visual Studio | never emitted | always (the command's only placement is the editor context menu; a user-assigned keybinding is indistinguishable) | never emitted: the classic CodeLens click shares a code path with the Details-popup prefetch (#698), so it emits no `GoToHook` event at all |
+| Visual Studio | never emitted | always, best-effort: the command's only placement is the editor context menu, but invocations from the Command Window, Tools > Customize and user-assigned keybindings also report `ContextMenu` | never emitted: CodeLens clicks share the Details-popup prefetch path (#698), so VS emits no `GoToHook` event for them. The shared enum therefore has a value VS never produces (a deliberate gap) |
+
+`Source` is event-scoped: on `UnhandledException` the same key holds a class name (§6), on `GoToHookCommandExecuted` it holds the enum above.
 
 **Analytics use.** True Go-to-Hooks navigation rate per IDE — the honest counterpart to the
 server's lookup volume.

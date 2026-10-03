@@ -18,7 +18,12 @@ export const TelemetryEvents = {
  * (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Telemetry/TelemetryProperties.cs`). PascalCase on the wire.
  */
 export const TelemetryProperties = {
-  /** How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}. */
+  /**
+   * Event-scoped key: on "GoToHook command executed" it is the enum below; the server's
+   * `TelemetryProperties.Source` (same literal) is a class name on `UnhandledException`. Keep the
+   * literal in step with `GoToHookSources.PropertyName` (C#) and Rider's `GO_TO_HOOK_SOURCE_PROPERTY`.
+   * How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}.
+   */
   source: 'Source',
 } as const;
 
