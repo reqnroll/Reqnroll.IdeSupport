@@ -401,6 +401,28 @@ public class ScenarioTestTargetResolverTests : IDisposable
     }
 
     [Fact]
+    public void IndividualMethods_prefix_matched_methods_without_a_test_attribute_are_ignored()
+    {
+        var generatedCs = """
+            namespace Tests
+            {
+                public class FFeature
+                {
+                    public void CheckValue(string v, string pickleIndex, string[] exampleTags) { }
+                    [Fact] public void CheckValue_1() { }
+                    public void CheckValue_Helper() { }
+                }
+            }
+            """;
+        var tags = ParseTags(IndividualMethodsFeatureText);
+        var uri = WriteGeneratedFixture(generatedCs);
+
+        var result = CreateSut().Resolve(uri, tags, RangeAtLine(tags, 1));
+
+        result.Should().ContainSingle().Which.MethodName.Should().Be("CheckValue_1");
+    }
+
+    [Fact]
     public void IndividualMethods_example_set_index_counts_named_blocks_too()
     {
         var text = """

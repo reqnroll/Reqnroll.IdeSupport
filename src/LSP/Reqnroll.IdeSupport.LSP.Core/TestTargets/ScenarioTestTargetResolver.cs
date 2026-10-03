@@ -135,7 +135,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 
         var prefix = expectedMethodName + "_";
         var candidateMethods = classDecl.Members.OfType<MethodDeclarationSyntax>()
-            .Where(m => m.Identifier.Text.StartsWith(prefix, StringComparison.Ordinal))
+            .Where(m => m.AttributeLists.Count > 0 && m.Identifier.Text.StartsWith(prefix, StringComparison.Ordinal))
             .ToList();
         if (candidateMethods.Count == 0)
         {
