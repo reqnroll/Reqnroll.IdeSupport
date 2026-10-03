@@ -10,13 +10,13 @@ public class ClientFacetResolverTests
         RequiresPushedSemanticTokens = true,
         UsesCustomCodeLensRefresh = true,
         RejectsEmptyTriggerCompletion = true,
-        AppliesRenameViaPush = true,
+        AppliesRenameResponseEditNatively = true,
     };
 
     private static readonly ClientFacets VSCodeFacets = new()
     {
         RunsVscodeOpenCommandLocally = true,
-        RevealsFileViaShowDocument = true,
+        HonorsShowDocumentRequests = true,
     };
 
     [Theory]

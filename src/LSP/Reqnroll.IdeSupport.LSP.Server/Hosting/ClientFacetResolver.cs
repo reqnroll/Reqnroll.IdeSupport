@@ -58,7 +58,7 @@ internal static class ClientFacetResolver
                 RequiresPushedSemanticTokens = true,
                 UsesCustomCodeLensRefresh = true,
                 RejectsEmptyTriggerCompletion = true,
-                AppliesRenameViaPush = true,
+                AppliesRenameResponseEditNatively = true,
             };
         }
 
@@ -67,7 +67,7 @@ internal static class ClientFacetResolver
             return new ClientFacets
             {
                 RunsVscodeOpenCommandLocally = true,
-                RevealsFileViaShowDocument = true,
+                HonorsShowDocumentRequests = true,
             };
         }
 

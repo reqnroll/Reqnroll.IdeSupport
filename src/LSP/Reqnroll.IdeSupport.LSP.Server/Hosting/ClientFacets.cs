@@ -44,15 +44,15 @@ public sealed record ClientFacets
     /// so the server pushes the real edit with <c>workspace/applyEdit</c> after the response and
     /// returns an empty edit in the response itself (returning the real one would apply it twice).
     /// </summary>
-    public bool AppliesRenameViaPush { get; init; }
+    public bool AppliesRenameResponseEditNatively { get; init; }
 
     /// <summary>
-    /// After the Define Steps command the server reveals the generated file with
-    /// <c>window/showDocument</c> (when the client also advertises that capability). Only set for
-    /// clients that also recognise the built-in <c>vscode.open</c> command; the others forward
-    /// commands to the server, where an unregistered one fails with "Method not found".
+    /// The client reliably opens a document in response to a <c>window/showDocument</c> request, so
+    /// the server uses it to reveal the generated file after the Define Steps command (when the
+    /// client also advertises that capability). Opt-in: we have only confirmed this for clients that
+    /// also run the built-in <c>vscode.open</c> command locally.
     /// </summary>
-    public bool RevealsFileViaShowDocument { get; init; }
+    public bool HonorsShowDocumentRequests { get; init; }
 
     /// <summary>
     /// The client recognises the built-in <c>vscode.open</c> command and runs it locally, without a

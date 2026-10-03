@@ -239,7 +239,7 @@ Behaviour that differs between IDE clients is expressed as **facets**: named fla
 `ClientFacets` record (`Hosting/ClientFacets.cs`), exposed as `ClientIdeContext.Facets`. A facet
 records a quirk or limitation we found through our own development and debugging — it is
 deliberately *not* an LSP-spec client capability, and it is named for the behaviour
-(`RequiresPushedSemanticTokens`, `AppliesRenameViaPush`), not the IDE.
+(`RequiresPushedSemanticTokens`, `AppliesRenameResponseEditNatively`), not the IDE.
 
 - **One place decides.** `ClientFacetResolver.Resolve(ide, clientVersion)` maps identity (and
   version) to facets. If a client's behaviour changes in a new IDE version, edit the rule there
