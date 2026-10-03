@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Logging;
@@ -21,7 +22,20 @@ public class DefineStepsTriggeredHandlerTests
     public DefineStepsTriggeredHandlerTests()
     {
         _languageServer.Window.Returns(_window);
+        SetShowDocumentSupport(true);
     }
+
+    private void SetShowDocumentSupport(bool supported) =>
+        _languageServer.ClientSettings.Returns(new InitializeParams
+        {
+            Capabilities = new ClientCapabilities
+            {
+                Window = new WindowClientCapabilities
+                {
+                    ShowDocument = new ShowDocumentClientCapabilities { Support = supported }
+                }
+            }
+        });
 
     private DefineStepsTriggeredHandler CreateSut(string ide) =>
         new(_languageServer, new ClientIdeContext(ide), Substitute.For<IIdeSupportLogger>(), _telemetry);
@@ -80,6 +94,41 @@ public class DefineStepsTriggeredHandlerTests
         var act = () => CreateSut("vscode").Handle(Params(), CancellationToken.None);
 
         await act.Should().NotThrowAsync();
+        _telemetry.Received(1).SendEvent(TelemetryEvents.DefineStepsCommandExecuted, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task Does_not_ask_VS_Code_to_show_the_file_when_it_does_not_support_showDocument_Async()
+    {
+        SetShowDocumentSupport(false);
+
+        await CreateSut("vscode").Handle(Params(), CancellationToken.None);
+
+        _ = _window.DidNotReceiveWithAnyArgs().SendRequest(Arg.Any<ShowDocumentParams>(), default);
+        _telemetry.Received(1).SendEvent(TelemetryEvents.DefineStepsCommandExecuted, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("object")]
+    [InlineData("number")]
+    [InlineData("empty")]
+    public async Task Malformed_arguments_skip_the_reveal_but_still_send_the_event_Async(string kind)
+    {
+        var arguments = kind switch
+        {
+            "none"   => null,
+            "object" => new JArray(new JObject { ["uri"] = TargetUri }),
+            "number" => new JArray(42),
+            _        => new JArray(""),
+        };
+
+        var act = () => CreateSut("vscode").Handle(
+            new ExecuteCommandParams { Command = DefineStepsTriggeredHandler.CommandName, Arguments = arguments },
+            CancellationToken.None);
+
+        await act.Should().NotThrowAsync();
+        _ = _window.DidNotReceiveWithAnyArgs().SendRequest(Arg.Any<ShowDocumentParams>(), default);
         _telemetry.Received(1).SendEvent(TelemetryEvents.DefineStepsCommandExecuted, Arg.Any<Dictionary<string, object?>>());
     }
 }

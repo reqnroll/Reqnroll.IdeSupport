@@ -1,4 +1,5 @@
 using MediatR;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -63,8 +64,15 @@ public sealed class DefineStepsTriggeredHandler : IExecuteCommandHandler
 
         _telemetryService?.SendEvent(TelemetryEvents.DefineStepsCommandExecuted, new());
 
-        var uriText = request.Arguments?.Count > 0 ? request.Arguments[0].Value<string>() : null;
-        if (_clientIde.IsVSCode && uriText is not null)
+        // The argument comes from the client, so treat it as untrusted: only a string is used, and
+        // anything else (missing, an object, a number) just skips the reveal. Revealing the file is a
+        // convenience, so it must never fail the command or lose the event sent above. It is also
+        // skipped for a client that does not advertise window/showDocument, so the command's response
+        // is never held open on a request that client will not answer.
+        if (_clientIde.IsVSCode
+            && request.Arguments is [JValue { Type: JTokenType.String } uriArgument, ..]
+            && uriArgument.Value<string>() is { Length: > 0 } uriText
+            && _languageServer.ClientSettings.Capabilities?.Window?.ShowDocument is { IsSupported: true, Value.Support: true })
         {
             try
             {
@@ -74,7 +82,6 @@ public sealed class DefineStepsTriggeredHandler : IExecuteCommandHandler
             }
             catch (Exception ex)
             {
-                // Revealing the file is a convenience; never fail the command (or lose the event) over it.
                 _logger.LogVerbose($"DefineStepsTriggeredHandler: showDocument failed for {uriText}: {ex.Message}");
             }
         }
