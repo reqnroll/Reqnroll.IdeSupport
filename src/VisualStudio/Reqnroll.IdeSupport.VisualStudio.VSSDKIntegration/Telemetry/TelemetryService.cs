@@ -35,18 +35,6 @@ public class TelemetryService : ITelemetryService
         _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ExtensionLoaded));
     }
 
-    /// <summary>Transmits the "Project loaded" event with project settings and feature-file count.</summary>
-    public void MonitorOpenProject(ProjectSettings settings, int? featureFileCount)
-    {
-        _telemetryTransmitter.TransmitEvent(new VsGenericEvent(TelemetryEvents.ProjectLoaded,
-            GetProjectSettingsProps(settings,
-                new Dictionary<string, object>
-                {
-                    {"FeatureFileCount", featureFileCount}
-                }
-            )));
-    }
-
     /// <summary>Transmits the "Feature file opened" event with project settings.</summary>
     public void MonitorOpenFeatureFile(ProjectSettings projectSettings)
     {
@@ -173,14 +161,6 @@ public class TelemetryService : ITelemetryService
     private ImmutableDictionary<string, object> GetProjectSettingsProps(ProjectSettings settings)
     {
         var props = GetProps(settings);
-        return props.ToImmutable();
-    }
-
-    private ImmutableDictionary<string, object> GetProjectSettingsProps(ProjectSettings settings,
-        IEnumerable<KeyValuePair<string, object>> additionalSettings)
-    {
-        var props = GetProps(settings);
-        props.AddRange(additionalSettings);
         return props.ToImmutable();
     }
 

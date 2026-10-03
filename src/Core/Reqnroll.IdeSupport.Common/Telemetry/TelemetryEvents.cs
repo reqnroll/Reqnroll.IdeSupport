@@ -196,9 +196,6 @@ public static class TelemetryEvents
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProjectSystem</c>) when the extension activates inside an IDE scope.</summary>
     public const string ExtensionLoaded = "Extension loaded";
 
-    /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProject</c>) when a Reqnroll project is loaded (carries project settings + feature-file count).</summary>
-    public const string ProjectLoaded = "Project loaded";
-
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenFeatureFile</c>) when a <c>.feature</c> file is opened.</summary>
     public const string FeatureFileOpened = "Feature file opened";
 
