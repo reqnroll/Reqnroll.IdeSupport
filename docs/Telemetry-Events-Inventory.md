@@ -548,7 +548,7 @@ them unchanged. Parse with `parse_json(tostring(customDimensions.LookupCounts))`
 | Kind | Keys | Recorded operation |
 |---|---|---|
 | `Lookup` - requested by the editor on a gesture or typing | `Completion.Step`, `Completion.Keyword`, `Completion.Tag` (a *subset* of `Completion.Keyword`), `Completion.Other`, `CodeAction` (also fires on cursor moves in VS/VS Code, not only on click) | `textDocument/completion#step`/`#keyword`/`#tag`/bare, `textDocument/codeAction` |
-| `Passive` - requested by the editor on its own schedule | `CodeLens`, `InlayHint`, `FoldingRange`, `DocumentSymbol`, `OnTypeFormatting` (the aggregate stand-in for the never-implemented `CommandAutoFormatTable`) | `textDocument/codeLens`/`inlayHint`/`foldingRange`/`documentSymbol` (+ `reqnroll/documentSymbolHierarchical`)/`onTypeFormatting` |
+| `Passive` - requested by the editor on its own schedule | `CodeLens`, `InlayHint`, `FoldingRange`, `DocumentLink`, `DocumentSymbol`, `OnTypeFormatting` (the aggregate stand-in for the never-implemented `CommandAutoFormatTable`) | `textDocument/codeLens`/`inlayHint`/`foldingRange`/`documentLink`/`documentSymbol` (+ `reqnroll/documentSymbolHierarchical`)/`onTypeFormatting` |
 
 **Not counted here, by design:** every discrete command (Go to Step Definition, Find Usages, Rename,
 Find Unused, Comment/Uncomment, Format, Run lens lookups, Find Hooks, Go to Matching Scenarios).
