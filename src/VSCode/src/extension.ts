@@ -14,7 +14,7 @@ import { StatusBarManager } from './statusBar';
 import { doToggleComment } from './commands/commentToggle';
 import { doFindStepUsages } from './commands/stepUsages';
 import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinitions';
-import { doGoToHooks } from './commands/goToHooks';
+import { doGoToHooks, sourceForArgs } from './commands/goToHooks';
 import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
@@ -236,15 +236,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<Reqnro
         return;
       }
       if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
-        await doGoToHooks(client, {
-          uri: args[0],
-          line: args[1],
-          character: typeof args[2] === 'number' ? args[2] : 0,
-          ownLevelOnly: typeof args[3] === 'boolean' ? args[3] : false,
-          alwaysShowPicker: true,
-        });
+        await doGoToHooks(
+          client,
+          {
+            uri: args[0],
+            line: args[1],
+            character: typeof args[2] === 'number' ? args[2] : 0,
+            ownLevelOnly: typeof args[3] === 'boolean' ? args[3] : false,
+            alwaysShowPicker: true,
+          },
+          sourceForArgs(args),
+        );
       } else {
-        await doGoToHooks(client);
+        // The editor/context menu passes the document Uri as the first argument; the command
+        // palette and keybinding pass none.
+        await doGoToHooks(client, undefined, sourceForArgs(args));
       }
     }),
 

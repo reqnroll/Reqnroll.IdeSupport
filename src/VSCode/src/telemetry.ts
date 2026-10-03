@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { LanguageClient, TelemetryEventNotification } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { createTelemetryDebugLogFromEnvironment } from './logging/telemetryDebugLog';
+import { logInfo } from './logging/appNotify';
+import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
 
 // Same Application Insights resource VS's AnalyticsTransmitter uses (see
 // src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Analytics/InstrumentationKey.txt)
@@ -33,6 +35,41 @@ function isTelemetryEnabledByEnv(): boolean {
 // that never call registerTelemetry at all).
 let reporter: TelemetryReporter | undefined;
 
+/** Upper bound on the flush performed when the reporter is disposed (extension deactivate). */
+const DISPOSE_TIMEOUT_MS = 500;
+
+// One breaker per session (re-created by registerTelemetry): once the endpoint has failed, every
+// later event is dropped without touching the reporter, and the user sees a single notice (#859).
+let breaker = newBreaker();
+
+function newBreaker(): TelemetryCircuitBreaker {
+  return new TelemetryCircuitBreaker(logInfo, logInfo);
+}
+
+/**
+ * Disposes `r` without ever delaying deactivation: skipped entirely once the breaker is open (a
+ * flush cannot succeed), otherwise raced against a short timeout, and never throws or rejects.
+ */
+function disposeReporterBounded(r: TelemetryReporter): Thenable<void> {
+  if (breaker.isOpen) {
+    void Promise.resolve()
+      .then(() => r.dispose())
+      .catch(() => undefined);
+    return Promise.resolve();
+  }
+  let timer: NodeJS.Timeout | undefined;
+  const bound = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, DISPOSE_TIMEOUT_MS);
+  });
+  const flush = Promise.resolve()
+    .then(() => r.dispose())
+    .then(
+      () => undefined,
+      (err: unknown) => breaker.recordFailure(String(err)),
+    );
+  return Promise.race([flush, bound]).finally(() => timer && clearTimeout(timer));
+}
+
 /**
  * Creates the shared `TelemetryReporter` if telemetry is enabled and it does not exist yet. Called by
  * `extension.ts` *before* `client.start()` so that client-originated server-lifecycle events
@@ -42,8 +79,10 @@ let reporter: TelemetryReporter | undefined;
 export function ensureTelemetryReporter(context: vscode.ExtensionContext): void {
   if (reporter || !isTelemetryEnabledByEnv()) return;
 
-  reporter = new TelemetryReporter(CONNECTION_STRING);
-  context.subscriptions.push(reporter);
+  breaker = newBreaker();
+  const created = new TelemetryReporter(CONNECTION_STRING);
+  reporter = created;
+  context.subscriptions.push({ dispose: () => disposeReporterBounded(created) });
   context.subscriptions.push({
     dispose: () => {
       reporter = undefined;
@@ -138,6 +177,26 @@ export function sendTelemetryEvent(
 
   const stringProps = withClientIdentity(properties);
 
-  reporter.sendTelemetryEvent(eventName, stringProps);
+  if (breaker.isOpen) {
+    debugLog.record(
+      'host',
+      eventName,
+      properties,
+      enabled,
+      false,
+      'telemetry endpoint unreachable',
+    );
+    return;
+  }
+
+  try {
+    reporter.sendTelemetryEvent(eventName, stringProps);
+  } catch (err) {
+    // Telemetry must never surface to the user (#859): record it, open the breaker, carry on.
+    const message = err instanceof Error ? err.message : String(err);
+    breaker.recordFailure(message);
+    debugLog.record('host', eventName, properties, enabled, false, message);
+    return;
+  }
   debugLog.record('host', eventName, properties, enabled, true);
 }

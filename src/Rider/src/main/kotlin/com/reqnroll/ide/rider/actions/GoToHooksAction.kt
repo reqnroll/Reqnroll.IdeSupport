@@ -32,6 +32,9 @@ class GoToHooksAction : AnAction() {
         val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
         val position = editor.caretModel.logicalPosition
 
-        GoToHooksRunner.runAndShow(project, uri, position.line, position.column)
+        GoToHooksRunner.runAndShow(
+            project, uri, position.line, position.column,
+            source = GoToHooksRunner.sourceForPlace(e.place),
+        )
     }
 }

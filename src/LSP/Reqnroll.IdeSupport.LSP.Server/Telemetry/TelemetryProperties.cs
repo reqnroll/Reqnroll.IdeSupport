@@ -47,14 +47,29 @@ public static class TelemetryProperties
     public const string MatchCount = "MatchCount";
     /// <summary>Requested comment mode (<c>Toggle</c>, <c>Comment</c> or <c>Uncomment</c>).</summary>
     public const string Mode = "Mode";
+    /// <summary>Direction the comment command actually took (<c>Comment</c> or <c>Uncomment</c>); differs from <see cref="Mode"/> only for a requested <c>Toggle</c>.</summary>
+    public const string ResolvedMode = "ResolvedMode";
     /// <summary>Lines the comment command covered, bucketed by <see cref="TelemetryBuckets.LineCount(int)"/>.</summary>
     public const string LineCountBucket = "LineCountBucket";
     /// <summary>Text edits a formatting request returned that actually change the text (0 = already formatted).</summary>
     public const string EditCount = "EditCount";
     /// <summary>Document length in lines, bucketed by <see cref="TelemetryBuckets.LineCount(int)"/>.</summary>
     public const string DocumentLineBucket = "DocumentLineBucket";
-    /// <summary>Class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</summary>
+    /// <summary>
+    /// Event-scoped key: a class name on <c>UnhandledException</c>; on the client-originated
+    /// <c>GoToHook command executed</c> it is the <c>Command|ContextMenu|CodeLens</c> enum
+    /// (<c>GoToHookSources.PropertyName</c> in Common, mirrored in VS Code and Rider).
+    /// </summary>
+    /// <remarks>On <c>UnhandledException</c>: class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</remarks>
     public const string Source = "Source";
+    /// <summary>
+    /// Up to 8 sanitized frames (<c>Namespace.Type.Method:line</c>, newline-separated, innermost first) of an
+    /// <c>UnhandledException</c>'s stack: Reqnroll IDE-support frames only, everything else collapsed to
+    /// <c>[external]</c>; no paths, column numbers, parameters or generic arguments (issue #620, see
+    /// <see cref="Reqnroll.IdeSupport.Common.Telemetry.ExceptionStackSanitizer"/>). Attached to the first
+    /// occurrence of each distinct stack per session only.
+    /// </summary>
+    public const string StackFrames = "StackFrames";
 
     /// <summary>Client (IDE) version the client reported in <c>InitializeParams.ClientInfo</c>; omitted when absent.</summary>
     public const string ClientVersion = "ClientVersion";

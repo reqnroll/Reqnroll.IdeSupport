@@ -3,7 +3,7 @@ import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
 import { sendTelemetryEvent } from '../telemetry';
-import { TelemetryEvents } from '../telemetryEvents';
+import { GoToHookSource, TelemetryEvents, TelemetryProperties } from '../telemetryEvents';
 import { openAndReveal } from '../util/navigationUtils';
 
 interface FindHooksResponse {
@@ -20,6 +20,18 @@ interface FindHookLocation {
 }
 
 /**
+ * Classifies the arguments `reqnroll.goToHooks` was invoked with (issue #861): the hook-count
+ * CodeLens passes `[uri, line, ...]` (string, number); the editor context menu passes the document
+ * `vscode.Uri`; the command palette and keybindings pass nothing (or anything else) -> Command.
+ */
+export function sourceForArgs(args: readonly unknown[]): GoToHookSource {
+  if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
+    return GoToHookSource.codeLens;
+  }
+  return args[0] instanceof vscode.Uri ? GoToHookSource.contextMenu : GoToHookSource.command;
+}
+
+/**
  * Implements Hook Navigation ("Go to Hooks"): queries the server for hooks applicable at
  * `position` (defaulting to the active editor's cursor when omitted — the command-palette/
  * keybinding invocation path). When invoked from the hook-count CodeLens (issue #269) the server
@@ -33,16 +45,21 @@ interface FindHookLocation {
  * the `QuickPick` even for a single match, so clicking a lens always lets the user see which hook
  * it refers to rather than jumping straight there; the keybinding/command-palette path keeps the
  * original single-match shortcut.
+ *
+ * `source` is the entry point reported on the telemetry event (see {@link GoToHookSource}).
  */
 export async function doGoToHooks(
   client: LanguageClient,
-  position?: {
-    uri: string;
-    line: number;
-    character: number;
-    ownLevelOnly?: boolean;
-    alwaysShowPicker?: boolean;
-  },
+  position:
+    | {
+        uri: string;
+        line: number;
+        character: number;
+        ownLevelOnly?: boolean;
+        alwaysShowPicker?: boolean;
+      }
+    | undefined,
+  source: GoToHookSource,
 ): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   const uri = position?.uri ?? editor?.document.uri.toString();
@@ -53,7 +70,10 @@ export async function doGoToHooks(
   // A genuine navigation -- unlike VS's classic CodeLens, VS Code's hook-count CodeLens resolves
   // its counts server-side without ever calling reqnroll/findHooks, so doGoToHooks is the only
   // caller and every invocation (palette, keybinding, or a lens click) really is one (issue #698).
-  sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted);
+  // `source` is mandatory: every caller states how the navigation started (see sourceForArgs).
+  sendTelemetryEvent(TelemetryEvents.goToHookCommandExecuted, {
+    [TelemetryProperties.source]: source,
+  });
 
   let response: FindHooksResponse;
   try {
