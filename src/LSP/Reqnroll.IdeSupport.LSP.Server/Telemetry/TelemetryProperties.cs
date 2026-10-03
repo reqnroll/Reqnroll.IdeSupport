@@ -56,9 +56,9 @@ public static class TelemetryProperties
     /// <summary>Class name (no namespace, no stack trace) of the first Reqnroll frame an exception passed through.</summary>
     public const string Source = "Source";
     /// <summary>
-    /// Up to 8 sanitized frames (<c>Namespace.Type.Method</c>, newline-separated, innermost first) of an
+    /// Up to 8 sanitized frames (<c>Namespace.Type.Method:line</c>, newline-separated, innermost first) of an
     /// <c>UnhandledException</c>'s stack: Reqnroll IDE-support frames only, everything else collapsed to
-    /// <c>[external]</c>; no paths, line numbers, parameters or generic arguments (issue #620, see
+    /// <c>[external]</c>; no paths, column numbers, parameters or generic arguments (issue #620, see
     /// <see cref="Reqnroll.IdeSupport.Common.Telemetry.ExceptionStackSanitizer"/>). Attached to the first
     /// occurrence of each distinct stack per session only.
     /// </summary>

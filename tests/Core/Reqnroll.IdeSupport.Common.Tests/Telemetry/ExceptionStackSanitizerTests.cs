@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Reqnroll.IdeSupport.Common.Telemetry;
 
 namespace Reqnroll.IdeSupport.Common.Tests.Telemetry;
@@ -19,7 +20,7 @@ public class ExceptionStackSanitizerTests
         var result = ExceptionStackSanitizer.Sanitize(Thrown(() => ThrowWithParameters("secret-scenario-name", 42)))!;
 
         var frames = result.Split(ExceptionStackSanitizer.FrameSeparator);
-        frames[0].Should().Be($"{Prefix}.ThrowWithParameters");
+        frames[0].WithoutLine().Should().Be($"{Prefix}.ThrowWithParameters");
         result.Should().NotContain("secret-scenario-name")
             .And.NotContain("(").And.NotContain(")")
             .And.NotContain(".cs").And.NotContain(":line")
@@ -31,7 +32,7 @@ public class ExceptionStackSanitizerTests
     {
         var result = ExceptionStackSanitizer.Sanitize(Thrown(() => throw new InvalidOperationException("boom")))!;
 
-        result.Split(ExceptionStackSanitizer.FrameSeparator)[0]
+        result.Split(ExceptionStackSanitizer.FrameSeparator)[0].WithoutLine()
             .Should().Be($"{Prefix}.{nameof(Normalises_lambdas_to_the_declaring_member)}{{lambda}}");
         result.Should().NotContain("<").And.NotContain("b__").And.NotContain("DisplayClass");
     }
@@ -41,7 +42,7 @@ public class ExceptionStackSanitizerTests
     {
         var ex = await ThrowAsync();
 
-        ExceptionStackSanitizer.Sanitize(ex)!.Split(ExceptionStackSanitizer.FrameSeparator)[0]
+        ExceptionStackSanitizer.Sanitize(ex)!.Split(ExceptionStackSanitizer.FrameSeparator)[0].WithoutLine()
             .Should().Be($"{Prefix}.{nameof(ThrowAsync)}");
     }
 
@@ -50,7 +51,7 @@ public class ExceptionStackSanitizerTests
     {
         var result = ExceptionStackSanitizer.Sanitize(Thrown(() => new GenericHolder<UserSecretType>().Go<UserSecretType>()))!;
 
-        result.Split(ExceptionStackSanitizer.FrameSeparator)[0].Should().Be($"{Prefix}.GenericHolder.Go");
+        result.Split(ExceptionStackSanitizer.FrameSeparator)[0].WithoutLine().Should().Be($"{Prefix}.GenericHolder.Go");
         result.Should().NotContain("UserSecretType").And.NotContain("`").And.NotContain("[");
     }
 
@@ -110,7 +111,7 @@ public class ExceptionStackSanitizerTests
         result.Should().NotContain("alice").And.NotContain("Login");
     }
 
-    private static string First(string sanitized) => sanitized.Split(ExceptionStackSanitizer.FrameSeparator)[0];
+    private static string First(string sanitized) => sanitized.Split(ExceptionStackSanitizer.FrameSeparator)[0].WithoutLine();
 
     [Fact]
     public void IsProductType_requires_both_namespace_and_assembly_in_the_product_tree()
@@ -203,7 +204,7 @@ public class ExceptionStackSanitizerTests
 
         var frames = result.Split(ExceptionStackSanitizer.FrameSeparator);
         frames.Should().HaveCount(ExceptionStackSanitizer.DefaultMaxFrames);
-        frames[0].Should().Be($"{Prefix}.Recurse");
+        frames[0].WithoutLine().Should().Be($"{Prefix}.Recurse");
         result.Length.Should().BeLessThanOrEqualTo(ExceptionStackSanitizer.MaxLength);
     }
 
@@ -214,6 +215,49 @@ public class ExceptionStackSanitizerTests
 
         captured.Source.Should().Be(nameof(ExceptionStackSanitizerTests));
     }
+
+    [Fact]
+    public void Appends_the_line_number_to_product_frames_only()
+    {
+        var ex = Thrown(() => ThrowAtKnownLine(out _));
+        var line = ((KnownLine)ex).Line;
+
+        var frames = ExceptionStackSanitizer.Sanitize(ex)!.Split(ExceptionStackSanitizer.FrameSeparator);
+
+        frames[0].Should().Be($"{Prefix}.ThrowAtKnownLine:{line}");
+        frames.Where(f => f != ExceptionStackSanitizer.ExternalPlaceholder)
+            .Should().OnlyContain(f => Regex.IsMatch(f, @":\d+$"));
+    }
+
+    [Fact]
+    public void Line_numbers_add_no_path_column_or_file_name_to_the_output()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => ThrowWithParameters("s", 1)))!;
+
+        foreach (var frame in result.Split(ExceptionStackSanitizer.FrameSeparator).Where(f => f != ExceptionStackSanitizer.ExternalPlaceholder))
+            Regex.IsMatch(frame, @"^[\w.{}]+:\d+$").Should().BeTrue(frame);
+        result.Should().NotContain(".cs").And.NotContain("\\").And.NotContain("/").And.NotContain(" ");
+    }
+
+    [Fact]
+    public void Never_emits_a_zero_line_for_frames_without_debug_info()
+    {
+        var result = ExceptionStackSanitizer.Sanitize(Thrown(() => ThrowWithParameters("s", 1)))!;
+
+        result.Should().NotMatchRegex(@":0(
+|$)");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowAtKnownLine(out int unused)
+    {
+        unused = 0;
+        throw new KnownLine(ThisLine()); // ThisLine() must stay on the throw's own line
+    }
+
+    private static int ThisLine([CallerLineNumber] int line = 0) => line;
+
+    private sealed class KnownLine(int line) : Exception("x") { public int Line { get; } = line; }
 
     private static Type ImpostorType()
     {
@@ -308,4 +352,10 @@ public class ExceptionStackSanitizerTests
         [MethodImpl(MethodImplOptions.NoInlining)]
         public void Go<TArg>() => throw new InvalidOperationException("generic");
     }
+}
+
+internal static class SanitizedFrameExtensions
+{
+    /// <summary>"Ns.Type.Method:123" -> "Ns.Type.Method"; line numbers shift whenever the test file is edited.</summary>
+    public static string WithoutLine(this string frame) => Regex.Replace(frame, @":\d+$", string.Empty);
 }

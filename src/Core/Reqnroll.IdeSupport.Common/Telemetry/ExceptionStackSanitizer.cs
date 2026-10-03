@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 
@@ -10,8 +11,10 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// Reduces an exception's stack to a privacy-safe, bounded attribution string for telemetry (issue #620).
 /// <para>
 /// Only frames whose declaring type is a product type (see <see cref="IsProductType"/>: namespace AND
-/// assembly both in the <c>Reqnroll.IdeSupport</c> tree) are named, as <c>Namespace.Type.Method</c>: no file
-/// paths, line/column numbers, parameter lists, generic arguments or assembly names are ever read or emitted.
+/// assembly both in the <c>Reqnroll.IdeSupport</c> tree) are named, as <c>Namespace.Type.Method</c> followed by
+/// <c>:line</c> when the assembly's PDB resolves one (omitted otherwise). Only the integer line number is read
+/// from the debug info: file paths, column numbers, parameter lists, generic arguments and assembly names are
+/// never read or emitted.
 /// Compiler-generated async/lambda/local-function members are normalised to the member that declares them
 /// (<c>Method</c>, <c>Method{lambda}</c>, <c>Method{local}</c>). Every run of frames from any other assembly
 /// (BCL, third party, user code) is collapsed to a single <see cref="ExternalPlaceholder"/> entry.
@@ -96,7 +99,7 @@ public static class ExceptionStackSanitizer
                 if (!sawProduct && method?.DeclaringType != null && IsProductType(method.DeclaringType))
                     sawProduct = true;
             }
-            return sawProduct ? new CapturedStack(methods) : null;
+            return sawProduct ? new CapturedStack(exception, methods) : null;
         }
         catch (Exception)
         {
@@ -110,7 +113,13 @@ public static class ExceptionStackSanitizer
     {
         private readonly List<MethodBase> _methods;
 
-        internal CapturedStack(List<MethodBase> methods) => _methods = methods;
+        private readonly Exception _exception;
+
+        internal CapturedStack(Exception exception, List<MethodBase> methods)
+        {
+            _exception = exception;
+            _methods = methods;
+        }
 
         /// <summary>
         /// Simple name (no namespace) of the class holding the topmost product frame; compiler-generated
@@ -140,13 +149,20 @@ public static class ExceptionStackSanitizer
                 return null;
             try
             {
+                // Line numbers need the debug info, which is only worth reading for the stacks that are actually
+                // sent: Capture() stays metadata-only so Source is cheap for every exception.
+                var frames = new StackTrace(_exception, fNeedFileInfo: true).GetFrames();
+                if (frames == null)
+                    return null;
+
                 var entries = new List<string>();
                 var sawProductFrame = false;
-                foreach (var method in _methods)
+                foreach (var frame in frames)
                 {
                     if (entries.Count >= maxFrames)
                         break;
-                    var name = method == null ? null : FormatProductFrame(method);
+                    var method = frame.GetMethod();
+                    var name = method == null ? null : FormatProductFrame(method, frame.GetFileLineNumber());
                     if (name == null)
                     {
                         if (entries.Count == 0 || entries[entries.Count - 1] != ExternalPlaceholder)
@@ -181,7 +197,7 @@ public static class ExceptionStackSanitizer
         }
     }
 
-    private static string FormatProductFrame(MethodBase method)
+    private static string FormatProductFrame(MethodBase method, int line)
     {
         var declaring = method.DeclaringType;
         if (declaring == null || !IsProductType(declaring))
@@ -197,7 +213,8 @@ public static class ExceptionStackSanitizer
 
         var methodName = NormalizeMethodName(method.Name, declaring.Name);
         var prefix = declaring.Namespace + "." + (typeNames.Count == 0 ? string.Empty : string.Join(".", typeNames) + ".");
-        return prefix + methodName;
+        // 0 means no PDB / no sequence point for the frame; never emit a made-up location.
+        return prefix + methodName + (line > 0 ? ":" + line.ToString(CultureInfo.InvariantCulture) : string.Empty);
     }
 
     private static string NormalizeMethodName(string methodName, string declaringTypeName)
