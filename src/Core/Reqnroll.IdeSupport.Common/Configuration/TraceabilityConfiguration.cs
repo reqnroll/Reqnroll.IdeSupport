@@ -22,6 +22,26 @@ public class TraceabilityConfiguration
         foreach (var tagLinkConfiguration in TagLinks) tagLinkConfiguration.CheckConfiguration();
     }
 
+    /// <summary>
+    /// Resolves the link target for a Gherkin tag (with or without the leading <c>@</c>) using the first
+    /// configured tag link whose pattern matches, or returns null when none match.
+    /// </summary>
+    public Uri ResolveTagLink(string tagName)
+    {
+        if (string.IsNullOrEmpty(tagName) || TagLinks == null)
+            return null;
+
+        var name = tagName.TrimStart('@');
+        foreach (var tagLink in TagLinks)
+        {
+            var url = tagLink.ResolveUrl(name);
+            if (url != null)
+                return url;
+        }
+
+        return null;
+    }
+
     #region Equality
 
     /// <summary>Determines whether this instance has the same tag links as <paramref name="other"/>.</summary>
