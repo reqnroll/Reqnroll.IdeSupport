@@ -41,6 +41,24 @@ public class TagLinkConfiguration
         }
     }
 
+    /// <summary>
+    /// Expands <see cref="UrlTemplate"/> with the named groups captured from <paramref name="tagName"/>
+    /// (no leading <c>@</c>), or returns null when the pattern does not match or the result is not an absolute URI.
+    /// </summary>
+    public Uri ResolveUrl(string tagName)
+    {
+        if (ResolvedTagPattern == null || UrlTemplate == null)
+            return null;
+
+        var match = ResolvedTagPattern.Match(tagName);
+        if (!match.Success)
+            return null;
+
+        var url = Regex.Replace(UrlTemplate, @"\{(?<paramName>[a-zA-Z_\d]+)\}",
+            paramMatch => match.Groups[paramMatch.Groups["paramName"].Value].Value);
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri : null;
+    }
+
     #region Equality
 
     /// <summary>Determines whether this instance has the same setting values as <paramref name="other"/>.</summary>

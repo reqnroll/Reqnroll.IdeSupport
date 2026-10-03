@@ -28,7 +28,7 @@ are not yet implemented but could add value for Gherkin / Reqnroll users.
 |---|---|
 | All | **Deferred** — issue #128 closed 2026-09-25; nothing scheduled. |
 | 5. `workspace/executeCommand` | ⚠️ **Partial.** The server now handles `workspace/executeCommand` for one command, `reqnroll.toggleComment` (`CommentToggleHandler`). The other operations listed below are still custom `reqnroll/*` requests only. |
-| 6. `textDocument/documentLink` | Clickable tags (e.g. tags carrying issue/work-item identifiers, as the legacy VS extension supported) are tracked separately as [issue #755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755) — likely the main use case for `documentLink`. |
+| 6. `textDocument/documentLink` | Implemented for clickable tags (issue [#755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755), `DocumentLinkHandler`, see [F28](LSP-IDE-Support-Feature-Designs.md#f28--clickable-tags-traceability-links)). Step-to-binding links remain unimplemented (see Q21). |
 | 9. Pull diagnostics | **Abandoned**, not just deferred — `OmniSharp.Extensions.LanguageServer` 0.19.9's server-side JSON converters for the pull-diagnostics report types are `NotImplementedException` stubs. See [Open Questions Q19](LSP-IDE-Support-Open-Questions.md) and the archived [PullDiagnostics-Implementation-Plan.md](Archive/PullDiagnostics-Implementation-Plan.md). |
 | Protocol ceiling | Any future work here is bounded by OmniSharp 0.19.9's LSP 3.17 ceiling — see the "Protocol version ceiling" note in [LSP-IDE-Support-Architecture.md](LSP-IDE-Support-Architecture.md). |
 
@@ -49,6 +49,7 @@ The server already covered the high-value Gherkin features well:
 | `textDocument/formatting` | `GherkinFormattingHandler` |
 | `textDocument/documentSymbol` | `FeatureDocumentSymbolHandler` |
 | `textDocument/foldingRange` | `FeatureFoldingRangeHandler` |
+| `textDocument/documentLink` | `DocumentLinkHandler` (added later, F28) |
 | `textDocument/prepareRename` / `rename` | `StepRenameHandler` |
 | `textDocument/inlayHint` | `FeatureInlayHintHandler` |
 | `textDocument/semanticTokens/full` + `full/delta` | `SemanticTokensHandler` |
@@ -273,6 +274,6 @@ the first unused step definition.
 
 7. Pull diagnostics (`workspace/diagnostic` + `textDocument/diagnostic`) — since abandoned
 8. `textDocument/selectionRange`
-9. `textDocument/documentLink` — see issue #755
+9. `textDocument/documentLink` — tag links implemented (issue #755, F28); step links still deferred
 10. `textDocument/implementation`
 11. `window/showDocument`

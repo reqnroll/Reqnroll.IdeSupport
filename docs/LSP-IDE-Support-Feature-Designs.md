@@ -42,6 +42,7 @@
 - [F25 · Hook Match Count CodeLens (Hook Bindings)](#f25--hook-match-count-codelens-hook-bindings)
 - [F26 · Test Runner Integration (Run/Debug + Failed-Step Highlight)](#f26--test-runner-integration-rundebug--failed-step-highlight)
 - [F27 · C# Binding Validation Diagnostics](#f27--c-binding-validation-diagnostics)
+- [F28 · Clickable Tags (Traceability Links)](#f28--clickable-tags-traceability-links)
 - [Appendix B · Deferred / Future Features](#appendix-b--deferred--future-features)
 
 ---
@@ -463,7 +464,7 @@ Pressing **Go to Definition** (F12 / Ctrl+Click) on a step in a `.feature` file 
 
 **Resolved (Q20)**: `textDocument/definition`, via `DefinitionHandler`. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
 
-> **Open question (Q21)**: Should the server also support `textDocument/documentLink`? This would annotate step lines as Ctrl+hover hyperlinks — a complementary navigation path that requires no keystroke. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+> **Open question (Q21)**: Should the server also support `textDocument/documentLink`? This would annotate step lines as Ctrl+hover hyperlinks — a complementary navigation path that requires no keystroke. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md). (`documentLink` is now used for clickable tags, see [F28](#f28--clickable-tags-traceability-links), but not for step navigation.)
 
 #### IDE support matrix
 
@@ -2034,6 +2035,70 @@ sequenceDiagram
   `MatchResultItem`'s existing `Errors`/`MatchResult.GetErrorMessage()` mechanism — the same one
   the Ambiguous case already used — so `DiagnosticsAggregator` needed only a one-line change to
   stop discarding it.
+
+### F28 · Clickable Tags (Traceability Links)
+
+**Status: Implemented** (LSP server, issue [#755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755), PR [#888](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/888)). Client-side behaviour in Visual Studio and Rider is **not yet verified** (see the matrix below). Ports the "clickable tags" behaviour of the legacy Reqnroll.VisualStudio extension (`ScenarioTraceability`).
+
+#### End-user experience
+
+A Gherkin tag such as `@issue:1234` becomes a Ctrl+click hyperlink to the matching tracker item (e.g. `https://github.com/org/repo/issues/1234`) when it matches a pattern configured under `ide.traceability.tagLinks` in `reqnroll.json`. Tags that match no pattern are not linked. Projects that use SpecSync (`specsync.json`) get a link for `<prefix>:<id>` tags automatically, pointing at `<projectUrl>/_workitems/edit/{id}`, with no extra configuration. Configuration is per project: the requested document's owning project supplies the patterns.
+
+#### IDE support matrix
+
+| VS Code | Visual Studio | Rider |
+|---------|---------------|-------|
+| ✅ Generic (`vscode-languageclient` renders `textDocument/documentLink`) | ❓ Unverified | ❓ Unverified |
+
+The server side is complete and unit-tested. Whether the generic LSP clients of Visual Studio and Rider consume `textDocument/documentLink` has **not** been checked. If either does not (as Rider's client does not for folding, CodeLens and inlay hints), a plugin-side glue layer will be needed, following the F10/F23 pattern.
+
+#### LSP messages
+
+| Direction | Method | Purpose |
+|-----------|--------|---------|
+| Client → Server | `textDocument/documentLink` | Request the links for a document |
+| Server → Client | `DocumentLink[]` response | One link (range = the whole tag including `@`, target = resolved URL) per matching tag |
+
+`documentLink/resolve` is not supported (`ResolveProvider = false`): the target URL is computed eagerly, which is a regex match and string substitution with no I/O.
+
+#### Sequence diagram
+
+```mermaid
+sequenceDiagram
+    participant IDE
+
+    box LightBlue LSP Server
+        participant DLH as DocumentLinkHandler
+        participant PC as ParseCoordinator
+        participant DB as Document Buffer
+        participant CFG as Project Configuration
+    end
+
+    IDE->>DLH: textDocument/documentLink
+    DLH->>PC: WaitForReadyAsync
+    DLH->>DB: Retrieve tags by URI
+    DB-->>DLH: IdeSupportTag collection
+    DLH->>CFG: Traceability for the owning project
+    loop each Tag node
+        DLH->>CFG: ResolveTagLink(tag name)
+    end
+    DLH-->>IDE: DocumentLink[]
+    IDE-->>IDE: Render tags as hyperlinks
+```
+
+#### Implementation notes
+
+`DocumentLinkHandler` (`LSP.Server/Features/DocumentLinks/`) awaits `IParseCoordinator.WaitForReadyAsync`, then iterates the buffer's flat `IdeSupportTag` collection (`buffer.Tags`, the AST-like semantic tag collection, parents and children together) and keeps nodes of type `IdeSupportTagTypes.Tag` whose `Data` is a `Gherkin.Ast.Tag`. Each tag's name (which includes the leading `@`) is passed to `TraceabilityConfiguration.ResolveTagLink`, which trims the `@` and returns the first non-null `TagLinkConfiguration.ResolveUrl` across the configured links. `ResolveUrl` requires the pattern to match the **whole** tag name, expands each `{name}` placeholder in `UrlTemplate` from the pattern's named capture groups, and returns `null` unless the result is an absolute URI. The handler returns an empty container when the buffer or its tags are not yet available, or when no tag links are configured. The pattern/template logic lives in `Reqnroll.IdeSupport.Common` (`Configuration/`) so the regex stays internal to `TagLinkConfiguration`.
+
+SpecSync auto-links are produced by `ProjectScopeIdeSupportConfigurationProvider`, which merges them into `Traceability.TagLinks`; the handler needs no SpecSync-specific code.
+
+Like [F10 Folding](#f10--code-folding) and [F23 Inlay Hints](#f23--inlay-hints-step-binding-info), `documentLinkProvider` is declared statically in the `initialize` response (`Program.ApplyStaticDocumentLinkCapability`) and the handler is registered manually via `OnRequest` in `LanguageServerOptionsExtensions`, avoiding the dynamic-registration race with VS Code's restore of previously-open `.feature` tabs. The request is counted as a passive feature (`DocumentLink`) in `FeatureUsageCatalog`.
+
+#### Known limitations
+
+- **Client rendering is unverified in VS and Rider** (see the matrix).
+- **No link refresh on configuration change.** Links are computed per request; an edit to `reqnroll.json` or `specsync.json` is picked up on the client's next `documentLink` request, but LSP has no `workspace/documentLink/refresh`, so open editors may show stale links until they re-request.
+- **Tags only.** Step-to-binding navigation via `documentLink` remains the separate open question Q21.
 
 ---
 

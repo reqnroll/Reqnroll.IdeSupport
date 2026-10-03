@@ -288,6 +288,7 @@ public class Program
             ApplySemanticTokensCapability();
             ApplyStaticInlayHintCapability();
             ApplyStaticFoldingCapability();
+            ApplyStaticDocumentLinkCapability();
             ApplyStaticCodeLensCapability();
             ApplyTextDocumentSyncCapability();
             ApplyRenameCapability();
@@ -403,6 +404,16 @@ public class Program
             void ApplyStaticFoldingCapability()
             {
                 response.Capabilities.FoldingRangeProvider = new FoldingRangeRegistrationOptions.StaticOptions();
+            }
+
+            // documentLinkProvider: declared statically for the same dynamic-registration-race reason
+            // as foldingRangeProvider. Links are returned with their target, so no resolve support.
+            void ApplyStaticDocumentLinkCapability()
+            {
+                response.Capabilities.DocumentLinkProvider = new DocumentLinkRegistrationOptions.StaticOptions
+                {
+                    ResolveProvider = false
+                };
             }
 
             // codeLensProvider.resolveProvider: declared statically for the same

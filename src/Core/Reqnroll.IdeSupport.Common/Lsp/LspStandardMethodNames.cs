@@ -31,6 +31,8 @@ public static class LspStandardMethodNames
     public const string TextDocumentInlayHint = "textDocument/inlayHint";
     /// <summary>Method name for the <c>textDocument/foldingRange</c> request.</summary>
     public const string TextDocumentFoldingRange = "textDocument/foldingRange";
+    /// <summary>Method name for the <c>textDocument/documentLink</c> request.</summary>
+    public const string TextDocumentDocumentLink = "textDocument/documentLink";
     /// <summary>Method name for the <c>textDocument/prepareRename</c> request.</summary>
     public const string TextDocumentPrepareRename = "textDocument/prepareRename";
     /// <summary>Method name for the <c>textDocument/rename</c> request.</summary>
