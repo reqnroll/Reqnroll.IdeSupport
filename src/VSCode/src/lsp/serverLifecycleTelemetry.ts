@@ -80,7 +80,10 @@ export class ServerLifecycleTelemetry implements vscode.Disposable {
     if (this._intentionalStop) return;
     if (this._reachedRunning) {
       this._reachedRunning = false;
-      this._reportFailure(TelemetryEvents.serverExitedUnexpectedly, ServerFailureReason.processExited);
+      this._reportFailure(
+        TelemetryEvents.serverExitedUnexpectedly,
+        ServerFailureReason.processExited,
+      );
     } else if (!this._failureReported) {
       this._reportFailure(TelemetryEvents.serverStartFailed, ServerFailureReason.startFailed);
     }
