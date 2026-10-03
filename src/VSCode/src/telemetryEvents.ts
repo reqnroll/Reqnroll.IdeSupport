@@ -19,7 +19,18 @@ export const TelemetryEvents = {
   serverRestarted: 'ServerRestarted',
   /** An exception thrown in this extension's own code (issue #621): the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
   unhandledException: 'UnhandledException',
+  /** Extension activated (issue #875; VS's `Extension loaded`). */
+  extensionLoaded: 'Extension loaded',
+  /** First activation ever for this user (issue #875). */
+  extensionInstalled: 'Extension installed',
+  /** First activation after the version increased (issue #875). `OldExtensionVersion`. */
+  extensionUpgraded: 'Extension upgraded',
 } as const;
+
+/** Daily-active heartbeat name; mirrors `TelemetryEvents.DaysOfUsageEventNameFormat` (`"{0} day usage"`). */
+export function daysOfUsageEventName(usageDays: number): string {
+  return `${usageDays} day usage`;
+}
 
 /**
  * Closed set of `Reason` values for the server-lifecycle events; mirrors `ServerFailureReason` in
@@ -44,6 +55,8 @@ export const TelemetryProperties = {
    * How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}.
    */
   source: 'Source',
+  /** On "Extension upgraded": the version the user upgraded from (same key as VS). */
+  oldExtensionVersion: 'OldExtensionVersion',
 } as const;
 
 /** Closed set of `Source` values on "GoToHook command executed"; identical in VS, VS Code and Rider. */

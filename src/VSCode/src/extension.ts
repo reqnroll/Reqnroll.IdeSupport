@@ -40,6 +40,7 @@ import {
   sendTelemetryEvent,
 } from './telemetry';
 import { ServerLifecycleTelemetry } from './lsp/serverLifecycleTelemetry';
+import { reportExtensionLifecycle } from './extensionLifecycleTelemetry';
 import {
   SOURCE_ACTIVATION,
   createReportingErrorHandler,
@@ -448,6 +449,8 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   // before `client.start()` so a server that never comes up can still report; `registerTelemetry`
   // below reuses it. Attached before start so the first `Starting` transition is seen.
   ensureTelemetryReporter(context);
+  // Issue #875: install / upgrade / daily-usage lifecycle events, parity with Visual Studio.
+  void reportExtensionLifecycle(context, sendTelemetryEvent);
   serverLifecycle = new ServerLifecycleTelemetry(client, sendTelemetryEvent);
   context.subscriptions.push(serverLifecycle);
 
