@@ -127,7 +127,7 @@ public class TelemetryEventInterceptorTests
     }
 
     [Fact]
-    public async Task A_null_transmitter_drops_the_event_without_throwing()
+    public async Task A_null_transmitter_holds_the_event_without_throwing()
     {
         var sut = Create(transmitter: null);
 
@@ -135,5 +135,104 @@ public class TelemetryEventInterceptorTests
             Receive(TelemetryEvent("event")), CancellationToken.None);
 
         (await act.Should().NotThrowAsync()).Which.Should().Be(LspInterceptorResult.PassThrough);
+    }
+
+    private sealed class Clock
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 10, 3, 12, 0, 0, TimeSpan.Zero);
+    }
+
+    private static TelemetryEventInterceptor CreateHolding(
+        Func<ITelemetryTransmitter?> getTransmitter, Clock clock, TimeSpan? ttl = null) =>
+        new(getTransmitter, NullLogger<TelemetryEventInterceptor>.Instance, ttl ?? TimeSpan.FromSeconds(30), () => clock.Now);
+
+    [Fact]
+    public async Task Events_received_before_the_transmitter_resolves_are_sent_in_order_on_Flush()
+    {
+        ITelemetryTransmitter? transmitter = null;
+        var sut = CreateHolding(() => transmitter, new Clock());
+
+        await sut.InterceptAsync(Receive(TelemetryEvent("ServerSessionStarted")), CancellationToken.None);
+        await sut.InterceptAsync(Receive(TelemetryEvent("Second")), CancellationToken.None);
+        var capture = new CapturingTransmitter();
+        transmitter = capture;
+        capture.Events.Should().BeEmpty();
+
+        sut.Flush();
+
+        capture.Events.Select(e => e.EventName).Should().Equal("ServerSessionStarted", "Second");
+    }
+
+    [Fact]
+    public async Task Held_events_are_sent_before_the_next_event_when_no_Flush_occurs()
+    {
+        ITelemetryTransmitter? transmitter = null;
+        var sut = CreateHolding(() => transmitter, new Clock());
+        await sut.InterceptAsync(Receive(TelemetryEvent("Held")), CancellationToken.None);
+        var capture = new CapturingTransmitter();
+        transmitter = capture;
+
+        await sut.InterceptAsync(Receive(TelemetryEvent("Live")), CancellationToken.None);
+
+        capture.Events.Select(e => e.EventName).Should().Equal("Held", "Live");
+    }
+
+    [Fact]
+    public async Task Held_events_past_the_ttl_are_dropped_not_sent()
+    {
+        var clock = new Clock();
+        ITelemetryTransmitter? transmitter = null;
+        var sut = CreateHolding(() => transmitter, clock, TimeSpan.FromSeconds(30));
+        await sut.InterceptAsync(Receive(TelemetryEvent("Stale")), CancellationToken.None);
+        clock.Now += TimeSpan.FromSeconds(20);
+        await sut.InterceptAsync(Receive(TelemetryEvent("Fresh")), CancellationToken.None);
+        clock.Now += TimeSpan.FromSeconds(15); // Stale is 35s old, Fresh 15s
+        var capture = new CapturingTransmitter();
+        transmitter = capture;
+
+        sut.Flush();
+
+        capture.Events.Select(e => e.EventName).Should().Equal("Fresh");
+    }
+
+    [Fact]
+    public async Task Flush_sends_each_held_event_only_once()
+    {
+        ITelemetryTransmitter? transmitter = null;
+        var sut = CreateHolding(() => transmitter, new Clock());
+        await sut.InterceptAsync(Receive(TelemetryEvent("Once")), CancellationToken.None);
+        var capture = new CapturingTransmitter();
+        transmitter = capture;
+
+        sut.Flush();
+        sut.Flush();
+
+        capture.Events.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task The_buffer_is_bounded_and_drops_the_oldest_event()
+    {
+        ITelemetryTransmitter? transmitter = null;
+        var sut = CreateHolding(() => transmitter, new Clock());
+        for (var i = 0; i < TelemetryEventInterceptor.MaxPending + 1; i++)
+            await sut.InterceptAsync(Receive(TelemetryEvent($"e{i}")), CancellationToken.None);
+        var capture = new CapturingTransmitter();
+        transmitter = capture;
+
+        sut.Flush();
+
+        capture.Events.Should().HaveCount(TelemetryEventInterceptor.MaxPending);
+        capture.Events[0].EventName.Should().Be("e1");
+    }
+
+    [Fact]
+    public void Flush_without_a_transmitter_does_not_throw()
+    {
+        var sut = CreateHolding(() => null, new Clock());
+
+        var act = () => sut.Flush();
+
+        act.Should().NotThrow();
     }
 }

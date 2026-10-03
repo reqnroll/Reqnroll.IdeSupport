@@ -74,6 +74,7 @@ internal sealed class LspServerConnectionService : IDisposable
     private ChildProcessJob? _childJob;
     private ShutdownHandshakeInterceptor? _shutdownHandshakeInterceptor;
     private CodeLensRefreshInterceptor? _codeLensRefreshInterceptor;
+    private volatile TelemetryEventInterceptor? _telemetryInterceptor;
     private bool _disposed;
 
     // Client-originated server-lifecycle telemetry (issue #845). Holds events raised before
@@ -128,8 +129,14 @@ internal sealed class LspServerConnectionService : IDisposable
     public ITelemetryTransmitter? TelemetryTransmitter
     {
         get => _lifecycleReporter.Transmitter;
-        // Assigning also flushes any server-lifecycle events (issue #845) raised before it was known.
-        set => _lifecycleReporter.Transmitter = value;
+        // Assigning also flushes any server-lifecycle events (issue #845) raised before it was known,
+        // and any server telemetry the interceptor held while waiting for it.
+        set
+        {
+            _lifecycleReporter.Transmitter = value;
+            if (value is not null)
+                _telemetryInterceptor?.Flush();
+        }
     }
 
     /// <summary>
@@ -551,8 +558,10 @@ internal sealed class LspServerConnectionService : IDisposable
 
             // Telemetry interceptor: lazy reference because TelemetryTransmitter is resolved
             // from MEF on the main thread during OnServerInitializationResultAsync.
+            // It holds events (bounded, TTL) until the transmitter resolves; the TelemetryTransmitter setter flushes it.
             var telemetryInterceptor = new TelemetryEventInterceptor(
                 () => TelemetryTransmitter, _loggerFactory.CreateLogger<TelemetryEventInterceptor>());
+            _telemetryInterceptor = telemetryInterceptor;
             var receiveInterceptors = new ILspMessageInterceptor[]
                 { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
