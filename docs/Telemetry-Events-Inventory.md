@@ -399,7 +399,7 @@ server's lookup volume.
 |---|---|
 | **Emitter** | `LspErrorTelemetryService.MonitorError` — the LSP server's `ITelemetryService` implementation; every other `Monitor*` member is a no-op there |
 | **When** | Any exception reported through `IErrorTelemetryService` (e.g. `IdeSupportGherkinParser`, `IdeSupportTagParser`, `CompletionContextResolver`, `WatchedFilesHandler` config loads), driven by `IdeSupportLoggerExtensions.LogException` |
-| **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is never sent) |
+| **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is not sent under this property), `StackFrames` (string, **proposed in #620, awaiting maintainer decision**; omitted when unknown — up to 8 newline-separated, innermost-first entries of `Namespace.Type.Method:line` for product frames only (`:line` is the integer source line from the shipped PDB, omitted when none resolves) (declaring type's namespace **and** assembly are both `Reqnroll.IdeSupport` or `Reqnroll.IdeSupport.*`; a foreign assembly reusing the namespace, or `Reqnroll.IdeSupportLookalike`, does not qualify; assembly names are never emitted); runs of frames from any other assembly collapse to `[external]`; no file paths, column numbers, parameter lists or generic arguments; compiler-generated lambda/async/local members normalised to `Method{lambda}`/`Method`/`Method{local}`; ≤1024 chars; sanitized by `ExceptionStackSanitizer`, also passed through `TelemetryScrubber`; attached only to the first occurrence of each distinct exception-type+stack per server session and to at most 25 distinct stacks per session — the event itself is still sent every time; the cap is exact under concurrency). Caveats: frames the JIT inlined are absent, and the `[external]` collapse plus the 8-entry cap can push deeper product frames out. Only the exception's own stack is read — never inner exceptions or the exception type name beyond the unchanged `ExceptionType` property. The surrounding event (`ExceptionType`, path-scrubbed `Message`, `IsFatal`, `Source`) is unchanged |
 
 ### VS host exception transmission (not an event name)
 The VS host transmits exceptions with Application Insights' `ExceptionTelemetry` (fatal when
@@ -493,8 +493,16 @@ abrupt process death is accepted but detectable via `Sequence`.
 
 - **#583 — what should Reqnroll IDE telemetry collect?** The overall strategy thread this
   inventory feeds.
-- **#620 — should `UnhandledException` include stack traces?** Currently it does not
-  (type + scrubbed message only). Adding traces has privacy/volume implications.
+- **#620 — should `UnhandledException` include stack traces?** **Proposal implemented, not yet
+  decided:** a bounded, sanitized `StackFrames` property (see §6) — product frames reduced to
+  `Namespace.Type.Method:line` (line from the shipped PDB), everything else `[external]`, first occurrence per stack per session
+  only. Open for the maintainer: (a) accept/reject/narrow the property; (b) the issue discussion
+  prefers fuller data (inner exceptions, unscrubbed paths since exceptions come only
+  from our code); line numbers on product frames are included, the rest is deliberately *not* done here because the opt-out event stays counts/names-only;
+  (c) the VS host `ExceptionTelemetry` path (`TransmitException`) is untouched — Application
+  Insights already serializes the full exception (stack with file paths and line numbers) there,
+  which is a **different, wider posture than the server path** and should be reconciled with
+  #621/#845; `ExceptionStackSanitizer` (Common, netstandard2.0) is reusable for that.
 - **#621 — VS Code/Rider have no telemetry path for exceptions in their own client-side code.**
   Server exceptions reach telemetry via `UnhandledException`; a client-side exception path is not
   yet built.
