@@ -46,6 +46,11 @@ public sealed class CompletionHandler : ICompletionHandler
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
 
+    // Issue #883: step items carry this command so the client reports acceptance via
+    // workspace/executeCommand (counted by CompletionAcceptedHandler).
+    private static readonly Command AcceptCommand =
+        new() { Name = CompletionAcceptedHandler.CommandName, Title = "Completion accepted" };
+
     // Performance Verification (Layer 4) op labels. Keyword completion (<50ms) and step completion
     // (<150ms) have distinct targets, so they are recorded under distinct operation names.
     // These labels also feed FeatureUsageCatalog (Completion.* counters), so no separate usage telemetry is sent here.
@@ -200,7 +205,7 @@ public sealed class CompletionHandler : ICompletionHandler
 
         _logger.LogVerbose(
             $"CompletionHandler: {result.Entries.Count} step completion(s) for {uri}");
-        return new CompletionList(ToItems(result.Entries, stepRange));
+        return new CompletionList(ToItems(result.Entries, stepRange, AcceptCommand));
     }
 
     // ── Gherkin keyword completion ────────────────────────────────────────────
@@ -431,10 +436,11 @@ public sealed class CompletionHandler : ICompletionHandler
         return configProvider.GetConfiguration()?.DefaultFeatureLanguage ?? "en";
     }
 
-    private static List<CompletionItem> ToItems(IReadOnlyList<CompletionEntry> entries, LspRange range)
+    private static List<CompletionItem> ToItems(IReadOnlyList<CompletionEntry> entries, LspRange range, Command? command = null)
         => entries
             .Select(e => new CompletionItem
             {
+                Command = command,
                 Label = e.Label,
                 Detail = e.Detail,
                 Kind = (CompletionItemKind)(int)e.Kind,

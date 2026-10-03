@@ -3,7 +3,9 @@ using Gherkin;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
@@ -114,6 +116,58 @@ public class CompletionHandlerTests
             CancellationToken.None);
 
         result.Items.Should().BeEmpty();
+    }
+
+    private async Task<CompletionList> RequestStepCompletionAsync()
+    {
+        SetupBuffer(FeatureUri, "Feature: F\n  Scenario: S\n    Given my\n");
+        var step = new IdeSupportGherkinStep(
+            new Gherkin.Ast.Location(3, 5), "Given ", StepKeywordType.Context, "my", null!,
+            StepKeyword.Given, ScenarioBlock.Given);
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new StepCompletionContext(step, "my", 10));
+        _completionService.GetStepCompletions(
+                Arg.Any<IdeSupportGherkinStep>(), Arg.Any<string>(), Arg.Any<ProjectBindingRegistry>(),
+                Arg.Any<Func<ProjectStepDefinitionBinding, int>>(), _matcher)
+            .Returns(new CompletionResult(new[]
+            {
+                new CompletionEntry("my step", null, CompletionEntryKind.Keyword),
+                new CompletionEntry("my other step", null, CompletionEntryKind.Keyword),
+            }));
+
+        return await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(2, 12) },
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Step_items_carry_the_accept_command_Async()
+    {
+        var result = await RequestStepCompletionAsync();
+
+        result.Items.Should().HaveCount(2)
+            .And.OnlyContain(i => i.Command != null && i.Command.Name == CompletionAcceptedHandler.CommandName);
+    }
+
+    [Fact]
+    public async Task Keyword_items_never_carry_the_accept_command_Async()
+    {
+        SetupBuffer(FeatureUri, "Feature: F\n  Sc\n");
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, new[] { TokenType.ScenarioLine }));
+        _completionService.GetKeywordCompletions(Arg.Any<TokenType[]>(), dialect)
+            .Returns(new CompletionResult(new[] { new CompletionEntry("Scenario:", null, CompletionEntryKind.Keyword) }));
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(1, 4) },
+            CancellationToken.None);
+
+        result.Items.Should().NotBeEmpty().And.OnlyContain(i => i.Command == null);
     }
 
     [Fact]
