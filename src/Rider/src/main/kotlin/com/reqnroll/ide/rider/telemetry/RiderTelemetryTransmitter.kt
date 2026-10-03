@@ -49,6 +49,9 @@ object RiderTelemetryTransmitter {
      */
     internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
 
+    /** Exception caught in the plugin's own code (issue #621); same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
+    internal const val UNHANDLED_EXCEPTION = "UnhandledException"
+
     /**
      * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED] (issue #861): how the navigation was
      * started. Closed set shared with VS and VS Code (`GoToHookSources.cs` / `GoToHookSource` in

@@ -411,6 +411,34 @@ server's lookup volume.
 | **When** | Any exception reported through `IErrorTelemetryService` (e.g. `IdeSupportGherkinParser`, `IdeSupportTagParser`, `CompletionContextResolver`, `WatchedFilesHandler` config loads), driven by `IdeSupportLoggerExtensions.LogException` |
 | **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is not sent under this property), `StackFrames` (string, **proposed in #620, awaiting maintainer decision**; omitted when unknown — up to 8 newline-separated, innermost-first entries of `Namespace.Type.Method:line` for product frames only (`:line` is the integer source line from the shipped PDB, omitted when none resolves) (declaring type's namespace **and** assembly are both `Reqnroll.IdeSupport` or `Reqnroll.IdeSupport.*`; a foreign assembly reusing the namespace, or `Reqnroll.IdeSupportLookalike`, does not qualify; assembly names are never emitted); runs of frames from any other assembly collapse to `[external]`; no file paths, column numbers, parameter lists or generic arguments; compiler-generated lambda/async/local members normalised to `Method{lambda}`/`Method`/`Method{local}`; ≤1024 chars; sanitized by `ExceptionStackSanitizer`, also passed through `TelemetryScrubber`; attached only to the first occurrence of each distinct exception-type+stack per server session and to at most 25 distinct stacks per session — the event itself is still sent every time; the cap is exact under concurrency). Caveats: frames the JIT inlined are absent, and the `[external]` collapse plus the 8-entry cap can push deeper product frames out. Only the exception's own stack is read — never inner exceptions or the exception type name beyond the unchanged `ExceptionType` property. The surrounding event (`ExceptionType`, path-scrubbed `Message`, `IsFatal`, `Source`) is unchanged |
 
+### `UnhandledException` (VS Code and Rider client code, #621)
+| | |
+|---|---|
+| **Emitters** | VS Code: `clientExceptionTelemetry.ts` (`reportClientException`, `guardCommand`, `createReportingErrorHandler`); Rider: `ClientExceptionTelemetry.report`, called from `ReqnrollDebugLogger.warn`/`error` whenever they are given a throwable |
+| **When** | VS Code: an exception escapes `activate` (`Source = Activation`), a Reqnroll command handler throws or rejects (`Source = Command:<commandId>`, e.g. `Command:reqnroll.goToHooks`; rethrown unchanged afterwards), or the language client's transport error callback fires (`Source = LanguageClientErrorHandler`; the client's default handler still decides continue/stop). Rider: every exception the plugin catches and logs at Warning or Error (LSP request failures in `ReqnrollRequestSender`, test-runner and MTP-stub failures, server-path resolution, gutter marks) |
+| **Properties** | The server's schema, reused so one query covers every origin: `ExceptionType` (VS Code: JS error `name`/class name when it is a plain identifier, else `Error`, `NonError` for a thrown non-Error; Rider: full JVM class name), `Message` (scrubbed harder than the server's, see **Client message scrub** below, and capped at 128 chars), `Source` (VS Code: the closed set above; Rider: simple name of the topmost plugin class on the stack, nested/lambda types folded, omitted when none), plus **`ExceptionOrigin = "Client"`**, which server-originated events do not carry. `IdeClient` (`vscode`/`rider`) and the `Ide*`/`ExtensionVersion` identity keys are stamped by each host's transmitter like on every event (#844). `IsFatal` is never sent. `SuppressedCount` (plain integer, only when > 0) is the number of events dropped as duplicates or by the session cap since the last one sent; it rides on the next event that is sent, so events dropped after the cap is reached are not visible |
+| **Limits** | Per session: each distinct (source, type, message) is sent once, at most 20 events in total (Rider also guards against re-entrancy); cancellation exceptions are never reported (this includes Rider's request-timeout cancellations, e.g. a rename timeout: a timeout is not a plugin failure); an LSP error response (`ResponseError` in VS Code, `ResponseErrorException` in Rider, also as a cause) is never reported, because the server already reports its own failures and the text can embed step or expression text; in VS Code an error raised by the `editor.action.rename` command that the F2/rename commands fall through to is rethrown but not reported (it is VS Code's, not ours); every reporting step is wrapped so telemetry cannot throw into, or block, the code it observes (Rider hands the send to a pooled thread). Gating: `REQNROLL_TELEMETRY_ENABLED` in both clients, plus VS Code's own `telemetry.telemetryLevel`; **Rider (like VS) has no IDE-level telemetry opt-out**, only the env var |
+| **Not sent** | Stack traces (#620 is open: only the `Source` attribution derived from the stack is sent), paths, and anything beyond the scrubbed message |
+
+**Client message scrub.** Client exception text is arbitrary (Node, VS Code and JVM errors quote file names, user directories,
+URLs with tokens and parser snippets), so `Message` is scrubbed more strictly than the server's: every double-quoted span (first to last quote
+on the line, because V8 embeds JSON snippets unescaped) and every backtick or multi-character single-quoted span becomes
+`<text>`, so a `JSON.parse` snippet cannot leak; URLs become `<url>` (query string and fragment included); absolute drive-letter, UNC and POSIX
+paths (directory names may contain interior spaces, so `C:\Users\John Smith\x` is one path), `~`/`%VAR%`/`$VAR` paths, `./` and `../` paths and bare file
+names or relative paths ending in a source/config extension (`.feature`, `.cs`, `.csproj`, `.json`, `.md`, ...) become `<path>`; and the result is capped at
+128 characters, which also bounds anything the rules miss. The server's `TelemetryScrubber.RedactPaths` got the same URL/path hardening (not
+the quote drop or cap, which would change its `ErrorMessage` semantics). Known limits: a file name with spaces and no
+directory (`My File.feature`) keeps its first word; a bare name with an extension outside the list is not recognized.
+
+**Decision: reuse the `UnhandledException` event rather than add one.** The property schema is identical, so
+existing error-rate and exception-type queries keep working; `ExceptionOrigin` (absent = server) separates the layers
+and `IdeClient` the IDE. **Coverage:** VS Code covers activation, Reqnroll commands and the language-client transport
+error callback; it does *not* cover event handlers/providers outside those commands (e.g. CodeLens providers, the
+test-outcomes service, fire-and-forget promises), nor exceptions other extensions throw. Rider covers exceptions the plugin
+catches and logs; it does *not* cover exceptions the plugin never catches (those reach the IntelliJ platform's own error
+reporting, not ours). A failed server start/handshake and an unexpected server exit are server lifecycle (#845), not client
+exceptions, and are deliberately not duplicated here. The VS host already reports its own exceptions (next section).
+
 ### VS host exception transmission (not an event name)
 The VS host transmits exceptions with Application Insights' `ExceptionTelemetry` (fatal when
 classified so via `TransmitFatalExceptionEvent`); the debug mirror records them as
@@ -496,7 +524,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Picker UI trigger rate | `RenameTargetsResolved` (`TargetCount > 1` share) |
 | Go-to-hooks: lookups vs navigations | `FindHooks command executed` (server) vs `GoToHook command executed` (clients) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |
-| Crash/error rates | `UnhandledException` (server) + VS `ExceptionTelemetry` |
+| Crash/error rates | `UnhandledException` (server; VS Code/Rider client code with `ExceptionOrigin = "Client"`) + VS `ExceptionTelemetry` |
 | Adoption lifecycle | `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events |
 | Field performance (P95/P99) | `PerfSample` |
 | Volume/passive feature usage (completion, code actions, CodeLens, inlay hints, ...) | `FeatureUsageSummary` |
@@ -518,8 +546,8 @@ abrupt process death is accepted but detectable via `Sequence`.
   Insights already serializes the full exception (stack with file paths and line numbers) there,
   which is a **different, wider posture than the server path** and should be reconciled with
   #621/#845; `ExceptionStackSanitizer` (Common, netstandard2.0) is reusable for that.
-- **#621 — VS Code/Rider have no telemetry path for exceptions in their own client-side code.**
-  Server exceptions reach telemetry via `UnhandledException`; a client-side exception path is not
-  yet built.
+- **#621 — client-side exception path for VS Code/Rider** is built (see `UnhandledException` (VS Code and
+  Rider client code) in §6): activation, commands and the language-client error callback in VS Code, caught-and-logged
+  exceptions in Rider. Stack traces stay out of the client events until #620 is decided (its `StackFrames` proposal currently covers the server path only).
 - **#258 — `ProjectCharacteristics` event** (step/binding/hook/transformation counts as a
   snapshot) — proposed, not implemented.
