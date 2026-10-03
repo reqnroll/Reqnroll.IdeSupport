@@ -573,7 +573,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | `Reqnroll Generation executed` | Removed (`MonitorReqnrollGeneration` deleted) | The single-file code-behind generation feature it monitored has no implementation anywhere in the product; the event would never fire |
 | `Notification shown` / `Notification dismissed` | Not carried over | No notification system in the current extension (commented out in the interface — do not resurrect without the feature) |
 | `CommandAutoFormatTable` (a.k.a. on-type table formatting) | Never implemented as an event | Fires on every keystroke inside a table — not a discrete user command; perf sampling covers latency (`PerfTargets.OnTypeFormatting`) and `FeatureUsageSummary`'s `OnTypeFormatting` count covers volume |
-| `Completion inserted` | Deferred | Standard LSP gives the server no signal when a completion item is accepted; a future VS-client commit hook could emit it (see archived build plan §4.1) |
+| `Completion inserted` | Deferred | Standard LSP gives the server no signal when a completion item is accepted; a future VS-client commit hook could emit it (see archived build plan §4.1). Completion *requests* are already counted via `FeatureUsageSummary` (`Completion.*`), so there is no separate per-request completion event |
 
 ---
 

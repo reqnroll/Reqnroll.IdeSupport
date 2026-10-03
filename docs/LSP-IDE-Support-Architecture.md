@@ -849,6 +849,17 @@ handler (semanticTokens, completion, definition, references, rename, code action
 document outline, folding, formatting, inlay hints, find-unused-step-defs, comment toggle, and
 text-sync).
 
+**Telemetry for handlers.** A handler does not need explicit telemetry code for volume or passive
+features such as completion, code actions, CodeLens, inlay hints, folding and document symbols.
+The recorder's `Record` also increments an in-memory `IFeatureUsageCounters` entry whenever the
+operation label is in `FeatureUsageCatalog`; `FeatureUsageFlushService` drains those counters into one
+periodic `FeatureUsageSummary` event (see `docs/Telemetry-Events-Inventory.md`, `FeatureUsageSummary`).
+So a handler that records its operation label gets usage counting by adding a catalogue entry, not by
+sending events. Discrete user commands (Go to Step Definition, Find Usages, Rename, ...) are the
+opposite case: they send their own per-call event and must **not** also be catalogued, or each
+invocation is counted twice. Completion *acceptance* is not observable through standard LSP and is
+not counted; the counts are of requests.
+
 The two Roslyn/reflection binding-discovery batch scenarios, and representative bound-state
 numbers for definition/step-completion, need a real bindings assembly to measure against —
 provided by `tests/Performance/Reqnroll.IdeSupport.LSP.Server.Benchmarks.Corpus/`, a small class

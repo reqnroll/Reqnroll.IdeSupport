@@ -48,6 +48,7 @@ public sealed class CompletionHandler : ICompletionHandler
 
     // Performance Verification (Layer 4) op labels. Keyword completion (<50ms) and step completion
     // (<150ms) have distinct targets, so they are recorded under distinct operation names.
+    // These labels also feed FeatureUsageCatalog (Completion.* counters), so no separate usage telemetry is sent here.
     private const string KeywordCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#keyword";
     private const string StepCompletionOp = LspStandardMethodNames.TextDocumentCompletion + "#step";
 
