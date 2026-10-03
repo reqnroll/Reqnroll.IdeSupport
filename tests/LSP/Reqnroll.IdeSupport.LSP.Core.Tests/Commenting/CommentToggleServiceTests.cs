@@ -8,6 +8,20 @@ public class CommentToggleServiceTests
 {
     private static CommentToggleService CreateSut() => new();
 
+    // ── Resolved direction (issue #861) ───────────────────────────────────
+
+    [Theory]
+    [InlineData("Given a step\n", CommentToggleMode.Toggle, false)]
+    [InlineData("# Given a step\n", CommentToggleMode.Toggle, true)]
+    [InlineData("# a\nb\n", CommentToggleMode.Toggle, false)]
+    [InlineData("# Given a step\n", CommentToggleMode.Comment, false)]
+    [InlineData("Given a step\n", CommentToggleMode.Uncomment, true)]
+    public void Result_reports_the_direction_the_request_resolved_to(string text, CommentToggleMode mode, bool expectedUncommented)
+    {
+        var result = CreateSut().ToggleComment(text, 0, text.TrimEnd((char)10).Split((char)10).Length - 1, mode);
+        result.Uncommented.Should().Be(expectedUncommented);
+    }
+
     // ── Toggle ON (comment uncommented lines) ─────────────────────────────
 
     [Fact]

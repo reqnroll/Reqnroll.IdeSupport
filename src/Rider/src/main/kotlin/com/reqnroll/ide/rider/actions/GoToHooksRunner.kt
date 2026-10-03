@@ -1,5 +1,6 @@
 package com.reqnroll.ide.rider.actions
 
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -30,14 +31,16 @@ object GoToHooksRunner {
     fun runAndShow(
         project: Project, uri: String, line: Int, character: Int,
         ownLevelOnly: Boolean = false, alwaysShowPicker: Boolean = false,
+        source: String = RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_COMMAND,
     ) {
         ReqnrollDebugLogger.info("GoToHooksRunner: invoked for $uri at $line:$character")
 
-        // A genuine navigation -- GoToHooksAction is this function's only caller, and Rider's own
+        // A genuine navigation -- GoToHooksAction and the hook-count lens click are its only callers, and Rider's own
         // hook-count CodeVision lens resolves its counts without ever calling reqnroll/findHooks,
         // so unlike VS's classic CodeLens there's no prefetch call through here to mislabel
         // (issue #698).
-        RiderTelemetryTransmitter.transmit(RiderTelemetryTransmitter.GO_TO_HOOK_COMMAND_EXECUTED, emptyMap())
+        RiderTelemetryTransmitter.transmit(
+            RiderTelemetryTransmitter.GO_TO_HOOK_COMMAND_EXECUTED, telemetryProperties(source))
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(
             project, "Reqnroll: Finding Hooks", true) {
@@ -52,6 +55,19 @@ object GoToHooksRunner {
             }
         })
     }
+
+    /** `Source` property of the telemetry event (issue #861); pure so it is testable without a project. */
+    internal fun telemetryProperties(source: String): Map<String, String> =
+        mapOf(RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_PROPERTY to source)
+
+    /**
+     * Maps the [com.intellij.openapi.actionSystem.AnActionEvent.getPlace] an action fired from onto
+     * the telemetry `Source`: the editor right-click menu is `ContextMenu`; everything else
+     * (keymap shortcut, action search, main menu) is `Command`.
+     */
+    internal fun sourceForPlace(place: String): String =
+        if (place == ActionPlaces.EDITOR_POPUP) RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CONTEXT_MENU
+        else RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_COMMAND
 
     private fun showResult(project: Project, response: FindHooksResponse?, alwaysShowPicker: Boolean) {
         if (response == null) {

@@ -117,6 +117,7 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new()
         {
             [TelemetryProperties.Mode] = mode.ToString(),
+            [TelemetryProperties.ResolvedMode] = result.Uncommented ? nameof(CommentToggleMode.Uncomment) : nameof(CommentToggleMode.Comment),
             [TelemetryProperties.LineCountBucket] = TelemetryBuckets.LineCount(Math.Max(0, endLine - startLine + 1)),
         });
 
