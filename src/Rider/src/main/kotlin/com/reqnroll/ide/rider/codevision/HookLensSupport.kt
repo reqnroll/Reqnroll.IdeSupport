@@ -8,6 +8,7 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.actions.GoToHooksRunner
+import com.reqnroll.ide.rider.telemetry.RiderTelemetryTransmitter
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.CodeLens
 
@@ -102,6 +103,7 @@ internal object HookLensSupport {
                 val entry = StepUsagesCodeVisionProvider.buildEntry(command, providerId) {
                     GoToHooksRunner.runAndShow(
                         project, uri, clickLine, clickCharacter, ownLevelOnly, alwaysShowPicker = true,
+                        source = RiderTelemetryTransmitter.GO_TO_HOOK_SOURCE_CODE_LENS,
                     )
                 }
                 TextRange(offset, offset) to entry

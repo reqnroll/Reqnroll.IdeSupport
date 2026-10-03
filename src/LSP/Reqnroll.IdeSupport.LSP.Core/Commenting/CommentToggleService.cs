@@ -40,7 +40,7 @@ public class CommentToggleService : ICommentToggleService
             edits.Add(new GherkinCommentEdit(i, i, newLine));
         }
 
-        return new GherkinCommentToggleResult(edits.AsReadOnly());
+        return new GherkinCommentToggleResult(edits.AsReadOnly(), uncomment);
     }
 
     private static bool AreAllCommented(string[] lines, int rangeStartLine, int rangeEndLine)

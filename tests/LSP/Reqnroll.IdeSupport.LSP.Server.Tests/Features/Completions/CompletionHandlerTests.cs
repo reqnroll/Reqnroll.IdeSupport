@@ -204,6 +204,36 @@ public class CompletionHandlerTests
         range.End.Character.Should().BeLessThanOrEqualTo(cursorChar);
     }
 
+    // ── Stale / out-of-range request position (issue #871) ─────────────────────
+
+    [Theory]
+    [InlineData("  Giv", 40, 5)]   // character far beyond the end of the line
+    [InlineData("", 3, 0)]         // empty line (last line, no trailing newline)
+    [InlineData("  Giv", 5, 5)]    // caret exactly at end of line
+    [InlineData("  Giv", -2, 0)]   // negative character
+    public async Task Keyword_completion_with_out_of_range_position_does_not_throw_Async(
+        string line, int cursorChar, int expectedEnd)
+    {
+        SetupBuffer(FeatureUri, line);
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, Array.Empty<TokenType>()));
+        _completionService.GetDefaultKeywordCompletions(dialect).Returns(new CompletionResult(new[]
+        {
+            new CompletionEntry("Given ", null, CompletionEntryKind.Keyword)
+        }));
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, cursorChar) },
+            CancellationToken.None);
+
+        var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
+        range.End.Character.Should().Be(expectedEnd);
+        range.Start.Character.Should().BeLessThanOrEqualTo(range.End.Character);
+    }
+
     // ── Group-wise narrowing by typed prefix (issue #818 follow-up) ────────────
 
     [Fact]

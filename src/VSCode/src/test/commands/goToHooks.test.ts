@@ -2,8 +2,9 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
-import { doGoToHooks } from '../../commands/goToHooks';
+import { doGoToHooks, sourceForArgs } from '../../commands/goToHooks';
 import { registerTelemetry } from '../../telemetry';
+import { GoToHookSource, TelemetryProperties } from '../../telemetryEvents';
 
 /** Minimal stand-in for LanguageClient's sendRequest surface used by doGoToHooks. */
 function fakeClient(sendRequest: () => Promise<unknown>): LanguageClient {
@@ -69,7 +70,7 @@ suite('goToHooks', () => {
             return Promise.resolve(undefined);
           },
         },
-        () => doGoToHooks(client),
+        () => doGoToHooks(client, undefined, GoToHookSource.command),
       );
 
       assert.match(shownMessage ?? '', /Go to Hooks failed.*boom/);
@@ -86,7 +87,7 @@ suite('goToHooks', () => {
             return Promise.resolve(undefined);
           },
         },
-        () => doGoToHooks(client),
+        () => doGoToHooks(client, undefined, GoToHookSource.command),
       );
 
       assert.match(shownMessage ?? '', /No hooks found/);
@@ -124,7 +125,7 @@ suite('goToHooks', () => {
             return Promise.resolve(undefined);
           }) as unknown as typeof vscode.window.showQuickPick,
         },
-        () => doGoToHooks(client),
+        () => doGoToHooks(client, undefined, GoToHookSource.command),
       );
 
       assert.strictEqual(quickPickItems?.length, 2);
@@ -156,7 +157,12 @@ suite('goToHooks', () => {
             return Promise.resolve(undefined);
           },
         },
-        () => doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 }),
+        () =>
+          doGoToHooks(
+            client,
+            { uri: editor.document.uri.toString(), line: 0, character: 0 },
+            GoToHookSource.command,
+          ),
       );
 
       assert.strictEqual(quickPickShown, false);
@@ -187,12 +193,16 @@ suite('goToHooks', () => {
           },
         },
         () =>
-          doGoToHooks(client, {
-            uri: editor.document.uri.toString(),
-            line: 0,
-            character: 0,
-            alwaysShowPicker: true,
-          }),
+          doGoToHooks(
+            client,
+            {
+              uri: editor.document.uri.toString(),
+              line: 0,
+              character: 0,
+              alwaysShowPicker: true,
+            },
+            GoToHookSource.codeLens,
+          ),
       );
 
       assert.match(quickPickPlaceholder ?? '', /^1 hook found/);
@@ -204,7 +214,11 @@ suite('goToHooks', () => {
         sentParams = params;
       });
 
-      await doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 });
+      await doGoToHooks(
+        client,
+        { uri: editor.document.uri.toString(), line: 0, character: 0 },
+        GoToHookSource.command,
+      );
 
       assert.strictEqual((sentParams as { ownLevelOnly?: boolean })?.ownLevelOnly, false);
     });
@@ -215,17 +229,19 @@ suite('goToHooks', () => {
         sentParams = params;
       });
 
-      await doGoToHooks(client, {
-        uri: editor.document.uri.toString(),
-        line: 0,
-        character: 0,
-        ownLevelOnly: true,
-      });
+      await doGoToHooks(
+        client,
+        { uri: editor.document.uri.toString(), line: 0, character: 0, ownLevelOnly: true },
+        GoToHookSource.codeLens,
+      );
 
       assert.strictEqual((sentParams as { ownLevelOnly?: boolean })?.ownLevelOnly, true);
     });
 
-    test('sends "GoToHook command executed" telemetry directly on a genuine invocation (issue #698)', async () => {
+    /** Runs `invoke` with the reporter stubbed and returns every [eventName, properties] sent. */
+    async function captureTelemetry(
+      invoke: (client: LanguageClient) => Promise<void>,
+    ): Promise<Array<[string, Record<string, string> | undefined]>> {
       const client = {
         sendRequest: () => Promise.resolve({ hooks: [] }),
         onNotification: () => ({ dispose: () => undefined }),
@@ -233,23 +249,82 @@ suite('goToHooks', () => {
       const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
 
       const proto = TelemetryReporter.prototype as unknown as {
-        sendTelemetryEvent: (eventName: string) => void;
+        sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
       };
       const original = proto.sendTelemetryEvent;
-      const sentEventNames: string[] = [];
-      proto.sendTelemetryEvent = (eventName: string) => {
-        sentEventNames.push(eventName);
+      const sent: Array<[string, Record<string, string> | undefined]> = [];
+      proto.sendTelemetryEvent = (eventName: string, properties?: Record<string, string>) => {
+        sent.push([eventName, properties]);
       };
 
       try {
         registerTelemetry(client, telemetryContext);
-        await doGoToHooks(client, { uri: editor.document.uri.toString(), line: 0, character: 0 });
-
-        assert.deepStrictEqual(sentEventNames, ['GoToHook command executed']);
+        await invoke(client);
+        return sent;
       } finally {
         proto.sendTelemetryEvent = original;
         for (const sub of telemetryContext.subscriptions) sub.dispose();
       }
+    }
+
+    test('sends "GoToHook command executed" telemetry directly on a genuine invocation (issue #698)', async () => {
+      const sent = await captureTelemetry((client) =>
+        doGoToHooks(
+          client,
+          { uri: editor.document.uri.toString(), line: 0, character: 0 },
+          GoToHookSource.command,
+        ),
+      );
+
+      assert.deepStrictEqual(
+        sent.map(([name]) => name),
+        ['GoToHook command executed'],
+      );
+    });
+
+    // Issue #861: Source is derived by sourceForArgs from the real command arguments and is
+    // transmitted as the closed enum shared with VS and Rider.
+    const sourceCases: Array<[string, () => unknown[], string]> = [
+      ['palette/keybinding (no arguments)', () => [], 'Command'],
+      ['editor context menu (document Uri argument)', () => [editor.document.uri], 'ContextMenu'],
+      [
+        'CodeLens click (uri, line, char, ownLevelOnly)',
+        () => ['file:///a.feature', 3, 0, true],
+        'CodeLens',
+      ],
+    ];
+    for (const [name, makeArgs, expected] of sourceCases) {
+      test(`transmits Source=${expected} for ${name}`, async () => {
+        const args = makeArgs();
+        const sent = await captureTelemetry((client) =>
+          doGoToHooks(client, undefined, sourceForArgs(args)),
+        );
+
+        assert.strictEqual(sent[0][1]?.Source, expected);
+      });
+    }
+  });
+
+  suite('sourceForArgs', () => {
+    test('a real vscode.Uri (editor/context argument) is ContextMenu', () => {
+      assert.strictEqual(sourceForArgs([vscode.Uri.file('/w/a.feature')]), 'ContextMenu');
+    });
+
+    test('a string and a number (CodeLens arguments) is CodeLens', () => {
+      assert.strictEqual(sourceForArgs(['file:///w/a.feature', 4]), 'CodeLens');
+      assert.strictEqual(sourceForArgs(['file:///w/a.feature', 4, 2, false]), 'CodeLens');
+    });
+
+    test('a lone string, other values or no arguments is Command', () => {
+      assert.strictEqual(sourceForArgs(['file:///w/a.feature']), 'Command');
+      assert.strictEqual(sourceForArgs([42]), 'Command');
+      assert.strictEqual(sourceForArgs([{}]), 'Command');
+      assert.strictEqual(sourceForArgs([]), 'Command');
+    });
+
+    test('the closed enum and property key match the other IDEs', () => {
+      assert.deepStrictEqual(Object.values(GoToHookSource), ['Command', 'ContextMenu', 'CodeLens']);
+      assert.strictEqual(TelemetryProperties.source, 'Source');
     });
   });
 });
