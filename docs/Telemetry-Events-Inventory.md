@@ -197,11 +197,20 @@ prefetch, so genuine-navigation telemetry is emitted client-side as
 | | |
 |---|---|
 | **Emitter** | `CodeActionHandler` |
-| **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user accepts it — the `WorkspaceEdit` is applied client-side, so the server can't observe acceptance |
+| **When** | The "Define step(s)" lightbulb action is *offered* (undefined steps present); not when the user picks it — see [`DefineStepsCommandExecuted`](#definestepscommandexecuted) |
 | **Properties** | `UndefinedStepCount` (int), `ActionsOffered` (int, counted from the final post-filter/post-cap list) |
 
-**Analytics use.** Undefined-step pressure (how often the quick fix is needed) and offer rate.
-Acceptance rate is not measurable server-side by design.
+**Analytics use.** Undefined-step pressure (how often the quick fix is needed) and offer availability.
+VS and Rider may request code actions on every caret move, so this is not a count of lightbulb opens.
+
+### `DefineStepsCommandExecuted`
+| | |
+|---|---|
+| **Emitter** | `DefineStepsTriggeredHandler` |
+| **When** | A client runs the `reqnroll.defineStepsTriggered` command that every "Define step(s)" code action carries. Clients run a code action's command after applying its edit, so this is the user picking the quick fix (any of its variants). Not sent for hand-written definitions |
+| **Properties** | none |
+
+**Analytics use.** Acceptance rate = `DefineSteps command executed` / `DefineSteps command offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, replacing the former client-side `vscode.open` command (a code action has one command slot).
 
 ### `FindUnusedStepDefinitionsCommandExecuted`
 | | |
