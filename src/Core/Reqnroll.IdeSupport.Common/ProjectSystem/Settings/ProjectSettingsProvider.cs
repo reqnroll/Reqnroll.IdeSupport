@@ -1,7 +1,6 @@
 ﻿#nullable disable
 
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.Common.Telemetry;
 using System;
 using System.Threading;
 
@@ -44,7 +43,6 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     }
 
     private IIdeSupportLogger Logger => _projectScope.IdeScope.Logger;
-    private ITelemetryService TelemetryService => _projectScope.IdeScope.TelemetryService;
 
     /// <summary>Stops the retry timer and releases resources held by this provider.</summary>
     public void Dispose()
@@ -70,7 +68,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     /// <summary>Re-loads project settings from the project system and updates the cache if they changed.</summary>
     public ProjectSettings CheckProjectSettings()
     {
-        var projectSettings = LoadProjectSettings(out var featureFileCount);
+        var projectSettings = LoadProjectSettings();
         if (projectSettings.IsUninitialized)
             return _projectSettings;
 
@@ -80,7 +78,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         var wasUninitialized = _projectSettings.IsUninitialized;
         _projectSettings = projectSettings;
         if (wasUninitialized)
-            OnSettingsInitialized(projectSettings, featureFileCount);
+            OnSettingsInitialized(projectSettings);
         else
             Logger.LogInfo($"Project settings updated: {projectSettings.GetShortLabel()}");
         return _projectSettings;
@@ -88,9 +86,9 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
 
     private void InitializeProjectSettings()
     {
-        _projectSettings = LoadProjectSettings(out var featureFileCount);
+        _projectSettings = LoadProjectSettings();
         if (!_projectSettings.IsUninitialized)
-            OnSettingsInitialized(_projectSettings, featureFileCount);
+            OnSettingsInitialized(_projectSettings);
         else
             StartRetryInitializeTimer();
     }
@@ -136,16 +134,15 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         CheckProjectSettings();
     }
 
-    private void OnSettingsInitialized(ProjectSettings settings, int? featureFileCount)
+    private void OnSettingsInitialized(ProjectSettings settings)
     {
-        TelemetryService.MonitorOpenProject(settings, featureFileCount);
         Logger.LogInfo($"Project settings initialized: {settings.GetShortLabel()}");
         //SettingsInitialized?.Invoke(this, EventArgs.Empty);
     }
 
-    private ProjectSettings LoadProjectSettings(out int? featureFileCount)
+    private ProjectSettings LoadProjectSettings()
     {
-        featureFileCount = _projectScope.GetFeatureFileCount();
+        var featureFileCount = _projectScope.GetFeatureFileCount();
 
         var packageReferences = _projectScope.PackageReferences;
         var isInvalid = packageReferences == null;
