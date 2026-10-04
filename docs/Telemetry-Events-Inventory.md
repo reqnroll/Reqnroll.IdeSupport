@@ -398,7 +398,9 @@ Key names live in `TelemetryProperties` (LSP.Server); bucketing in `TelemetryBuc
 
 ## 4. Lifecycle & project events (Visual Studio host)
 
-All emitted by `VSSDKIntegration/Telemetry/TelemetryService.cs` (`Monitor*` methods) through
+`Extension loaded`, `Extension installed`, `Extension upgraded` and `"{N} day usage"` are emitted by all
+three IDEs (see the decision below, issue #875); the remaining events in this section are VS-only. The VS
+events are all emitted by `VSSDKIntegration/Telemetry/TelemetryService.cs` (`Monitor*` methods) through
 `ITelemetryTransmitter`. Events that fire before the LSP server starts (install, upgrade) can
 only originate here.
 
@@ -420,17 +422,26 @@ only originate here.
 `ProjectTargetFramework`, `SingleFileGeneratorUsed` (design-time code-behind generation on),
 `ProgrammingLanguage`, and `LegacySpecFlow` (true only for a SpecFlow project).
 
-**Decision (issue #845): derive, do not port.** VS Code and Rider do *not* get `Extension loaded` /
-`Extension installed` / `Extension upgraded` / `"{N} day usage"`. Every event already carries a stable
-`ai.user.id` (VS's user id, Rider's `PropertiesComponent` id, VS Code's reporter machine id) plus
-`IdeClient` and `ExtensionVersion`, and `ServerSessionStarted` fires once per session from all three
-IDEs. In Application Insights: *active users / retention* = distinct `ai.user.id` per day over
-`ServerSessionStarted`; *install* = a user's first-ever `ServerSessionStarted`; *upgrade* = a change in
-`ExtensionVersion` between a user's consecutive sessions; *daily-use count* = days with a session. This
-is retroactively computable (but limited by Application Insights retention, 90 days by default, so an install date older than that is unknowable, and `ai.user.id` is per IDE, so one person using two IDEs counts as two users), needs no per-IDE client state (`globalState` / `PropertiesComponent`) that
-could drift out of sync or reset on a reinstall, and keeps the three IDEs identical. The VS-only events
-stay for continuity with historical data and are not extended; retiring them is left until the derived
-queries have a release of history to compare against.
+**Decision (issue #875, superseding the #845 "derive, do not port" call): port.** VS Code and Rider
+emit the same four lifecycle events as Visual Studio, with identical names and semantics, so all three
+IDEs expose the same install -> upgrade funnel and daily-use retention signal directly:
+
+| Event | Fires | Properties |
+|---|---|---|
+| `Extension loaded` | every activation (VS Code: extension activation; Rider: first project startup of an IDE process) | — |
+| `Extension installed` | first activation with no stored lifecycle state | — |
+| `Extension upgraded` | stored version is lower than the running version (a downgrade sends nothing) | `OldExtensionVersion` |
+| `"{N} day usage"` | first activation of each new local calendar day after install (not on the install day), `N` = running count of such days | — |
+
+Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
+`reqnroll.telemetry.lifecycle` (`src/VSCode/src/extensionLifecycleTelemetry.ts`); Rider keeps the same
+three values in the application-level `PropertiesComponent` under `com.reqnroll.idesupport.telemetry.*`
+(`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
+`WelcomeService`, and unit-tested. Because state is new, installs that predate this release report
+`Extension installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when
+counting true new installs. `ai.user.id` remains per IDE, so one person using two IDEs counts as two users.
+`ServerSessionStarted` (from all IDEs) stays available as a cross-check, and the VS-only events are no
+longer VS-only.
 
 **Retired: the VS-host `Project loaded` event** (issue #873). The server's `OpenProject command
 executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` cover Reqnroll version, TFM,
@@ -610,7 +621,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Go-to-hooks: lookups vs navigations | `FindHooks command executed` (server) vs `GoToHook command executed` (clients) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |
 | Crash/error rates | `UnhandledException` (server; VS Code/Rider client code with `ExceptionOrigin = "Client"`) + VS `ExceptionTelemetry` |
-| Adoption lifecycle | VS: `Extension installed`, `Extension upgraded`, `"{N} day usage"`, wizard events; all IDEs (derived, #845): `ServerSessionStarted` by distinct `ai.user.id` |
+| Adoption lifecycle | All IDEs (#875): `Extension loaded`, `Extension installed`, `Extension upgraded`, `"{N} day usage"`; VS only: wizard events; `ServerSessionStarted` by distinct `ai.user.id` as a cross-check |
 | Server health: start failures, crashes, restarts, time-to-ready | `ServerStartFailed`, `ServerExitedUnexpectedly`, `ServerRestarted` (clients); `ServerSessionStarted` (`StartupMs`); Started without Ended per `SessionId` |
 | Project size snapshot (steps, hooks per type, binding classes, feature files) | `ProjectCharacteristics` |
 | Field performance (P95/P99) | `PerfSample` |
