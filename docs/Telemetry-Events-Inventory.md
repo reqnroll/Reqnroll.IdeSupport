@@ -387,7 +387,6 @@ only originate here.
 | Event | Emitter / when | Properties |
 |---|---|---|
 | `ExtensionLoaded` | `MonitorOpenProjectSystem` — on extension activation in an IDE scope | — |
-| `Project loaded` | `MonitorOpenProject` — a Reqnroll project opens (VS host path) | project settings¹ + `FeatureFileCount` |
 | `Feature file opened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
 | `Extension installed` | `MonitorExtensionInstalled` — first activation after installation | — |
 | `Extension upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
@@ -415,12 +414,14 @@ could drift out of sync or reset on a reinstall, and keeps the three IDEs identi
 stay for continuity with historical data and are not extended; retiring them is left until the derived
 queries have a release of history to compare against.
 
-**Status of the VS-host `Project loaded`** (issue #845 item 5): *not yet retired.* The server's
-`OpenProject command executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` now cover
-Reqnroll version, TFM, language and counts, but `LegacySpecFlow` and `SingleFileGeneratorUsed` are not
-reported by the server (the connector does not expose them), and the Reqnroll version arrives on the
-first discovery event rather than on `OpenProject`. Retire it once those two are server-side; until
-then the VS double-count of project opens remains.
+**Retired: the VS-host `Project loaded` event** (issue #873). The server's `OpenProject command
+executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` cover Reqnroll version, TFM,
+language and counts, so the VS-only duplicate (and its double-count of project opens) is gone.
+Decision (#873): reporting the Reqnroll version on discovery is sufficient; nothing was added to
+`OpenProject command executed`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available
+server-side (the connector does not expose them); they remain on the VS `Feature file opened`,
+`Feature file added` and `Reqnroll config added` events (see ¹), so they are now per-event rather than
+per-project-open signals.
 
 **Analytics use.** Adoption lifecycle: install→upgrade funnel, daily-active heartbeat (rollup
 `* day usage` by count), project-scale signals (ReqnrollVersion/TFM distribution,
@@ -583,7 +584,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 |---|---|
 | Binding-discovery reliability / failure rate | `ReqnrollDiscoveryExecuted` (`IsFailed`, `ErrorMessage`) |
 | Build churn (no-op rediscoveries) | `ReqnrollDiscoveryExecuted` (`HashMatched=true`) |
-| Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), `Project loaded`, discovery counts |
+| Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), discovery counts |
 | Project profile, all IDEs (Reqnroll version, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `ConnectorType`) |
 | Command usage & adoption | all `* command executed` / `* command offered` events |
 | Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
@@ -624,4 +625,5 @@ abrupt process death is accepted but detectable via `Sequence`.
 - **`ReqnrollVersion` / `LegacySpecFlow` on `OpenProject command executed`** — decision (#845): the
   first `ReqnrollDiscoveryExecuted` is the authoritative source for the Reqnroll version (the connector
   resolves it; the server's project model does not), so it is not duplicated on `OpenProject`.
-  `LegacySpecFlow` is not available server-side yet (see the `Project loaded` status in section 4).
+  `LegacySpecFlow` is not available server-side; per #873 it stays on the VS feature-file/config events
+  (see the retired `Project loaded` note in section 4).
