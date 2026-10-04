@@ -358,7 +358,8 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 _telemetryService?.SendEvent(
                     TelemetryEvents.ProjectCharacteristics,
                     ProjectCharacteristicsTelemetry.Build(
-                        newRegistry, _featureFileLookup?.CountFeatureFiles(_project), _project.TargetFrameworkMonikers));
+                        newRegistry, _featureFileLookup?.CountFeatureFiles(_project), _project.TargetFrameworkMonikers,
+                        _project.PackageReferences));
             }
             catch (Exception ex)
             {
