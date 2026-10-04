@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 public static class TelemetryConnectionOverride
 {
     /// <summary>Name of the environment variable holding an Application Insights connection string.</summary>
-    public const string EnvironmentVariable = "REQNROLL_TELEMETRY_CONNECTION_STRING";
+    public const string EnvironmentVariable = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING";
 
     /// <summary>
     /// Debug-build guard (issue #889): a Debug build must not send to the built-in (production)

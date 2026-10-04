@@ -62,7 +62,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
 #endif
 
     /// <summary>
-    /// Debug-build guard (#889): without a <c>REQNROLL_TELEMETRY_CONNECTION_STRING</c> override a Debug
+    /// Debug-build guard (#889): without a <c>REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING</c> override a Debug
     /// build is treated as telemetry-disabled, so a developer's F5 session never reaches the
     /// production resource (events are still mirrored to the debug log, flagged as not transmitted).
     /// </summary>

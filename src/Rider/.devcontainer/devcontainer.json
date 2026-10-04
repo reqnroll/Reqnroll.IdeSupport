@@ -1,8 +1,12 @@
 // src/Rider/.devcontainer/devcontainer.json
 {
+  // Display name of the dev container in the IDE's container picker.
   "name": "reqnroll-rider-plugin",
   "build": {
+    // Image definition for the container (JDK 21 plus the tooling needed to run the Rider sandbox).
+    // Resolved relative to this file.
     "dockerfile": "../docker/dev.Dockerfile",
+    // Docker build context, relative to this file: src/Rider (the plugin directory).
     "context": ".."
   },
   "containerEnv": {
@@ -30,7 +34,14 @@
     // `dotnet publish`, unavailable in this container, so prepareSandbox needs a
     // pre-published copy here instead.
     "ORG_GRADLE_PROJECT_lspTestLoggerBuildDir": "${containerWorkspaceFolder}/downloaded-testlogger",
-    "REQNROLL_TELEMETRY_DEBUG_LOG": "${localEnv:REQNROLL_TELEMETRY_DEBUG_LOG}"
+    // Forwards the host's REQNROLL_TELEMETRY_DEBUG_LOG so the telemetry debug log can be enabled
+    // from the host shell (`1`/`true` for the default path, or a file path). Empty when unset on
+    // the host, which leaves the log disabled. See src/LSP/CONTRIBUTING.md.
+    "REQNROLL_TELEMETRY_DEBUG_LOG": "${localEnv:REQNROLL_TELEMETRY_DEBUG_LOG}",
+    // Forwards the host's Application Insights connection string (issue #889) so telemetry from the
+    // runIde sandbox goes to your own resource. The sandbox is a development build, so without a
+    // usable value it sends no telemetry at all (never to production).
+    "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING": "${localEnv:REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING}"
   },
   "mounts": [
     // Docker Desktop's docker.exe is Windows-native, so bind-mount sources
@@ -39,6 +50,8 @@
     // the UNC form that actually works. Update "Ubuntu" below if your
     // distro is named differently.
     "source=\\\\wsl.localhost\\Ubuntu\\mnt\\wslg,target=/mnt/wslg,type=bind",
+    // Named volume for Gradle's cache (downloaded dependencies, the Rider SDK), so it survives
+    // "Rebuild Container" and avoids re-downloading each time.
     "source=reqnroll-gradle-cache,target=/root/.gradle,type=volume",
     // Scratch home for ad hoc sample Reqnroll .NET projects created while manually
     // testing the plugin in a running Rider sandbox. Deliberately a named volume
@@ -56,8 +69,10 @@
     // REQNROLL_HOST_SOLUTION_DIR is set, e.g.:
     // ,"source=${localEnv:REQNROLL_HOST_SOLUTION_DIR},target=/workspaces/host-solution,type=bind"
   ],
+  // Editor-specific settings applied when the container is opened.
   "customizations": {
     "vscode": {
+      // Extensions installed in the container for editing the plugin's Kotlin/Java sources.
       "extensions": [
         "fwcd.kotlin",
         "redhat.java",

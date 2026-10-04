@@ -32,7 +32,7 @@ Two emission paths exist:
    link clicks), or describe something only the IDE client can observe (a genuine "Go to Hooks"
    navigation). VS Code and Rider similarly originate `GoToHook command executed` themselves.
 
-Connection override (issue #889): `REQNROLL_TELEMETRY_CONNECTION_STRING`, an Application Insights
+Connection override (issue #889): `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`, an Application Insights
 connection string (`InstrumentationKey=...[;IngestionEndpoint=...]`), replaces the built-in
 connection in all three hosts (VS via `TelemetryConnectionOverride`, VS Code via
 `resolveConnectionString`, Rider via `resolveConnection`) so developers can send to their own
@@ -45,7 +45,7 @@ rather than falling back to the production resource: a Debug build of the VS ext
 (`#if DEBUG`, `TelemetryTransmitter.ApplyDebugBuildGuard`), VS Code running from source
 (`ExtensionMode.Development`, i.e. F5), and Rider's `runIde` sandbox (`reqnroll.devSandbox`). The
 event is still mirrored to the local debug log as not transmitted, and a released build is never
-affected. To exercise telemetry from a dev build, set `REQNROLL_TELEMETRY_CONNECTION_STRING`.
+affected. To exercise telemetry from a dev build, set `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in

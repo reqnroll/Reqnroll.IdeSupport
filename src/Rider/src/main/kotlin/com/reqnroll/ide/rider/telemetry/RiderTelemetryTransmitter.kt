@@ -36,7 +36,7 @@ object RiderTelemetryTransmitter {
     private const val INGESTION_ENDPOINT = "https://dc.services.visualstudio.com/v2/track"
 
     /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
-    internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_TELEMETRY_CONNECTION_STRING"
+    internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING"
 
     internal data class Connection(val instrumentationKey: String, val endpoint: String)
 
