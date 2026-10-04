@@ -107,6 +107,12 @@ public static class TelemetryEvents
     /// <summary>Sent by <c>Features.CodeActions.DefineStepsTriggeredHandler</c> when the client runs the command of a "Define step(s)" quick fix, i.e. the user picked it (issue #847).</summary>
     public const string DefineStepsCommandExecuted = "DefineSteps command executed";
 
+    /// <summary>Sent by <c>Features.CodeActions.CodeActionHandler</c> when "Insert '&lt;keyword&gt;'" quick fixes are offered for a parser error.</summary>
+    public const string InsertKeywordCommandOffered = "InsertKeyword command offered";
+
+    /// <summary>Sent by <c>Features.CodeActions.InsertKeywordTriggeredHandler</c> when the client runs the command of an "Insert '&lt;keyword&gt;'" quick fix, i.e. the user picked it (issue #877).</summary>
+    public const string InsertKeywordCommandExecuted = "InsertKeyword command executed";
+
     /// <summary>Sent by <c>Features.FindUnusedStepDefinitions.FindUnusedStepDefinitionsHandler</c> after handling a Find Unused Step Definitions request.</summary>
     public const string FindUnusedStepDefinitionsCommandExecuted = "FindUnusedStepDefinitions command executed";
 
@@ -195,9 +201,6 @@ public static class TelemetryEvents
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProjectSystem</c>) when the extension activates inside an IDE scope.</summary>
     public const string ExtensionLoaded = "Extension loaded";
-
-    /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenProject</c>) when a Reqnroll project is loaded (carries project settings + feature-file count).</summary>
-    public const string ProjectLoaded = "Project loaded";
 
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorOpenFeatureFile</c>) when a <c>.feature</c> file is opened.</summary>
     public const string FeatureFileOpened = "Feature file opened";
