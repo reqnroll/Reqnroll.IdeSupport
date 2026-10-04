@@ -59,6 +59,7 @@ public static class LanguageServerOptionsExtensions
                .AddHandler<WatchedFilesHandler>()
                .AddHandler<DefinitionHandler>()
                .AddHandler<CompletionHandler>()
+               .AddHandler<CompletionAcceptedHandler>()
                .AddHandler<CodeActionHandler>()
                .AddHandler<FormattingHandler>()
                .AddHandler<DocumentSymbolHandler>()

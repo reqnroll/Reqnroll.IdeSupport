@@ -248,6 +248,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<HookMatchCountCodeLensHandler>()
             .AddSingleton<CodeLensResolveHandler>()
             .AddSingleton<CompletionHandler>()
+            .AddSingleton<CompletionAcceptedHandler>()
             .AddSingleton<IStepScaffoldService, StepScaffoldService>()
             .AddSingleton<CodeActionHandler>()
             .AddSingleton<IFindUnusedStepDefinitionsService, FindUnusedStepDefinitionsService>()

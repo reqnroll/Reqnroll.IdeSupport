@@ -65,8 +65,15 @@ public static class FeatureUsageCatalog
         [LspStandardMethodNames.TextDocumentOnTypeFormatting] = new("OnTypeFormatting", FeatureUsageKind.Passive),
     };
 
+    /// <summary>
+    /// Counter key for an accepted step completion (issue #883 prototype). Not tied to an operation
+    /// label: it is incremented by the completion-accepted command handler, not the duration recorder.
+    /// </summary>
+    public const string StepCompletionAcceptedKey = "Completion.Step.Accepted";
+
     private static readonly Dictionary<string, FeatureUsageKind> KindsByKey = Entries.Values
         .DistinctBy(e => e.Key)
+        .Append(new FeatureUsageEntry(StepCompletionAcceptedKey, FeatureUsageKind.Lookup))
         .ToDictionary(e => e.Key, e => e.Kind, StringComparer.Ordinal);
 
     /// <summary>Looks up the counter entry for an <see cref="IOperationDurationRecorder"/> operation label.</summary>
