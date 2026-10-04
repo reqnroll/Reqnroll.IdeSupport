@@ -24,6 +24,31 @@ public class TelemetryTransmitterTests
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
     private readonly CapturingDebugLog _debugLog = new();
 
+    [Theory]
+    [InlineData(true, null, false)]
+    [InlineData(true, "InstrumentationKey=dev", true)]
+    [InlineData(false, null, true)]
+    public void DebugBuildGuard_disables_the_built_in_connection_only_in_debug_builds_without_an_override(
+        bool isDebugBuild, string? overrideValue, bool innerIsUsed)
+    {
+        const string variable = TelemetryConnectionOverride.EnvironmentVariable;
+        var original = Environment.GetEnvironmentVariable(variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(variable, overrideValue);
+            var inner = Substitute.For<IEnableTelemetryChecker>();
+            inner.IsEnabled().Returns(true);
+
+            var guarded = VsTelemetryTransmitter.ApplyDebugBuildGuard(inner, isDebugBuild);
+
+            guarded.IsEnabled().Should().Be(innerIsUsed);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, original);
+        }
+    }
+
     [Fact]
     public void Should_NotSendTelemetry_WhenDisabled()
     {

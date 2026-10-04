@@ -316,6 +316,11 @@ in `devenv.exe` and `CodeLensHostLogger.Instance` in the CodeLens ServiceHub hos
   `FileLoggingLspTelemetryService.cs`, `telemetryDebugLog.ts`
   (`src/VSCode/src/logging/telemetryDebugLog.ts`) and `RiderTelemetryDebugLog.kt`
   (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/telemetry/RiderTelemetryDebugLog.kt`).
+- **Sending telemetry from a dev build.** Development builds (VS `DEBUG`, VS Code Development host,
+  Rider `runIde`) never send to the production Application Insights resource. To send to your own
+  resource instead, set `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` to its connection string before
+  launching the IDE (the Rider dev container forwards it from the host). Without it, dev builds send
+  nothing. See `docs/Telemetry-Events-Inventory.md`.
 
 When a bug report only makes sense with more than one of these, ask for them together rather than
 guessing from one side.

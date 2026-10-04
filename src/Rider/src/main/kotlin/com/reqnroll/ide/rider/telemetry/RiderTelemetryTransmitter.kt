@@ -12,6 +12,8 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Transmits `telemetry/event` notifications forwarded by [ReqnrollTelemetryEventInterceptor] to
@@ -34,6 +36,50 @@ object RiderTelemetryTransmitter {
     // so usage events from every Reqnroll IDE client land in the same place.
     private const val INSTRUMENTATION_KEY = "3fd018ff-819d-4685-a6e1-6f09bc98d20b"
     private const val INGESTION_ENDPOINT = "https://dc.services.visualstudio.com/v2/track"
+
+    /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
+    internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING"
+
+    internal data class Connection(val instrumentationKey: String, val endpoint: String)
+
+    private val BUILT_IN_CONNECTION = Connection(INSTRUMENTATION_KEY, INGESTION_ENDPOINT)
+
+    /**
+     * Pure/parameterized like [isEnabled]. Uses [envValue] when it carries a non-empty
+     * `InstrumentationKey` (and, optionally, an `IngestionEndpoint`, to which `/v2/track` is
+     * appended); anything else falls back to the built-in connection and is reported to [onInvalid].
+     */
+    internal fun resolveConnection(envValue: String?, onInvalid: (String) -> Unit = {}): Connection =
+        parseOverride(envValue, onInvalid) ?: BUILT_IN_CONNECTION
+
+    /**
+     * Debug-build guard (issue #889): the `runIde` dev sandbox (`reqnroll.devSandbox`, see
+     * build.gradle.kts) must not send to the built-in production resource, so without a usable
+     * override it sends nothing.
+     */
+    internal fun isBuiltInBlocked(isDevSandbox: Boolean, envValue: String?): Boolean =
+        isDevSandbox && parseOverride(envValue) == null
+
+    private fun parseOverride(envValue: String?, onInvalid: (String) -> Unit = {}): Connection? {
+        val value = envValue?.trim()
+        if (value.isNullOrEmpty()) return null
+        val parts = value.split(';').mapNotNull { part ->
+            val idx = part.indexOf('=')
+            if (idx > 0) part.substring(0, idx).trim().lowercase() to part.substring(idx + 1).trim() else null
+        }.toMap()
+        val key = parts["instrumentationkey"]
+        if (key.isNullOrEmpty()) {
+            onInvalid("$CONNECTION_STRING_ENV_VAR has no InstrumentationKey; ignoring it.")
+            return null
+        }
+        val endpoint = parts["ingestionendpoint"]?.takeIf { it.isNotEmpty() }
+            ?.let { it.trimEnd('/') + "/v2/track" } ?: INGESTION_ENDPOINT
+        return Connection(key, endpoint)
+    }
+
+    private val connection: Connection by lazy {
+        resolveConnection(System.getenv(CONNECTION_STRING_ENV_VAR)) { ReqnrollDebugLogger.info(it) }
+    }
 
     // Same env-var opt-out contract as Reqnroll.IdeSupport.Common.Telemetry.EnableTelemetryChecker
     // (used by VS's transmitter) — kept identical rather than inventing a Rider-specific setting,
@@ -107,7 +153,8 @@ object RiderTelemetryTransmitter {
      */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
         val debugLog = RiderTelemetryDebugLog.fromEnvironment()
-        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
+        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR)) &&
+            !isBuiltInBlocked(System.getProperty("reqnroll.devSandbox") == "true", System.getenv(CONNECTION_STRING_ENV_VAR))
 
         if (!enabled) {
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
@@ -125,8 +172,8 @@ object RiderTelemetryTransmitter {
             properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
             stampClientIdentity(stringProps, ideVersion(), extensionVersion())
 
-            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now())
-            post(httpClient, URI.create(INGESTION_ENDPOINT), body, breaker) { reason ->
+            val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
+            post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
                 debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = reason)
             }
 
@@ -141,9 +188,29 @@ object RiderTelemetryTransmitter {
     }
 
     /**
-     * Fire-and-forget POST of [body]; never throws. Any failure (DNS, refused/reset, TLS, timeout,
-     * or a non-2xx status such as a proxy's 403/407) opens [breaker] and is reported to
-     * [onFailure], so an unreachable endpoint costs at most the first in-flight requests (#859).
+     * Retry policy for transient delivery failures: up to [maxAttempts] sends in total, waiting
+     * `baseDelay * 2^(attempt-1)` between them (or the server's `Retry-After`), never longer than [maxDelay].
+     */
+    internal data class RetryPolicy(val maxAttempts: Int, val baseDelay: Duration, val maxDelay: Duration)
+
+    internal val RETRY_POLICY = RetryPolicy(maxAttempts = 3, baseDelay = Duration.ofSeconds(1), maxDelay = Duration.ofSeconds(30))
+
+    /** Statuses Microsoft's Application Insights SDKs retry: 408, 429 and 5xx. Others (400, 401, 402, 403, 404, 413...) are final. */
+    internal fun isRetryableStatus(status: Int): Boolean = status == 408 || status == 429 || status in 500..599
+
+    /** Wait before send number `attempt + 1`: the server's `Retry-After` seconds if valid, else exponential backoff; capped by [RetryPolicy.maxDelay]. */
+    internal fun retryDelay(attempt: Int, policy: RetryPolicy, retryAfter: String? = null): Duration {
+        val requested = retryAfter?.trim()?.toLongOrNull()?.takeIf { it >= 0 }?.let { Duration.ofSeconds(it) }
+            ?: policy.baseDelay.multipliedBy(1L shl (attempt - 1).coerceIn(0, 20))
+        return if (requested > policy.maxDelay) policy.maxDelay else requested
+    }
+
+    /**
+     * Fire-and-forget POST of [body]; never throws. Transport failures (DNS, refused/reset, an HTTP/2
+     * `GOAWAY`, TLS, timeout) and retryable statuses (see [isRetryableStatus]) are retried per
+     * [retryPolicy]; once those are exhausted -- or for any non-retryable failure such as a proxy's
+     * 403/407 -- [breaker] opens and [onFailure] is told, so an unreachable endpoint costs at most
+     * the first in-flight requests (#859). No retry is scheduled once the breaker is open.
      */
     internal fun post(
         client: HttpClient,
@@ -151,6 +218,7 @@ object RiderTelemetryTransmitter {
         body: String,
         breaker: TelemetryCircuitBreaker,
         timeout: Duration = REQUEST_TIMEOUT,
+        retryPolicy: RetryPolicy = RETRY_POLICY,
         onFailure: (String) -> Unit = {},
     ) {
         try {
@@ -161,24 +229,49 @@ object RiderTelemetryTransmitter {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
 
-            client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                .whenComplete { response, ex ->
-                    val reason = when {
-                        ex != null -> (ex.cause ?: ex).let { it.message ?: it.javaClass.simpleName }
-                        response.statusCode() !in 200..299 -> "HTTP ${response.statusCode()}"
-                        else -> null
-                    }
-                    if (reason != null) {
-                        breaker.recordFailure(reason)
-                        onFailure(reason)
-                    }
-                }
+            send(client, request, breaker, retryPolicy, 1, onFailure)
         } catch (ex: Exception) {
             // Synchronous failure (e.g. unresolvable host surfaced eagerly) -- same policy.
-            val reason = ex.message ?: ex.javaClass.simpleName
-            breaker.recordFailure(reason)
-            onFailure(reason)
+            giveUp(ex.message ?: ex.javaClass.simpleName, breaker, onFailure)
         }
+    }
+
+    private fun giveUp(reason: String, breaker: TelemetryCircuitBreaker, onFailure: (String) -> Unit) {
+        breaker.recordFailure(reason)
+        onFailure(reason)
+    }
+
+    private fun send(
+        client: HttpClient,
+        request: HttpRequest,
+        breaker: TelemetryCircuitBreaker,
+        policy: RetryPolicy,
+        attempt: Int,
+        onFailure: (String) -> Unit,
+    ) {
+        client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+            .whenComplete { response, ex ->
+                val reason = when {
+                    ex != null -> (ex.cause ?: ex).let { it.message ?: it.javaClass.simpleName }
+                    response.statusCode() !in 200..299 -> "HTTP ${response.statusCode()}"
+                    else -> return@whenComplete
+                }
+                val retryable = ex != null || isRetryableStatus(response.statusCode())
+                if (!retryable || attempt >= policy.maxAttempts || breaker.isOpen) {
+                    giveUp(reason, breaker, onFailure)
+                    return@whenComplete
+                }
+
+                val delay = retryDelay(attempt, policy, response?.headers()?.firstValue("Retry-After")?.orElse(null))
+                ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: attempt $attempt failed ($reason); retrying in ${delay.toMillis()} ms")
+                CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS).execute {
+                    try {
+                        send(client, request, breaker, policy, attempt + 1, onFailure)
+                    } catch (e: Exception) {
+                        giveUp(e.message ?: e.javaClass.simpleName, breaker, onFailure)
+                    }
+                }
+            }
     }
 
     /**
@@ -226,10 +319,11 @@ object RiderTelemetryTransmitter {
         userId: String,
         properties: Map<String, String>,
         timestamp: Instant,
+        instrumentationKey: String = INSTRUMENTATION_KEY,
     ): String {
         val propsJson = properties.entries.joinToString(",") { (key, value) -> "${jsonString(key)}:${jsonString(value)}" }
         return """
-            {"name":"Microsoft.ApplicationInsights.Event","time":"$timestamp","iKey":"$INSTRUMENTATION_KEY","tags":{"ai.user.id":${jsonString(userId)}},"data":{"baseType":"EventData","baseData":{"ver":2,"name":${jsonString(eventName)},"properties":{$propsJson}}}}
+            {"name":"Microsoft.ApplicationInsights.Event","time":"$timestamp","iKey":${jsonString(instrumentationKey)},"tags":{"ai.user.id":${jsonString(userId)}},"data":{"baseType":"EventData","baseData":{"ver":2,"name":${jsonString(eventName)},"properties":{$propsJson}}}}
         """.trimIndent()
     }
 

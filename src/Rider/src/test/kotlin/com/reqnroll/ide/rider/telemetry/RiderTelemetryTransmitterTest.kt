@@ -20,6 +20,49 @@ class RiderTelemetryTransmitterTest {
     }
 
     @Test
+    fun `isBuiltInBlocked blocks only the dev sandbox without a usable override`() {
+        assertTrue(RiderTelemetryTransmitter.isBuiltInBlocked(true, null))
+        assertTrue(RiderTelemetryTransmitter.isBuiltInBlocked(true, "nonsense"))
+        assertFalse(RiderTelemetryTransmitter.isBuiltInBlocked(true, "InstrumentationKey=abc"))
+        assertFalse(RiderTelemetryTransmitter.isBuiltInBlocked(false, null))
+    }
+
+    @Test
+    fun `resolveConnection falls back to the built-in connection when unset or blank`() {
+        val builtIn = RiderTelemetryTransmitter.resolveConnection(null)
+        val invalid = mutableListOf<String>()
+        assertEquals(builtIn, RiderTelemetryTransmitter.resolveConnection("  ") { invalid.add(it) })
+        assertTrue(invalid.isEmpty())
+    }
+
+    @Test
+    fun `resolveConnection uses the key and appends v2 track to a custom ingestion endpoint`() {
+        val c = RiderTelemetryTransmitter.resolveConnection(
+            "InstrumentationKey=abc;IngestionEndpoint=https://localhost:1234/",
+        )
+        assertEquals("abc", c.instrumentationKey)
+        assertEquals("https://localhost:1234/v2/track", c.endpoint)
+    }
+
+    @Test
+    fun `resolveConnection keeps the default endpoint when only a key is given`() {
+        val builtIn = RiderTelemetryTransmitter.resolveConnection(null)
+        val c = RiderTelemetryTransmitter.resolveConnection("instrumentationkey=abc")
+        assertEquals("abc", c.instrumentationKey)
+        assertEquals(builtIn.endpoint, c.endpoint)
+    }
+
+    @Test
+    fun `resolveConnection ignores and reports a value without an instrumentation key`() {
+        val builtIn = RiderTelemetryTransmitter.resolveConnection(null)
+        for (bad in listOf("nonsense", "InstrumentationKey=", "IngestionEndpoint=https://x/")) {
+            val invalid = mutableListOf<String>()
+            assertEquals(builtIn, RiderTelemetryTransmitter.resolveConnection(bad) { invalid.add(it) })
+            assertEquals(1, invalid.size)
+        }
+    }
+
+    @Test
     fun `buildEnvelope embeds the event name, user id, iKey and properties`() {
         val timestamp = Instant.parse("2026-07-20T12:00:00Z")
         val json = RiderTelemetryTransmitter.buildEnvelope(

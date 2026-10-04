@@ -14,6 +14,10 @@ import kotlin.test.assertTrue
 
 /** Issue #859: an unreachable analytics endpoint must be silent, bounded and reported once. */
 class TelemetryUnreachableEndpointTest {
+    private companion object {
+        val FAST_RETRIES = RiderTelemetryTransmitter.RetryPolicy(3, Duration.ofMillis(10), Duration.ofMillis(50))
+    }
+
     private class Harness {
         val notices = mutableListOf<String>()
         val breaker = TelemetryCircuitBreaker(onFirstFailure = { notices.add(it) })
@@ -23,7 +27,7 @@ class TelemetryUnreachableEndpointTest {
         /** Posts and waits for the failure callback; returns whether one arrived in time. */
         fun postAndAwait(uri: String, timeout: Duration = Duration.ofSeconds(1)): Boolean {
             val latch = CountDownLatch(1)
-            RiderTelemetryTransmitter.post(client, URI.create(uri), "{}", breaker, timeout) { failures.add(it); latch.countDown() }
+            RiderTelemetryTransmitter.post(client, URI.create(uri), "{}", breaker, timeout, FAST_RETRIES) { failures.add(it); latch.countDown() }
             return latch.await(10, TimeUnit.SECONDS)
         }
     }
