@@ -63,6 +63,27 @@ public sealed class DocumentLinkHandler
 
         _logger.LogInfo($"Tag links textDocument/documentLink: {request.TextDocument.Uri}");
 
+        try
+        {
+            return await ResolveLinksAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled request answers null on the wire, which a client treats as "no links" and (VS Code)
+            // does not retry - so leave a trace of it.
+            _logger.LogVerbose($"Tag links: request for {request.TextDocument.Uri} was cancelled (ct.IsCancellationRequested={ct.IsCancellationRequested}).");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning($"Tag links: request for {request.TextDocument.Uri} failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<DocumentLinkContainer?> ResolveLinksAsync(DocumentLinkParams request, CancellationToken ct)
+    {
+
         // documentLink has no refresh mechanism, so wait for any in-flight parse (see FoldingRangeHandler).
         await _parseCoordinator.WaitForReadyAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
 
@@ -112,6 +133,7 @@ public sealed class DocumentLinkHandler
         if (_scopeManager.GetMembershipState(uri) != MembershipState.Pending)
             return;
 
+        _logger.LogVerbose($"Tag links: waiting for the owning project of {uri} to register.");
         var stopwatch = Stopwatch.StartNew();
         while (_scopeManager.GetMembershipState(uri) == MembershipState.Pending)
         {
