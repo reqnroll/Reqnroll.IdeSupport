@@ -143,6 +143,9 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
                 if (link is null)
                     return null;
 
+                _logger.LogVerbose(
+                    $"GoToDefinitionNavigableSymbolProvider: offering tag link symbol uri='{fileUri}' at {line.LineNumber}:{char0} -> '{link.Value.Target}'");
+
                 var snapshot = triggerSpan.Snapshot;
                 var start = snapshot.GetLineFromLineNumber(link.Value.StartLine).Start + link.Value.StartChar;
                 var end   = snapshot.GetLineFromLineNumber(link.Value.EndLine).Start   + link.Value.EndChar;
@@ -283,6 +286,8 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             try
             {
                 VsShellUtilities.OpenSystemBrowser(_target);
+                _logger.LogVerbose($"GoToDefinitionNavigableSymbolProvider: opened tag link '{_target}'.");
+                TagLinkRedirect.LinkOpened?.Invoke();
             }
             catch (Exception ex)
             {

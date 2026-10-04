@@ -26,6 +26,12 @@ public static class TagLinkRedirect
     public static Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? GetLinksAsync { get; set; }
 
     /// <summary>
+    /// Callback set by the Extension project, invoked once per Ctrl+Click that opens a tag link, so the
+    /// "TagLink command executed" telemetry event is emitted by the project that owns the transmitter.
+    /// </summary>
+    public static Action? LinkOpened { get; set; }
+
+    /// <summary>
     /// Only web links are opened: the target comes from user configuration (<c>reqnroll.json</c>), which a
     /// cloned repository controls, so <c>file:</c>, <c>ms-*:</c> and other handler schemes are refused.
     /// </summary>

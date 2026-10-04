@@ -253,6 +253,16 @@ public static class TelemetryEvents
     public const string GoToHookCommandExecuted = "GoToHook command executed";
 
     /// <summary>
+    /// Sent by each IDE client when the user opens a clickable Gherkin tag's link (issue #755) - VS
+    /// (<c>GoToDefinitionNavigableSymbolProvider</c>, Ctrl+Click), VS Code (<c>openTagLink</c>) and Rider
+    /// (<c>ReqnrollFeatureTagLinkController</c>, Ctrl+Click). Only the client knows a link was actually followed:
+    /// the server just answers <c>textDocument/documentLink</c> (counted as the passive <c>DocumentLink</c>
+    /// feature). No properties: the target URL and tag text are user/repository data and are never sent.
+    /// Mirrored verbatim in <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>: keep the three copies in sync.
+    /// </summary>
+    public const string TagLinkCommandExecuted = "TagLink command executed";
+
+    /// <summary>
     /// Sent by each IDE client when the language server fails to start or to finish its handshake
     /// (issue #845): VS (<c>LspServerConnectionService</c>), VS Code (language-client start failure)
     /// and Rider (<c>ReqnrollServerLifecycleListener</c>, from <c>LspServerManagerListener</c> state changes). A dead server cannot report itself, so the client does.

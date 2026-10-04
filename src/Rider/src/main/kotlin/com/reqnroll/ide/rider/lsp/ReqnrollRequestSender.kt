@@ -25,6 +25,8 @@ import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsParams
 import com.reqnroll.ide.rider.lsp.protocol.ResolveTestTargetsResponse
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
+import org.eclipse.lsp4j.DocumentLink
+import org.eclipse.lsp4j.DocumentLinkParams
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.DocumentSymbolParams
@@ -65,6 +67,7 @@ object ReqnrollRequestSender {
     private const val INLAY_HINT_TIMEOUT_MS = 10_000
     private const val ON_TYPE_FORMATTING_TIMEOUT_MS = 10_000
     private const val FOLDING_RANGE_TIMEOUT_MS = 10_000
+    private const val DOCUMENT_LINK_TIMEOUT_MS = 10_000
     private const val FIND_HOOKS_TIMEOUT_MS = 10_000
     private const val FIND_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
     private const val TOGGLE_COMMENT_TIMEOUT_MS = 10_000
@@ -194,6 +197,26 @@ object ReqnrollRequestSender {
             throw ex
         } catch (ex: Exception) {
             ReqnrollDebugLogger.verbose("foldingRange: request failed", ex)
+            null
+        }
+    }
+
+    /**
+     * Runs the *standard* `textDocument/documentLink` request (clickable tags for `.feature` files, issue #755 -
+     * see DocumentLinkHandler.cs). Standard LSP method, so - like [foldingRange] - no custom `@JsonRequest`
+     * method or cast to `ReqnrollLanguageServer` is needed. Rider's generic client never sends it itself.
+     */
+    fun documentLink(project: Project, uri: String): List<DocumentLink>? {
+        val server = firstRunningServer(project) ?: return null
+        val params = DocumentLinkParams(TextDocumentIdentifier(uri))
+        return try {
+            server.sendRequestSync(DOCUMENT_LINK_TIMEOUT_MS) { languageServer ->
+                languageServer.textDocumentService.documentLink(params)
+            }?.filterNotNull()
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: Exception) {
+            ReqnrollDebugLogger.verbose("documentLink: request failed", ex)
             null
         }
     }

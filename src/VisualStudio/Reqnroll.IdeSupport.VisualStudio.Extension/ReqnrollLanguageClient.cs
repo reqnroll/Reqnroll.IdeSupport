@@ -328,6 +328,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 // Ctrl+Click navigable-symbol provider asks for the links through this bridge.
                 _documentLinkService = new DocumentLinkService(interceptingPipe, _loggerFactory.CreateLogger<DocumentLinkService>());
                 TagLinkRedirect.GetLinksAsync = _documentLinkService.GetLinksAsync;
+                TagLinkRedirect.LinkOpened = () => _connectionService.TelemetryTransmitter?.TransmitEvent(TagLinkTelemetry.CreateEvent());
 
                 // VS.Extensibility can call this method more than once per session (issue #156):
                 // a second activation must not leave the first ProjectMonitor's DTE event
@@ -391,6 +392,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             GoToDefinitionRedirect.GoToDefinitionAsync = null;
             _documentLinkService = null;
             TagLinkRedirect.GetLinksAsync = null;
+            TagLinkRedirect.LinkOpened = null;
             _renameStepState.Service = null;
             _formatDocumentState.Service = null;
             FormatDocumentRedirect.FormatDocumentAsync = null;

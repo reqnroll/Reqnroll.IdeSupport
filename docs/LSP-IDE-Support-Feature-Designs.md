@@ -2038,7 +2038,7 @@ sequenceDiagram
 
 ### F28 · Clickable Tags (Traceability Links)
 
-**Status: Implemented** (LSP server, issue [#755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755), PR [#888](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/888)). Visual Studio needs client glue (implemented, awaiting live verification); Rider is **not yet verified** (see the matrix below). Ports the "clickable tags" behaviour of the legacy Reqnroll.VisualStudio extension (`ScenarioTraceability`).
+**Status: Implemented** (LSP server, issue [#755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755), PR [#888](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/888)). Visual Studio (live-verified) and Rider need client glue, and VS Code re-targets the links so clicks are observable (see the matrix below). Ports the "clickable tags" behaviour of the legacy Reqnroll.VisualStudio extension (`ScenarioTraceability`).
 
 #### End-user experience
 
@@ -2048,9 +2048,11 @@ A Gherkin tag such as `@issue:1234` becomes a Ctrl+click hyperlink to the matchi
 
 | VS Code | Visual Studio | Rider |
 |---------|---------------|-------|
-| ✅ Generic (`vscode-languageclient` renders `textDocument/documentLink`) | ⚠️ Glue required: VS's LSP client never sends `textDocument/documentLink` (confirmed from the inspector log, #755). `DocumentLinkService` requests it over the owned pipe and `GoToDefinitionNavigableSymbolProvider` offers a Ctrl+Click symbol that opens the http(s) target via `VsShellUtilities.OpenSystemBrowser`. Unit-tested; live check pending | ❓ Unverified |
+| ✅ Rendered by `vscode-languageclient`'s `textDocument/documentLink`; a `provideDocumentLinks` middleware re-targets each link at the internal `reqnroll.openTagLink` command (real URL kept as the tooltip). Unit-tested; not yet live-verified | ⚠️ Glue required: VS's LSP client never sends `textDocument/documentLink` (confirmed from the inspector log, #755). `DocumentLinkService` requests it over the owned pipe and `GoToDefinitionNavigableSymbolProvider` offers a Ctrl+Click symbol that opens the http(s) target via `VsShellUtilities.OpenSystemBrowser`. Live-verified | ⚠️ Glue required: `ReqnrollFeatureTagLinkController` requests `textDocument/documentLink` itself (Rider's generic client never does), tracks each link as a `RangeMarker`, and handles Ctrl/Cmd+hover (hand cursor + underline) and Ctrl/Cmd+click (`BrowserUtil.browse`). Unit-tested; not yet live-verified |
 
-The server side is complete and unit-tested. Whether the generic LSP clients of Visual Studio and Rider consume `textDocument/documentLink` has **not** been checked. If either does not (as Rider's client does not for folding, CodeLens and inlay hints), a plugin-side glue layer will be needed, following the F10/F23 pattern.
+The server side is complete and unit-tested. Neither Visual Studio's nor Rider's generic LSP client requests `textDocument/documentLink` (VS confirmed from the inspector log), so each has plugin-side glue following the F10/F23 pattern.
+
+**Telemetry.** Following a link reports the client-originated `TagLink command executed` event from all three IDEs (no properties; see the [Telemetry Events Inventory](Telemetry-Events-Inventory.md#taglinkcommandexecuted-issue-755)). The VS Code click path relies on VS Code dispatching `command:` document-link targets.
 
 #### LSP messages
 
@@ -2096,7 +2098,7 @@ Like [F10 Folding](#f10--code-folding) and [F23 Inlay Hints](#f23--inlay-hints-s
 
 #### Known limitations
 
-- **Rider rendering is unverified**, and the VS glue has only been unit-tested so far (see the matrix). VS opens only `http`/`https` targets, since the URL comes from repository-controlled configuration.
+- **Rider and VS Code click handling are unit-tested only** (see the matrix). All three IDEs open only `http`/`https` targets, since the URL comes from repository-controlled configuration.
 - **No link refresh on configuration change.** Links are computed per request; an edit to `reqnroll.json` or `specsync.json` is picked up on the client's next `documentLink` request, but LSP has no `workspace/documentLink/refresh`, so open editors may show stale links until they re-request.
 - **Tags only.** Step-to-binding navigation via `documentLink` remains the separate open question Q21.
 

@@ -30,7 +30,8 @@ Two emission paths exist:
    `GenericEvent` and hands it to `ITelemetryTransmitter` directly. These are events that fire
    before the server starts (install/upgrade), have no server-side equivalent (wizard dialogs,
    link clicks), or describe something only the IDE client can observe (a genuine "Go to Hooks"
-   navigation). VS Code and Rider similarly originate `GoToHook command executed` themselves.
+   navigation). VS Code and Rider similarly originate `GoToHook command executed` and
+   `TagLink command executed` themselves.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
@@ -467,6 +468,22 @@ killed outright, cannot be reported by anything and shows up only as a `ServerSe
 `ServerSessionStarted` for the same user).
 
 ---
+
+### `TagLinkCommandExecuted` (issue #755)
+| | |
+|---|---|
+| **Emitter** | VS `GoToDefinitionNavigableSymbolProvider` (via `TagLinkRedirect.LinkOpened`, wired in `ReqnrollLanguageClient`); VS Code `openTagLink` (`src/VSCode/src/lsp/tagLinks.ts`); Rider `ReqnrollFeatureTagLinkController` - three client copies of the same constant, per the catalog's mirror rule |
+| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the browser. Only http(s) targets are opened, so a refused target emits nothing |
+| **Properties** | none - the target URL and tag text come from repository configuration and are never sent |
+
+The server only answers `textDocument/documentLink` (counted in `PassiveCounts` as `DocumentLink`), and
+cannot tell a link being rendered from one being followed, so this event is client-originated. In VS Code
+the middleware re-targets each link at the internal `reqnroll.openTagLink` command so the click reaches the
+extension; VS and Rider request the links themselves because their generic LSP clients never send
+`textDocument/documentLink`.
+
+**Analytics use.** Tag-link adoption per IDE: `TagLink command executed` per session against
+`PassiveCounts.DocumentLink` (links offered).
 
 ## 6. Error & perf events
 

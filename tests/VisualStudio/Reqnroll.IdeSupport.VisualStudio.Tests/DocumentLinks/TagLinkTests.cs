@@ -44,6 +44,15 @@ public class TagLinkTests
         DocumentLinkService.MapResult(new JObject()).Should().BeEmpty();
     }
 
+    [Fact]
+    public void Telemetry_event_is_named_after_the_catalog_constant_and_carries_no_properties()
+    {
+        var evt = TagLinkTelemetry.CreateEvent();
+
+        evt.EventName.Should().Be("TagLink command executed");
+        evt.Properties.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(1, 0, true)]    // the '@'
     [InlineData(1, 10, true)]   // last character of the tag

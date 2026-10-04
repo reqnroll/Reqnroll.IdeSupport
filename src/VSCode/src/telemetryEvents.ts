@@ -11,6 +11,8 @@
 export const TelemetryEvents = {
   /** A genuine "Go to Hooks" navigation via `doGoToHooks` (issue #698) — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
   goToHookCommandExecuted: 'GoToHook command executed',
+  /** A clickable tag's link was followed (issue #755), via `openTagLink`. No properties: the URL and tag text are never sent. */
+  tagLinkCommandExecuted: 'TagLink command executed',
   /** The language server failed to start or complete its handshake (issue #845). `Reason`, `AttemptNumber`. */
   serverStartFailed: 'ServerStartFailed',
   /** A running language server stopped without the client asking it to (issue #845). `Reason`, `AttemptNumber`. */
