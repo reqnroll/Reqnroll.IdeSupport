@@ -91,6 +91,8 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
         val session = editor.getUserData(SESSION_KEY) ?: return
         editor.putUserData(SESSION_KEY, null)
         clearHover(editor)
+        // The markers live on the document, which can outlive this editor (a second editor, a split), so release them.
+        editor.getUserData(LINKS_KEY)?.markers?.forEach { it.first.dispose() }
         editor.putUserData(LINKS_KEY, null)
         Disposer.dispose(session.disposable)
     }

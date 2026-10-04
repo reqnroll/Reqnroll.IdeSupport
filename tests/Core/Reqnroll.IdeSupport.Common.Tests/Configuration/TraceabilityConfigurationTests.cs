@@ -73,4 +73,18 @@ public class TraceabilityConfigurationTests
     {
         Assert.Null(new TraceabilityConfiguration().ResolveTagLink("@issue:1"));
     }
+
+    [Fact]
+    public void ResolveTagLink_PathologicalPattern_TimesOutInsteadOfHanging()
+    {
+        var config = Configure((@"(a+)+", "https://example.com/{x}"));
+        var tag = "@" + new string('a', 40) + "!";
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var url = config.ResolveTagLink(tag);
+        stopwatch.Stop();
+
+        Assert.Null(url);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"took {stopwatch.Elapsed}");
+    }
 }

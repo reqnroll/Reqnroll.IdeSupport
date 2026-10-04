@@ -15,6 +15,10 @@ public class TagLinkConfiguration
 
     internal Regex ResolvedTagPattern { get; private set; }
 
+    // The pattern comes from repository configuration and runs against every tag on each documentLink
+    // request, so a pathological pattern (e.g. "(a+)+") must not be able to hang the server.
+    internal static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
+
     private void FixEmptyContainers()
     {
         //nop;
@@ -32,7 +36,7 @@ public class TagLinkConfiguration
 
         try
         {
-            ResolvedTagPattern = new Regex("^" + TagPattern.TrimStart('^').TrimEnd('$') + "$");
+            ResolvedTagPattern = new Regex("^" + TagPattern.TrimStart('^').TrimEnd('$') + "$", RegexOptions.None, MatchTimeout);
         }
         catch (Exception e)
         {
@@ -50,7 +54,16 @@ public class TagLinkConfiguration
         if (ResolvedTagPattern == null || UrlTemplate == null)
             return null;
 
-        var match = ResolvedTagPattern.Match(tagName);
+        Match match;
+        try
+        {
+            match = ResolvedTagPattern.Match(tagName);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
+
         if (!match.Success)
             return null;
 

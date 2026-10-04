@@ -483,7 +483,9 @@ extension; VS and Rider request the links themselves because their generic LSP c
 `textDocument/documentLink`.
 
 **Analytics use.** Tag-link adoption per IDE: `TagLink command executed` per session against
-`PassiveCounts.DocumentLink` (links offered).
+`PassiveCounts.DocumentLink` (links offered). Compare `DocumentLink` per IDE, not across IDEs: VS asks on every
+Ctrl+hover, VS Code after each `workspace/codeLens/refresh` as well as on open/edit, and Rider on open/edit and
+each inlay-hint refresh.
 
 ## 6. Error & perf events
 
