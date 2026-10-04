@@ -22,9 +22,8 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 
 /// <summary>
 /// Handles <c>textDocument/codeAction</c> requests for <c>*.feature</c> files: generates C#
-/// step-definition stubs for undefined steps (Define Steps), offers "Insert '&lt;keyword&gt;'"
-/// fixes for Gherkin syntax errors, and offers "Go to '&lt;method&gt;'" navigation for ambiguous
-/// steps — the last of these only for VS Code (see <see cref="IdeBehaviours.RunsVscodeOpenCommandLocally"/>).
+/// step-definition stubs for undefined steps (Define Steps) and offers "Insert '&lt;keyword&gt;'"
+/// fixes for Gherkin syntax errors.
 /// Registered via OmniSharp dynamic registration (<see cref="ICodeActionHandler"/>), scoped to
 /// <c>**/*.feature</c> documents so it does not conflict with the C# language server.
 /// </summary>
@@ -32,10 +31,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// Reduced to guards, orchestration, and telemetry (issue #588, extended for #563): resolving
 /// <em>where</em> generated code should go is <see cref="StepDefinitionTargetResolver"/>, and
 /// building the actions for a given target/step-subset is <see cref="DefineStepsActionBuilder"/>.
-/// The parser-error and ambiguous-step fixes added for issue #563 follow the same split:
-/// <see cref="ParserErrorActionBuilder"/> and <see cref="AmbiguousStepActionBuilder"/>. All four
-/// are plain internal collaborators constructed here, not DI-registered services — they have no
-/// other consumer and no reason to be swapped independently of this handler.
+/// The parser-error fix added for issue #563 follows the same split:
+/// <see cref="ParserErrorActionBuilder"/>. Both builders are plain internal collaborators
+/// constructed here, not DI-registered services — they have no other consumer and no reason to
+/// be swapped independently of this handler.
 /// </remarks>
 public sealed class CodeActionHandler : ICodeActionHandler
 {
@@ -50,13 +49,11 @@ public sealed class CodeActionHandler : ICodeActionHandler
     private readonly ILspWorkspaceScopeManager     _scopeManager;
     private readonly IDocumentBufferService        _bufferService;
     private readonly IIdeSupportLogger               _logger;
-    private readonly ClientIdeContext              _clientIde;
     private readonly ILspTelemetryService?         _telemetryService;
     private readonly IOperationDurationRecorder    _recorder;
     private readonly StepDefinitionTargetResolver  _targetResolver;
     private readonly DefineStepsActionBuilder      _actionBuilder;
     private readonly ParserErrorActionBuilder      _parserErrorActionBuilder;
-    private readonly AmbiguousStepActionBuilder    _ambiguousActionBuilder;
 
     /// <summary>Initializes a new instance of the <see cref="CodeActionHandler"/> class.</summary>
     public CodeActionHandler(
@@ -69,7 +66,6 @@ public sealed class CodeActionHandler : ICodeActionHandler
         ICSharpFileTextCache      csharpFileTextCache,
         ICompletionService        completionService,
         IErrorTelemetryService    errorTelemetryService,
-        ClientIdeContext          clientIde,
         ILspTelemetryService?     telemetryService = null,
         IOperationDurationRecorder? recorder = null)
     {
@@ -77,13 +73,11 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _scopeManager    = scopeManager;
         _bufferService   = bufferService;
         _logger          = logger;
-        _clientIde       = clientIde;
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
         _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache);
         _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
-        _ambiguousActionBuilder   = new AmbiguousStepActionBuilder(fileSystem);
     }
 
     /// <summary>Builds the LSP registration options advertising code-action support (quick-fix kind) for <c>.feature</c> files.</summary>
@@ -153,18 +147,8 @@ public sealed class CodeActionHandler : ICodeActionHandler
             actions.AddRange(defineActions);
         }
 
-        // ── "Go to '<method>'" actions for an ambiguous step under the cursor ───
-        // VS Code-only (issue #563 follow-up): these actions carry only a `vscode.open` Command,
-        // no Edit. VS Code's LSP client recognizes that command name and runs it locally; Visual
-        // Studio and Rider have no such special-casing, forward it to the server via
-        // workspace/executeCommand instead, and get back "Method not found" (confirmed live in
-        // VS) — so the action would silently do nothing there. See IdeBehaviours.RunsVscodeOpenCommandLocally.
-        if (stepAtCursor is { IsAmbiguous: true } && _clientIde.Behaviours.RunsVscodeOpenCommandLocally)
-        {
-            actions.AddRange(_ambiguousActionBuilder.Build(stepAtCursor));
-        }
-
         // ── "Insert '<keyword>'" actions for a parser error under the cursor ────
+        var isInsertKeywordAction = new HashSet<CommandOrCodeAction>();
         if (buffer?.Tags is not null)
         {
             var errorTag = FindParserErrorTagAt(buffer.Tags, offset);
@@ -172,7 +156,9 @@ public sealed class CodeActionHandler : ICodeActionHandler
             {
                 var gherkinDoc = buffer.Tags
                     .FirstOrDefault(t => t.Type == IdeSupportTagTypes.Document)?.Data as IdeSupportGherkinDocument;
-                actions.AddRange(_parserErrorActionBuilder.Build(uri, errorTag, gherkinDoc));
+                var insertKeywordActions = _parserErrorActionBuilder.Build(uri, errorTag, gherkinDoc);
+                isInsertKeywordAction.UnionWith(insertKeywordActions);
+                actions.AddRange(insertKeywordActions);
             }
         }
 
@@ -185,12 +171,12 @@ public sealed class CodeActionHandler : ICodeActionHandler
 
         _logger.LogVerbose($"CodeActionHandler: {actions.Count} action(s) for {uri}");
 
-        // Telemetry: records that a "Define step(s)" action was *offered*, not that the user
-        // accepted it — the CodeAction's WorkspaceEdit is applied entirely client-side
-        // (workspace/applyEdit), so unlike CommentToggleHandler's workspace/executeCommand round
-        // trip, the server has no signal for whether the lightbulb was actually clicked. Counted
-        // from the final, post-filter/post-cap list — not the raw count built above — so this
-        // never reports more than what the client actually received.
+        // Telemetry: records that a "Define step(s)" / "Insert '<keyword>'" action was *offered*,
+        // not that the user accepted it — the CodeAction's WorkspaceEdit is applied entirely
+        // client-side, so acceptance is reported separately by the command each action carries
+        // (DefineStepsTriggeredHandler / InsertKeywordTriggeredHandler). Counted from the final,
+        // post-filter/post-cap list — not the raw count built above — so this never reports more
+        // than what the client actually received.
         var defineActionsOffered = actions.Count(isDefineAction.Contains);
         if (defineActionsOffered > 0)
         {
@@ -198,6 +184,15 @@ public sealed class CodeActionHandler : ICodeActionHandler
             {
                 ["UndefinedStepCount"] = matchSet.Undefined.Count(),
                 ["ActionsOffered"] = defineActionsOffered,
+            });
+        }
+
+        var insertKeywordActionsOffered = actions.Count(isInsertKeywordAction.Contains);
+        if (insertKeywordActionsOffered > 0)
+        {
+            _telemetryService?.SendEvent(TelemetryEvents.InsertKeywordCommandOffered, new()
+            {
+                ["ActionsOffered"] = insertKeywordActionsOffered,
             });
         }
 

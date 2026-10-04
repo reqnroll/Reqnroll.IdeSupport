@@ -259,6 +259,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<FoldingRangeHandler>()
             .AddSingleton<CommentToggleHandler>()
             .AddSingleton<DefineStepsTriggeredHandler>()
+            .AddSingleton<InsertKeywordTriggeredHandler>()
             .AddSingleton<RenameHandler>()
             .AddSingleton<RenameSessionManager>()
             .AddSingleton<RenameBindingResolver>()
