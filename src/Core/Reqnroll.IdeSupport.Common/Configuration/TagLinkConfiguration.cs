@@ -15,6 +15,10 @@ public class TagLinkConfiguration
 
     internal Regex ResolvedTagPattern { get; private set; }
 
+    // The pattern comes from repository configuration and runs against every tag on each documentLink
+    // request, so a pathological pattern (e.g. "(a+)+") must not be able to hang the server.
+    internal static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(1);
+
     private void FixEmptyContainers()
     {
         //nop;
@@ -32,13 +36,40 @@ public class TagLinkConfiguration
 
         try
         {
-            ResolvedTagPattern = new Regex("^" + TagPattern.TrimStart('^').TrimEnd('$') + "$");
+            ResolvedTagPattern = new Regex("^" + TagPattern.TrimStart('^').TrimEnd('$') + "$", RegexOptions.None, MatchTimeout);
         }
         catch (Exception e)
         {
             throw new IdeSupportConfigurationException(
                 $"Invalid regular expression '{TagPattern}' was specified as 'traceability/tagLinks[]/tagPattern': {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// Expands <see cref="UrlTemplate"/> with the named groups captured from <paramref name="tagName"/>
+    /// (no leading <c>@</c>), or returns null when the pattern does not match or the result is not an absolute URI.
+    /// </summary>
+    public Uri ResolveUrl(string tagName)
+    {
+        if (ResolvedTagPattern == null || UrlTemplate == null)
+            return null;
+
+        Match match;
+        try
+        {
+            match = ResolvedTagPattern.Match(tagName);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
+
+        if (!match.Success)
+            return null;
+
+        var url = Regex.Replace(UrlTemplate, @"\{(?<paramName>[a-zA-Z_\d]+)\}",
+            paramMatch => match.Groups[paramMatch.Groups["paramName"].Value].Value);
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri : null;
     }
 
     #region Equality

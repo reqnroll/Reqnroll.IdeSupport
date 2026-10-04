@@ -9,6 +9,7 @@ import com.reqnroll.ide.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector
 import com.reqnroll.ide.rider.folding.ReqnrollFeatureFoldingController
 import com.reqnroll.ide.rider.inlayhints.ReqnrollFeatureInlayHintsController
 import com.reqnroll.ide.rider.structureview.ReqnrollStructurePanel
+import com.reqnroll.ide.rider.taglinks.ReqnrollFeatureTagLinkController
 import java.util.concurrent.CompletableFuture
 
 /**
@@ -47,6 +48,7 @@ class ReqnrollInlayHintRefreshInterceptor(
     override fun refreshInlayHints(): CompletableFuture<Void> {
         ReqnrollFeatureInlayHintsController.refreshOpenFeatureEditors(project)
         ReqnrollFeatureFoldingController.refreshOpenFeatureEditors(project)
+        ReqnrollFeatureTagLinkController.refreshOpenFeatureEditors(project)
         ReqnrollFeatureBreadcrumbsCollector.refreshOpenFeatureEditors(project)
         ApplicationManager.getApplication().invokeLater(
             {

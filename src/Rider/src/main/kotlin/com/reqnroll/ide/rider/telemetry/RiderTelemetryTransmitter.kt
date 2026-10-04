@@ -95,6 +95,9 @@ object RiderTelemetryTransmitter {
      */
     internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
 
+    /** A clickable tag's link was followed (issue #755). No properties: the URL and tag text are never sent. */
+    internal const val TAG_LINK_COMMAND_EXECUTED = "TagLink command executed"
+
     // Server-lifecycle events (issue #845): sent by the client because a dead server cannot report
     // itself. `Reason` is always one of the SERVER_FAILURE_REASON_* values below, `AttemptNumber` the
     // 1-based start attempt in this IDE session. Mirror of ServerLifecycleTelemetry.cs.

@@ -77,6 +77,10 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          Same "manage it manually" approach as the inlay hints controller above. -->
     <editorFactoryListener implementation="com.reqnroll.ide.rider.folding.ReqnrollFeatureFoldingController" />
 
+    <!-- Rider's generic LSP client never requests textDocument/documentLink either (clickable tags, issue #755),
+         so the tag links are requested and rendered manually, same approach as folding above. -->
+    <editorFactoryListener implementation="com.reqnroll.ide.rider.taglinks.ReqnrollFeatureTagLinkController" />
+
     <!-- Rider's generic LSP client has no bridge for textDocument/onTypeFormatting at all (unlike
          whole-document formatting's LspFormattingService — see
          ReqnrollLspServerDescriptor.lspFormattingSupport), so `|`-triggered table-column

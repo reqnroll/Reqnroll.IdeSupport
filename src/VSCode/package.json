@@ -66,6 +66,10 @@
         "title": "Reqnroll: Go to Hooks"
       },
       {
+        "command": "reqnroll.openTagLink",
+        "title": "Reqnroll: Open Tag Link"
+      },
+      {
         "command": "reqnroll.showOutputChannel",
         "title": "Reqnroll: Show Output Channel"
       },
@@ -144,6 +148,10 @@
         {
           "command": "reqnroll.findStepUsages",
           "when": "editorLangId == csharp"
+        },
+        {
+          "command": "reqnroll.openTagLink",
+          "when": "false"
         },
         {
           "command": "reqnroll.goToStepDefinition",

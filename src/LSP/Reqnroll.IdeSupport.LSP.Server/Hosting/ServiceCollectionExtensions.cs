@@ -33,6 +33,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.LSP.Server.Features.DocumentLinks;
 using Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
@@ -258,6 +259,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IDocumentSymbolService, DocumentSymbolService>()
             .AddSingleton<DocumentSymbolHandler>()
             .AddSingleton<FoldingRangeHandler>()
+            .AddSingleton<DocumentLinkHandler>()
             .AddSingleton<CommentToggleHandler>()
             .AddSingleton<DefineStepsTriggeredHandler>()
             .AddSingleton<InsertKeywordTriggeredHandler>()

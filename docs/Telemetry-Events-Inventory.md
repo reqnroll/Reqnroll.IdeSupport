@@ -30,7 +30,8 @@ Two emission paths exist:
    `GenericEvent` and hands it to `ITelemetryTransmitter` directly. These are events that fire
    before the server starts (install/upgrade), have no server-side equivalent (wizard dialogs,
    link clicks), or describe something only the IDE client can observe (a genuine "Go to Hooks"
-   navigation). VS Code and Rider similarly originate `GoToHook command executed` themselves.
+   navigation). VS Code and Rider similarly originate `GoToHook command executed` and
+   `TagLink command executed` themselves.
 
 Connection override (issue #889): `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`, an Application Insights
 connection string (`InstrumentationKey=...[;IngestionEndpoint=...]`), replaces the built-in
@@ -513,6 +514,24 @@ killed outright, cannot be reported by anything and shows up only as a `ServerSe
 
 ---
 
+### `TagLinkCommandExecuted` (issue #755)
+| | |
+|---|---|
+| **Emitter** | VS `TagLinkNavigableSymbolProvider` (via `TagLinkRedirect.LinkOpened`, wired in `ReqnrollLanguageClient`); VS Code `openTagLink` (`src/VSCode/src/lsp/tagLinks.ts`); Rider `ReqnrollFeatureTagLinkController` - three client copies of the same constant, per the catalog's mirror rule |
+| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the browser. Only http(s) targets are opened, so a refused target emits nothing |
+| **Properties** | none - the target URL and tag text come from repository configuration and are never sent |
+
+The server only answers `textDocument/documentLink` (counted in `PassiveCounts` as `DocumentLink`), and
+cannot tell a link being rendered from one being followed, so this event is client-originated. In VS Code
+the middleware re-targets each link at the internal `reqnroll.openTagLink` command so the click reaches the
+extension; VS and Rider request the links themselves because their generic LSP clients never send
+`textDocument/documentLink`.
+
+**Analytics use.** Tag-link adoption per IDE: `TagLink command executed` per session against
+`PassiveCounts.DocumentLink` (links offered). Compare `DocumentLink` per IDE, not across IDEs: VS asks on every
+Ctrl+hover, VS Code after each `workspace/codeLens/refresh` as well as on open/edit, and Rider on open/edit and
+each inlay-hint refresh.
+
 ## 6. Error & perf events
 
 ### `UnhandledException` (server)
@@ -593,7 +612,7 @@ them unchanged. Parse with `parse_json(tostring(customDimensions.LookupCounts))`
 | Kind | Keys | Recorded operation |
 |---|---|---|
 | `Lookup` - requested by the editor on a gesture or typing | `Completion.Step`, `Completion.Keyword`, `Completion.Tag` (a *subset* of `Completion.Keyword`), `Completion.Other`, `CodeAction` (also fires on cursor moves in VS/VS Code, not only on click) | `textDocument/completion#step`/`#keyword`/`#tag`/bare, `textDocument/codeAction` |
-| `Passive` - requested by the editor on its own schedule | `CodeLens`, `InlayHint`, `FoldingRange`, `DocumentSymbol`, `OnTypeFormatting` (the aggregate stand-in for the never-implemented `CommandAutoFormatTable`) | `textDocument/codeLens`/`inlayHint`/`foldingRange`/`documentSymbol` (+ `reqnroll/documentSymbolHierarchical`)/`onTypeFormatting` |
+| `Passive` - requested by the editor on its own schedule | `CodeLens`, `InlayHint`, `FoldingRange`, `DocumentLink`, `DocumentSymbol`, `OnTypeFormatting` (the aggregate stand-in for the never-implemented `CommandAutoFormatTable`) | `textDocument/codeLens`/`inlayHint`/`foldingRange`/`documentLink`/`documentSymbol` (+ `reqnroll/documentSymbolHierarchical`)/`onTypeFormatting` |
 
 **Not counted here, by design:** every discrete command (Go to Step Definition, Find Usages, Rename,
 Find Unused, Comment/Uncomment, Format, Run lens lookups, Find Hooks, Go to Matching Scenarios).

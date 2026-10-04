@@ -15,6 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentActivated;
 using Reqnroll.IdeSupport.LSP.Server.Features.DocumentOutline;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
+using Reqnroll.IdeSupport.LSP.Server.Features.DocumentLinks;
 using Reqnroll.IdeSupport.LSP.Server.Features.Folding;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
 using Reqnroll.IdeSupport.LSP.Server.Features.InlayHints;
@@ -251,6 +252,10 @@ public static class LanguageServerOptionsExtensions
         options.OnRequest<FoldingRangeRequestParam, Container<FoldingRange>?>(
             LspStandardMethodNames.TextDocumentFoldingRange,
             (request, ct) => resolver!.Get<FoldingRangeHandler>().HandleAsync(request, ct));
+
+        options.OnRequest<DocumentLinkParams, DocumentLinkContainer?>(
+            LspStandardMethodNames.TextDocumentDocumentLink,
+            (request, ct) => resolver!.Get<DocumentLinkHandler>().HandleAsync(request, ct));
 
         options.OnRequest<FindUnusedStepDefinitionsParams, FindUnusedStepDefinitionsResponse>(
             CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions,

@@ -15,6 +15,13 @@ import { doToggleComment } from './commands/commentToggle';
 import { doFindStepUsages } from './commands/stepUsages';
 import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinitions';
 import { doGoToHooks, sourceForArgs } from './commands/goToHooks';
+import {
+  OPEN_TAG_LINK_COMMAND,
+  createTagLinkMiddleware,
+  openTagLink,
+  registerTagLinkRefresh,
+} from './lsp/tagLinks';
+import { getCodeLensRefreshEvent } from './commands/codeLensRefresh';
 import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
@@ -266,6 +273,10 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     // alwaysShowPicker is set for every CodeLens-sourced call (issue #372 follow-up) so clicking
     // a lens always shows the picker, even for a single match, rather than jumping straight
     // there — the command-palette/keybinding path (no args) keeps the direct-navigate shortcut.
+    // Follows a clickable tag's link (issue #755); only reached through the links the middleware above
+    // re-targets, so it is hidden from the command palette.
+    registerCommand(OPEN_TAG_LINK_COMMAND, (url: unknown) => openTagLink(url)),
+
     registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
         notReady('Go to Hooks')();
@@ -425,6 +436,9 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       // CodeLens feature alongside the hand-rolled providers below (registerStepCodeLens,
       // registerHookCodeLens), doubling every lens — see codeLensSuppression.ts.
       ...createCodeLensSuppressionMiddleware(),
+      // Clickable tags (issue #755): the built-in documentLink feature renders the server's links;
+      // this re-targets each at 'reqnroll.openTagLink' so a click is observable (telemetry).
+      ...createTagLinkMiddleware(),
     },
   };
 
@@ -467,6 +481,11 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
         registerStepCodeLens(client!, context);
         // Hook-match count CodeLens for .feature files (issue #269)
         registerHookCodeLens(client!, context);
+        // Clickable tags (issue #755): re-request the links once discovery has made the project's tag
+        // patterns available - see registerTagLinkRefresh.
+        context.subscriptions.push(
+          registerTagLinkRefresh(getCodeLensRefreshEvent(client!, context)),
+        );
         // No run/test mechanism of our own (issue #504, reconsidered): C# Dev Kit already provides
         // gutter run/debug and Test Explorer integration for Reqnroll-generated methods, mapped back
         // to the .feature file via Reqnroll's own #line pragmas. A prior CodeLens-based "▶ Run"

@@ -58,6 +58,7 @@ public static class FeatureUsageCatalog
         [LspStandardMethodNames.TextDocumentCodeLens] = new("CodeLens", FeatureUsageKind.Passive),
         [LspStandardMethodNames.TextDocumentInlayHint] = new("InlayHint", FeatureUsageKind.Passive),
         [LspStandardMethodNames.TextDocumentFoldingRange] = new("FoldingRange", FeatureUsageKind.Passive),
+        [LspStandardMethodNames.TextDocumentDocumentLink] = new("DocumentLink", FeatureUsageKind.Passive),
         [LspStandardMethodNames.TextDocumentDocumentSymbol] = new("DocumentSymbol", FeatureUsageKind.Passive),
         [CustomLspMethodNames.ReqnrollDocumentSymbolHierarchical] = new("DocumentSymbol", FeatureUsageKind.Passive),
         // Closes the gap the retired CommandAutoFormatTable event left: on-type table formatting

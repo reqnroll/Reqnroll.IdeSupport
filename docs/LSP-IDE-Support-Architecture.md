@@ -445,6 +445,7 @@ The Protocol Handler is responsible for the initial synchronous state write; Med
 | `CompletionHandler` | `textDocument/completion`, `completionItem/resolve` |
 | `DocumentSymbolHandler` | `textDocument/documentSymbol` |
 | `FoldingRangeHandler` | `textDocument/foldingRange` |
+| `DocumentLinkHandler` | `textDocument/documentLink` (F28 - clickable tags from `ide.traceability.tagLinks`; statically-declared capability, manually registered alongside `FoldingRangeHandler` - see [F28 as-built](LSP-IDE-Support-Feature-Designs.md#f28--clickable-tags-traceability-links)) |
 | `InlayHintHandler` | `textDocument/inlayHint` (F23 — binding info hints; statically-declared capability, manually registered alongside `FoldingRangeHandler` — see [F23 as-built](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info)) |
 | `FormattingHandler` | `textDocument/formatting`, `rangeFormatting`, `onTypeFormatting` |
 | `CommentToggleHandler` | `workspace/executeCommand` (for `reqnroll.toggleComment`; `WorkspaceExecuteCommand` is now in `LspStandardMethodNames` like every other method) |
