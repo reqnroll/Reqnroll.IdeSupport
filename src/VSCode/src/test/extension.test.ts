@@ -18,6 +18,7 @@ import './lsp/serverLifecycleTelemetry.test';
 // guards a module-level singleton that only its first caller in the whole process actually wires
 // up -- see the doc comment atop `lsp/codeLensRefresh.test.ts`.
 import './lsp/codeLensRefresh.test';
+import './lsp/tagLinks.test';
 import './telemetry.test';
 import './clientExceptionTelemetry.test';
 import './resolveServerPath.test';
