@@ -43,6 +43,12 @@ namespace Reqnroll.IdeSupport.VisualStudio;
 /// <see langword="null"/>, leaving the underline/click affordance entirely to VS's own (lower-priority)
 /// provider — the same fallback <see cref="GoToDefinitionCommandFilter"/> uses for F12.
 /// </para>
+/// <para>
+/// It also makes clickable tags work (issue #755): VS's LSP client never sends
+/// <c>textDocument/documentLink</c>, so before the Go To Definition fallback this provider asks
+/// <see cref="TagLinkRedirect"/> for the file's links and, when the pointer is on one, offers a symbol
+/// that opens the link's URL instead.
+/// </para>
 /// </remarks>
 [Export(typeof(INavigableSymbolSourceProvider))]
 [Name("Reqnroll GoToDefinitionNavigableSymbolProvider")]
@@ -87,19 +93,23 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             _logger = logger;
         }
 
-        public Task<INavigableSymbol?> GetNavigableSymbolAsync(SnapshotSpan triggerSpan, CancellationToken token)
+        public async Task<INavigableSymbol?> GetNavigableSymbolAsync(SnapshotSpan triggerSpan, CancellationToken token)
         {
             var redirect = GoToDefinitionRedirect.GoToDefinitionAsync;
             if (redirect is null)
             {
                 _logger.LogVerbose(
                     "GoToDefinitionNavigableSymbolProvider: LSP server not initialized (no redirect set), falling through to VS's own Ctrl+Click handling.");
-                return Task.FromResult<INavigableSymbol?>(null);
+                return null;
             }
 
             var fileUri = GetTextBufferFileUri(_textView.TextBuffer);
             if (fileUri.Length == 0)
-                return Task.FromResult<INavigableSymbol?>(null);
+                return null;
+
+            var tagLinkSymbol = await TryCreateTagLinkSymbolAsync(triggerSpan, fileUri, token).ConfigureAwait(false);
+            if (tagLinkSymbol is not null)
+                return tagLinkSymbol;
 
             var navigator = _textStructureNavigatorSelectorService.GetTextStructureNavigator(triggerSpan.Snapshot.TextBuffer);
             var wordSpan = navigator.GetExtentOfWord(triggerSpan.Start).Span;
@@ -112,7 +122,52 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             _logger.LogVerbose(
                 $"GoToDefinitionNavigableSymbolProvider: offering navigable symbol uri='{fileUri}' at {line0}:{char0}");
 
-            return Task.FromResult<INavigableSymbol?>(new NavigableSymbol(wordSpan, fileUri, line0, char0, lineText, redirect, _logger));
+            return new NavigableSymbol(wordSpan, fileUri, line0, char0, lineText, redirect, _logger);
+        }
+
+        // Offers a link symbol when the pointer is on a clickable tag (issue #755); null otherwise, so the
+        // caller falls through to Go To Definition. Server failures degrade to "no link", never an error.
+        private async Task<INavigableSymbol?> TryCreateTagLinkSymbolAsync(
+            SnapshotSpan triggerSpan, string fileUri, CancellationToken token)
+        {
+            var getLinks = TagLinkRedirect.GetLinksAsync;
+            if (getLinks is null)
+                return null;
+
+            try
+            {
+                var links = await getLinks(fileUri, token).ConfigureAwait(false);
+                var line  = triggerSpan.Start.GetContainingLine();
+                var char0 = triggerSpan.Start.Position - line.Start.Position;
+                var link  = FindLink(links, line.LineNumber, char0);
+                if (link is null)
+                    return null;
+
+                var snapshot = triggerSpan.Snapshot;
+                var start = snapshot.GetLineFromLineNumber(link.Value.StartLine).Start + link.Value.StartChar;
+                var end   = snapshot.GetLineFromLineNumber(link.Value.EndLine).Start   + link.Value.EndChar;
+                return new TagLinkNavigableSymbol(new SnapshotSpan(start, end), link.Value.Target, _logger);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"GoToDefinitionNavigableSymbolProvider: tag link lookup failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        // internal so tests can exercise the position lookup without a real text view.
+        internal static TagLinkEntry? FindLink(IReadOnlyList<TagLinkEntry> links, int line0, int char0)
+        {
+            foreach (var link in links)
+            {
+                if (link.Contains(line0, char0))
+                    return link;
+            }
+            return null;
         }
 
         public void Dispose()
@@ -191,6 +246,48 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
                     _logger.LogException(ex, "GoToDefinitionNavigableSymbolProvider: Go To Definition (Ctrl+Click) failed");
                     return true;
                 });
+        }
+    }
+
+    /// <summary>
+    /// The navigable symbol for a clickable tag: <see cref="Navigate"/> opens the link's URL in the
+    /// default browser (issue #755). Only http(s) targets are opened - see <see cref="TagLinkRedirect.IsOpenableUrl"/>.
+    /// </summary>
+    internal sealed class TagLinkNavigableSymbol : INavigableSymbol
+    {
+        private readonly string _target;
+        private readonly IIdeSupportLogger _logger;
+
+        internal TagLinkNavigableSymbol(SnapshotSpan symbolSpan, string target, IIdeSupportLogger logger)
+        {
+            SymbolSpan = symbolSpan;
+            _target    = target;
+            _logger    = logger;
+        }
+
+        public SnapshotSpan SymbolSpan { get; }
+
+        public IEnumerable<INavigableRelationship> Relationships { get; } =
+            new[] { PredefinedNavigableRelationships.Definition };
+
+        public void Navigate(INavigableRelationship relationship)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (!TagLinkRedirect.IsOpenableUrl(_target))
+            {
+                _logger.LogWarning($"GoToDefinitionNavigableSymbolProvider: refusing to open non-http(s) tag link '{_target}'.");
+                return;
+            }
+
+            try
+            {
+                VsShellUtilities.OpenSystemBrowser(_target);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogException(ex, "GoToDefinitionNavigableSymbolProvider: opening tag link failed");
+            }
         }
     }
 }

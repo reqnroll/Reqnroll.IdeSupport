@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
+using Reqnroll.IdeSupport.VisualStudio.Extension.DocumentLinks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -53,6 +54,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
     private GoToStepDefinitionPresenter? _goToStepDefinitionPresenter;
     private GherkinNavigationBarSymbolService? _navigationBarSymbolService;
     private HookFeatureCodeLensService? _hookFeatureCodeLensService;
+    private DocumentLinkService? _documentLinkService;
     private ScenarioTestTargetService? _scenarioTestTargetService;
     private RunTestCodeLensService? _runTestCodeLensService;
     private RunTestCodeLensResultCache? _runTestCodeLensResultCache;
@@ -322,6 +324,11 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>());
                 GoToDefinitionRedirect.GoToDefinitionAsync = _goToStepDefinitionPresenter.GoToDefinitionAsync;
 
+                // Clickable tags (issue #755): VS's LSP client never sends textDocument/documentLink, so the
+                // Ctrl+Click navigable-symbol provider asks for the links through this bridge.
+                _documentLinkService = new DocumentLinkService(interceptingPipe, _loggerFactory.CreateLogger<DocumentLinkService>());
+                TagLinkRedirect.GetLinksAsync = _documentLinkService.GetLinksAsync;
+
                 // VS.Extensibility can call this method more than once per session (issue #156):
                 // a second activation must not leave the first ProjectMonitor's DTE event
                 // subscriptions (SolutionEvents/BuildEvents/WindowEvents/
@@ -382,6 +389,8 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             CommentToggleRedirect.ToggleCommentAsync = null;
             _goToStepDefinitionPresenter = null;
             GoToDefinitionRedirect.GoToDefinitionAsync = null;
+            _documentLinkService = null;
+            TagLinkRedirect.GetLinksAsync = null;
             _renameStepState.Service = null;
             _formatDocumentState.Service = null;
             FormatDocumentRedirect.FormatDocumentAsync = null;

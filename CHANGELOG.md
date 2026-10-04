@@ -55,7 +55,7 @@
 
 * The client-originated `GoToHook command executed` telemetry event now carries `Source` (`Command`, `ContextMenu` or `CodeLens` - how the navigation was started; the same closed set and property name in all three IDEs; Visual Studio reports `ContextMenu` for every invocation of its command - its only placement is the editor context menu, so the Command Window, Tools > Customize and user-assigned keybindings count as `ContextMenu` too - and never emits `CodeLens`), and `CommentUncomment command executed` now carries `ResolvedMode` (`Comment` or `Uncomment`, the direction a request actually took) next to the requested `Mode`, so a `Toggle` is no longer opaque; enums only, no paths or text (LSP server, VS, VS Code, Rider) - see #861
 
-* Gherkin tags matching a configured `Traceability.TagLinks` pattern (including links auto-generated from `specsync.json`) are now clickable in feature files, opening the tracker URL, via `textDocument/documentLink` (LSP server) - see #755, #888
+* Gherkin tags matching a configured `Traceability.TagLinks` pattern (including links auto-generated from `specsync.json`) are now clickable in feature files, opening the tracker URL, via `textDocument/documentLink` (LSP server; Visual Studio requests the links itself and opens http(s) targets on Ctrl+Click) - see #755, #888
 
 ## Bug fixes:
 
