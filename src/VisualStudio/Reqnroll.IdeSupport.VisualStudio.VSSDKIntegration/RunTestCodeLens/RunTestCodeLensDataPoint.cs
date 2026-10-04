@@ -96,10 +96,10 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // Row-tests targets share one method — collapsing to distinct (assembly, type, method)
         // tuples means "run this scenario" and "run all examples" (row-tests mode) are the same
         // single-element list, matching design doc §5's "free" case. For individual-methods mode
-        // (allowRowTests = false) this naturally becomes a multi-element array; whether
-        // CodeLensDetailPaneCommand.CommandArgs actually accepts more than one TestMethodIdentifier
-        // in that mode is unconfirmed live (design doc §7 item 7) — structurally supported (CommandArgs
-        // is IEnumerable<object>), not verified against a real Test Explorer.
+        // (allowRowTests = false) this naturally becomes a multi-element array, the same shape the
+        // Feature/Rule container lens already sends (design doc §5/§7 item 7); the server resolver
+        // supplies every variant method (issue #454). Live confirmation that Test Explorer runs every
+        // element for an individual-methods Outline is still outstanding.
         _cachedMethods = onThisLine
             .Select(e => new TestMethodIdentifier(e.OutputAssemblyPath, $"{e.DeclaringTypeFullName}.{e.MethodName}", e.DeclaringTypeFullName, e.MethodName))
             .Distinct()

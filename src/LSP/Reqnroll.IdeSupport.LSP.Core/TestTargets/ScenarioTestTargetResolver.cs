@@ -123,16 +123,26 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 
         var exactMethod = classDecl.Members.OfType<MethodDeclarationSyntax>()
             .FirstOrDefault(m => m.Identifier.Text == expectedMethodName);
-        if (exactMethod is not null)
+
+        // Reqnroll always emits a public, parameterized *template* method named exactly like the
+        // Outline — in individual-methods mode too, where it is not itself a test and every
+        // Examples row instead gets its own "{name}_{variant}" method that calls it. Real tests
+        // (plain scenario, row-tests Outline) always carry at least a test attribute; the template
+        // carries none, so an attribute-less exact match must not shadow the variant methods.
+        if (exactMethod is not null && exactMethod.AttributeLists.Count > 0)
             return ResolveExactMethod(exactMethod, declaringTypeFullName, expectedMethodName,
                 scenarioTag.Data, selectedRow);
 
         var prefix = expectedMethodName + "_";
         var candidateMethods = classDecl.Members.OfType<MethodDeclarationSyntax>()
-            .Where(m => m.Identifier.Text.StartsWith(prefix, StringComparison.Ordinal))
+            .Where(m => m.AttributeLists.Count > 0 && m.Identifier.Text.StartsWith(prefix, StringComparison.Ordinal))
             .ToList();
         if (candidateMethods.Count == 0)
-            return Array.Empty<ScenarioTestTarget>(); // naming-rule mismatch or generator-version drift
+        {
+            return exactMethod is not null
+                ? ResolveExactMethod(exactMethod, declaringTypeFullName, expectedMethodName, scenarioTag.Data, selectedRow)
+                : Array.Empty<ScenarioTestTarget>(); // naming-rule mismatch or generator-version drift
+        }
 
         return ResolveIndividualMethods(candidateMethods, declaringTypeFullName, scenarioTag.Data,
             expectedMethodName, selectedRow);
@@ -367,33 +377,35 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 
     /// <summary>
     /// Ports design doc §2's individual-methods naming rule:
-    /// <c>{scenario.Name.ToIdentifier()}_{exampleSetIdentifier}_{variantName.ToIdentifier()}</c>,
-    /// where <c>variantName</c> is the row's first cell value if unique across its own
-    /// <c>Examples:</c> block, else <c>"Variant {index}"</c> (0-based within the block); and
-    /// <c>exampleSetIdentifier</c> is the block's own name if given, folded out entirely if there is
-    /// exactly one unnamed block, else <c>"ExampleSet {n}"</c> (0-based among the unnamed blocks).
+    /// <c>{scenario.Name.ToIdentifier()}_{exampleSetIdentifier}_{variantName.ToIdentifier().TrimStart('_')}</c>,
+    /// where <c>variantName</c> is the row's first cell value if every row's first cell is present
+    /// and distinct <em>as an identifier</em> within its own <c>Examples:</c> block, else
+    /// <c>"Variant {index}"</c> (0-based within the block); and <c>exampleSetIdentifier</c> is the
+    /// block's own name if given, folded out entirely if there is exactly one unnamed block, else
+    /// <c>"ExampleSet {n}"</c> where <c>n</c> is the block's 0-based index among <em>all</em> blocks
+    /// (named ones included), mirroring <c>UnitTestMethodGenerator</c>.
     /// </summary>
     private static Dictionary<TableRow, string> ComputeIndividualMethodNames(ScenarioOutline outline, string expectedMethodName)
     {
         var result = new Dictionary<TableRow, string>();
         var blocks = outline.Examples?.ToList() ?? new List<Examples>();
         var unnamedBlockCount = blocks.Count(b => string.IsNullOrWhiteSpace(b.Name));
-        var unnamedIndex = 0;
 
-        foreach (var block in blocks)
+        for (var blockIndex = 0; blockIndex < blocks.Count; blockIndex++)
         {
+            var block = blocks[blockIndex];
             string? exampleSetIdentifier;
             if (!string.IsNullOrWhiteSpace(block.Name))
                 exampleSetIdentifier = block.Name;
             else if (unnamedBlockCount == 1)
                 exampleSetIdentifier = null;
             else
-                exampleSetIdentifier = $"ExampleSet {unnamedIndex++}";
+                exampleSetIdentifier = $"ExampleSet {blockIndex}";
 
             var rows = block.TableBody?.ToList() ?? new List<TableRow>();
             var firstCellValues = rows.Select(r => r.Cells?.Select(c => c.Value).FirstOrDefault()).ToList();
             var firstCellsUnique = firstCellValues.All(v => v is not null)
-                && firstCellValues.Distinct().Count() == firstCellValues.Count;
+                && firstCellValues.Select(v => ReqnrollIdentifierNaming.ToIdentifier(v!)).Distinct().Count() == firstCellValues.Count;
 
             for (var i = 0; i < rows.Count; i++)
             {
@@ -401,7 +413,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
                 var parts = new List<string> { expectedMethodName };
                 if (exampleSetIdentifier is not null)
                     parts.Add(ReqnrollIdentifierNaming.ToIdentifier(exampleSetIdentifier));
-                parts.Add(ReqnrollIdentifierNaming.ToIdentifier(variantName));
+                parts.Add(ReqnrollIdentifierNaming.ToIdentifier(variantName).TrimStart('_'));
                 result[rows[i]] = string.Join("_", parts);
             }
         }
