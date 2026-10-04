@@ -37,6 +37,12 @@ public class IdeSupportTagParser : IIdeSupportTagParser
     public IReadOnlyCollection<IdeSupportTag> Parse(
         IGherkinTextSnapshot fileSnapshot,
         ProjectBindingRegistry bindingRegistry)
+        => Parse(fileSnapshot, new[] { bindingRegistry });
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<IdeSupportTag> Parse(
+        IGherkinTextSnapshot fileSnapshot,
+        IReadOnlyList<ProjectBindingRegistry> bindingRegistries)
     {
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -44,7 +50,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
         try
         {
             var configuration = _deveroomConfigurationProvider.GetConfiguration();
-            return ParseInternal(fileSnapshot, bindingRegistry, configuration);
+            return ParseInternal(fileSnapshot, bindingRegistries, configuration);
         }
         catch (Exception ex)
         {
@@ -60,7 +66,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
     }
 
     private IReadOnlyCollection<IdeSupportTag> ParseInternal(IGherkinTextSnapshot fileSnapshot,
-        ProjectBindingRegistry bindingRegistry,
+        IReadOnlyList<ProjectBindingRegistry> bindingRegistries,
         IdeSupportConfiguration deveroomConfiguration)
     {
         var dialectProvider = ReqnrollGherkinDialectProvider.Get(deveroomConfiguration.DefaultFeatureLanguage);
@@ -73,7 +79,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
             ImmutableSortedSet.CreateBuilder(new IdeSupportTagPositionComparer());
 
         if (gherkinDocument != null)
-            AddGherkinDocumentTags(fileSnapshot, bindingRegistry, gherkinDocument, result);
+            AddGherkinDocumentTags(fileSnapshot, bindingRegistries, gherkinDocument, result);
 
         foreach (var parserException in parserErrors)
         {
@@ -89,7 +95,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
         return result.ToImmutable();
     }
 
-    private void AddGherkinDocumentTags(IGherkinTextSnapshot fileSnapshot, ProjectBindingRegistry bindingRegistry,
+    private void AddGherkinDocumentTags(IGherkinTextSnapshot fileSnapshot, IReadOnlyList<ProjectBindingRegistry> bindingRegistries,
         IdeSupportGherkinDocument gherkinDocument, ISet<IdeSupportTag> result)
     {
         var documentTag = new IdeSupportTag(IdeSupportTagTypes.Document,
@@ -98,7 +104,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
 
         if (gherkinDocument.Feature != null)
         {
-            var featureTag = GetFeatureTags(fileSnapshot, bindingRegistry, gherkinDocument.Feature);
+            var featureTag = GetFeatureTags(fileSnapshot, bindingRegistries, gherkinDocument.Feature);
             var allTags = GetAllTags(featureTag);
             result.UnionWith(allTags);
         }
@@ -112,7 +118,7 @@ public class IdeSupportTagParser : IIdeSupportTagParser
             }
     }
 
-    private IdeSupportTag GetFeatureTags(IGherkinTextSnapshot fileSnapshot, ProjectBindingRegistry bindingRegistry,
+    private IdeSupportTag GetFeatureTags(IGherkinTextSnapshot fileSnapshot, IReadOnlyList<ProjectBindingRegistry> bindingRegistries,
         Feature feature)
     {
         var featureTag = CreateDefinitionBlockTag(feature, IdeSupportTagTypes.FeatureBlock, fileSnapshot,
@@ -120,14 +126,14 @@ public class IdeSupportTagParser : IIdeSupportTagParser
 
         foreach (var block in feature.Children)
             if (block is StepsContainer stepsContainer)
-                AddScenarioDefinitionBlockTag(fileSnapshot, bindingRegistry, stepsContainer, featureTag);
+                AddScenarioDefinitionBlockTag(fileSnapshot, bindingRegistries, stepsContainer, featureTag);
             else if (block is Rule rule)
-                AddRuleBlockTag(fileSnapshot, bindingRegistry, rule, featureTag);
+                AddRuleBlockTag(fileSnapshot, bindingRegistries, rule, featureTag);
 
         return featureTag;
     }
 
-    private void AddRuleBlockTag(IGherkinTextSnapshot fileSnapshot, ProjectBindingRegistry bindingRegistry, Rule rule,
+    private void AddRuleBlockTag(IGherkinTextSnapshot fileSnapshot, IReadOnlyList<ProjectBindingRegistry> bindingRegistries, Rule rule,
         IdeSupportTag featureTag)
     {
         var lastStepsContainer = rule.StepsContainers().LastOrDefault();
@@ -139,10 +145,10 @@ public class IdeSupportTagParser : IIdeSupportTagParser
             lastLine, featureTag);
 
         foreach (var stepsContainer in rule.StepsContainers())
-            AddScenarioDefinitionBlockTag(fileSnapshot, bindingRegistry, stepsContainer, ruleTag);
+            AddScenarioDefinitionBlockTag(fileSnapshot, bindingRegistries, stepsContainer, ruleTag);
     }
 
-    private void AddScenarioDefinitionBlockTag(IGherkinTextSnapshot fileSnapshot, ProjectBindingRegistry bindingRegistry,
+    private void AddScenarioDefinitionBlockTag(IGherkinTextSnapshot fileSnapshot, IReadOnlyList<ProjectBindingRegistry> bindingRegistries,
         StepsContainer scenarioDefinition, IdeSupportTag parentTag)
     {
         var scenarioDefinitionTag = CreateDefinitionBlockTag(scenarioDefinition,
@@ -181,10 +187,9 @@ public class IdeSupportTagParser : IIdeSupportTagParser
 
             if (scenarioDefinition is ScenarioOutline) AddPlaceholderTags(fileSnapshot, stepTag, step);
 
-            if (bindingRegistry == ProjectBindingRegistry.Invalid)
+var match = MatchStep(bindingRegistries, step, scenarioDefinitionTag);
+            if (match == null)
                 continue;
-
-            var match = bindingRegistry.MatchStep(step, scenarioDefinitionTag);
             AddStepBindingMatchTags(fileSnapshot, stepTag, step, scenarioDefinition, match);
         }
 
@@ -199,9 +204,12 @@ public class IdeSupportTagParser : IIdeSupportTagParser
                         IdeSupportTagTypes.ScenarioOutlinePlaceholder);
             }
 
-        if (scenarioDefinition is Scenario scenario && bindingRegistry != ProjectBindingRegistry.Invalid)
+        // Hook matching stays with the primary owner (first registry): hooks are not part of the
+        // "bound if any owning project binds it" rule for steps (issue #558).
+        var hookRegistry = bindingRegistries[0];
+        if (scenarioDefinition is Scenario scenario && hookRegistry != ProjectBindingRegistry.Invalid)
         {
-            var match = bindingRegistry.MatchScenarioToHooks(scenario, scenarioDefinitionTag);
+            var match = hookRegistry.MatchScenarioToHooks(scenario, scenarioDefinitionTag);
             if (match.HasHooks)
             {
                 var firstTagTag = scenarioDefinitionTag
@@ -216,6 +224,36 @@ public class IdeSupportTagParser : IIdeSupportTagParser
                 scenarioDefinitionTag.AddChild(hookReferenceTag);
             }
         }
+    }
+
+    /// <summary>
+    /// Matches <paramref name="step"/> against every owning project's registry (primary owner
+    /// first) and returns the first result that finds at least one binding (defined or ambiguous);
+    /// when no owner binds the step, the primary owner's (undefined) result is returned, so a step
+    /// is undefined only if it is unmatched in all owners (issue #558). Returns <c>null</c> when
+    /// the primary registry is <see cref="ProjectBindingRegistry.Invalid"/> (not yet discovered),
+    /// preserving the pre-discovery "skip step matching" behaviour regardless of other owners.
+    /// </summary>
+    private static MatchResult? MatchStep(IReadOnlyList<ProjectBindingRegistry> registries, Step step,
+        IdeSupportTag scenarioDefinitionTag)
+    {
+        if (registries[0] == ProjectBindingRegistry.Invalid)
+            return null;
+
+        var primaryMatch = registries[0].MatchStep(step, scenarioDefinitionTag);
+        if (primaryMatch.HasDefined || primaryMatch.HasAmbiguous)
+            return primaryMatch;
+
+        for (var i = 1; i < registries.Count; i++)
+        {
+            if (registries[i] == ProjectBindingRegistry.Invalid)
+                continue;
+            var match = registries[i].MatchStep(step, scenarioDefinitionTag);
+            if (match.HasDefined || match.HasAmbiguous)
+                return match;
+        }
+
+        return primaryMatch;
     }
 
     /// <summary>

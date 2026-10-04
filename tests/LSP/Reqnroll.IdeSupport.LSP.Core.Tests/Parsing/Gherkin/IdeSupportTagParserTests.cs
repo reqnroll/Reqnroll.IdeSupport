@@ -484,4 +484,60 @@ public class IdeSupportTagParserTests
         var tags = ParseTags("Feature: F\nScenario: S\n  Given a step\n");
         tags.Should().BeEmpty();
     }
+
+    // ── Multi-owner (linked feature file) matching — issue #558 ───────────────
+
+    private const string OneStep = "Feature: F\nScenario: S\n  Given a step\n";
+
+    [Fact]
+    public void Step_bound_only_by_a_non_primary_owner_is_defined()
+    {
+        var primary = RegistryWith();
+        var other   = RegistryWith(GivenBinding("a step", "OtherMethod"));
+
+        var tags = CreateSut().Parse(Snap(OneStep), new[] { primary, other });
+
+        OfType(tags, IdeSupportTagTypes.DefinedStep).Should().HaveCount(1);
+        OfType(tags, IdeSupportTagTypes.UndefinedStep).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Step_unbound_in_every_owner_is_undefined()
+    {
+        var tags = CreateSut().Parse(Snap(OneStep), new[] { RegistryWith(), RegistryWith() });
+
+        OfType(tags, IdeSupportTagTypes.UndefinedStep).Should().HaveCount(1);
+        OfType(tags, IdeSupportTagTypes.DefinedStep).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Primary_owner_binding_is_preferred_when_several_owners_bind_the_step()
+    {
+        var primary = RegistryWith(GivenBinding("a step", "PrimaryMethod"));
+        var other   = RegistryWith(GivenBinding("a step", "OtherMethod"));
+
+        var tags = CreateSut().Parse(Snap(OneStep), new[] { primary, other });
+
+        var match = (MatchResult)Single(tags, IdeSupportTagTypes.DefinedStep).Data!;
+        match.Items.Single().MatchedStepDefinition.Implementation.Method.Should().Be("PrimaryMethod");
+    }
+
+    [Fact]
+    public void Invalid_primary_registry_skips_step_matching_even_when_another_owner_binds_it()
+    {
+        var other = RegistryWith(GivenBinding("a step"));
+
+        var tags = CreateSut().Parse(Snap(OneStep), new[] { ProjectBindingRegistry.Invalid, other });
+
+        OfType(tags, IdeSupportTagTypes.DefinedStep).Should().BeEmpty();
+        OfType(tags, IdeSupportTagTypes.UndefinedStep).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Invalid_non_primary_registry_is_ignored()
+    {
+        var tags = CreateSut().Parse(Snap(OneStep), new[] { RegistryWith(), ProjectBindingRegistry.Invalid });
+
+        OfType(tags, IdeSupportTagTypes.UndefinedStep).Should().HaveCount(1);
+    }
 }

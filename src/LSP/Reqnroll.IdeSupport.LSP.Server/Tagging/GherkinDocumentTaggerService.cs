@@ -1,6 +1,7 @@
 ﻿using OmniSharp.Extensions.LanguageServer.Protocol;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 
 
@@ -71,7 +72,16 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // discovered or its first discovery run has not completed; IdeSupportTagParser
         // gracefully skips step-matching in that case.
         var registry = _registryLookup.GetRegistryForUri(uri);
-        var tags     = _tagParser.Parse(snapshot, registry);
+
+        // A feature file can be linked into more than one project: match its steps against every
+        // owner's registry (primary owner first) so a step is undefined only if it is unmatched in
+        // ALL owners (issue #558; design doc "Linked Files and Project Membership" decision 5).
+        // The result is still stored as ONE match set under the primary owner's key, so each
+        // physical step is counted once by usage-count consumers (no per-owner duplication).
+        var registries = GetOwnerRegistries(uri, registry);
+        var tags       = registries.Count > 1
+            ? _tagParser.Parse(snapshot, registries)
+            : _tagParser.Parse(snapshot, registry);
         _logger.LogInfo($"Parsed {tags.Count} tags from document {uri}");
 
         // Store the new tags first so semantic-token encoding (which re-reads them) and the
@@ -121,10 +131,7 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
         // for a shared/linked feature is computed against THIS project's bindings, not the
         // primary owner's bindings. This is the per-(uri, project) correctness requirement
         // (primary-owner resolution / shared-feature scoping 2B).
-        var registry = project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)
-                       && obj is ConnectorBindingRegistryProvider provider
-            ? provider.Current
-            : _registryLookup.GetRegistryForUri(uri);   // fallback: router (should not happen after baseline)
+        var registry = TryGetProjectRegistry(project) ?? _registryLookup.GetRegistryForUri(uri);   // fallback: router (should not happen after baseline)
 
         var tags = _tagParser.Parse(snapshot, registry);
 
@@ -135,6 +142,42 @@ public class GherkinDocumentTaggerService : IGherkinDocumentTaggerService
 
         _logger.LogVerbose($"ScanClosedFile: stored {matchSet.Steps.Count} step(s) for {uri} [{project.ProjectName}]");
         return Task.CompletedTask;
+    }
+
+    private static bool IsSameProject(LspReqnrollProject a, LspReqnrollProject b)
+        => string.Equals(a.ProjectFullName, b.ProjectFullName, StringComparison.OrdinalIgnoreCase)
+           && string.Equals(a.TargetFrameworkMoniker, b.TargetFrameworkMoniker, StringComparison.Ordinal);
+
+    private static ProjectBindingRegistry? TryGetProjectRegistry(LspReqnrollProject project)
+        => project.Properties.TryGetValue(typeof(ConnectorBindingRegistryProvider), out var obj)
+           && obj is ConnectorBindingRegistryProvider provider
+            ? provider.Current
+            : null;
+
+    /// <summary>
+    /// The registries to match <paramref name="uri"/>'s steps against: the primary owner's
+    /// (<paramref name="primaryRegistry"/>, as resolved by the router) first, followed by every
+    /// other owning project's own registry. Non-primary owners whose registry is not yet
+    /// available are omitted.
+    /// </summary>
+    private IReadOnlyList<ProjectBindingRegistry> GetOwnerRegistries(DocumentUri uri, ProjectBindingRegistry primaryRegistry)
+    {
+        var owners = _scopeManager.ResolveOwners(uri);
+        if (owners.Count <= 1)
+            return new[] { primaryRegistry };
+
+        var primary   = _scopeManager.ResolvePrimaryOwner(uri);
+        var registries = new List<ProjectBindingRegistry> { primaryRegistry };
+        foreach (var project in owners)
+        {
+            if (primary is not null && IsSameProject(project, primary))
+                continue;
+            var other = TryGetProjectRegistry(project);
+            if (other is not null && other != ProjectBindingRegistry.Invalid)
+                registries.Add(other);
+        }
+
+        return registries;
     }
 
     /// <inheritdoc/>
