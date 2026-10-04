@@ -61,11 +61,9 @@ public class CodeActionHandlerTests
                        .Returns(new IdeSupportConfiguration());
     }
 
-    // Defaults to VS Code so existing tests (written before the #563 follow-up VS-Code-only gate)
-    // keep exercising the ambiguous-step "Go to" actions without each having to opt in.
-    private CodeActionHandler CreateSut(ClientIdeContext? clientIde = null) =>
+    private CodeActionHandler CreateSut() =>
         new(_matchService, _scaffoldService, _scopeManager, _bufferService, _logger, _fileSystem,
-            _csharpFileTextCache, _completionService, _errorTelemetryService, clientIde ?? new ClientIdeContext("vscode"),
+            _csharpFileTextCache, _completionService, _errorTelemetryService,
             _telemetryService);
 
     private static CodeActionParams RequestAt(
@@ -180,43 +178,15 @@ public class CodeActionHandlerTests
         result!.Select(a => a.CodeAction!.Title).Should().NotContain(t => t.StartsWith("Define"));
     }
 
-    // ── With an ambiguous step under the cursor (issue #563) ────────────────────
+    // ── With an ambiguous step under the cursor ─────────────────────────────────
 
     [Fact]
-    public async Task Offers_go_to_actions_for_each_competing_binding_of_an_ambiguous_step()
+    public async Task Offers_no_actions_for_an_ambiguous_step()
     {
+        // Navigating to a competing binding is Go to Definition's job, not a quick fix's.
         SeedMatchService(AmbiguousMatch("a step", lineOffset: 23, length: 6));
 
         var result = await CreateSut().Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
-
-        var actions = result!.Select(a => a.CodeAction!).ToList();
-        actions.Should().HaveCount(2);
-        actions.Should().Contain(a => a.Title.Contains("StepsA.Handle"));
-        actions.Should().Contain(a => a.Title.Contains("StepsB.Handle"));
-        actions.Should().AllSatisfy(a =>
-        {
-            a.Kind.Should().Be(CodeActionKind.QuickFix);
-            a.Edit.Should().BeNull("navigation actions carry no edit, only a Command");
-            a.Command.Should().NotBeNull();
-            a.Diagnostics.Should().NotBeNullOrEmpty();
-            a.Diagnostics!.Single().Source.Should().Be(DiagnosticsAggregator.BindingSource);
-        });
-    }
-
-    [Theory]
-    [InlineData("visualstudio")]
-    [InlineData("rider")]
-    public async Task Does_not_offer_go_to_actions_for_non_VSCode_clients(string ide)
-    {
-        // A "Go to" action carries only a vscode.open Command, no Edit (issue #563 follow-up).
-        // VS Code's LSP client recognizes that command name and runs it locally; Visual Studio's
-        // and Rider's do not, and forwarding it to the server via workspace/executeCommand fails
-        // ("Method not found" — confirmed live in VS, since neither client special-cases it the
-        // way VS Code does), so the action would silently do nothing there.
-        SeedMatchService(AmbiguousMatch("a step", lineOffset: 23, length: 6));
-
-        var result = await CreateSut(new ClientIdeContext(ide))
-            .Handle(RequestAt(FeatureUri, line: 2), CancellationToken.None);
 
         result.Should().BeEmpty();
     }
@@ -595,6 +565,67 @@ public class CodeActionHandlerTests
             var edit = a.Edit!.DocumentChanges!.Single().TextDocumentEdit!.Edits.Single();
             edit.Range.Should().Be(errorTag.Range.ToLspRange());
         });
+    }
+
+    [Fact]
+    public async Task Insert_keyword_actions_carry_the_server_command_that_reports_the_trigger()
+    {
+        // The client runs this command after applying the edit; it is the only signal the server
+        // gets that the quick fix was picked (issue #877).
+        var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
+        var tags = ParseTags(BrokenFeatureText);
+        var (errorLine, errorChar) = tags.First(t => t.Type == IdeSupportTagTypes.ParserError).Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, BrokenFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        var actions = result!.Select(a => a.CodeAction!).ToList();
+        actions.Should().NotBeEmpty();
+        actions.Should().AllSatisfy(a => a.Command!.Name.Should().Be(InsertKeywordTriggeredHandler.CommandName));
+    }
+
+    [Fact]
+    public async Task Reports_the_number_of_insert_keyword_actions_offered()
+    {
+        var uri = DocumentUri.FromFileSystemPath("/workspace/broken.feature");
+        var tags = ParseTags(BrokenFeatureText);
+        var (errorLine, errorChar) = tags.First(t => t.Type == IdeSupportTagTypes.ParserError).Range.StartLinePosition;
+
+        _scopeManager.ResolvePrimaryOwner(uri).Returns((LspReqnrollProject?)null);
+        _scopeManager.GetConfigurationProviderForUri(uri).Returns(_configProvider);
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, BrokenFeatureText, tags);
+                return true;
+            });
+
+        var result = await CreateSut().Handle(RequestAt(uri, errorLine, errorChar), CancellationToken.None);
+
+        _telemetryService.Received(1).SendEvent(
+            TelemetryEvents.InsertKeywordCommandOffered,
+            Arg.Is<Dictionary<string, object?>>(p => (int)p["ActionsOffered"]! == result!.Count()));
+        _telemetryService.DidNotReceive().SendEvent(
+            TelemetryEvents.DefineStepsCommandOffered, Arg.Any<Dictionary<string, object?>>());
+    }
+
+    [Fact]
+    public async Task Does_not_report_insert_keyword_offered_when_no_parser_error_is_under_the_cursor()
+    {
+        SeedMatchService(UndefinedMatch("I press add", ScenarioBlock.When));
+
+        await CreateSut().Handle(RequestAt(FeatureUri), CancellationToken.None);
+
+        _telemetryService.DidNotReceive().SendEvent(
+            TelemetryEvents.InsertKeywordCommandOffered, Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]

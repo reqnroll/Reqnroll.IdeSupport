@@ -5,7 +5,7 @@ import { Middleware } from 'vscode-languageclient/node';
  *
  * Why this exists (issue #471 follow-up): the server now declares `codeLensProvider` (with
  * `resolveProvider: true`) statically in its initialize response, so that a capable client can
- * one day use the deferred-resolve path (see `ClientIdeContext.SupportsCodeLensResolve` on the
+ * one day use the deferred-resolve path (see `IdeBehaviours.SupportsCodeLensResolve` on the
  * server). But this extension already has its own hand-rolled `vscode.CodeLensProvider`s --
  * `registerStepCodeLens` (`.cs`) and `registerHookCodeLens` (`.feature`, see `hookCodeLens.ts`) --
  * which call `client.sendRequest(CodeLensRequest.type, ...)` directly and have done so since

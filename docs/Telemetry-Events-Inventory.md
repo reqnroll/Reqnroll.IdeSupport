@@ -214,6 +214,24 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 
 **Analytics use.** Acceptance rate = `DefineSteps command executed` / `DefineSteps command offered` (offers are inflated by caret-move polling; compare trends, not absolutes). The same handler reveals the edited file in VS Code via `window/showDocument`, replacing the former client-side `vscode.open` command (a code action has one command slot).
 
+### `InsertKeywordCommandOffered`
+| | |
+|---|---|
+| **Emitter** | `CodeActionHandler` |
+| **When** | One or more "Insert '\<keyword\>'" lightbulb actions are *offered* for a Gherkin parser error under the cursor; not when the user picks one — see [`InsertKeywordCommandExecuted`](#insertkeywordcommandexecuted) |
+| **Properties** | `ActionsOffered` (int, counted from the final post-filter/post-cap list) |
+
+**Analytics use.** How often syntax-error quick fixes are available. Clients may request code actions on every caret move, so this is not a count of lightbulb opens.
+
+### `InsertKeywordCommandExecuted`
+| | |
+|---|---|
+| **Emitter** | `InsertKeywordTriggeredHandler` |
+| **When** | A client runs the `reqnroll.insertKeywordTriggered` command that every "Insert '\<keyword\>'" code action carries. Clients run a code action's command after applying its edit, so this is the user picking the quick fix (any keyword) |
+| **Properties** | none |
+
+**Analytics use.** Acceptance rate = `InsertKeyword command executed` / `InsertKeyword command offered` (offers are inflated by caret-move polling; compare trends, not absolutes).
+
 ### `FindUnusedStepDefinitionsCommandExecuted`
 | | |
 |---|---|
@@ -349,7 +367,7 @@ can also drop the Ended event, so treat it as an upper bound and corroborate wit
 |---|---|
 | **Emitter** | `ConnectorBindingRegistryProvider` (server) |
 | **When** | After each successful connector discovery run that changed the bindings — the same trigger point as `ReqnrollDiscoveryExecuted`, so it re-fires on every such build with no "already sent" state. A hash-no-op run sends none (nothing changed). A separate event so the discovery event's schema stays stable |
-| **Properties** | `StepDefinitionCount`, `HookCount` (int); `StepBindingClassCount` (int: distinct declaring classes across step definitions and hooks — the method identity cut at the first `(` and then minus its last `.`-segment; class names are never sent. The connector builds identities as namespace-less `{ShortTypeName}.{Signature}` (e.g. `Steps.SetFirstNumber(Int32)`), so on that path same-named classes in different namespaces merge — an accepted undercount; Roslyn identities are `Namespace.Class.Method` and are not merged); `HookCount_<HookType>` (int, flat per-type keys such as `HookCount_BeforeScenario`, only for types present); `FeatureFileCount` (int, from the link-aware membership index — linked files count, `bin`/`obj`/`node_modules` do not; **omitted** until the project's `reqnroll/projectFiles` baseline has arrived, never sent as zero); `ProjectTargetFramework` (string); an undefined hook type is folded into `HookCount_Unknown` |
+| **Properties** | `StepDefinitionCount`, `HookCount` (int); `StepBindingClassCount` (int: distinct declaring classes across step definitions and hooks — the method identity cut at the first `(` and then minus its last `.`-segment; class names are never sent. The connector builds identities as namespace-less `{ShortTypeName}.{Signature}` (e.g. `Steps.SetFirstNumber(Int32)`), so on that path same-named classes in different namespaces merge — an accepted undercount; Roslyn identities are `Namespace.Class.Method` and are not merged); `HookCount_<HookType>` (int, flat per-type keys such as `HookCount_BeforeScenario`, only for types present); `FeatureFileCount` (int, from the link-aware membership index — linked files count, `bin`/`obj`/`node_modules` do not; **omitted** until the project's `reqnroll/projectFiles` baseline has arrived, never sent as zero); `ProjectTargetFramework` (string); an undefined hook type is folded into `HookCount_Unknown`; `UnitTestFramework` (`MSTest`/`xUnit`/`NUnit`/`TUnit`/`Multiple`) and `TestPlatform` (`VSTest`/`MTP`), inferred from the project's package references (issue #874; both **omitted** when unknown, e.g. Rider sends no package references — see below) |
 
 **Volume.** One event per project per successful, binding-changing connector run, so a full rebuild of an
 N-project solution emits about N extra events (no per-project rate limit; the payload is a handful of ints).
@@ -389,7 +407,6 @@ only originate here.
 | Event | Emitter / when | Properties |
 |---|---|---|
 | `ExtensionLoaded` | `MonitorOpenProjectSystem` — on extension activation in an IDE scope | — |
-| `Project loaded` | `MonitorOpenProject` — a Reqnroll project opens (VS host path) | project settings¹ + `FeatureFileCount` |
 | `Feature file opened` | `MonitorOpenFeatureFile` — a `.feature` file opens (once per open-lifetime, same transition as `reqnroll/documentActivated`) | project settings¹ |
 | `Extension installed` | `MonitorExtensionInstalled` — first activation after installation | — |
 | `Extension upgraded` | `MonitorExtensionUpgraded` — first activation after version change | `OldExtensionVersion` |
@@ -426,12 +443,14 @@ counting true new installs. `ai.user.id` remains per IDE, so one person using tw
 `ServerSessionStarted` (from all IDEs) stays available as a cross-check, and the VS-only events are no
 longer VS-only.
 
-**Status of the VS-host `Project loaded`** (issue #845 item 5): *not yet retired.* The server's
-`OpenProject command executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` now cover
-Reqnroll version, TFM, language and counts, but `LegacySpecFlow` and `SingleFileGeneratorUsed` are not
-reported by the server (the connector does not expose them), and the Reqnroll version arrives on the
-first discovery event rather than on `OpenProject`. Retire it once those two are server-side; until
-then the VS double-count of project opens remains.
+**Retired: the VS-host `Project loaded` event** (issue #873). The server's `OpenProject command
+executed` + `ReqnrollDiscoveryExecuted` + `ProjectCharacteristics` cover Reqnroll version, TFM,
+language and counts, so the VS-only duplicate (and its double-count of project opens) is gone.
+Decision (#873): reporting the Reqnroll version on discovery is sufficient; nothing was added to
+`OpenProject command executed`. `LegacySpecFlow` and `SingleFileGeneratorUsed` are not available
+server-side (the connector does not expose them); they remain on the VS `Feature file opened`,
+`Feature file added` and `Reqnroll config added` events (see ¹), so they are now per-event rather than
+per-project-open signals.
 
 **Analytics use.** Adoption lifecycle: install→upgrade funnel, daily-active heartbeat (rollup
 `* day usage` by count), project-scale signals (ReqnrollVersion/TFM distribution,
@@ -594,7 +613,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 |---|---|
 | Binding-discovery reliability / failure rate | `ReqnrollDiscoveryExecuted` (`IsFailed`, `ErrorMessage`) |
 | Build churn (no-op rediscoveries) | `ReqnrollDiscoveryExecuted` (`HashMatched=true`) |
-| Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), `Project loaded`, discovery counts |
+| Solution/project scale | `OpenProject command executed` (`FeatureFileCount`), discovery counts |
 | Project profile, all IDEs (Reqnroll version, TFM, language, connector type) | `OpenProject command executed` (`ProjectTargetFramework`, `ProgrammingLanguage`) + `ReqnrollDiscoveryExecuted` (`ReqnrollVersion`, `ConnectorType`) |
 | Command usage & adoption | all `* command executed` / `* command offered` events |
 | Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
@@ -630,9 +649,16 @@ abrupt process death is accepted but detectable via `Sequence`.
   exceptions in Rider. Stack traces stay out of the client events until #620 is decided (its `StackFrames` proposal currently covers the server path only).
 - **#258 — `ProjectCharacteristics` event** — implemented in #845 (step/hook/binding-class/feature-file
   counts, hooks per type). Transformation counts and reuse ratios remain excluded (see its section).
-- **`UnitTestFramework`** (MSTest/xUnit/NUnit/TUnit, VSTest vs MTP) — not implemented: the connector
-  does not report it. Needs a connector change (or a package-reference scan) first; tracked in #845.
+- **`UnitTestFramework` / `TestPlatform`** (MSTest/xUnit/NUnit/TUnit, VSTest vs MTP) — implemented in #874 on
+  `ProjectCharacteristics` by `UnitTestFrameworkDetector`, from the package references the client sends (the
+  connector does not report them). The Reqnroll adapter package (`Reqnroll.MsTest`, ...) decides the framework;
+  without one the framework packages themselves do; differing frameworks give `Multiple`. Platform is best effort:
+  TUnit is MTP, `Microsoft.NET.Test.Sdk` means VSTest, anything else is omitted — package references cannot see the
+  MSBuild switches (e.g. `EnableMSTestRunner`) that opt MSTest/xUnit/NUnit into MTP, so a project on MTP that still
+  references the VSTest SDK reads as `VSTest`. Both properties are omitted for clients that send no package
+  references (Rider today).
 - **`ReqnrollVersion` / `LegacySpecFlow` on `OpenProject command executed`** — decision (#845): the
   first `ReqnrollDiscoveryExecuted` is the authoritative source for the Reqnroll version (the connector
   resolves it; the server's project model does not), so it is not duplicated on `OpenProject`.
-  `LegacySpecFlow` is not available server-side yet (see the `Project loaded` status in section 4).
+  `LegacySpecFlow` is not available server-side; per #873 it stays on the VS feature-file/config events
+  (see the retired `Project loaded` note in section 4).

@@ -13,8 +13,9 @@ public interface ITelemetryService : IErrorTelemetryService
 {
     /// <summary>Records that a project system was opened.</summary>
     void MonitorOpenProjectSystem(IIdeScope ideScope);
-    /// <summary>Records that a project was opened, including its feature file count.</summary>
-    void MonitorOpenProject(ProjectSettings settings, int? featureFileCount);
+    // MonitorOpenProject(ProjectSettings, int?) — retired (issue #873): the "Project loaded" event it sent
+    // duplicated the LSP server's "OpenProject command executed" (which carries FeatureFileCount) and
+    // "ReqnrollDiscoveryExecuted" / "ProjectCharacteristics" events, which are identical across IDEs.
     /// <summary>Records that a feature file was opened.</summary>
     void MonitorOpenFeatureFile(ProjectSettings projectSettings);
     // MonitorParserParse(ProjectSettings, Dictionary<string, object>) — retired, not just unwired:

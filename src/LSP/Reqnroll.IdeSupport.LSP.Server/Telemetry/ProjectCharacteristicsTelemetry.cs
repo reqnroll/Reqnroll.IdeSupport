@@ -1,3 +1,4 @@
+using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 
@@ -16,10 +17,12 @@ internal static class ProjectCharacteristicsTelemetry
 {
     /// <summary>
     /// Builds the event properties. <paramref name="featureFileCount"/> and <paramref name="targetFramework"/>
-    /// are omitted when null/empty (unknown), never sent as zero/blank.
+    /// are omitted when null/empty (unknown), never sent as zero/blank; so are the test framework and
+    /// platform inferred from <paramref name="packageReferences"/> when they cannot be determined.
     /// </summary>
     internal static Dictionary<string, object?> Build(
-        ProjectBindingRegistry registry, int? featureFileCount, string? targetFramework)
+        ProjectBindingRegistry registry, int? featureFileCount, string? targetFramework,
+        IEnumerable<NuGetPackageReference>? packageReferences = null)
     {
         var properties = new Dictionary<string, object?>
         {
@@ -39,6 +42,12 @@ internal static class ProjectCharacteristicsTelemetry
             properties[TelemetryProperties.FeatureFileCount] = files;
         if (!string.IsNullOrEmpty(targetFramework))
             properties[TelemetryProperties.ProjectTargetFramework] = targetFramework;
+
+        var testing = UnitTestFrameworkDetector.Detect(packageReferences);
+        if (testing.Framework is not null)
+            properties[TelemetryProperties.UnitTestFramework] = testing.Framework;
+        if (testing.Platform is not null)
+            properties[TelemetryProperties.TestPlatform] = testing.Platform;
         return properties;
     }
 
