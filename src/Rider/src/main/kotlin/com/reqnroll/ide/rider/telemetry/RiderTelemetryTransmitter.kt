@@ -12,6 +12,8 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Transmits `telemetry/event` notifications forwarded by [ReqnrollTelemetryEventInterceptor] to
@@ -179,9 +181,29 @@ object RiderTelemetryTransmitter {
     }
 
     /**
-     * Fire-and-forget POST of [body]; never throws. Any failure (DNS, refused/reset, TLS, timeout,
-     * or a non-2xx status such as a proxy's 403/407) opens [breaker] and is reported to
-     * [onFailure], so an unreachable endpoint costs at most the first in-flight requests (#859).
+     * Retry policy for transient delivery failures: up to [maxAttempts] sends in total, waiting
+     * `baseDelay * 2^(attempt-1)` between them (or the server's `Retry-After`), never longer than [maxDelay].
+     */
+    internal data class RetryPolicy(val maxAttempts: Int, val baseDelay: Duration, val maxDelay: Duration)
+
+    internal val RETRY_POLICY = RetryPolicy(maxAttempts = 3, baseDelay = Duration.ofSeconds(1), maxDelay = Duration.ofSeconds(30))
+
+    /** Statuses Microsoft's Application Insights SDKs retry: 408, 429 and 5xx. Others (400, 401, 402, 403, 404, 413...) are final. */
+    internal fun isRetryableStatus(status: Int): Boolean = status == 408 || status == 429 || status in 500..599
+
+    /** Wait before send number `attempt + 1`: the server's `Retry-After` seconds if valid, else exponential backoff; capped by [RetryPolicy.maxDelay]. */
+    internal fun retryDelay(attempt: Int, policy: RetryPolicy, retryAfter: String? = null): Duration {
+        val requested = retryAfter?.trim()?.toLongOrNull()?.takeIf { it >= 0 }?.let { Duration.ofSeconds(it) }
+            ?: policy.baseDelay.multipliedBy(1L shl (attempt - 1).coerceIn(0, 20))
+        return if (requested > policy.maxDelay) policy.maxDelay else requested
+    }
+
+    /**
+     * Fire-and-forget POST of [body]; never throws. Transport failures (DNS, refused/reset, an HTTP/2
+     * `GOAWAY`, TLS, timeout) and retryable statuses (see [isRetryableStatus]) are retried per
+     * [retryPolicy]; once those are exhausted -- or for any non-retryable failure such as a proxy's
+     * 403/407 -- [breaker] opens and [onFailure] is told, so an unreachable endpoint costs at most
+     * the first in-flight requests (#859). No retry is scheduled once the breaker is open.
      */
     internal fun post(
         client: HttpClient,
@@ -189,6 +211,7 @@ object RiderTelemetryTransmitter {
         body: String,
         breaker: TelemetryCircuitBreaker,
         timeout: Duration = REQUEST_TIMEOUT,
+        retryPolicy: RetryPolicy = RETRY_POLICY,
         onFailure: (String) -> Unit = {},
     ) {
         try {
@@ -199,24 +222,49 @@ object RiderTelemetryTransmitter {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
 
-            client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                .whenComplete { response, ex ->
-                    val reason = when {
-                        ex != null -> (ex.cause ?: ex).let { it.message ?: it.javaClass.simpleName }
-                        response.statusCode() !in 200..299 -> "HTTP ${response.statusCode()}"
-                        else -> null
-                    }
-                    if (reason != null) {
-                        breaker.recordFailure(reason)
-                        onFailure(reason)
-                    }
-                }
+            send(client, request, breaker, retryPolicy, 1, onFailure)
         } catch (ex: Exception) {
             // Synchronous failure (e.g. unresolvable host surfaced eagerly) -- same policy.
-            val reason = ex.message ?: ex.javaClass.simpleName
-            breaker.recordFailure(reason)
-            onFailure(reason)
+            giveUp(ex.message ?: ex.javaClass.simpleName, breaker, onFailure)
         }
+    }
+
+    private fun giveUp(reason: String, breaker: TelemetryCircuitBreaker, onFailure: (String) -> Unit) {
+        breaker.recordFailure(reason)
+        onFailure(reason)
+    }
+
+    private fun send(
+        client: HttpClient,
+        request: HttpRequest,
+        breaker: TelemetryCircuitBreaker,
+        policy: RetryPolicy,
+        attempt: Int,
+        onFailure: (String) -> Unit,
+    ) {
+        client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+            .whenComplete { response, ex ->
+                val reason = when {
+                    ex != null -> (ex.cause ?: ex).let { it.message ?: it.javaClass.simpleName }
+                    response.statusCode() !in 200..299 -> "HTTP ${response.statusCode()}"
+                    else -> return@whenComplete
+                }
+                val retryable = ex != null || isRetryableStatus(response.statusCode())
+                if (!retryable || attempt >= policy.maxAttempts || breaker.isOpen) {
+                    giveUp(reason, breaker, onFailure)
+                    return@whenComplete
+                }
+
+                val delay = retryDelay(attempt, policy, response?.headers()?.firstValue("Retry-After")?.orElse(null))
+                ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: attempt $attempt failed ($reason); retrying in ${delay.toMillis()} ms")
+                CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS).execute {
+                    try {
+                        send(client, request, breaker, policy, attempt + 1, onFailure)
+                    } catch (e: Exception) {
+                        giveUp(e.message ?: e.javaClass.simpleName, breaker, onFailure)
+                    }
+                }
+            }
     }
 
     /**
