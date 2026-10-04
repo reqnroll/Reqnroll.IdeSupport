@@ -5,6 +5,7 @@ import {
   createTagLinkMiddleware,
   isOpenableUrl,
   openTagLink,
+  registerTagLinkRefresh,
   retargetLink,
 } from '../../lsp/tagLinks';
 
@@ -84,5 +85,34 @@ suite('tagLinks', () => {
     await openTagLink(undefined, opener);
 
     assert.deepStrictEqual(opened, []);
+  });
+
+  test('registerTagLinkRefresh nudges once for a burst of refresh signals', async () => {
+    const emitter = new vscode.EventEmitter<void>();
+    let nudges = 0;
+    const subscription = registerTagLinkRefresh(emitter.event, () => nudges++, 20);
+
+    emitter.fire();
+    emitter.fire();
+    emitter.fire();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    assert.strictEqual(nudges, 1);
+    subscription.dispose();
+    emitter.dispose();
+  });
+
+  test('registerTagLinkRefresh stops nudging once disposed', async () => {
+    const emitter = new vscode.EventEmitter<void>();
+    let nudges = 0;
+    const subscription = registerTagLinkRefresh(emitter.event, () => nudges++, 20);
+
+    emitter.fire();
+    subscription.dispose();
+    emitter.fire();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    assert.strictEqual(nudges, 0);
+    emitter.dispose();
   });
 });

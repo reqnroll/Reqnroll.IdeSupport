@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { Middleware } from 'vscode-languageclient/node';
+import { GHERKIN_LANGUAGE_ID } from '../languageIds';
 import { sendTelemetryEvent } from '../telemetry';
 import { TelemetryEvents } from '../telemetryEvents';
 
@@ -65,4 +66,44 @@ export async function openTagLink(
   if (typeof url !== 'string' || !isOpenableUrl(url)) return;
   sendTelemetryEvent(TelemetryEvents.tagLinkCommandExecuted);
   await openExternal(vscode.Uri.parse(url));
+}
+
+/**
+ * Makes VS Code ask for the links again. VS Code requests `textDocument/documentLink` when a document
+ * opens and after edits, never otherwise, and LSP has no `documentLink` refresh - so a restored tab that
+ * asked before its project registered (the tag patterns live in the project's configuration) would keep
+ * its empty answer until the user edited it. Registering and disposing a provider changes the link
+ * provider registry, which makes every open editor recompute its links.
+ */
+export function nudgeDocumentLinkRefresh(): void {
+  vscode.languages
+    .registerDocumentLinkProvider(
+      { language: GHERKIN_LANGUAGE_ID },
+      { provideDocumentLinks: () => undefined },
+    )
+    .dispose();
+}
+
+/**
+ * Re-requests the links whenever the server signals that binding discovery changed
+ * (`workspace/codeLens/refresh`, shared through `getCodeLensRefreshEvent`), which is also when a project's
+ * configuration first becomes available. Debounced: discovery can emit a burst of refreshes.
+ */
+export function registerTagLinkRefresh(
+  refreshEvent: vscode.Event<void>,
+  nudge: () => void = nudgeDocumentLinkRefresh,
+  debounceMs = 300,
+): vscode.Disposable {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const subscription = refreshEvent(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      nudge();
+    }, debounceMs);
+  });
+  return new vscode.Disposable(() => {
+    if (timer) clearTimeout(timer);
+    subscription.dispose();
+  });
 }

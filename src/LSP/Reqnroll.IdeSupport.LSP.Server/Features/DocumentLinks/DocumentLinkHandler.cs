@@ -1,4 +1,3 @@
-using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
@@ -8,7 +7,6 @@ using Reqnroll.IdeSupport.LSP.Server.Parsing;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
-using System.Diagnostics;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.DocumentLinks;
 
@@ -29,15 +27,6 @@ public sealed class DocumentLinkHandler
     private readonly IParseCoordinator _parseCoordinator;
     private readonly IIdeSupportLogger _logger;
     private readonly IOperationDurationRecorder _recorder;
-    private readonly TimeSpan _ownerWaitTimeout;
-
-    /// <summary>
-    /// How long a request waits for the owning project to register before answering without its
-    /// configuration. Generous because a client that gets an empty answer never asks again.
-    /// </summary>
-    internal static readonly TimeSpan DefaultOwnerWaitTimeout = TimeSpan.FromSeconds(15);
-
-    private static readonly TimeSpan OwnerPollInterval = TimeSpan.FromMilliseconds(50);
 
     /// <summary>Initializes a new instance of the <see cref="DocumentLinkHandler"/> class.</summary>
     public DocumentLinkHandler(
@@ -45,10 +34,8 @@ public sealed class DocumentLinkHandler
         ILspWorkspaceScopeManager scopeManager,
         IParseCoordinator parseCoordinator,
         IIdeSupportLogger logger,
-        IOperationDurationRecorder? recorder = null,
-        TimeSpan? ownerWaitTimeout = null)
+        IOperationDurationRecorder? recorder = null)
     {
-        _ownerWaitTimeout = ownerWaitTimeout ?? DefaultOwnerWaitTimeout;
         _documentBufferService = documentBufferService;
         _scopeManager = scopeManager;
         _parseCoordinator = parseCoordinator;
@@ -93,12 +80,6 @@ public sealed class DocumentLinkHandler
             return new DocumentLinkContainer();
         }
 
-        // The tag patterns live in the owning project's configuration, which does not exist until that
-        // project registers - at startup a restored .feature tab asks for links well before that. A client
-        // that gets an empty answer never asks again (no refresh in LSP; VS Code only re-requests on edit),
-        // so hold the answer back until ownership is known.
-        await WaitForOwnerAsync(request.TextDocument.Uri, ct).ConfigureAwait(false);
-
         var traceability = _scopeManager.GetConfigurationProviderForUri(request.TextDocument.Uri)
             .GetConfiguration()?.Traceability;
         if (traceability is null || traceability.TagLinks.Length == 0)
@@ -128,24 +109,4 @@ public sealed class DocumentLinkHandler
         return new DocumentLinkContainer(links);
     }
 
-    private async Task WaitForOwnerAsync(DocumentUri uri, CancellationToken ct)
-    {
-        if (_scopeManager.GetMembershipState(uri) != MembershipState.Pending)
-            return;
-
-        _logger.LogVerbose($"Tag links: waiting for the owning project of {uri} to register.");
-        var stopwatch = Stopwatch.StartNew();
-        while (_scopeManager.GetMembershipState(uri) == MembershipState.Pending)
-        {
-            if (stopwatch.Elapsed >= _ownerWaitTimeout)
-            {
-                _logger.LogVerbose($"Tag links: owning project of {uri} still unknown after {stopwatch.ElapsedMilliseconds} ms; answering without its configuration.");
-                return;
-            }
-
-            await Task.Delay(OwnerPollInterval, ct).ConfigureAwait(false);
-        }
-
-        _logger.LogVerbose($"Tag links: waited {stopwatch.ElapsedMilliseconds} ms for the owning project of {uri}.");
-    }
 }
