@@ -25,7 +25,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeActions;
 /// only ever lists its two internal commands, <c>_ms_setClipboard</c>/<c>_ms_openUrl</c>), which
 /// has no handler registered for <c>vscode.open</c> and replies "Method not found" — so the
 /// action would silently do nothing if offered there. <see cref="CodeActionHandler"/> only calls
-/// <see cref="Build"/> when <see cref="Hosting.ClientFacets.RunsVscodeOpenCommandLocally"/> is true.
+/// <see cref="Build"/> when <see cref="Hosting.IdeBehaviours.RunsVscodeOpenCommandLocally"/> is true.
 /// </remarks>
 internal sealed class AmbiguousStepActionBuilder
 {

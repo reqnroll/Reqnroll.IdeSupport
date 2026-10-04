@@ -48,10 +48,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Features.CodeLens;
 /// <para>
 /// For a scoped hook the corpus walk can instead be deferred to <c>codeLens/resolve</c>
 /// (<see cref="ResolveAsync"/>, issue #471), but only for clients on the opt-in allowlist behind
-/// <see cref="ClientFacets.SupportsCodeLensResolve"/>. That allowlist is empty today, so every
+/// <see cref="IdeBehaviours.SupportsCodeLensResolve"/>. That allowlist is empty today, so every
 /// shipped client (VS Code, Rider, Visual Studio) gets fully-computed lenses eagerly — none of
 /// them issue <c>codeLens/resolve</c>, and a lens returned without a <c>Command</c> simply never
-/// renders for them. See the allowlist's note in <c>ClientFacetResolver</c> for the evidence and for
+/// renders for them. See the allowlist's note in <c>IdeBehavioursResolver</c> for the evidence and for
 /// what a client must implement before being added.
 /// </para>
 /// </remarks>
@@ -126,11 +126,11 @@ public sealed class HookMatchCountCodeLensHandler
         var seen = new HashSet<(int line, int col)>();
 
         // Defer the scoped-hook corpus walk to codeLens/resolve ONLY for clients on the opt-in
-        // allowlist in ClientFacetResolver (ClientFacets.SupportsCodeLensResolve) -- that set is empty today, so
+        // allowlist in IdeBehavioursResolver (IdeBehaviours.SupportsCodeLensResolve) -- that set is empty today, so
         // every shipped client (VS Code, Rider, Visual Studio) takes the eager path below. None of
         // them issue codeLens/resolve, and a deferred lens simply never renders for them
         // (issue #471; see the allowlist note for the evidence).
-        var deferToResolve = _clientIde.Facets.SupportsCodeLensResolve;
+        var deferToResolve = _clientIde.Behaviours.SupportsCodeLensResolve;
 
         foreach (var hook in registry.Hooks)
         {
@@ -187,7 +187,7 @@ public sealed class HookMatchCountCodeLensHandler
 
     /// <summary>
     /// Resolves a placeholder lens created above (allowlisted resolve-capable clients only — see
-    /// <see cref="ClientFacets.SupportsCodeLensResolve"/>, scoped-hook deferred path) into its
+    /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/>, scoped-hook deferred path) into its
     /// final <c>Command</c> — backs <c>codeLens/resolve</c> (issue #471). Falls back to the
     /// non-actionable "0 scenarios matched" lens if the hook can no longer be located.
     /// </summary>
@@ -246,7 +246,7 @@ public sealed class HookMatchCountCodeLensHandler
     /// <para>
     /// <c>reqnroll.noMatchingScenarios</c> is a sentinel with no arguments, the hook counterpart
     /// of <c>reqnroll.noStepUsages</c>. It is unreachable while
-    /// <see cref="ClientFacets.SupportsCodeLensResolve"/> is false for every client; a client
+    /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/> is false for every client; a client
     /// adding itself to that allowlist should register it as a no-op (one line, exactly as VS
     /// Code's <c>extension.ts</c> registers <c>reqnroll.noStepUsages</c>).
     /// </para>

@@ -46,7 +46,7 @@ public class SemanticTokensPushHandler : INotificationHandler<MatchCacheChangedN
     public async Task Handle(MatchCacheChangedNotification notification, CancellationToken cancellationToken)
     {
         // Only Visual Studio needs the push; all other clients pull semantic tokens themselves.
-        if (!_clientIde.Facets.RequiresPushedSemanticTokens)
+        if (!_clientIde.Behaviours.RequiresPushedSemanticTokens)
         {
             _logger.LogVerbose($"SemanticTokensPushHandler: skipped (client is not VS) for {notification.Uri} v{notification.Version}");
             return;

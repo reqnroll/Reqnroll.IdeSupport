@@ -26,7 +26,7 @@ internal static class CodeLensRefreshRequester
         bool isFullReplacement = false,
         CancellationToken cancellationToken = default)
     {
-        if (clientIde.Facets.UsesCustomCodeLensRefresh)
+        if (clientIde.Behaviours.UsesCustomCodeLensRefresh)
         {
             logger.LogInfo(
                 $"Sending reqnroll/refreshCodeLens for project '{projectName}' " +

@@ -3,20 +3,20 @@ using System;
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 
 /// <summary>
-/// The single place that decides which <see cref="ClientFacets"/> apply to a client, from its
+/// The single place that decides which <see cref="IdeBehaviours"/> apply to a client, from its
 /// <c>--ide</c> identifier (or the identifier resolved from <c>ClientInfo</c>) and its reported
 /// version. A pure function so every rule is unit-testable.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>To change a facet for a client or version</b>, edit the rule here and nowhere else. Version
+/// <b>To change a behaviour for a client or version</b>, edit the rule here and nowhere else. Version
 /// rules go in the matching <c>case</c> and read <paramref name="clientVersion"/>; it is the
 /// free-form <c>InitializeParams.ClientInfo.Version</c> string and is <see langword="null"/> when
 /// the client reported none, so a version rule must treat "unknown" explicitly (the current rules
 /// deliberately do not narrow by version).
 /// </para>
 /// <para>
-/// An unrecognized or absent identity gets <see cref="ClientFacets.None"/>: the standard-LSP
+/// An unrecognized or absent identity gets <see cref="IdeBehaviours.None"/>: the standard-LSP
 /// baseline. A new client therefore opts in to workarounds explicitly.
 /// </para>
 /// <para>
@@ -41,19 +41,19 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// <c>resolveCodeLens</c> and thread the server's <c>data</c> onto the <c>vscode.CodeLens</c>;
 /// Rider: render command-less lenses as a placeholder CodeVision entry and issue codeLens/resolve
 /// to fill them in), verify it live against a large solution, THEN set
-/// <see cref="ClientFacets.SupportsCodeLensResolve"/> for it below.
+/// <see cref="IdeBehaviours.SupportsCodeLensResolve"/> for it below.
 /// </para>
 /// </remarks>
-internal static class ClientFacetResolver
+internal static class IdeBehavioursResolver
 {
-    /// <summary>Resolves the facets for the given <c>--ide</c> identifier and client version.</summary>
-    internal static ClientFacets Resolve(string? ide, string? clientVersion)
+    /// <summary>Resolves the behaviours for the given <c>--ide</c> identifier and client version.</summary>
+    internal static IdeBehaviours Resolve(string? ide, string? clientVersion)
     {
         _ = clientVersion; // no rule narrows by version yet; see the class remarks.
 
         if (Is(ide, "visualstudio"))
         {
-            return new ClientFacets
+            return new IdeBehaviours
             {
                 RequiresPushedSemanticTokens = true,
                 UsesCustomCodeLensRefresh = true,
@@ -64,14 +64,14 @@ internal static class ClientFacetResolver
 
         if (Is(ide, "vscode"))
         {
-            return new ClientFacets
+            return new IdeBehaviours
             {
                 RunsVscodeOpenCommandLocally = true,
                 HonorsShowDocumentRequests = true,
             };
         }
 
-        return ClientFacets.None;
+        return IdeBehaviours.None;
     }
 
     private static bool Is(string? ide, string expected) =>

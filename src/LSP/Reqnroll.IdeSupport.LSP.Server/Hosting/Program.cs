@@ -362,7 +362,7 @@ public class Program
                 // two that knows the identity resolved from ClientInfo when --ide was absent.
                 // ApplyClientIdentity runs first, above, so the fallback is already applied here.
                 var requiresPushedSemanticTokens = languageServer.Services
-                    .GetRequiredService<ClientIdeContext>().Facets.RequiresPushedSemanticTokens;
+                    .GetRequiredService<ClientIdeContext>().Behaviours.RequiresPushedSemanticTokens;
 
                 var tokenService = languageServer.Services.GetRequiredService<ISemanticTokensService>();
 
@@ -414,7 +414,7 @@ public class Program
             // No shipped client currently uses it: neither VS Code nor Rider nor Visual Studio
             // issues codeLens/resolve today, so every lens is still returned fully computed. The
             // decision of whether to hand out an unresolved placeholder lens is NOT made here —
-            // it is made per client by ClientFacets.SupportsCodeLensResolve, an opt-in
+            // it is made per client by IdeBehaviours.SupportsCodeLensResolve, an opt-in
             // allowlist that is deliberately empty (see the note on that allowlist for the
             // evidence and the criteria for adding a client). Advertising resolveProvider while
             // that allowlist is empty is harmless — a spec-compliant client only resolves a lens

@@ -403,7 +403,7 @@ public sealed class CompletionHandler : ICompletionHandler
     /// </remarks>
     private CompletionList BuildTableRowSuppressionResult(int cursorLine, int cursorChar)
     {
-        if (!_clientIde.Facets.RejectsEmptyTriggerCompletion)
+        if (!_clientIde.Behaviours.RejectsEmptyTriggerCompletion)
             return new CompletionList();
 
         var insertPos = new Position(cursorLine, cursorChar);

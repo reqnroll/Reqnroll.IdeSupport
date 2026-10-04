@@ -195,9 +195,9 @@ see [../VisualStudio/CONTRIBUTING.md](../VisualStudio/CONTRIBUTING.md) and
 `--ide <identifier>` (`visualstudio` / `vscode` / `rider`) is the fourth startup argument, and the
 only one that isn't about verbosity. It is parsed in `Program.Main` and handed to
 `ClientIdeContext`, the singleton that resolves the client identity and exposes it as
-`ClientIdeContext.Facets` (a `ClientFacets` record). Handlers branch on a facet, never on an IDE name:
-`ClientFacetResolver` is the one place that maps identity (and version) to facets. See
-"Client facets" below before adding another per-IDE branch.
+`ClientIdeContext.Behaviours` (an `IdeBehaviours` record). Handlers branch on a behaviour, never on an IDE name:
+`IdeBehavioursResolver` is the one place that maps identity (and version) to behaviours. See
+"IDE behaviours" below before adding another per-IDE branch.
 
 It has **two** sources, resolved in this order (issue #709):
 
@@ -233,29 +233,29 @@ identified only via `ClientInfo` therefore still gets the neutral `reqnroll-lsp-
 prefix, while everything else (capabilities, handlers, telemetry `IdeClient`) uses the resolved
 identity.
 
-## Client facets
+## IDE behaviours
 
-Behaviour that differs between IDE clients is expressed as **facets**: named flags on the
-`ClientFacets` record (`Hosting/ClientFacets.cs`), exposed as `ClientIdeContext.Facets`. A facet
+Behaviour that differs between IDE clients is expressed as **behaviours**: named flags on the
+`IdeBehaviours` record (`Hosting/IdeBehaviours.cs`), exposed as `ClientIdeContext.Behaviours`. A behaviour
 records a quirk or limitation we found through our own development and debugging — it is
 deliberately *not* an LSP-spec client capability, and it is named for the behaviour
 (`RequiresPushedSemanticTokens`, `AppliesRenameResponseEditNatively`), not the IDE.
 
-- **One place decides.** `ClientFacetResolver.Resolve(ide, clientVersion)` maps identity (and
-  version) to facets. If a client's behaviour changes in a new IDE version, edit the rule there
+- **One place decides.** `IdeBehavioursResolver.Resolve(ide, clientVersion)` maps identity (and
+  version) to behaviours. If a client's behaviour changes in a new IDE version, edit the rule there
   and nowhere else; the handlers do not change. The evidence note for the opt-in
-  `SupportsCodeLensResolve` facet lives there too.
-- **Handlers branch on facets, never on an IDE name.** To add a workaround: add a documented
-  facet, set it for the affected client(s) in the resolver, add a resolver test, and read
-  `_clientIde.Facets.<Facet>` in the handler. An unrecognized client gets `ClientFacets.None`
+  `SupportsCodeLensResolve` behaviour lives there too.
+- **Handlers branch on behaviours, never on an IDE name.** To add a workaround: add a documented
+  behaviour, set it for the affected client(s) in the resolver, add a resolver test, and read
+  `_clientIde.Behaviours.<Behaviour>` in the handler. An unrecognized client gets `IdeBehaviours.None`
   (the standard-LSP baseline), so a new client opts in to workarounds explicitly.
-- **Facets are recomputed at `initialize`.** `ApplyClientInfo` re-resolves them once `ClientInfo`
+- **Behaviours are recomputed at `initialize`.** `ApplyClientInfo` re-resolves them once `ClientInfo`
   has supplied the identity (when `--ide` was absent) and the version. Don't capture
-  `Facets` in a constructor; read it per request.
+  `Behaviours` in a constructor; read it per request.
 - **Identity is still used for labelling** (log file prefix, telemetry `IdeClient`), via
   `ClientIdeContext.Ide`; just don't make behavioural decisions from it.
-- **Testing.** Handler tests can force facets with the internal
-  `new ClientIdeContext(ide, new ClientFacets { ... })` seam instead of faking an IDE name.
+- **Testing.** Handler tests can force behaviours with the internal
+  `new ClientIdeContext(ide, new IdeBehaviours { ... })` seam instead of faking an IDE name.
 
 ## Debugging
 
@@ -361,8 +361,8 @@ and their own PID-suffixed file — there's no shared/interleaved Connector log 
 The server serves three IDE clients (VS, VS Code, Rider — all three built, none yet published to their respective marketplaces) from one codebase.
 Before adding IDE-specific behavior in server code:
 
-- Gate the workaround on a `ClientFacets` flag (`ClientIdeContext.Facets`), not on an IDE name —
-  don't let one IDE's quirk leak into the generic path. See "Client facets" below.
+- Gate the workaround on an `IdeBehaviours` flag (`ClientIdeContext.Behaviours`), not on an IDE name —
+  don't let one IDE's quirk leak into the generic path. See "IDE behaviours" below.
 - If the workaround changes observable protocol behavior, add or adjust the relevant spec scenario
   under a client-specific `.feature` file rather than folding IDE-conditional assertions into a
   generic one.

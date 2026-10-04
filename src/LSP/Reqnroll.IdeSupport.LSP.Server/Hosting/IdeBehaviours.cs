@@ -3,20 +3,20 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// <summary>
 /// Behaviours and limitations that we have found, through our own development and debugging, to
 /// differ between IDE clients. These are deliberately separate from the LSP-spec client
-/// capabilities (<c>InitializeParams.Capabilities</c>): a facet records something the spec cannot
+/// capabilities (<c>InitializeParams.Capabilities</c>): a behaviour records something the spec cannot
 /// tell us (a client quirk or workaround), named for the <em>behaviour</em> rather than the IDE.
 /// </summary>
 /// <remarks>
-/// Populated in one place, <see cref="ClientFacetResolver"/>, from the client identity (and
-/// version), and exposed as <see cref="ClientIdeContext.Facets"/>. Handlers branch on a facet, never
+/// Populated in one place, <see cref="IdeBehavioursResolver"/>, from the client identity (and
+/// version), and exposed as <see cref="ClientIdeContext.Behaviours"/>. Handlers branch on a behaviour, never
 /// on an IDE name, so a change in a client's behaviour is a one-line edit to the resolver.
 /// The default (<see cref="None"/>) is the standard-LSP baseline: an unrecognized client opts in to
 /// no workaround.
 /// </remarks>
-public sealed record ClientFacets
+public sealed record IdeBehaviours
 {
     /// <summary>The standard-LSP baseline: no client-specific workaround applies.</summary>
-    public static ClientFacets None { get; } = new();
+    public static IdeBehaviours None { get; } = new();
 
     /// <summary>
     /// The client cannot pull semantic tokens usefully (its built-in colorizer cannot map our custom
@@ -65,7 +65,7 @@ public sealed record ClientFacets
     /// <summary>
     /// The client actually issues <c>codeLens/resolve</c> for a lens returned without a
     /// <c>Command</c>, so the expensive per-lens count can be deferred to it. Opt-in: see the
-    /// evidence note in <see cref="ClientFacetResolver"/>.
+    /// evidence note in <see cref="IdeBehavioursResolver"/>.
     /// </summary>
     public bool SupportsCodeLensResolve { get; init; }
 }

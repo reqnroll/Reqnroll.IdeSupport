@@ -162,7 +162,7 @@ internal sealed class RenamePostApplyCoordinator
     /// </remarks>
     public void SchedulePostResponseApply(DocumentUri renameUri, WorkspaceEditBuilder builder)
     {
-        if (!_clientIdeContext.Facets.AppliesRenameResponseEditNatively)
+        if (!_clientIdeContext.Behaviours.AppliesRenameResponseEditNatively)
             return;
 
         _ = Task.Run(() => PushAndCompleteAsync(renameUri, builder));

@@ -29,39 +29,39 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// </remarks>
 public sealed class ClientIdeContext
 {
-    private readonly Func<string?, string?, ClientFacets> _facetResolver;
+    private readonly Func<string?, string?, IdeBehaviours> _behaviourResolver;
 
     /// <summary>Initializes a new instance of the <see cref="ClientIdeContext"/> class.</summary>
     public ClientIdeContext(string? ide, TraceLevel logLevel = TraceLevel.Warning)
-        : this(ide, ClientFacetResolver.Resolve, logLevel)
+        : this(ide, IdeBehavioursResolver.Resolve, logLevel)
     {
     }
 
     /// <summary>
-    /// Test seam: builds a context whose <see cref="Facets"/> are forced to
-    /// <paramref name="facets"/> regardless of identity, so a handler branch can be exercised
-    /// without faking an IDE name (and a facet no shipped client has, such as
-    /// <see cref="ClientFacets.SupportsCodeLensResolve"/>, stays covered). Never used in production
+    /// Test seam: builds a context whose <see cref="Behaviours"/> are forced to
+    /// <paramref name="behaviours"/> regardless of identity, so a handler branch can be exercised
+    /// without faking an IDE name (and a behaviour no shipped client has, such as
+    /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/>, stays covered). Never used in production
     /// code — the public constructor is the only path the server takes.
     /// </summary>
-    internal ClientIdeContext(string? ide, ClientFacets facets, TraceLevel logLevel = TraceLevel.Warning)
-        : this(ide, (_, _) => facets, logLevel)
+    internal ClientIdeContext(string? ide, IdeBehaviours behaviours, TraceLevel logLevel = TraceLevel.Warning)
+        : this(ide, (_, _) => behaviours, logLevel)
     {
     }
 
     private ClientIdeContext(
-        string? ide, Func<string?, string?, ClientFacets> facetResolver, TraceLevel logLevel)
+        string? ide, Func<string?, string?, IdeBehaviours> behaviourResolver, TraceLevel logLevel)
     {
         IdeArgument = ide;
         Ide = ide;
         LogLevel = logLevel;
-        _facetResolver = facetResolver;
-        Facets = facetResolver(ide, null);
+        _behaviourResolver = behaviourResolver;
+        Behaviours = behaviourResolver(ide, null);
     }
 
     /// <summary>
     /// The client-specific behaviours that apply to the connected client — the only thing handlers
-    /// should branch on. Resolved by <see cref="ClientFacetResolver"/> from the identity and version;
+    /// should branch on. Resolved by <see cref="IdeBehavioursResolver"/> from the identity and version;
     /// recomputed by <see cref="ApplyClientInfo"/> once <c>ClientInfo</c> arrives, because that can
     /// supply the identity (when <c>--ide</c> was absent) and the version.
     /// </summary>
@@ -69,7 +69,7 @@ public sealed class ClientIdeContext
     /// Replaced as a whole immutable record, only during the <c>initialize</c> handshake and before
     /// any request is dispatched, so readers on later threads always observe the final value.
     /// </remarks>
-    public ClientFacets Facets { get; private set; }
+    public IdeBehaviours Behaviours { get; private set; }
 
     /// <summary>
     /// The effective IDE identity: the <c>--ide</c> value when the client passed one, otherwise the
@@ -102,7 +102,7 @@ public sealed class ClientIdeContext
 
     /// <summary>
     /// <c>InitializeParams.ClientInfo.Version</c> as self-reported by the client, or
-    /// <see langword="null"/> when absent. Passed to <see cref="ClientFacetResolver"/> so a facet can be
+    /// <see langword="null"/> when absent. Passed to <see cref="IdeBehavioursResolver"/> so a behaviour can be
     /// narrowed by version, though no rule does today (issue #709 deliberately does not narrow the VS
     /// semantic-tokens workaround by version); also logged so the log carries the exact client build.
     /// </summary>
@@ -147,7 +147,7 @@ public sealed class ClientIdeContext
             IdeResolvedFromClientInfo = true;
         }
 
-        Facets = _facetResolver(Ide, ClientVersion);
+        Behaviours = _behaviourResolver(Ide, ClientVersion);
     }
 
     /// <summary>

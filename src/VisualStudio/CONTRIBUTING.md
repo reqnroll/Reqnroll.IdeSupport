@@ -179,8 +179,8 @@ those scenarios test behavior that now lives server-side and is already covered 
 
 ## Conventions specific to this codebase
 
-- **Gate every VS-specific workaround behind a `ClientFacets` flag** (`ClientIdeContext.Facets`,
-  populated for VS by `ClientFacetResolver`), even in server-side code that happens to be triggered from here — a fix for a
+- **Gate every VS-specific workaround behind an `IdeBehaviours` flag** (`ClientIdeContext.Behaviours`,
+  populated for VS by `IdeBehavioursResolver`), even in server-side code that happens to be triggered from here — a fix for a
   VS quirk should never silently change behavior for VS Code/Rider.
 - **Never hand-type a Visual Studio identifier** (GUID, command ID, property ID, content-type or
   classification name). Use the SDK constant (`VSConstants`, `VsMenus`, `__VSPROPID`,
