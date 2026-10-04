@@ -36,10 +36,11 @@ public class DocumentLinkHandlerTests
     private static readonly IdeSupportTag IssueTag = TagAt(11, "@issue:1234");
     private static readonly IdeSupportTag SmokeTag = TagAt(23, "@smoke");
 
-    private DocumentLinkHandler CreateSut()
+    private DocumentLinkHandler CreateSut(TimeSpan? ownerWaitTimeout = null)
     {
         _scopeManager.GetConfigurationProviderForUri(Arg.Any<DocumentUri>()).Returns(_configProvider);
-        return new DocumentLinkHandler(_bufferService, _scopeManager, _parseCoordinator, _logger);
+        return new DocumentLinkHandler(_bufferService, _scopeManager, _parseCoordinator, _logger,
+            ownerWaitTimeout: ownerWaitTimeout);
     }
 
     private static DocumentLinkParams RequestFor(DocumentUri uri) =>
@@ -121,6 +122,35 @@ public class DocumentLinkHandlerTests
         SetupTagLinks((".*", "https://example.com/{x}"));
 
         var result = await CreateSut().HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Waits_for_the_owning_project_to_register_before_resolving_links_Async()
+    {
+        SetupBuffer(new[] { IssueTag, SmokeTag });
+        SetupTagLinks((@"issue\:(?<id>\d+)", "https://github.com/specsolutions/my-project/issues/{id}"));
+        // Startup race: the project that carries the tag patterns has not registered yet on the first
+        // two checks; a client that got an empty answer would never ask again.
+        _scopeManager.GetMembershipState(FeatureUri)
+            .Returns(MembershipState.Pending, MembershipState.Pending, MembershipState.Owned);
+
+        var result = await CreateSut(TimeSpan.FromSeconds(10))
+            .HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
+
+        result.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Stops_waiting_after_the_timeout_when_the_project_never_registers_Async()
+    {
+        SetupBuffer(new[] { IssueTag, SmokeTag });
+        SetupTagLinks();
+        _scopeManager.GetMembershipState(FeatureUri).Returns(MembershipState.Pending);
+
+        var result = await CreateSut(TimeSpan.FromMilliseconds(120))
+            .HandleAsync(RequestFor(FeatureUri), CancellationToken.None);
 
         result.Should().BeEmpty();
     }
