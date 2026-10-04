@@ -120,6 +120,13 @@ object RiderTelemetryTransmitter {
     internal const val GO_TO_HOOK_SOURCE_CONTEXT_MENU = "ContextMenu"
     internal const val GO_TO_HOOK_SOURCE_CODE_LENS = "CodeLens"
 
+    // Extension lifecycle events (issue #875), parity with VS's WelcomeService. Mirror of the same
+    // constants in TelemetryEvents.cs; the "{N} day usage" name is built by [ExtensionLifecycleTelemetry].
+    internal const val EXTENSION_LOADED = "Extension loaded"
+    internal const val EXTENSION_INSTALLED = "Extension installed"
+    internal const val EXTENSION_UPGRADED = "Extension upgraded"
+    internal const val OLD_EXTENSION_VERSION_PROPERTY = "OldExtensionVersion"
+
     internal const val IDE_CLIENT = "rider"
 
     private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")

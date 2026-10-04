@@ -34,6 +34,7 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollProjectFilesSync" />
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollDocumentActivationSync" />
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.ReqnrollServerLifecycleListener" />
+    <postStartupActivity implementation="com.reqnroll.ide.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
 
     <!-- The built-in CommentByLineComment action (Ctrl+/) is a MultiCaretCodeInsightAction that
          hardcodes its own handler and gates on LanguageCommenters.forLanguage finding a Commenter
