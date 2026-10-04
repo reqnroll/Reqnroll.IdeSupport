@@ -254,7 +254,7 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent by each IDE client when the user opens a clickable Gherkin tag's link (issue #755) - VS
-    /// (<c>GoToDefinitionNavigableSymbolProvider</c>, Ctrl+Click), VS Code (<c>openTagLink</c>) and Rider
+    /// (<c>TagLinkNavigableSymbolProvider</c>, Ctrl+Click), VS Code (<c>openTagLink</c>) and Rider
     /// (<c>ReqnrollFeatureTagLinkController</c>, Ctrl+Click). Only the client knows a link was actually followed:
     /// the server just answers <c>textDocument/documentLink</c> (counted as the passive <c>DocumentLink</c>
     /// feature). No properties: the target URL and tag text are user/repository data and are never sent.
