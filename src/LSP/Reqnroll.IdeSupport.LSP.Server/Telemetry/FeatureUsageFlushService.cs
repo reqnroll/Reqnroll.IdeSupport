@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
 /// Default <see cref="IFeatureUsageFlushService"/>. Whether and how often it flushes is resolved by

@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 

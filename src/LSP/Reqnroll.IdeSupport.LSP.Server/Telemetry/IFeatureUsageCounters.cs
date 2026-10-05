@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
 /// In-process, allocation-free counters for high-volume lookup and passive feature usage (issue #582),

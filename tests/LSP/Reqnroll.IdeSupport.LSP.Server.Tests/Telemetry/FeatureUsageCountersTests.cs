@@ -1,6 +1,7 @@
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry;
 
 /// <summary>
 /// Concurrency tests for <see cref="FeatureUsageCounters"/> (issue #582), mirroring the barrier-

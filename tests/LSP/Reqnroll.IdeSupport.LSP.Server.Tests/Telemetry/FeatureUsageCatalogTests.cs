@@ -1,7 +1,8 @@
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry;
 
 /// <summary>Tests for <see cref="FeatureUsageCatalog"/> (issue #582).</summary>
 public class FeatureUsageCatalogTests

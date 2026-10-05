@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry;
 
 /// <summary>Tests for <see cref="FeatureUsageFlushService"/> (issue #582).</summary>
 public class FeatureUsageFlushServiceTests

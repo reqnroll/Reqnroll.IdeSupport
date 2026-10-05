@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.Common.Lsp;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>How a counted feature is triggered; reported in separate <c>FeatureUsageSummary</c> properties.</summary>
 public enum FeatureUsageKind

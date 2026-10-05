@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Performance;
+namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>Default <see cref="IFeatureUsageCounters"/>, backed by a <see cref="ConcurrentDictionary{TKey,TValue}"/>.</summary>
 /// <remarks>
