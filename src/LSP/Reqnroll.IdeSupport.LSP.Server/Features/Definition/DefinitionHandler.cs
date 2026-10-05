@@ -92,7 +92,8 @@ public sealed class DefinitionHandler : IDefinitionHandler
         // Telemetry: a *lookup*, not a navigation (issue #899). VS Code and Rider send this request on hover
         // as well as for F12/Ctrl+click and the client cannot tell the two apart, so it is the same lookup
         // event FindStepDefinitionsHandler sends. A client that navigates through reqnroll/findStepDefinitions
-        // (Visual Studio) only reaches here as its own provider's fall-through on hover: nothing to count.
+        // (Visual Studio) mostly reaches here as the editor's own fall-through on hover (Peek Definition is the
+        // exception, and is not distinguishable): nothing worth counting, but the response is still needed.
         // LocationCount is 0 for the undefined/ambiguous/unresolved cases below.
         if (_clientIde?.Behaviours.NavigatesStepsViaFindStepDefinitions != true)
         {

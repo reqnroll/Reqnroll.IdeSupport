@@ -140,7 +140,7 @@ public static class TelemetryEvents
     /// <summary>
     /// Sent by <c>Features.Definition.FindStepDefinitionsHandler</c> for every <c>reqnroll/findStepDefinitions</c>
     /// lookup (issue #757) and by <c>Features.Definition.DefinitionHandler</c> for every <c>textDocument/definition</c>
-    /// lookup from VS Code and Rider (issue #899; not Visual Studio, where that request is only a hover fall-through).
+    /// lookup from VS Code and Rider (issue #899; not Visual Studio, where that request is mostly the editor's hover fall-through).
     /// Visual Studio sends the custom request on Go To Definition and on every Ctrl+hover that checks whether a
     /// word is navigable (issue #898), so read it as *lookups*, not navigations; the genuine navigation is
     /// <see cref="GoToStepDefinitionCommandExecuted"/>, sent by the client.
