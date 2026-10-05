@@ -1,6 +1,7 @@
 using Reqnroll;
 using Reqnroll.IdeSupport.LSP.Server.Specs.Support;
 using Xunit;
+using Reqnroll.IdeSupport.LSP.Core.Discovery;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Specs.StepDefinitions;
 

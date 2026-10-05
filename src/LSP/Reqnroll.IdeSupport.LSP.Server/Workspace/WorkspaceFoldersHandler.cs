@@ -5,6 +5,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 

@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery;
 

@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Tagging;
 
@@ -45,7 +46,7 @@ public class GherkinDocumentTaggerServiceTests
     {
         var ideScope = new LspIdeScope(Substitute.For<IIdeSupportLogger>());
         return new LspReqnrollProject(
-            new Reqnroll.IdeSupport.LSP.Server.Workspace.ReqnrollProjectLoadedParams
+            new Reqnroll.IdeSupport.LSP.Core.Workspace.ReqnrollProjectLoadedParams
             {
                 WorkspaceFolder        = folder,
                 ProjectFile            = folder + "/My.csproj",

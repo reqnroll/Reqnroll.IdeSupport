@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+namespace Reqnroll.IdeSupport.LSP.Core.Discovery;
 
 /// <summary>
 /// Answers whether a project is a Reqnroll test project, gating the out-of-process connector so

@@ -1,6 +1,6 @@
 using System;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
+namespace Reqnroll.IdeSupport.LSP.Core.Ide;
 
 /// <summary>
 /// The single place that decides which <see cref="IdeBehaviours"/> apply to a client, from its
@@ -44,10 +44,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// <see cref="IdeBehaviours.SupportsCodeLensResolve"/> for it below.
 /// </para>
 /// </remarks>
-internal static class IdeBehavioursResolver
+public static class IdeBehavioursResolver
 {
     /// <summary>Resolves the behaviours for the given <c>--ide</c> identifier and client version.</summary>
-    internal static IdeBehaviours Resolve(string? ide, string? clientVersion)
+    public static IdeBehaviours Resolve(string? ide, string? clientVersion)
     {
         _ = clientVersion; // no rule narrows by version yet; see the class remarks.
 

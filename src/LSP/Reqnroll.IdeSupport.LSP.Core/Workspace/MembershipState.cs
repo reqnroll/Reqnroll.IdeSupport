@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 /// <summary>
 /// Describes how a URI relates to the authoritative project-membership index populated by

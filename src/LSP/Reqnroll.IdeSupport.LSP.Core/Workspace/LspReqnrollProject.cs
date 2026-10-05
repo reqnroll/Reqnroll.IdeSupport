@@ -1,7 +1,10 @@
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
+using System.Collections.Concurrent;
+using System.IO;
+using System.Collections.Immutable;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 /// <summary>
 /// Represents one <c>.csproj</c> Reqnroll project within an <see cref="LspProjectScope"/>
@@ -99,7 +102,7 @@ public sealed class LspReqnrollProject : IProjectScope, IDisposable
     /// <see cref="OutputAssemblyPath"/> or <see cref="TargetFrameworkMoniker"/> — so the caller
     /// knows to trigger binding re-discovery; otherwise <see langword="false"/>.
     /// </returns>
-    internal bool Update(ReqnrollProjectLoadedParams info)
+    public bool Update(ReqnrollProjectLoadedParams info)
     {
         var discoveryInputChanged =
             !string.Equals(OutputAssemblyPath, info.OutputAssemblyPath, StringComparison.OrdinalIgnoreCase) ||

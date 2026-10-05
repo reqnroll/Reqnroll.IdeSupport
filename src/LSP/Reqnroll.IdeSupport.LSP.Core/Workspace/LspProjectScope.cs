@@ -1,6 +1,8 @@
 using Reqnroll.IdeSupport.Common;
+using System.Collections.Concurrent;
+using System.IO;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 /// <summary>
 /// Represents one LSP workspace folder (the root directory sent by the client in
@@ -43,7 +45,7 @@ public sealed class LspProjectScope : IDisposable
     /// <c>discoveryInputChanged</c> is <see langword="true"/> for a newly created project, or
     /// for an updated project whose output assembly path or target framework moniker changed.
     /// </returns>
-    internal (LspReqnrollProject Project, bool IsNew, bool DiscoveryInputChanged) AddOrUpdateProject(
+    public (LspReqnrollProject Project, bool IsNew, bool DiscoveryInputChanged) AddOrUpdateProject(
         ReqnrollProjectLoadedParams info)
     {
         var key = NormaliseKey(info.ProjectFile);
@@ -72,7 +74,7 @@ public sealed class LspProjectScope : IDisposable
     /// Removes the project identified by <paramref name="projectFile"/> and returns it,
     /// or <c>null</c> if it was not registered.
     /// </summary>
-    internal LspReqnrollProject? RemoveProject(string projectFile)
+    public LspReqnrollProject? RemoveProject(string projectFile)
     {
         var key = NormaliseKey(projectFile);
         return _projects.TryRemove(key, out var project) ? project : null;

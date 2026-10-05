@@ -1,11 +1,11 @@
 ﻿using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Tests.Workspace;
 
 public class LspReqnrollProjectTests
 {
-    private readonly LspIdeScope _ideScope = new(Substitute.For<IIdeSupportLogger>());
+    private readonly TestIdeScope _ideScope = new(Substitute.For<IIdeSupportLogger>());
 
     private static ReqnrollProjectLoadedParams Params(
         string outputAssemblyPath = @"C:\repo\proj\bin\Debug\net8.0\Proj.dll",

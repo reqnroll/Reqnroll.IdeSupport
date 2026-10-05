@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Reqnroll.IdeSupport.LSP.Core.Rename;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 

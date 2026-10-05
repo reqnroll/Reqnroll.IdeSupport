@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+using Reqnroll.IdeSupport.LSP.Core.Discovery;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
+namespace Reqnroll.IdeSupport.LSP.Core.Tests.Discovery;
 
 /// <summary>
 /// Covers the gate that keeps the out-of-process connector away from projects that cannot

@@ -2,7 +2,7 @@ using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+namespace Reqnroll.IdeSupport.LSP.Core.Discovery;
 
 /// <summary>
 /// Decides whether a project reported by the IDE glue is a Reqnroll <em>test</em> project, so
@@ -158,7 +158,7 @@ public sealed class ReqnrollProjectDetector : IReqnrollProjectDetector
             return false;
         }
 
-        if (string.IsNullOrEmpty(outputFolder))
+        if (outputFolder is null || outputFolder.Length == 0)
             return false;
 
         return _fileSystem.File.Exists(_fileSystem.Path.Combine(outputFolder, RuntimeAssemblyName));

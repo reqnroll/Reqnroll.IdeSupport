@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
+namespace Reqnroll.IdeSupport.LSP.Core.Ide;
 
 /// <summary>
 /// Behaviours and limitations that we have found, through our own development and debugging, to

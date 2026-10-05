@@ -1,11 +1,11 @@
 ﻿using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Tests.Workspace;
 
 public class LspProjectScopeTests
 {
-    private readonly LspIdeScope _ideScope = new(Substitute.For<IIdeSupportLogger>());
+    private readonly TestIdeScope _ideScope = new(Substitute.For<IIdeSupportLogger>());
     private readonly string _root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
 
     private LspProjectScope CreateSut() => new(_root, _ideScope);

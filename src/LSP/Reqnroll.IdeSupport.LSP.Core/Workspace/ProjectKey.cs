@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 /// <summary>
 /// Identifies a (project, TFM) combination in the membership index.

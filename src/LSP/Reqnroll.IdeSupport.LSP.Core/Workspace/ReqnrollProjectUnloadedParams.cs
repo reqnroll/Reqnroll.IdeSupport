@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
+namespace Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 /// <summary>
 /// Payload for the <c>reqnroll/projectUnloaded</c> client-to-server notification.

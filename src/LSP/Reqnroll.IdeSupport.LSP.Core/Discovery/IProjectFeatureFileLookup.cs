@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
+namespace Reqnroll.IdeSupport.LSP.Core.Discovery;
 
 /// <summary>
 /// Answers whether a project owns any feature files, from a source that knows real project
