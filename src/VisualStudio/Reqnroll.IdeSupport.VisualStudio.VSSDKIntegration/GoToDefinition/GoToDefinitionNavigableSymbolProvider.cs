@@ -110,6 +110,10 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             if (fileUri.Length == 0)
                 return null;
 
+            // The editor cancels a Ctrl+hover query as soon as the pointer moves on (often within milliseconds), and the
+            // tag-link provider ahead of us swallows that as "no link". Don't send a lookup nobody is waiting for.
+            token.ThrowIfCancellationRequested();
+
             var navigator = _textStructureNavigatorSelectorService.GetTextStructureNavigator(triggerSpan.Snapshot.TextBuffer);
             var wordSpan = navigator.GetExtentOfWord(triggerSpan.Start).Span;
 

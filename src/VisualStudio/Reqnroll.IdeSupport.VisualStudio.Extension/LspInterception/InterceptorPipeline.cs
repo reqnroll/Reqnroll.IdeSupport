@@ -48,6 +48,13 @@ internal sealed class InterceptorPipeline
                 if (result == LspInterceptorResult.Consume)
                     return LspInterceptorResult.Consume;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Not a fault: the message's own token was cancelled (e.g. the editor abandoned a Ctrl+hover lookup
+                // mid-flight) while the interceptor was waiting on it. Same degrade-and-continue rule, no warning.
+                _logger.LogDebug("InterceptorPipeline: interceptor {InterceptorType} cancelled with the message.",
+                    interceptor.GetType().Name);
+            }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "InterceptorPipeline: interceptor {InterceptorType} threw.",
