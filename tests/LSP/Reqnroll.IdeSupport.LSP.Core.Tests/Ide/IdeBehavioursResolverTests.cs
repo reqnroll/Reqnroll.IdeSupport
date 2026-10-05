@@ -10,6 +10,7 @@ public class IdeBehavioursResolverTests
         UsesCustomCodeLensRefresh = true,
         RejectsEmptyTriggerCompletion = true,
         AppliesRenameResponseEditNatively = true,
+        NavigatesStepsViaFindStepDefinitions = true,
     };
 
     private static readonly IdeBehaviours VSCodeBehaviours = new()

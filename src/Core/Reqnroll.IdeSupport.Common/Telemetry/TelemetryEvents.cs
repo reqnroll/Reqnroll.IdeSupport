@@ -128,18 +128,20 @@ public static class TelemetryEvents
     public const string FindStepDefinitionUsagesCommandExecuted = "FindStepDefinitionUsages command executed";
 
     /// <summary>
-    /// Sent by <c>Features.Definition.DefinitionHandler</c> (over <c>textDocument/definition</c>, which VS Code
-    /// and Rider send for Go To Definition and on hover) and by the Visual Studio client when the user runs
-    /// Go To Definition on a step (<c>GoToStepDefinitionPresenter</c>, issue #898). Visual Studio does not use
-    /// <c>textDocument/definition</c> for that command; its lookups are
-    /// <see cref="FindStepDefinitionsCommandExecuted"/>. VS Code and Rider will send this from the client too
-    /// (follow-up), after which the server-side emission becomes a lookup event.
+    /// A genuine Go To Step Definition navigation, sent by the client: the Visual Studio client when the user runs
+    /// Go To Definition on a step (<c>GoToStepDefinitionPresenter</c>, issue #898) and the VS Code client for its
+    /// "Go to Step Definition" picker command (issue #899). VS Code's F12/Ctrl+click and Rider's go-to-declaration
+    /// use <c>textDocument/definition</c>, which also fires on hover, so they are not reported as navigations; the
+    /// server counts them as <see cref="FindStepDefinitionsCommandExecuted"/>. Property: <c>LocationCount</c>.
+    /// Mirrored verbatim in VS Code's <c>telemetryEvents.ts</c>.
     /// </summary>
     public const string GoToStepDefinitionCommandExecuted = "GoToStepDefinition command executed";
 
     /// <summary>
     /// Sent by <c>Features.Definition.FindStepDefinitionsHandler</c> for every <c>reqnroll/findStepDefinitions</c>
-    /// lookup (issue #757). Visual Studio sends it on Go To Definition and on every Ctrl+hover that checks whether a
+    /// lookup (issue #757) and by <c>Features.Definition.DefinitionHandler</c> for every <c>textDocument/definition</c>
+    /// lookup from VS Code and Rider (issue #899; not Visual Studio, where that request is only a hover fall-through).
+    /// Visual Studio sends the custom request on Go To Definition and on every Ctrl+hover that checks whether a
     /// word is navigable (issue #898), so read it as *lookups*, not navigations; the genuine navigation is
     /// <see cref="GoToStepDefinitionCommandExecuted"/>, sent by the client.
     /// </summary>

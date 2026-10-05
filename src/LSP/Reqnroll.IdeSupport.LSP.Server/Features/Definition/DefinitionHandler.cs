@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.Common.Lsp;
 
@@ -33,6 +34,7 @@ public sealed class DefinitionHandler : IDefinitionHandler
     private readonly ILspTelemetryService?      _telemetryService;
     private readonly IOperationDurationRecorder _recorder;
     private readonly IFileSystemForIDE         _fileSystem;
+    private readonly ClientIdeContext?         _clientIde;
 
     /// <summary>Initializes a new instance of the <see cref="DefinitionHandler"/> class.</summary>
     public DefinitionHandler(
@@ -42,13 +44,15 @@ public sealed class DefinitionHandler : IDefinitionHandler
         IIdeSupportLogger           logger,
         IFileSystemForIDE         fileSystem,
         ILspTelemetryService?     telemetryService = null,
-        IOperationDurationRecorder? recorder = null)
+        IOperationDurationRecorder? recorder = null,
+        ClientIdeContext?         clientIde = null)
     {
         _resolver      = new StepAtPositionResolver(matchService, bufferService, scopeManager, logger, nameof(DefinitionHandler));
         _logger        = logger;
         _fileSystem    = fileSystem;
         _telemetryService = telemetryService;
         _recorder      = recorder ?? NullOperationDurationRecorder.Instance;
+        _clientIde     = clientIde;
     }
 
     /// <summary>Builds the LSP registration options advertising go-to-definition support for <c>.feature</c> files.</summary>
@@ -85,16 +89,20 @@ public sealed class DefinitionHandler : IDefinitionHandler
             .Select(loc => new LocationOrLocationLink(loc.ToLspLocation()))
             .ToArray();
 
-        // Telemetry: fired once a step has actually been resolved at the cursor (the equivalent
-        // of FindStepUsagesHandler's "is a binding" gate) -- LocationCount is 0 for the
-        // undefined/ambiguous/unresolved cases below, matching the Erroneous-style signal other
-        // handlers use, rather than a separate boolean.
-        _telemetryService?.SendEvent(TelemetryEvents.GoToStepDefinitionCommandExecuted, new()
+        // Telemetry: a *lookup*, not a navigation (issue #899). VS Code and Rider send this request on hover
+        // as well as for F12/Ctrl+click and the client cannot tell the two apart, so it is the same lookup
+        // event FindStepDefinitionsHandler sends. A client that navigates through reqnroll/findStepDefinitions
+        // (Visual Studio) only reaches here as its own provider's fall-through on hover: nothing to count.
+        // LocationCount is 0 for the undefined/ambiguous/unresolved cases below.
+        if (_clientIde?.Behaviours.NavigatesStepsViaFindStepDefinitions != true)
         {
-            ["LocationCount"] = locations.Length,
-            [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, locations.Length),
-            [TelemetryProperties.Protocol] = LspStandardMethodNames.TextDocumentDefinition,
-        });
+            _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionsCommandExecuted, new()
+            {
+                ["LocationCount"] = locations.Length,
+                [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, locations.Length),
+                [TelemetryProperties.Protocol] = LspStandardMethodNames.TextDocumentDefinition,
+            });
+        }
 
         if (locations.Length == 0)
         {

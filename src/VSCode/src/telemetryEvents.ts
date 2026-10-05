@@ -9,6 +9,8 @@
  * for events the VS Code client emits directly, where only the client is the source of truth.
  */
 export const TelemetryEvents = {
+  /** A genuine "Go to Step Definition" navigation via `doGoToStepDefinition` (issue #899); `LocationCount`. F12/Ctrl+click use `textDocument/definition`, which also fires on hover, so they are not reported (the server counts them as lookups). */
+  goToStepDefinitionCommandExecuted: 'GoToStepDefinition command executed',
   /** A genuine "Go to Hooks" navigation via `doGoToHooks` (issue #698) — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
   goToHookCommandExecuted: 'GoToHook command executed',
   /** A clickable tag's link was followed (issue #755), via `openTagLink`. No properties: the URL and tag text are never sent. */
@@ -57,6 +59,8 @@ export const TelemetryProperties = {
    * How a "Go to Hooks" navigation was started; one of {@link GoToHookSource}.
    */
   source: 'Source',
+  /** On "GoToStepDefinition command executed": navigable bindings offered (0 when there was nowhere to go); same key as VS. */
+  locationCount: 'LocationCount',
   /** On "Extension upgraded": the version the user upgraded from (same key as VS). */
   oldExtensionVersion: 'OldExtensionVersion',
 } as const;

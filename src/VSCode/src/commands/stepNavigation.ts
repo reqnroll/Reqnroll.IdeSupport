@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
 import { showError, showInfo } from '../logging/appNotify';
+import { sendTelemetryEvent } from '../telemetry';
+import { TelemetryEvents, TelemetryProperties } from '../telemetryEvents';
 import { openAndReveal } from '../util/navigationUtils';
 import {
   StepDefinitionItem,
@@ -45,6 +47,13 @@ export async function doGoToStepDefinition(client: LanguageClient): Promise<void
   }
 
   const bindings = distinctByPosition(response?.items ?? []);
+
+  // A genuine navigation (issue #899): the server counts reqnroll/findStepDefinitions as a lookup.
+  // LocationCount is the navigable rows, 0 when there is nowhere to go.
+  sendTelemetryEvent(TelemetryEvents.goToStepDefinitionCommandExecuted, {
+    [TelemetryProperties.locationCount]: bindings.filter(isNavigable).length,
+  });
+
   if (bindings.length === 0) {
     void showInfo('Reqnroll: No step definition found at this position.');
     return;
@@ -91,8 +100,14 @@ export function distinctByPosition(items: readonly StepDefinitionItem[]): StepDe
   });
 }
 
+function isNavigable(
+  item: StepDefinitionItem,
+): item is StepDefinitionItem & { sourceFile: string } {
+  return !!item.sourceFile && (item.isResolved ?? true);
+}
+
 async function navigateTo(item: StepDefinitionItem): Promise<void> {
-  if (!item.sourceFile || !(item.isResolved ?? true)) {
+  if (!isNavigable(item)) {
     warnSourceNotOnThisMachine(item);
     return;
   }

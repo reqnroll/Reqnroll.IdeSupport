@@ -59,6 +59,7 @@ public static class IdeBehavioursResolver
                 UsesCustomCodeLensRefresh = true,
                 RejectsEmptyTriggerCompletion = true,
                 AppliesRenameResponseEditNatively = true,
+                NavigatesStepsViaFindStepDefinitions = true,
             };
         }
 
