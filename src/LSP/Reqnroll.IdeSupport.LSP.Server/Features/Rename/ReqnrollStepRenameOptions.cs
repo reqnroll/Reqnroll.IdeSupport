@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
+namespace Reqnroll.IdeSupport.LSP.Server.Features.Rename;
 
 /// <summary>
 /// The three-method step-rename refactoring workflow: <c>reqnroll/renameTargets</c> (disambiguation

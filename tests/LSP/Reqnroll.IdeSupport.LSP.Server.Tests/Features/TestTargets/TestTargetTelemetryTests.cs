@@ -4,7 +4,6 @@ using Gherkin.Ast;
 using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using GherkinLocation = Gherkin.Ast.Location;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestTargets;

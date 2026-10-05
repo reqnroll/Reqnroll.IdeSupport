@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
+namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 /// <summary>
 /// The three notifications a client uses to keep the server's workspace/project index in sync:

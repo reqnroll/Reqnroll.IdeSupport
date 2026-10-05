@@ -3,7 +3,7 @@
 using Newtonsoft.Json;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
+namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 /// <summary>
 /// One step-definition binding, as reported by <c>reqnroll/findUnusedStepDefinitions</c> (a binding

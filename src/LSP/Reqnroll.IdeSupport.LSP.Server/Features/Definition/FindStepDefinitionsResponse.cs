@@ -2,7 +2,6 @@
 
 using System.Collections.Generic;
 using Newtonsoft.Json;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 

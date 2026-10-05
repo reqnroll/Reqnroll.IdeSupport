@@ -1,7 +1,6 @@
 ﻿using System.IO.Pipes;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;

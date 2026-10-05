@@ -17,6 +17,8 @@ using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
+using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
+using Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 

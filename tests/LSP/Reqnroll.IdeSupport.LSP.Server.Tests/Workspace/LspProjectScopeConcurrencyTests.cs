@@ -1,5 +1,4 @@
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;

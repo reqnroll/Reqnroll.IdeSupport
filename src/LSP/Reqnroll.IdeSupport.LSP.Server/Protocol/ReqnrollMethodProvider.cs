@@ -1,4 +1,6 @@
 using Newtonsoft.Json;
+using Reqnroll.IdeSupport.LSP.Server.Features.Rename;
+using Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
 

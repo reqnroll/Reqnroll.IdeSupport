@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
+namespace Reqnroll.IdeSupport.LSP.Server.Features.TestOutcomes;
 
 /// <summary>
 /// Payload shape for the <c>reqnrollTestOutcomesProvider</c> entry Program.cs writes into

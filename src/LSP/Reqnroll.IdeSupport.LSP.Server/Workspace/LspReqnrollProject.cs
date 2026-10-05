@@ -1,6 +1,5 @@
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 

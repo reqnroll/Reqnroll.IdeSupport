@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.FindUnusedStepDefinitions;
 
