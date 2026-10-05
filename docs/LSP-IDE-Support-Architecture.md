@@ -291,11 +291,16 @@ Reqnroll.IdeSupport/
 │   │       └── Reqnroll.IdeSupport.LSP.Connector.Models/  # DTOs for reflection discovery results
 │   │
 │   ├── VisualStudio/
-│   │   ├── Reqnroll.IdeSupport.VisualStudio.Extension/     # VSIX (net481)
-│   │   │   ├── LanguageClient/                  # ReqnrollLanguageClient (VS.Extensibility)
-│   │   │   ├── Inspection/                      # LspInterceptingPipe (debug tracing)
-│   │   │   └── LSPServer/                       # Embedded server exe
-│   │   ├── Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/  # VSSDK fallback helpers, IdeSupportClassifications
+│   │   ├── Reqnroll.IdeSupport.VisualStudio.Extension/     # VSIX (net481); ExtensionEntrypoint, ReqnrollLanguageClient and ReqnrollPluginPackage stay at the root
+│   │   │   ├── Activation/                  # language-server activation signal, scratch-file recovery trigger, solution-open state
+│   │   │   ├── Documents/                   # Gherkin/C# document types, RDT initialization, buffer content-type guard, stub-frame realization
+│   │   │   ├── Menus/                       # ReqnrollMenu, ShellMenuIds
+│   │   │   ├── LspInterception/, LspNotifications/   # server connection + per-message interceptors; DTE project state pushed to the server
+│   │   │   └── <Feature>/                   # per-feature VS-side client logic (FindStepUsages, GoToHooks, RenameStep, CommentToggle, ...)
+│   │   ├── Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/  # VSSDK fallback helpers; RootNamespace is Reqnroll.IdeSupport.VisualStudio, folders append to it
+│   │   │   ├── CommentToggle/, FormatDocument/, GoToDefinition/, DocumentLinks/   # command filters / symbol providers + their Redirect bridges
+│   │   │   ├── IdeServices/, ProjectSystem/, WellKnownIds/, Utilities/            # IIdeScope implementation, hierarchy walking, VS constants, VsUtils
+│   │   │   └── Editor/, HookCodeLens/, RunTestCodeLens/, LineCodeLens/, NavigationBar/, Telemetry/, Logging/, TestLogger/, TestReporter/
 │   │   └── Reqnroll.IdeSupport.VisualStudio.Wizards{,.Core,.UI}/  # New Project/Item wizards
 │   │
 │   ├── VSCode/                                  # TypeScript VS Code extension
@@ -607,7 +612,7 @@ The embedded `LSPServer.exe` is published to the VSIX under the `LSPServer/` sub
 
 **Proactive binding discovery via the preload side channel**. Launching the server process earlier doesn't by itself make binding discovery happen earlier — the server only runs `reqnroll/projectLoaded`/`reqnroll/projectFiles` discovery once it *receives* those notifications, and OmniSharp's `LanguageServer` (`LspRequestRouter`) defers/queues **all** requests and notifications routed through its own JSON-RPC dispatcher until the client's real `initialize` handshake completes (confirmed by decompiling `OmniSharp.Extensions.LanguageServer.dll`: `_initializeComplete`/`ServerNotInitialized`, and the log string *"Tried to send request or notification before initialization was completed and will be sent later"*). Since VS only sends `initialize` when the `LanguageServerProvider` activates (`.feature`-file open), pushing project data over the normal LSP channel is a no-op until then, regardless of how early the process itself launched.
 
-To route around that gate, `Program.cs` uses `LanguageServer.PreInit(...)` instead of `LanguageServer.From(...)`. Unlike `From`, which blocks inside `Initialize()` awaiting the client's real `initialize` before returning, `PreInit` builds the DI container and constructs the `LanguageServer` object — `.Services` is populated and `ILspWorkspaceScopeManager` resolvable — **without** blocking on the handshake. `Main` starts `ProjectPreloadListener.RunAsync(...)` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Workspace/ProjectPreloadListener.cs`) against that DI-resolved scope manager, *then* calls `server.Initialize(...)` to perform the real handshake whenever it arrives; the listener is cancelled once `Initialize()` returns, since the side channel has no further purpose after that.
+To route around that gate, `Program.cs` uses `LanguageServer.PreInit(...)` instead of `LanguageServer.From(...)`. Unlike `From`, which blocks inside `Initialize()` awaiting the client's real `initialize` before returning, `PreInit` builds the DI container and constructs the `LanguageServer` object — `.Services` is populated and `ILspWorkspaceScopeManager` resolvable — **without** blocking on the handshake. `Main` starts `ProjectPreloadListener.RunAsync(...)` (`src/LSP/Reqnroll.IdeSupport.LSP.Server/Hosting/ProjectPreloadListener.cs`) against that DI-resolved scope manager, *then* calls `server.Initialize(...)` to perform the real handshake whenever it arrives; the listener is cancelled once `Initialize()` returns, since the side channel has no further purpose after that.
 
 `ProjectPreloadListener` listens on a process-local named pipe (`reqnroll-preload-{pid}`) for `{"method":"reqnroll/projectLoaded"|"reqnroll/projectFiles","params":{...}}` lines and dispatches them **directly** to `ILspWorkspaceScopeManager.HandleProjectLoadedAsync`/`HandleProjectFilesAsync` — bypassing OmniSharp's JSON-RPC dispatcher (and its initialize gate) entirely, since it's a completely separate transport the extension controls end-to-end. `ILspWorkspaceScopeManager.HandleProjectLoadedAsync`'s own "auto-creating workspace scope for project notification" behavior confirms the workspace/project model was already designed to tolerate project notifications arriving before `initialize`'s workspace folders exist.
 
@@ -864,7 +869,7 @@ stdio against the built exe (the production transport) — and reports P50/P95/P
 against the §9 targets, plus a separate `session` command modelling latency under realistic
 concurrent editing load. See [src/LSP/CONTRIBUTING.md](../src/LSP/CONTRIBUTING.md#performance-benchmarking)
 for usage. Layer 4 field instrumentation lives under `LSP.Server/Performance/`
-(`IOperationDurationRecorder`, sampled `PerfSample` telemetry), wired into nearly every feature
+(`IOperationDurationRecorder`, sampled `PerfSample` telemetry; the passive-usage counters are in `LSP.Server/Telemetry/FeatureUsage/`), wired into nearly every feature
 handler (semanticTokens, completion, definition, references, rename, code actions, code lens,
 document outline, folding, formatting, inlay hints, find-unused-step-defs, comment toggle, and
 text-sync).

@@ -11,17 +11,28 @@
 
 ```
 src/LSP/
-  Reqnroll.IdeSupport.LSP.Core     ← Gherkin parser, binding registry, match cache (netstandard2.0, IDE-agnostic)
+  Reqnroll.IdeSupport.LSP.Core     ← Reqnroll LSP functionality with no hosting/OmniSharp/MediatR plumbing
+                                      (netstandard2.0, IDE-agnostic): Gherkin parser, binding registry, matching,
+                                      per-capability logic, project-scope model (Workspace/), IDE behaviours (Ide/)
   Reqnroll.IdeSupport.LSP.Server   ← the LSP server (net10.0 console exe, OmniSharp.Extensions.LanguageServer host)
-    Hosting/                       ← Program.cs, DI wiring (ConfigureServer), LanguageServerOptions extensions
-    Handlers/ProtocolHandlers      ← standard/custom LSP message handlers (registered via OnRequest/OnNotification
-                                      or OmniSharp base classes — see "Handler naming and registration" below)
-    Handlers/InternalHandlers      ← MediatR notification handlers for internal pipeline events
+    Hosting/                       ← Program.cs, DI wiring (ConfigureServer), LanguageServerOptions extensions,
+                                      ClientIdeContext, ProjectPreloadListener
+    Features/<capability>/         ← OmniSharp/custom-request handlers with their Params/Response/Options types beside them
+                                      (registered via OnRequest/OnNotification or OmniSharp base classes — see
+                                      "Handler naming and registration" below)
+    Pipeline/                      ← MediatR notification handlers for internal pipeline events
                                       (e.g. BindingRegistryChangedNotification, MatchCacheChangedNotification)
-    Workspace/                     ← ILspWorkspaceScopeManager — the two-tier folder/project model
+    Protocol/                      ← cross-cutting protocol pieces only (ReqnrollMethodProvider, Documents/ helpers)
+    Workspace/                     ← ILspWorkspaceScopeManager — the two-tier folder/project model (scope + membership
+                                      handling; the project model itself is LSP.Core/Workspace)
     Discovery/                     ← BindingRegistryProviderRouter, ConnectorBindingRegistryProvider
                                       (out-of-proc reflection discovery) and CSharpBindingDiscoveryService
                                       (in-proc Roslyn source-level discovery)
+    Telemetry/, Performance/       ← telemetry sinks and session events, FeatureUsage/ counters; Performance/ = perf sampling
+
+  Where a new type goes (Core vs Server): see "Where code goes" in
+  docs/LSP-IDE-Support-Architecture.md §4 — Core takes whatever implements Reqnroll LSP
+  functionality regardless of plumbing; Server takes the plumbing and the timing/scheduling semantics.
   Reqnroll.IdeSupport.LSP.Connector ← out-of-process reflection-based binding discovery, one variant per TFM
                                       (Reqnroll-Generic-net8.0, -net481, …); invoked as a short-lived child
                                       process by the server, never referenced in-proc
@@ -236,7 +247,7 @@ identity.
 ## IDE behaviours
 
 Behaviour that differs between IDE clients is expressed as **behaviours**: named flags on the
-`IdeBehaviours` record (`Hosting/IdeBehaviours.cs`), exposed as `ClientIdeContext.Behaviours`. A behaviour
+`IdeBehaviours` record (`LSP.Core/Ide/IdeBehaviours.cs`), exposed as `ClientIdeContext.Behaviours`. A behaviour
 records a quirk or limitation we found through our own development and debugging — it is
 deliberately *not* an LSP-spec client capability, and it is named for the behaviour
 (`RequiresPushedSemanticTokens`, `AppliesRenameResponseEditNatively`), not the IDE.
