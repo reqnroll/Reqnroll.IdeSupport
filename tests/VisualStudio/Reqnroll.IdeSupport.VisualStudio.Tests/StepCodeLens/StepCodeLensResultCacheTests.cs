@@ -15,7 +15,7 @@ using Xunit;
 // RunTestCodeLensResultCacheTests.
 #pragma warning disable VSTHRD003 // Avoid awaiting foreign Tasks
 
-namespace Reqnroll.VisualStudio.Tests.StepCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.StepCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="StepCodeLensResultCache"/> (issue #552 follow-up): mirrors

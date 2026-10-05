@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
-namespace Reqnroll.VisualStudio.Tests.StepCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.StepCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="StepCodeLensState"/>: the method-start-line bookkeeping (the data

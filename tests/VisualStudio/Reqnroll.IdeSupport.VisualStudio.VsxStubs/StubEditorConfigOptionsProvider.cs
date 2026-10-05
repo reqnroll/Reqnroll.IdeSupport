@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.Common.Configuration;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubEditorConfigOptionsProvider : IEditorConfigOptionsProvider
 {

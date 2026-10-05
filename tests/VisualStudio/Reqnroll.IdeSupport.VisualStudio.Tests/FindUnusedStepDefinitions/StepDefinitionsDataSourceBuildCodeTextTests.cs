@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.FindUnusedStepDefinitions;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.FindUnusedStepDefinitions;
 
 /// <summary>
 /// The Code-column text of a step-definition row (<see cref="StepDefinitionsDataSource.BuildCodeText"/>),

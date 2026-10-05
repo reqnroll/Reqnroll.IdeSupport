@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 public class ShutdownHandshakeInterceptorTests
 {

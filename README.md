@@ -142,7 +142,7 @@ dotnet test tests/LSP/Reqnroll.IdeSupport.LSP.Server.Tests/Reqnroll.IdeSupport.L
 dotnet test tests/LSP/Reqnroll.IdeSupport.LSP.Server.Specs/Reqnroll.IdeSupport.LSP.Server.Specs.csproj
 
 # VS extension client-side unit tests
-dotnet test tests/VisualStudio/Reqnroll.VisualStudio.Tests/Reqnroll.VisualStudio.Tests.csproj
+dotnet test tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Tests/Reqnroll.IdeSupport.VisualStudio.Tests.csproj
 
 # VS Code extension tests (downloads VS Code and runs in an Extension Development Host)
 cd src/VSCode && npm ci && npm run compile && npm test

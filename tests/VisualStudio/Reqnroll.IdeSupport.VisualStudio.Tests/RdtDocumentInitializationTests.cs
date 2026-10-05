@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 

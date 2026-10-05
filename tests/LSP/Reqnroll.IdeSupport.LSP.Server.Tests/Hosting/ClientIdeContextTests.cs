@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
+using Reqnroll.IdeSupport.LSP.Core.Ide;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Hosting;
 

@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// Pure state-machine tests for <see cref="DocumentActivationState"/> (issue #85), including

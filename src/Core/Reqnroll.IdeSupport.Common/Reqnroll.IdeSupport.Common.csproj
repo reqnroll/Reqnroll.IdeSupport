@@ -32,4 +32,8 @@
     <PackageReference Include="System.Threading.Channels" Version="9.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\..\build\IsExternalInit.cs" Link="IsExternalInit.cs" />
+  </ItemGroup>
+
 </Project>

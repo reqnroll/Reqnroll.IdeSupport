@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json;
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 

@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.FindUnusedStepDefinitions;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.FindUnusedStepDefinitions;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/findUnusedStepDefinitions</c> result into an

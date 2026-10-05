@@ -12,6 +12,12 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
+using Reqnroll.IdeSupport.VisualStudio.IdeServices;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 using IServiceProvider = System.IServiceProvider;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension;

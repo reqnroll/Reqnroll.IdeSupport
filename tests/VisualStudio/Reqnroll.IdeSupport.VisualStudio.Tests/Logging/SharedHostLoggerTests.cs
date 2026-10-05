@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.Logging;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.Logging;
 
 /// <summary>
 /// Issue #748: each process must have exactly one <see cref="SynchronousFileLogger"/> per log file.

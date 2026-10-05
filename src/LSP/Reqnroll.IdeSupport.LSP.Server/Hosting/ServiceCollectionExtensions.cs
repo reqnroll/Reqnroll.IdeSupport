@@ -54,6 +54,7 @@ using Reqnroll.IdeSupport.LSP.Server.Tagging;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 

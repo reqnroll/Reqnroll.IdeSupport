@@ -3,6 +3,7 @@
 using EnvDTE;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 

@@ -62,6 +62,6 @@ Feel free to delete any tasks that are not relevant, or add new ones.
 - [ ] I've changed the behaviour of the code
   - [ ] I have added/updated tests to cover my changes.
 - [ ] My change alters as-built behaviour described in a design doc under `docs/`
-  - [ ] I have updated the relevant doc accordingly (see `docs/AsBuilt-Reconciliation-Reminder.md`).
+  - [ ] I have updated the relevant doc accordingly (see `docs/Archive/AsBuilt-Reconciliation-Reminder.md`).
 - [ ] Users should know about my change
   - [ ] I have added an entry to the "[vNext]" section of the [**CHANGELOG**](../blob/main/CHANGELOG.md), linking to this pull request & included my GitHub handle to the release contributors list.

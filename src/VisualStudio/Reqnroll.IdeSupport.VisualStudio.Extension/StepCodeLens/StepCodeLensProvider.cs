@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 

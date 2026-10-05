@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// Owned-RPC correlation, tested without a pipe (issue #587, step 2). Issues #401 and #555 both

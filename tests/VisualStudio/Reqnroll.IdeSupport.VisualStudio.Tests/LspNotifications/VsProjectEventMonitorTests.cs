@@ -6,7 +6,7 @@ using NSubstitute;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LspNotifications;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspNotifications;
 
 /// <summary>
 /// <see cref="VsProjectEventMonitor"/> reacts to <see cref="IVsTrackProjectDocumentsEvents2"/>

@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.GoToHooks;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToHooks;
 
 /// <summary>
 /// Maps applicable hooks onto Find All References window rows

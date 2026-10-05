@@ -1,8 +1,11 @@
 using System.Reflection;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
+using Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
-namespace Reqnroll.VisualStudio.Tests;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Coverage for <see cref="TagLinkNavigableSymbolProvider"/> (issue #755). The editor takes the first non-null

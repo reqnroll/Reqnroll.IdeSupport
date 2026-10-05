@@ -3,7 +3,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.NavigationBar;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.NavigationBar;
 
 /// <summary>
 /// Pure combo-population logic for the Navigation Bar (Issue #5 / Q22 Option B):

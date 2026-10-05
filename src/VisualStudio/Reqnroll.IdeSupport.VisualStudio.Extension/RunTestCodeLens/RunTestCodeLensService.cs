@@ -12,6 +12,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 

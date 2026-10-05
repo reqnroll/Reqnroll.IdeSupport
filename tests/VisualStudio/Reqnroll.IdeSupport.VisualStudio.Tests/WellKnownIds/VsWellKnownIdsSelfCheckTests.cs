@@ -1,6 +1,8 @@
 using Microsoft.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
-using Outcome = Reqnroll.IdeSupport.VisualStudio.VsWellKnownIdsSelfCheck.Outcome;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
+using Outcome = Reqnroll.IdeSupport.VisualStudio.WellKnownIds.VsWellKnownIdsSelfCheck.Outcome;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 

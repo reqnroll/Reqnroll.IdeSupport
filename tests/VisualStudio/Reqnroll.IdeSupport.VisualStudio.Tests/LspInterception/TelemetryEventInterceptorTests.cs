@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// <see cref="TelemetryEventInterceptor"/> forwards server <c>telemetry/event</c> notifications

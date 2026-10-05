@@ -1,7 +1,8 @@
 using Microsoft.VisualStudio.Language.Intellisense;
 using Microsoft.VisualStudio.Text.Operations;
+using Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 
-namespace Reqnroll.VisualStudio.Tests;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Coverage for <see cref="GoToDefinitionNavigableSymbolProvider"/> (issue #761): Ctrl+Click routing

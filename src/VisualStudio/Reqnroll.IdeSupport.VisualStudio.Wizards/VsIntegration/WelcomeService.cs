@@ -3,6 +3,7 @@ using Microsoft.Win32;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
+using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 

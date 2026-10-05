@@ -8,6 +8,8 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Abstractions;
 using Reqnroll.IdeSupport.VisualStudio.Wizards.Core;
+using Reqnroll.IdeSupport.VisualStudio.IdeServices;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.VsIntegration;
 

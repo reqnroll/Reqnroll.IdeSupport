@@ -4,7 +4,7 @@
     <TargetFrameworks>netstandard2.0</TargetFrameworks>
     <!-- The connector resolves this assembly by its simple name
          (NetFxTestAssemblyContext.PROXYINTERFACEASSEMBLYNAME); it must match exactly. -->
-    <AssemblyName>Reqnroll.VisualStudio.ReqnrollConnector.Generic.NetFX.Interfaces</AssemblyName>
+    <AssemblyName>Reqnroll.IdeSupport.ReqnrollConnector.Generic.NetFX.Interfaces</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>annotations</Nullable>
     <SignAssembly>true</SignAssembly>

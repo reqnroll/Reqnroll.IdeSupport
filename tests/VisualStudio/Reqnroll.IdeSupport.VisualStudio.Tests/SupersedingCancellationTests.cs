@@ -1,8 +1,9 @@
 using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
-namespace Reqnroll.VisualStudio.Tests;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// <see cref="SupersedingCancellation"/>: the per-view "newer press cancels the older one" coordination

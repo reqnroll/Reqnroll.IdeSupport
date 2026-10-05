@@ -36,7 +36,7 @@ significantly between the .NET server/VS pieces and the TypeScript VS Code piece
 - Add or update tests for the area you're changing (each area guide explains what's realistically
   testable and what isn't — VS-COM glue and similar host-only integration points generally aren't).
 - Update the relevant design doc if your change alters as-built behavior described there — stale
-  docs are worse than no docs. `docs/AsBuilt-Reconciliation-Reminder.md` is a live checklist for
+  docs are worse than no docs. `docs/Archive/AsBuilt-Reconciliation-Reminder.md` is a live checklist for
   folding a shipped feature's as-built details back into the canonical design docs; use it as a
   template if you introduce a similar standalone implementation plan.
 - Once an implementation plan doc in `docs/` is fully shipped, move it to `docs/Archive/` (see the

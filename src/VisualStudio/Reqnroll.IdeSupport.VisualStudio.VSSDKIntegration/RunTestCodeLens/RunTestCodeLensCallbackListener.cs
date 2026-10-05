@@ -9,6 +9,8 @@ using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 using StreamJsonRpc;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 

@@ -16,7 +16,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Wizards.UI.Controls;
 public class MarkDownTextBlock : RichTextBox
 {
     /// <summary>Base URL used to turn "#123" references in the Markdown text into hyperlinks.</summary>
-    public const string IssueUrlTemplate = "https://github.com/reqnroll/Reqnroll.VisualStudio/issues/";
+    public const string IssueUrlTemplate = "https://github.com/reqnroll/Reqnroll.IdeSupport/issues/";
 
     /// <summary>Creates the control with default read-only, borderless, transparent styling.</summary>
     public MarkDownTextBlock()

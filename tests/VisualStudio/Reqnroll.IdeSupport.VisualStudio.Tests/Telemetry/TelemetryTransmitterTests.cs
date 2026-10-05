@@ -5,6 +5,7 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.Telemetry;

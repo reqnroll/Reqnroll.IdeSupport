@@ -1,6 +1,6 @@
 #if false // Deferred: DiscoveryResult, IDiscoveryResultProvider, StepDefinition, Hook not yet ported
 #nullable enable
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubDiscoveryResultProvider : IDiscoveryResultProvider
 {

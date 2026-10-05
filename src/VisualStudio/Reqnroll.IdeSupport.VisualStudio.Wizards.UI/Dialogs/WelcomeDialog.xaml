@@ -26,7 +26,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Image Grid.Column="0"
-                       Source="pack://application:,,,/Reqnroll.VisualStudio.Wizards;component/UI/Resources/reqnroll-icon.png"
+                       Source="pack://application:,,,/Reqnroll.IdeSupport.VisualStudio.Wizards.UI;component/Resources/reqnroll-icon.png"
                        Width="64" VerticalAlignment="Top" Margin="5,5,0,5" />
                 <ItemsControl Grid.Column="1" ItemsSource="{Binding Pages}">
                     <ItemsControl.Resources>

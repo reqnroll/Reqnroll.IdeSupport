@@ -2,8 +2,9 @@ using AwesomeAssertions;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.DocumentLinks;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
-namespace Reqnroll.VisualStudio.Tests.DocumentLinks;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.DocumentLinks;
 
 /// <summary>
 /// Client-side pieces of clickable tags in Visual Studio (issue #755): mapping the server's

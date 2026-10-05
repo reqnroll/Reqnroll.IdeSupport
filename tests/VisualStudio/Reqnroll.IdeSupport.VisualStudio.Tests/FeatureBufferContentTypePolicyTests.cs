@@ -6,6 +6,8 @@ using Microsoft.VisualStudio.Utilities;
 using NSubstitute;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 

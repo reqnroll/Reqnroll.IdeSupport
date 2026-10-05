@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio; // GherkinLineRangeEdit
+using Reqnroll.IdeSupport.VisualStudio.FormatDocument;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 

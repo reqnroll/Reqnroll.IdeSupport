@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 

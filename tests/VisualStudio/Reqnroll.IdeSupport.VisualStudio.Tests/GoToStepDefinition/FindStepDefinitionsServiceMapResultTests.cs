@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.GoToStepDefinition;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/findStepDefinitions</c> result into step-definition rows

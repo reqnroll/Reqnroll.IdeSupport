@@ -4,7 +4,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.TestReporter;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestReporter;
 
 public sealed class MtpReporterPathResolverTests : IDisposable
 {

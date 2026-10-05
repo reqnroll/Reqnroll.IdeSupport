@@ -1,7 +1,8 @@
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
-namespace Reqnroll.VisualStudio.Tests.CommentToggle;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.CommentToggle;
 
 /// <summary>
 /// Pins the <c>workspace/executeCommand</c> payload <see cref="CommentToggleService"/> sends for

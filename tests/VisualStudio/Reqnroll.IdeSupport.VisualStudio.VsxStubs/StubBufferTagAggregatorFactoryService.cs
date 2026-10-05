@@ -1,5 +1,5 @@
 #if false // Deferred: IdeSupportTag tagger not yet ported to VS layer
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubBufferTagAggregatorFactoryService : IBufferTagAggregatorFactoryService
 {

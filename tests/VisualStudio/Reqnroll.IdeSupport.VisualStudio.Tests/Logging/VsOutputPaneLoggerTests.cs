@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Logging;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.Logging;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.Logging;
 
 /// <summary>
 /// Coverage for issue #651's "Reqnroll" VS Output Window pane sink. Only the sink's pure

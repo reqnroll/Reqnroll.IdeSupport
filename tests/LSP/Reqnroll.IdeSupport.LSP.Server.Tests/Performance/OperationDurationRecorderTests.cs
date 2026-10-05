@@ -1,9 +1,9 @@
 ﻿using System.Diagnostics;
 using Reqnroll.IdeSupport.Common.Logging;
-using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Tracing;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Performance;
 

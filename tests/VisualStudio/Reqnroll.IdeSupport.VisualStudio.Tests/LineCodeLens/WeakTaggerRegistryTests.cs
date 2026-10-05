@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LineCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LineCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="WeakTaggerRegistry{TTagger}"/> — the per-file, weakly-held tagger

@@ -5,7 +5,7 @@ using System.Linq;
 // using Microsoft.VisualStudio.Platform.VSEditor;
 // using Microsoft.VisualStudio.Text.Internal.Language;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class RuntimeDependencyLock
 {

@@ -51,7 +51,7 @@ public class UpgradeDialogViewModelTests
 
         var communityPage = sut.Pages[1].Should().BeOfType<MarkDownWizardPageViewModel>().Subject;
         communityPage.Text.Should().Contain(UpgradeDialogViewModel.COMMUNITY_INFO_HEADER.Trim());
-        communityPage.Text.Should().Contain("github.com/reqnroll/Reqnroll.VisualStudio/issues");
+        communityPage.Text.Should().Contain("github.com/reqnroll/Reqnroll.IdeSupport/issues");
     }
 
     [Fact]

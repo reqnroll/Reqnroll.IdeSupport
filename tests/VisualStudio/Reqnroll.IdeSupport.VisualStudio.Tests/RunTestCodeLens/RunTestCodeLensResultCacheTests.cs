@@ -16,7 +16,7 @@ using Xunit;
 // directly, with no UI thread or real async I/O involved anywhere in this file.
 #pragma warning disable VSTHRD003 // Avoid awaiting foreign Tasks
 
-namespace Reqnroll.VisualStudio.Tests.RunTestCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
 /// Coverage for issue #262's follow-up fix, re-scoped by issue #495:
@@ -218,7 +218,7 @@ public class RunTestCodeLensResultCacheTests
         Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct) =>
             Interlocked.Increment(ref callCount) == 1
                 ? Task.FromException<IReadOnlyList<RunTestTargetEntry>>(
-                    new Reqnroll.IdeSupport.VisualStudio.LspContentModifiedException("reqnroll/documentSymbolHierarchical", uri))
+                    new Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException("reqnroll/documentSymbolHierarchical", uri))
                 : Task.FromResult<IReadOnlyList<RunTestTargetEntry>>(SampleEntries);
 
         var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
@@ -237,12 +237,12 @@ public class RunTestCodeLensResultCacheTests
         {
             Interlocked.Increment(ref callCount);
             return Task.FromException<IReadOnlyList<RunTestTargetEntry>>(
-                new Reqnroll.IdeSupport.VisualStudio.LspContentModifiedException("reqnroll/documentSymbolHierarchical", uri));
+                new Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException("reqnroll/documentSymbolHierarchical", uri));
         }
 
         var sut = new RunTestCodeLensResultCache(Resolver, NullLogger<RunTestCodeLensResultCache>.Instance, Jtf);
 
-        await Assert.ThrowsAsync<Reqnroll.IdeSupport.VisualStudio.LspContentModifiedException>(
+        await Assert.ThrowsAsync<Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException>(
             () => sut.GetTargetsAsync("file:///Test.feature", 3, CancellationToken.None));
         callCount.Should().Be(RunTestCodeLensResultCache.MaxInvalidationRestarts + 1);
     }

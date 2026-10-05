@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.FindStepUsages;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.FindStepUsages;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/findStepUsages</c> result into the three-state

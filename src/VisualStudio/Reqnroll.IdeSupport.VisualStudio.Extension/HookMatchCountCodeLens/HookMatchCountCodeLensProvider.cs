@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindMatchingScenarios;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.HookMatchCountCodeLens;
 

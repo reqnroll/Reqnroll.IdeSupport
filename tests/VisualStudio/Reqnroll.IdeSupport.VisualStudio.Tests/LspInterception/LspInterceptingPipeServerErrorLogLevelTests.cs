@@ -4,8 +4,9 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// Covers the level a server-rejected request is logged at (issue #800 follow-up): ContentModified

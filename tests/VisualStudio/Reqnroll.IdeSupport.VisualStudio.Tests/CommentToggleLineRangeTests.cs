@@ -1,6 +1,7 @@
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
-namespace Reqnroll.VisualStudio.Tests;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="CommentToggleLineRange.AdjustEndLineForWholeLineSelection"/>, the

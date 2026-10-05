@@ -16,14 +16,21 @@ src/VisualStudio/
   Reqnroll.IdeSupport.VisualStudio.Extension        ← the VSIX: VS.Extensibility LSP client + commands
     ExtensionEntrypoint.cs                          ← extension entry point, DI service registration
     ReqnrollLanguageClient.cs                        ← LanguageServerProvider (the actual LSP client)
+    ReqnrollPluginPackage.cs                         ← the VSSDK package (activation-recovery trigger, welcome dialog)
+    Activation/                                      ← language-server activation signal + scratch-file recovery trigger
+    Documents/                                       ← Gherkin/C# document types, RDT initialization, content-type guard
+    Menus/                                           ← ReqnrollMenu and the shell menu IDs
     LspInterception/                                 ← LspServerConnectionService, LspInterceptingPipe,
                                                         per-message interceptors
     LspNotifications/                                ← VsProjectEventMonitor + preload-pipe pusher —
                                                         push DTE project state to the server
     FindStepUsages/, GoToHooks/, StepCodeLens/,
     RenameStep/, CommentToggle/, FindUnusedStepDefinitions/  ← per-feature VS-side client logic
-  Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration ← MEF classifications, analytics transmitter,
-                                                        VsIdeScope, VSSDK fallback pieces (CodeLens, etc.)
+  Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration ← MEF classifications, analytics transmitter, VSSDK fallback pieces.
+                                                        RootNamespace is Reqnroll.IdeSupport.VisualStudio; each folder
+                                                        appends its name (CommentToggle/, FormatDocument/, GoToDefinition/,
+                                                        DocumentLinks/, IdeServices/ (VsIdeScope), ProjectSystem/,
+                                                        WellKnownIds/, Utilities/ (VsUtils), HookCodeLens/, ...)
   Reqnroll.IdeSupport.VisualStudio.Wizards(.Core/.UI) ← New Project / New Item wizards, welcome dialog
   Reqnroll.IdeSupport.VisualStudio.ItemTemplates,
   Reqnroll.IdeSupport.VisualStudio.ProjectTemplate  ← VSIX template packaging
