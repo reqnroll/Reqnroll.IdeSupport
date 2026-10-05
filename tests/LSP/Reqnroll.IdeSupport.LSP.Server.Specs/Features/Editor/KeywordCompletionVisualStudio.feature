@@ -19,7 +19,7 @@ Scenario: VS completion inside a table row returns cell separator instead of emp
                 | n |
                 |4
         """
-    And completions are requested at line 5 column 2 in "TableRow.feature"
+    And completions are requested at line 5 column 10 in "TableRow.feature"
     Then completions are returned
     And the completions include a keyword label "| "
 
@@ -33,5 +33,5 @@ Scenario: VS completion inside a table row does not include keyword completions
                 | n |
                 |4
         """
-    And completions are requested at line 5 column 2 in "TableRow.feature"
+    And completions are requested at line 5 column 10 in "TableRow.feature"
     Then the completions do not include a label "@ignore"
