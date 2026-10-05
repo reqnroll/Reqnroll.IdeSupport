@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 /// <summary>
 /// Visual Studio identifiers this extension depends on that have <b>no managed SDK constant</b>.

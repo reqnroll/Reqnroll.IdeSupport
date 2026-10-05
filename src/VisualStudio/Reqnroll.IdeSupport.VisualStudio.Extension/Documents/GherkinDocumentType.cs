@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Microsoft.VisualStudio.Extensibility.LanguageServer;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 

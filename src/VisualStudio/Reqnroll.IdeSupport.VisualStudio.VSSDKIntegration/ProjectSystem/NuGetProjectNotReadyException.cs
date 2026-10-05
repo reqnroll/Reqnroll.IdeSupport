@@ -1,6 +1,6 @@
 using System;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 
 /// <summary>
 /// Thrown by <see cref="VsUtils.GetInstalledNuGetPackages"/> when NuGet's brokered

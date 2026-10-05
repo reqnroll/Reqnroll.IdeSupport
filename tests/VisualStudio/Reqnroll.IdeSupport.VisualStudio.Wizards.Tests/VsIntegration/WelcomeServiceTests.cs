@@ -1,4 +1,5 @@
 ﻿using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Wizards.Tests.VsIntegration;
 

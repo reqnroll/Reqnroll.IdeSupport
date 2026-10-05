@@ -8,6 +8,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 

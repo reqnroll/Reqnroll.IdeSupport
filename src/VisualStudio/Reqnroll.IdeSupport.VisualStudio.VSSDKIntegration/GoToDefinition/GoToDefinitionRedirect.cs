@@ -2,7 +2,7 @@
 
 using System.Threading.Tasks;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 
 /// <summary>
 /// Static bridge that the Extension project populates so the VSSDK command filter

@@ -16,10 +16,11 @@ using NuGet.VisualStudio.Contracts;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Microsoft.VisualStudio.Setup.Configuration;
 using System.Windows.Media;
+using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 using IOleServiceProvider = Microsoft.VisualStudio.OLE.Interop.IServiceProvider;
 using IServiceProvider = System.IServiceProvider;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 /// <summary>
 /// Static helpers for interacting with the EnvDTE object model and other classic VS SDK services

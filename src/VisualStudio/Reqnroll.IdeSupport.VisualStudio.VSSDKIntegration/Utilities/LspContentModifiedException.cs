@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 /// <summary>
 /// A request to the language server was rejected with LSP <c>ContentModified</c> even after a

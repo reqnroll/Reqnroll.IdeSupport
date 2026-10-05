@@ -1,4 +1,5 @@
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
 namespace Reqnroll.VisualStudio.Tests;
 

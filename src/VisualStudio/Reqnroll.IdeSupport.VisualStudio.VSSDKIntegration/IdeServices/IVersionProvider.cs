@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 /// <summary>
 /// Provides the running Visual Studio version and the extension's own version.

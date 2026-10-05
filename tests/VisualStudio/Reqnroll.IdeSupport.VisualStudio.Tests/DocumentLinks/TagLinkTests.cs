@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.DocumentLinks;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
 namespace Reqnroll.VisualStudio.Tests.DocumentLinks;
 

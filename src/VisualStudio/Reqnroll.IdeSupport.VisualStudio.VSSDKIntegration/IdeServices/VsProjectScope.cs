@@ -9,8 +9,9 @@ using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Microsoft.VisualStudio.Shell;
 using System.Collections.Concurrent;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 /// <summary>
 /// Visual Studio's <see cref="IProjectScope"/> implementation, backed by an EnvDTE

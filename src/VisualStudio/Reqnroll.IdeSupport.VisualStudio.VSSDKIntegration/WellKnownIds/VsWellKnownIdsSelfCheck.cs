@@ -10,8 +10,9 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 /// <summary>
 /// Checks, inside a running VS, that the command identifiers this extension hard-codes still name the

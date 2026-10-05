@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.Editor;
+using Reqnroll.IdeSupport.VisualStudio.FormatDocument;
 
 namespace Reqnroll.VisualStudio.Tests;
 

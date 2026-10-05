@@ -29,6 +29,10 @@ using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
+using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
+using Reqnroll.IdeSupport.VisualStudio.FormatDocument;
+using Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 #pragma warning disable VSEXTPREVIEW_LSP
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension;

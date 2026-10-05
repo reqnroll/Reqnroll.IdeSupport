@@ -5,6 +5,7 @@ using System.ComponentModel.Composition;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 

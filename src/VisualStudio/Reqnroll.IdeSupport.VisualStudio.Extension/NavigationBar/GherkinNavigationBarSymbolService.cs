@@ -9,6 +9,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Lsp;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 

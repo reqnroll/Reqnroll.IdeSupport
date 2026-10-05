@@ -2,6 +2,7 @@ using System.IO;
 using System.Xml.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 

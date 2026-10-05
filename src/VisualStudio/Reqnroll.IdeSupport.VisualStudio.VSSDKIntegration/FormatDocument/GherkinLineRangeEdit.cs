@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.FormatDocument;
 
 /// <summary>
 /// A single formatting edit: replaces the full content of lines <see cref="StartLine"/> through

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.DocumentLinks;

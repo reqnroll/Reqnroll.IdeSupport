@@ -8,6 +8,7 @@ using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Language.CodeLens.Remoting;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 

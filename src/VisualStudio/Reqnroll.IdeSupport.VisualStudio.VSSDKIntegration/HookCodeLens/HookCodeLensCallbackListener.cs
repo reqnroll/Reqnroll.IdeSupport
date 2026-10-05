@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Utilities;
 using StreamJsonRpc;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 

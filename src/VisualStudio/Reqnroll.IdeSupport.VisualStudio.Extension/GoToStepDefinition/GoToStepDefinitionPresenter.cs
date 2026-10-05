@@ -6,6 +6,7 @@ using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 

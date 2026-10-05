@@ -13,8 +13,9 @@ using Microsoft.VisualStudio.Text.Operations;
 using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 
 /// <summary>
 /// Intercepts Ctrl+Click / Ctrl+hover ("Go To Definition" via the navigable-symbol API) for

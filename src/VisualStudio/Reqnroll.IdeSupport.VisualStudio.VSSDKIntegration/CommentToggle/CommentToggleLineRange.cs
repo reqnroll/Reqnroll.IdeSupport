@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
 /// <summary>
 /// Shared line-range math for Comment/Uncomment toggle, used by both the VS.Extensibility

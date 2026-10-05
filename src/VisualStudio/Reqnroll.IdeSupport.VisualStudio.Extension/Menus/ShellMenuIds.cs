@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 

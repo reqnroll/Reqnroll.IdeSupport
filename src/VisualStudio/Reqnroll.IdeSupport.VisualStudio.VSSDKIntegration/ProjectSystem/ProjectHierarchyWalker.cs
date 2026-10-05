@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 
 /// <summary>
 /// Pure, VS-independent depth-first walk of a solution's project hierarchy.

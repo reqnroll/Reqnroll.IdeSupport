@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.TextManager.Interop;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Editor;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 

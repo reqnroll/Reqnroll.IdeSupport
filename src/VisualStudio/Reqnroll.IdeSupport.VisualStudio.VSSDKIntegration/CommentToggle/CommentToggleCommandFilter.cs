@@ -10,8 +10,10 @@ using Microsoft.VisualStudio.TextManager.Interop;
 using Microsoft.VisualStudio.Threading;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
 /// <summary>
 /// Intercepts the built-in Comment Selection / Uncomment Selection / Toggle Line Comment

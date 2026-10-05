@@ -4,7 +4,7 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 /// <summary>
 /// Extension helpers for <see cref="IServiceProvider"/> and common VS SDK service interfaces.

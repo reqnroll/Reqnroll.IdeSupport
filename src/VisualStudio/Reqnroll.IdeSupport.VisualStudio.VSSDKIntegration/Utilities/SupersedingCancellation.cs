@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 /// <summary>
 /// Hands out one cancellation token per operation, where starting a new operation cancels the one

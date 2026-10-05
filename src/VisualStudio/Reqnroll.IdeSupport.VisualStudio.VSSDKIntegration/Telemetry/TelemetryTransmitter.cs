@@ -8,6 +8,7 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
+using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Telemetry;
 

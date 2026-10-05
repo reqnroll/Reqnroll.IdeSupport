@@ -4,6 +4,7 @@ using System.Linq;
 using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 
 namespace Reqnroll.VisualStudio.Tests.ProjectSystem;
 

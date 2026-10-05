@@ -1,6 +1,6 @@
 #nullable enable
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
 /// <summary>
 /// Which built-in editor command asked for a comment change in a <c>.feature</c> file; maps to the

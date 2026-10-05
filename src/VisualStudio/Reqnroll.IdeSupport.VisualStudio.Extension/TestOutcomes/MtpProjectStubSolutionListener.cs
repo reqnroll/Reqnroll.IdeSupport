@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.Threading;
 using NuGet.VisualStudio;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.TestReporter;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
 

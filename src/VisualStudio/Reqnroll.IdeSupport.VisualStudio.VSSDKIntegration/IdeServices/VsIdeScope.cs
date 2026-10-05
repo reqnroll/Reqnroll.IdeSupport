@@ -9,8 +9,9 @@ using Reqnroll.IdeSupport.VisualStudio;
 using System.Collections.Concurrent;
 using System.ComponentModel.Composition;
 using System.Threading.Tasks;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 /// <summary>
 /// Visual Studio's MEF-exported <see cref="IIdeScope"/>/<see cref="IVsIdeScope"/> implementation:

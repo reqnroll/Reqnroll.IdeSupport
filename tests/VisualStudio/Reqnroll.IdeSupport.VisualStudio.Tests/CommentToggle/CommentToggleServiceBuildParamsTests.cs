@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.CommentToggle;
+using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
 namespace Reqnroll.VisualStudio.Tests.CommentToggle;
 

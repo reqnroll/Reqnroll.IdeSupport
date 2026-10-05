@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
 /// <summary>One clickable tag: a 0-based, end-exclusive range in a <c>.feature</c> file and the URL it opens.</summary>
 public readonly record struct TagLinkEntry(int StartLine, int StartChar, int EndLine, int EndChar, string Target)

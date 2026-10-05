@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.VisualStudio.Tests.LspInterception;
 

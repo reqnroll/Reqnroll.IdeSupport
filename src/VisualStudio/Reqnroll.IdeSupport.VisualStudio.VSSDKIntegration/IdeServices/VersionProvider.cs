@@ -3,8 +3,9 @@ using System;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Reflection;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.IdeServices;
 
 /// <summary>
 /// Visual Studio's MEF-exported <see cref="IVersionProvider"/> implementation; lazily resolves

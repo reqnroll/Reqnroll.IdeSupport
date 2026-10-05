@@ -11,8 +11,10 @@ using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
-namespace Reqnroll.IdeSupport.VisualStudio;
+namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
 /// <summary>
 /// Ctrl+Click on a clickable Gherkin tag (issue #755): when the pointer is on a tag that matches a configured
