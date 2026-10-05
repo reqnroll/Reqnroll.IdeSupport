@@ -1,9 +1,8 @@
 #nullable enable
 
 using Reqnroll.IdeSupport.Common.ProjectSystem;
-using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry;
+namespace Reqnroll.IdeSupport.Common.Tests.ProjectSystem;
 
 public class UnitTestFrameworkDetectorTests
 {

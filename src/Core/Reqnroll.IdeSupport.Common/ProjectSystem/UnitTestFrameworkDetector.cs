@@ -1,7 +1,9 @@
 #nullable enable
-using Reqnroll.IdeSupport.Common.ProjectSystem;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
+namespace Reqnroll.IdeSupport.Common.ProjectSystem;
 
 /// <summary>
 /// Infers a project's unit test framework and test platform from its NuGet package references
@@ -19,15 +21,15 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// Platform for MSTest/xUnit/NUnit, so this is best effort: TUnit is always MTP, otherwise
 /// <c>Microsoft.NET.Test.Sdk</c> means VSTest, and anything else is unknown.
 /// </remarks>
-internal static class UnitTestFrameworkDetector
+public static class UnitTestFrameworkDetector
 {
-    internal const string MSTest = "MSTest";
-    internal const string XUnit = "xUnit";
-    internal const string NUnit = "NUnit";
-    internal const string TUnit = "TUnit";
-    internal const string Multiple = "Multiple";
-    internal const string VSTest = "VSTest";
-    internal const string Mtp = "MTP";
+    public const string MSTest = "MSTest";
+    public const string XUnit = "xUnit";
+    public const string NUnit = "NUnit";
+    public const string TUnit = "TUnit";
+    public const string Multiple = "Multiple";
+    public const string VSTest = "VSTest";
+    public const string Mtp = "MTP";
 
     private const string VSTestSdkPackage = "Microsoft.NET.Test.Sdk";
 
@@ -55,15 +57,15 @@ internal static class UnitTestFrameworkDetector
     };
 
     /// <summary>The detected framework and platform; each is <see langword="null"/> when unknown.</summary>
-    internal readonly record struct Result(string? Framework, string? Platform);
+    public readonly record struct Result(string? Framework, string? Platform);
 
-    internal static Result Detect(IEnumerable<NuGetPackageReference>? packageReferences)
+    public static Result Detect(IEnumerable<NuGetPackageReference>? packageReferences)
     {
-        var names = (packageReferences ?? [])
+        var names = new HashSet<string>((packageReferences ?? [])
             .Select(p => p?.PackageName)
             .Where(n => !string.IsNullOrEmpty(n))
-            .Select(n => n!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(n => n!),
+            StringComparer.OrdinalIgnoreCase);
 
         var framework = Classify(names, AdapterPackages) ?? Classify(names, FrameworkPackages);
 
