@@ -264,6 +264,9 @@ Reqnroll.IdeSupport/
 │   │   │   ├── Bindings/                        # ProjectBindingRegistry and binding data types
 │   │   │   ├── Parsing/                         # IdeSupportGherkinParser, StepDefinitionFileParser, AST builder
 │   │   │   ├── Matching/                        # BindingMatchService, match cache
+│   │   │   ├── Workspace/                       # project-scope model (LspProjectScope, LspReqnrollProject) and the reqnroll/projectLoaded|Unloaded|Files params it consumes
+│   │   │   ├── Discovery/                       # ReqnrollProjectDetector and the discovery-facing interfaces that need only netstandard2.0
+│   │   │   ├── Ide/                             # IdeBehaviours / IdeBehavioursResolver: per-IDE behaviour switches, resolved from plain strings
 │   │   │   ├── Completions/, Formatting/, InlayHints/, Folding/,
 │   │   │   │   Diagnostics/, DocumentOutline/, Commenting/, Rename/,
 │   │   │   │   Scaffolding/, TagExpressions/, TestTargets/, Documents/
@@ -271,18 +274,18 @@ Reqnroll.IdeSupport/
 │   │   │   └── globalUsings.cs
 │   │   │
 │   │   ├── Reqnroll.IdeSupport.LSP.Server/      # OmniSharp LSP host (net10.0, exe)
-│   │   │   ├── Protocol/                        # wire DTOs; method names live in Reqnroll.IdeSupport.Common/Lsp; Documents/ = document extension helpers
-│   │   │   ├── Features/                        # OmniSharp handler classes (LSP messages), one folder per capability (e.g. Features/Completions, Features/Formatting, Features/SemanticTokens)
+│   │   │   ├── Protocol/                        # cross-cutting protocol pieces only (ReqnrollMethodProvider, Documents/ extension helpers); method names live in Reqnroll.IdeSupport.Common/Lsp
+│   │   │   ├── Features/                        # OmniSharp handler classes (LSP messages) with their Params/Response/Options types beside them, one folder per capability (e.g. Features/Completions, Features/Formatting, Features/SemanticTokens)
 │   │   │   ├── Pipeline/                        # MediatR notification handlers (internal events)
 │   │   │   ├── Hosting/                         # Program.cs, LanguageServerOptionsExtensions (capability + reqnroll/* registration), ClientIdeContext, ResilientMediator, ServiceCollectionExtensions
 │   │   │   ├── Discovery/
 │   │   │   │   ├── Roslyn/                      # in-process .cs discovery
 │   │   │   │   └── Connector/                   # IPC client for the reflection-based Connector, incl. AssemblyReflection/
 │   │   │   ├── Registry/                        # registry-facing orchestration atop LSP.Core/Bindings
-│   │   │   ├── Workspace/                       # LspWorkspaceScopeManager, LspProjectScope, MembershipIndex
+│   │   │   ├── Workspace/                       # LspWorkspaceScopeManager, LspIdeScope, MembershipIndex, notification handlers (the project model itself is in LSP.Core/Workspace)
 │   │   │   ├── Concurrency/                     # FeatureRescanDebouncer, RefreshDebouncer (debounced downstream work)
 │   │   │   ├── Parsing/                         # ParseCoordinator, FeatureDocumentReparser (parse scheduling)
-│   │   │   └── Documents/, Tagging/, Performance/, Telemetry/, Tracing/, Logging/   # per-concern support (document buffer, tagger, perf sampling, telemetry, trace, logging)
+│   │   │   └── Documents/, Tagging/, Performance/, Telemetry/, Tracing/, Logging/   # per-concern support (document buffer, tagger, perf sampling, telemetry — Telemetry/FeatureUsage holds the usage counters —, trace, logging)
 │   │   │
 │   │   └── Reqnroll.IdeSupport.LSP.Connector/   # Reflection-based binding discovery (exe)
 │   │       └── Reqnroll.IdeSupport.LSP.Connector.Models/  # DTOs for reflection discovery results
@@ -313,6 +316,22 @@ Reqnroll.IdeSupport/
         ├── Reqnroll.IdeSupport.VisualStudio.VsxStubs/    # Test doubles for VS SDK types
         └── Reqnroll.IdeSupport.VisualStudio.Wizards.Tests/
 ```
+
+### Where code goes: `LSP.Core` vs `LSP.Server`
+
+The rule is about **plumbing**, not about how big or how "core" something feels:
+
+- **`LSP.Core` gets whatever implements Reqnroll LSP functionality without respect to the plumbing required** — hosting, OmniSharp, MediatR, DI registration, process lifetime. If a type can be written and unit-tested knowing only Reqnroll concepts (bindings, features, matching, project scopes, IDE behaviour switches), it belongs in Core.
+- **`LSP.Server` gets the plumbing and what is inseparable from it**: OmniSharp handlers, MediatR notifications and handlers, hosting and DI wiring, and *timing and scheduling semantics* of LSP operations (for example the debouncers in `Concurrency/`, `ParseCoordinator`), even when those files happen to compile without OmniSharp. A handler's `Params`/`Response`/`Options` types stay beside the handler in `Features/<capability>/`.
+- **The dependency direction is one way**: Server references Core, never the reverse. A type that Core code needs therefore moves to Core even if it looks like a protocol DTO (the `reqnroll/projectLoaded|Unloaded|Files` params live in `LSP.Core/Workspace` for this reason).
+
+Practical checks before placing a new type:
+
+1. Does it reference OmniSharp, MediatR, `Microsoft.Extensions.DependencyInjection/Hosting`, or any Server type that does? → Server.
+2. Does it need an API that is not available on `netstandard2.0` (Core's target), such as `System.Text.Json` or `ToHashSet`? → Server, unless adding the dependency to Core is a deliberate decision. (`ConnectorRunTelemetry` and `IConnectorDiscoveryService` stay in Server for this reason.)
+3. Otherwise → Core, in the folder named for the capability.
+
+Because Core's internals are not visible to Server, a Core type that Server consumes must be `public`. Tests follow their subject: Core types are tested in `LSP.Core.Tests`, handlers and wiring in `LSP.Server.Tests`.
 
 There is no `src/clients/` grouping folder today — `VisualStudio/`, `VSCode/`, and `Rider/` are top-level siblings of `Core/` and `LSP/`. Whether to nest them under a `clients/` folder is still an open question ([Q10](LSP-IDE-Support-Open-Questions.md)).
 
