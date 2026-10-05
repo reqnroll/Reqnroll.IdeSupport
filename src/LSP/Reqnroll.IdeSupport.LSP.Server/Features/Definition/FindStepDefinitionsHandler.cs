@@ -79,13 +79,13 @@ public sealed class FindStepDefinitionsHandler
             $"FindStepDefinitionsHandler: {items.Count} step definition(s) ({resolvedCount} navigable) for step at " +
             $"{request.Position.Line}:{request.Position.Character} in {uri}");
 
-        // Same event and property as textDocument/definition: this is the same user command, reached
-        // through the request Visual Studio sends for it. LocationCount counts navigable rows.
-        _telemetryService?.SendEvent(TelemetryEvents.GoToStepDefinitionCommandExecuted, new()
+        // A lookup event, not a navigation: Visual Studio also sends this request on Ctrl+hover to decide
+        // whether to underline a word (issue #898). The user's actual navigation is reported by the client
+        // as GoToStepDefinitionCommandExecuted. LocationCount counts navigable rows.
+        _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionsCommandExecuted, new()
         {
             ["LocationCount"] = resolvedCount,
             [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, resolvedCount),
-            [TelemetryProperties.Protocol] = CustomLspMethodNames.ReqnrollFindStepDefinitions,
         });
 
         return Task.FromResult(new FindStepDefinitionsResponse { Items = items });

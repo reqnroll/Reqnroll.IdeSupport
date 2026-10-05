@@ -15,9 +15,15 @@ public class GoToDefinitionNavigableSymbolProviderTests : IDisposable
     // GoToDefinitionRedirect.GoToDefinitionAsync is a process-wide static: reset it on both sides of
     // every test so a value one test sets can't leak into another (this class is the only one that
     // touches it today, but xUnit may run test classes in parallel, so don't rely on ordering).
-    public GoToDefinitionNavigableSymbolProviderTests() => GoToDefinitionRedirect.GoToDefinitionAsync = null;
+    public GoToDefinitionNavigableSymbolProviderTests() => ResetRedirect();
 
-    public void Dispose() => GoToDefinitionRedirect.GoToDefinitionAsync = null;
+    public void Dispose() => ResetRedirect();
+
+    private static void ResetRedirect()
+    {
+        GoToDefinitionRedirect.GoToDefinitionAsync = null;
+        GoToDefinitionRedirect.HasNavigableDefinitionAsync = null;
+    }
 
     private static GoToDefinitionNavigableSymbolProvider.NavigableSymbolSource CreateSut(ITextView? textView = null) =>
         new(textView ?? Substitute.For<ITextView>(),
@@ -75,10 +81,25 @@ public class GoToDefinitionNavigableSymbolProviderTests : IDisposable
     public async Task Returns_null_when_the_text_buffer_has_no_file_uri_even_with_a_redirect_set()
     {
         GoToDefinitionRedirect.GoToDefinitionAsync = (_, _, _, _, _) => Task.CompletedTask;
+        GoToDefinitionRedirect.HasNavigableDefinitionAsync = (_, _, _, _) => Task.FromResult(true);
 
         var sut = CreateSut(CreateTextView(new PropertyCollection()));
 
         var symbol = await sut.GetNavigableSymbolAsync(default, CancellationToken.None);
+
+        symbol.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Returns_null_when_only_the_navigability_probe_is_missing_issue_898()
+    {
+        // The probe is what keeps the underline off words with nothing to navigate to, so a provider that
+        // cannot ask must not offer one.
+        GoToDefinitionRedirect.GoToDefinitionAsync = (_, _, _, _, _) => Task.CompletedTask;
+        var properties = new PropertyCollection();
+        properties.AddProperty(typeof(ITextDocument), Substitute.For<ITextDocument>());
+
+        var symbol = await CreateSut(CreateTextView(properties)).GetNavigableSymbolAsync(default, CancellationToken.None);
 
         symbol.Should().BeNull();
     }

@@ -21,4 +21,12 @@ public static class GoToDefinitionRedirect
     /// Null when the server has not yet initialized or has been disposed.
     /// </summary>
     public static Func<string, int, int, string, CancellationToken, Task>? GoToDefinitionAsync { get; set; }
+
+    /// <summary>
+    /// Delegate set by the Extension project: <c>(fileUri, line, character, ct)</c> -> whether the step at
+    /// that 0-based position has a binding Go To Definition can navigate to (issue #898). Lets
+    /// <c>GoToDefinitionNavigableSymbolProvider</c> offer the Ctrl+hover underline only where a click would go
+    /// somewhere. Null when the server has not yet initialized or has been disposed.
+    /// </summary>
+    public static Func<string, int, int, CancellationToken, Task<bool>>? HasNavigableDefinitionAsync { get; set; }
 }

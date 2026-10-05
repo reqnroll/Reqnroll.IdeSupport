@@ -61,6 +61,25 @@ internal sealed class FindStepDefinitionsService
     }
 
     /// <summary>
+    /// True when the step at the position has at least one binding whose source file exists on this
+    /// machine - i.e. Go To Definition would take the user somewhere (issue #898). An ordinary
+    /// <c>reqnroll/findStepDefinitions</c> query, so the server measures and counts it like any other lookup.
+    /// </summary>
+    public async Task<bool> HasNavigableDefinitionAsync(
+        string            fileUri,
+        int               line0,
+        int               char0,
+        CancellationToken cancellationToken)
+    {
+        var items = await GetDefinitionsAsync(fileUri, line0, char0, cancellationToken).ConfigureAwait(false);
+        return HasNavigableItem(items);
+    }
+
+    /// <summary>The same test <c>GoToStepDefinitionPresenter</c> applies before navigating to a row.</summary>
+    internal static bool HasNavigableItem(IReadOnlyList<StepDefinitionListItem> items) =>
+        items.Any(item => item.IsResolved && item.SourceFile is { Length: > 0 });
+
+    /// <summary>
     /// Pure mapping from a raw <c>reqnroll/findStepDefinitions</c> JSON result to step-definition
     /// rows, using the same item parser as Find Unused Step Definitions (the wire shape is shared).
     /// A <c>null</c> or non-object result yields no rows. Rows for the same method are collapsed:
