@@ -64,6 +64,7 @@
 
 ## Bug fixes:
 
+* Deleting a line, or backspacing onto the end of a complete step, no longer pops up the completion list in a `.feature` file (Visual Studio reports the deleted text as a completion trigger); completion is also no longer offered when the caret sits in the indentation of a line that already has content, whatever kind of line it is (LSP server, VS) - see #897, @clrudolphi
 * Ctrl+hover in a `.feature` file no longer underlines text that does nothing when clicked (tags with no matching `Traceability.TagLinks` pattern, keywords, descriptions): the underline is now offered only on a step with at least one binding whose source is on this machine. Go to Step Definition lookups now send a new `FindStepDefinitions command executed` telemetry event (`LocationCount`, `Status`), and Visual Studio sends `GoToStepDefinition command executed` when the user actually navigates; abandoned hover lookups no longer log interceptor-fault warnings (VS) - see #898, #900, @clrudolphi
 
 * The "Run" lens on a Scenario Outline (and on its containing Rule or Feature) now runs every generated per-row test method when Reqnroll is configured with `allowRowTests = false`; the resolver previously stopped at the Outline's non-test parameterized template method, so the run matched no tests. Single-row resolution now also follows Reqnroll's variant naming exactly (leading `_` trimmed, `ExampleSet N` counted across named blocks, first-cell uniqueness judged as identifiers) (LSP server) - see #454
