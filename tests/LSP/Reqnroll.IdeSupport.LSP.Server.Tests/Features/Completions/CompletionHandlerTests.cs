@@ -377,6 +377,28 @@ public class CompletionHandlerTests
     }
 
     [Fact]
+    public async Task Invoked_request_with_a_trigger_character_is_not_treated_as_a_deletion_by_other_clients_Async()
+    {
+        SetupBuffer(FeatureUri, "Feature: F\n  Scenario: S\n    Giv");
+        SetupAnyKeywordContext();
+
+        var result = await CreateSut(isVisualStudio: false).Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(2, 7),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.Invoked,
+                    TriggerCharacter = "\n"
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public async Task Completion_for_a_typed_trigger_character_is_not_treated_as_a_deletion_Async()
     {
         SetupBuffer(FeatureUri, " ");

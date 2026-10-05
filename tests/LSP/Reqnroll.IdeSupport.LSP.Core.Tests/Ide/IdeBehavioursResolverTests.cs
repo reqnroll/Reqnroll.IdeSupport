@@ -9,6 +9,7 @@ public class IdeBehavioursResolverTests
         RequiresPushedSemanticTokens = true,
         UsesCustomCodeLensRefresh = true,
         RejectsEmptyTriggerCompletion = true,
+        RequestsCompletionAfterDeletion = true,
         AppliesRenameResponseEditNatively = true,
     };
 

@@ -143,12 +143,13 @@ public sealed class CompletionHandler : ICompletionHandler
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Visual Studio requests completion after a deletion (Backspace/Delete, including joining
-        // lines) and reports the *deleted* text in triggerCharacter, with triggerKind Invoked. A
-        // genuine trigger character arrives as TriggerKind.TriggerCharacter. Nothing was typed, so
-        // popping a list up (e.g. step samples after backspacing onto the end of a complete step)
-        // is noise.
-        if (request.Context is { TriggerKind: CompletionTriggerKind.Invoked, TriggerCharacter: { Length: > 0 } })
+        // Some clients (Visual Studio) request completion after a deletion (Backspace/Delete,
+        // including joining lines) and report the *deleted* text in triggerCharacter, with
+        // triggerKind Invoked. A genuine trigger character arrives as TriggerKind.TriggerCharacter.
+        // Nothing was typed, so popping a list up (e.g. step samples after backspacing onto the end
+        // of a complete step) is noise.
+        if (_clientIde.Behaviours.RequestsCompletionAfterDeletion &&
+            request.Context is { TriggerKind: CompletionTriggerKind.Invoked, TriggerCharacter: { Length: > 0 } })
         {
             _logger.LogVerbose("CompletionHandler: request follows a deletion (Invoked with a deleted-text trigger character) — suppressing");
             return new CompletionList();
