@@ -8,18 +8,6 @@ using Reqnroll.IdeSupport.Common.TestOutcomes;
 
 namespace Reqnroll.IdeSupport.LSP.Core.TestOutcomes;
 
-/// <summary>Pass/fail state of one test case (one Scenario, or one example row of an Outline).</summary>
-public enum TestOutcomeKind
-{
-    None,
-    Passed,
-    Failed,
-    Skipped,
-    NotFound,
-    /// <summary>Listed in a run's <c>runStart</c> but no result yet.</summary>
-    Running,
-}
-
 /// <summary>
 /// Identity of a generated test method as both sides see it: the container the result came from
 /// (<c>TestCase.Source</c> / <c>ScenarioTestTarget.OutputAssemblyPath</c>), the declaring type, and the
@@ -93,62 +81,4 @@ public sealed record TestOutcomeKey(string Source, string TypeFullName, string M
             }
         }
     }
-}
-
-/// <summary>One test case's result as received from the logger.</summary>
-public sealed record TestResultRecord(
-    string RunId,
-    string Source,
-    string? ManagedType,
-    string? ManagedMethod,
-    string FullyQualifiedName,
-    string DisplayName,
-    TestOutcomeKind Outcome,
-    double DurationMs,
-    string? ErrorMessage,
-    string? ErrorStackTrace,
-    string? Stdout,
-    bool StdoutTruncated);
-
-/// <summary>Last-known state of one row (test case) of a method.</summary>
-public sealed record RowOutcome(
-    string DisplayName,
-    TestOutcomeKind Outcome,
-    double DurationMs,
-    string? ErrorMessage,
-    string? ErrorStackTrace,
-    string? Stdout,
-    bool StdoutTruncated,
-    string RunId,
-    DateTime RecordedUtc,
-    /// <summary>Reqnroll's step trace parsed out of <see cref="Stdout"/> (execution order); empty when the output carried none.</summary>
-    IReadOnlyList<StepTraceEntry> Steps)
-{
-    /// <summary>The first step that failed (error / binding error / undefined), or null.</summary>
-    public StepTraceEntry? FailedStep => Steps.FirstOrDefault(s => s.IsFailure);
-}
-
-/// <summary>Aggregate + rows for one generated test method.</summary>
-public sealed record MethodOutcome(
-    TestOutcomeKey Key,
-    TestOutcomeKind Aggregate,
-    IReadOnlyList<RowOutcome> Rows,
-    DateTime LastUpdatedUtc,
-    /// <summary>True between a run's <c>runStart</c> naming this method and that run's completion.</summary>
-    bool IsRunning = false)
-{
-    public int FailedRowCount => Rows.Count(r => r.Outcome == TestOutcomeKind.Failed);
-}
-
-/// <summary>Raised after the store changes; <see cref="Keys"/> lists the affected methods.</summary>
-public sealed class TestOutcomesChangedEventArgs : EventArgs
-{
-    public TestOutcomesChangedEventArgs(IReadOnlyCollection<TestOutcomeKey> keys, int revision)
-    {
-        Keys = keys;
-        Revision = revision;
-    }
-
-    public IReadOnlyCollection<TestOutcomeKey> Keys { get; }
-    public int Revision { get; }
 }

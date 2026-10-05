@@ -28,38 +28,3 @@ public sealed class ReqnrollMethodProvider
     [JsonProperty("method")]
     public required string Method { get; init; }
 }
-
-/// <summary>
-/// The three notifications a client uses to keep the server's workspace/project index in sync:
-/// <c>reqnroll/projectLoaded</c>, <c>reqnroll/projectUnloaded</c>, <c>reqnroll/projectFiles</c>.
-/// </summary>
-public sealed class ReqnrollWorkspaceLifecycleOptions
-{
-    [JsonProperty("projectLoadedMethod")]
-    public required string ProjectLoadedMethod { get; init; }
-
-    [JsonProperty("projectUnloadedMethod")]
-    public required string ProjectUnloadedMethod { get; init; }
-
-    [JsonProperty("projectFilesMethod")]
-    public required string ProjectFilesMethod { get; init; }
-}
-
-/// <summary>
-/// The three-method step-rename refactoring workflow: <c>reqnroll/renameTargets</c> (disambiguation
-/// candidates for a multi-binding match), <c>reqnroll/selectRenameTarget</c> (the client's chosen
-/// candidate), <c>reqnroll/renameApplied</c> (post-apply confirmation). Runs alongside the standard
-/// <c>textDocument/prepareRename</c> + <c>textDocument/rename</c>, which handle the common
-/// single-candidate case unassisted.
-/// </summary>
-public sealed class ReqnrollStepRenameOptions
-{
-    [JsonProperty("renameTargetsMethod")]
-    public required string RenameTargetsMethod { get; init; }
-
-    [JsonProperty("selectRenameTargetMethod")]
-    public required string SelectRenameTargetMethod { get; init; }
-
-    [JsonProperty("renameAppliedMethod")]
-    public required string RenameAppliedMethod { get; init; }
-}
