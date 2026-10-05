@@ -35,4 +35,8 @@
     <ProjectReference Include="..\Reqnroll.IdeSupport.LSP.Connector\Reqnroll.IdeSupport.LSP.Connector.Models\Reqnroll.IdeSupport.LSP.Connector.Models.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\..\build\IsExternalInit.cs" Link="IsExternalInit.cs" />
+  </ItemGroup>
+
 </Project>

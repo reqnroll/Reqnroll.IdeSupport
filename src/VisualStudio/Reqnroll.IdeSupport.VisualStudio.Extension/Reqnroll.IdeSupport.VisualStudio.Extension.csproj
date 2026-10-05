@@ -173,4 +173,8 @@
        VersionPrefix, not Version: the manifest needs a plain System.Version, so no -alpha suffix. -->
   <Target Name="GetVsixVersion" Returns="$(VersionPrefix)" />
 
+  <ItemGroup>
+    <Compile Include="..\..\..\build\IsExternalInit.cs" Link="IsExternalInit.cs" />
+  </ItemGroup>
+
 </Project>

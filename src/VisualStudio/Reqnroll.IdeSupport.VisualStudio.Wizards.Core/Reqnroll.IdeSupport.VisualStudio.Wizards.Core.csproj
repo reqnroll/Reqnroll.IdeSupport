@@ -21,4 +21,8 @@
     <ProjectReference Include="..\..\Core\Reqnroll.IdeSupport.Common\Reqnroll.IdeSupport.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\..\build\IsExternalInit.cs" Link="IsExternalInit.cs" />
+  </ItemGroup>
+
 </Project>

@@ -7,6 +7,7 @@
        LSP.Server.Tests. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Reqnroll.IdeSupport.LSP.Server.Benchmarks</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

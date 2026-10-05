@@ -82,4 +82,8 @@
     </AssemblyAttribute>
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\..\build\IsExternalInit.cs" Link="IsExternalInit.cs" />
+  </ItemGroup>
+
 </Project>
