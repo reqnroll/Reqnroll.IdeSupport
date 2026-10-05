@@ -143,6 +143,30 @@ public sealed class CompletionHandler : ICompletionHandler
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Some clients (Visual Studio) request completion after a deletion (Backspace/Delete,
+        // including joining lines) and report the *deleted* text in triggerCharacter, with
+        // triggerKind Invoked. A genuine trigger character arrives as TriggerKind.TriggerCharacter.
+        // Nothing was typed, so popping a list up (e.g. step samples after backspacing onto the end
+        // of a complete step) is noise.
+        if (_clientIde.Behaviours.RequestsCompletionAfterDeletion &&
+            request.Context is { TriggerKind: CompletionTriggerKind.Invoked, TriggerCharacter: { Length: > 0 } })
+        {
+            _logger.LogVerbose("CompletionHandler: request follows a deletion (Invoked with a deleted-text trigger character) — suppressing");
+            return new CompletionList();
+        }
+
+        // Deleting a line (or a selection) leaves the caret at column 0 of whatever line moved up,
+        // and the client may ask for completion right after the edit. A caret in the indentation of
+        // a line that already has content is not composing anything -- accepting a keyword or tag
+        // there would insert it in front of existing text -- whatever kind of line follows (step,
+        // Feature/Rule/Scenario/Background/Examples, tag line, comment, table row, doc string...).
+        if (IsCaretBeforeLineContent(snapshot.GetLineFromLineNumber(cursorLine).GetText(), cursorChar))
+        {
+            _logger.LogVerbose(
+                $"CompletionHandler: caret {cursorLine}:{cursorChar} is in the indentation of a line with content — suppressing");
+            return new CompletionList();
+        }
+
         var registry = _registryLookup.GetRegistryForUri(uri);
         var fallbackLanguage = GetFallbackLanguage(uri);
 
@@ -429,6 +453,21 @@ public sealed class CompletionHandler : ICompletionHandler
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True when the line has non-whitespace content and the caret is at or before its first
+    /// non-whitespace character. The caret is clamped into the line first, as a stale request
+    /// position can lie outside it (issue #871).
+    /// </summary>
+    internal static bool IsCaretBeforeLineContent(string lineText, int cursorChar)
+    {
+        var firstContent = 0;
+        while (firstContent < lineText.Length && char.IsWhiteSpace(lineText[firstContent]))
+            firstContent++;
+
+        return firstContent < lineText.Length
+            && Math.Clamp(cursorChar, 0, lineText.Length) <= firstContent;
+    }
 
     private string GetFallbackLanguage(DocumentUri uri)
     {

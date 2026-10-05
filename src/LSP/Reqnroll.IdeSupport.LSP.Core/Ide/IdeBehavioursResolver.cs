@@ -58,6 +58,7 @@ public static class IdeBehavioursResolver
                 RequiresPushedSemanticTokens = true,
                 UsesCustomCodeLensRefresh = true,
                 RejectsEmptyTriggerCompletion = true,
+                RequestsCompletionAfterDeletion = true,
                 AppliesRenameResponseEditNatively = true,
             };
         }

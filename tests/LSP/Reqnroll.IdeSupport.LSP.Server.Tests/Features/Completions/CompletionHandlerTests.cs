@@ -264,7 +264,7 @@ public class CompletionHandlerTests
     [InlineData("  Giv", 40, 5)]   // character far beyond the end of the line
     [InlineData("", 3, 0)]         // empty line (last line, no trailing newline)
     [InlineData("  Giv", 5, 5)]    // caret exactly at end of line
-    [InlineData("  Giv", -2, 0)]   // negative character
+    [InlineData("", -2, 0)]        // negative character
     public async Task Keyword_completion_with_out_of_range_position_does_not_throw_Async(
         string line, int cursorChar, int expectedEnd)
     {
@@ -286,6 +286,171 @@ public class CompletionHandlerTests
         var range = result.Items.Should().ContainSingle().Subject.TextEdit!.TextEdit!.Range;
         range.End.Character.Should().Be(expectedEnd);
         range.Start.Character.Should().BeLessThanOrEqualTo(range.End.Character);
+    }
+
+    // ── Caret in the indentation of a line with content (deleted line above) ───
+
+    private void SetupAnyKeywordContext()
+    {
+        var dialect = new GherkinDialectProvider("en").DefaultDialect;
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(new KeywordCompletionContext(dialect, Array.Empty<TokenType>()));
+        _completionService.GetDefaultKeywordCompletions(dialect).Returns(new CompletionResult(new[]
+        {
+            new CompletionEntry("Given ", null, CompletionEntryKind.Keyword)
+        }));
+    }
+
+    [Theory]
+    [InlineData("    Given a step", 0)]               // step, caret at column 0
+    [InlineData("    Given a step", 2)]               // step, caret part-way through the indentation
+    [InlineData("    Given a step", 4)]               // step, caret directly before the keyword
+    [InlineData("Feature: Something", 0)]
+    [InlineData("  Rule: A rule", 0)]
+    [InlineData("  Background:", 0)]
+    [InlineData("  Scenario: A scenario", 0)]
+    [InlineData("  Scenario Outline: An outline", 0)]
+    [InlineData("    Examples:", 0)]
+    [InlineData("  @smoke", 0)]                       // tag line (tag completion must not fire either)
+    [InlineData("  @smoke @slow", 0)]
+    [InlineData("  # a comment", 0)]
+    [InlineData("      | a | b |", 0)]                // table row (VS would otherwise get the safe item)
+    [InlineData("    \"\"\"", 0)]                    // doc string fence
+    [InlineData("  # language: en", 0)]
+    [InlineData("\tGiven a step", 0)]                 // tab indentation
+    [InlineData("Given a step", 0)]                   // no indentation at all
+    public async Task Keyword_completion_is_suppressed_when_the_caret_is_before_the_content_of_a_line_Async(
+        string line, int cursorChar)
+    {
+        SetupBuffer(FeatureUri, "Feature: F\n" + line + "\n");
+        SetupAnyKeywordContext();
+        SetupTags(new[] { "@smoke" });
+
+        var result = await CreateSut().Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(1, cursorChar),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.TriggerCharacter,
+                    TriggerCharacter = " "
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().BeEmpty();
+        _contextResolver.DidNotReceiveWithAnyArgs().Resolve(default!, default, default, default!, default!);
+    }
+
+    [Theory]
+    [InlineData("\n")]   // Backspace joining a blank line onto the prior step line
+    [InlineData("\r\n")]
+    [InlineData("R")]    // deleted letter
+    [InlineData(" ")]    // deleted space
+    public async Task Completion_requested_after_a_deletion_is_suppressed_Async(string deletedText)
+    {
+        // VS reports the deleted text as triggerCharacter, with triggerKind Invoked. The caret is
+        // at the end of a complete step line, where step completion would otherwise pop up.
+        SetupBuffer(FeatureUri, "Feature: F\n  Scenario: S\n    Given a step");
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(ci => throw new InvalidOperationException("must not resolve a context"));
+
+        var result = await CreateSut(isVisualStudio: true).Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(2, 16),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.Invoked,
+                    TriggerCharacter = deletedText
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Invoked_request_with_a_trigger_character_is_not_treated_as_a_deletion_by_other_clients_Async()
+    {
+        SetupBuffer(FeatureUri, "Feature: F\n  Scenario: S\n    Giv");
+        SetupAnyKeywordContext();
+
+        var result = await CreateSut(isVisualStudio: false).Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(2, 7),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.Invoked,
+                    TriggerCharacter = "\n"
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Completion_for_a_typed_trigger_character_is_not_treated_as_a_deletion_Async()
+    {
+        SetupBuffer(FeatureUri, " ");
+        SetupAnyKeywordContext();
+
+        var result = await CreateSut(isVisualStudio: true).Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(0, 1),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.TriggerCharacter,
+                    TriggerCharacter = " "
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task Table_row_with_the_caret_before_its_content_gets_no_visual_studio_safe_item_Async()
+    {
+        // The VS no-op "| " item exists so VS does not revert a typed '|'; a caret in the
+        // indentation of a row is not that case, and the item would pop the list up.
+        SetupBuffer(FeatureUri, "Feature: F\n      | a | b |\n");
+
+        var result = await CreateSut(isVisualStudio: true).Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(1, 0) },
+            CancellationToken.None);
+
+        result.Items.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("    Giv", 7)]    // typing a keyword after indentation
+    [InlineData("    ", 4)]       // whitespace-only line, caret at its end
+    [InlineData("    ", 0)]       // whitespace-only line, caret at column 0
+    [InlineData("", 0)]           // empty line
+    [InlineData("Gi", 2)]         // caret after the typed prefix
+    public async Task Keyword_completion_is_still_offered_when_the_caret_is_not_before_line_content_Async(
+        string line, int cursorChar)
+    {
+        SetupBuffer(FeatureUri, line);
+        SetupAnyKeywordContext();
+
+        var result = await CreateSut().Handle(
+            new CompletionParams { TextDocument = FeatureUri, Position = new Position(0, cursorChar) },
+            CancellationToken.None);
+
+        result.Items.Should().NotBeEmpty();
     }
 
     // ── Group-wise narrowing by typed prefix (issue #818 follow-up) ────────────

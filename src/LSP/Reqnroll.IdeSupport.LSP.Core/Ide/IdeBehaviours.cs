@@ -40,6 +40,14 @@ public sealed record IdeBehaviours
     public bool RejectsEmptyTriggerCompletion { get; init; }
 
     /// <summary>
+    /// The client requests completion after a deletion (Backspace/Delete, including joining lines),
+    /// reporting the <em>deleted</em> text in <c>triggerCharacter</c> with <c>triggerKind</c>
+    /// <c>Invoked</c> (a genuine trigger character arrives as <c>TriggerCharacter</c>). Nothing was
+    /// typed, so the server answers such requests with an empty list.
+    /// </summary>
+    public bool RequestsCompletionAfterDeletion { get; init; }
+
+    /// <summary>
     /// The client's native rename applies whatever <c>WorkspaceEdit</c> the rename response carries,
     /// so the server pushes the real edit with <c>workspace/applyEdit</c> after the response and
     /// returns an empty edit in the response itself (returning the real one would apply it twice).
