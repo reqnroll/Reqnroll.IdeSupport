@@ -327,8 +327,10 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                     new FindStepDefinitionsService(interceptingPipe, _loggerFactory.CreateLogger<FindStepDefinitionsService>()),
                     _findUnusedStepDefinitionsState.Renderer,
                     ExtensionHostLogger.Instance,
-                    _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>());
+                    _loggerFactory.CreateLogger<GoToStepDefinitionPresenter>(),
+                    count => _connectionService.TelemetryTransmitter?.TransmitEvent(GoToStepDefinitionTelemetry.CreateEvent(count)));
                 GoToDefinitionRedirect.GoToDefinitionAsync = _goToStepDefinitionPresenter.GoToDefinitionAsync;
+                GoToDefinitionRedirect.HasNavigableDefinitionAsync = _goToStepDefinitionPresenter.HasNavigableDefinitionAsync;
 
                 // Clickable tags (issue #755): VS's LSP client never sends textDocument/documentLink, so the
                 // Ctrl+Click navigable-symbol provider asks for the links through this bridge.
@@ -396,6 +398,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
             CommentToggleRedirect.ToggleCommentAsync = null;
             _goToStepDefinitionPresenter = null;
             GoToDefinitionRedirect.GoToDefinitionAsync = null;
+            GoToDefinitionRedirect.HasNavigableDefinitionAsync = null;
             _documentLinkService = null;
             TagLinkRedirect.GetLinksAsync = null;
             TagLinkRedirect.LinkOpened = null;

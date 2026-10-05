@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
@@ -40,6 +41,28 @@ public class InterceptorPipelineTests
         {
             Calls++;
             throw new InvalidOperationException("interceptor blew up");
+        }
+    }
+
+    private sealed class CancelledWaitInterceptor : ILspMessageInterceptor
+    {
+        public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken) =>
+            Task.FromCanceled<LspInterceptorResult>(cancellationToken);
+    }
+
+    private sealed class WarningCountingLogger : ILogger
+    {
+        public int Warnings { get; private set; }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= LogLevel.Warning)
+                Warnings++;
         }
     }
 
@@ -89,6 +112,48 @@ public class InterceptorPipelineTests
         result.Should().Be(LspInterceptorResult.PassThrough, "the message must still be forwarded");
         throwing.Calls.Should().Be(1);
         following.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task An_interceptor_cancelled_with_the_message_is_skipped_without_a_warning()
+    {
+        // Issue #898: an abandoned Ctrl+hover lookup cancels its token while LspInspectorLogger waits on its
+        // gate. That is ordinary cancellation, not a buggy interceptor, so it must not log a Warning + stack.
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var logger    = new WarningCountingLogger();
+        var following = new RecordingInterceptor();
+        var pipeline  = new InterceptorPipeline(new ILspMessageInterceptor[] { new CancelledWaitInterceptor(), following }, logger);
+
+        var result = await pipeline.RunAsync(AnyMessage(), cts.Token);
+
+        result.Should().Be(LspInterceptorResult.PassThrough);
+        following.Calls.Should().Be(1);
+        logger.Warnings.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task An_OperationCanceledException_with_a_live_token_is_still_a_warning()
+    {
+        // Only cancellation of the message's own token is exempt; a stray OCE from inside an interceptor is a fault.
+        using var other = new CancellationTokenSource();
+        other.Cancel();
+        var logger   = new WarningCountingLogger();
+        var pipeline = new InterceptorPipeline(new ILspMessageInterceptor[] { new StrayCancellationInterceptor(other.Token) }, logger);
+
+        await pipeline.RunAsync(AnyMessage(), CancellationToken.None);
+
+        logger.Warnings.Should().Be(1);
+    }
+
+    private sealed class StrayCancellationInterceptor : ILspMessageInterceptor
+    {
+        private readonly CancellationToken _other;
+
+        public StrayCancellationInterceptor(CancellationToken other) => _other = other;
+
+        public Task<LspInterceptorResult> InterceptAsync(LspMessage message, CancellationToken cancellationToken) =>
+            Task.FromCanceled<LspInterceptorResult>(_other);
     }
 
     [Fact]

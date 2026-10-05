@@ -128,11 +128,22 @@ public static class TelemetryEvents
     public const string FindStepDefinitionUsagesCommandExecuted = "FindStepDefinitionUsages command executed";
 
     /// <summary>
-    /// Sent by <c>Features.Definition.DefinitionHandler</c> (over <c>textDocument/definition</c>)
-    /// and <c>Features.Definition.FindStepDefinitionsHandler</c> (over <c>reqnroll/findStepDefinitions</c>,
-    /// which Visual Studio uses for the same command, issue #757) — same user command, one event.
+    /// Sent by <c>Features.Definition.DefinitionHandler</c> (over <c>textDocument/definition</c>, which VS Code
+    /// and Rider send for Go To Definition and on hover) and by the Visual Studio client when the user runs
+    /// Go To Definition on a step (<c>GoToStepDefinitionPresenter</c>, issue #898). Visual Studio does not use
+    /// <c>textDocument/definition</c> for that command; its lookups are
+    /// <see cref="FindStepDefinitionsCommandExecuted"/>. VS Code and Rider will send this from the client too
+    /// (follow-up), after which the server-side emission becomes a lookup event.
     /// </summary>
     public const string GoToStepDefinitionCommandExecuted = "GoToStepDefinition command executed";
+
+    /// <summary>
+    /// Sent by <c>Features.Definition.FindStepDefinitionsHandler</c> for every <c>reqnroll/findStepDefinitions</c>
+    /// lookup (issue #757). Visual Studio sends it on Go To Definition and on every Ctrl+hover that checks whether a
+    /// word is navigable (issue #898), so read it as *lookups*, not navigations; the genuine navigation is
+    /// <see cref="GoToStepDefinitionCommandExecuted"/>, sent by the client.
+    /// </summary>
+    public const string FindStepDefinitionsCommandExecuted = "FindStepDefinitions command executed";
 
     /// <summary>Sent by <c>Workspace.LspWorkspaceScopeManager</c> the first time a Reqnroll project is discovered in a workspace (issue #581 finding 2).</summary>
     public const string OpenProjectCommandExecuted = "OpenProject command executed";

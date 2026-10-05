@@ -44,6 +44,13 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 /// <see langword="null"/>, leaving the underline/click affordance entirely to VS's own (lower-priority)
 /// provider — the same fallback <see cref="GoToDefinitionCommandFilter"/> uses for F12.
 /// </para>
+/// <para>
+/// A symbol is offered only where the server reports a navigable binding
+/// (<see cref="GoToDefinitionRedirect.HasNavigableDefinitionAsync"/>, issue #898). Without that check every
+/// word in the file - tags with no link, keywords, descriptions - was underlined on Ctrl+hover although a
+/// click did nothing. VS's own provider applies the same rule (it offers a symbol only when
+/// <c>textDocument/definition</c> returns a location).
+/// </para>
 /// </remarks>
 [Export(typeof(INavigableSymbolSourceProvider))]
 [Name("Reqnroll GoToDefinitionNavigableSymbolProvider")]
@@ -88,19 +95,24 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             _logger = logger;
         }
 
-        public Task<INavigableSymbol?> GetNavigableSymbolAsync(SnapshotSpan triggerSpan, CancellationToken token)
+        public async Task<INavigableSymbol?> GetNavigableSymbolAsync(SnapshotSpan triggerSpan, CancellationToken token)
         {
             var redirect = GoToDefinitionRedirect.GoToDefinitionAsync;
-            if (redirect is null)
+            var probe    = GoToDefinitionRedirect.HasNavigableDefinitionAsync;
+            if (redirect is null || probe is null)
             {
                 _logger.LogVerbose(
                     "GoToDefinitionNavigableSymbolProvider: LSP server not initialized (no redirect set), falling through to VS's own Ctrl+Click handling.");
-                return Task.FromResult<INavigableSymbol?>(null);
+                return null;
             }
 
             var fileUri = GetTextBufferFileUri(_textView.TextBuffer);
             if (fileUri.Length == 0)
-                return Task.FromResult<INavigableSymbol?>(null);
+                return null;
+
+            // The editor cancels a Ctrl+hover query as soon as the pointer moves on (often within milliseconds), and the
+            // tag-link provider ahead of us swallows that as "no link". Don't send a lookup nobody is waiting for.
+            token.ThrowIfCancellationRequested();
 
             var navigator = _textStructureNavigatorSelectorService.GetTextStructureNavigator(triggerSpan.Snapshot.TextBuffer);
             var wordSpan = navigator.GetExtentOfWord(triggerSpan.Start).Span;
@@ -110,10 +122,28 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             var char0    = wordSpan.Start.Position - line.Start.Position;
             var lineText = line.GetText();
 
+            // Only underline where a click would go somewhere (issue #898). Our symbol outranks VS's own LSP
+            // provider, which makes the same check against textDocument/definition, so we must make it too.
+            // A failed probe degrades to "no underline", never an error.
+            try
+            {
+                if (!await probe(fileUri, line0, char0, token).ConfigureAwait(false))
+                    return null;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"GoToDefinitionNavigableSymbolProvider: navigability probe failed: {ex.Message}");
+                return null;
+            }
+
             _logger.LogVerbose(
                 $"GoToDefinitionNavigableSymbolProvider: offering navigable symbol uri='{fileUri}' at {line0}:{char0}");
 
-            return Task.FromResult<INavigableSymbol?>(new NavigableSymbol(wordSpan, fileUri, line0, char0, lineText, redirect, _logger));
+            return new NavigableSymbol(wordSpan, fileUri, line0, char0, lineText, redirect, _logger);
         }
 
         public void Dispose()

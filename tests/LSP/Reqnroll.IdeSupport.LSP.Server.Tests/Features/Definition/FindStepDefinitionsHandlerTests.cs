@@ -137,7 +137,7 @@ public class FindStepDefinitionsHandlerTests
     }
 
     [Fact]
-    public async Task Sends_the_go_to_step_definition_telemetry_counting_navigable_bindings_Async()
+    public async Task Sends_the_find_step_definitions_lookup_telemetry_counting_navigable_bindings_Async()
     {
         var telemetry = Substitute.For<ILspTelemetryService>();
         StoreStep(
@@ -147,10 +147,20 @@ public class FindStepDefinitionsHandlerTests
         await CreateSut(telemetry).HandleAsync(RequestAt(2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "GoToStepDefinition command executed",
+            "FindStepDefinitions command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 1
-                && (string)p["Status"]! == "Ambiguous"
-                && (string)p["Protocol"]! == "reqnroll/findStepDefinitions"));
+                && (string)p["Status"]! == "Ambiguous"));
+    }
+
+    [Fact]
+    public async Task Does_not_send_the_go_to_step_definition_navigation_event_Async()
+    {
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        StoreStep(Binding("Steps.AStep", new SourceLocation("/workspace/Steps.cs", 10, 5), "a step"));
+
+        await CreateSut(telemetry).HandleAsync(RequestAt(2, 10), CancellationToken.None);
+
+        telemetry.DidNotReceive().SendEvent("GoToStepDefinition command executed", Arg.Any<Dictionary<string, object?>>());
     }
 }

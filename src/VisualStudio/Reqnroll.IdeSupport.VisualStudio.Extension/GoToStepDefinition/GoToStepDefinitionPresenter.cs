@@ -23,21 +23,33 @@ internal sealed class GoToStepDefinitionPresenter
     private readonly StepDefinitionsRenderer _renderer;
     private readonly IIdeSupportLogger _navigationLogger;
     private readonly ILogger<GoToStepDefinitionPresenter> _logger;
+    private readonly Action<int>? _goToDefinitionRun;
 
-    /// <summary>Creates the presenter over the definition service and the shared step-definitions renderer.</summary>
+    /// <summary>
+    /// Creates the presenter over the definition service and the shared step-definitions renderer.
+    /// <paramref name="goToDefinitionRun"/> is called with the navigable row count each time the user runs
+    /// Go To Definition (issue #898); the extension turns it into the "GoToStepDefinition command executed" event.
+    /// </summary>
     public GoToStepDefinitionPresenter(
         FindStepDefinitionsService service,
         StepDefinitionsRenderer renderer,
         IIdeSupportLogger navigationLogger,
-        ILogger<GoToStepDefinitionPresenter> logger)
+        ILogger<GoToStepDefinitionPresenter> logger,
+        Action<int>? goToDefinitionRun = null)
     {
+        _goToDefinitionRun = goToDefinitionRun;
         _service          = service;
         _renderer         = renderer;
         _navigationLogger = navigationLogger;
         _logger           = logger;
     }
 
-    /// <summary>Matches <c>GoToDefinitionRedirect.GoToDefinitionAsync</c>.</summary>
+    /// <summary>Matches <c>GoToDefinitionRedirect.HasNavigableDefinitionAsync</c> (issue #898).</summary>
+    public Task<bool> HasNavigableDefinitionAsync(
+        string fileUri, int line0, int char0, CancellationToken cancellationToken) =>
+        _service.HasNavigableDefinitionAsync(fileUri, line0, char0, cancellationToken);
+
+    /// <summary>Matches <c>GoToDefinitionRedirect.GoToDefinitionAsync</c>.
     public async Task GoToDefinitionAsync(
         string            fileUri,
         int               line0,
@@ -53,6 +65,8 @@ internal sealed class GoToStepDefinitionPresenter
         // presenting it would tell the user "No step definition found" for a press that a newer one
         // superseded. The caller (GoToDefinitionCommandFilter) treats this as a quiet cancellation.
         cancellationToken.ThrowIfCancellationRequested();
+
+        _goToDefinitionRun?.Invoke(items.Count(item => item.IsResolved && item.SourceFile is { Length: > 0 }));
 
         if (items.Count == 0)
         {
