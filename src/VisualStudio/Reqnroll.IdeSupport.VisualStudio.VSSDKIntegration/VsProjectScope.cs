@@ -74,7 +74,7 @@ public class VsProjectScope : IProjectScope
         try
         {
             return VsUtils.GetPhysicalFileProjectItems(_project)
-                .Count(pi => FileSystemHelper.IsOfType(VsUtils.GetFilePath(pi), ".feature"));
+                .Count(pi => VsUtils.GetFilePath(pi).IsOfType(".feature"));
         }
         catch (Exception e)
         {
@@ -91,7 +91,7 @@ public class VsProjectScope : IProjectScope
         {
             return VsUtils.GetPhysicalFileProjectItems(_project)
                 .Select(VsUtils.GetFilePath)
-                .Where(fp => FileSystemHelper.IsOfType(fp, extension))
+                .Where(fp => fp.IsOfType(extension))
                 .ToArray();
         }
         catch (Exception e)

@@ -12,4 +12,15 @@ public static class FileSystemExtensions
             return filePath;
         return null;
     }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="extension"/> is <see langword="null"/>
+    /// (matches anything) or <paramref name="filePath"/> ends with it (case-insensitive).
+    /// </summary>
+    public static bool IsOfType(this string filePath, string extension)
+    {
+        if (extension == null)
+            return true;
+        return filePath.EndsWith(extension, System.StringComparison.OrdinalIgnoreCase);
+    }
 }

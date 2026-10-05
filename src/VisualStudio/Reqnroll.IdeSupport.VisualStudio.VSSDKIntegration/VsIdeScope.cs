@@ -164,7 +164,7 @@ public class VsIdeScope : IVsIdeScope
             if (!VsUtils.IsSolutionProject(project))
                 return false;
             return VsUtils.GetPhysicalFileProjectItems(project)
-                .Any(pi => FileSystemHelper.IsOfType(VsUtils.GetFilePath(pi), ".feature"));
+                .Any(pi => VsUtils.GetFilePath(pi).IsOfType(".feature"));
         }
         catch (Exception e)
         {
