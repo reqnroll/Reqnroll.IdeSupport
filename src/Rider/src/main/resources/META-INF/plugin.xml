@@ -87,6 +87,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          realignment is driven manually, same reasoning as the codeVision/inlay entries above. -->
     <typedHandler implementation="com.reqnroll.ide.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler" />
 
+    <!-- Rider's generic LSP client never starts a completion popup on the server's `@`/space trigger
+         characters (it only labels requests with them; IntelliJ's auto-popup fires on identifier
+         characters only), so tag and step completion would otherwise wait for the first letter
+         (issue #902). -->
+    <typedHandler implementation="com.reqnroll.ide.rider.completion.ReqnrollFeatureCompletionAutoPopupHandler" />
+
     <!-- Not com.intellij.structureViewBuilder (FileType-keyed StructureViewBuilderProvider): that
          EP resolves through a JDK dynamic proxy that throws a ClassCastException casting our
          provider instance to StructureViewBuilder on Rider 243.24978.27 (confirmed via idea.log
