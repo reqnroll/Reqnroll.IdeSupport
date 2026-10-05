@@ -1,8 +1,9 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
+namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
 /// Builds the property set of the <c>ProjectCharacteristics</c> snapshot event (issues #258, #845):

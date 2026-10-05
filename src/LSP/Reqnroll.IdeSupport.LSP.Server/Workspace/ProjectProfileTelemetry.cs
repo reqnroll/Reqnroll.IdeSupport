@@ -1,6 +1,6 @@
 using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
+namespace Reqnroll.IdeSupport.LSP.Server.Workspace;
 
 /// <summary>Helpers for the project-profile properties sent on server telemetry events (issue #846).</summary>
 internal static class ProjectProfileTelemetry

@@ -1,7 +1,7 @@
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.LSP.Server.Features.Completions;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
-using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.Completions;
 

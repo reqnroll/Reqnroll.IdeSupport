@@ -4,8 +4,9 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
+using Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
-namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry;
+namespace Reqnroll.IdeSupport.LSP.Server.Tests.Telemetry.FeatureUsage;
 
 /// <summary>Tests for <see cref="FeatureUsageFlushService"/> (issue #582).</summary>
 public class FeatureUsageFlushServiceTests

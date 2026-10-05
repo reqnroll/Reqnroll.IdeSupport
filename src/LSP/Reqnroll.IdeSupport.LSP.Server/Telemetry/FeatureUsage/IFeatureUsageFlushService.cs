@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
+namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 
 /// <summary>
 /// Periodically drains <see cref="IFeatureUsageCounters"/> and emits the result as one
