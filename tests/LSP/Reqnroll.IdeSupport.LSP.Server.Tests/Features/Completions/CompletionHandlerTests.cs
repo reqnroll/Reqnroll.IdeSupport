@@ -345,6 +345,59 @@ public class CompletionHandlerTests
         _contextResolver.DidNotReceiveWithAnyArgs().Resolve(default!, default, default, default!, default!);
     }
 
+    [Theory]
+    [InlineData("\n")]   // Backspace joining a blank line onto the prior step line
+    [InlineData("\r\n")]
+    [InlineData("R")]    // deleted letter
+    [InlineData(" ")]    // deleted space
+    public async Task Completion_requested_after_a_deletion_is_suppressed_Async(string deletedText)
+    {
+        // VS reports the deleted text as triggerCharacter, with triggerKind Invoked. The caret is
+        // at the end of a complete step line, where step completion would otherwise pop up.
+        SetupBuffer(FeatureUri, "Feature: F\n  Scenario: S\n    Given a step");
+        _contextResolver.Resolve(
+            Arg.Any<Reqnroll.IdeSupport.LSP.Core.Documents.IGherkinTextSnapshot>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>())
+            .Returns(ci => throw new InvalidOperationException("must not resolve a context"));
+
+        var result = await CreateSut(isVisualStudio: true).Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(2, 16),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.Invoked,
+                    TriggerCharacter = deletedText
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Completion_for_a_typed_trigger_character_is_not_treated_as_a_deletion_Async()
+    {
+        SetupBuffer(FeatureUri, " ");
+        SetupAnyKeywordContext();
+
+        var result = await CreateSut(isVisualStudio: true).Handle(
+            new CompletionParams
+            {
+                TextDocument = FeatureUri,
+                Position = new Position(0, 1),
+                Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
+                {
+                    TriggerKind = CompletionTriggerKind.TriggerCharacter,
+                    TriggerCharacter = " "
+                }
+            },
+            CancellationToken.None);
+
+        result.Items.Should().NotBeEmpty();
+    }
+
     [Fact]
     public async Task Table_row_with_the_caret_before_its_content_gets_no_visual_studio_safe_item_Async()
     {
