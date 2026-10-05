@@ -1,6 +1,6 @@
 using Match = System.Text.RegularExpressions.Match;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class TestTextPosition
 {

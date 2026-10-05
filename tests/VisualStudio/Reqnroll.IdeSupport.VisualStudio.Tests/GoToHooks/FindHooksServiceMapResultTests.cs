@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.GoToHooks;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToHooks;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/findHooks</c> result into a

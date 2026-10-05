@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.RenameStep;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.RenameStep;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/renameTargets</c> JSON result into a

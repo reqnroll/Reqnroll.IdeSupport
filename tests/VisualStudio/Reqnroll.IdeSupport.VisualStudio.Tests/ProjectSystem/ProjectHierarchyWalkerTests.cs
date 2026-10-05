@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.VisualStudio;
 using Xunit;
 using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 
-namespace Reqnroll.VisualStudio.Tests.ProjectSystem;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.ProjectSystem;
 
 /// <summary>
 /// Traversal rules behind <c>VsUtils.GetAllProjects</c> (issue #729): a flat walk of the solution's

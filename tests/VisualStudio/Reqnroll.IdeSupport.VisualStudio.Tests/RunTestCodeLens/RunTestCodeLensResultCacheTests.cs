@@ -16,7 +16,7 @@ using Xunit;
 // directly, with no UI thread or real async I/O involved anywhere in this file.
 #pragma warning disable VSTHRD003 // Avoid awaiting foreign Tasks
 
-namespace Reqnroll.VisualStudio.Tests.RunTestCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
 /// Coverage for issue #262's follow-up fix, re-scoped by issue #495:

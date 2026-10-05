@@ -6,7 +6,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.TestLogger;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.TestLogger;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestLogger;
 
 /// <summary>
 /// Merge rules of <see cref="TestLoggerRunSettings.Inject"/> — the pure half of the

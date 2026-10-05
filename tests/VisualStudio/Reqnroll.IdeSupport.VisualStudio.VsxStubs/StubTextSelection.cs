@@ -1,7 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubTextSelection : ITextSelection
 {

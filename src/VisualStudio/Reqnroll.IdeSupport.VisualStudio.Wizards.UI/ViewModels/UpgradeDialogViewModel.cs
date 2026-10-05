@@ -27,7 +27,7 @@ public class UpgradeDialogViewModel : WizardViewModel
         Reqnroll is an independent project that is owned and supported by the community.
 
         If you find a bug or an issue with the Reqnroll Visual Studio extension, please 
-        report it on GitHub: https://github.com/reqnroll/Reqnroll.VisualStudio/issues.
+        report it on GitHub: https://github.com/reqnroll/Reqnroll.IdeSupport/issues.
 
         For all other communication (questions, feature suggestions, discussions), please 
         use the GitHub discussion board: https://github.com/reqnroll/Reqnroll/discussions

@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.Editor;
 using Reqnroll.IdeSupport.VisualStudio.FormatDocument;
 
-namespace Reqnroll.VisualStudio.Tests;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Coverage for <see cref="FormatDocumentCommandFilter.GetTextBufferFileUri"/> — the one member of

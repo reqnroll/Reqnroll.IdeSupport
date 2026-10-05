@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell.Interop;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class FilePathProvider : IVsTextBuffer, IPersistFileFormat
 {

@@ -1,4 +1,4 @@
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubTextBuffer : ITextBuffer2
 {

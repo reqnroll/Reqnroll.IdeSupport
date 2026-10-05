@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.NavigationBar;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.NavigationBar;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.NavigationBar;
 
 /// <summary>
 /// Client-side mapping of a <c>textDocument/documentSymbol</c> result into the

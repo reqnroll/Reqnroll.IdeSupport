@@ -1,4 +1,4 @@
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 /// <summary>
 /// Local stub for content-type constants that were previously in the monolithic

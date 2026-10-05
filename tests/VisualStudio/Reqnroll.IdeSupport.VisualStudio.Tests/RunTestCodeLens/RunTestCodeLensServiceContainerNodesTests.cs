@@ -5,7 +5,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.RunTestCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.RunTestCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="RunTestCodeLensService.CollectContainerNodes"/> — the Feature/Rule

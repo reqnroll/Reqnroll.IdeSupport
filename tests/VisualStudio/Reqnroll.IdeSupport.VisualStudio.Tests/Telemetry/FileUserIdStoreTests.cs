@@ -1,5 +1,5 @@
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
-namespace Reqnroll.VisualStudio.Tests.Telemetry;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.Telemetry;
 
 public class FileUserIdStoreTests
 {

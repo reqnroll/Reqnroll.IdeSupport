@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.HookFeatureCodeLens;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.HookCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.HookCodeLens;
 
 /// <summary>
 /// Client-side mapping of the server's <c>textDocument/codeLens</c> response for a <c>.feature</c>

@@ -1,4 +1,4 @@
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public record StubTextVersion2(
         INormalizedTextChangeCollection Changes,

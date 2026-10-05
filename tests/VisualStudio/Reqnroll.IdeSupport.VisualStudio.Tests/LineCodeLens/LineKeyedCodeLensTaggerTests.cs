@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.Text;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LineCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LineCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="LineKeyedCodeLensTagger{TEntry}"/> — the generic classic-CodeLens

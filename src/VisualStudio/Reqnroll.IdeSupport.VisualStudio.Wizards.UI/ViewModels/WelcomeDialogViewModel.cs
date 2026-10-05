@@ -32,7 +32,7 @@ public class WelcomeDialogViewModel : WizardViewModel
 
         * You can find even more trace information in the **log file** in the [%LOCALAPPDATA%\Reqnroll\logs](file://%LOCALAPPDATA%\Reqnroll\logs) folder.
 
-        * Please **submit your issues** in our [issue tracker on GitHub](https://github.com/reqnroll/Reqnroll.VisualStudio/issues) or suggest a new feature [in our Discussion Board](https://go.reqnroll.net/ideas).
+        * Please **submit your issues** in our [issue tracker on GitHub](https://github.com/reqnroll/Reqnroll.IdeSupport/issues) or suggest a new feature [in our Discussion Board](https://go.reqnroll.net/ideas).
         """;
 
 #if DEBUG

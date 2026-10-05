@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.TestTargets;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestTargets;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/resolveTestTargets</c> result into

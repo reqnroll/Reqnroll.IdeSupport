@@ -8,7 +8,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.TestReporter;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestReporter;
 
 /// <summary>
 /// Covers <see cref="MtpProjectStubs"/> — the project-local <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c>

@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// The interceptor list's own rules (issue #587, step 3). Before the extraction these were only

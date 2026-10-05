@@ -1,6 +1,6 @@
 using Microsoft.VisualStudio.Text.Classification;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubEditorFormatMap : IEditorFormatMap
 {

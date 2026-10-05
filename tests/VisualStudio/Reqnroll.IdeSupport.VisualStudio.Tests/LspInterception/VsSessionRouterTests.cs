@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.LspInterception;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// Issue #395's routing rule, tested directly. The point of extracting

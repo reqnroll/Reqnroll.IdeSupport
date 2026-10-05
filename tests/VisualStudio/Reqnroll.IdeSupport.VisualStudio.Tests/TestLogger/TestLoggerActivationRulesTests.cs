@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.TestLogger;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.TestLogger;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestLogger;
 
 /// <summary>
 /// Covers <see cref="TestLoggerActivationRules"/>, the pure decision logic extracted from

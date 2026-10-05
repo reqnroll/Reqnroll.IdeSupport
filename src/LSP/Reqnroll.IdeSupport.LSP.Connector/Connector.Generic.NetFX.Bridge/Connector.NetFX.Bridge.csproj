@@ -4,7 +4,7 @@
     <TargetFrameworks>net462;net472;net481</TargetFrameworks>
     <!-- The connector loads this assembly into the test AppDomain by its simple name
          (NetFxTestAssemblyContext.BRIDGEASSEMBLYNAME); it must match exactly. -->
-    <AssemblyName>Reqnroll.VisualStudio.ReqnrollConnector.Generic.NetFX.Bridge</AssemblyName>
+    <AssemblyName>Reqnroll.IdeSupport.ReqnrollConnector.Generic.NetFX.Bridge</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>annotations</Nullable>
     <SignAssembly>true</SignAssembly>

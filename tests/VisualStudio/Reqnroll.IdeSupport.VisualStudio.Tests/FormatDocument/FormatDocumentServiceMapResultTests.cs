@@ -1,7 +1,7 @@
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FormatDocument;
 
-namespace Reqnroll.VisualStudio.Tests.FormatDocument;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.FormatDocument;
 
 /// <summary>
 /// Client-side mapping of a <c>textDocument/formatting</c>/<c>rangeFormatting</c> result (an LSP

@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.Classification;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.Classification;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.Classification;
 
 public class SemanticTokensClassificationInterceptorTests
 {

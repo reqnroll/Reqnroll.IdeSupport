@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToStepDefinition;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.GoToStepDefinition;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
 /// The Find All References window title for Go To Definition with several matching step

@@ -4,7 +4,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.TestLogger;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestLogger;
 
 /// <summary>
 /// Phase 2 of the implementation plan: the step trace carried in each result's stdout becomes per-row

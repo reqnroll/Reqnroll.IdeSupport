@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.Editor;
 using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 
-namespace Reqnroll.VisualStudio.Tests;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// Coverage for issue #565: <see cref="CommentToggleCommandFilter.GetTextBufferFileUri"/> is the

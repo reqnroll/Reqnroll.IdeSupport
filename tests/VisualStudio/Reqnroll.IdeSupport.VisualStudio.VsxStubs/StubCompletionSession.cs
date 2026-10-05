@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using Microsoft.VisualStudio.Language.Intellisense;
 
-namespace Reqnroll.VisualStudio.VsxStubs;
+namespace Reqnroll.IdeSupport.VisualStudio.VsxStubs;
 
 public class StubCompletionSession : ICompletionSession
 {

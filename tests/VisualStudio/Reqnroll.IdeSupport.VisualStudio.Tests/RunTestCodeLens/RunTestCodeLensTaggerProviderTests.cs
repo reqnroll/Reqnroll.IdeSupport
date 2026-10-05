@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.RunTestCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="RunTestCodeLensTaggerProvider.EncodeElementDescription"/> — the

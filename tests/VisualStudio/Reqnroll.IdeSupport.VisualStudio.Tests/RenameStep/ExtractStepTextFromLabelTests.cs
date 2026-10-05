@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.RenameStep;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.RenameStep;
 
 /// <summary>
 /// Splitting a picker label into the keyword prefix and step text

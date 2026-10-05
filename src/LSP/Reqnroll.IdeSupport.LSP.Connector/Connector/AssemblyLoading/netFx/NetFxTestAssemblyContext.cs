@@ -11,8 +11,8 @@ public class NetFxTestAssemblyContext : ITestAssemblyContext, IDisposable
     private readonly AppDomain _appDomain;
     private readonly ReqnrollConnector.AssemblyLoading.netFXAppDomainInterfaces.INetFxAssemblyProxy _proxy;
     private readonly ILogger _log;
-    private const string BRIDGEASSEMBLYNAME = "Reqnroll.VisualStudio.ReqnrollConnector.Generic.NetFX.Bridge";
-    private const string PROXYINTERFACEASSEMBLYNAME = "Reqnroll.VisualStudio.ReqnrollConnector.Generic.NetFX.Interfaces";
+    private const string BRIDGEASSEMBLYNAME = "Reqnroll.IdeSupport.ReqnrollConnector.Generic.NetFX.Bridge";
+    private const string PROXYINTERFACEASSEMBLYNAME = "Reqnroll.IdeSupport.ReqnrollConnector.Generic.NetFX.Interfaces";
     private string _bridgeTargetDir = string.Empty;
     public NetFxTestAssemblyContext(string assemblyPath, ILogger log)
     {

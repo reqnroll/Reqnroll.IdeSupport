@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.HookCodeLens;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.HookCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="HookCodeLensTaggerProvider.EncodeElementDescription"/> (the

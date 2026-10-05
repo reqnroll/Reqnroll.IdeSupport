@@ -3,7 +3,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Xunit;
 
-namespace Reqnroll.VisualStudio.Tests.GoToHooks;
+namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToHooks;
 
 /// <summary>
 /// The client-originated "GoToHook command executed" event carries the closed <c>Source</c>
