@@ -7,8 +7,9 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 
 /// <summary>
 /// Recovers a missed language server activation (issue #533) by opening and closing a throwaway

@@ -11,7 +11,7 @@ using NuGet.VisualStudio;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.TestReporter;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestOutcomes;
 
 /// <summary>
 /// Keeps every Reqnroll C# project of the open solution connected to the bundled Microsoft.Testing.Platform

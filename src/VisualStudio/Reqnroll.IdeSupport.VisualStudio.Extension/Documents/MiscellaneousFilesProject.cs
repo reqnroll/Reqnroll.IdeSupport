@@ -2,7 +2,7 @@
 
 using Microsoft.VisualStudio;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 /// <summary>Which signal identified a hierarchy as the Miscellaneous Files project.</summary>
 internal enum MiscellaneousFilesMatch

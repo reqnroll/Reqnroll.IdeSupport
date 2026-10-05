@@ -1,4 +1,6 @@
 using System.IO;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 

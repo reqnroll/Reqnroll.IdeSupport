@@ -1,8 +1,9 @@
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
+using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 /// <summary>
 /// Adds a "Reqnroll" submenu to the Extensions top-level menu.

@@ -5,8 +5,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 /// <summary>
 /// Realizes the text buffers of restored <c>.feature</c> stub frames in the VS Running Document

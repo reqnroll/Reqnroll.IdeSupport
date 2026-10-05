@@ -1,4 +1,4 @@
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 /// <summary>
 /// The built-in Visual Studio document type name for C# files. VS.Extensibility's

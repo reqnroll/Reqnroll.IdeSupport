@@ -2,7 +2,7 @@
 
 using System;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 /// <summary>
 /// VS shell menu identifiers used by the VisualStudio.Extensibility commands'

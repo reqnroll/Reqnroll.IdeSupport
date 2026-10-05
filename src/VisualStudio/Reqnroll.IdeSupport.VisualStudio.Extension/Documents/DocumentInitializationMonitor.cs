@@ -7,7 +7,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.Common.Logging;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 /// <summary>The kind of document a Running Document Table moniker names, for logging purposes.</summary>
 internal enum RdtDocumentKind

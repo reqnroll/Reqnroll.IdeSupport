@@ -4,6 +4,7 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 

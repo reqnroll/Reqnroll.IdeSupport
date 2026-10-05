@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Reqnroll.IdeSupport.VisualStudio;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 

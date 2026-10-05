@@ -7,6 +7,7 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 

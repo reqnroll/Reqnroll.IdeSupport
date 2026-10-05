@@ -3,7 +3,7 @@
 using System;
 using System.Threading;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 
 /// <summary>
 /// Records whether VS has activated the <see cref="ReqnrollLanguageClient"/> provider in this

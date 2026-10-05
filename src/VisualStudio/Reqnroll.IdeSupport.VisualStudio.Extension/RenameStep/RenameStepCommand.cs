@@ -12,6 +12,8 @@ using Microsoft.VisualStudio.Extensibility.Editor;
 using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 

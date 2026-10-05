@@ -13,7 +13,7 @@ using Microsoft.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Editor;
 
-namespace Reqnroll.IdeSupport.VisualStudio.Extension;
+namespace Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 /// <summary>What <see cref="FeatureBufferContentTypeGuard"/> should do with one text buffer.</summary>
 internal enum FeatureBufferContentTypeAction

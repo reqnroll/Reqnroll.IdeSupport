@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 
