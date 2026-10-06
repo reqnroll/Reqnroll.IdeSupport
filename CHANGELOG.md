@@ -2,7 +2,7 @@
 
 ## Improvements:
 
-* The VS Code extension now has a Marketplace-ready listing: an icon and README (preview notice, feature list, how to give feedback and collect diagnostics), the changelog on the Changelog tab, the `Testing` and `Formatters` categories, homepage/issues links, and plain-language descriptions for the `reqnroll.trace.server`, `reqnroll.protocolLogLevel` and `reqnroll.testOutcomes.enabled` settings (VS Code) - see #910
+* The VS Code extension now has a Marketplace-ready listing: an icon and README (preview notice, feature list, how to give feedback and collect diagnostics), the `Testing` and `Formatters` categories, homepage/issues links, and plain-language descriptions for the `reqnroll.trace.server`, `reqnroll.protocolLogLevel` and `reqnroll.testOutcomes.enabled` settings (VS Code) - see #910
 * **Preview installs must be replaced:** the extensions now have consolidated package identities, so VS, VS Code and Rider treat them as new packages rather than upgrades — uninstall the earlier preview build first. Package IDs are now `Reqnroll.IdeSupport.VisualStudio` (VS), `Reqnroll.reqnroll-ide-support` (VS Code, publisher now `Reqnroll`) and `net.reqnroll.idesupport` (Rider); Rider's "Extension installed" telemetry state resets with the new ID (VS, VS Code, Rider) - see #914
 * Versions now follow `<year>.<minor>.<build number>` (e.g. `2026.1.345`), hand-bumped via `ReqnrollMainVersion` in `build/Version.props` (VS, VS Code, Rider, LSP server) - see #912
 * CI artifacts and package files are named consistently: `reqnroll-ide-support-vs|vscode|rider` artifacts containing `Reqnroll.IdeSupport.VisualStudio|VSCode|Rider.<version>` packages (CI) - see #911

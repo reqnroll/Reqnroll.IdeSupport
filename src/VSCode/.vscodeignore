@@ -8,6 +8,7 @@ tsconfig.json
 .eslintrc.json
 .eslint.config.js
 .prettierrc
+CHANGELOG.md
 **/*.ts
 **/*.ts.map
 **/*.d.ts
