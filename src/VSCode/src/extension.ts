@@ -26,7 +26,7 @@ import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
 import { registerHookCodeLens } from './commands/hookCodeLens';
-import { CSHARP_LANGUAGE_ID, GHERKIN_LANGUAGE_ID } from './languageIds';
+import { CSHARP_LANGUAGE_ID, REQNROLL_LANGUAGE_ID } from './languageIds';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
@@ -214,7 +214,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
 
     registerCommand('reqnroll.showOutputChannel', () => appLogChannel.show()),
 
-    // Comment/Uncomment toggle (Ctrl+/ for gherkin files)
+    // Comment/Uncomment toggle (Ctrl+/ for .feature files)
     registerCommand('reqnroll.toggleComment', async () => {
       if (!client) {
         notReady('Comment/Uncomment')();
@@ -407,7 +407,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: GHERKIN_LANGUAGE_ID, pattern: '**/*.feature' }],
+    documentSelector: [{ language: REQNROLL_LANGUAGE_ID, pattern: '**/*.feature' }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{feature,cs}'),
     },
