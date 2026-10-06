@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 /** Fully-qualified walkthrough ID: `<publisher>.<name>#<walkthroughId>` (see package.json). */
-export const WALKTHROUGH_ID = 'reqnroll.reqnroll-ide-support#reqnroll.getStarted';
+export const WALKTHROUGH_ID = 'Reqnroll.reqnroll-ide-support#reqnroll.getStarted';
 
 /** globalState key recording that the Get Started walkthrough has already been shown once. */
 export const WALKTHROUGH_SHOWN_KEY = 'reqnroll.walkthroughShown';

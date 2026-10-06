@@ -176,7 +176,7 @@ just without publishing it:
 ```sh
 cd src/VSCode
 npm run build:vsix           # or: bash scripts/build-vsix.sh <rid>, for a non-host RID
-code --install-extension reqnroll-ide-support-<version>.vsix
+code --install-extension Reqnroll.IdeSupport.VSCode.<version>.vsix
 ```
 
 (`<version>` comes from `package.json`.) Or, from VS Code's UI: Extensions view → **...** menu →

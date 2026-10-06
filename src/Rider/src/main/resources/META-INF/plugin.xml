@@ -1,5 +1,5 @@
 <idea-plugin>
-  <id>com.reqnroll.idesupport</id>
+  <id>net.reqnroll.idesupport</id>
   <name>Reqnroll Extension for Rider (Preview)</name>
   <vendor url="https://github.com/reqnroll/Reqnroll.IdeSupport">Reqnroll</vendor>
 

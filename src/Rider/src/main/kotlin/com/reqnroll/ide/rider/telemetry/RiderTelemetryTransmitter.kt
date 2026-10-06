@@ -132,8 +132,8 @@ object RiderTelemetryTransmitter {
 
     internal const val IDE_CLIENT = "rider"
 
-    private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
-    private const val USER_ID_PROPERTY_KEY = "com.reqnroll.idesupport.telemetry.userId"
+    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
+    private const val USER_ID_PROPERTY_KEY = "net.reqnroll.idesupport.telemetry.userId"
 
     // Bounded timeouts (#859): without them a black-holed endpoint leaves one pending request and
     // socket per event until the OS gives up.
