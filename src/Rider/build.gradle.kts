@@ -16,6 +16,41 @@ plugins {
 group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
+// Renders the top of the repo-root CHANGELOG.md (the [vNext] section plus the latest release) as
+// the small HTML subset JetBrains accepts for "What's new" (issue #910). Deliberately hand-rolled
+// rather than pulling in a Markdown library: the changelog only uses headings, bullets, **bold**,
+// `code` and [links](url). The root file stays the single source of truth for all three clients.
+fun changelogToHtml(markdown: String): String {
+    fun inline(text: String): String {
+        var out = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        out = Regex("""`([^`]+)`""").replace(out) { "<code>${it.groupValues[1]}</code>" }
+        out = Regex("""\*\*([^*]+)\*\*""").replace(out) { "<b>${it.groupValues[1]}</b>" }
+        out = Regex("""\[([^\]]+)\]\((https?://[^)\s]+)\)""").replace(out) {
+            "<a href=\"${it.groupValues[2]}\">${it.groupValues[1]}</a>"
+        }
+        return out
+    }
+
+    val html = StringBuilder()
+    var inList = false
+    var releaseHeadings = 0
+    for (line in markdown.lines()) {
+        if (line.startsWith("# ")) {
+            if (++releaseHeadings > 2) break
+            if (inList) { html.append("</ul>"); inList = false }
+            html.append("<h3>").append(inline(line.removePrefix("# ").trim())).append("</h3>")
+        } else if (line.startsWith("## ")) {
+            if (inList) { html.append("</ul>"); inList = false }
+            html.append("<h4>").append(inline(line.removePrefix("## ").trim())).append("</h4>")
+        } else if (line.startsWith("* ")) {
+            if (!inList) { html.append("<ul>"); inList = true }
+            html.append("<li>").append(inline(line.removePrefix("* ").trim())).append("</li>")
+        }
+    }
+    if (inList) html.append("</ul>")
+    return html.toString()
+}
+
 repositories {
     mavenCentral()
     intellijPlatform {
@@ -86,8 +121,12 @@ tasks.test {
 intellijPlatform {
     pluginConfiguration {
         id = providers.gradleProperty("pluginId")
-        name = "Reqnroll"
+        name = "Reqnroll Extension for Rider (Preview)"
         version = providers.gradleProperty("pluginVersion")
+        changeNotes = providers
+            .fileContents(rootProject.layout.projectDirectory.file("../../CHANGELOG.md"))
+            .asText
+            .map { changelogToHtml(it) }
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")

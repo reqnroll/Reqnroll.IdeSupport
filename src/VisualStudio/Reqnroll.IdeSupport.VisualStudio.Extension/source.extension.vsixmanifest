@@ -3,7 +3,11 @@
   <Metadata>
     <Identity Id="Reqnroll.IdeSupport.VisualStudio" Version="|%CurrentProject%;GetVsixVersion|" Language="en-US" Publisher="Reqnroll" />
     <DisplayName>Reqnroll Extension for Visual Studio (Preview)</DisplayName>
-    <Description>Preview Visual Studio extension (for VS2022 and VS2026) for Reqnroll</Description>
+    <Description xml:space="preserve">[Preview] Support for Reqnroll &amp; Gherkin — syntax highlighting, navigation, completion, and more.</Description>
+    <MoreInfo>https://reqnroll.net</MoreInfo>
+    <License>LICENSE.txt</License>
+    <ReleaseNotes>CHANGELOG.txt</ReleaseNotes>
+    <Icon>Images\ReqnrollIcon.128.png</Icon>
     <Preview>true</Preview>
   </Metadata>
   <Installation ExtensionType="VSSDK+VisualStudio.Extensibility">
