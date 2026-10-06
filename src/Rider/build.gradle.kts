@@ -17,9 +17,14 @@ group = providers.gradleProperty("pluginGroup").get()
 version = providers.gradleProperty("pluginVersion").get()
 
 // Renders the top of the repo-root CHANGELOG.md (the [vNext] section plus the latest release) as
-// the small HTML subset JetBrains accepts for "What's new" (issue #910). Deliberately hand-rolled
+// the small HTML subset JetBrains accepts for "What's new" (issue #910), cut off with a link to the
+// full changelog once it passes CHANGE_NOTES_BUDGET: <change-notes> is capped at 65,535 characters
+// and the verifier fails the build beyond that, so it must not grow with the changelog. Deliberately hand-rolled
 // rather than pulling in a Markdown library: the changelog only uses headings, bullets, **bold**,
 // `code` and [links](url). The root file stays the single source of truth for all three clients.
+val CHANGE_NOTES_BUDGET = 40_000
+val FULL_CHANGELOG_URL = "https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/CHANGELOG.md"
+
 fun changelogToHtml(markdown: String): String {
     fun inline(text: String): String {
         var out = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -33,21 +38,24 @@ fun changelogToHtml(markdown: String): String {
 
     val html = StringBuilder()
     var inList = false
+    var truncated = false
     var releaseHeadings = 0
     for (line in markdown.lines()) {
-        if (line.startsWith("# ")) {
-            if (++releaseHeadings > 2) break
-            if (inList) { html.append("</ul>"); inList = false }
-            html.append("<h3>").append(inline(line.removePrefix("# ").trim())).append("</h3>")
-        } else if (line.startsWith("## ")) {
-            if (inList) { html.append("</ul>"); inList = false }
-            html.append("<h4>").append(inline(line.removePrefix("## ").trim())).append("</h4>")
-        } else if (line.startsWith("* ")) {
-            if (!inList) { html.append("<ul>"); inList = true }
-            html.append("<li>").append(inline(line.removePrefix("* ").trim())).append("</li>")
+        val element = when {
+            line.startsWith("# ") -> "<h3>${inline(line.removePrefix("# ").trim())}</h3>"
+            line.startsWith("## ") -> "<h4>${inline(line.removePrefix("## ").trim())}</h4>"
+            line.startsWith("* ") -> "<li>${inline(line.removePrefix("* ").trim())}</li>"
+            else -> continue
         }
+        if (line.startsWith("# ") && ++releaseHeadings > 2) break
+        if (html.length + element.length > CHANGE_NOTES_BUDGET) { truncated = true; break }
+        val isItem = line.startsWith("* ")
+        if (inList && !isItem) { html.append("</ul>"); inList = false }
+        if (!inList && isItem) { html.append("<ul>"); inList = true }
+        html.append(element)
     }
     if (inList) html.append("</ul>")
+    if (truncated) html.append("<p><a href=\"$FULL_CHANGELOG_URL\">Full changelog</a></p>")
     return html.toString()
 }
 
@@ -121,7 +129,9 @@ tasks.test {
 intellijPlatform {
     pluginConfiguration {
         id = providers.gradleProperty("pluginId")
-        name = "Reqnroll Extension for Rider (Preview)"
+        // Not "... for Rider": the Plugin Verifier rejects a plugin name containing the IDE name (same
+        // rule as for the plugin ID, see gradle.properties). Rider's plugin list is Rider-only anyway.
+        name = "Reqnroll Extension (Preview)"
         version = providers.gradleProperty("pluginVersion")
         changeNotes = providers
             .fileContents(rootProject.layout.projectDirectory.file("../../CHANGELOG.md"))
