@@ -5,3 +5,6 @@ server/
 testlogger/
 mtpreporter/
 *.vsix
+
+# Copied from the repo root by scripts/copy-changelog.mjs at package time
+CHANGELOG.md

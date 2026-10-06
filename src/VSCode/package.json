@@ -1,15 +1,26 @@
 {
   "name": "reqnroll-ide-support",
   "displayName": "Reqnroll Extension for VS Code (Preview)",
-  "description": "[Preview] Gherkin language support for Reqnroll — syntax highlighting, diagnostics, step navigation, completion, and more via the Reqnroll LSP server.",
+  "description": "[Preview] Support for Reqnroll & Gherkin — syntax highlighting, navigation, completion, and more.",
   "version": "0.1.0",
   "publisher": "Reqnroll",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#c4d600",
+    "theme": "light"
+  },
+  "homepage": "https://reqnroll.net",
+  "bugs": {
+    "url": "https://github.com/reqnroll/Reqnroll.IdeSupport/issues"
+  },
   "engines": {
     "vscode": "^1.96.0"
   },
   "categories": [
     "Programming Languages",
+    "Testing",
+    "Formatters",
     "Linters",
     "Snippets"
   ],
@@ -182,7 +193,7 @@
             "verbose"
           ],
           "default": "off",
-          "description": "Traces the communication between VS Code and the Reqnroll LSP server, and also controls the server's own log verbosity ('off' -> Warning, 'messages' -> Info, 'verbose' -> Verbose). When set to 'verbose', a log file is also written to the Reqnroll log directory. Requires a window reload to take effect on the running server."
+          "description": "Turns on troubleshooting output for the Reqnroll extension and its language server. Use \"messages\" or \"verbose\" when you are asked for logs to report a problem; \"verbose\" also saves a log file to the Reqnroll log folder. Reload the window after changing it."
         },
         "reqnroll.protocolLogLevel": {
           "type": "string",
@@ -194,12 +205,12 @@
             "Verbose"
           ],
           "default": "Warning",
-          "description": "Controls the verbosity of the Reqnroll LSP server's own internal protocol diagnostics (OmniSharp request dispatch, DryIoc, JSON-RPC plumbing), passed to the server as --protocol-log-level and written to both window/logMessage and the dedicated reqnroll-vscode-protocol-*.log file. Independent of reqnroll.trace.server, which drives the server's --log-level. Requires a window reload to take effect on the running server."
+          "description": "How much low-level technical detail the Reqnroll language server writes to its protocol log. Leave it at Warning unless you are asked for more detail when reporting a problem. Reload the window after changing it."
         },
         "reqnroll.testOutcomes.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Opt-in (LSP-server outcome pipeline, #700/#702). C# Dev Kit owns test discovery/execution in VS Code, not this extension (issue #504) -- when enabled, Reqnroll registers a run with the LSP server and merges the bundled VSTest logger into the 'dotnet.unitTests.runSettingsPath' setting C# Dev Kit already reads, so per-row Scenario Outline outcomes and failed-step detail become available without changing how you run tests. Off by default because this writes to a setting your workspace may already have its own value for; your existing runsettings file's content is preserved and merged, never replaced. Requires a window reload to take effect."
+          "description": "Show the result of each example of a Scenario Outline, and the details of the failed step, after you run tests with C# Dev Kit. When turned on, Reqnroll adds its test logger to the runsettings file that C# Dev Kit uses (the dotnet.unitTests.runSettingsPath setting); your existing runsettings content is kept. Off by default because it changes that setting. Reload the window after changing it."
         }
       }
     },
@@ -269,7 +280,7 @@
   },
   "main": "./out/extension.js",
   "scripts": {
-    "vscode:prepublish": "npm run compile && npm run bundle",
+    "vscode:prepublish": "node scripts/copy-changelog.mjs && npm run compile && npm run bundle",
     "compile": "tsc -p ./tsconfig.json",
     "bundle": "node scripts/esbuild.mjs",
     "watch": "tsc -watch -p ./tsconfig.json",
@@ -312,7 +323,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes.git"
+    "url": "https://github.com/reqnroll/Reqnroll.IdeSupport.git"
   },
   "dependencies": {
     "@vscode/extension-telemetry": "^1.5.2",
