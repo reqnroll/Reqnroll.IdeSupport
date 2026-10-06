@@ -5,12 +5,11 @@ import com.intellij.codeInsight.codeVision.CodeVisionEntry
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.actions.GoToHooksRunner
 import com.reqnroll.ide.rider.telemetry.RiderTelemetryTransmitter
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.CodeLens
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Shared lens-computation logic for [HookCodeVisionProvider] and [StepHooksCodeVisionProvider] —
@@ -72,7 +71,7 @@ internal object HookLensSupport {
         providerId: String,
         wantStepHooksLens: Boolean,
     ): List<Pair<TextRange, CodeVisionEntry>> {
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(filePath))
+        val uri = localPathToLspUri(filePath)
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
 
         return lenses

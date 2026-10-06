@@ -4,8 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.util.io.URLUtil
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Find Step Definition Usages — the Rider-side surface for the position-based
@@ -31,7 +30,7 @@ class FindStepUsagesAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
+        val uri = localPathToLspUri(file.path)
         val position = editor.caretModel.logicalPosition
 
         FindStepUsagesRunner.runAndShow(project, uri, position.line, position.column)

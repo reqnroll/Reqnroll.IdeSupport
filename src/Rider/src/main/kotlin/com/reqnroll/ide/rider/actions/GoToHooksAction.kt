@@ -4,8 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.util.io.URLUtil
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Go to Hooks — the Rider-side surface for the position-based `reqnroll/findHooks` request
@@ -29,7 +28,7 @@ class GoToHooksAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
+        val uri = localPathToLspUri(file.path)
         val position = editor.caretModel.logicalPosition
 
         GoToHooksRunner.runAndShow(

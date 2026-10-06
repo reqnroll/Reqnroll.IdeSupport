@@ -13,10 +13,9 @@ import com.intellij.openapi.util.TextRange
 import com.reqnroll.ide.rider.actions.FindStepUsagesRunner
 import com.reqnroll.ide.rider.actions.GoToMatchingScenariosRunner
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
-import com.intellij.util.io.URLUtil
-import com.intellij.openapi.vfs.VirtualFileManager
 import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.Command
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * CodeVision lens above `.cs` binding methods showing either "N step usages" (step-definition
@@ -112,7 +111,7 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return emptyList()
         if (!file.extension.equals("cs", ignoreCase = true)) return emptyList()
 
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
+        val uri = localPathToLspUri(file.path)
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
 
         val document = editor.document
