@@ -139,7 +139,8 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
         private fun refresh(project: Project, editor: Editor, virtualFile: VirtualFile) {
             if (project.isDisposed || editor.isDisposed) return
 
-            if (!ReqnrollFeatureInlayHintsSettings.isEnabled) {
+            // Rider 2026.2+ renders the server's inlay hints itself (see NativeLspInlayHints); ours would duplicate them.
+            if (NativeLspInlayHints.isRenderedByPlatform || !ReqnrollFeatureInlayHintsSettings.isEnabled) {
                 clearInlays(editor)
                 return
             }
