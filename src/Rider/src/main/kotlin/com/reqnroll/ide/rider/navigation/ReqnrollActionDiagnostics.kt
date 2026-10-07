@@ -17,7 +17,11 @@ import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 class ReqnrollActionDiagnostics : AnActionListener {
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
         val id = ActionManager.getInstance().getId(action) ?: return
-        if (!id.contains("Goto", ignoreCase = true) && !id.startsWith("Reqnroll.")) return
+        val input = event.inputEvent
+        val isNavigationInput =
+            (input is java.awt.event.KeyEvent && input.keyCode == java.awt.event.KeyEvent.VK_F12) ||
+                (input is java.awt.event.MouseEvent && input.isControlDown)
+        if (!isNavigationInput && !id.contains("Goto", ignoreCase = true) && !id.startsWith("Reqnroll.")) return
         val file = event.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
         if (!isFeatureExtension(file.extension)) return
 

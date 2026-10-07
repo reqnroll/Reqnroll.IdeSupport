@@ -15,10 +15,24 @@ import com.reqnroll.ide.rider.isFeatureExtension
  */
 class ReqnrollGoToDefinitionPromoter : ActionPromoter {
     override fun suppress(actions: List<AnAction>, context: DataContext): List<AnAction> {
-        val file = CommonDataKeys.VIRTUAL_FILE.getData(context) ?: return emptyList()
-        if (!isFeatureExtension(file.extension) || !NativeLspCodeLens.isRenderedByPlatform) return emptyList()
+        if (!appliesTo(context)) return emptyList()
 
         val actionManager = ActionManager.getInstance()
         return actions.filter { actionManager.getId(it) == ReqnrollGoToDefinitionAction.GO_TO_DECLARATION_ID }
+    }
+
+    /**
+     * Also puts ours first: F12 and Ctrl+click resolve to several actions sharing the shortcut
+     * (`GotoDeclaration`, `ClickLink`, Rider's `InlayClickAction`, ...), and suppressing only
+     * `GotoDeclaration` left another of them to win the shortcut ahead of this action (#909).
+     */
+    override fun promote(actions: List<AnAction>, context: DataContext): List<AnAction> {
+        if (!appliesTo(context)) return emptyList()
+        return actions.filterIsInstance<ReqnrollGoToDefinitionAction>()
+    }
+
+    private fun appliesTo(context: DataContext): Boolean {
+        val file = CommonDataKeys.VIRTUAL_FILE.getData(context) ?: return false
+        return isFeatureExtension(file.extension) && NativeLspCodeLens.isRenderedByPlatform
     }
 }
