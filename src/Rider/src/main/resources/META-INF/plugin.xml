@@ -35,6 +35,8 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollDocumentActivationSync" />
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.ReqnrollServerLifecycleListener" />
     <postStartupActivity implementation="com.reqnroll.ide.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
+    <!-- Diagnostic for issue #909 (F12 / Ctrl+click routing); remove with ReqnrollActionDiagnostics. -->
+    <postStartupActivity implementation="com.reqnroll.ide.rider.navigation.ReqnrollKeymapDiagnostics" />
 
     <!-- The built-in CommentByLineComment action (Ctrl+/) is a MultiCaretCodeInsightAction that
          hardcodes its own handler and gates on LanguageCommenters.forLanguage finding a Commenter
