@@ -210,7 +210,7 @@
         "reqnroll.testOutcomes.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Show the result of each example of a Scenario Outline, and the details of the failed step, after you run tests with C# Dev Kit. When turned on, Reqnroll adds its test logger to the runsettings file that C# Dev Kit uses (the dotnet.unitTests.runSettingsPath setting); your existing runsettings content is kept. Off by default because it changes that setting. Reload the window after changing it."
+          "description": "Show the result of each example of a Scenario Outline, and the details of the failed step, after you run tests with C# Dev Kit. When turned on, Reqnroll adds its test logger to the runsettings file named by the dotnet.unitTests.runSettingsPath setting (provided by the C# extension and used by C# Dev Kit); your existing runsettings content is kept. It has no effect if that setting is not available. Off by default because it changes that setting. Reload the window after changing it."
         }
       }
     },

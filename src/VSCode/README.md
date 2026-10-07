@@ -29,7 +29,8 @@ See the [feature overview](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/
 ## Requirements
 
 * VS Code 1.96 or later
-* A .NET project that uses Reqnroll. The [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit) is recommended; the `reqnroll.testOutcomes.enabled` setting builds on its test runner.
+* A .NET project that uses Reqnroll.
+* Optional: the [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit) for running tests from VS Code. Reqnroll does not depend on it. Only `reqnroll.testOutcomes.enabled` interacts with it, through the `dotnet.unitTests.runSettingsPath` setting that the C# extension provides.
 
 ## Settings
 
@@ -37,7 +38,7 @@ See the [feature overview](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/
 |---|---|
 | `reqnroll.trace.server` | Turns on troubleshooting output. Use it when you are asked for logs to report a problem. |
 | `reqnroll.protocolLogLevel` | How much low-level technical detail the language server logs. Leave it at the default unless asked. |
-| `reqnroll.testOutcomes.enabled` | Show per-example results for Scenario Outline runs and failed-step details after running tests with C# Dev Kit. |
+| `reqnroll.testOutcomes.enabled` | Show per-example results for Scenario Outline runs and failed-step details after running tests with C# Dev Kit. Off by default; has no effect if the `dotnet.unitTests.runSettingsPath` setting is not available. |
 
 ## Links
 
