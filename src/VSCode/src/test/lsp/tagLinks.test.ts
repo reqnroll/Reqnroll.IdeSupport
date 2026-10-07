@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {
   OPEN_TAG_LINK_COMMAND,
+  TagLinkDecorations,
   createTagLinkMiddleware,
   isOpenableUrl,
   openTagLink,
@@ -60,6 +61,88 @@ suite('tagLinks', () => {
     const result = await middleware.provideDocumentLinks!({} as never, {} as never, () => null);
 
     assert.ok(result === null || result === undefined);
+  });
+
+  suite('TagLinkDecorations (issue #921)', () => {
+    const docUri = vscode.Uri.parse('untitled:/a.feature');
+
+    /** A fake editor on `uri` that records every setDecorations call. */
+    function fakeEditor(uri: vscode.Uri) {
+      const calls: vscode.Range[][] = [];
+      const editor = {
+        document: { uri },
+        setDecorations: (_type: unknown, ranges: vscode.Range[]) => calls.push(ranges),
+      } as unknown as vscode.TextEditor;
+      return { editor, calls };
+    }
+
+    function create(editors: vscode.TextEditor[]) {
+      const type = vscode.window.createTextEditorDecorationType({ textDecoration: 'underline' });
+      return new TagLinkDecorations(() => editors, type);
+    }
+
+    test('record paints the visible editor of that document with the link ranges', () => {
+      const { editor, calls } = fakeEditor(docUri);
+      const decorations = create([editor]);
+
+      decorations.record(docUri, [range]);
+
+      assert.deepStrictEqual(calls, [[range]]);
+      assert.deepStrictEqual(decorations.rangesFor(docUri), [range]);
+      decorations.dispose();
+    });
+
+    test('record leaves editors of other documents alone', () => {
+      const { editor, calls } = fakeEditor(vscode.Uri.parse('untitled:/other.feature'));
+      const decorations = create([editor]);
+
+      decorations.record(docUri, [range]);
+
+      assert.deepStrictEqual(calls, []);
+      decorations.dispose();
+    });
+
+    test('an empty answer clears the styling', () => {
+      const { editor, calls } = fakeEditor(docUri);
+      const decorations = create([editor]);
+      decorations.record(docUri, [range]);
+
+      decorations.record(docUri, []);
+
+      assert.deepStrictEqual(calls[calls.length - 1], []);
+      assert.deepStrictEqual(decorations.rangesFor(docUri), []);
+      decorations.dispose();
+    });
+
+    test('middleware records the retargeted links, dropping the non-openable ones', async () => {
+      const { editor, calls } = fakeEditor(docUri);
+      const decorations = create([editor]);
+      const middleware = createTagLinkMiddleware(decorations);
+      const other = new vscode.Range(3, 0, 3, 5);
+      const next = () => [
+        new vscode.DocumentLink(range, vscode.Uri.parse(issueUrl)),
+        new vscode.DocumentLink(other, vscode.Uri.file('/etc/passwd')),
+      ];
+
+      await middleware.provideDocumentLinks!({ uri: docUri } as never, {} as never, next);
+
+      assert.deepStrictEqual(calls, [[range]]);
+      decorations.dispose();
+    });
+
+    test('middleware keeps the last known styling when the request returns nothing', async () => {
+      const { editor, calls } = fakeEditor(docUri);
+      const decorations = create([editor]);
+      decorations.record(docUri, [range]);
+      calls.length = 0;
+      const middleware = createTagLinkMiddleware(decorations);
+
+      await middleware.provideDocumentLinks!({ uri: docUri } as never, {} as never, () => null);
+
+      assert.deepStrictEqual(calls, []);
+      assert.deepStrictEqual(decorations.rangesFor(docUri), [range]);
+      decorations.dispose();
+    });
   });
 
   test('openTagLink opens an http(s) URL', async () => {
