@@ -123,6 +123,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
     <fileBreadcrumbsCollector implementation="com.reqnroll.ide.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector" />
   </extensions>
 
+  <applicationListeners>
+    <!-- Diagnostic for issue #909: logs which Go To action runs for a .feature editor. -->
+    <listener class="com.reqnroll.ide.rider.navigation.ReqnrollActionDiagnostics"
+        topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />
+  </applicationListeners>
+
   <actions>
     <group id="Reqnroll.ActionGroup" text="Reqnroll" popup="true">
       <add-to-group group-id="ToolsMenu" anchor="last" />
@@ -176,8 +182,14 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
       <action id="Reqnroll.GoToDefinition"
           class="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionAction"
           text="Reqnroll: Go to Step Definition"
-          description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)"
-          use-shortcut-of="GotoDeclaration" />
+          description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
+        <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
+             dispatcher did not pick up for this action. "Visual Studio 2022" inherits "Visual Studio". -->
+        <keyboard-shortcut keymap="$default" first-keystroke="control B" />
+        <mouse-shortcut keymap="$default" keystroke="ctrl button1" />
+        <keyboard-shortcut keymap="Visual Studio" first-keystroke="F12" />
+        <mouse-shortcut keymap="Visual Studio" keystroke="ctrl button1" />
+      </action>
 
       <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI
            language is registered for Gherkin in this plugin, so nothing else (native or

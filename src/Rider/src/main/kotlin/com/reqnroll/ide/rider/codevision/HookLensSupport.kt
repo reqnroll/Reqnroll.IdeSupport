@@ -71,6 +71,9 @@ internal object HookLensSupport {
         providerId: String,
         wantStepHooksLens: Boolean,
     ): List<Pair<TextRange, CodeVisionEntry>> {
+        // Rider 2026.2+ renders these lenses itself (see NativeLspCodeLens); a second copy would be a duplicate.
+        if (NativeLspCodeLens.isRenderedByPlatform) return emptyList()
+
         val uri = localPathToLspUri(filePath)
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
 
