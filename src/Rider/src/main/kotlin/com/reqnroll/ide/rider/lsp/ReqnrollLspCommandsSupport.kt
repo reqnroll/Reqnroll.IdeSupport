@@ -1,5 +1,7 @@
 package com.reqnroll.ide.rider.lsp
 
+import com.google.gson.JsonPrimitive
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.LspServer
 import com.intellij.platform.lsp.api.customization.LspCommandsSupport
@@ -37,7 +39,7 @@ class ReqnrollLspCommandsSupport : LspCommandsSupport() {
         run(server.project, action)
     }
 
-    private fun run(project: com.intellij.openapi.project.Project, action: LensCommand) {
+    private fun run(project: Project, action: LensCommand) {
         when (action) {
             is LensCommand.FindStepUsages -> FindStepUsagesRunner.runAndShow(project, action.uri, action.line, action.character)
             is LensCommand.NoStepUsages -> FindStepUsagesRunner.showNoUsages(project)
@@ -53,7 +55,7 @@ class ReqnrollLspCommandsSupport : LspCommandsSupport() {
         /** Pure, so the argument handling is testable without a platform fixture. Null for any command that isn't one of ours. */
         internal fun parseLensCommand(command: Command): LensCommand? {
             val args = command.arguments
-            val uri = args?.getOrNull(0)?.let { raw -> if (raw is com.google.gson.JsonPrimitive) raw.asString else raw.toString() }
+            val uri = args?.getOrNull(0)?.let { raw -> if (raw is JsonPrimitive) raw.asString else raw.toString() }
             val line = HookLensSupport.argAsInt(args, 1)
             val character = HookLensSupport.argAsInt(args, 2)
             return when (command.command) {
