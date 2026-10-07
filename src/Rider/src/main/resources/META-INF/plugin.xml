@@ -46,6 +46,11 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          first approach tried) doesn't work for this particular built-in action. -->
     <actionPromoter implementation="com.reqnroll.ide.rider.commenting.ReqnrollCommentTogglePromoter" />
 
+    <!-- Rider 2026.2 routes the Go to Declaration shortcuts (F12, Ctrl+B, Ctrl+click) through its
+         ReSharper backend first, which knows nothing about Gherkin; ReqnrollGoToDefinitionAction runs
+         the frontend action directly for .feature files instead (issue #909). -->
+    <actionPromoter implementation="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionPromoter" />
+
     <!-- Rider's generic LSP client has no rendering-side consumer for textDocument/codeLens or
          textDocument/inlayHint at all (confirmed by decompiling — only capability-name
          bookkeeping exists in com.intellij.platform.lsp.impl.LspDynamicCapabilities). Both
@@ -167,6 +172,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
         <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH" />
       </action>
+
+      <action id="Reqnroll.GoToDefinition"
+          class="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionAction"
+          text="Reqnroll: Go to Step Definition"
+          description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)"
+          use-shortcut-of="GotoDeclaration" />
 
       <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI
            language is registered for Gherkin in this plugin, so nothing else (native or
