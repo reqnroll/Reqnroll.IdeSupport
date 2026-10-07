@@ -110,6 +110,8 @@ class StepUsagesCodeVisionProvider : CodeVisionProvider<Unit> {
         val project = editor.project ?: return emptyList()
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return emptyList()
         if (!file.extension.equals("cs", ignoreCase = true)) return emptyList()
+        // Rider 2026.2+ renders these lenses itself (see NativeLspCodeLens); a second copy would be a duplicate.
+        if (NativeLspCodeLens.isRenderedByPlatform) return emptyList()
 
         val uri = localPathToLspUri(file.path)
         val lenses = ReqnrollRequestSender.codeLens(project, uri) ?: return emptyList()
