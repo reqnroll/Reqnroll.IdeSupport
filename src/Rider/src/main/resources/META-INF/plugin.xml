@@ -35,8 +35,6 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollDocumentActivationSync" />
     <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.ReqnrollServerLifecycleListener" />
     <postStartupActivity implementation="com.reqnroll.ide.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
-    <!-- Diagnostic for issue #909 (F12 / Ctrl+click routing); remove with ReqnrollActionDiagnostics. -->
-    <postStartupActivity implementation="com.reqnroll.ide.rider.navigation.ReqnrollKeymapDiagnostics" />
 
     <!-- The built-in CommentByLineComment action (Ctrl+/) is a MultiCaretCodeInsightAction that
          hardcodes its own handler and gates on LanguageCommenters.forLanguage finding a Commenter
@@ -124,12 +122,6 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          overridden to false. -->
     <fileBreadcrumbsCollector implementation="com.reqnroll.ide.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector" />
   </extensions>
-
-  <applicationListeners>
-    <!-- Diagnostic for issue #909: logs which Go To action runs for a .feature editor. -->
-    <listener class="com.reqnroll.ide.rider.navigation.ReqnrollActionDiagnostics"
-        topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />
-  </applicationListeners>
 
   <actions>
     <group id="Reqnroll.ActionGroup" text="Reqnroll" popup="true">

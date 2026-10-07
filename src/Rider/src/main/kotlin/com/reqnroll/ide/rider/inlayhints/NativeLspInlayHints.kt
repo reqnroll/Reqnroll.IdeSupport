@@ -10,8 +10,11 @@ import com.intellij.openapi.extensions.ExtensionPointName
  * the declarative framework this plugin originally had to bypass — does show hints in `.feature`
  * files. With both active every hint appeared twice (a truncated pill from
  * [ReqnrollFeatureInlayHintsController] and the full text from the platform), so the controller stands
- * down there; the platform's hints are switched in Settings > Editor > Inlay Hints instead of the
- * Tools-menu toggle.
+ * down there and the Tools-menu toggle is hidden. Known limitation: the platform's own
+ * "LSP-based inlays" checkbox (Settings > Editor > Inlay Hints) does not switch these hints off —
+ * nothing in its `lsp.impl` module consults `InlayHintsSettings` (decompiled, 2026.2.3.1) — so on
+ * 2026.2+ the hints cannot be disabled. Turning them off needs the 2026.2-only `LspInlayHintDisabled`
+ * customizer or a server-side switch.
  */
 internal object NativeLspInlayHints {
     private const val PROVIDER_FACTORY_CLASS = "com.intellij.platform.lsp.impl.features.inlayCommon.LspInlayHintsProviderFactory"
