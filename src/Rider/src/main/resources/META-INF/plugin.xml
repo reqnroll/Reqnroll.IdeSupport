@@ -184,11 +184,14 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
           text="Reqnroll: Go to Step Definition"
           description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
         <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
-             dispatcher did not pick up for this action. "Visual Studio 2022" inherits "Visual Studio". -->
+             dispatcher did not pick up for this action. "Visual Studio 2022" is listed explicitly too: bindings added to
+             its parent "Visual Studio" alone did not take effect for it. -->
         <keyboard-shortcut keymap="$default" first-keystroke="control B" />
         <mouse-shortcut keymap="$default" keystroke="ctrl button1" />
         <keyboard-shortcut keymap="Visual Studio" first-keystroke="F12" />
         <mouse-shortcut keymap="Visual Studio" keystroke="ctrl button1" />
+        <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F12" />
+        <mouse-shortcut keymap="Visual Studio 2022" keystroke="ctrl button1" />
       </action>
 
       <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI
