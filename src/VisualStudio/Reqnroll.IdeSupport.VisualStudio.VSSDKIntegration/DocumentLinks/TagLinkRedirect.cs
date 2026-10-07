@@ -24,7 +24,20 @@ public readonly record struct TagLinkEntry(int StartLine, int StartChar, int End
 public static class TagLinkRedirect
 {
     /// <summary>Delegate set by the Extension project: <c>(fileUri, ct) =&gt;</c> the links in that file. Null when the server is not initialized.</summary>
-    public static Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? GetLinksAsync { get; set; }
+    public static Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? GetLinksAsync
+    {
+        get => _getLinksAsync;
+        set
+        {
+            _getLinksAsync = value;
+            // Buffers restored with the solution are classified before the server connects and found no link source;
+            // hand them one as soon as it exists.
+            if (value is not null)
+                TrackerRegistry.InvalidateAll();
+        }
+    }
+
+    private static volatile Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? _getLinksAsync;
 
     /// <summary>
     /// Callback set by the Extension project, invoked once per Ctrl+Click that opens a tag link, so the

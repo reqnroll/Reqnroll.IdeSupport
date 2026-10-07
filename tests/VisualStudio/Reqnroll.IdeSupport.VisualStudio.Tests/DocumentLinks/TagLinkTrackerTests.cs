@@ -13,6 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.DocumentLinks;
 /// <see cref="TagLinkTracker"/>, and the MEF metadata that makes the classifier and the hover source apply to
 /// Gherkin buffers only. The live behaviour (underline in the editor, the hover tooltip) needs a running Visual Studio.
 /// </summary>
+[Collection("TagLinkRedirect static state")]
 public class TagLinkTrackerTests
 {
     // "Feature: F\n@issue:1234 @smoke\nScenario: S\n" - lines start at 0, 11 and 30; 42 characters in all.
@@ -39,6 +40,46 @@ public class TagLinkTrackerTests
     }
 
     private static SnapshotSpan? Map(TagLinkEntry link) => TagLinkTracker.TryGetSpan(CreateSnapshot(), link);
+
+    // ── Restored tab ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_tracker_created_before_the_link_source_exists_fetches_once_the_source_is_assigned()
+    {
+        TagLinkRedirect.GetLinksAsync = null;
+        TagLinkTracker? tracker = null;
+        try
+        {
+            var snapshot = CreateSnapshot();
+            var buffer = Substitute.For<ITextBuffer>();
+            buffer.Properties.Returns(new PropertyCollection());
+            buffer.CurrentSnapshot.Returns(snapshot);
+            var document = Substitute.For<ITextDocument>();
+            document.FilePath.Returns("C:/repo/a.feature");
+            buffer.Properties.AddProperty(typeof(ITextDocument), document);
+
+            tracker = TagLinkTracker.GetOrCreate(buffer, null);
+            await Task.Delay(100); // the constructor's refresh found no source and gave up
+            tracker.Links.Should().BeEmpty();
+
+            var fetched = new TaskCompletionSource<string>();
+            TagLinkRedirect.GetLinksAsync = (uri, _) =>
+            {
+                fetched.TrySetResult(uri);
+                return Task.FromResult<IReadOnlyList<TagLinkEntry>>(Array.Empty<TagLinkEntry>());
+            };
+
+            var winner = await Task.WhenAny(fetched.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+            winner.Should().BeSameAs(fetched.Task, "assigning the link source must re-request the links of open buffers");
+        }
+        finally
+        {
+            TagLinkRedirect.GetLinksAsync = null;
+            // The registry is process-wide: leave no tracker behind to answer another test's link source.
+            if (tracker is not null)
+                TagLinkRedirect.TrackerRegistry.UnregisterTagger(tracker, TagLinkTracker.RegistryKey);
+        }
+    }
 
     // ── TryGetSpan ───────────────────────────────────────────────────────────
 

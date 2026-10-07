@@ -36,11 +36,13 @@ internal sealed class TagLinkTracker
     /// <summary>How long after the last edit the links are re-requested.</summary>
     internal const int DebounceMilliseconds = 400;
 
+    // Trackers are invalidated wholesale, never per file, so they share one registry bucket.
+    internal const string RegistryKey = "*";
+
     private readonly ITextBuffer _buffer;
     private readonly IIdeSupportLogger? _logger;
     private readonly object _gate = new();
     private CancellationTokenSource? _refresh;
-    private string? _registeredFileUri;
     private volatile IReadOnlyList<TrackedLink> _links = Array.Empty<TrackedLink>();
 
     /// <summary>Raised, from any thread, when the set of links changed; the span covers the whole buffer.</summary>
@@ -51,6 +53,9 @@ internal sealed class TagLinkTracker
         _buffer = buffer;
         _logger = logger;
         buffer.PostChanged += OnBufferChanged;
+        // Registered up front, before the server link source or the file path may exist: a restored tab's buffer is
+        // classified before the language client connects, and the connection's InvalidateAll must reach it.
+        TagLinkRedirect.TrackerRegistry.RegisterTagger(this, RegistryKey);
         ScheduleRefresh(0);
     }
 
@@ -118,7 +123,6 @@ internal sealed class TagLinkTracker
             if (getLinks is null || fileUri is null)
                 return;
 
-            Register(fileUri);
             var entries = await getLinks(fileUri, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
 
@@ -162,14 +166,6 @@ internal sealed class TagLinkTracker
                 return false;
         }
         return true;
-    }
-
-    private void Register(string fileUri)
-    {
-        if (_registeredFileUri == fileUri)
-            return;
-        _registeredFileUri = fileUri;
-        TagLinkRedirect.TrackerRegistry.RegisterTagger(this, fileUri);
     }
 
     private string? TryGetFileUri()
