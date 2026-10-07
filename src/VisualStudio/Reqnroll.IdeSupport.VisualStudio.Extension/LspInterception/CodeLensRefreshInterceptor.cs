@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 using Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
@@ -125,6 +126,10 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
                 // doc §5/§6, issue #262) — a rebuilt .feature.cs (new/changed generated methods)
                 // means previously-resolved reqnroll/resolveTestTargets results may be stale.
                 RunTestCodeLensRedirect.InvalidateAll();
+
+                // The clickable-tag link styling (issue #921): the tag patterns live in the project's
+                // configuration, which can arrive after a restored tab first asked for its links.
+                TagLinkRedirect.InvalidateAll();
             }
             return Task.FromResult(LspInterceptorResult.PassThrough);
         }

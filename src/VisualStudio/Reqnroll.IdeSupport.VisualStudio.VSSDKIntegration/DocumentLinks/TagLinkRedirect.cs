@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
@@ -30,6 +31,15 @@ public static class TagLinkRedirect
     /// "TagLink command executed" telemetry event is emitted by the project that owns the transmitter.
     /// </summary>
     public static Action? LinkOpened { get; set; }
+
+    /// <summary>The trackers of every open <c>.feature</c> buffer, so a server-side change can make them re-request their links (issue #921).</summary>
+    internal static readonly WeakTaggerRegistry<TagLinkTracker> TrackerRegistry = new(tracker => tracker.RequestRefresh());
+
+    /// <summary>
+    /// Asks every open <c>.feature</c> buffer to re-request its links, e.g. once the project's tag patterns arrive with
+    /// the server's CodeLens refresh. Safe to call from any thread.
+    /// </summary>
+    public static void InvalidateAll() => TrackerRegistry.InvalidateAll();
 
     /// <summary>
     /// Only web links are opened: the target comes from user configuration (<c>reqnroll.json</c>), which a

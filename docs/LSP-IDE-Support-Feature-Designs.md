@@ -2088,6 +2088,12 @@ sequenceDiagram
     IDE-->>IDE: Render tags as hyperlinks
 ```
 
+#### Permanent link styling — Visual Studio (issue #921)
+
+The legacy extension emitted a `UrlTag` per link, and Visual Studio's own `UrlClassifier` drew the permanent underline and a tooltip. The new extension keeps the Ctrl+click navigable-symbol path instead, so the styling is supplied separately: `TagLinkTracker` (one per buffer, in `VSSDKIntegration/DocumentLinks`) fetches the links through `TagLinkRedirect.GetLinksAsync`, keeps only http(s) targets, holds each as a tracking span so it follows edits, and refreshes on a debounced buffer change and on the server's CodeLens refresh (`TagLinkRedirect.InvalidateAll`, via the shared `WeakTaggerRegistry`). `TagLinkClassifier` classifies each span with the editor's `url` classification type (link colour and underline); `TagLinkQuickInfoSourceProvider` shows the target URL and "CTRL + click to follow link" when the pointer rests on a link, with no modifier.
+
+It is deliberately **not** a `UrlTag` tagger: decompiling `Microsoft.VisualStudio.Platform.VSEditor.dll` shows the editor's Go To Definition mouse handler stands down wherever a `UrlTag` exists (`ExistsUrlTagAt`), which would bypass `TagLinkNavigableSymbolProvider` and with it the http(s)-only rule and the `TagLink command executed` telemetry.
+
 #### Implementation notes
 
 `DocumentLinkHandler` (`LSP.Server/Features/DocumentLinks/`) awaits `IParseCoordinator.WaitForReadyAsync`, then iterates the buffer's flat `IdeSupportTag` collection (`buffer.Tags`, the AST-like semantic tag collection, parents and children together) and keeps nodes of type `IdeSupportTagTypes.Tag` whose `Data` is a `Gherkin.Ast.Tag`. Each tag's name (which includes the leading `@`) is passed to `TraceabilityConfiguration.ResolveTagLink`, which trims the `@` and returns the first non-null `TagLinkConfiguration.ResolveUrl` across the configured links. `ResolveUrl` requires the pattern to match the **whole** tag name, expands each `{name}` placeholder in `UrlTemplate` from the pattern's named capture groups, and returns `null` unless the result is an absolute URI. The handler returns an empty container when the buffer or its tags are not yet available, or when no tag links are configured. The pattern/template logic lives in `Reqnroll.IdeSupport.Common` (`Configuration/`) so the regex stays internal to `TagLinkConfiguration`.
