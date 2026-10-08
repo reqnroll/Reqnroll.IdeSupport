@@ -197,7 +197,29 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // single binding class typically contributes many step definitions from the same file.
         var parsedFiles = new Dictionary<string, SyntaxNode>();
 
+        // Issue #930: a compiled binding is only as current as the assembly. After a branch switch
+        // with no rebuild, the assembly still describes files the working tree no longer has, and
+        // the Roslyn reconcile cannot revisit a file that is gone. A binding whose recorded source
+        // path is inside this project's folder and did not resolve is therefore stale and is left
+        // out. Paths outside the project folder (a NuGet package, a project reference, a container
+        // or CI build) never had local source to begin with, so they are not stale and are kept.
+        var staleSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var staleBindingCount = 0;
+        bool IsStale(string sourceLocation)
+        {
+            var recordedPath = importer.GetRecordedSourcePath(sourceLocation);
+            if (recordedPath == null
+                || !PathUtils.IsUnderFolder(recordedPath, scope.ProjectFolder)
+                || importer.ResolveSourceFilePath(sourceLocation) != null)
+                return false;
+
+            staleSourcePaths.Add(recordedPath);
+            staleBindingCount++;
+            return true;
+        }
+
         var stepDefinitions = (result.StepDefinitions ?? [])
+            .Where(sd => !IsStale(sd.SourceLocation))
             .Select(sd => {
                 // For connector-discovered bindings, backfill the attribute source line and the
                 // method identifier's own location from the source file using Roslyn syntax
@@ -252,6 +274,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // way (issue #540 F2). Hooks carry no attribute line (ProjectHookBinding does not model one),
         // so only the identifier location is backfilled here.
         var hooks = (result.Hooks ?? [])
+            .Where(h => !IsStale(h.SourceLocation))
             .Select(h => {
                 var root = TryGetParsedRoot(importer, h.SourceLocation, h.Method, parsedFiles, _fileSystem, _logger);
                 var bareMethodName = BindingImporter.ExtractBareMethodName(h.Method);
@@ -264,7 +287,8 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             .Where(h => h is not null)
             .ToList();
 
-        ReportUnresolvedSourceFiles(scope, importer);
+        ReportStaleBindings(scope, staleBindingCount, staleSourcePaths);
+        ReportUnresolvedSourceFiles(scope, importer, staleSourcePaths);
 
         // Use a stable hash of the output path as the project hash so the registry
         // can participate in the version-monotonicity guard in ProjectBindingRegistry.
@@ -330,6 +354,25 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     }
 
     /// <summary>
+    /// Reports, once per discovery run, the compiled bindings left out because their source file
+    /// under the project folder no longer exists (issue #930).
+    /// </summary>
+    private void ReportStaleBindings(IProjectScope scope, int staleBindingCount, ISet<string> staleSourcePaths)
+    {
+        if (staleBindingCount == 0)
+            return;
+
+        _logger.LogInfo(
+            $"[{scope.ProjectName}] Ignored {staleBindingCount} binding(s) in the compiled assembly whose " +
+            $"source file no longer exists under '{scope.ProjectFolder}' ({staleSourcePaths.Count} file(s), " +
+            $"e.g. '{staleSourcePaths.First()}'). The assembly is older than the working tree, for example " +
+            "after a branch switch; rebuild the project to refresh it.");
+
+        foreach (var path in staleSourcePaths)
+            _logger.LogVerbose($"[{scope.ProjectName}] Stale binding source path: '{path}'");
+    }
+
+    /// <summary>
     /// Reports, once per discovery run, the source paths this run could not place on this machine.
     /// </summary>
     /// <remarks>
@@ -339,9 +382,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// needs to be able to find out why. One warning per run naming the count, the example path and
     /// the remedy; the full list at verbose.
     /// </remarks>
-    private void ReportUnresolvedSourceFiles(IProjectScope scope, BindingImporter importer)
+    private void ReportUnresolvedSourceFiles(
+        IProjectScope scope, BindingImporter importer, ISet<string> staleSourcePaths)
     {
-        var unresolved = importer.UnresolvedSourceFiles;
+        // Stale paths are reported by ReportStaleBindings; they are not "built somewhere else".
+        var unresolved = importer.UnresolvedSourceFiles
+            .Where(path => !staleSourcePaths.Contains(path))
+            .ToList();
         if (unresolved.Count == 0)
             return;
 
