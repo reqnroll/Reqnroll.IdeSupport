@@ -45,6 +45,16 @@ object TagLinkSupport {
         TagLinkRange(start, end, target)
     }
 
+    /**
+     * The HTML of the hover hint shown over a clickable tag (issue #921): the target, and the gesture that follows it
+     * ([modifier] is the platform's link modifier, "Ctrl" or "Cmd"). The target comes from `reqnroll.json`, so it is escaped.
+     */
+    fun hoverHtml(target: String, modifier: String): String =
+        "<html>${escapeHtml(target)}<br>$modifier + click to follow link</html>"
+
+    private fun escapeHtml(text: String): String =
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
     /** The link covering [offset], if any. */
     fun linkAt(links: List<TagLinkRange>, offset: Int): TagLinkRange? = links.firstOrNull { it.contains(offset) }
 }

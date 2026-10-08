@@ -2,6 +2,7 @@
 
 ## Improvements:
 
+* In Rider, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (Rider) - see #921
 * In Visual Studio, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (VS) - see #921
 * In VS Code, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, so it is visible which tags are clickable (VS Code) - see #921
 * Go to Step Definition telemetry no longer counts hover lookups as navigations: `textDocument/definition` on a `.feature` file (VS Code and Rider send it for F12/Ctrl+click and on hover) now reports the lookup event `FindStepDefinitions command executed` (with `Protocol`) instead of `GoToStepDefinition command executed`, and Visual Studio, where that request is mostly a hover fall-through, reports nothing for it. VS Code now sends `GoToStepDefinition command executed` (`LocationCount`) from its "Go to Step Definition" picker command; F12/Ctrl+click in VS Code and Rider are no longer counted as navigations (LSP server, VS Code) - see #899, @clrudolphi

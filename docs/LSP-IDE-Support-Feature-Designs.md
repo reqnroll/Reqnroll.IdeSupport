@@ -2067,6 +2067,10 @@ VS Code only underlines a document link while Ctrl/Cmd is held over it, which hi
 
 `documentLink/resolve` is not supported (`ResolveProvider = false`): the target URL is computed eagerly, which is a regex match and string substitution with no I/O.
 
+#### Permanent link styling — Rider (issue #921)
+
+`ReqnrollFeatureTagLinkController` now stores each link as a range highlighter in the hyperlink colour with an underline (instead of only creating one while Ctrl/Cmd is held), so clickable tags are visible at all times; the highlighters follow edits until the next debounced refresh replaces them. Hovering a link for 500 ms, with no modifier, shows a hint with the target and "Ctrl + click to follow link" ("Cmd" on macOS; `TagLinkSupport.hoverHtml`, target HTML-escaped). Ctrl/Cmd+hover still adds the hand cursor, and Ctrl/Cmd+click opens the link as before.
+
 #### Sequence diagram
 
 ```mermaid
