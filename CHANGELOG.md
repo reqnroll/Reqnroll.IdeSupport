@@ -2,6 +2,7 @@
 
 ## Improvements:
 
+* A pre-release `reqnroll.version` such as `1.0.0-RC1` or `1.0.0-Beta` is now accepted instead of being rejected as malformed (which silently reset the whole Reqnroll configuration); the version format check is now case-insensitive and no longer accepts a trailing newline (LSP server) - see #971, @clrudolphi
 * In Rider, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (Rider) - see #921
 * In Visual Studio, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (VS) - see #921
 * In VS Code, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, so it is visible which tags are clickable (VS Code) - see #921

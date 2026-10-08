@@ -29,7 +29,7 @@ public class ReqnrollConfiguration
     {
         FixEmptyContainers();
 
-        if (Version != null && !Regex.IsMatch(Version, @"^(?:\.?[0-9]+){2,}(?:\-[\-a-z0-9]*)?$"))
+        if (Version != null && !Regex.IsMatch(Version, @"\A(?:\.?[0-9]+){2,}(?:\-[\-a-z0-9]*)?\z", RegexOptions.IgnoreCase))
             throw new IdeSupportConfigurationException("'reqnroll/version' was not in a correct format");
     }
 
