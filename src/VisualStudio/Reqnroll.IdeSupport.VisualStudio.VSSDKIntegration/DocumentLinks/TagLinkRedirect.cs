@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
 namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
@@ -23,13 +24,35 @@ public readonly record struct TagLinkEntry(int StartLine, int StartChar, int End
 public static class TagLinkRedirect
 {
     /// <summary>Delegate set by the Extension project: <c>(fileUri, ct) =&gt;</c> the links in that file. Null when the server is not initialized.</summary>
-    public static Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? GetLinksAsync { get; set; }
+    public static Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? GetLinksAsync
+    {
+        get => _getLinksAsync;
+        set
+        {
+            _getLinksAsync = value;
+            // Buffers restored with the solution are classified before the server connects and found no link source;
+            // hand them one as soon as it exists.
+            if (value is not null)
+                TrackerRegistry.InvalidateAll();
+        }
+    }
+
+    private static volatile Func<string, CancellationToken, Task<IReadOnlyList<TagLinkEntry>>>? _getLinksAsync;
 
     /// <summary>
     /// Callback set by the Extension project, invoked once per Ctrl+Click that opens a tag link, so the
     /// "TagLink command executed" telemetry event is emitted by the project that owns the transmitter.
     /// </summary>
     public static Action? LinkOpened { get; set; }
+
+    /// <summary>The trackers of every open <c>.feature</c> buffer, so a server-side change can make them re-request their links (issue #921).</summary>
+    internal static readonly WeakTaggerRegistry<TagLinkTracker> TrackerRegistry = new(tracker => tracker.RequestRefresh());
+
+    /// <summary>
+    /// Asks every open <c>.feature</c> buffer to re-request its links, e.g. once the project's tag patterns arrive with
+    /// the server's CodeLens refresh. Safe to call from any thread.
+    /// </summary>
+    public static void InvalidateAll() => TrackerRegistry.InvalidateAll();
 
     /// <summary>
     /// Only web links are opened: the target comes from user configuration (<c>reqnroll.json</c>), which a
