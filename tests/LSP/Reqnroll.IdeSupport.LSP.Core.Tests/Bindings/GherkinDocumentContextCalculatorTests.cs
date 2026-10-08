@@ -229,6 +229,36 @@ public class GherkinDocumentContextCalculatorTests
         results[1].Key.Should().Be("2");
     }
 
+    [Fact]
+    public void ScenarioOutline_with_short_examples_row_falls_back_to_placeholder_text()
+    {
+        // Issue #948: an Examples row with FEWER cells than its header keeps the missing
+        // column as a null TableCell in the Gherkin AST. Reading .Value on it must not throw;
+        // the missing placeholder falls back to its literal placeholder text.
+        const string text = """
+            Feature: F
+            Scenario Outline: SO
+              Given <a> plus <b>
+              Examples:
+                | a | b |
+                | 1 |
+            """;
+
+        var doc = ParseFeature(text);
+        var outline = doc.Feature.Children.OfType<ScenarioOutline>().Single();
+        var step = outline.Steps.First();
+
+        var featureCtx = new SimpleContext(null!, doc.Feature);
+        var outlineCtx = new SimpleContext(featureCtx, outline);
+
+        var results = GherkinDocumentContextCalculator
+            .GetScenarioOutlineStepsWithContexts(step, outlineCtx)
+            .ToList();
+
+        results.Should().ContainSingle()
+            .Which.Key.Should().Be("1 plus <b>");
+    }
+
     // ── minimal IGherkinDocumentContext helper ─────────────────────────────────
 
     private sealed class SimpleContext(IGherkinDocumentContext parent, object node) : IGherkinDocumentContext
