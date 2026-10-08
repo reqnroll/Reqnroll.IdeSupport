@@ -19,11 +19,13 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// <see cref="ExtractLiteralSegments"/> walks that compiled regex tracking group/class/quantifier
 /// depth (<c>(</c>/<c>[</c>/<c>{</c> and their closers), and only characters seen at depth zero —
 /// outside every group, character class, and quantifier — that aren't themselves a regex
-/// metacharacter or part of an escape sequence are accumulated as literal text. Anything at depth
-/// zero that touches an operator (<c>. ^ $ * + ? |</c>) breaks the current run instead of being
-/// included, and depth &gt; 0 content is skipped entirely rather than trusted. Because a depth-zero
-/// literal run contains no regex syntax at all, it is — by construction — exactly the text
-/// <see cref="Regex.Escape(string)"/> would have produced, so any string the full regex matches
+/// metacharacter or part of an escape sequence are accumulated as literal text. At depth zero a
+/// plain operator (<c>. ^ $ + |</c>) breaks the current run instead of being included, while a
+/// quantifier that may match zero occurrences (<c>?</c>, <c>*</c>, <c>{...}</c>) additionally drops
+/// the character it applies to before breaking the run, since that character is not required to be
+/// present (issue #947). Depth &gt; 0 content is skipped entirely rather than trusted. Because a
+/// depth-zero literal run contains no regex syntax at all, it is — by construction — exactly the
+/// text <see cref="Regex.Escape(string)"/> would have produced, so any string the full regex matches
 /// must contain it verbatim.
 /// </para>
 /// <para>
@@ -190,6 +192,16 @@ public sealed class StepLiteralIndex
             }
         }
 
+        // Removes the last appended character. Used when a following quantifier ('?', '*', '{...}')
+        // means that character may be absent from a matching string and is therefore not required
+        // literal text (issue #947). No-op when the run is empty, which is the case for a quantifier
+        // that directly follows a group/class close (their contents are never appended).
+        void DropQuantifiedCharacter()
+        {
+            if (current.Length > 0)
+                current.Length--;
+        }
+
         while (i < pattern.Length)
         {
             var c = pattern[i];
@@ -203,8 +215,25 @@ public sealed class StepLiteralIndex
                 continue;
             }
 
-            if (c is '(' or '[' or '{')
+            if (c is '(' or '[')
             {
+                Flush();
+                depth++;
+                i++;
+                continue;
+            }
+
+            if (c == '{')
+            {
+                // A quantifier like {0,1}, {2,3} or {2} applies to the single atom just before it.
+                // It may match zero occurrences (e.g. {0,1}), so that character is not guaranteed
+                // to be present -- drop it from the run before flushing (issue #947). Inspecting
+                // the bounds to keep the character when the minimum is >= 1 would narrow more
+                // tightly but risks nothing by being conservative here: dropping a literal only
+                // ever widens the candidate set, which is safe, whereas keeping one that isn't
+                // required would be a false negative. Entering depth skips the braced body so its
+                // digits are not mistaken for literal text.
+                DropQuantifiedCharacter();
                 Flush();
                 depth++;
                 i++;
@@ -221,10 +250,25 @@ public sealed class StepLiteralIndex
 
             if (depth == 0)
             {
-                if (c is '.' or '^' or '$' or '*' or '+' or '?' or '|')
+                if (c is '?' or '*')
+                {
+                    // Zero-or-one / zero-or-more: the character this quantifier applies to is not
+                    // required, so remove it from the run before flushing (issue #947). At depth 0
+                    // a quantifier can only apply to the character just appended -- one following
+                    // a group/class close sees an already-flushed, empty run -- so dropping the last
+                    // character targets exactly the quantified one. '+' is deliberately excluded:
+                    // it requires at least one occurrence, so its character genuinely stays.
+                    DropQuantifiedCharacter();
                     Flush();
+                }
+                else if (c is '.' or '^' or '$' or '+' or '|')
+                {
+                    Flush();
+                }
                 else
+                {
                     current.Append(c);
+                }
             }
 
             i++;
