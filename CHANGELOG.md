@@ -64,6 +64,7 @@
 
 ## Bug fixes:
 
+* Opening a `.feature` file in a compare (diff) window, e.g. from the Visual Studio Git Changes window, no longer floods the Reqnroll output pane with "IVsCodeWindow does not implement IVsDropdownBarManager" warnings (and later "giving up" warnings): the Navigation Bar client now recognises diff panes and stands down immediately (Visual Studio) - see #907, @clrudolphi
 * Deleting a line, or backspacing onto the end of a complete step, no longer pops up the completion list in a `.feature` file (Visual Studio reports the deleted text as a completion trigger); completion is also no longer offered when the caret sits in the indentation of a line that already has content, whatever kind of line it is (LSP server, VS) - see #897, @clrudolphi
 * Ctrl+hover in a `.feature` file no longer underlines text that does nothing when clicked (tags with no matching `Traceability.TagLinks` pattern, keywords, descriptions): the underline is now offered only on a step with at least one binding whose source is on this machine. Go to Step Definition lookups now send a new `FindStepDefinitions command executed` telemetry event (`LocationCount`, `Status`), and Visual Studio sends `GoToStepDefinition command executed` when the user actually navigates; abandoned hover lookups no longer log interceptor-fault warnings (VS) - see #898, #900, @clrudolphi
 
