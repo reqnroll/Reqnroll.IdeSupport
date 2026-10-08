@@ -6,11 +6,10 @@ import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollNotificationSender
 import com.reqnroll.ide.rider.lsp.protocol.DocumentActivatedParams
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Feeds `reqnroll/documentActivated` (issue #85) — Phase 4 of
@@ -55,11 +54,8 @@ class ReqnrollDocumentActivationSync : ProjectActivity {
     private fun isFeatureFile(file: VirtualFile) = file.extension.equals("feature", ignoreCase = true)
 
     private fun send(project: Project, file: VirtualFile) {
-        // Matches LspServerDescriptor.getFileUri's own construction (confirmed by decompiling
-        // Rider 2024.3.5's actual bytecode) rather than a hand-rolled "file://" + path string, so
-        // this lines up with whatever URI format the same LSP framework already used for this
-        // file's textDocument/didOpen.
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
+        // Same URI form as the platform's own textDocument/didOpen for this file — see localPathToLspUri.
+        val uri = localPathToLspUri(file.path)
         ReqnrollDebugLogger.verbose("documentActivated: $uri")
         ReqnrollNotificationSender.sendDocumentActivated(project, DocumentActivatedParams(uri))
     }

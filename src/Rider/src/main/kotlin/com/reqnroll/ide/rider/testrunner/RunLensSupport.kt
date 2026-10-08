@@ -5,13 +5,12 @@ import com.intellij.codeInsight.codeVision.ui.model.ClickableTextCodeVisionEntry
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.protocol.ScenarioTestTargetItem
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.SymbolKind
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Shared lens-computation logic for [RunTestCodeVisionProvider] — mirrors
@@ -84,7 +83,7 @@ internal object RunLensSupport {
         filePath: String,
         providerId: String,
     ): List<Pair<TextRange, CodeVisionEntry>> {
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(filePath))
+        val uri = localPathToLspUri(filePath)
         val symbols = ReqnrollRequestSender.documentSymbol(project, uri) ?: return emptyList()
         val scenarioSymbols = collectMethodSymbols(symbols)
         val containerSymbols = collectContainerSymbols(symbols)
