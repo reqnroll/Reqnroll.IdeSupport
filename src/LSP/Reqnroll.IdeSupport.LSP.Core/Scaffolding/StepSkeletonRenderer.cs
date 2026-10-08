@@ -167,22 +167,40 @@ public static class StepSkeletonRenderer
 
     internal static string EscapeForCucumber(string text)
     {
-        // Order matters: backslash first to avoid double-escaping
+        // Cucumber Expressions treat ( ) { } / and \ as special: an unescaped ) or /
+        // would turn the text into an unbalanced group or an alternation, so the
+        // generated binding would no longer match its own step.
+        // Order matters: backslash first to avoid double-escaping.
         return text
             .Replace("\\", "\\\\")
             .Replace("(", "\\(")
-            .Replace("{", "\\{");
+            .Replace("{", "\\{")
+            .Replace(")", "\\)")
+            .Replace("/", "\\/");
     }
 
     internal static string EscapeForRegex(string text)
     {
+        // Escape the full set of .NET regex metacharacters (the set Regex.Escape
+        // covers: \ * + ? | { [ ( ) ^ $ . #) so the generated binding matches its
+        // own step text. Whitespace is deliberately left literal -- Regex.Escape also
+        // escapes spaces, but that only matters under RegexOptions.IgnorePatternWhitespace
+        // (which generated bindings do not use) and would hurt readability.
+        // Order matters: backslash first to avoid double-escaping.
         return text
             .Replace("\\", "\\\\")
-            .Replace("(", "\\(")
-            .Replace(")", "\\)")
-            .Replace("{", "\\{")
             .Replace(".", "\\.")
-            .Replace("|", "\\|");
+            .Replace("$", "\\$")
+            .Replace("^", "\\^")
+            .Replace("{", "\\{")
+            .Replace("[", "\\[")
+            .Replace("(", "\\(")
+            .Replace("|", "\\|")
+            .Replace(")", "\\)")
+            .Replace("*", "\\*")
+            .Replace("+", "\\+")
+            .Replace("?", "\\?")
+            .Replace("#", "\\#");
     }
 
     // ── Method name ───────────────────────────────────────────────────────────────
