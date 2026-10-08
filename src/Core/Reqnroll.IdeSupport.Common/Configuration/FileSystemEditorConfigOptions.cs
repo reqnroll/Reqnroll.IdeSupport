@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace Reqnroll.IdeSupport.Common.Configuration;
 
@@ -16,16 +17,25 @@ internal sealed class FileSystemEditorConfigOptions : IEditorConfigOptions
         _values = values;
     }
 
-    /// <summary>Returns the value for <paramref name="key"/> converted to <typeparamref name="TResult"/> (bool, int, or string), or <paramref name="defaultValue"/> if absent or unsupported/unparsable.</summary>
+    /// <summary>Returns the value for <paramref name="key"/> converted to <typeparamref name="TResult"/> (bool, int, or string), or <paramref name="defaultValue"/> if absent, unparsable, or the EditorConfig keyword <c>unset</c>.</summary>
     public TResult GetOption<TResult>(string key, TResult defaultValue)
     {
         if (!_values.TryGetValue(key, out var raw))
             return defaultValue;
 
         if (typeof(TResult) == typeof(bool))
-            return (TResult)(object)(raw.Equals("true", StringComparison.OrdinalIgnoreCase));
-        if (typeof(TResult) == typeof(int) && int.TryParse(raw, out var i))
+        {
+            // bool.TryParse accepts only "true"/"false" (case-insensitive); anything else
+            // (garbage, or the EditorConfig keyword "unset") is treated as unset, so the
+            // caller's default is kept rather than a spurious false replacing a true default.
+            if (bool.TryParse(raw, out var b))
+                return (TResult)(object)b;
+        }
+        else if (typeof(TResult) == typeof(int)
+                 && int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i))
+        {
             return (TResult)(object)i;
+        }
         if (typeof(TResult) == typeof(string))
             return (TResult)(object)raw;
 
