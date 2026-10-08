@@ -68,6 +68,8 @@
 
 ## Bug fixes:
 
+* Go to Step Definition in VS Code no longer labels a step definition whose source file sits in a workspace folder that merely shares a prefix with another open folder (e.g. `Repo` and `RepoExtra`): the folder-prefix check now requires a path-separator boundary, so a file under `RepoExtra` falls back to its bare filename instead of being reported with a bogus `../RepoExtra/...` path resolved against `Repo` (VS Code) - see #1015
+
 * Find Step Usages and step-usage CodeLens no longer return a step definition's usages for a location in a file it has moved away from (for example after switching to a branch where the binding lives in a different file and back); a lookup now only returns usages recorded at the file being asked about (LSP server) - see #929, #928
 * After switching branches (or opening a solution) without rebuilding, step definitions and hooks recorded in the older compiled assembly whose source file no longer exists in the project folder are no longer kept: the feature file's hook CodeLenses and step-usage counts for bindings that are gone from source disappear instead of lingering until the next build. Bindings from outside the project folder (NuGet packages, project references, container or CI builds) are unaffected, and the number of ignored bindings is logged (LSP server, VS, VS Code, Rider) - see #930, #928
 * Opening a `.feature` file in a compare (diff) window, e.g. from the Visual Studio Git Changes window, no longer floods the Reqnroll output pane with "IVsCodeWindow does not implement IVsDropdownBarManager" warnings (and later "giving up" warnings): the Navigation Bar client now recognises diff panes and stands down immediately (Visual Studio) - see #907, @clrudolphi
