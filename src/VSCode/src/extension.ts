@@ -17,6 +17,7 @@ import { doFindUnusedStepDefinitions } from './commands/findUnusedStepDefinition
 import { doGoToHooks, sourceForArgs } from './commands/goToHooks';
 import {
   OPEN_TAG_LINK_COMMAND,
+  TagLinkDecorations,
   createTagLinkMiddleware,
   openTagLink,
   registerTagLinkRefresh,
@@ -406,6 +407,10 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     },
   };
 
+  // Permanent link styling for clickable tags (issue #921); fed by the tag-link middleware below.
+  const tagLinkDecorations = new TagLinkDecorations().register();
+  context.subscriptions.push(tagLinkDecorations);
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: GHERKIN_LANGUAGE_ID, pattern: '**/*.feature' }],
     synchronize: {
@@ -437,8 +442,9 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       // registerHookCodeLens), doubling every lens — see codeLensSuppression.ts.
       ...createCodeLensSuppressionMiddleware(),
       // Clickable tags (issue #755): the built-in documentLink feature renders the server's links;
-      // this re-targets each at 'reqnroll.openTagLink' so a click is observable (telemetry).
-      ...createTagLinkMiddleware(),
+      // this re-targets each at 'reqnroll.openTagLink' so a click is observable (telemetry), and
+      // keeps the linked tags permanently underlined (issue #921).
+      ...createTagLinkMiddleware(tagLinkDecorations),
     },
   };
 
