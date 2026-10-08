@@ -19,7 +19,7 @@
       "patterns": [
         {
           "name": "comment.line.gherkin",
-          "match": "#.*$"
+          "match": "^\\s*#.*$"
         }
       ]
     },
