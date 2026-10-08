@@ -17,6 +17,17 @@ Scenario: Feature with no scenarios returns a Feature symbol
     Then the outline contains 1 top-level symbol
     And the first top-level symbol has name "Calculator" and kind "Module"
 
+# Regression (#959): an untitled "Feature:" (transient while typing) must yield a non-empty
+# symbol name; empty names make LSP clients reject the whole documentSymbol response.
+Scenario: Untitled Feature falls back to the keyword as its symbol name
+    When the feature file "UntitledFeature.feature" is opened with
+        """
+        Feature:
+        """
+    And the document outline is requested for "UntitledFeature.feature"
+    Then the outline contains 1 top-level symbol
+    And the first top-level symbol has name "Feature" and kind "Module"
+
 # ── Scenario as child ────────────────────────────────────────────────────────
 
 Scenario: Scenario appears as a child of Feature
@@ -86,6 +97,18 @@ Scenario: Scenario inside Rule is a child of the Rule symbol
         """
     And the document outline is requested for "RuleWithScenario.feature"
     Then the first child of "R" has name "S inside rule" and kind "Method"
+
+# Regression (#959): an untitled "Rule:" must fall back to the keyword as its symbol name.
+Scenario: Untitled Rule falls back to the keyword as its symbol name
+    When the feature file "UntitledRule.feature" is opened with
+        """
+        Feature: F
+        Rule:
+        Scenario: S
+            Given a step
+        """
+    And the document outline is requested for "UntitledRule.feature"
+    Then the first child of "F" has name "Rule" and kind "Namespace"
 
 # ── Scenario Outline + Examples ───────────────────────────────────────────────
 
