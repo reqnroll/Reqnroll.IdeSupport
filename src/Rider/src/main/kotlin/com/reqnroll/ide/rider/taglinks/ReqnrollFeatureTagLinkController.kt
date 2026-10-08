@@ -28,9 +28,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.Alarm
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
@@ -40,6 +38,7 @@ import java.awt.Font
 import java.awt.event.InputEvent
 import java.awt.event.MouseEvent
 import org.eclipse.lsp4j.DocumentLink
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Makes Gherkin tags that match a configured `Traceability.TagLinks` pattern clickable (issue #755): the server
@@ -121,7 +120,7 @@ class ReqnrollFeatureTagLinkController : EditorFactoryListener {
             ApplicationManager.getApplication().executeOnPooledThread {
                 if (project.isDisposed || editor.isDisposed) return@executeOnPooledThread
 
-                val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
+                val uri = localPathToLspUri(virtualFile.path)
                 val links = ReqnrollRequestSender.documentLink(project, uri)
                 ReqnrollDebugLogger.verbose("ReqnrollFeatureTagLinkController: ${links?.size ?: "null"} link(s) for $uri")
 

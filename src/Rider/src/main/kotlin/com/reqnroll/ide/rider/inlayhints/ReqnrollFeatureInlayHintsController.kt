@@ -23,16 +23,15 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.JBColor
 import com.intellij.util.Alarm
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.InlayHint
 import java.awt.Graphics
 import java.awt.Rectangle
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Renders binding-info inlay hints for `.feature` files directly against
@@ -140,7 +139,8 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
         private fun refresh(project: Project, editor: Editor, virtualFile: VirtualFile) {
             if (project.isDisposed || editor.isDisposed) return
 
-            if (!ReqnrollFeatureInlayHintsSettings.isEnabled) {
+            // Rider 2026.2+ renders the server's inlay hints itself (see NativeLspInlayHints); ours would duplicate them.
+            if (NativeLspInlayHints.isRenderedByPlatform || !ReqnrollFeatureInlayHintsSettings.isEnabled) {
                 clearInlays(editor)
                 return
             }
@@ -152,7 +152,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
             ApplicationManager.getApplication().executeOnPooledThread {
                 if (project.isDisposed || editor.isDisposed) return@executeOnPooledThread
 
-                val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
+                val uri = localPathToLspUri(virtualFile.path)
                 val hints = ReqnrollRequestSender.inlayHint(project, uri, 0, editor.document.lineCount)
                 ReqnrollDebugLogger.verbose("ReqnrollFeatureInlayHintsController: ${hints?.size ?: "null"} hint(s) for $uri")
 

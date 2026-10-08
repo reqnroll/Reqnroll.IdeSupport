@@ -2054,6 +2054,10 @@ The server side is complete and unit-tested. Neither Visual Studio's nor Rider's
 
 **Telemetry.** Following a link reports the client-originated `TagLink command executed` event from all three IDEs (no properties; see the [Telemetry Events Inventory](Telemetry-Events-Inventory.md#taglinkcommandexecuted-issue-755)). The VS Code click path relies on VS Code dispatching `command:` document-link targets.
 
+#### Permanent link styling — VS Code (issue #921)
+
+VS Code only underlines a document link while Ctrl/Cmd is held over it, which hides which tags are links. `TagLinkDecorations` (`src/VSCode/src/lsp/tagLinks.ts`) therefore remembers the ranges of the links the `provideDocumentLinks` middleware returns for each document and paints them with a `TextEditorDecorationType` (underline in `textLink.foreground`), re-applied when editors become visible and cleared when a document closes. Because the ranges come from the same pass that renders the links, they refresh exactly when the links do (open, edit, and the refresh nudge); a request that returns nothing keeps the last known styling rather than flashing it off. The hover target is the link's existing tooltip.
+
 #### LSP messages
 
 | Direction | Method | Purpose |

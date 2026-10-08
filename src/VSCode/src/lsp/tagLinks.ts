@@ -40,16 +40,90 @@ export function retargetLink(link: vscode.DocumentLink): vscode.DocumentLink | u
 }
 
 /**
- * Middleware around the built-in `textDocument/documentLink` feature (issue #755): every returned
- * tag link is re-targeted by {@link retargetLink}, so clicking it runs {@link openTagLink}.
+ * Keeps every clickable tag permanently styled as a link (issue #921). VS Code only underlines a
+ * document link while Ctrl/Cmd is held over it, which hides which tags are links at all; this
+ * remembers the ranges of the links the server returned for each document and paints them with a
+ * link-coloured underline decoration. The ranges come from the same `provideDocumentLinks` pass
+ * that renders the links, so they refresh exactly when the links do, and VS Code moves a
+ * decoration along with edits made in between.
  */
-export function createTagLinkMiddleware(): Middleware {
+export class TagLinkDecorations implements vscode.Disposable {
+  private readonly rangesByDocument = new Map<string, vscode.Range[]>();
+  private readonly decorationType: vscode.TextEditorDecorationType;
+  private readonly subscriptions: vscode.Disposable[] = [];
+
+  constructor(
+    private readonly visibleEditors: () => readonly vscode.TextEditor[] = () =>
+      vscode.window.visibleTextEditors,
+    decorationType: vscode.TextEditorDecorationType = vscode.window.createTextEditorDecorationType({
+      textDecoration: 'underline',
+      color: new vscode.ThemeColor('textLink.foreground'),
+    }),
+  ) {
+    this.decorationType = decorationType;
+  }
+
+  /** Starts following editor and document lifecycle; returns this for chaining. */
+  register(): this {
+    this.subscriptions.push(
+      vscode.window.onDidChangeVisibleTextEditors(() => this.applyAll()),
+      vscode.workspace.onDidCloseTextDocument((document) =>
+        this.rangesByDocument.delete(document.uri.toString()),
+      ),
+    );
+    return this;
+  }
+
+  /** Replaces the remembered link ranges of `uri` (an empty list clears them) and repaints its editors. */
+  record(uri: vscode.Uri, ranges: readonly vscode.Range[]): void {
+    this.rangesByDocument.set(uri.toString(), [...ranges]);
+    for (const editor of this.visibleEditors()) {
+      if (editor.document.uri.toString() === uri.toString()) this.apply(editor);
+    }
+  }
+
+  /** The remembered link ranges of `uri`. */
+  rangesFor(uri: vscode.Uri): readonly vscode.Range[] {
+    return this.rangesByDocument.get(uri.toString()) ?? [];
+  }
+
+  private applyAll(): void {
+    for (const editor of this.visibleEditors()) this.apply(editor);
+  }
+
+  private apply(editor: vscode.TextEditor): void {
+    editor.setDecorations(this.decorationType, [...this.rangesFor(editor.document.uri)]);
+  }
+
+  dispose(): void {
+    for (const subscription of this.subscriptions) subscription.dispose();
+    this.decorationType.dispose();
+    this.rangesByDocument.clear();
+  }
+}
+
+/**
+ * Middleware around the built-in `textDocument/documentLink` feature (issue #755): every returned
+ * tag link is re-targeted by {@link retargetLink}, so clicking it runs {@link openTagLink}. When
+ * `decorations` is given, the surviving links' ranges are also handed to it so they stay
+ * permanently styled (issue #921).
+ */
+export function createTagLinkMiddleware(decorations?: TagLinkDecorations): Middleware {
   return {
     provideDocumentLinks: async (document, token, next) => {
       const links = await next(document, token);
-      return links
+      const retargeted = links
         ?.map(retargetLink)
         .filter((link): link is vscode.DocumentLink => link !== undefined);
+      // A cancelled or failed request returns nothing (null): keep the last known ranges rather
+      // than flashing the styling off; only an actual answer replaces them.
+      if (retargeted && document?.uri) {
+        decorations?.record(
+          document.uri,
+          retargeted.map((link) => link.range),
+        );
+      }
+      return retargeted;
     },
   };
 }
