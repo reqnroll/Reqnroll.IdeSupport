@@ -2,7 +2,6 @@
 
 using System;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 
 namespace Reqnroll.IdeSupport.LSP.Core.Rename;
@@ -25,10 +24,6 @@ public static class StepRenameValidator
 
     /// <summary>Characters that are regex operators and must not appear in non-parameter text of a regex-authored binding.</summary>
     private static readonly char[] RegexOperators = { '?', '*', '+', '[', ']', '{', '}', '(', ')', '^', '$', '|' };
-
-    private static readonly Regex CucumberPlaceholderPattern = new(
-        @"\{\w+\}",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // ── Validation methods ─────────────────────────────────────────────────────
 
@@ -74,12 +69,11 @@ public static class StepRenameValidator
         // literal '$' (e.g. a currency amount in "the price is ${float}") is meaningless
         // punctuation in a Cucumber Expression but a real anchor in a regex, so the two syntaxes
         // need different forbidden-character sets rather than one shared regex-operator list.
-        var originalParamCount = CountParameterSlots(originalExpression);
-        var newParamCount = CountParameterSlots(newName);
+        var isCucumber = CucumberExpressionDetector.IsCucumberExpression(originalExpression);
+        var originalParamCount = CountParameterSlots(originalExpression, isCucumber);
+        var newParamCount = CountParameterSlots(newName, isCucumber);
 
-        var forbiddenOperators = CucumberExpressionDetector.IsCucumberExpression(originalExpression)
-            ? CucumberExpressionOperators
-            : RegexOperators;
+        var forbiddenOperators = isCucumber ? CucumberExpressionOperators : RegexOperators;
 
         // Scan non-parameter segments for operators the rename INTRODUCES. An operator the
         // original expression already carries outside its parameter slots - most importantly the
@@ -88,8 +82,8 @@ public static class StepRenameValidator
         // verbatim as newName, so those characters arrive without the user having typed them.
         // Rejecting on mere presence made every anchored regex binding unrenamable in Visual
         // Studio (issue #1126).
-        var newNonParamSegments = SplitNonParameterSegments(newName);
-        var originalNonParamSegments = SplitNonParameterSegments(originalExpression);
+        var newNonParamSegments = SplitNonParameterSegments(newName, isCucumber);
+        var originalNonParamSegments = SplitNonParameterSegments(originalExpression, isCucumber);
         foreach (var operatorChar in forbiddenOperators)
         {
             if (CountOccurrences(newNonParamSegments, operatorChar) > CountOccurrences(originalNonParamSegments, operatorChar))
@@ -118,23 +112,25 @@ public static class StepRenameValidator
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Counts parameter slots in an expression. Parameter slots are either
-    /// regex capture groups like <c>(.*)</c> or Cucumber placeholders like <c>{word}</c>.
+    /// Counts parameter slots in an expression. What is a slot depends on the binding's syntax
+    /// (issue #960): see <see cref="ScanExpression"/>.
     /// </summary>
-    private static int CountParameterSlots(string expression)
-        => string.IsNullOrEmpty(expression) ? 0 : FindParameterSlots(expression).Count;
+    private static int CountParameterSlots(string expression, bool isCucumber)
+        => string.IsNullOrEmpty(expression) ? 0 : ScanExpression(expression, isCucumber).Count(e => e.IsSlot);
 
     /// <summary>
-    /// Splits an expression into non-parameter segments by removing parameter slots.
+    /// Splits an expression into non-parameter segments by removing its parameter slots and its
+    /// other matched groups (see <see cref="ScanExpression"/>), so the delimiters of optional text
+    /// or of a non-capturing group are never mistaken for operators in literal text.
     /// </summary>
-    private static string[] SplitNonParameterSegments(string expression)
+    private static string[] SplitNonParameterSegments(string expression, bool isCucumber)
     {
         if (string.IsNullOrEmpty(expression))
             return Array.Empty<string>();
 
         var segments = new System.Collections.Generic.List<string>();
         var last = 0;
-        foreach (var (start, length) in FindParameterSlots(expression))
+        foreach (var (start, length, _) in ScanExpression(expression, isCucumber))
         {
             if (start > last)
                 segments.Add(expression.Substring(last, start - last));
@@ -146,46 +142,52 @@ public static class StepRenameValidator
     }
 
     /// <summary>
-    /// Finds the parameter slots of <paramref name="expression"/>, left to right: Cucumber
-    /// placeholders (<c>{word}</c>) and regex groups. A group is matched with balanced parentheses
-    /// so one containing nested groups (<c>(\d+(\.\d+)?)</c>) is a single slot (issue #1131); a
-    /// <c>[^)]*</c>-style match stopped at the first <c>)</c> and leaked the group's tail into the
-    /// non-parameter text. Escaped parentheses are literal text, not group delimiters, and an
-    /// unbalanced <c>(</c> is plain text.
+    /// Finds the structural elements of <paramref name="expression"/>, left to right: <c>{…}</c>
+    /// placeholders (including the empty <c>{}</c>), which are slots in either syntax, and
+    /// parenthesised groups, matched with balanced parentheses so one containing nested groups
+    /// (<c>(\d+(\.\d+)?)</c>) is a single element (issue #1131). Escaped parentheses are literal
+    /// text and an unbalanced <c>(</c> is plain text.
+    /// <para>
+    /// Whether a group is a slot is syntax-aware (issue #960): in a regex-authored binding only a
+    /// capturing group is — non-capturing, look-around and inline-option groups are structure; in
+    /// a Cucumber-authored binding <c>(text)</c> is optional text, never a parameter. Structure
+    /// that is not a slot is still reported (<c>IsSlot == false</c>) so that its delimiters are
+    /// excluded from the non-parameter text scanned for operators.
+    /// </para>
     /// </summary>
-    private static System.Collections.Generic.List<(int Start, int Length)> FindParameterSlots(string expression)
+    private static System.Collections.Generic.List<(int Start, int Length, bool IsSlot)> ScanExpression(
+        string expression, bool isCucumber)
     {
-        var slots = new System.Collections.Generic.List<(int Start, int Length)>();
+        var elements = new System.Collections.Generic.List<(int Start, int Length, bool IsSlot)>();
         var i = 0;
         while (i < expression.Length)
         {
-            if (expression[i] == '(' && !StepExpressionParameters.IsEscaped(expression, i))
+            var length = 0;
+            var isSlot = false;
+            if (expression[i] == '{')
             {
-                var end = FindGroupEnd(expression, i);
-                if (end > 0)
-                {
-                    slots.Add((i, end - i + 1));
-                    i = end + 1;
-                    continue;
-                }
+                length = StepExpressionParameters.SlotLengthAt(expression, i);
+                isSlot = true;
             }
-            else if (expression[i] == '{')
+            else if (expression[i] == '(' && !StepExpressionParameters.IsEscaped(expression, i))
             {
-                var placeholder = CucumberPlaceholderPattern.Match(expression, i);
-                if (placeholder.Success && placeholder.Index == i)
-                {
-                    slots.Add((i, placeholder.Length));
-                    i += placeholder.Length;
-                    continue;
-                }
+                length = GroupLengthAt(expression, i);
+                isSlot = !isCucumber && IsCapturingGroup(expression, i);
             }
-            i++;
+
+            if (length > 0)
+            {
+                elements.Add((i, length, isSlot));
+                i += length;
+            }
+            else
+                i++;
         }
-        return slots;
+        return elements;
     }
 
-    /// <summary>Returns the index of the <c>)</c> closing the group opened at <paramref name="open"/>, or -1 when it is unbalanced.</summary>
-    private static int FindGroupEnd(string expression, int open)
+    /// <summary>Returns the length of the balanced group opened at <paramref name="open"/>, or 0 when it is unbalanced.</summary>
+    private static int GroupLengthAt(string expression, int open)
     {
         var depth = 0;
         for (var j = open; j < expression.Length; j++)
@@ -193,9 +195,24 @@ public static class StepRenameValidator
             if (StepExpressionParameters.IsEscaped(expression, j))
                 continue;
             if (expression[j] == '(') depth++;
-            else if (expression[j] == ')' && --depth == 0) return j;
+            else if (expression[j] == ')' && --depth == 0) return j - open + 1;
         }
-        return -1;
+        return 0;
+    }
+
+    /// <summary>
+    /// Whether the regex group opened at <paramref name="open"/> captures: a plain <c>(…)</c> or a
+    /// named group (<c>(?&lt;name&gt;…)</c>, <c>(?'name'…)</c>); not <c>(?:</c>, <c>(?=</c>,
+    /// <c>(?!</c>, <c>(?&lt;=</c>, <c>(?&lt;!</c> or an inline option such as <c>(?i)</c>.
+    /// </summary>
+    private static bool IsCapturingGroup(string expression, int open)
+    {
+        if (open + 1 >= expression.Length || expression[open + 1] != '?')
+            return true;
+        if (open + 3 >= expression.Length)
+            return false;
+        return expression[open + 2] == '\'' ||
+               (expression[open + 2] == '<' && expression[open + 3] != '=' && expression[open + 3] != '!');
     }
 
     /// <summary>
