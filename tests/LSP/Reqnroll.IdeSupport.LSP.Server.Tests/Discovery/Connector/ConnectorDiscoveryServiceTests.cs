@@ -479,7 +479,9 @@ public class ConnectorDiscoveryServiceTests : IDisposable
                     Regex          = "^the first number is (.*)$",
                     Method         = "SetFirstNumber",
                     ParamTypes     = "i",
-                    SourceLocation = Path.Combine(_projectFolder, "does-not-exist.cs") + "|3|5"
+                    // Outside the project folder: a missing file *inside* it is a stale compiled binding and is
+                    // dropped instead (issue #930, ConnectorDiscoveryStaleBindingTests).
+                    SourceLocation = Path.Combine(Path.GetTempPath(), "no-such-folder", "does-not-exist.cs") + "|3|5"
                 }
             ],
             Hooks = []
