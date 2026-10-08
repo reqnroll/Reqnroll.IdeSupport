@@ -18,6 +18,11 @@ suite('tableHighlightService', () => {
     test('rejects a line where the first non-whitespace character is not a pipe', () => {
       assert.strictEqual(isTableRow('\t\tfoo | bar |'), false);
     });
+
+    test('does not count an escaped pipe towards the two-separator minimum', () => {
+      // '| a \| b' has a leading pipe and an escaped pipe, so it has only one column separator.
+      assert.strictEqual(isTableRow('| a \\| b'), false);
+    });
   });
 
   suite('getPipeIndexes', () => {
@@ -27,6 +32,27 @@ suite('tableHighlightService', () => {
 
     test('returns an empty array when there are no pipes', () => {
       assert.deepStrictEqual(getPipeIndexes('no pipes here'), []);
+    });
+
+    test('ignores a pipe escaped by a single backslash', () => {
+      // '| a \| b |' — the pipes at 0 and 9 are column separators; the pipe at 5 is cell content.
+      assert.deepStrictEqual(getPipeIndexes('| a \\| b |'), [0, 9]);
+    });
+
+    test('counts a pipe preceded by an escaped backslash as a separator', () => {
+      // '| a \\| b |' — the two backslashes are one escaped backslash, so the pipe at 6 is real.
+      assert.deepStrictEqual(getPipeIndexes('| a \\\\| b |'), [0, 6, 10]);
+    });
+
+    test('counts a pipe after an even run of backslashes as a separator', () => {
+      // Four backslashes collapse to two escaped backslashes, so the pipe at 8 is real.
+      assert.deepStrictEqual(getPipeIndexes('| a \\\\\\\\| b |'), [0, 8, 12]);
+    });
+
+    test('ignores a pipe after an odd run of backslashes', () => {
+      // Three backslashes are an escaped backslash plus one escaping backslash, so the pipe at 7
+      // is cell content.
+      assert.deepStrictEqual(getPipeIndexes('| a \\\\\\| b |'), [0, 11]);
     });
   });
 
