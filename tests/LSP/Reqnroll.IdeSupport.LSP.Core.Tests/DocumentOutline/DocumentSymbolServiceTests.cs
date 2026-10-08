@@ -70,6 +70,19 @@ public class DocumentSymbolServiceTests
         result[0].Children.Should().BeEmpty();
     }
 
+    // Regression test (issue #959): an untitled "Feature:" (no text after the colon) is the
+    // transient state of a Feature line while it is being typed. The Gherkin parser gives it
+    // Name = "" (not null), so the old "feature.Name ?? feature.Keyword.Trim()" fallback never
+    // applied and an empty symbol Name reached the LSP response, which clients reject
+    // ("name must not be falsy"), blanking the Outline view.
+    [Fact]
+    public void Untitled_feature_symbol_name_falls_back_to_keyword()
+    {
+        var tags = ParseTags("Feature:\n");
+        var result = CreateSut().BuildSymbols(tags);
+        result[0].Name.Should().Be("Feature");
+    }
+
     // ── Scenario ──────────────────────────────────────────────────────────────
 
     [Fact]
@@ -225,6 +238,17 @@ public class DocumentSymbolServiceTests
         var rule = result[0].Children[0];
         rule.Children.Should().HaveCount(1);
         rule.Children[0].Kind.Should().Be(GherkinSymbolKind.Scenario);
+    }
+
+    // Regression test (issue #959): same class of bug as
+    // Untitled_feature_symbol_name_falls_back_to_keyword, for an untitled "Rule:".
+    [Fact]
+    public void Untitled_rule_symbol_name_falls_back_to_keyword()
+    {
+        var text = "Feature: F\nRule:\nScenario: S\n    Given a step\n";
+        var tags = ParseTags(text);
+        var result = CreateSut().BuildSymbols(tags);
+        result[0].Children[0].Name.Should().Be("Rule");
     }
 
     // ── Scenario Outline ──────────────────────────────────────────────────────
