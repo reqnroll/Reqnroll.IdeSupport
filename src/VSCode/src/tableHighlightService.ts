@@ -112,18 +112,21 @@ export class TableHighlightService implements vscode.Disposable {
   }
 }
 
-/** True when `text` is a Gherkin data-table row: starts with `|` and contains at least two pipes. */
+/**
+ * True when `text` is a Gherkin data-table row: it starts with `|` (after leading whitespace) and
+ * contains at least two column separators. Escaped pipes are cell content, not separators.
+ */
 export function isTableRow(text: string): boolean {
   const trimmedStart = text.trimStart();
   if (!trimmedStart.startsWith('|')) {
     return false;
   }
 
-  let pipeCount = 0;
-  for (const character of text) {
-    if (character === '|') {
-      pipeCount++;
-      if (pipeCount >= 2) {
+  let separatorCount = 0;
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] === '|' && !isEscapedPipe(text, index)) {
+      separatorCount++;
+      if (separatorCount >= 2) {
         return true;
       }
     }
@@ -132,16 +135,40 @@ export function isTableRow(text: string): boolean {
   return false;
 }
 
-/** Returns the character indexes of every `|` in `text`. */
+/**
+ * Returns the character indexes of every `|` that is a column separator in `text`.
+ *
+ * A backslash-escaped pipe (`\|`) is cell content and is skipped, so a cell such as `a \| b` is
+ * not split into extra columns.
+ */
 export function getPipeIndexes(text: string): number[] {
   const result: number[] = [];
   for (let index = 0; index < text.length; index++) {
-    if (text[index] === '|') {
+    if (text[index] === '|' && !isEscapedPipe(text, index)) {
       result.push(index);
     }
   }
 
   return result;
+}
+
+/**
+ * True when the `|` at `index` in `text` is escaped — i.e. cell content rather than a column
+ * separator.
+ *
+ * Gherkin (following CSV/Cucumber conventions) escapes a literal backslash as `\\` and a literal
+ * pipe as `\|`. A `|` is therefore a separator exactly when an even number of backslashes
+ * immediately precede it: zero, or an even-length run whose final backslash is itself escaped.
+ * Counting the whole run, rather than only the single preceding character, is what makes `a \\| b`
+ * split on the pipe while `a \| b` does not.
+ */
+function isEscapedPipe(text: string, index: number): boolean {
+  let backslashes = 0;
+  for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) {
+    backslashes++;
+  }
+
+  return backslashes % 2 === 1;
 }
 
 /**
