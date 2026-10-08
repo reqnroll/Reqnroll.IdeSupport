@@ -362,7 +362,11 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         if (staleBindingCount == 0)
             return;
 
-        _logger.LogInfo(
+        // Warning, not Info: every IDE launches the server at --log-level Warning by default (VS
+        // Release, VS Code with trace.server off, Rider outside the dev sandbox), so an Info line
+        // would not even reach the server log file for a real user. Neither level reaches an IDE
+        // output pane -- the server's app logger has no window/logMessage sink.
+        _logger.LogWarning(
             $"[{scope.ProjectName}] Ignored {staleBindingCount} binding(s) in the compiled assembly whose " +
             $"source file no longer exists under '{scope.ProjectFolder}' ({staleSourcePaths.Count} file(s), " +
             $"e.g. '{staleSourcePaths.First()}'). The assembly is older than the working tree, for example " +

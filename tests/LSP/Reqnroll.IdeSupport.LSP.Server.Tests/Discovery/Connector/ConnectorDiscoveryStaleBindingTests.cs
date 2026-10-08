@@ -193,7 +193,7 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
         });
 
         _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
-            m.Level == System.Diagnostics.TraceLevel.Info &&
+            m.Level == System.Diagnostics.TraceLevel.Warning &&
             m.Message.Contains("Ignored 3 binding(s)") &&
             m.Message.Contains("1 file(s)") &&
             m.Message.Contains("rebuild")));
