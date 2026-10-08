@@ -70,4 +70,26 @@ public class GherkinFormatConfigurationEditorConfigTests
         Assert.True(original.IndentSteps,  "original must be unchanged");
         Assert.False(clone.IndentSteps,    "clone must reflect the override");
     }
+
+    [Fact]
+    public void UpdateFromEditorConfig_negative_table_cell_padding_size_does_not_break_formatter_padding()
+    {
+        var config = ApplyOptions(new() { ["gherkin_table_cell_padding_size"] = "-1" });
+
+        // GherkinFormatSettings builds the table cell padding as `new string(' ', TableCellPaddingSize)`,
+        // which throws ArgumentOutOfRangeException for a negative size.
+        var padding = new string(' ', config.TableCellPaddingSize);
+
+        Assert.True(config.TableCellPaddingSize >= 0,
+            "a negative gherkin_table_cell_padding_size must be clamped to a non-negative value");
+        Assert.Empty(padding);
+    }
+
+    [Fact]
+    public void TableCellPaddingSize_clamps_negative_value_to_zero()
+    {
+        var config = new GherkinFormatConfiguration { TableCellPaddingSize = -5 };
+
+        Assert.Equal(0, config.TableCellPaddingSize);
+    }
 }
