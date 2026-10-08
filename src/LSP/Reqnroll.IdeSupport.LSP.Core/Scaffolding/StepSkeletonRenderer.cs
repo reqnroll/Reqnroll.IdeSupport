@@ -82,8 +82,8 @@ public static class StepSkeletonRenderer
 
         var keyword   = BlockToKeyword(descriptor.Block);
         var attrValue = useCucumber
-            ? $"(\"{descriptor.ExpressionText}\")"
-            : $"(@\"{descriptor.ExpressionText}\")";
+            ? $"(\"{CSharpStringLiteralEscaper.EscapeRegular(descriptor.ExpressionText)}\")"
+            : $"(@\"{CSharpStringLiteralEscaper.EscapeVerbatim(descriptor.ExpressionText)}\")";
 
         var paramList = string.Join(", ", descriptor.Parameters.Select(p => $"{p.Type} {p.Name}"));
         var returnType = isAsync ? "async Task" : "void";
