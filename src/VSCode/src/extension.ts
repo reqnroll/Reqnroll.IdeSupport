@@ -384,7 +384,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     void showError(`Reqnroll: ${message}`, 'Open Documentation').then((choice) => {
       if (choice === 'Open Documentation') {
         void vscode.env.openExternal(
-          vscode.Uri.parse('https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes'),
+          vscode.Uri.parse('https://docs.reqnroll.net/latest/ide-integrations/vscode/index.html'),
         );
       }
     });

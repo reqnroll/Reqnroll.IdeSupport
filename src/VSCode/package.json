@@ -312,7 +312,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes.git"
+    "url": "https://github.com/reqnroll/Reqnroll.IdeSupport.git"
+  },
+  "homepage": "https://github.com/reqnroll/Reqnroll.IdeSupport#readme",
+  "bugs": {
+    "url": "https://github.com/reqnroll/Reqnroll.IdeSupport/issues"
   },
   "dependencies": {
     "@vscode/extension-telemetry": "^1.5.2",
