@@ -148,19 +148,30 @@ public static class StepSkeletonRenderer
     private static (string Expression, IReadOnlyList<(string Type, string Name)> Parameters)
         BuildRegexExpression(string stepText)
     {
-        var escaped = EscapeForRegex(stepText);
         var parameters = new List<(string, string)>();
         int paramIndex = 0;
+        var sb  = new StringBuilder();
+        int pos = 0;
 
-        // Replace (.*) capture groups with string parameters
-        var result = RegexGroupRegex.Replace(escaped, _ =>
+        // Substitute parameter groups on the RAW step text, then escape only the
+        // literal segments between groups. Escaping first would turn "(foo)" into
+        // "\(foo\)" and the group regex would consume the wrong span, producing an
+        // invalid pattern such as "\(.*)".
+        foreach (Match m in RegexGroupRegex.Matches(stepText))
         {
-            var name = $"p{paramIndex++}";
-            parameters.Add(("string", name));
-            return "(.*)";
-        });
+            if (m.Index > pos)
+                sb.Append(EscapeForRegex(stepText.Substring(pos, m.Index - pos)));
 
-        return (result, parameters.AsReadOnly());
+            parameters.Add(("string", $"p{paramIndex++}"));
+            sb.Append("(.*)");
+
+            pos = m.Index + m.Length;
+        }
+
+        if (pos < stepText.Length)
+            sb.Append(EscapeForRegex(stepText.Substring(pos)));
+
+        return (sb.ToString(), parameters.AsReadOnly());
     }
 
     // ── Escaping ──────────────────────────────────────────────────────────────────

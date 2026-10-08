@@ -1,5 +1,6 @@
 ﻿#nullable enable
 
+using System.Text.RegularExpressions;
 using Gherkin;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
@@ -147,6 +148,59 @@ public class StepSkeletonRendererTests
     {
         var result = StepSkeletonRenderer.EscapeForRegex(text);
         result.Should().Be(expected);
+    }
+
+    // ── Regex mode — parameter group substitution ─────────────────────────────
+
+    [Fact]
+    public void Regex_parenthesised_step_text_is_substituted_before_escaping()
+    {
+        var step       = MakeStep("(foo)", ScenarioBlock.Given);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be("(.*)");
+        descriptor.Parameters.Should().HaveCount(1);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+    }
+
+    [Fact]
+    public void Regex_parenthesised_step_text_produces_valid_matching_regex()
+    {
+        var step       = MakeStep("I use (parenthesis)", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be("I use (.*)");
+        descriptor.Parameters.Should().HaveCount(1);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+
+        // The generated pattern must be a valid regex that matches its own step text.
+        var regex = new Regex(descriptor.ExpressionText);
+        regex.IsMatch(step.StepText).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Regex_multiple_parameter_groups_substituted_and_indexed()
+    {
+        var step       = MakeStep("(first) then (second)", ScenarioBlock.Then);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be("(.*) then (.*)");
+        descriptor.Parameters.Should().HaveCount(2);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+        descriptor.Parameters[1].Should().Be(("string", "p1"));
+
+        new Regex(descriptor.ExpressionText).IsMatch(step.StepText).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Regex_literal_segments_are_still_escaped_around_parameter_groups()
+    {
+        var step       = MakeStep("the value {a} (is) done.", ScenarioBlock.Then);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be(@"the value \{a} (.*) done\.");
+        descriptor.Parameters.Should().HaveCount(1);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
     }
 
     // ── Render — output format ────────────────────────────────────────────────
