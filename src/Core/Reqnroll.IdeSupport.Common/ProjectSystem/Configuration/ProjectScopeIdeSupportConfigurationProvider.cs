@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.Common.Configuration;
 using System.Linq;
 using System.IO;
 using System.Collections;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 
 namespace Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
@@ -290,7 +291,7 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
     {
         tagLinks.Add(new TagLinkConfiguration
         {
-            TagPattern = $@"{tagPrefix}\:(?<id>\d+)",
+            TagPattern = $@"{Regex.Escape(tagPrefix)}\:(?<id>\d+)",
             UrlTemplate = projectUrl + "/_workitems/edit/{id}"
         });
     }
