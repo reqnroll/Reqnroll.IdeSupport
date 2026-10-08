@@ -168,6 +168,93 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("rename");
     }
 
+    // ── Rule 4, parameter slots are syntax-aware (issue #960) ───────────────
+    //
+    // The validator used to count a parameter slot with the regex @"(\([^)]*\)|\{\w+\})",
+    // which disagreed with StepExpressionParameters (the slot logic the rest of the rename
+    // pipeline already uses) four ways: it counted regex non-capturing / look-around groups and
+    // escaped parens as slots, under-matched nested groups, and missed the empty placeholder {}.
+    // It also treated a Cucumber Expression's optional text "(s)" as a parameter, so dropping it
+    // was rejected as a "Parameter count mismatch". Slots are now derived syntax-aware.
+
+    [Fact]
+    public void ValidateNewName_regex_dropping_a_non_capturing_group_passes()
+    {
+        // "(?:red|blue)" is not a parameter slot, so dropping it is not a parameter-count change.
+        var result = StepRenameValidator.ValidateNewName(
+            @"I have (?:red|blue) (.*) cukes", @"I have (.*) cukes");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_optional_text_dropped_passes()
+    {
+        // In a Cucumber Expression "(s)" is optional text, not a parameter.
+        var result = StepRenameValidator.ValidateNewName("I have cucumber(s)", "I have cucumber");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_optional_text_kept_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName("I have cucumber(s)", "I have gherkin(s)");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_empty_placeholder_does_not_block_rename()
+    {
+        // "{}" is a valid untyped Cucumber placeholder; it counted as no slot at all and its
+        // braces were then flagged as forbidden operators, rejecting every rename.
+        var result = StepRenameValidator.ValidateNewName("I have {} cukes", "I have {} apples");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_escaped_parens_are_not_parameters()
+    {
+        // "\(...\)" is a literal "(...)" in a regex, not a capturing group.
+        var result = StepRenameValidator.ValidateNewName(
+            @"I have \(literal\) (.*) cukes", @"I have (.*) cukes");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_nested_groups_count_as_one_slot_each()
+    {
+        // "((red)(blue))" is a single balanced capturing group, not three.
+        var result = StepRenameValidator.ValidateNewName(
+            @"I have ((red)(blue)) (.*) cukes", @"I have (x) (.*) cukes");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_optional_text_with_operator_inside_is_not_flagged()
+    {
+        // The parentheses of matched optional text are syntax, not forbidden operators.
+        var result = StepRenameValidator.ValidateNewName("I have {int} cukes", "I have gherkin(s) {int} cukes");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_dropping_a_real_capturing_group_still_fails()
+    {
+        // A genuine parameter slot was removed - the check must not become vacuous.
+        var result = StepRenameValidator.ValidateNewName(@"I have (.*) cukes", "I have cukes");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_dropping_a_real_parameter_still_fails()
+    {
+        var result = StepRenameValidator.ValidateNewName("I have {int} cukes", "I have cukes");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+        result.Scope.Should().Be("rename");
+    }
+
     // ── ValidateProjectState ────────────────────────────────────────────────────
 
     [Fact]
