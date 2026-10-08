@@ -59,6 +59,49 @@ class RunTestRunnerTest {
         assertNull(RunTestRunner.findOwningProjectPath("/repo/Foo/A.feature", emptyList()))
     }
 
+    @Test
+    fun `matches a Windows project path against a forward-slashed file path`() {
+        // lspUriToLocalPath yields C:/proj/F.feature while the project path uses backslashes on Windows (#977)
+        val projects = listOf("""C:\proj\Proj.csproj""")
+        assertEquals(
+            """C:\proj\Proj.csproj""",
+            RunTestRunner.findOwningProjectPath("C:/proj/Features/F.feature", projects),
+        )
+    }
+
+    @Test
+    fun `matches Windows paths case-insensitively`() {
+        val projects = listOf("""C:\Proj\Proj.csproj""")
+        assertEquals("""C:\Proj\Proj.csproj""", RunTestRunner.findOwningProjectPath("c:/proj/F.feature", projects))
+    }
+
+    @Test
+    fun `matches a forward-slashed project path against a backslashed file path`() {
+        val projects = listOf("C:/proj/Proj.csproj")
+        assertEquals("C:/proj/Proj.csproj", RunTestRunner.findOwningProjectPath("""C:\proj\F.feature""", projects))
+    }
+
+    @Test
+    fun `deepest project wins with mixed separators`() {
+        val projects = listOf("""C:\proj\Proj.csproj""", """C:\proj\Nested\Nested.csproj""")
+        assertEquals(
+            """C:\proj\Nested\Nested.csproj""",
+            RunTestRunner.findOwningProjectPath("C:/proj/Nested/F.feature", projects),
+        )
+    }
+
+    @Test
+    fun `a sibling folder sharing a name prefix is not an owner`() {
+        val projects = listOf("""C:\proj\Proj.csproj""")
+        assertNull(RunTestRunner.findOwningProjectPath("C:/proj2/F.feature", projects))
+    }
+
+    @Test
+    fun `returns null when a Windows file is outside every project folder`() {
+        val projects = listOf("""C:\proj\Proj.csproj""")
+        assertNull(RunTestRunner.findOwningProjectPath("D:/other/F.feature", projects))
+    }
+
     // ── normalizeToManagedAssemblyPath ───────────────────────────────────────
 
     @Test

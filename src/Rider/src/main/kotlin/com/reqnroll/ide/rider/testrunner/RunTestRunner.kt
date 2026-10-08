@@ -163,12 +163,17 @@ object RunTestRunner {
      * `internal`ly testable without a platform fixture.
      */
     internal fun findOwningProjectPath(filePath: String, projectFilePaths: Collection<String>): String? {
+        // Compare in a separator-independent form: lspUriToLocalPath yields forward slashes, while the project
+        // path comes back from Rider with the system separator (backslashes on Windows). Parsed as plain
+        // strings, not via java.io.File, so the logic behaves the same on every OS (#977).
+        val normalizedFile = filePath.replace('\\', '/')
         var best: String? = null
         var bestLen = 0
         for (projectFilePath in projectFilePaths) {
-            val folder = File(projectFilePath).parent ?: continue
-            val prefix = folder.trimEnd(File.separatorChar) + File.separatorChar
-            if (filePath.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
+            val folder = projectFilePath.replace('\\', '/').substringBeforeLast('/', missingDelimiterValue = "")
+            if (folder.isEmpty()) continue
+            val prefix = folder.trimEnd('/') + "/"
+            if (normalizedFile.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
                 best = projectFilePath
                 bestLen = prefix.length
             }
