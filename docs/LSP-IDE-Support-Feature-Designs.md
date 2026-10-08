@@ -2054,6 +2054,10 @@ The server side is complete and unit-tested. Neither Visual Studio's nor Rider's
 
 **Telemetry.** Following a link reports the client-originated `TagLink command executed` event from all three IDEs (no properties; see the [Telemetry Events Inventory](Telemetry-Events-Inventory.md#taglinkcommandexecuted-issue-755)). The VS Code click path relies on VS Code dispatching `command:` document-link targets.
 
+#### Permanent link styling — VS Code (issue #921)
+
+VS Code only underlines a document link while Ctrl/Cmd is held over it, which hides which tags are links. `TagLinkDecorations` (`src/VSCode/src/lsp/tagLinks.ts`) therefore remembers the ranges of the links the `provideDocumentLinks` middleware returns for each document and paints them with a `TextEditorDecorationType` (underline in `textLink.foreground`), re-applied when editors become visible and cleared when a document closes. Because the ranges come from the same pass that renders the links, they refresh exactly when the links do (open, edit, and the refresh nudge); a request that returns nothing keeps the last known styling rather than flashing it off. The hover target is the link's existing tooltip.
+
 #### LSP messages
 
 | Direction | Method | Purpose |
@@ -2062,6 +2066,10 @@ The server side is complete and unit-tested. Neither Visual Studio's nor Rider's
 | Server → Client | `DocumentLink[]` response | One link (range = the whole tag including `@`, target = resolved URL) per matching tag |
 
 `documentLink/resolve` is not supported (`ResolveProvider = false`): the target URL is computed eagerly, which is a regex match and string substitution with no I/O.
+
+#### Permanent link styling — Rider (issue #921)
+
+`ReqnrollFeatureTagLinkController` now stores each link as a range highlighter in the hyperlink colour with an underline (instead of only creating one while Ctrl/Cmd is held), so clickable tags are visible at all times; the highlighters follow edits until the next debounced refresh replaces them. Hovering a link for 500 ms, with no modifier, shows a hint with the target and "Ctrl + click to follow link" ("Cmd" on macOS; `TagLinkSupport.hoverHtml`, target HTML-escaped). Ctrl/Cmd+hover still adds the hand cursor, and Ctrl/Cmd+click opens the link as before.
 
 #### Sequence diagram
 
@@ -2087,6 +2095,12 @@ sequenceDiagram
     DLH-->>IDE: DocumentLink[]
     IDE-->>IDE: Render tags as hyperlinks
 ```
+
+#### Permanent link styling — Visual Studio (issue #921)
+
+The legacy extension emitted a `UrlTag` per link, and Visual Studio's own `UrlClassifier` drew the permanent underline and a tooltip. The new extension keeps the Ctrl+click navigable-symbol path instead, so the styling is supplied separately: `TagLinkTracker` (one per buffer, in `VSSDKIntegration/DocumentLinks`) fetches the links through `TagLinkRedirect.GetLinksAsync`, keeps only http(s) targets, holds each as a tracking span so it follows edits, and refreshes on a debounced buffer change and on the server's CodeLens refresh (`TagLinkRedirect.InvalidateAll`, via the shared `WeakTaggerRegistry`). `TagLinkClassifier` classifies each span with the editor's `url` classification type (link colour and underline); `TagLinkQuickInfoSourceProvider` shows the target URL and "CTRL + click to follow link" when the pointer rests on a link, with no modifier.
+
+It is deliberately **not** a `UrlTag` tagger: decompiling `Microsoft.VisualStudio.Platform.VSEditor.dll` shows the editor's Go To Definition mouse handler stands down wherever a `UrlTag` exists (`ExistsUrlTagAt`), which would bypass `TagLinkNavigableSymbolProvider` and with it the http(s)-only rule and the `TagLink command executed` telemetry.
 
 #### Implementation notes
 

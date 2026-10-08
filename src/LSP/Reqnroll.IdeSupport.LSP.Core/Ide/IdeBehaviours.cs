@@ -76,4 +76,13 @@ public sealed record IdeBehaviours
     /// evidence note in <see cref="IdeBehavioursResolver"/>.
     /// </summary>
     public bool SupportsCodeLensResolve { get; init; }
+
+    /// <summary>
+    /// The client navigates to a step definition through <c>reqnroll/findStepDefinitions</c> (Ctrl+click and
+    /// F12 are both intercepted), so a <c>textDocument/definition</c> request on a <c>.feature</c> file is
+    /// almost always the editor's own provider falling through on hover (issue #899), which is not worth
+    /// counting. The response is still needed: Peek Definition (not intercepted), the hover underline and
+    /// F12 before the client has initialized all use it, so this flag must only gate telemetry.
+    /// </summary>
+    public bool NavigatesStepsViaFindStepDefinitions { get; init; }
 }

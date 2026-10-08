@@ -191,23 +191,22 @@ as *lookups*, not *runs*.
 ### `GoToStepDefinitionCommandExecuted`
 | | |
 |---|---|
-| **Emitters** | Server: `DefinitionHandler` (`textDocument/definition` - VS Code and Rider). Client: Visual Studio's `GoToStepDefinitionPresenter` (issue #898) |
-| **When** | Server: after a step is resolved at the cursor (guard-clause rejections don't emit); note that VS Code and Rider send `textDocument/definition` on hover too, so this is a lookup count there until their clients emit it (follow-up). Visual Studio: each time the user runs Go To Definition (F12 or Ctrl+Click) in a `.feature` file, wherever the caret is |
-| **Properties** | Server: `LocationCount` (int): navigable rows offered; `Status` (string): `Bound` (defined, at least one navigable row) \| `Ambiguous` \| `Undefined` (no defined binding) \| `Unresolved` (defined, but no binding source exists on this machine — issue #540); `Protocol` (`"textDocument/definition"`). Visual Studio client: `LocationCount` only (0 when there was nowhere to go) |
+| **Emitters** | Client only (issues #898, #899): Visual Studio's `GoToStepDefinitionPresenter`; VS Code's `doGoToStepDefinition` (the "Reqnroll: Go to Step Definition" picker command). Rider has no such command and sends nothing |
+| **When** | Visual Studio: each time the user runs Go To Definition (F12 or Ctrl+Click) in a `.feature` file, wherever the caret is. VS Code: each run of the picker command. VS Code's F12/Peek/Ctrl+click and Rider's go-to-declaration use `textDocument/definition`, which those IDEs also send on hover and which a client cannot tell apart from a navigation, so they are **not** reported as navigations (known gap) |
+| **Properties** | `LocationCount` (int): navigable rows offered (0 when there was nowhere to go) |
 
-**Analytics use.** Go to Step Definition usage. In Visual Studio this is a genuine navigation count,
-the honest counterpart to `FindStepDefinitionsCommandExecuted`. The ambiguous-match frequency
-(`Status = Ambiguous`), undefined-step rate and `Unresolved` rate come from the server event
-(VS Code and Rider) and, in Visual Studio, from `FindStepDefinitionsCommandExecuted`.
+**Analytics use.** Go to Step Definition navigation count for Visual Studio and VS Code's picker command;
+the honest counterpart to `FindStepDefinitionsCommandExecuted`. The status mix (ambiguous, undefined,
+unresolved) comes from `FindStepDefinitionsCommandExecuted`.
 
 ### `FindStepDefinitionsCommandExecuted`
 | | |
 |---|---|
-| **Emitter** | `FindStepDefinitionsHandler` (`reqnroll/findStepDefinitions`, issue #757) |
-| **When** | After a step is resolved at the cursor, for **every** request. Visual Studio sends it for Go To Definition and for each Ctrl+hover that checks whether a word is navigable (issue #898), so read it as *lookups*, not navigations; the navigation is `GoToStepDefinitionCommandExecuted`. Positions that are not on a step don't emit |
-| **Properties** | `LocationCount` (int): navigable rows offered; `Status` (string): `Bound` \| `Ambiguous` \| `Undefined` \| `Unresolved` (as for `GoToStepDefinitionCommandExecuted`) |
+| **Emitters** | `FindStepDefinitionsHandler` (`reqnroll/findStepDefinitions`, issue #757) and, for VS Code and Rider, `DefinitionHandler` (`textDocument/definition`, issue #899) |
+| **When** | After a step is resolved at the cursor, for **every** request. Visual Studio sends the custom request for Go To Definition and for each Ctrl+hover that checks whether a word is navigable (issue #898); VS Code and Rider send `textDocument/definition` for F12/Ctrl+click and on hover. Read it as *lookups*, not navigations; the navigation is `GoToStepDefinitionCommandExecuted`. `DefinitionHandler` emits nothing for Visual Studio (`IdeBehaviours.NavigatesStepsViaFindStepDefinitions`): there `textDocument/definition` is mostly the editor's hover fall-through when our provider declined (Peek Definition also uses it and is not distinguishable, so it goes uncounted). Positions that are not on a step don't emit |
+| **Properties** | `LocationCount` (int): navigable rows offered; `Status` (string): `Bound` (defined, at least one navigable row) \| `Ambiguous` \| `Undefined` (no defined binding) \| `Unresolved` (defined, but no binding source exists on this machine - issue #540); `Protocol` (string): `reqnroll/findStepDefinitions` or `textDocument/definition` |
 
-**Analytics use.** Lookup volume and the step-status mix as seen by Visual Studio: how often a hovered
+**Analytics use.** Lookup volume and the step-status mix (all IDEs; split by `Protocol` or `IdeClient`): how often a hovered
 or navigated step is ambiguous, undefined, or has no local binding source.
 
 ### `FindHooksCommandExecuted` (server) vs `GoToHookCommandExecuted` (clients)
@@ -487,7 +486,7 @@ link/content engagement on the welcome/upgrade surfaces.
 
 ## 5. Client-originated navigation events
 
-`GoToStepDefinitionCommandExecuted` (§ above) is also client-originated in Visual Studio (issue #898); VS Code and Rider will follow, mirroring the constant per the catalog's rule.
+`GoToStepDefinitionCommandExecuted` (§ above) is also client-originated, in Visual Studio (issue #898) and, for its picker command, VS Code (issue #899; constant mirrored in `telemetryEvents.ts`). Rider has no Go to Step Definition command, so it sends none.
 
 ### `GoToHookCommandExecuted`
 | | |
@@ -665,7 +664,7 @@ abrupt process death is accepted but detectable via `Sequence`.
 | Step Rename failure modes | `Rename step command executed` (`Erroneous`, `Reason`) |
 | Picker UI trigger rate | `RenameTargetsResolved` (`TargetCount > 1` share) |
 | Go-to-hooks: lookups vs navigations | `FindHooks command executed` (server) vs `GoToHook command executed` (clients) |
-| Go-to-step-definition: lookups vs navigations | Visual Studio: `FindStepDefinitions command executed` (server) vs `GoToStepDefinition command executed` (client). VS Code/Rider: only the server's `GoToStepDefinition command executed` (lookup-shaped) until their clients emit it |
+| Go-to-step-definition: lookups vs navigations | `FindStepDefinitions command executed` (server; all IDEs) vs `GoToStepDefinition command executed` (client; Visual Studio and VS Code's picker command only - F12/Ctrl+click in VS Code and Rider are not distinguishable from hover) |
 | Run CodeLens: resolves vs actual runs | `ResolveTestTargets…` (lookups) + `TestOutcomesRunCompleted` (completions) |
 | Crash/error rates | `UnhandledException` (server; VS Code/Rider client code with `ExceptionOrigin = "Client"`) + VS `ExceptionTelemetry` |
 | Adoption lifecycle | All IDEs (#875): `Extension loaded`, `Extension installed`, `Extension upgraded`, `"{N} day usage"`; VS only: wizard events; `ServerSessionStarted` by distinct `ai.user.id` as a cross-check |

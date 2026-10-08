@@ -13,6 +13,7 @@ public class ClientIdeContextBehavioursTests
         RejectsEmptyTriggerCompletion = true,
         RequestsCompletionAfterDeletion = true,
         AppliesRenameResponseEditNatively = true,
+        NavigatesStepsViaFindStepDefinitions = true,
     };
 
     private static readonly IdeBehaviours VSCodeBehaviours = new()

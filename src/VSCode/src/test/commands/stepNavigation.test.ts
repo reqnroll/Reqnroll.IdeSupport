@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
+import { TelemetryReporter } from '@vscode/extension-telemetry';
+import { registerTelemetry } from '../../telemetry';
 import {
   distinctByPosition,
   doGoToStepDefinition,
@@ -78,6 +80,54 @@ suite('stepNavigation', () => {
 
       assert.strictEqual(sentMethod, 'reqnroll/findStepDefinitions');
       assert.match(info ?? '', /No step definition found/);
+    });
+
+    test('sends "GoToStepDefinition command executed" with the navigable LocationCount (issue #899)', async () => {
+      const client = {
+        sendRequest: () =>
+          Promise.resolve({
+            items: [
+              {
+                methodName: 'A',
+                sourceFile: stepsFile,
+                sourceLine: 1,
+                sourceChar: 1,
+                isResolved: true,
+              },
+              {
+                methodName: 'B',
+                recordedSourceFile: '/elsewhere/B.cs',
+                sourceLine: 2,
+                sourceChar: 1,
+                isResolved: false,
+              },
+            ],
+          }),
+        onNotification: () => ({ dispose: () => undefined }),
+      } as unknown as LanguageClient;
+      const telemetryContext = { subscriptions: [] } as unknown as vscode.ExtensionContext;
+      const proto = TelemetryReporter.prototype as unknown as {
+        sendTelemetryEvent: (eventName: string, properties?: Record<string, string>) => void;
+      };
+      const original = proto.sendTelemetryEvent;
+      const sent: Array<[string, Record<string, string> | undefined]> = [];
+      proto.sendTelemetryEvent = (eventName, properties) => {
+        sent.push([eventName, properties]);
+      };
+
+      try {
+        registerTelemetry(client, telemetryContext);
+        await withStubbedWindow({ showQuickPick: () => Promise.resolve(undefined) as never }, () =>
+          doGoToStepDefinition(client),
+        );
+      } finally {
+        proto.sendTelemetryEvent = original;
+        for (const sub of telemetryContext.subscriptions) sub.dispose();
+      }
+
+      const events = sent.filter(([name]) => name === 'GoToStepDefinition command executed');
+      assert.strictEqual(events.length, 1);
+      assert.strictEqual(String(events[0][1]?.LocationCount), '1');
     });
 
     test('lists several bindings with their method and attribute', async () => {

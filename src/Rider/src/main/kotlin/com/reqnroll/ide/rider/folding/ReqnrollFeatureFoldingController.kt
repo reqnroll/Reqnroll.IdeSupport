@@ -16,13 +16,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.util.Alarm
 import com.reqnroll.ide.rider.isFeatureExtension
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.FoldingRange
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Renders Code Folding for `.feature` files directly against [Editor.getFoldingModel], bypassing
@@ -112,7 +111,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
             ApplicationManager.getApplication().executeOnPooledThread {
                 if (project.isDisposed || editor.isDisposed) return@executeOnPooledThread
 
-                val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
+                val uri = localPathToLspUri(virtualFile.path)
                 val ranges = ReqnrollRequestSender.foldingRange(project, uri)
                 ReqnrollDebugLogger.verbose("ReqnrollFeatureFoldingController: ${ranges?.size ?: "null"} range(s) for $uri")
 

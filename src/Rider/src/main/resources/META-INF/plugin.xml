@@ -46,6 +46,11 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          first approach tried) doesn't work for this particular built-in action. -->
     <actionPromoter implementation="com.reqnroll.ide.rider.commenting.ReqnrollCommentTogglePromoter" />
 
+    <!-- Rider 2026.2 routes the Go to Declaration shortcuts (F12, Ctrl+B, Ctrl+click) through its
+         ReSharper backend first, which knows nothing about Gherkin; ReqnrollGoToDefinitionAction runs
+         the frontend action directly for .feature files instead (issue #909). -->
+    <actionPromoter implementation="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionPromoter" />
+
     <!-- Rider's generic LSP client has no rendering-side consumer for textDocument/codeLens or
          textDocument/inlayHint at all (confirmed by decompiling — only capability-name
          bookkeeping exists in com.intellij.platform.lsp.impl.LspDynamicCapabilities). Both
@@ -86,6 +91,12 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
          ReqnrollLspServerDescriptor.lspFormattingSupport), so `|`-triggered table-column
          realignment is driven manually, same reasoning as the codeVision/inlay entries above. -->
     <typedHandler implementation="com.reqnroll.ide.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler" />
+
+    <!-- Rider's generic LSP client never starts a completion popup on the server's `@`/space trigger
+         characters (it only labels requests with them; IntelliJ's auto-popup fires on identifier
+         characters only), so tag and step completion would otherwise wait for the first letter
+         (issue #902). -->
+    <typedHandler implementation="com.reqnroll.ide.rider.completion.ReqnrollFeatureCompletionAutoPopupHandler" />
 
     <!-- Not com.intellij.structureViewBuilder (FileType-keyed StructureViewBuilderProvider): that
          EP resolves through a JDK dynamic proxy that throws a ClassCastException casting our
@@ -160,6 +171,21 @@ navigation, backed by the Reqnroll.IdeSupport LSP server.
           description="Toggles # comments on the selected line(s) of a feature file">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
         <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH" />
+      </action>
+
+      <action id="Reqnroll.GoToDefinition"
+          class="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionAction"
+          text="Reqnroll: Go to Step Definition"
+          description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
+        <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
+             dispatcher did not pick up for this action. "Visual Studio 2022" is listed explicitly too: bindings added to
+             its parent "Visual Studio" alone did not take effect for it. -->
+        <keyboard-shortcut keymap="$default" first-keystroke="control B" />
+        <mouse-shortcut keymap="$default" keystroke="ctrl button1" />
+        <keyboard-shortcut keymap="Visual Studio" first-keystroke="F12" />
+        <mouse-shortcut keymap="Visual Studio" keystroke="ctrl button1" />
+        <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F12" />
+        <mouse-shortcut keymap="Visual Studio 2022" keystroke="ctrl button1" />
       </action>
 
       <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI

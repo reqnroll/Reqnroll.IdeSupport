@@ -60,6 +60,7 @@ public static class IdeBehavioursResolver
                 RejectsEmptyTriggerCompletion = true,
                 RequestsCompletionAfterDeletion = true,
                 AppliesRenameResponseEditNatively = true,
+                NavigatesStepsViaFindStepDefinitions = true,
             };
         }
 

@@ -81,11 +81,13 @@ public sealed class FindStepDefinitionsHandler
 
         // A lookup event, not a navigation: Visual Studio also sends this request on Ctrl+hover to decide
         // whether to underline a word (issue #898). The user's actual navigation is reported by the client
-        // as GoToStepDefinitionCommandExecuted. LocationCount counts navigable rows.
+        // as GoToStepDefinitionCommandExecuted. LocationCount counts navigable rows. DefinitionHandler sends the same
+        // event (Protocol = textDocument/definition) for VS Code and Rider.
         _telemetryService?.SendEvent(TelemetryEvents.FindStepDefinitionsCommandExecuted, new()
         {
             ["LocationCount"] = resolvedCount,
             [TelemetryProperties.Status] = StepAtPositionResolver.ClassifyStatus(step, resolvedCount),
+            [TelemetryProperties.Protocol] = CustomLspMethodNames.ReqnrollFindStepDefinitions,
         });
 
         return Task.FromResult(new FindStepDefinitionsResponse { Items = items });

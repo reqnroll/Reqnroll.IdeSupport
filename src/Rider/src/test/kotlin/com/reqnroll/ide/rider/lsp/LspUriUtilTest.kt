@@ -38,4 +38,41 @@ class LspUriUtilTest {
     fun `returns null for a blank string`() {
         assertNull(lspUriToLocalPath(""))
     }
+
+    // localPathToLspUri (#909): must equal what Rider's LspServerDescriptor.getFileUri sends for didOpen.
+
+    @Test
+    fun `builds a three-slash uri for a unix path`() {
+        assertEquals("file:///repo/Calculator.feature", localPathToLspUri("/repo/Calculator.feature"))
+    }
+
+    @Test
+    fun `builds a three-slash lower-case-drive uri for a windows path`() {
+        assertEquals(
+            "file:///w:/Reqnroll/Calc/Addition.feature",
+            localPathToLspUri("W:/Reqnroll/Calc/Addition.feature"),
+        )
+    }
+
+    @Test
+    fun `normalizes backslashes in a windows path`() {
+        assertEquals("file:///c:/repo/F.feature", localPathToLspUri("C:\\repo\\F.feature"))
+    }
+
+    @Test
+    fun `percent-encodes reserved characters`() {
+        assertEquals("file:///repo/Price%20-%20Copy.feature", localPathToLspUri("/repo/Price - Copy.feature"))
+        assertEquals("file:///c:/My%20Repo/F.feature", localPathToLspUri("C:/My Repo/F.feature"))
+    }
+
+    @Test
+    fun `keeps a unc path's host`() {
+        assertEquals("file://server/share/F.feature", localPathToLspUri("//server/share/F.feature"))
+    }
+
+    @Test
+    fun `round-trips through lspUriToLocalPath for unix paths`() {
+        val path = "/repo/Price - Copy.feature"
+        assertEquals(path, lspUriToLocalPath(localPathToLspUri(path)))
+    }
 }

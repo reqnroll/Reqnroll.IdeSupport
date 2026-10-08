@@ -53,6 +53,23 @@ class TagLinkSupportTest {
     }
 
     @Test
+    fun `hoverHtml shows the target and the gesture that follows it`() {
+        assertEquals(
+            "<html>https://example.com/issues/1234<br>Ctrl + click to follow link</html>",
+            TagLinkSupport.hoverHtml("https://example.com/issues/1234", "Ctrl"),
+        )
+        assertTrue(TagLinkSupport.hoverHtml("https://example.com/", "Cmd").contains("Cmd + click"))
+    }
+
+    @Test
+    fun `hoverHtml escapes markup in the target`() {
+        val html = TagLinkSupport.hoverHtml("https://example.com/?a=1&b=<script>\"x\"</script>", "Ctrl")
+
+        assertFalse(html.contains("<script>"))
+        assertTrue(html.contains("a=1&amp;b=&lt;script&gt;&quot;x&quot;&lt;/script&gt;"))
+    }
+
+    @Test
     fun `linkAt is start inclusive and end exclusive`() {
         val links = listOf(TagLinkRange(11, 22, "https://example.com/1"))
 

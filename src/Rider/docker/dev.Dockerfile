@@ -73,6 +73,15 @@ ENV PATH="${PATH}:/usr/share/dotnet"
 ENV DOTNET_NOLOGO=1
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
 
+# Pre-create ~/.config (issue #893). On Linux, .NET's Environment.GetFolderPath(ApplicationData)
+# returns "" — not the would-be path — when ~/.config doesn't exist, and a fresh container has none.
+# Reqnroll's own analytics FileUserIdStore (run from the MSBuild code-behind generation task of any
+# project under test) builds its path from that, ending up with the relative "Reqnroll/userid", so
+# every build wrote a stray Reqnroll/userid folder into the opened solution's directory. With the
+# directory present it resolves to ~/.config/Reqnroll/userid instead. The folder must exist —
+# setting XDG_CONFIG_HOME alone does not help.
+RUN mkdir -p /root/.config
+
 # /mnt/wslg is bind-mounted in from the host (see devcontainer.json); the
 # X11 socket actually lives at /mnt/wslg/.X11-unix, and this recreates the
 # same /tmp/.X11-unix symlink WSLg itself uses — done here as a plain

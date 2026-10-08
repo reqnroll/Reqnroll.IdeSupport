@@ -13,6 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 /// here because nothing else would notice it drifting. The source-level tests need no real VS UI thread, so
 /// they use plain NSubstitute fakes, like <see cref="GoToDefinitionNavigableSymbolProviderTests"/>.
 /// </summary>
+[Collection("TagLinkRedirect static state")]
 public class TagLinkNavigableSymbolProviderTests : IDisposable
 {
     // TagLinkRedirect.GetLinksAsync is a process-wide static: reset it on both sides of every test.

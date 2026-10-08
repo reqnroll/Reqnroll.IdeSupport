@@ -16,6 +16,7 @@ using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.Definition;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
+using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Workspace;
 using Reqnroll.IdeSupport.LSP.Core.Workspace;
@@ -60,6 +61,9 @@ public class DefinitionHandlerTests
 
     private DefinitionHandler CreateSutWithTelemetry(ILspTelemetryService telemetry) =>
         new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem, telemetry);
+
+    private DefinitionHandler CreateSutWithTelemetry(ILspTelemetryService telemetry, ClientIdeContext clientIde) =>
+        new(_matchService, _bufferService, _scopeManager, _logger, _fileSystem, telemetry, clientIde: clientIde);
 
     private static DefinitionParams RequestAt(DocumentUri uri, int line, int character) =>
         new()
@@ -532,7 +536,7 @@ public class DefinitionHandlerTests
         result.Should().NotBeNull();
     }
 
-    // ── Telemetry (issue #581 finding 1) ──────────────────────────────────────
+    // ── Telemetry (issue #581 finding 1; lookup event since issue #899) ──────────────────────────────────────
 
     [Fact]
     public async Task Handle_defined_step_emits_telemetry_with_the_location_count()
@@ -546,7 +550,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "GoToStepDefinition command executed",
+            "FindStepDefinitions command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 1
                 && (string)p["Status"]! == "Bound"
@@ -568,7 +572,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "GoToStepDefinition command executed",
+            "FindStepDefinitions command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 0 && (string)p["Status"]! == "Unresolved"));
     }
@@ -585,7 +589,7 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "GoToStepDefinition command executed",
+            "FindStepDefinitions command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 2 && (string)p["Status"]! == "Ambiguous"));
     }
@@ -604,9 +608,39 @@ public class DefinitionHandlerTests
             RequestAt(FeatureUri, 2, 10), CancellationToken.None);
 
         telemetry.Received(1).SendEvent(
-            "GoToStepDefinition command executed",
+            "FindStepDefinitions command executed",
             Arg.Is<Dictionary<string, object?>>(p =>
                 (int)p["LocationCount"]! == 0 && (string)p["Status"]! == "Undefined"));
+    }
+
+    [Fact]
+    public async Task Handle_from_a_client_that_navigates_via_findStepDefinitions_emits_no_telemetry()
+    {
+        // Visual Studio reaches textDocument/definition only as its provider's hover fall-through (issue #899).
+        var step = MakeDefinedMatch("Steps.cs", csLine: 10, csColumn: 5);
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        var result = await CreateSutWithTelemetry(telemetry, new ClientIdeContext("visualstudio")).Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+        result.Should().NotBeNull("the response is unaffected by the telemetry gate");
+    }
+
+    [Fact]
+    public async Task Handle_from_a_client_without_the_behaviour_still_emits_the_lookup_event()
+    {
+        var step = MakeDefinedMatch("Steps.cs", csLine: 10, csColumn: 5);
+        _matchService.Store(new FeatureBindingMatchSet(
+            FeatureUri.ToString(), ProjectOwner.Unknown, 1, 1, new[] { step }));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+
+        await CreateSutWithTelemetry(telemetry, new ClientIdeContext("vscode")).Handle(
+            RequestAt(FeatureUri, 2, 10), CancellationToken.None);
+
+        telemetry.Received(1).SendEvent("FindStepDefinitions command executed", Arg.Any<Dictionary<string, object?>>());
     }
 
     [Fact]
