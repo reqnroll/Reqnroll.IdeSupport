@@ -16,9 +16,11 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     private readonly IProjectScope _projectScope;
     private readonly ReqnrollProjectSettingsProvider _reqnrollProjectSettingsProvider;
     private readonly TimeSpan _retryDelay;
+    private readonly SynchronizationContext _synchronizationContext;
     private ProjectSettings _projectSettings;
     private int _retryInitializeCounter;
     private Timer _retryInitializeTimer;
+    private volatile bool _disposed;
 
     /// <summary>Initializes a new instance of the <see cref="ProjectSettingsProvider"/> class.</summary>
     public ProjectSettingsProvider( IProjectScope projectScope,
@@ -36,6 +38,10 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         _reqnrollProjectSettingsProvider = reqnrollProjectSettingsProvider ??
                                            throw new ArgumentNullException(nameof(reqnrollProjectSettingsProvider));
         _retryDelay = retryDelay;
+        // The project scope may be thread-affine (VsProjectScope requires the VS UI thread, which
+        // is where this provider is constructed), so retries are marshalled back to this context
+        // instead of running on the timer's thread-pool thread (#962).
+        _synchronizationContext = SynchronizationContext.Current;
         InitializeProjectSettings();
 
         //_projectScope.GetIdeSupportConfigurationProvider().WeakConfigurationChanged += OnConfigurationChanged;
@@ -47,6 +53,7 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
     /// <summary>Stops the retry timer and releases resources held by this provider.</summary>
     public void Dispose()
     {
+        _disposed = true;
         StopRetryInitializeTimer();
         //_projectScope.GetIdeSupportConfigurationProvider().WeakConfigurationChanged -= OnConfigurationChanged;
         //_projectScope.IdeScope.WeakProjectsBuilt -= ProjectSystemOnProjectsBuilt;
@@ -109,12 +116,36 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
 
     private void RetryInitializeTimerTick(object state)
     {
+        // Runs on a thread-pool thread: an exception escaping here would terminate the host process.
+        try
+        {
+            if (_synchronizationContext != null)
+                _synchronizationContext.Post(_ => RetryInitialize(), null);
+            else
+                RetryInitialize();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException(_projectScope.IdeScope.TelemetryService, ex, "Project settings retry could not be scheduled");
+        }
+    }
+
+    private void RetryInitialize()
+    {
         StopRetryInitializeTimer();
 
-        if (!_projectSettings.IsUninitialized)
+        if (_disposed || !_projectSettings.IsUninitialized)
             return;
 
-        CheckProjectSettings();
+        try
+        {
+            CheckProjectSettings();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException(_projectScope.IdeScope.TelemetryService, ex, "Project settings retry failed");
+        }
+
         if (_projectSettings.IsUninitialized)
         {
             if (_retryInitializeCounter < MAX_RETRY_COUNT)
