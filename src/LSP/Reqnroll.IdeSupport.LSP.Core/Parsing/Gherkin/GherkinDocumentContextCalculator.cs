@@ -70,6 +70,11 @@ internal static class GherkinDocumentContextCalculator
                             int headerIndex = Array.IndexOf(header, match.Name);
                             if (headerIndex < 0)
                                 return match.Value;
+                            // A short Examples row has fewer cells than its header. TableCell is a
+                            // readonly struct (since Gherkin 34), so ElementAtOrDefault returns a
+                            // default cell whose Value is null for a missing column, and the `??`
+                            // below falls back to the placeholder text. Do NOT "fix" this with
+                            // `?.Value` — `?.` is a compile error (CS0023) on a non-nullable struct.
                             return exampleRow.Cells.ElementAtOrDefault(headerIndex).Value ?? match.Value;
                         });
 
