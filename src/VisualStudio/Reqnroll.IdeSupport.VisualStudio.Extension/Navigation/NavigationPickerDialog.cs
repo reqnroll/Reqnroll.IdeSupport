@@ -66,19 +66,35 @@ internal sealed class NavigationPickerDialog : DialogWindow
     {
         var goButton = new Button
         {
-            Content             = "Go",
-            IsDefault           = true,
-            MinWidth            = 75,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin              = new Thickness(8, 4, 8, 8),
+            Content   = "Go",
+            IsDefault = true,
+            MinWidth  = 75,
+            Margin    = new Thickness(8, 4, 8, 8),
+        };
+        // IsCancel gives both the button and the Esc key a dismiss path: pressing Esc
+        // (or clicking Cancel) sets DialogResult to false and closes the window.
+        var cancelButton = new Button
+        {
+            Content   = "Cancel",
+            IsCancel  = true,
+            MinWidth  = 75,
+            Margin    = new Thickness(8, 4, 0, 8),
         };
         goButton.Click           += (_, _) => Accept();
         listBox.MouseDoubleClick += (_, _) => Accept();
         listBox.KeyDown          += OnListKeyDown;
 
+        var buttons = new StackPanel
+        {
+            Orientation         = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        buttons.Children.Add(cancelButton);
+        buttons.Children.Add(goButton);
+
         var root = new StackPanel();
         root.Children.Add(listBox);
-        root.Children.Add(goButton);
+        root.Children.Add(buttons);
         return root;
     }
 
