@@ -90,6 +90,16 @@ public sealed class TagLinkNavigableSymbolProvider : INavigableSymbolSourceProvi
                 if (link is null)
                     return null;
 
+                // A non-http(s) target is refused by Navigate, so offering a symbol for it would put a
+                // Ctrl+hover underline on the tag (winning over Go To Definition) that does nothing when
+                // clicked. Keep the provider in step with the styling (TagLinkTracker) and Navigate (#1036).
+                if (!TagLinkRedirect.IsOpenableUrl(link.Value.Target))
+                {
+                    _logger.LogVerbose(
+                        $"TagLinkNavigableSymbolProvider: not offering non-http(s) tag link '{link.Value.Target}'.");
+                    return null;
+                }
+
                 _logger.LogVerbose(
                     $"TagLinkNavigableSymbolProvider: offering tag link symbol uri='{fileUri}' at {line.LineNumber}:{char0} -> '{link.Value.Target}'");
 
