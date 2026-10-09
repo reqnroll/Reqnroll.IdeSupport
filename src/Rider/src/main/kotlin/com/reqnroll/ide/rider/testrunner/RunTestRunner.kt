@@ -680,23 +680,17 @@ object RunTestRunner {
     internal fun evaluateMtpPropertiesViaMsbuild(projectFilePath: String): MtpEvaluation? {
         val propertyNames = MTP_CAPABLE_PROPERTY_NAMES + MTP_REDIRECT_PROPERTY_NAME
         return try {
-            // stderr is discarded, not merely unread — an un-drained pipe that fills its OS buffer
-            // would otherwise block the child process writing to it, hanging the readText() below
-            // until the timeout even for an evaluation that would otherwise succeed (same pitfall
-            // runDotnetTest's own Redirect.DISCARD comment documents).
-            val process = ProcessBuilder(
-                DotnetCliLocator.resolve(), "msbuild", projectFilePath,
-                "-getProperty:${propertyNames.joinToString(",")}", "-nologo",
-            )
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            val completed = process.waitFor(MSBUILD_EVAL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroyForcibly()
-                return null
-            }
-            if (process.exitValue() != 0) return null
+            // stderr is discarded and stdout is drained off-thread with the timeout enforced
+            // (issue #982) — see BoundedProcessRunner.
+            val result = BoundedProcessRunner.run(
+                listOf(
+                    DotnetCliLocator.resolve(), "msbuild", projectFilePath,
+                    "-getProperty:${propertyNames.joinToString(",")}", "-nologo",
+                ),
+                TimeUnit.SECONDS.toMillis(MSBUILD_EVAL_TIMEOUT_SECONDS),
+            ) ?: return null
+            if (result.exitCode != 0) return null
+            val output = result.output
 
             val properties = JsonParser.parseString(output).asJsonObject.getAsJsonObject("Properties") ?: return null
             fun isTrue(name: String) = properties.get(name)

@@ -110,20 +110,13 @@ internal object MtpProjectStubs {
     /** `dotnet msbuild <project> -getProperty:MSBuildProjectExtensionsPath` (a single property prints the bare value). Null on any failure or timeout. */
     internal fun evaluateViaMsbuild(projectFile: String): String? =
         try {
-            val process = ProcessBuilder(
-                DotnetCliLocator.resolve(), "msbuild", projectFile, "-getProperty:MSBuildProjectExtensionsPath", "-nologo",
-            )
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
-                .start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            if (!process.waitFor(MSBUILD_EVAL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                process.destroyForcibly()
-                null
-            } else if (process.exitValue() != 0) {
-                null
-            } else {
-                output.trim().takeIf { it.isNotEmpty() }
-            }
+            BoundedProcessRunner.run(
+                listOf(
+                    DotnetCliLocator.resolve(), "msbuild", projectFile,
+                    "-getProperty:MSBuildProjectExtensionsPath", "-nologo",
+                ),
+                TimeUnit.SECONDS.toMillis(MSBUILD_EVAL_TIMEOUT_SECONDS),
+            )?.takeIf { it.exitCode == 0 }?.output?.trim()?.takeIf { it.isNotEmpty() }
         } catch (ex: Exception) {
             ReqnrollDebugLogger.warn("MtpProjectStubs: MSBuildProjectExtensionsPath evaluation failed for $projectFile", ex)
             null
