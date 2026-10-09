@@ -71,8 +71,8 @@ public sealed class FindUnusedStepDefinitionsHandler
         _telemetryService?.SendEvent(TelemetryEvents.FindUnusedStepDefinitionsCommandExecuted, new()
         {
             ["UnusedStepDefinitions"] = items.Count,
-            ["ScannedFeatureFiles"] = allRegistries.Count,
-            ["IsCancellationRequested"] = false,
+            [TelemetryProperties.ScannedProjects] = allRegistries.Count,
+            ["IsCancellationRequested"] = cancellationToken.IsCancellationRequested,
             [TelemetryProperties.TotalStepDefinitions] = CountScannedStepDefinitions(allRegistries.Select(r => r.Registry)),
             [TelemetryProperties.DurationBucket] = TelemetryBuckets.DurationSince(started),
         });
