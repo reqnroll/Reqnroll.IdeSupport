@@ -11,8 +11,8 @@ public interface IDocumentBufferService
 {
     /// <summary>Replaces the buffer for the given document with new text and version, discarding any cached tags.</summary>
     void Update(DocumentUri uri, int? version, string text);
-    /// <summary>Updates the cached Gherkin tags for a document, creating an empty buffer entry if none exists yet.</summary>
-    void UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags);
+    /// <summary>Updates the cached Gherkin tags of an existing buffer. Never creates a buffer: returns <see langword="false"/> when the document is not (or no longer) open.</summary>
+    bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags);
     /// <summary>Removes the buffer for the given document, typically when it is closed.</summary>
     void Remove(DocumentUri uri);
     /// <summary>Attempts to retrieve the current buffer for the given document.</summary>
@@ -32,11 +32,20 @@ public class DocumentBufferService : IDocumentBufferService
         => _buffers[uri.ToString()] = new DocumentBuffer(uri, version, text);
 
     /// <inheritdoc/>
-    public void UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
-        => _buffers.AddOrUpdate(
-            uri.ToString(),
-            _ => new DocumentBuffer(uri, null, string.Empty, tags),
-            (_, existing) => existing with { Tags = tags });
+    public bool UpdateTags(DocumentUri uri, IReadOnlyCollection<IdeSupportTag> tags)
+    {
+        // Update-only (issue #938): a parse can finish after didClose has removed the buffer, and
+        // re-creating it here would leave a ghost "open" document. TryUpdate only swaps in the
+        // tagged copy if the entry is still the one just read; retry if a concurrent
+        // Update/UpdateTags replaced it, and give up once Remove has taken it away.
+        var key = uri.ToString();
+        while (_buffers.TryGetValue(key, out var existing))
+        {
+            if (_buffers.TryUpdate(key, existing with { Tags = tags }, existing))
+                return true;
+        }
+        return false;
+    }
 
     /// <inheritdoc/>
     public bool TryGet(DocumentUri uri, out DocumentBuffer? buffer)
