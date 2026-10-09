@@ -56,7 +56,7 @@ public class IdeSupportGherkinParser
         catch (Exception e)
         {
             logger.LogException(_telemetryService, e, "Exception during Gherkin parsing");
-            gherkinDocument = GetResult();
+            gherkinDocument = TryGetResult();
         }
 
         return false;
@@ -67,13 +67,13 @@ public class IdeSupportGherkinParser
         // trying to "finish" open nodes by sending dummy <endrule> messages up to 5 levels of nesting
         for (int i = 0; i < 10; i++)
         {
-            var result = GetResult();
+            var result = TryGetResult();
             if (result != null)
                 return result;
 
             try
             {
-                AstBuilder.EndRule(RuleType.None);
+                AstBuilder?.EndRule(RuleType.None);
             }
             catch (Exception)
             {
@@ -81,6 +81,24 @@ public class IdeSupportGherkinParser
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Best-effort access to the partially built AST for error recovery. Returns null and never
+    /// throws when no builder has been created yet — e.g. dialect/TokenMatcher construction failed
+    /// before <see cref="_astBuilder"/> could be assigned — or when the builder cannot produce a
+    /// result, e.g. its node stack is empty because parsing failed before any node was opened.
+    /// </summary>
+    private IdeSupportGherkinDocument TryGetResult()
+    {
+        try
+        {
+            return GetResult();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -103,7 +121,7 @@ public class IdeSupportGherkinParser
     }
 
     /// <summary>Returns the AST built so far by the current <see cref="_astBuilder"/>.</summary>
-    public IdeSupportGherkinDocument GetResult() => _astBuilder.GetResult();
+    public IdeSupportGherkinDocument GetResult() => _astBuilder?.GetResult();
 
     private class InternalParser : Parser<IdeSupportGherkinDocument>
     {
