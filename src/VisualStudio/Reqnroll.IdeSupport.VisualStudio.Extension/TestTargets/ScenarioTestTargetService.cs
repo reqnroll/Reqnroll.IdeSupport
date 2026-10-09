@@ -45,9 +45,11 @@ internal sealed class ScenarioTestTargetService
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}",
             CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, range.Start.Line);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
+        var (result, error) = await _pipe
+            .SendRequestToServerWithErrorAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
+
+        ThrowIfNoResult(CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, result, error, cancellationToken);
 
         var mapped = MapResult(result as JObject);
         _logger.LogDebug(
@@ -73,9 +75,11 @@ internal sealed class ScenarioTestTargetService
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}-{EndLine}",
             CustomLspMethodNames.ReqnrollResolveContainerTestTargets, fileUri, containerRange.Start.Line, containerRange.End.Line);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, paramsJson, cancellationToken)
+        var (result, error) = await _pipe
+            .SendRequestToServerWithErrorAsync(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
+
+        ThrowIfNoResult(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, fileUri, result, error, cancellationToken);
 
         var mapped = MapResult(result as JObject);
         _logger.LogDebug(
@@ -85,6 +89,23 @@ internal sealed class ScenarioTestTargetService
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Issue #1017: both handlers answer with an object (an empty one when nothing resolves), never
+    /// JSON <c>null</c>, so no result at all means the request failed (server error incl.
+    /// ContentModified, timeout, terminated server, cancellation). Throwing rather than returning
+    /// "no targets" keeps the failure out of <c>RunTestCodeLensResultCache</c>, which reuses a
+    /// completed result but retries a faulted one — and restarts on ContentModified.
+    /// </summary>
+    private void ThrowIfNoResult(string method, string fileUri, JToken? result, JObject? error, CancellationToken cancellationToken)
+    {
+        if (result is not null && result.Type != JTokenType.Null)
+            return;
+
+        cancellationToken.ThrowIfCancellationRequested(); // the pipe reports a cancelled request as no result too
+        _logger.LogDebug("ScenarioTestTargetService: no result from {RequestMethod} for {FileUri} (error: {Error})", method, fileUri, error);
+        throw OwnedRequestFailure.Create(method, fileUri, error);
+    }
 
     private static string BuildParams(string fileUri, GherkinSymbolRange range) =>
         new LspParamsBuilder()
