@@ -50,9 +50,14 @@ class ReqnrollLspServerSupportProvider : LspServerSupportProvider {
      * `projectFiles` showed up in OmniSharp's `LspServerReceiver` warning log, and the server's own
      * log never logged `HandleProjectLoadedAsync` at all for that session. Deferred via
      * [ReqnrollLspServerReadiness] rather than sent directly.
+     *
+     * Coalesced: every `.feature`/`.cs` file opened while the server is still starting calls this,
+     * and one deferred push covers them all because the push reads the runnable-projects snapshot
+     * when it runs — without the key, N files opened during startup meant N full baseline disk
+     * walks once the server reached Running (issue #987).
      */
     private fun pushBaselineOnceRunning(project: Project) {
-        ReqnrollLspServerReadiness.runWhenRunning(project) {
+        ReqnrollLspServerReadiness.runWhenRunning(project, coalesceKey = "fileOpened.baseline") {
             ReqnrollProjectBaseline.pushForAllRunnableProjects(project)
         }
     }
