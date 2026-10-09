@@ -5,6 +5,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#doc_strings" },
+    { "include": "#doc_strings_backtick" },
     { "include": "#tags" },
     { "include": "#feature_keywords" },
     { "include": "#step_keywords" },
@@ -34,6 +35,18 @@
         }
       ]
     },
+    "doc_strings_backtick": {
+      "comment": "Gherkin also allows ``` as a doc-string delimiter; a doc string is closed only by the delimiter that opened it, hence a separate rule.",
+      "begin": "^\\s*```",
+      "end": "^\\s*```",
+      "name": "string.quoted.other.gherkin",
+      "patterns": [
+        {
+          "name": "markup.raw.gherkin",
+          "match": "(?:(?!```).)+"
+        }
+      ]
+    },
     "tags": {
       "patterns": [
         {
@@ -43,7 +56,12 @@
           "patterns": [
             {
               "name": "entity.name.tag.gherkin",
-              "match": "@\\w+(?:[\\w-]*\\w)?"
+              "match": "@[^\\s@#]+"
+            },
+            {
+              "comment": "Gherkin discards a trailing whitespace-preceded # comment on a tag line before parsing the tags.",
+              "name": "comment.line.gherkin",
+              "match": "(?<=\\s)#.*$"
             }
           ]
         }
@@ -53,7 +71,7 @@
       "patterns": [
         {
           "name": "keyword.control.gherkin",
-          "match": "^(?:\\s*)(Feature|Rule|Background|Scenario(?: Outline)?(?: Template)?|Examples|Example):"
+          "match": "^(?:\\s*)(Feature|Rule|Background|Scenario(?: Outline)?(?: Template)?|Examples|Scenarios|Example):"
         }
       ]
     },
