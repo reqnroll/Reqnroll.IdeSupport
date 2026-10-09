@@ -65,6 +65,12 @@ public sealed class StepCodeLensHandler
         // cost is expected to track cacheSteps (and this file's binding count) — logging it here
         // lets a climbing-duration pattern be confirmed/quantified from the PERF log directly.
         var (cacheDocs, cacheSteps) = _matchService.GetCacheStats();
+        // Single per-request measurement for the whole textDocument/codeLens operation (issue
+        // #941). It sits above the file-type check below, so it records exactly once for every
+        // request the combined registration in LanguageServerOptionsExtensions dispatches --
+        // including .feature requests this handler does not itself serve. FeatureUsageCatalog
+        // counts textDocument/codeLens as an exact-count Passive key, so the other lens handlers
+        // must not record the same request again.
         using var _perf = _recorder.Measure(
             LspStandardMethodNames.TextDocumentCodeLens, uri, detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps}");
 

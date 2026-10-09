@@ -92,8 +92,8 @@ public sealed class HookMatchCountCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
-
+        // No per-request measurement here (issue #941): see HookCodeLensHandler -- the single
+        // textDocument/codeLens measurement is owned by StepCodeLensHandler.
         if (!IsCSharp(uri))
         {
             _logger.LogVerbose($"HookMatchCountCodeLensHandler: ignoring non-.cs URI {uri}");
