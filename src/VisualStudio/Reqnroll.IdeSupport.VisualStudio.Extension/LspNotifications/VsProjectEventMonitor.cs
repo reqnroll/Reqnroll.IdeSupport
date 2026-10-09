@@ -403,8 +403,8 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
             if (!IsSolutionProject(project))
                 return;
 
-            var payload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
-                project, GetSolutionFolder(), _serviceProvider, _logger);
+            var payload = await VsProjectPayloadBuilder.BuildProjectLoadedParamsJsonAsync(
+                project, GetSolutionFolder(), _serviceProvider, _logger, ct);
             await _pipe.SendNotificationToServerAsync(CustomLspMethodNames.ReqnrollProjectLoaded, payload.Json, ct)
                        .ConfigureAwait(false);
 
