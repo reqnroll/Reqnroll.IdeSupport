@@ -138,7 +138,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 |---|---|
 | **Constant** | `TelemetryEvents.ReqnrollDiscoveryExecuted` |
 | **Emitters** | LSP server: `CSharpBindingDiscoveryService` (Roslyn, in-proc source parse) and `ConnectorBindingRegistryProvider` (out-of-proc connector reflection), discriminated by `DiscoverySource` |
-| **When** | Each completed binding-discovery run: Roslyn on a `.cs` binding file open/`csEdit` per owning project; Connector on the first `projectLoad` after a project registers, then on every post-build refresh (debounced) |
+| **When** | Each completed binding-discovery run: Roslyn on a `.cs` binding file open/`csEdit` per owning project; Connector on the first `projectLoad` after a project registers, then on every post-build refresh (debounced). A connector refresh that cannot start (no output assembly yet, or not a Reqnroll test project) sends nothing and does not use up `projectLoad` (issue #939) |
 
 **Properties**
 
@@ -146,17 +146,17 @@ include URIs; the `PerfSample` telemetry payload never does.)
 |---|---|---|
 | `DiscoverySource` | `"Connector"` \| `"Roslyn"` | Which discovery path ran |
 | `TriggerContext` | Connector: `"projectLoad"` \| `"build"`; Roslyn: `"csOpen"` \| `"csEdit"` | What triggered the run |
-| `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure) |
+| `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure: an unexpected exception, or the connector threw or reported failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn (issue #845): counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
-| `ErrorMessage` | string | Connector failure: the exception message, filesystem-path-scrubbed (`<path>`) |
+| `ErrorMessage` | string | Connector failure from an unexpected exception: the exception message, filesystem-path-scrubbed (`<path>`). Not sent when the connector itself threw or reported failure (its raw error text is never forwarded) |
 | `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
 | `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
-| `ReqnrollVersion` | string | Connector success only: the project's Reqnroll version reduced to `major.minor`; omitted when unknown |
-| `ConnectorType` | string | Connector success only: which connector flavour ran |
-| `ConnectorExitCode` | int | Connector success only: the connector process exit code |
+| `ReqnrollVersion` | string | Connector success, or a failure the connector reported: the project's Reqnroll version reduced to `major.minor`; omitted when unknown |
+| `ConnectorType` | string | Connector success, or a failure the connector reported: which connector flavour ran |
+| `ConnectorExitCode` | int | Connector success, or a failure the connector reported: the connector process exit code |
 
 The last four come from the connector's `DiscoveryResult.TelemetryProperties` through an explicit
 whitelist (`ConnectorRunTelemetry`, issue #846). The connector's `ConnectorArguments` (command

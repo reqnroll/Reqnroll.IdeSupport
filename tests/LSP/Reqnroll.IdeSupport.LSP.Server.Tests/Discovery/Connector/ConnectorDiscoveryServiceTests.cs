@@ -354,6 +354,79 @@ public class ConnectorDiscoveryServiceTests : IDisposable
         hash.Should().Be("prev");
     }
 
+    // ── Outcome status (issue #939) ───────────────────────────────────────────────
+    // Every path but a real discovery returns the caller's lastGood/lastHash, so the status is the
+    // only thing that tells an unchanged assembly apart from a failed or skipped run.
+
+    [Fact]
+    public void RunDiscovery_reports_Discovered_for_a_successful_run()
+    {
+        GivenConnectorReturns(SuccessfulResult());
+
+        CreateSut().RunDiscovery(MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, "prev", CancellationToken.None)
+            .Status.Should().Be(ConnectorDiscoveryStatus.Discovered);
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Unchanged_for_a_hash_match()
+    {
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeScope(_assemblyPath);
+        var sut = CreateSut();
+        var first = sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        sut.RunDiscovery(scope, first.Registry, first.Hash, CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Unchanged(first.Registry, first.Hash));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Failed_when_the_connector_reports_failure()
+    {
+        GivenConnectorReturns(new DiscoveryResult { ErrorMessage = "boom" });
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Failed_when_the_connector_throws()
+    {
+        _factory.Create(Arg.Any<IProjectScope>()).Returns(new ThrowingConnector());
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Skipped_when_output_assembly_path_is_empty()
+    {
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeScope(string.Empty), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Skipped_when_output_assembly_missing_on_disk()
+    {
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(
+                MakeScope(Path.Combine(_projectFolder, "does-not-exist.dll")), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Skipped_for_a_non_reqnroll_test_project()
+    {
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeNonReqnrollScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
+    }
+
     private sealed class ThrowingConnector : OutProcReqnrollConnector
     {
         public ThrowingConnector()

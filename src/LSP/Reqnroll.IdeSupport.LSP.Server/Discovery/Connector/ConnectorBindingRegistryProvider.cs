@@ -278,15 +278,46 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
             ct.ThrowIfCancellationRequested();
 
             stopwatch.Start();
-            var (newRegistry, newHash) = await Task
+            var outcome = await Task
                 .Run(() => _discoveryService.RunDiscovery(_project, _current, _lastHash, ct), ct)
                 .ConfigureAwait(false);
             stopwatch.Stop();
 
             ct.ThrowIfCancellationRequested();
 
-            // Skip the swap if nothing changed (hash matches means RunDiscovery returned lastGood).
-            if (newHash == _lastHash)
+            // Issue #939: every non-Discovered status hands back the unchanged last-good registry and
+            // hash, so the hash cannot tell these apart -- the status does. None of them swaps the
+            // registry or advances _lastHash, so the next trigger retries exactly as before.
+            switch (outcome.Status)
+            {
+                case ConnectorDiscoveryStatus.Skipped:
+                    // No assembly yet, or not a Reqnroll test project: nothing ran, so there is no
+                    // discovery outcome to report, and the first real run is still the project load.
+                    return;
+
+                case ConnectorDiscoveryStatus.Failed:
+                    // The connector threw or reported failure (already logged by the service). Same
+                    // shape as the unexpected-exception event below, minus the raw error text: the
+                    // connector's own error is deliberately not forwarded (issue #846), only its
+                    // whitelisted telemetry. _isFirstRun is kept for the same reason as there.
+                    var failureProperties = new Dictionary<string, object?>
+                    {
+                        ["DiscoverySource"] = "Connector",
+                        ["TriggerContext"] = _isFirstRun ? "projectLoad" : "build",
+                        ["IsFailed"] = true,
+                        ["ProjectTargetFramework"] = _project.TargetFrameworkMonikers,
+                        ["DurationMs"] = (long)stopwatch.Elapsed.TotalMilliseconds,
+                        ["DurationBucket"] = OperationDurationRecorder.Bucket(stopwatch.Elapsed.TotalMilliseconds),
+                    };
+                    _discoveryService.LastRunTelemetry?.AddTo(failureProperties);
+                    _telemetryService?.SendEvent(TelemetryEvents.ReqnrollDiscoveryExecuted, failureProperties);
+                    return;
+            }
+
+            var (newRegistry, newHash) = outcome;
+
+            // Skip the swap if nothing changed (an unchanged assembly; RunDiscovery returned lastGood).
+            if (outcome.Status == ConnectorDiscoveryStatus.Unchanged)
             {
                 // Lightweight telemetry: connector hash-noop rate (membership index / telemetry
                 // design §4.2).
@@ -316,10 +347,9 @@ public sealed class ConnectorBindingRegistryProvider : IBindingRegistryProvider,
                 _currentLock.Release();
             }
 
-            // Only reachable when RunDiscovery actually found and read a compiled DLL (it returns
-            // the unchanged lastHash -- never a genuinely new one -- when OutputAssemblyPath is
-            // unset or the file doesn't exist yet, so this branch can't be reached by an unbuilt
-            // project). See HasSuccessfulConnectorRun's remarks.
+            // Only reachable on a Discovered outcome, i.e. when RunDiscovery actually found and read
+            // a compiled DLL (an unset OutputAssemblyPath or a not-yet-built file is Skipped, so this
+            // branch can't be reached by an unbuilt project). See HasSuccessfulConnectorRun's remarks.
             _hasSuccessfulConnectorRun = true;
 
             // Telemetry: connector discovery event (membership index / telemetry design §2.2).
