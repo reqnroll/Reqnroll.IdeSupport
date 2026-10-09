@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.Common.Configuration;
 using System.Linq;
 using System.IO;
 using System.Collections;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
@@ -176,24 +177,28 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
         foreach (var configSource in configSources)
             try
             {
+                // Each source is applied to a copy and committed only once it has loaded and validated, so a
+                // failing source can neither leave partial changes behind nor invalidate the other sources.
+                var candidate = CloneConfiguration(configuration);
                 var fileName = Path.GetFileName(configSource.FilePath);
                 if (ReqnrollJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromReqnrollJsonConfig(configSource.FilePath, configuration);
+                    LoadFromReqnrollJsonConfig(configSource.FilePath, candidate);
 
                 if (SpecFlowAppConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromSpecFlowXmlConfig(configSource.FilePath, configuration);
+                    LoadFromSpecFlowXmlConfig(configSource.FilePath, candidate);
 
                 if (SpecFlowJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromSpecFlowJsonConfig(configSource.FilePath, configuration);
+                    LoadFromSpecFlowJsonConfig(configSource.FilePath, candidate);
 
                 if (SpecSyncJsonConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromSpecSyncJsonConfig(configSource.FilePath, configuration);
+                    LoadFromSpecSyncJsonConfig(configSource.FilePath, candidate);
 
                 if (IdeSupportConfigFileName.Equals(fileName, StringComparison.InvariantCultureIgnoreCase))
-                    LoadFromIdeSupportConfig(configSource.FilePath, configuration);
+                    LoadFromIdeSupportConfig(configSource.FilePath, candidate);
 
-                configuration.CheckConfiguration();
+                candidate.CheckConfiguration();
 
+                configuration = candidate;
                 loadedSources.Add(configSource);
             }
             catch (Exception ex)
@@ -202,22 +207,18 @@ public class ProjectScopeIdeSupportConfigurationProvider : IIdeSupportConfigurat
                 Logger.LogVerboseException(TelemetryService, ex, "Unable to load configuration");
             }
 
+        // 'configuration' is always the default or a candidate that passed CheckConfiguration(), so no final
+        // validation (or fall-back to defaults) is needed.
         if (loadedSources.Any())
             configuration.ConfigurationChangeTime = loadedSources.Max(cs => cs.LastChangeTime);
 
-        try
-        {
-            configuration.CheckConfiguration();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning($"Invalid Reqnroll Visual Studio configuration: {ex.Message}");
-            Logger.LogVerboseException(TelemetryService, ex, "Configuration error, using default config");
-            configuration = new IdeSupportConfiguration();
-        }
-
         return new ConfigCache(configuration, loadedSources.ToArray());
     }
+
+    // All configuration classes are plain property bags (the same ones the JSON loaders populate), so a JSON
+    // round trip is a faithful deep copy; nulls are kept so that an explicitly null value survives the copy.
+    private static IdeSupportConfiguration CloneConfiguration(IdeSupportConfiguration configuration) =>
+        JsonConvert.DeserializeObject<IdeSupportConfiguration>(JsonConvert.SerializeObject(configuration));
 
     private void LoadFromIdeSupportConfig(string configSourceFilePath, IdeSupportConfiguration configuration)
     {
