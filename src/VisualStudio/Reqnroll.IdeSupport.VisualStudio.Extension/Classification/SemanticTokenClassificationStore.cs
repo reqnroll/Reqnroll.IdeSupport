@@ -56,6 +56,10 @@ internal sealed class SemanticTokenClassificationStore
         new ConcurrentDictionary<string, IReadOnlyList<ClassifiedToken>>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Raised after the tokens for a file change. Argument is the normalized file key.</summary>
+    /// <remarks>
+    /// The store lives for the whole VS session, so a handler subscribed here stays reachable until it is
+    /// removed. Per-buffer subscribers must subscribe weakly (see <see cref="GherkinSemanticClassifier"/>).
+    /// </remarks>
     public event Action<string>? TokensChanged;
 
     /// <summary>The token-type legend advertised by the server (index → name).</summary>
