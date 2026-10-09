@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using EnvDTE;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
@@ -25,29 +27,36 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 /// </remarks>
 internal static class VsProjectPayloadBuilder
 {
-    /// <summary>Builds the <c>reqnroll/projectLoaded</c> params JSON for a project (paths, TFM, NuGet package references). Must run on the UI thread.</summary>
+    /// <summary>
+    /// Builds the <c>reqnroll/projectLoaded</c> params JSON for a project (paths, TFM, NuGet package
+    /// references). Reads DTE on the UI thread (switching to it if needed); the NuGet brokered-service query is awaited
+    /// rather than blocked on (issue #1031).
+    /// </summary>
     /// <returns>
     /// The JSON payload, plus whether NuGet's package references were actually available (issue
     /// #690). When <see langword="false"/>, the payload still carries an empty
-    /// <c>packageReferences</c> array (NuGet reported <c>ProjectNotReady</c>, not a real absence of
-    /// references) -- callers that care about correctness (e.g. <see cref="VsProjectEventMonitor"/>)
+    /// <c>packageReferences</c> array (NuGet reported <c>ProjectNotReady</c> or did not answer in time
+    /// -- issue #1031 -- not a real absence of references) -- callers that care about correctness (e.g. <see cref="VsProjectEventMonitor"/>)
     /// should re-send once NuGet's restore actually finishes rather than treating this baseline as final.
     /// </returns>
-    public static ProjectLoadedPayload BuildProjectLoadedParamsJson(
+    public static async Task<ProjectLoadedPayload> BuildProjectLoadedParamsJsonAsync(
         Project project,
         string workspaceFolder,
         IServiceProvider serviceProvider,
-        ILogger logger)
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
-        ThreadHelper.ThrowIfNotOnUIThread();
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
         var projectFile   = project.FullName;
         var projectFolder = Path.GetDirectoryName(projectFile) ?? string.Empty;
 
         var outputAssemblyPath = VsUtils.GetOutputAssemblyPath(project) ?? string.Empty;
         var tfm = VsUtils.GetTargetFrameworkMoniker(project) ?? string.Empty;
+        var projectName = project.Name;
 
-        var (packageRefs, packageReferencesReady) = GetPackageReferences(project, serviceProvider, logger);
+        var (packageRefs, packageReferencesReady) =
+            await GetPackageReferencesAsync(projectFile, projectName, serviceProvider, logger, cancellationToken);
 
         var paramsObj = new
         {
@@ -123,13 +132,14 @@ internal static class VsProjectPayloadBuilder
         }
     }
 
-    private static (object[] References, bool Ready) GetPackageReferences(
-        Project project, IServiceProvider serviceProvider, ILogger logger)
+    private static async Task<(object[] References, bool Ready)> GetPackageReferencesAsync(
+        string projectFullName, string projectName, IServiceProvider serviceProvider, ILogger logger,
+        CancellationToken cancellationToken)
     {
-        ThreadHelper.ThrowIfNotOnUIThread();
         try
         {
-            var references = VsUtils.GetInstalledNuGetPackages(serviceProvider, project.FullName)
+            var packages = await VsUtils.GetInstalledNuGetPackagesAsync(serviceProvider, projectFullName, cancellationToken);
+            var references = packages
                 .Select(p => (object)new
                 {
                     packageId   = p.Id,
@@ -139,6 +149,16 @@ internal static class VsProjectPayloadBuilder
                 .ToArray();
             return (references, true);
         }
+        catch (NuGetProjectNotReadyException ex) when (ex.TimedOut)
+        {
+            // Issue #1031: a stalled NuGet service is unexpected (unlike ProjectNotReady below), so
+            // it is worth a Warning -- but the package list is just as unknown, so it is retried the
+            // same way.
+            logger.LogWarning(
+                "VsProjectPayloadBuilder: {Reason} ({ProjectName}); sending an empty package list for now.",
+                ex.Message, projectName);
+            return (Array.Empty<object>(), false);
+        }
         catch (NuGetProjectNotReadyException)
         {
             // Routine during solution load, not a failure -- logging it as a Warning is what made
@@ -146,14 +166,18 @@ internal static class VsProjectPayloadBuilder
             logger.LogDebug(
                 "VsProjectPayloadBuilder: NuGet reports {ProjectName} is not ready yet (not nominated/restored); " +
                 "sending an empty package list for now.",
-                project.Name);
+                projectName);
             return (Array.Empty<object>(), false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex,
                 "VsProjectPayloadBuilder: could not read NuGet packages for {ProjectName}",
-                project.Name);
+                projectName);
             return (Array.Empty<object>(), true);
         }
     }
@@ -161,6 +185,6 @@ internal static class VsProjectPayloadBuilder
 
 /// <summary>
 /// A built <c>reqnroll/projectLoaded</c> payload plus whether its NuGet package references were
-/// actually available (issue #690) -- see <see cref="VsProjectPayloadBuilder.BuildProjectLoadedParamsJson"/>.
+/// actually available (issue #690) -- see <see cref="VsProjectPayloadBuilder.BuildProjectLoadedParamsJsonAsync"/>.
 /// </summary>
 internal readonly record struct ProjectLoadedPayload(string Json, bool PackageReferencesReady);

@@ -68,6 +68,8 @@
 
 ## Bug fixes:
 
+* Reading a project's installed NuGet packages from Visual Studio's NuGet service is now bounded by a 10-second timeout, so a stalled NuGet service can no longer hang the UI during solution load; a timeout is logged as a warning and retried like a project NuGet has not restored yet. The project-loaded notification sent to the LSP server now awaits the NuGet query instead of blocking the UI thread on it (VS) - see #1031
+
 * Find Step Usages and step-usage CodeLens no longer return a step definition's usages for a location in a file it has moved away from (for example after switching to a branch where the binding lives in a different file and back); a lookup now only returns usages recorded at the file being asked about (LSP server) - see #929, #928
 * After switching branches (or opening a solution) without rebuilding, step definitions and hooks recorded in the older compiled assembly whose source file no longer exists in the project folder are no longer kept: the feature file's hook CodeLenses and step-usage counts for bindings that are gone from source disappear instead of lingering until the next build. Bindings from outside the project folder (NuGet packages, project references, container or CI builds) are unaffected, and the number of ignored bindings is logged (LSP server, VS, VS Code, Rider) - see #930, #928
 * Opening a `.feature` file in a compare (diff) window, e.g. from the Visual Studio Git Changes window, no longer floods the Reqnroll output pane with "IVsCodeWindow does not implement IVsDropdownBarManager" warnings (and later "giving up" warnings): the Navigation Bar client now recognises diff panes and stands down immediately (Visual Studio) - see #907, @clrudolphi

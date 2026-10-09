@@ -12,9 +12,11 @@ using Microsoft.VisualStudio.Shell.ServiceBroker;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
+using Microsoft.VisualStudio.Threading;
 using NuGet.VisualStudio.Contracts;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Microsoft.VisualStudio.Setup.Configuration;
+using System.Threading.Tasks;
 using System.Windows.Media;
 using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 using IOleServiceProvider = Microsoft.VisualStudio.OLE.Interop.IServiceProvider;
@@ -762,48 +764,108 @@ public static class VsUtils
     }
 
     /// <summary>
+    /// Upper bound on the NuGet brokered-service round trip in <see cref="GetInstalledNuGetPackagesAsync"/>
+    /// (issue #1031). The call normally answers in milliseconds, and when the project isn't restored
+    /// yet NuGet answers <c>ProjectNotReady</c> straight away, so this only fires for a stalled
+    /// service. Generous rather than tight because a timeout is reported as "not ready" and retried,
+    /// while the synchronous <see cref="GetInstalledNuGetPackages"/> blocks the UI thread for up to
+    /// this long per project.
+    /// </summary>
+    internal static readonly TimeSpan NuGetInstalledPackagesTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
     /// Retrieves the installed NuGet packages for the project via the NuGet brokered service; blocks
-    /// synchronously on the async call.
+    /// synchronously on <see cref="GetInstalledNuGetPackagesAsync"/>, for at most about
+    /// <see cref="NuGetInstalledPackagesTimeout"/> waiting on the service.
+    /// </summary>
+    /// <exception cref="NuGetProjectNotReadyException">
+    /// See <see cref="GetInstalledNuGetPackagesAsync"/>.
+    /// </exception>
+    public static IEnumerable<NuGetInstalledPackage> GetInstalledNuGetPackages(IServiceProvider serviceProvider,
+        string projectFullName)
+    {
+        return ThreadHelper.JoinableTaskFactory.Run(
+            () => GetInstalledNuGetPackagesAsync(serviceProvider, projectFullName, CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Retrieves the installed NuGet packages for the project via the NuGet brokered service. Resolves
+    /// the project on the UI thread, then awaits the service without blocking it.
     /// </summary>
     /// <exception cref="NuGetProjectNotReadyException">
     /// NuGet reports <see cref="InstalledPackageResultStatus.ProjectNotReady"/> -- the project
     /// hasn't been nominated/restored yet. Routine during solution load (issue #690); callers should
     /// treat this as "try again once restore finishes," not as a failure worth surfacing to the user.
+    /// Also thrown, with <see cref="NuGetProjectNotReadyException.TimedOut"/> set, when the service
+    /// does not answer within <see cref="NuGetInstalledPackagesTimeout"/> (issue #1031).
     /// </exception>
-    public static IEnumerable<NuGetInstalledPackage> GetInstalledNuGetPackages(IServiceProvider serviceProvider,
-        string projectFullName)
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled.</exception>
+    public static async Task<IReadOnlyCollection<NuGetInstalledPackage>> GetInstalledNuGetPackagesAsync(
+        IServiceProvider serviceProvider, string projectFullName, CancellationToken cancellationToken)
     {
-        return ThreadHelper.JoinableTaskFactory.Run(async () =>
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        var solution = serviceProvider.GetService<SVsSolution, IVsSolution>();
+        int result = solution.GetProjectOfUniqueName(projectFullName, out IVsHierarchy project);
+        if (result != VSConstants.S_OK)
+            throw new Exception(
+                $"Error calling {nameof(IVsSolution)}.{nameof(IVsSolution.GetProjectOfUniqueName)}: {result}");
+
+        result = solution.GetGuidOfProject(project, out Guid projectGuid);
+        if (result != VSConstants.S_OK)
+            throw new Exception(
+                $"Error calling {nameof(IVsSolution)}.{nameof(IVsSolution.GetGuidOfProject)}: {result}");
+
+        var serviceBrokerContainer =
+            serviceProvider.GetService<SVsBrokeredServiceContainer, IBrokeredServiceContainer>();
+        var serviceBroker = serviceBrokerContainer.GetFullAccessServiceBroker();
+
+        return await QueryInstalledNuGetPackagesAsync(async ct =>
         {
-            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-            var solution = serviceProvider.GetService<SVsSolution, IVsSolution>();
-            int result = solution.GetProjectOfUniqueName(projectFullName, out IVsHierarchy project);
-            if (result != VSConstants.S_OK)
-                throw new Exception(
-                    $"Error calling {nameof(IVsSolution)}.{nameof(IVsSolution.GetProjectOfUniqueName)}: {result}");
-
-            result = solution.GetGuidOfProject(project, out Guid projectGuid);
-            if (result != VSConstants.S_OK)
-                throw new Exception(
-                    $"Error calling {nameof(IVsSolution)}.{nameof(IVsSolution.GetGuidOfProject)}: {result}");
-
-            var serviceBrokerContainer =
-                serviceProvider.GetService<SVsBrokeredServiceContainer, IBrokeredServiceContainer>();
-            var serviceBroker = serviceBrokerContainer.GetFullAccessServiceBroker();
-
             var projectService =
-                await serviceBroker.GetProxyAsync<INuGetProjectService>(NuGetServices.NuGetProjectServiceV1);
+                await serviceBroker.GetProxyAsync<INuGetProjectService>(NuGetServices.NuGetProjectServiceV1, cancellationToken: ct);
             using (projectService as IDisposable)
-            {
-                var packagesResult =
-                    await projectService.GetInstalledPackagesAsync(projectGuid, CancellationToken.None);
-                if (packagesResult.Status == InstalledPackageResultStatus.ProjectNotReady)
-                    throw new NuGetProjectNotReadyException();
-                if (packagesResult.Status != InstalledPackageResultStatus.Successful)
-                    throw new Exception("Unexpected result from GetInstalledPackagesAsync: " + packagesResult.Status);
-                return packagesResult.Packages;
-            }
-        });
+                return await projectService.GetInstalledPackagesAsync(projectGuid, ct);
+        }, NuGetInstalledPackagesTimeout, cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs the NuGet installed-packages query (<paramref name="queryAsync"/>: get the brokered proxy,
+    /// then call it) bounded by <paramref name="timeout"/>, and maps its result status. Separated from
+    /// <see cref="GetInstalledNuGetPackagesAsync"/> so the timeout handling can be unit tested with a
+    /// query that never completes, without a VS host.
+    /// </summary>
+    /// <remarks>
+    /// The token passed to <paramref name="queryAsync"/> is cancelled when the timeout fires, and the
+    /// wait itself is abandoned at that point too (<see cref="ThreadingTools.WithCancellation{T}(Task{T}, CancellationToken)"/>)
+    /// rather than relying on an out-of-process service to honour cancellation promptly -- a stalled
+    /// service is the case being guarded against. An abandoned query finishes (and disposes its
+    /// proxy) in the background whenever the service eventually answers.
+    /// </remarks>
+    internal static async Task<IReadOnlyCollection<NuGetInstalledPackage>> QueryInstalledNuGetPackagesAsync(
+        Func<CancellationToken, Task<InstalledPackagesResult>> queryAsync,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCancellation.CancelAfter(timeout);
+
+        InstalledPackagesResult packagesResult;
+        try
+        {
+            packagesResult = await queryAsync(timeoutCancellation.Token).WithCancellation(timeoutCancellation.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested
+                                                 && timeoutCancellation.IsCancellationRequested)
+        {
+            // Same outcome as ProjectNotReady: the package list is unknown for now, so callers retry.
+            throw new NuGetProjectNotReadyException(timeout);
+        }
+
+        if (packagesResult.Status == InstalledPackageResultStatus.ProjectNotReady)
+            throw new NuGetProjectNotReadyException();
+        if (packagesResult.Status != InstalledPackageResultStatus.Successful)
+            throw new Exception("Unexpected result from GetInstalledPackagesAsync: " + packagesResult.Status);
+        return packagesResult.Packages;
     }
 
     //[StructLayout(LayoutKind.Sequential)]
