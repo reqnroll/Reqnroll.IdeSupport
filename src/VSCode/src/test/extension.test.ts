@@ -87,7 +87,7 @@ suite('Reqnroll Extension Tests', () => {
     assert.ok(ext, `Extension ${extensionId} is not installed`);
   });
 
-  test('Extension should activate on gherkin language', async () => {
+  test('Extension should activate on reqnroll language', async () => {
     const ext = vscode.extensions.getExtension(extensionId)!;
     await ext.activate();
     assert.ok(ext.isActive, 'Extension did not activate');
@@ -105,11 +105,11 @@ suite('Reqnroll Extension Tests', () => {
     assert.strictEqual(client.state, State.Running, 'Language client should be running');
   });
 
-  test('Gherkin language should be registered', async () => {
+  test('Reqnroll language should be registered', async () => {
     const languages = await vscode.languages.getLanguages();
     assert.ok(
-      languages.includes('gherkin'),
-      `gherkin language not registered. Available: ${languages.join(', ')}`,
+      languages.includes('reqnroll'),
+      `reqnroll language not registered. Available: ${languages.join(', ')}`,
     );
   });
 });
