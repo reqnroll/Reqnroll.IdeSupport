@@ -357,6 +357,76 @@ public class TelemetryTransmitterTests
         rec.Error.Should().BeNull();
     }
 
+    // ── Exception scrubbing (#1027) ───────────────────────────────────────────────
+
+    private const string UserPath = @"C:\Users\alice\proj\x.cs";
+
+    private static Exception ThrownWithPathInMessage()
+    {
+        try
+        {
+            throw new InvalidOperationException("Could not find file '" + UserPath + "'.",
+                new System.IO.IOException("inner " + UserPath));
+        }
+        catch (Exception ex)
+        {
+            return ex;
+        }
+    }
+
+    [Fact]
+    public void Should_RedactPaths_FromTransmittedExceptionMessage()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+
+        sut.TransmitFatalExceptionEvent(ThrownWithPathInMessage(), isFatal: true);
+
+        var sent = _telemetryChannel.SentTelemtries.Should().ContainSingle()
+            .Which.Should().BeOfType<ExceptionTelemetry>().Subject;
+        sent.ExceptionDetailsInfoList.Should().ContainSingle();
+        var details = sent.ExceptionDetailsInfoList.Single();
+        details.TypeName.Should().Be(typeof(InvalidOperationException).FullName);
+        details.Message.Should().Be("Could not find file '<path>'.");
+        sent.Message.Should().NotContain("alice");
+        sent.Properties["IsFatal"].Should().Be("True");
+    }
+
+    [Fact]
+    public void Should_SendOnlyTheSanitizedStack_NeverTheRawStackTrace()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        var exception = ThrownWithPathInMessage();
+
+        sut.TransmitFatalExceptionEvent(exception, isFatal: true);
+
+        // Assert on what actually goes over the wire: the raw stack (with the source file path) and the
+        // inner exception never leave; only ExceptionStackSanitizer's Namespace.Type.Method[:line]
+        // attribution does.
+        var payload = System.Text.Encoding.UTF8.GetString(Microsoft.ApplicationInsights.Extensibility.Implementation
+            .JsonSerializer.Serialize(_telemetryChannel.SentTelemtries, compress: false));
+        var sanitizedStack = ExceptionStackSanitizer.Sanitize(exception);
+        sanitizedStack.Should().Contain(nameof(ThrownWithPathInMessage));
+        payload.Should().Contain(Newtonsoft.Json.JsonConvert.ToString(sanitizedStack).Trim('"'));
+        payload.Should().NotContain("alice")
+            .And.NotContain("x.cs")
+            .And.NotContain("TelemetryTransmitterTests.cs")
+            .And.NotContain(typeof(System.IO.IOException).FullName);
+    }
+
+    [Fact]
+    public void Should_KeepRawMessage_InTheLocalDebugLogMirror()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+
+        sut.TransmitFatalExceptionEvent(ThrownWithPathInMessage(), isFatal: true);
+
+        var props = (System.Collections.IDictionary)_debugLog.Records.Single().Props;
+        props["Message"].Should().Be("Could not find file '" + UserPath + "'.");
+    }
+
     private sealed class CapturingDebugLog : ITelemetryDebugLog
     {
         public bool IsEnabled => true;
