@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.IO.Pipelines;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,6 +46,9 @@ internal sealed class ServerChannel
     private readonly SemaphoreSlim _writeLock = new SemaphoreSlim(1, 1);
 
     private volatile bool _terminated;
+
+    /// <summary>1 once a failed write has been logged at Warning (issue #1023).</summary>
+    private int _writeFailureReported;
 
     /// <summary>Creates the channel over the server process's stdin writer.</summary>
     public ServerChannel(PipeWriter output, ILogger logger)
@@ -98,30 +102,45 @@ internal sealed class ServerChannel
     /// <summary>
     /// Writes a frame this extension originated, unless the server has terminated.
     /// </summary>
-    /// <returns><see langword="false"/> if the write was refused because the server is gone.</returns>
+    /// <returns>
+    /// <see langword="false"/> if the write was refused because the server is gone, or failed because
+    /// its stdin is no longer writable.
+    /// </returns>
     /// <remarks>
+    /// <para>
     /// Issue #555: after <c>exit</c> the server is on its way out, so this would write into a stream
     /// nothing is reading. Observed in the wild — StepCodeLens and navigation-bar traffic kept being
     /// injected for ~200ms after VS's <c>exit</c> and on through the following session, each request
     /// awaiting a response that could never arrive.
+    /// </para>
+    /// <para>
+    /// Issue #1023: the flag is checked again once the lock is held, because a caller that passed the
+    /// first check can wait behind another write while the server is marked terminated. A write that
+    /// fails because the server's stdin is gone is reported the same way, as <see langword="false"/>,
+    /// rather than thrown: an <see cref="IOException"/> is a crashed server's closed pipe, an
+    /// <see cref="ObjectDisposedException"/> a write racing the disposal of a discarded generation's
+    /// process. Neither marks the channel terminated: that flag means the server was <em>asked</em> to
+    /// go, and setting it for a crash would suppress the unexpected-exit report (issue #845).
+    /// </para>
     /// </remarks>
     public async Task<bool> InjectAsync(byte[] rawFrame, string method, CancellationToken cancellationToken)
     {
-        if (_terminated)
-        {
-            _logger.LogDebug(
-                "ServerChannel: refusing to inject {Method} — the server on this connection has terminated.",
-                method);
-            return false;
-        }
+        if (RefuseIfTerminated(method)) return false;
 
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (RefuseIfTerminated(method)) return false;
+
             await LspFrameCodec.WriteFrameAsync(_output, rawFrame, cancellationToken).ConfigureAwait(false);
 
             _logger.LogDebug(
                 "ServerChannel: injected {Method} ({ByteCount} bytes)", method, rawFrame.Length);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        {
+            LogWriteFailure(method, ex);
+            return false;
         }
         finally
         {
@@ -129,5 +148,32 @@ internal sealed class ServerChannel
         }
 
         return true;
+    }
+
+    private bool RefuseIfTerminated(string method)
+    {
+        if (!_terminated) return false;
+
+        _logger.LogDebug(
+            "ServerChannel: refusing to inject {Method} — the server on this connection has terminated.",
+            method);
+        return true;
+    }
+
+    /// <summary>
+    /// Warns about the first write that fails while the server is still believed alive; every later
+    /// one, and any during an expected teardown, is Debug, since a dead stdin fails every write.
+    /// </summary>
+    private void LogWriteFailure(string method, Exception ex)
+    {
+        var level = !_terminated && Interlocked.Exchange(ref _writeFailureReported, 1) == 0
+            ? LogLevel.Warning
+            : LogLevel.Debug;
+
+        _logger.Log(
+            level,
+            "ServerChannel: could not inject {Method} — the server's stdin is no longer writable " +
+            "({ExceptionType}: {Message}); the server process has most likely exited.",
+            method, ex.GetType().Name, ex.Message);
     }
 }

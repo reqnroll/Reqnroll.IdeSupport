@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.IO;
 using System.IO.Pipelines;
 using System.Text;
 using System.Threading;
@@ -8,6 +9,7 @@ using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nerdbank.Streams;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Xunit;
@@ -742,6 +744,235 @@ public class LspInterceptingPipeTests : IAsyncLifetime
             .Should().BeNull("the owned response must never reach VS's JsonRpc");
     }
 
+    // ── Writes to a server whose stdin is gone (issue #1023) ─────────────────────────────────
+    //
+    // The send methods' contract is "failure is reported, not thrown": a dead or terminated server
+    // yields a null result / a dropped notification. Before #1023 that only held when the #555 flag
+    // was already set when the call started. A crashed server's closed stdin surfaced IOException,
+    // a write racing the generation's disposal surfaced ObjectDisposedException, and a call that
+    // passed the flag check and then queued on the write lock wrote to the server after it had been
+    // marked terminated.
+
+    [Fact]
+    public async Task An_injected_request_whose_stdin_write_fails_with_IOException_returns_null_promptly_and_warns_once()
+    {
+        var logger = new RecordingLogger();
+        var serverSide = new FaultingServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(), logger);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        serverSide.Writer.Fault = new IOException("The pipe has been ended.");
+
+        // Uncancelled token and the default 60s owned-request timeout: the call must report the
+        // failure from the write itself, not by waiting for a response that can never come.
+        var (result, error) = await WithTimeoutAsync(
+            _pipe.SendRequestToServerWithErrorAsync("reqnroll/findStepDefinitions", "{}", CancellationToken.None),
+            ShortTimeout);
+        await _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", "{}", CancellationToken.None);
+        (await WithTimeoutAsync(
+            _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None), ShortTimeout))
+            .Should().BeNull();
+
+        result.Should().BeNull();
+        error.Should().BeNull();
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning,
+                "a dead server's stdin fails every write, and one Warning is enough to say so")
+            .Which.Message.Should().Contain("reqnroll/findStepDefinitions").And.Contain("The pipe has been ended.");
+        logger.Entries.Should().Contain(e => e.Level == LogLevel.Debug && e.Message.Contains("textDocument/codeLens"));
+    }
+
+    [Fact]
+    public async Task A_stdin_write_failure_does_not_mark_the_connection_terminated()
+    {
+        // ServerTerminated == true tells LspServerConnectionService the server was *asked* to go, which
+        // suppresses the ServerExitedUnexpectedly report for a crash (issue #845). A failed write is
+        // evidence of a crash, not of an orderly exit, so it must leave that flag alone.
+        var serverSide = new FaultingServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        serverSide.Writer.Fault = new IOException("The pipe has been ended.");
+        await _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", "{}", CancellationToken.None);
+
+        _pipe.ServerTerminated.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Injected_traffic_to_the_real_stream_pipe_writer_over_a_closed_stdin_never_throws()
+    {
+        // The production writer (Nerdbank.Streams' UsePipeWriter over Process.StandardInput) copies to
+        // the stream on a background task and re-throws that task's failure from a later FlushAsync —
+        // this pins that the failure really does reach InjectAsync, and that it is contained there.
+        var serverPipe = new DuplexPipe(new Pipe().Reader, new ClosedStdinStream().UsePipeWriter());
+        _pipe = new LspInterceptingPipe(
+            serverPipe, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance, ownedRequestTimeout: TimeSpan.FromMilliseconds(200));
+        await _pipe.StartAsync(CancellationToken.None);
+
+        for (var i = 0; i < 20; i++)
+        {
+            await _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", "{}", CancellationToken.None);
+            (await WithTimeoutAsync(
+                _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None), ShortTimeout))
+                .Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public async Task Injected_traffic_queued_behind_the_write_lock_is_refused_once_the_server_terminates()
+    {
+        // The TOCTOU: the #555 flag used to be checked before taking the write lock, so a call that
+        // passed the check and then waited behind another write went on to write into a server that
+        // had been marked terminated in the meantime.
+        var serverSide = new FaultingServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(),
+            NullLogger<LspInterceptingPipe>.Instance);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        // Hold the write lock with an injected write that is in the middle of flushing.
+        var flushStarted = serverSide.Writer.HoldNextFlush();
+        var holder = _pipe.SendNotificationToServerAsync("reqnroll/first", "{}", CancellationToken.None);
+        await WithTimeoutAsync(flushStarted, ShortTimeout);
+
+        // Both pass the flag check synchronously, then queue on the lock.
+        var queuedRequest      = _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None);
+        var queuedNotification = _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", "{}", CancellationToken.None);
+
+        _pipe.MarkServerTerminated("test");
+        serverSide.Writer.ReleaseHeldFlush();
+
+        await WithTimeoutAsync(holder, ShortTimeout);
+        (await WithTimeoutAsync(queuedRequest, ShortTimeout)).Should().BeNull();
+        await WithTimeoutAsync(queuedNotification, ShortTimeout);
+
+        (await ReadFrameAsync(serverSide.ServerSideStdin, ShortTimeout)).Should().Contain("reqnroll/first");
+        (await TryReadFrameAsync(serverSide.ServerSideStdin, TimeSpan.FromMilliseconds(300)))
+            .Should().BeNull("nothing may be written to a server once it has been marked terminated");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_write_in_flight_when_the_generation_is_disposed_reports_failure_instead_of_throwing(bool request)
+    {
+        // DiscardDeadGeneration marks the pipe terminated and then disposes the process (closing its
+        // stdin) on another thread, so a write already under way sees ObjectDisposedException. That is
+        // an expected part of teardown, so it must not Warn either.
+        var logger = new RecordingLogger();
+        var serverSide = new FaultingServerPipe();
+        _pipe = new LspInterceptingPipe(
+            serverSide, Array.Empty<ILspMessageInterceptor>(), Array.Empty<ILspMessageInterceptor>(), logger);
+        await _pipe.StartAsync(CancellationToken.None);
+
+        var flushStarted = serverSide.Writer.HoldNextFlush();
+        Task send = request
+            ? _pipe.SendRequestToServerAsync("textDocument/codeLens", null, CancellationToken.None)
+            : _pipe.SendNotificationToServerAsync("reqnroll/projectLoaded", "{}", CancellationToken.None);
+        await WithTimeoutAsync(flushStarted, ShortTimeout);
+
+        _pipe.MarkServerTerminated("its generation is being discarded");
+        _pipe.Dispose();
+        serverSide.Writer.Fault = new ObjectDisposedException("stdin");
+        serverSide.Writer.ReleaseHeldFlush();
+
+        await WithTimeoutAsync(send, ShortTimeout);
+        if (send is Task<JToken?> requestTask)
+            (await requestTask).Should().BeNull();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
+    /// <summary>
+    /// Server stdio whose stdin side can be made to fail, or to stall mid-flush, on demand.
+    /// </summary>
+    private sealed class FaultingServerPipe : IDuplexPipe
+    {
+        private readonly Pipe _serverToUs = new(); // server stdout
+        private readonly Pipe _usToServer = new(); // server stdin
+
+        public FaultingServerPipe() => Writer = new FaultingPipeWriter(_usToServer.Writer);
+
+        public FaultingPipeWriter Writer { get; }
+        public PipeReader Input  => _serverToUs.Reader;
+        public PipeWriter Output => Writer;
+
+        /// <summary>What reached "the server" through successful flushes.</summary>
+        public PipeReader ServerSideStdin => _usToServer.Reader;
+    }
+
+    /// <summary>A <see cref="PipeWriter"/> over a real pipe whose <see cref="FlushAsync"/> can throw or be held.</summary>
+    /// <remarks>
+    /// VSTHRD003 is suppressed for the same reason as on <see cref="WithTimeoutAsync{T}"/>: the
+    /// completion-source tasks are test-owned signals and there is no JoinableTaskFactory context.
+    /// </remarks>
+#pragma warning disable VSTHRD003
+    private sealed class FaultingPipeWriter : PipeWriter
+    {
+        private readonly PipeWriter _inner;
+        private TaskCompletionSource<bool>? _holdNext;   // consumed by the next flush
+        private TaskCompletionSource<bool>? _release;    // completed by ReleaseHeldFlush
+        private TaskCompletionSource<bool>? _entered;
+
+        public FaultingPipeWriter(PipeWriter inner) => _inner = inner;
+
+        /// <summary>When set, every flush throws this — a closed or disposed stdin.</summary>
+        public Exception? Fault { get; set; }
+
+        /// <summary>Makes the next flush wait for <see cref="ReleaseHeldFlush"/>; the returned task completes once it has started.</summary>
+        public Task<bool> HoldNextFlush()
+        {
+            _entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _release  = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _holdNext = _release;
+            return _entered.Task;
+        }
+
+        public void ReleaseHeldFlush() => _release!.TrySetResult(true);
+
+        public override async ValueTask<FlushResult> FlushAsync(CancellationToken cancellationToken = default)
+        {
+            var held = Interlocked.Exchange(ref _holdNext, null);
+            if (held is not null)
+            {
+                _entered!.TrySetResult(true);
+                await held.Task.ConfigureAwait(false);
+            }
+
+            if (Fault is { } fault)
+                throw fault;
+
+            return await _inner.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public override void Advance(int bytes) => _inner.Advance(bytes);
+        public override Memory<byte> GetMemory(int sizeHint = 0) => _inner.GetMemory(sizeHint);
+        public override Span<byte> GetSpan(int sizeHint = 0) => _inner.GetSpan(sizeHint);
+        public override void CancelPendingFlush() => _inner.CancelPendingFlush();
+        public override void Complete(Exception? exception = null) => _inner.Complete(exception);
+    }
+#pragma warning restore VSTHRD003
+
+    /// <summary>The stdin of a process that has exited: every write fails as a broken pipe does.</summary>
+    private sealed class ClosedStdinStream : Stream
+    {
+        public override bool CanRead  => false;
+        public override bool CanSeek  => false;
+        public override bool CanWrite => true;
+        public override long Length   => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new IOException("The pipe has been ended.");
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            throw new IOException("The pipe has been ended.");
+        public override void Flush() => throw new IOException("The pipe has been ended.");
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
+
     /// <summary>Awaits <paramref name="task"/>, failing the test if it does not finish in time.</summary>
     /// <remarks>
     /// VSTHRD003 is suppressed deliberately: the deadlock it guards against needs a JoinableTaskFactory
@@ -755,6 +986,14 @@ public class LspInterceptingPipeTests : IAsyncLifetime
         var completed = await Task.WhenAny(task, Task.Delay(timeout));
         completed.Should().BeSameAs(task, "the call should return without waiting on a dead server");
         return await task;
+    }
+
+    /// <inheritdoc cref="WithTimeoutAsync{T}(Task{T}, TimeSpan)"/>
+    private static async Task WithTimeoutAsync(Task task, TimeSpan timeout)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(timeout));
+        completed.Should().BeSameAs(task, "the call should return without waiting on a dead server");
+        await task;
     }
 #pragma warning restore VSTHRD003
 
