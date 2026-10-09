@@ -199,6 +199,23 @@ public class CompletionContextResolverTests
     }
 
     [Fact]
+    public void Fallback_language_with_regional_code_resolves_base_dialect_without_throwing()
+    {
+        // Issue #957: DefaultFeatureLanguage can be a regional code such as "en-US".
+        // The plain GherkinDialectProvider rejects that with NoSuchLanguageException, so the
+        // fallback must go through ReqnrollGherkinDialectProvider, which retries with the base
+        // language ("en") when no exact regional dialect is registered.
+        var snapshot = Snapshot(DocText);
+        _tagParser.Parse(snapshot, Arg.Any<ProjectBindingRegistry>()).Returns(Array.Empty<IdeSupportTag>());
+
+        var ctx = (KeywordCompletionContext)_sut.Resolve(snapshot, 0, 0, ProjectBindingRegistry.Invalid, "en-US")!;
+
+        ctx.Dialect.Should().NotBeNull();
+        ctx.Dialect.Language.Should().Be("en-US");
+        ctx.Dialect.FeatureKeywords.Should().Contain("Feature");
+    }
+
+    [Fact]
     public void Parsed_document_dialect_takes_priority_over_fallback_language()
     {
         var deDialect = new GherkinDialectProvider("de").DefaultDialect;
