@@ -305,6 +305,22 @@ val publishMtpReporter by tasks.registering(Exec::class) {
     )
 }
 
+// CI hands the per-RID server over via artifact zips, which drop the Unix executable bit, and Gradle
+// copies preserve whatever mode the source had -- so the extensionless server/connector apphosts would
+// land in the plugin zip as 0644 and fail to spawn on Linux/macOS (issue #979). Force rwxr-xr-x on them
+// (harmless on Windows, where the binaries have .exe names and never match).
+fun CopySpec.makeServerBinariesExecutable() {
+    filesMatching(listOf("**/Reqnroll.IdeSupport.LSP.Server", "**/reqnroll-ide-connector")) {
+        permissions { unix("rwxr-xr-x") }
+    }
+}
+
+// The plugin zip is re-packed from the sandbox by buildPlugin, which writes entries with default modes
+// rather than the sandbox files' modes, so the executable bit has to be set on that task too.
+tasks.named("buildPlugin", Zip::class) {
+    makeServerBinariesExecutable()
+}
+
 // The IntelliJ Platform Gradle Plugin registers one PrepareSandboxTask per run/test entry point
 // (prepareSandbox, prepareSandbox_runIde, prepareSandbox_runIdeBackend, prepareSandbox_runIdeFrontend,
 // prepareTestSandbox, ...) — each populating its own separate sandbox directory. Configuring only the
@@ -320,6 +336,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
         dependsOn(publishServer)
         from(serverOutputDir) {
             into("${project.name}/server/$serverRid")
+            makeServerBinariesExecutable()
         }
     } else {
         allServerRids.forEach { rid ->
@@ -327,6 +344,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
             if (ridDir.exists()) {
                 from(ridDir) {
                     into("${project.name}/server/$rid")
+                    makeServerBinariesExecutable()
                 }
             }
         }

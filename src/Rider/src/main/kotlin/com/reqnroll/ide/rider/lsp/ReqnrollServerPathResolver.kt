@@ -2,6 +2,7 @@ package com.reqnroll.ide.rider.lsp
 
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.extensions.PluginId
+import java.io.File
 import java.nio.file.Path
 
 /**
@@ -24,12 +25,27 @@ object ReqnrollServerPathResolver {
         val candidate = plugin.pluginPath.resolve("server").resolve(rid).resolve(binaryName)
 
         if (candidate.toFile().exists()) {
+            ensureExecutable(candidate.toFile(), System.getProperty("os.name"))
             return candidate
         }
 
         error(
             "Reqnroll LSP server not found at $candidate. " +
                 "Ensure the server is published and bundled under server/$rid/ for this plugin."
+        )
+    }
+
+    /**
+     * On POSIX systems a bundled server that lost its executable bit (zip round-trips don't
+     * preserve it) cannot be spawned; try to restore it, and fail with an actionable message
+     * rather than a bare process-start error if that isn't possible. No-op on Windows.
+     */
+    internal fun ensureExecutable(file: File, osName: String) {
+        if (isWindows(osName) || file.canExecute()) return
+        if (file.setExecutable(true) && file.canExecute()) return
+        error(
+            "Reqnroll LSP server at $file is not executable and its permissions could not be changed. " +
+                "Run 'chmod +x \"$file\"' (and the same for the bundled reqnroll-ide-connector binaries) and restart the IDE."
         )
     }
 
