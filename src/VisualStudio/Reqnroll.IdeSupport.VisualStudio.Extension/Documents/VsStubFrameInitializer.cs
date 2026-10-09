@@ -54,7 +54,7 @@ internal static class VsStubFrameInitializer
 
     // ── RDT stub scan ───────────────────────────────────────────────────────
 
-    private static bool TryForceInitRdtStubs(
+    internal static bool TryForceInitRdtStubs(
         IVsRunningDocumentTable rdt,
         IServiceProvider serviceProvider,
         ILogger logger)
@@ -74,13 +74,20 @@ internal static class VsStubFrameInitializer
 
             rdt.GetDocumentInfo(cookie, out _, out _, out _, out var moniker, out _, out _, out var docData);
 
+            // ppunkDocData is an AddRef'd IUnknown the caller owns (the shell's own
+            // RunningDocumentTable wrapper releases it too). Only whether it is non-null is used
+            // below, so release it straight away - for every document, not just feature files.
+            var docDataInitialized = docData != IntPtr.Zero;
+            if (docDataInitialized)
+                Marshal.Release(docData);
+
             if (moniker is null || !moniker.EndsWith(".feature", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             anyFound = true;
 
             // If document data is already initialized, skip.
-            if (docData != IntPtr.Zero)
+            if (docDataInitialized)
             {
                 logger.LogDebug(
                     "VsStubFrameInitializer: {Moniker} is already initialized — skipping.", moniker);
