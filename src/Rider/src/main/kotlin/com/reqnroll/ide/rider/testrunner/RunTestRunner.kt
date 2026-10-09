@@ -343,9 +343,19 @@ object RunTestRunner {
         return RunResult(outcome, rows)
     }
 
-    /** The pre-#700 result shape: one aggregate bit over every TRX row, no per-row detail. */
-    private fun trxResult(results: List<TrxUnitTestResult>): RunResult =
-        RunResult(if (results.any { it.outcome == "Failed" }) RunOutcome.FAILED else RunOutcome.PASSED)
+    /**
+     * The pre-#700 result shape: one aggregate bit over every TRX row, no per-row detail. Zero rows
+     * (a TRX with no `UnitTestResult` entries, or one [TrxParser] couldn't parse) proves nothing ran
+     * or was readable, so it is [RunOutcome.INCONCLUSIVE] rather than a vacuous pass (issue #983).
+     * `internal` for testability.
+     */
+    internal fun trxResult(results: List<TrxUnitTestResult>): RunResult = RunResult(
+        when {
+            results.isEmpty() -> RunOutcome.INCONCLUSIVE
+            results.any { it.outcome == "Failed" } -> RunOutcome.FAILED
+            else -> RunOutcome.PASSED
+        },
+    )
 
     /** The outcome of a [runDotnetTest] call — [Failure.message] is shown to the user verbatim, so it distinguishes an unresolvable `dotnet` CLI (issue #452) from every other launch failure. */
     private sealed class DotnetTestOutcome {

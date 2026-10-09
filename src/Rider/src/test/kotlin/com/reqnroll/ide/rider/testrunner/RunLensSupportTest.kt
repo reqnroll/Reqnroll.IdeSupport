@@ -110,6 +110,7 @@ class RunLensSupportTest {
     @Test
     fun `renderTitle shows the cross glyph for a cached failing result`() {
         assertEquals("✗ Run", RunLensSupport.renderTitle(RunOutcome.FAILED))
+        assertEquals("? Run", RunLensSupport.renderTitle(RunOutcome.INCONCLUSIVE))
     }
 
     @Test

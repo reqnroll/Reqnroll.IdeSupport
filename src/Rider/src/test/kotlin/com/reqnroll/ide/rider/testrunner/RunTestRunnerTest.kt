@@ -216,6 +216,22 @@ class RunTestRunnerTest {
         assertEquals(emptyMap<Int, RunResult>(), RunTestRunner.scenarioResults(scenarios, null, RunResult(RunOutcome.FAILED)))
     }
 
+    // ── trxResult ────────────────────────────────────────────────────────────
+
+    private fun trxRow(outcome: String) = TrxUnitTestResult("t", outcome, "", null)
+
+    @Test
+    fun `trxResult is not Passed when the TRX has no result rows`() {
+        // Issue #983: an empty (or unparseable) TRX carries no signal, so it must never render as a green pass.
+        assertEquals(RunOutcome.INCONCLUSIVE, RunTestRunner.trxResult(emptyList()).outcome)
+    }
+
+    @Test
+    fun `trxResult is Passed when every row passed and Failed when any row failed`() {
+        assertEquals(RunOutcome.PASSED, RunTestRunner.trxResult(listOf(trxRow("Passed"), trxRow("Passed"))).outcome)
+        assertEquals(RunOutcome.FAILED, RunTestRunner.trxResult(listOf(trxRow("Passed"), trxRow("Failed"))).outcome)
+    }
+
     // ── combineIfComplete ────────────────────────────────────────────────────
 
     @Test
