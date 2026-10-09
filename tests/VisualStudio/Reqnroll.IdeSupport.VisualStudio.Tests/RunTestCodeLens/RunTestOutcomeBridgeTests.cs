@@ -173,4 +173,62 @@ public class RunTestOutcomeBridgeTests : IDisposable
 
         act.Should().NotThrow();
     }
+
+    // ── Disposal of the cached proxy on a failure (issue #1034) ─────────────
+
+    private sealed class DisposableProxySpy : IDisposable
+    {
+        public bool Disposed { get; private set; }
+        public void Dispose() => Disposed = true;
+    }
+
+    private sealed class ThrowingDisposableProxySpy : IDisposable
+    {
+        public void Dispose() => throw new InvalidOperationException("dispose failed");
+    }
+
+    private static void SeedCachedProxy(object proxy) =>
+        RunTestOutcomeBridge.SetProxyForTests(proxy, Method(nameof(FakeTestOutcomeService.GetOutcome)));
+
+    [Fact]
+    public void HandleFailure_disposes_the_cached_proxy_on_a_transient_failure_and_clears_it()
+    {
+        // A dropped ServiceHub connection must not leak the brokered-service proxy (and the
+        // Stream it owns): the cached connection is dropped here, and nothing else in this
+        // static-only class ever disposes it.
+        var proxy = new DisposableProxySpy();
+        SeedCachedProxy(proxy);
+
+        RunTestOutcomeBridge.HandleFailure(new InvalidOperationException("dropped connection"), "GetOrCreateProxyAsync");
+
+        proxy.Disposed.Should().BeTrue();
+        RunTestOutcomeBridge.HasCachedProxyForTests.Should().BeFalse();
+    }
+
+    [Fact]
+    public void HandleFailure_disposes_the_cached_proxy_on_a_permanent_shape_change_and_clears_it()
+    {
+        // DisablePermanently drops the connection too; it must release the proxy for the same reason.
+        var proxy = new DisposableProxySpy();
+        SeedCachedProxy(proxy);
+
+        RunTestOutcomeBridge.HandleFailure(new TypeLoadException("shape changed"), "GetOrCreateProxyAsync");
+
+        proxy.Disposed.Should().BeTrue();
+        RunTestOutcomeBridge.HasCachedProxyForTests.Should().BeFalse();
+    }
+
+    [Fact]
+    public void HandleFailure_does_not_throw_when_the_cached_proxy_dispose_throws()
+    {
+        // HandleFailure is always invoked from inside a catch clause, so a Dispose that itself
+        // fails must not escape — disposal is best-effort.
+        SeedCachedProxy(new ThrowingDisposableProxySpy());
+
+        var act = () => RunTestOutcomeBridge.HandleFailure(
+            new InvalidOperationException("dropped connection"), "GetOrCreateProxyAsync");
+
+        act.Should().NotThrow();
+        RunTestOutcomeBridge.HasCachedProxyForTests.Should().BeFalse();
+    }
 }
