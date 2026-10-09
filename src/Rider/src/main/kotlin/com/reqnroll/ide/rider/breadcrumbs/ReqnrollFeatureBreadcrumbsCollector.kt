@@ -15,10 +15,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.components.breadcrumbs.Crumb
 import com.intellij.util.Alarm
-import com.intellij.util.io.URLUtil
 import com.intellij.xml.breadcrumbs.NavigatableCrumb
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
@@ -27,6 +25,7 @@ import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.Position
 import java.util.concurrent.ConcurrentHashMap
 import javax.swing.Icon
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Feeds the editor breadcrumb bar for `.feature` files from `textDocument/documentSymbol` —
@@ -138,7 +137,7 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
         }
     }
 
-    private fun uriOf(file: VirtualFile): String = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
+    private fun uriOf(file: VirtualFile): String = localPathToLspUri(file.path)
 
     companion object {
         private const val DEBOUNCE_MS = 400

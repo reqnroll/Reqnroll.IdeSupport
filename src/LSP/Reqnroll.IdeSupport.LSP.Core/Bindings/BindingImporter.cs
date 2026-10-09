@@ -187,10 +187,11 @@ public class BindingImporter
         return (pos.Line + 1, pos.Character + 1);
     }
 
-    /// <summary>Resolves the source file path referenced by a connector-discovered binding's raw
-    /// wire-format source location, using the same "#index" table lookup as <see cref="ParseSourceLocation"/>.
-    /// Returns null when the location is empty or the referenced/literal file does not exist.</summary>
-    public string ResolveSourceFilePath(string sourceLocationRaw)
+    /// <summary>Returns the source path the connector recorded for a binding -- the "#index" table
+    /// entry or the literal path in its raw wire-format source location -- exactly as recorded,
+    /// without checking that it exists or mapping it onto this machine. Null when the location is
+    /// empty.</summary>
+    public string GetRecordedSourcePath(string sourceLocationRaw)
     {
         if (string.IsNullOrWhiteSpace(sourceLocationRaw))
             return null;
@@ -199,6 +200,18 @@ public class BindingImporter
         if (sourceRef.StartsWith("#") && _sourceFiles != null &&
             _sourceFiles.TryGetValue(sourceRef.Substring(1), out var resolvedPath))
             sourceRef = resolvedPath;
+
+        return sourceRef;
+    }
+
+    /// <summary>Resolves the source file path referenced by a connector-discovered binding's raw
+    /// wire-format source location, using the same "#index" table lookup as <see cref="ParseSourceLocation"/>.
+    /// Returns null when the location is empty or the referenced/literal file does not exist.</summary>
+    public string ResolveSourceFilePath(string sourceLocationRaw)
+    {
+        var sourceRef = GetRecordedSourcePath(sourceLocationRaw);
+        if (sourceRef == null)
+            return null;
 
         // The PDB records the absolute source path from the machine that built the assembly
         // (e.g. a CI runner, a devcontainer, or a plugin built elsewhere), which may not exist on

@@ -3,6 +3,7 @@ package com.reqnroll.ide.rider.actions
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.ToggleAction
+import com.reqnroll.ide.rider.inlayhints.NativeLspInlayHints
 import com.reqnroll.ide.rider.inlayhints.ReqnrollFeatureInlayHintsController
 import com.reqnroll.ide.rider.inlayhints.ReqnrollFeatureInlayHintsSettings
 
@@ -14,6 +15,12 @@ import com.reqnroll.ide.rider.inlayhints.ReqnrollFeatureInlayHintsSettings
  */
 class ReqnrollToggleFeatureInlayHintsAction : ToggleAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+
+    // On Rider 2026.2+ the platform renders the hints (see NativeLspInlayHints), so this switch controls nothing there.
+    override fun update(e: AnActionEvent) {
+        super.update(e)
+        if (NativeLspInlayHints.isRenderedByPlatform) e.presentation.isEnabledAndVisible = false
+    }
 
     override fun isSelected(e: AnActionEvent): Boolean = ReqnrollFeatureInlayHintsSettings.isEnabled
 

@@ -1,4 +1,4 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Shell;
@@ -52,6 +52,16 @@ internal static class DropdownBarAttachRetryPolicy
             ? DropdownBarAttachOutcome.StopBudgetExhausted
             : DropdownBarAttachOutcome.Retry;
     }
+}
+
+/// <summary>Recognises the panes of VS's difference viewer, which have no drop-down bar (#907).</summary>
+internal static class DiffViewDetector
+{
+    /// <summary>Role carried by every difference-viewer pane (seen alongside LEFTDIFF and INLINEDIFF).</summary>
+    public const string DiffRole = "DIFF";
+
+    public static bool IsDiffView(IEnumerable<string> textViewRoles) =>
+        textViewRoles.Contains(DiffRole, StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -316,6 +326,17 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
     {
         ThreadHelper.ThrowIfNotOnUIThread();
 
+        // Diff panes (Git Changes compare window) never get a code window with a drop-down bar
+        // manager, and some never resolve one at all — which would otherwise retry for the whole
+        // attempt budget and end in a "giving up" warning (#907).
+        var roles = _editorAdapter.GetWpfTextView(_vsTextView)?.Roles;
+        if (roles is not null && DiffViewDetector.IsDiffView(roles))
+        {
+            _logger.LogVerbose("GherkinDropdownBarClient: view is a diff pane; no drop-down bar to attach, standing down.");
+            Dispose();
+            return false;
+        }
+
         var codeWindow = ResolveCodeWindow(_vsTextView);
         if (codeWindow is null)
         {
@@ -325,7 +346,12 @@ internal sealed class GherkinDropdownBarClient : IVsDropdownBarClient, IDisposab
 
         if (codeWindow is not IVsDropdownBarManager dropdownBarManager)
         {
-            _logger.LogWarning("GherkinDropdownBarClient: IVsCodeWindow does not implement IVsDropdownBarManager.");
+            // Permanent, not transient: a host whose code window has no drop-down bar support never
+            // gains it, so retrying would repeat this warning every 300ms (#907). Known diff panes
+            // are caught by DiffViewDetector above; warn once for any other unrecognised host.
+            _logger.LogWarning(
+                "GherkinDropdownBarClient: IVsCodeWindow does not implement IVsDropdownBarManager; standing down.");
+            Dispose();
             return false;
         }
 
