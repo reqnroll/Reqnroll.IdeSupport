@@ -62,7 +62,7 @@ internal sealed class RenameStepCommand : Command
             if (service is null)
             {
                 _logger.LogWarning("RenameStepCommand: LSP server not yet initialized.");
-                VsUtils.ShowStatusBarMessage("Reqnroll: LSP server not yet initialized.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: LSP server not yet initialized.");
                 return;
             }
 
@@ -89,7 +89,7 @@ internal sealed class RenameStepCommand : Command
             if (targets is null || targets.Targets.Count == 0)
             {
                 _logger.LogInformation("RenameStepCommand: no renameable targets at cursor position.");
-                VsUtils.ShowStatusBarMessage("Reqnroll: No step definition found to rename at this position.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: No step definition found to rename at this position.");
                 return;
             }
 
@@ -171,7 +171,7 @@ internal sealed class RenameStepCommand : Command
                 // rejected push has no in-flight request left to fail and is logged server-side
                 // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
                 _logger.LogInformation("RenameStepCommand: rename rejected by server: {Message}", ex.Message);
-                VsUtils.ShowStatusBarMessage($"Reqnroll: {ex.Message}");
+                await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: {ex.Message}");
                 return;
             }
 
@@ -181,7 +181,7 @@ internal sealed class RenameStepCommand : Command
             // that request with ContentModified, issue #654), so the edit lands a moment after this
             // message is shown.
             _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
-            VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
+            await VsUtils.ShowStatusBarMessageAsync("Reqnroll: Step renamed successfully.");
         }
         catch (Exception ex)
         {
