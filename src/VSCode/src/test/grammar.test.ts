@@ -183,6 +183,35 @@ suite('gherkin.tmLanguage.json', () => {
       const scopes = results[0].tokens.map((t) => t.scopes).flat();
       assert.ok(!scopes.some((s) => s.includes('entity.name.tag.gherkin')));
     });
+    // #1004: a Gherkin tag is any whitespace-delimited token starting with @, so tags such as
+    // @category:smoke, @owner=bob and @Jira:ABC-1 must be scoped in full, not truncated at : . = /.
+    test('#1004: scopes the whole of tags containing : = . / characters', () => {
+      const results = tokenizeLines(['@category:smoke @owner=bob @Jira:ABC-1 @v1.2/x']);
+      const tagTexts = results[0].tokens
+        .filter((t) => t.scopes.includes('entity.name.tag.gherkin'))
+        .map((t) =>
+          '@category:smoke @owner=bob @Jira:ABC-1 @v1.2/x'.substring(t.startIndex, t.endIndex),
+        );
+      assert.deepStrictEqual(tagTexts, ['@category:smoke', '@owner=bob', '@Jira:ABC-1', '@v1.2/x']);
+    });
+
+    // Gherkin discards a trailing "# comment" on a tag line before parsing the tags (see #949), so
+    // it is valid and should be scoped as a comment, with the tags before it unaffected.
+    test('#1004: scopes a trailing # comment on a tag line as a comment', () => {
+      const line = '@smoke @slow # flaky on CI';
+      const results = tokenizeLines([line]);
+      const tokens = results[0].tokens;
+      const comment = tokens.filter((t) => t.scopes.includes('comment.line.gherkin'));
+      assert.ok(comment.length > 0, `Expected a comment token: ${JSON.stringify(tokens)}`);
+      assert.strictEqual(
+        line.substring(comment[0].startIndex, comment[comment.length - 1].endIndex),
+        '# flaky on CI',
+      );
+      const tagTexts = tokens
+        .filter((t) => t.scopes.includes('entity.name.tag.gherkin'))
+        .map((t) => line.substring(t.startIndex, t.endIndex));
+      assert.deepStrictEqual(tagTexts, ['@smoke', '@slow']);
+    });
   });
 
   // ── Feature keywords ────────────────────────────────────────────────────
@@ -205,6 +234,12 @@ suite('gherkin.tmLanguage.json', () => {
     test('should match indented keywords', () => {
       const re = new RegExp(p().match);
       assert.ok(re.test('  Scenario: indented'));
+    });
+
+    test('#1004: should match the Scenarios: alias of Examples:', () => {
+      const re = new RegExp(p().match);
+      assert.ok(re.test('Scenarios:'));
+      assert.ok(re.test('  Scenarios: more cases'));
     });
 
     test('should not match step keywords', () => {
@@ -333,6 +368,39 @@ suite('gherkin.tmLanguage.json', () => {
         'Expected the real closing """ (line 3, alone on its line) to have ended the doc ' +
           'string so the following Scenario: is highlighted normally',
       );
+    });
+
+    // #1004: ``` is an alternative doc-string delimiter in Gherkin. A doc string must be closed by
+    // the same delimiter that opened it, so a """ inside a ``` block does not close it.
+    test('#1004: backtick doc strings are scoped and close only on a backtick delimiter', () => {
+      const lines = [
+        '  Then the output is:',
+        '    ```',
+        '    contains """ which is only content here',
+        '    ```',
+        'Scenario: Next',
+      ];
+      const results = tokenizeLines(lines);
+      for (const idx of [1, 2, 3]) {
+        const scopes = results[idx].tokens.map((t) => t.scopes).flat();
+        assert.ok(
+          scopes.includes('string.quoted.other.gherkin'),
+          `line ${idx} should be in the doc string: ${JSON.stringify(scopes)}`,
+        );
+      }
+      const next = results[4].tokens.map((t) => t.scopes).flat();
+      assert.ok(!next.includes('string.quoted.other.gherkin'));
+      assert.ok(next.includes('keyword.control.gherkin'));
+    });
+
+    // A ``` inside a """ block is likewise plain content.
+    test('#1004: a backtick line inside a """ doc string does not close it', () => {
+      const results = tokenizeLines(['    """', '    ```', '    """', 'Scenario: Next']);
+      const inner = results[1].tokens.map((t) => t.scopes).flat();
+      assert.ok(inner.includes('string.quoted.other.gherkin'));
+      const next = results[3].tokens.map((t) => t.scopes).flat();
+      assert.ok(!next.includes('string.quoted.other.gherkin'));
+      assert.ok(next.includes('keyword.control.gherkin'));
     });
 
     // Documents current, accepted behavior: an unterminated doc string has no closing delimiter
