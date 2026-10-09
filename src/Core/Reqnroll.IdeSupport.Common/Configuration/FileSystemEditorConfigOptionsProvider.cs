@@ -3,8 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Abstractions;
-using System.Linq;
-using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Reqnroll.IdeSupport.Common.Configuration;
 
@@ -150,30 +148,11 @@ public sealed class FileSystemEditorConfigOptionsProvider : IEditorConfigOptions
 
     private static bool SectionApplies(string pattern, string editorConfigDir, string targetFilePath)
     {
-        var normalized = NormalizePattern(pattern);
-        var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
-        matcher.AddInclude(normalized);
-
         // Match the target path relative to the .editorconfig's directory
         var relative = GetRelativePath(editorConfigDir, targetFilePath)
                            .Replace(Path.DirectorySeparatorChar, '/');
 
-        return matcher.Match(relative).HasMatches;
-    }
-
-    /// <summary>
-    /// Applies EditorConfig glob-normalization rules:
-    /// patterns without a path separator are treated as matching in any subdirectory
-    /// (equivalent to prefixing with <c>**/</c>).
-    /// Patterns starting with <c>/</c> are anchored to the .editorconfig directory.
-    /// </summary>
-    private static string NormalizePattern(string pattern)
-    {
-        if (pattern.StartsWith("/"))
-            return pattern.TrimStart('/');
-        if (!pattern.Contains('/') && !pattern.Contains('\\'))
-            return "**/" + pattern;
-        return pattern;
+        return EditorConfigGlob.IsMatch(pattern, relative);
     }
 
     /// <summary>

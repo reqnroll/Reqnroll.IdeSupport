@@ -212,6 +212,98 @@ public class FileSystemEditorConfigOptionsProviderTests
         Assert.False(opts.GetBoolOption("gherkin_indent_steps", true));
     }
 
+    // Issue #968: EditorConfig glob semantics (https://spec.editorconfig.org/#glob-expressions).
+    // The .editorconfig lives at C:\Repo; each case says whether a section with the given
+    // pattern applies to the given file (path relative to C:\Repo).
+    [Theory]
+    // {s1,s2,...} alternatives
+    [InlineData("*.{feature,cs}", @"Login.feature", true)]
+    [InlineData("*.{feature,cs}", @"src\Steps.cs", true)]
+    [InlineData("*.{cs,vb}", @"src\Features\Login.feature", false)]
+    [InlineData("*.{cs,vb}", @"src\Module.vb", true)]
+    [InlineData("{Login,Logout}.feature", @"src\Logout.feature", true)]
+    [InlineData("*.{feature,{cs,vb}}", @"src\Module.vb", true)]
+    [InlineData("*.{feature}", @"Login.feature", false)] // no comma: braces are literal
+    [InlineData("*.{feature}", @"Login.{feature}", true)]
+    // {num1..num2} integer range
+    [InlineData("Step{1..10}.cs", @"src\Step7.cs", true)]
+    [InlineData("Step{1..10}.cs", @"src\Step11.cs", false)]
+    [InlineData("Step{-3..3}.cs", @"Step-2.cs", true)]
+    [InlineData("{Login,Step{1..3}}.cs", @"Login.cs", true)]
+    [InlineData("{Login,Step{1..3}}.cs", @"Step4.cs", false)]
+    // [seq] and [!seq]
+    [InlineData("Login[123].feature", @"Login2.feature", true)]
+    [InlineData("Login[123].feature", @"Login4.feature", false)]
+    [InlineData("Login[a-c].feature", @"Loginb.feature", true)]
+    [InlineData("Login[_.-].feature", @"Login_.feature", true)]
+    [InlineData("Login[_.-].feature", @"Login-.feature", true)]
+    [InlineData("Login[!123].feature", @"Login4.feature", true)]
+    [InlineData("Login[!123].feature", @"Login2.feature", false)]
+    [InlineData("Login[!-a].feature", @"Login0.feature", true)]
+    [InlineData("Login[!-a].feature", @"Login-.feature", false)]
+    // ? matches exactly one character other than /
+    [InlineData("Login?.feature", @"Login1.feature", true)]
+    [InlineData("Login?.feature", @"Login.feature", false)]
+    // * does not cross /, ** does
+    [InlineData("src/*.feature", @"src\Login.feature", true)]
+    [InlineData("src/*.feature", @"src\Features\Login.feature", false)]
+    [InlineData("src/**.feature", @"src\Features\Login.feature", true)]
+    [InlineData("src/**/*.feature", @"src\Features\Deep\Login.feature", true)]
+    // a pattern containing / is relative to the .editorconfig directory
+    [InlineData("src/*.feature", @"other\src\Login.feature", false)]
+    [InlineData("/Login.feature", @"Login.feature", true)]
+    [InlineData("/Login.feature", @"src\Login.feature", false)]
+    // a pattern without / matches the file name at any depth
+    [InlineData("Login.feature", @"src\Features\Login.feature", true)]
+    [InlineData("*", @"src\Features\Login.feature", true)]
+    // backslash escapes a special character
+    [InlineData(@"Login\*.feature", @"Login*.feature", true)]
+    [InlineData(@"Login\*.feature", @"LoginX.feature", false)]
+    // regex metacharacters in the pattern are literal
+    [InlineData("Login(1).feature", @"Login(1).feature", true)]
+    [InlineData("Login+.feature", @"Loginn.feature", false)]
+    // malformed patterns never apply rather than throwing
+    [InlineData("Login[z-a].feature", @"Loginb.feature", false)]
+    [InlineData("Login[12.feature", @"Login[12.feature", true)] // unterminated [ is literal
+    [InlineData("*.{feature,cs", @"Login.{feature,cs", true)]   // unterminated { is literal
+    public void Section_glob_follows_EditorConfig_spec(string pattern, string relativeFile, bool expectedToApply)
+    {
+        var ec   = @"C:\Repo\.editorconfig";
+        var file = Path.Combine(@"C:\Repo", relativeFile);
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = $"""
+                    root = true
+                    [{pattern}]
+                    gherkin_table_cell_padding_size = 7
+                    """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.Equal(expectedToApply ? 7 : 1, opts.GetOption("gherkin_table_cell_padding_size", 1));
+    }
+
+    [Fact]
+    public void Section_glob_is_case_insensitive_on_Windows_only()
+    {
+        var ec   = @"C:\Repo\.editorconfig";
+        var file = @"C:\Repo\src\Login.feature";
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.{FEATURE,CS}]
+                   gherkin_table_cell_padding_size = 7
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        var expected = OperatingSystem.IsWindows() ? 7 : 1;
+        Assert.Equal(expected, opts.GetOption("gherkin_table_cell_padding_size", 1));
+    }
+
     // ── Cache invalidation ────────────────────────────────────────────────────
 
     [Fact]
