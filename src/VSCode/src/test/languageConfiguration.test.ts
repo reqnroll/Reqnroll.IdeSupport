@@ -75,13 +75,33 @@ suite('language-configuration.json indentationRules', () => {
     });
   }
 
+  /**
+   * VS Code's language-configuration mapper (`_mapIndentationRules` in the workbench) treats
+   * BOTH patterns as mandatory: if either `increaseIndentPattern` or `decreaseIndentPattern` is
+   * absent (or fails to compile), it `return`s early and the ENTIRE `indentationRules` block is
+   * discarded — the increase pattern never takes effect, so Enter never indents. The key must
+   * therefore always be present. This is the regression guard for #1002: the first attempt at the
+   * fix deleted `decreaseIndentPattern` outright, which silently disabled indentation entirely.
+   */
+  test('indentationRules declares both patterns VS Code requires', () => {
+    assert.ok(
+      typeof rules.increaseIndentPattern === 'string' && rules.increaseIndentPattern.length > 0,
+      'increaseIndentPattern must be present (VS Code drops the whole block otherwise)',
+    );
+    assert.ok(
+      typeof rules.decreaseIndentPattern === 'string' && rules.decreaseIndentPattern.length > 0,
+      'decreaseIndentPattern must be present even if it never matches — VS Code drops the whole ' +
+        'indentationRules block when this key is missing, which silently disables indentation',
+    );
+    assert.doesNotThrow(() => new RegExp(rules.increaseIndentPattern!));
+    assert.doesNotThrow(() => new RegExp(rules.decreaseIndentPattern!));
+  });
+
   test('decreaseIndentPattern does not match steps, tables, tags, comments or blank lines', () => {
     // A decrease pattern fires on the line itself and cancels the increase from the previous line,
-    // so it would outdent `Scenario:` right after `Rule:`/`Feature:`. It must never be a catch-all.
-    if (rules.decreaseIndentPattern === undefined) {
-      return;
-    }
-    const decrease = new RegExp(rules.decreaseIndentPattern);
+    // so it would outdent `Scenario:` right after `Rule:`/`Feature:`. It must never be a catch-all;
+    // `(?!)` (match nothing) is the intended value, keeping the block alive without ever outdenting.
+    const decrease = new RegExp(rules.decreaseIndentPattern!);
     for (const line of [...shouldNotIncrease, '    Given a user', '      | a | b |']) {
       assert.ok(
         !decrease.test(line),

@@ -22,6 +22,7 @@
     { "open": "'", "close": "'" }
   ],
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*(Feature|Rule|Background|Scenario Outline|Scenario Template|Scenarios|Scenario|Examples|Example)\\s*:"
+    "increaseIndentPattern": "^\\s*(Feature|Rule|Background|Scenario Outline|Scenario Template|Scenarios|Scenario|Examples|Example)\\s*:",
+    "decreaseIndentPattern": "(?!)"
   }
 }
