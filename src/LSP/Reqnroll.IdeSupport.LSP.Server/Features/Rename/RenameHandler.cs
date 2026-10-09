@@ -581,20 +581,36 @@ public sealed class RenameHandler
         WorkspaceEditBuilder builder, IReadOnlyList<StepBindingMatch> usages,
         string effectiveNewName, string sourceExpression, ProjectStepDefinitionBinding binding)
     {
+        // A feature owned by several projects (or linked into several) can report the same step
+        // range once per owner. Emit one edit per (uri, range): overlapping duplicate TextEdits are
+        // rejected or double-applied by clients.
+        var editedRanges = new Dictionary<(string Uri, int StartLine, int StartCharacter, int EndLine, int EndCharacter), string>();
+
         foreach (var usage in usages)
         {
             var featureUri = DocumentUri.Parse(usage.FeatureDocumentId);
+            var stepRange = usage.Range.ToLspRange();
 
             // Read the feature step text to preserve parameter values / placeholders
-            string? stepText = null;
-            if (usage.Range != null)
-            {
-                var stepRange = usage.Range.ToLspRange();
-                stepText = ReadStepText(featureUri, stepRange);
-            }
+            var stepText = ReadStepText(featureUri, stepRange);
 
             var featureNewText = FeatureStepTextBuilder.Build(effectiveNewName, sourceExpression, binding.Regex, stepText);
-            builder.Add(featureUri, usage.Range!.ToLspRange(), featureNewText, RenameChangeAnnotations.Feature);
+
+            var key = (usage.FeatureDocumentId, stepRange.Start.Line, stepRange.Start.Character,
+                stepRange.End.Line, stepRange.End.Character);
+            if (editedRanges.TryGetValue(key, out var existingNewText))
+            {
+                if (existingNewText != featureNewText)
+                {
+                    _logger.LogWarning(
+                        $"RenameHandler: dropped conflicting edit for '{usage.FeatureDocumentId}' at " +
+                        $"{stepRange.Start.Line}:{stepRange.Start.Character}: '{featureNewText}' vs kept '{existingNewText}'");
+                }
+                continue;
+            }
+
+            editedRanges[key] = featureNewText;
+            builder.Add(featureUri, stepRange, featureNewText, RenameChangeAnnotations.Feature);
         }
     }
 
