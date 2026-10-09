@@ -29,6 +29,9 @@ internal sealed class LspInspectorLogger : ILspMessageInterceptor, IDisposable
     private StreamWriter? _writer;
     private bool _disposed;
 
+    /// <summary>The file this logger writes to.</summary>
+    internal string LogFilePath => _logFilePath;
+
     /// <summary>
     /// Initialises the logger and creates (or truncates) the log file at
     /// <paramref name="logFilePath"/>.
