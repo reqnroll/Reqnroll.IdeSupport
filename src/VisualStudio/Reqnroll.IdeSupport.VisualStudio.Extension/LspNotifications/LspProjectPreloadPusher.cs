@@ -71,8 +71,10 @@ internal static class LspProjectPreloadPusher
                 // push is a best-effort head start (see class remarks), always superseded by
                 // VsProjectEventMonitor.SendInitialProjectsAsync's own baseline once the real LSP
                 // connection exists — that path is what subscribes for a NuGet-restore-finished resend.
-                var loadedPayload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
-                    project, GetSolutionFolder(solution), serviceProvider, logger);
+                var loadedPayload = await VsProjectPayloadBuilder.BuildProjectLoadedParamsJsonAsync(
+                    project, GetSolutionFolder(solution), serviceProvider, logger, cancellationToken);
+                // The NuGet query above yields while it waits; BuildProjectFilesParamsJson reads DTE.
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
                 var filesJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, logger);
 
                 await WriteEnvelopeAsync(pipe, CustomLspMethodNames.ReqnrollProjectLoaded, loadedPayload.Json, cancellationToken)
