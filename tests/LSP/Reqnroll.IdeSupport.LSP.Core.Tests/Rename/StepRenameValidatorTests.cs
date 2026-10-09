@@ -232,6 +232,29 @@ public class StepRenameValidatorTests
         result.Should().BeNull();
     }
 
+    // ── Real-world repros from the Experimental-instance logs (issue #1126) ────
+    // The binding is `[Then(@"the basket price should be (\d+(\.\d+)?)")]` in a Quickstart
+    // project; Rename Step seeds the prompt with the source literal and submits the edited text
+    // verbatim. Both the anchored and the unanchored form were rejected.
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_nested_capture_groups_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"the basket price should be (\d+(\.\d+)?)",
+            @"the price should be (\d+(\.\d+)?)");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_anchors_and_nested_capture_groups_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"^the basket price should be \$(\d+(\.\d+)?)$",
+            @"^the price should be \$(\d+(\.\d+)?)$");
+        result.Should().BeNull();
+    }
+
     // ── ValidateProjectState ────────────────────────────────────────────────────
 
     [Fact]
