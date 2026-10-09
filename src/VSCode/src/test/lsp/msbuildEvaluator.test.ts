@@ -3,10 +3,12 @@ import * as path from 'path';
 import {
   buildOutputPath,
   findTargetKey,
+  getMsbuildEvaluation,
   readPackageReferences,
   tfmToShort,
   toProjectFileItems,
 } from '../../lsp/msbuildEvaluator';
+import { MAX_BUFFER_OVERFLOW_CODE } from '../../util/msbuildProcess';
 
 suite('msbuildEvaluator', () => {
   suite('tfmToShort', () => {
@@ -162,6 +164,35 @@ suite('msbuildEvaluator', () => {
 
       const expected = path.resolve('repo', 'MyProject', 'bin', 'Debug', 'net8.0', 'MyProject.dll');
       assert.strictEqual(result, expected);
+    });
+  });
+
+  suite('msbuild output exceeding the buffer (issue #1008)', () => {
+    const overflowError = (): Error =>
+      Object.assign(new Error('stdout maxBuffer length exceeded'), {
+        code: MAX_BUFFER_OVERFLOW_CODE,
+      });
+
+    test('warns and returns null instead of dropping the evaluation silently', async () => {
+      const warnings: unknown[] = [];
+      const originalWarn = console.warn;
+      console.warn = (...args: unknown[]): void => {
+        warnings.push(args[0]);
+      };
+
+      let result: unknown;
+      try {
+        result = await getMsbuildEvaluation('C:\\proj\\Big.csproj', () =>
+          Promise.resolve({ stdout: '', error: overflowError() }),
+        );
+      } finally {
+        console.warn = originalWarn;
+      }
+
+      assert.strictEqual(result, null);
+      assert.strictEqual(warnings.length, 1, 'the dropped evaluation must be logged');
+      assert.match(String(warnings[0]), /buffer limit/);
+      assert.match(String(warnings[0]), /Big\.csproj/);
     });
   });
 });
