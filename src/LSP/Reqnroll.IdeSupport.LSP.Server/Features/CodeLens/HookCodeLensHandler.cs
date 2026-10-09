@@ -66,8 +66,10 @@ public sealed class HookCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
-
+        // No per-request measurement here (issue #941): the single textDocument/codeLens
+        // measurement is owned by StepCodeLensHandler, which records above its own file-type
+        // check and therefore fires once for every request the combined registration dispatches,
+        // including this .feature path. Recording here too counted one client request twice.
         if (!IsFeatureFile(uri))
         {
             _logger.LogVerbose($"HookCodeLensHandler: ignoring non-.feature URI {uri}");
