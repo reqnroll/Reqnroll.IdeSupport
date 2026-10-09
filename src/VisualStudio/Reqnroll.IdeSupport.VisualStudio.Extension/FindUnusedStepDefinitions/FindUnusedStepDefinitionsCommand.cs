@@ -54,7 +54,7 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
                 _logger.LogWarning(
                     "FindUnusedStepDefinitionsCommand: LSP server not yet initialized (service={ServiceState}, renderer={RendererState}).",
                     service is null ? "null" : "set", renderer is null ? "null" : "set");
-                VsUtils.ShowStatusBarMessage("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
                 return;
             }
 
