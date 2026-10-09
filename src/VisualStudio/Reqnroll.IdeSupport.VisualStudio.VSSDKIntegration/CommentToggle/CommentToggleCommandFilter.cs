@@ -137,7 +137,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                 var endPos    = selection.End.Position;
                 var endContainingLine = endPos.GetContainingLine();
                 var startLine = selection.Start.Position.GetContainingLine().LineNumber;
-                var endLine   = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
+                var endLine   = SelectionLineRange.AdjustEndLineForWholeLineSelection(
                     startLine, endContainingLine.LineNumber, endPos == endContainingLine.Start);
 
                 _logger.LogVerbose(
