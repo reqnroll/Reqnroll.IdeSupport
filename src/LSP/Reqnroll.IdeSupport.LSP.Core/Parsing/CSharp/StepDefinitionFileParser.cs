@@ -150,7 +150,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             // step/hook attributes.
             var typeScope = ReadScopeAttributes(GetContainingTypeAttributeLists(method));
             var methodScope = ReadScopeAttributes(method.AttributeLists);
-            var combinedScope = CombineScopes(typeScope, methodScope);
+            var combinedScope = CombineScopeAlternatives(typeScope, methodScope);
 
             var sourceLocation = GetSourceLocation(stepDefinitionFile.FullName, method);
             var parameterTypes = method.ParameterList.Parameters
@@ -186,7 +186,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     }
 
     private static void AddStepDefinitions(List<ProjectStepDefinitionBinding> target, AttributeSyntax attribute,
-        ScenarioBlock[] blocks, RawScope scope, ProjectBindingImplementation implementation,
+        ScenarioBlock[] blocks, IReadOnlyList<RawScope> scope, ProjectBindingImplementation implementation,
         string methodName, IReadOnlyList<string> parameterNames, string structuralError)
     {
         var expression = GetStepDefinitionExpression(attribute);
@@ -391,7 +391,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             : new ParamPosition(-1, 0, paramIndex);
     }
 
-    private static ProjectHookBinding CreateHook(AttributeSyntax attribute, HookType hookType, RawScope methodScope,
+    private static ProjectHookBinding CreateHook(AttributeSyntax attribute, HookType hookType, IReadOnlyList<RawScope> methodScope,
         ProjectBindingImplementation implementation, string error)
     {
         var hookTags = GetHookTags(attribute);
@@ -573,20 +573,41 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             span.EndLinePosition.Line + 1, span.EndLinePosition.Character + 1);
     }
 
-    private static RawScope ReadScopeAttributes(SyntaxList<AttributeListSyntax> attributeLists)
+    /// <summary>
+    /// Reads the [Scope] attributes at one level (type or method) as a list of alternatives, or
+    /// <c>null</c> when there are none. Multiple [Scope] attributes broaden the match (OR
+    /// semantics; Reqnroll registers one binding per scope), while the properties inside one
+    /// [Scope] are AND-combined. The alternatives are folded into a single scope whenever that is
+    /// exact (see <see cref="CanOrIntoOneScope"/>), so e.g. tag-only scopes keep their single
+    /// OR-ed tag expression; otherwise (issue #953) they are kept as separate alternatives.
+    /// </summary>
+    private static IReadOnlyList<RawScope> ReadScopeAttributes(SyntaxList<AttributeListSyntax> attributeLists)
     {
-        RawScope result = null;
-        foreach (var attribute in EnumerateAttributes(attributeLists))
-        {
-            if (GetAttributeName(attribute) != "Scope")
-                continue;
+        var scopes = EnumerateAttributes(attributeLists)
+            .Where(attribute => GetAttributeName(attribute) == "Scope")
+            .Select(ReadScopeAttribute)
+            .ToArray();
 
-            var raw = ReadScopeAttribute(attribute);
-            // Multiple [Scope] attributes at the same level broaden the match (OR semantics).
-            result = result == null ? raw : OrScopes(result, raw);
-        }
+        if (scopes.Length == 0)
+            return null;
 
-        return result;
+        return CanOrIntoOneScope(scopes) ? new[] { scopes.Aggregate(OrScopes) } : scopes;
+    }
+
+    /// <summary>
+    /// (t1 AND F AND S) OR (t2 AND F AND S) equals (t1 OR t2) AND F AND S, so alternatives can be
+    /// folded into one scope when they all share the same feature and scenario title and either
+    /// all or none of them carry a tag (a missing tag means "any tags", which OR-ing only the
+    /// remaining tags would wrongly narrow).
+    /// </summary>
+    private static bool CanOrIntoOneScope(IReadOnlyList<RawScope> scopes)
+    {
+        var first = scopes[0];
+        var firstHasTag = !string.IsNullOrWhiteSpace(first.Tag);
+        return scopes.All(scope =>
+            scope.Feature == first.Feature &&
+            scope.Scenario == first.Scenario &&
+            !string.IsNullOrWhiteSpace(scope.Tag) == firstHasTag);
     }
 
     private static RawScope ReadScopeAttribute(AttributeSyntax attribute)
@@ -614,11 +635,30 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         return new RawScope(tag, feature, scenario);
     }
 
+    // Only valid for alternatives that CanOrIntoOneScope accepts: they share Feature/Scenario.
     private static RawScope OrScopes(RawScope first, RawScope second) =>
         new(
             CombineTags(first.Tag, second.Tag, " or "),
             first.Feature ?? second.Feature,
             first.Scenario ?? second.Scenario);
+
+    /// <summary>
+    /// Combines the type-level and method-level [Scope] alternatives: every type-level
+    /// alternative is combined (see <see cref="CombineScopes(RawScope, RawScope)"/>) with every
+    /// method-level one. With a single alternative per level this is exactly that combination.
+    /// </summary>
+    private static IReadOnlyList<RawScope> CombineScopeAlternatives(IReadOnlyList<RawScope> typeScopes,
+        IReadOnlyList<RawScope> methodScopes)
+    {
+        if (typeScopes == null)
+            return methodScopes;
+        if (methodScopes == null)
+            return typeScopes;
+
+        return typeScopes
+            .SelectMany(typeScope => methodScopes.Select(methodScope => CombineScopes(typeScope, methodScope)))
+            .ToArray();
+    }
 
     /// <summary>
     /// Combines the type-level and method-level [Scope] attributes. A binding is in scope only
@@ -641,16 +681,20 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     /// <summary>
     /// A hook applies when the scenario is within the method/type scope and carries one of the
     /// tags listed on the hook attribute. The hook's tags are OR-combined and then AND-combined
-    /// with the surrounding [Scope].
+    /// with the surrounding [Scope] (with each of its alternatives, when there are several).
     /// </summary>
-    private static RawScope CombineWithHookTags(RawScope methodScope, IReadOnlyList<string> hookTags)
+    private static IReadOnlyList<RawScope> CombineWithHookTags(IReadOnlyList<RawScope> methodScopes,
+        IReadOnlyList<string> hookTags)
     {
         if (hookTags.Count == 0)
-            return methodScope;
+            return methodScopes;
 
         var tagsExpression = string.Join(" or ", hookTags.Select(NormalizeTag));
         var hookScope = new RawScope(tagsExpression, null, null);
-        return CombineScopes(methodScope, hookScope);
+        if (methodScopes == null)
+            return new[] { hookScope };
+
+        return methodScopes.Select(methodScope => CombineScopes(methodScope, hookScope)).ToArray();
     }
 
     private static string CombineTags(string left, string right, string op)
@@ -664,6 +708,27 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
 
     private static string NormalizeTag(string tag) =>
         tag.StartsWith("@", StringComparison.Ordinal) ? tag : "@" + tag;
+
+    /// <summary>
+    /// Builds the binding scope from its alternatives: a single alternative yields the ordinary
+    /// single scope, several yield a scope with <see cref="BindingScope.Alternatives"/> (issue
+    /// #953) whose <see cref="BindingScope.Error"/> combines the alternatives' errors.
+    /// </summary>
+    private static BindingScope BuildScope(IReadOnlyList<RawScope> scopes)
+    {
+        if (scopes == null)
+            return null;
+        if (scopes.Count == 1)
+            return BuildScope(scopes[0]);
+
+        // An alternative without any restriction builds to null; it still matches everything.
+        var alternatives = scopes.Select(scope => BuildScope(scope) ?? new BindingScope()).ToArray();
+        return new BindingScope
+        {
+            Alternatives = alternatives,
+            Error = CombineErrors(alternatives.Select(alternative => alternative.Error).ToArray())
+        };
+    }
 
     private static BindingScope BuildScope(RawScope raw)
     {
