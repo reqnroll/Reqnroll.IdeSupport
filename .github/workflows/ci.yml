@@ -698,6 +698,16 @@ jobs:
           name: testlogger
           path: ${{ env.RIDER_DIR }}/downloaded-testlogger
 
+      - name: Restore executable bit on downloaded server/connector binaries
+        # Artifact zips don't preserve the Unix executable bit (see the VS Code job's equivalent
+        # step, issue #252), so without this the plugin zip would ship non-executable
+        # linux/osx apphosts (issue #979). build.gradle.kts also forces the mode when copying.
+        run: |
+          find "downloaded-server/linux-x64" "downloaded-server/linux-arm64" "downloaded-server/osx-x64" "downloaded-server/osx-arm64" \
+            \( -name 'Reqnroll.IdeSupport.LSP.Server' -o -name 'reqnroll-ide-connector' \) \
+            -type f -exec chmod +x {} +
+        working-directory: ${{ env.RIDER_DIR }}
+
       # -PpluginVersion overrides gradle.properties' placeholder with the build version, so Rider
       # treats each CI build as an upgrade of the last (issue #746).
       - name: Build plugin

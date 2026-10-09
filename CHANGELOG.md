@@ -2,6 +2,7 @@
 
 ## Improvements:
 
+* The Rider plugin now ships the bundled LSP server and connector binaries as executable on Linux and macOS: the Gradle packaging sets `rwxr-xr-x` on them, CI restores the executable bit lost in artifact round-trips, and the plugin restores the bit at startup (or reports a clear `chmod +x` hint) if it is missing (Rider) - see #979
 * In Rider, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (Rider) - see #921
 * In Visual Studio, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (VS) - see #921
 * In VS Code, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, so it is visible which tags are clickable (VS Code) - see #921
