@@ -7,14 +7,13 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiFile
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.lsp.isDocumentStale
 import org.eclipse.lsp4j.TextEdit
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Triggers server-side table-column realignment (`textDocument/onTypeFormatting`,
@@ -46,7 +45,7 @@ class ReqnrollFeatureOnTypeFormattingHandler : TypedHandlerDelegate() {
         val character = offset - document.getLineStartOffset(line)
         val insertSpaces = !editor.settings.isUseTabCharacter(project)
         val tabSize = editor.settings.getTabSize(project)
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
+        val uri = localPathToLspUri(virtualFile.path)
         // Captured before the request fires so the edit-application step below can detect
         // whether the document changed in the meantime (issue #326) -- the server's returned
         // TextEdit line/character offsets are only valid against the document as it looked at

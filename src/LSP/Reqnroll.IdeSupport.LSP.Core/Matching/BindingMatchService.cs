@@ -33,14 +33,21 @@ public sealed class BindingMatchService : IBindingMatchService
     /// repro's ~1,300 bindings/file, binary search measures ~40x faster than a linear scan of the
     /// same file's entries). Upsert-only by design: entries are keyed by the binding's stable
     /// identity, so a re-parse naturally overwrites a moved binding's span under the same key; a
-    /// genuinely removed/renamed binding leaves a harmless stale entry that resolves to zero
-    /// usages via <see cref="_reverseIndex"/> rather than a wrong answer (the same tolerance
-    /// clangd's own background index has for staleness).
+    /// genuinely removed/renamed binding leaves a stale entry that resolves to zero usages via
+    /// <see cref="_reverseIndex"/> rather than a wrong answer (the same tolerance clangd's own
+    /// background index has for staleness). A binding that moved to a <em>different file</em> also
+    /// leaves its old file's entry behind, and that id still has usages (at the new file), so
+    /// <see cref="CollectUsages"/> additionally requires each usage to have been indexed at the
+    /// file being asked about (issue #929).
     /// </summary>
     private readonly ConcurrentDictionary<string, ImmutableArray<LocationEntry>> _locationIndex = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>One entry in the reverse index: the step, plus the match-set key it came from (needed to apply project-owner filtering).</summary>
-    private readonly record struct IndexedStep(MatchSetKey Key, StepBindingMatch Step);
+    /// <summary>
+    /// One entry in the reverse index: the step, plus the match-set key it came from (needed to
+    /// apply project-owner filtering), plus the source file the step's binding was recorded at when
+    /// it was indexed (needed to answer a location lookup, see <see cref="FindUsages(SourceLocation, IReadOnlyCollection{ProjectOwner}?)"/>).
+    /// </summary>
+    private readonly record struct IndexedStep(MatchSetKey Key, StepBindingMatch Step, string? SourceFile);
 
     /// <summary>One entry in the per-file location index: the binding's source line span and identity.</summary>
     private readonly record struct LocationEntry(int StartLine, int EndLine, BindingId Id);
@@ -203,7 +210,7 @@ public sealed class BindingMatchService : IBindingMatchService
 
             var usages = new List<StepBindingMatch>();
             foreach (var id in matchedIds)
-                CollectUsages(id, projectFilter, usages);
+                CollectUsages(id, projectFilter, usages, bindingLocation.SourceFile);
             return usages;
         }
         finally
@@ -221,7 +228,7 @@ public sealed class BindingMatchService : IBindingMatchService
         _sync.EnterReadLock();
         try
         {
-            CollectUsages(bindingId, projectFilter, usages);
+            CollectUsages(bindingId, projectFilter, usages, sourceFile: null);
         }
         finally
         {
@@ -333,14 +340,36 @@ public sealed class BindingMatchService : IBindingMatchService
         return anomalies;
     }
 
+    /// <param name="sourceFile">
+    /// When set, only steps whose binding was indexed at this file are returned. The per-file
+    /// location index is upsert-only, so a binding that moved to another file leaves its old file's
+    /// entry behind (issue #929); that entry still resolves to the binding's id, and without this
+    /// check the id's usages -- which now belong to the new file -- would be returned for the old one.
+    /// A binding id is location-independent and can legitimately be recorded at two paths at once
+    /// (for example by two projects' registries), so each indexed step carries the file it was
+    /// recorded at instead of the index being limited to one file per id.
+    /// </param>
     private void CollectUsages(
-        BindingId id, IReadOnlyCollection<ProjectOwner>? projectFilter, List<StepBindingMatch> usages)
+        BindingId id, IReadOnlyCollection<ProjectOwner>? projectFilter, List<StepBindingMatch> usages,
+        string? sourceFile)
     {
         if (!_reverseIndex.TryGetValue(id, out var indexedSteps))
             return;
 
+        // A step is one index entry per (id, file). Without a file filter, the same step reaching an
+        // id through two files (a binding recorded twice) must still count as one usage, as it did
+        // before entries carried a file. With a file filter every entry is already distinct.
+        var seen = sourceFile == null ? new HashSet<StepBindingMatch>() : null;
+
         foreach (var indexed in indexedSteps)
         {
+            if (sourceFile != null
+                && !string.Equals(indexed.SourceFile, sourceFile, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (seen != null && !seen.Add(indexed.Step))
+                continue;
+
             // Unknown entries are pre-baseline placeholders -- always include them so
             // Find Usages works during the transition before the first baseline arrives.
             if (projectFilter != null && indexed.Key.Owner.IsKnown && !MatchesFilter(indexed.Key.Owner, projectFilter))
@@ -404,7 +433,7 @@ public sealed class BindingMatchService : IBindingMatchService
         {
             foreach (var (id, location) in step.BindingIdentities)
             {
-                AddToReverseIndex(id, new IndexedStep(key, step));
+                AddToReverseIndex(id, new IndexedStep(key, step, location.SourceFile));
 
                 if (string.IsNullOrEmpty(location.SourceFile))
                     continue;
@@ -426,8 +455,8 @@ public sealed class BindingMatchService : IBindingMatchService
     private void RemoveFromReverseIndex(MatchSetKey key, FeatureBindingMatchSet matchSet)
     {
         foreach (var step in matchSet.Steps)
-            foreach (var (id, _) in step.BindingIdentities)
-                RemoveFromReverseIndex(id, new IndexedStep(key, step));
+            foreach (var (id, location) in step.BindingIdentities)
+                RemoveFromReverseIndex(id, new IndexedStep(key, step, location.SourceFile));
     }
 
     private void AddToReverseIndex(BindingId id, IndexedStep indexedStep)

@@ -6,6 +6,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.platform.lsp.api.Lsp4jClient
 import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
+import com.intellij.platform.lsp.api.customization.LspCommandsSupport
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
 import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
@@ -71,6 +72,11 @@ class ReqnrollLspServerDescriptor(project: Project) :
     // route through this path (whole-document only); on-type table-column realignment likewise
     // has no generic platform hook and would need separate custom client glue.
     override val lspFormattingSupport: LspFormattingSupport = LspFormattingSupport()
+
+    // Rider 2026.2 renders textDocument/codeLens natively and runs a clicked lens's command through
+    // this; without it the server's client-side commands (reqnroll.findStepUsages, ...) go back to the
+    // server as workspace/executeCommand and nothing happens (#909).
+    override val lspCommandsSupport: LspCommandsSupport = ReqnrollLspCommandsSupport()
 
     // Adds the reqnroll-prefixed client-to-server notifications (ReqnrollNotificationSender) on top
     // of the standard LanguageServer interface. Confirmed against Rider 2024.3.5's actual

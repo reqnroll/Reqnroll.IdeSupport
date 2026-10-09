@@ -6,10 +6,9 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.vfs.VirtualFileManager
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Comment/Uncomment toggle for `.feature` files (issue #159). Neither VS nor VS Code has a native
@@ -49,7 +48,7 @@ class ReqnrollToggleCommentAction : AnAction() {
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
-        val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(file.path))
+        val uri = localPathToLspUri(file.path)
         val (startLine, endLine) = selectionLines(editor)
 
         ReqnrollDebugLogger.info(

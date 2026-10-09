@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/vsix-publish",
+  "categories": [ "coding", "testing" ],
+  "identity": {
+    "internalName": "Reqnroll.IdeSupport.VisualStudio",
+    "tags": [ "reqnroll", "gherkin", "bdd", "specflow", "feature", "cucumber" ]
+  },
+  "overview": "overview.md",
+  "priceCategory": "free",
+  "publisher": "Reqnroll",
+  "private": false,
+  "qna": false,
+  "repo": "https://github.com/reqnroll/Reqnroll.IdeSupport"
+}

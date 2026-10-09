@@ -159,6 +159,23 @@ and the Rider plugin, and publishes the LSP server for all supported runtimes (w
 linux-x64, linux-arm64, osx-x64, osx-arm64). See the comment header at the top of `ci.yml` for the
 full job dependency graph.
 
+## Security note: opening untrusted projects
+
+Step-binding discovery works by reflecting over your project's **compiled test assembly** in a
+separate connector process (`reqnroll-ide-connector`). Reflecting over custom attributes
+instantiates them, so a malicious assembly can run code from an attribute constructor during
+discovery — with no test run and no explicit action from you. Discovery starts automatically when a
+project loads and again whenever a DLL under `bin/` changes, so a prebuilt assembly in a freshly
+cloned repository is enough to trigger it, even if you never build the project.
+
+The connector runs as a separate OS process, but it is **not sandboxed**: it has your user's full
+permissions. This is the same exposure as opening a solution containing an unaudited project or
+NuGet package (MSBuild tasks and source generators are at least as powerful), and Reqnroll's own
+runtime does the same reflection scan when tests run. Treat it the same way: **don't open
+repositories you don't trust with these extensions active** (or open them with the extension
+disabled). See [#251](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/251) for the
+discussion and the mitigations considered.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

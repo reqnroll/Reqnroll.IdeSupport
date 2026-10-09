@@ -13,13 +13,12 @@ import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiFile
 import com.intellij.util.Alarm
-import com.intellij.util.io.URLUtil
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.DocumentSymbol
+import com.reqnroll.ide.rider.lsp.localPathToLspUri
 
 /**
  * Feeds Structure View from `textDocument/documentSymbol`. Unlike a PSI-based
@@ -86,7 +85,7 @@ class ReqnrollFeatureStructureViewModel(
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
 
-            val uri = VirtualFileManager.constructUrl("file", URLUtil.encodePath(virtualFile.path))
+            val uri = localPathToLspUri(virtualFile.path)
             val result = ReqnrollRequestSender.documentSymbol(project, uri)
             ReqnrollDebugLogger.verbose("ReqnrollFeatureStructureViewModel: ${result?.size ?: "null"} top-level symbol(s) for $uri")
             if (result == null) return@executeOnPooledThread
