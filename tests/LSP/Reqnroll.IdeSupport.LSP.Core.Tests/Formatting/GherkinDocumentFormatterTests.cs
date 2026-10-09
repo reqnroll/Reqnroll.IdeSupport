@@ -353,4 +353,30 @@ public class GherkinDocumentFormatterTests
         buffer.GetLineOneBased(1).Should().Be("@tag1 @tag2");
         buffer.GetLineOneBased(3).Should().Be("@tag3");
     }
+
+    [Fact]
+    public void Should_preserve_trailing_comment_on_tag_line()
+    {
+        // Gherkin allows a trailing comment on a tag line (@smoke # note). The Gherkin
+        // library strips the comment before tag parsing (GherkinLine.TagsEnumerable
+        // truncates at a '#' preceded by inline whitespace), so Tag.Name cannot recover
+        // the '# note' text; the formatter must preserve it from the original source
+        // line (issue #949).
+        var sut = CreateSUT();
+        var lines = new[]
+        {
+            "@smoke # note",
+            "Feature: foo",
+            "  @a    @b # trailing",
+            "Scenario: bar",
+            "    Given step",
+            ""
+        };
+        var buffer = Buffer(lines);
+
+        sut.FormatGherkinDocument(ParseDocument(lines), buffer, _defaultSettings);
+
+        buffer.GetLineOneBased(1).Should().Be("@smoke # note");
+        buffer.GetLineOneBased(3).Should().Be("@a @b # trailing");
+    }
 }

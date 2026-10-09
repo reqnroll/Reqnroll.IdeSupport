@@ -247,9 +247,35 @@ public class GherkinDocumentFormatter : IGherkinDocumentFormatter
         foreach (var tag in tagGroup)
         {
             var line = indent + string.Join(" ", tag.Select(t => t.Name));
+            // Gherkin strips a trailing comment before tag parsing (GherkinLine.TagsEnumerable
+            // truncates the line at a '#' preceded by inline whitespace), so the tag AST cannot
+            // recover it. Read it back from the original source line so formatting does not
+            // silently delete it (issue #949).
+            var comment = GetTrailingComment(lines.GetLineOneBased(tag.Key));
+            if (comment != null)
+                line += $" {comment}";
             lines.SetLineOneBased(tag.Key, line);
         }
     }
+
+    /// <summary>
+    /// Extracts a trailing inline comment from a raw tag line (e.g. "@smoke # note" yields
+    /// "# note"). Mirrors Gherkin's own comment rule: a '#' starts a comment only at the start
+    /// of the line or when preceded by inline whitespace. Returns null when there is no comment.
+    /// </summary>
+    private static string? GetTrailingComment(string lineText)
+    {
+        if (string.IsNullOrEmpty(lineText))
+            return null;
+        for (var i = lineText.IndexOf('#'); i > 0; i = lineText.IndexOf('#', i + 1))
+        {
+            if (IsInlineWhitespace(lineText[i - 1]))
+                return lineText.Substring(i).TrimEnd();
+        }
+        return null;
+    }
+
+    private static bool IsInlineWhitespace(char c) => c == ' ' || c == '\t' || c == '\u00a0';
 
     private static void SetLine(DocumentLinesEditBuffer lines, IHasLocation hasLocation, string line)
     {
