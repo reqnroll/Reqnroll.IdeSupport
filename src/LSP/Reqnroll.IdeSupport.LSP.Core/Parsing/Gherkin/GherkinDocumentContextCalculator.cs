@@ -50,13 +50,15 @@ internal static class GherkinDocumentContextCalculator
     {
         var scenarioOutline = (ScenarioOutline) context.Node;
 
-        var subContext = context;
         bool hasExamples = false;
         foreach (var scenarioOutlineExamples in scenarioOutline.Examples)
         {
             var exampleTags = EnsureArray(scenarioOutlineExamples.Tags);
-            if (exampleTags != null && exampleTags.Any())
-                subContext = new TagMatchingContext(context, scenarioOutlineExamples);
+            // Compute the matching scope per Examples block: an untagged block uses the plain
+            // context and must not inherit a preceding tagged block's tag context (#954).
+            var subContext = exampleTags != null && exampleTags.Any()
+                ? new TagMatchingContext(context, scenarioOutlineExamples)
+                : context;
 
             if (scenarioOutlineExamples.TableHeader != null && scenarioOutlineExamples.TableBody != null)
             {
