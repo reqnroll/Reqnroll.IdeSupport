@@ -914,6 +914,117 @@ public class StepRenameHandlerTests
             "the outline placeholder is preserved; the binding's {int} token must not leak into the feature");
     }
 
+    [Fact]
+    public async Task Rename_emits_one_feature_edit_when_the_same_step_range_is_reported_twice()
+    {
+        // A feature owned by several projects (or linked into several) can report the same step
+        // range once per owner. Duplicate TextEdits on one range are rejected or double-applied.
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the second number is {int}\")]\n" +
+            "        public void GivenTheSecondNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        const string featureText =
+            "Feature: F\n" +
+            "Scenario Outline: x\n" +
+            "\tGiven the second number is <secondNumber>\n";
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/x.feature");
+
+        SetupBuffers((CsUri, csText), (featureUri, featureText));
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the second number is (-?\\d+)$"),
+            specifiedExpression: "the second number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var snapshot = new LspTextSnapshot(featureUri.ToString(), 1, featureText);
+        var stepOffset = featureText.IndexOf("the second", StringComparison.Ordinal);
+        var stepLength = "the second number is <secondNumber>".Length;
+        var first = new StepBindingMatch(
+            featureUri.ToString(),
+            GherkinRange.FromPoint(snapshot, startOffset: stepOffset, length: stepLength),
+            MatchResult.NoMatch);
+        var duplicate = new StepBindingMatch(
+            featureUri.ToString(),
+            GherkinRange.FromPoint(snapshot, startOffset: stepOffset, length: stepLength),
+            MatchResult.NoMatch);
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { first, duplicate });
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the second no is {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var featureEdits = result!.Changes![featureUri].ToList();
+        featureEdits.Should().ContainSingle("two usages of one step range must produce one TextEdit");
+        featureEdits[0].NewText.Should().Be("the second no is <secondNumber>");
+    }
+
+    [Fact]
+    public async Task Rename_keeps_a_feature_edit_for_each_distinct_step_range()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the second number is {int}\")]\n" +
+            "        public void GivenTheSecondNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        const string featureText =
+            "Feature: F\n" +
+            "Scenario Outline: x\n" +
+            "\tGiven the second number is <secondNumber>\n" +
+            "\tGiven the second number is <secondNumber>\n";
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/x.feature");
+
+        SetupBuffers((CsUri, csText), (featureUri, featureText));
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the second number is (-?\\d+)$"),
+            specifiedExpression: "the second number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var snapshot = new LspTextSnapshot(featureUri.ToString(), 1, featureText);
+        var stepLength = "the second number is <secondNumber>".Length;
+        var firstOffset = featureText.IndexOf("the second", StringComparison.Ordinal);
+        var secondOffset = featureText.IndexOf("the second", firstOffset + 1, StringComparison.Ordinal);
+        var matches = new[]
+        {
+            new StepBindingMatch(featureUri.ToString(),
+                GherkinRange.FromPoint(snapshot, startOffset: firstOffset, length: stepLength), MatchResult.NoMatch),
+            new StepBindingMatch(featureUri.ToString(),
+                GherkinRange.FromPoint(snapshot, startOffset: secondOffset, length: stepLength), MatchResult.NoMatch),
+        };
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(matches);
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the second no is {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var featureEdits = result!.Changes![featureUri].ToList();
+        featureEdits.Should().HaveCount(2);
+        featureEdits.Select(e => e.Range.Start.Line).Should().OnlyHaveUniqueItems();
+    }
+
     // ── Feature-file renaming tests ─────────────────────────────────────────────
     // These cover the three new code paths: HandleRenameTargetsFromFeatureAsync,
     // FindBindingsAtFeatureStep, and the .feature branch of HandleRenameAsync.
