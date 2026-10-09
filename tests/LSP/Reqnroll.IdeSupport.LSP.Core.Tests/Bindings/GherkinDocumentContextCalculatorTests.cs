@@ -229,6 +229,47 @@ public class GherkinDocumentContextCalculatorTests
         results[1].Key.Should().Be("2");
     }
 
+    [Fact]
+    public void ScenarioOutline_untagged_examples_block_does_not_inherit_previous_tagged_block_context()
+    {
+        // Regression for #954: an untagged Examples block following a tagged one must use the
+        // plain outline context, not inherit the previous block's tag-matching scope.
+        const string text = """
+            Feature: F
+            Scenario Outline: SO
+              Given <x>
+              @tagA
+              Examples: set1
+                | x |
+                | 1 |
+              Examples: set2
+                | x |
+                | 2 |
+            """;
+
+        var doc = ParseFeature(text);
+        var outline = doc.Feature.Children.OfType<ScenarioOutline>().Single();
+        var step = outline.Steps.First();
+
+        var featureCtx = new SimpleContext(null!, doc.Feature);
+        var outlineCtx = new SimpleContext(featureCtx, outline);
+
+        var results = GherkinDocumentContextCalculator
+            .GetScenarioOutlineStepsWithContexts(step, outlineCtx)
+            .ToList();
+
+        results.Should().HaveCount(2);
+
+        // Row from the tagged block carries @tagA...
+        results[0].Key.Should().Be("1");
+        results[0].Value.GetTagNames().Should().Contain("@tagA");
+
+        // ...but the untagged block's row must NOT inherit @tagA from the previous block.
+        results[1].Key.Should().Be("2");
+        results[1].Value.GetTagNames().Should().NotContain("@tagA");
+        results[1].Value.GetTagNames().Should().BeEmpty();
+    }
+
     // ── minimal IGherkinDocumentContext helper ─────────────────────────────────
 
     private sealed class SimpleContext(IGherkinDocumentContext parent, object node) : IGherkinDocumentContext
