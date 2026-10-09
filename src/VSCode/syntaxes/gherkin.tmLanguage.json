@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Gherkin",
-  "scopeName": "text.gherkin.feature",
+  "scopeName": "text.reqnroll.feature",
   "patterns": [
     { "include": "#comments" },
     { "include": "#doc_strings" },

@@ -86,7 +86,9 @@ tasks.test {
 intellijPlatform {
     pluginConfiguration {
         id = providers.gradleProperty("pluginId")
-        name = "Reqnroll"
+        // Not "... for Rider": the Plugin Verifier rejects a plugin name containing the IDE name (same
+        // rule as for the plugin ID, see gradle.properties). Rider's plugin list is Rider-only anyway.
+        name = "Reqnroll Extension (Preview)"
         version = providers.gradleProperty("pluginVersion")
 
         ideaVersion {

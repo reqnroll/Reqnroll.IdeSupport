@@ -151,7 +151,7 @@ public class ProgramTests
     public void GetServerVersion_matches_the_MainVersion_dot_BuildNumber_pattern()
     {
         // build/Version.props stamps VersionPrefix as <ReqnrollMainVersion>.<ReqnrollBuildNumber>
-        // (e.g. "0.1.99999"), with an optional "-<suffix>" and a "+<git-sha>" appended by the SDK.
+        // (e.g. "2026.1.99999"), with an optional "-<suffix>" and a "+<git-sha>" appended by the SDK.
         Program.GetServerVersion().Should().MatchRegex(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?(\+[0-9a-f]+)?$");
     }
 }
