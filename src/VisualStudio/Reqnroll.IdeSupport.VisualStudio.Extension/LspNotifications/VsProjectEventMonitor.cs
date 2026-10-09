@@ -63,7 +63,8 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
 
     // Resolved lazily (not in the constructor) since MEF composition may not be ready yet at
     // construction time; cached thereafter. Used only for the MonitorOpenFeatureFile telemetry
-    // signal below — every other responsibility in this class talks to DTE/the LSP pipe directly.
+    // signal and for evicting its cached project scopes on project removal/solution close (#1030) —
+    // every other responsibility in this class talks to DTE/the LSP pipe directly.
     private IVsIdeScope? _ideScope;
 
     // Issue #690: subscribed lazily, on first need (a projectLoaded baseline that went out with
@@ -242,14 +243,44 @@ internal sealed class VsProjectEventMonitor : IDisposable, IVsTrackProjectDocume
         });
 
     private void OnProjectRemoved(Project project)
-        => FireAndForget(ct => TrySendProjectUnloadedAsync(project, ct));
+    {
+        ThreadHelper.ThrowIfNotOnUIThread(); // DTE raises SolutionEvents on the UI thread.
+        // Evicted synchronously, while DTE still guarantees the removed Project is readable — the
+        // notification below is deferred and only reads it after a thread hop.
+        RemoveCachedProjectScopes(ideScope => ideScope.RemoveProjectScope(project));
+        FireAndForget(ct => TrySendProjectUnloadedAsync(project, ct));
+    }
 
     private void OnSolutionOpened()
         => FireAndForget(ct => SendInitialProjectsAsync(ct));
 
     private void OnSolutionClosed()
     {
-        // Nothing to do — projects are removed individually via OnProjectRemoved before this fires.
+        ThreadHelper.ThrowIfNotOnUIThread(); // DTE raises SolutionEvents on the UI thread.
+        // The server needs nothing more — projects are removed individually via OnProjectRemoved
+        // before this fires. Sweep the IDE scope's project-scope cache anyway, so a scope cached under
+        // a path no removal named (e.g. a renamed project's old path) does not outlive the solution.
+        RemoveCachedProjectScopes(ideScope => ideScope.RemoveAllProjectScopes());
+    }
+
+    /// <summary>
+    /// Best-effort eviction of <see cref="VsIdeScope"/>'s cached project scopes, so a project that is
+    /// unloaded/removed and later reloaded under the same path gets a fresh scope instead of one still
+    /// holding the old DTE <see cref="Project"/> (issue #1030). Never allowed to break the event.
+    /// </summary>
+    private void RemoveCachedProjectScopes(Action<VsIdeScope> remove)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        try
+        {
+            _ideScope ??= VsUtils.ResolveMefDependency<IVsIdeScope>(_serviceProvider);
+            if (_ideScope is VsIdeScope ideScope)
+                remove(ideScope);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "VsProjectEventMonitor: evicting cached project scopes failed.");
+        }
     }
 
     private void OnWindowActivated(Window gotFocus, Window lostFocus)
