@@ -25,6 +25,12 @@ public static class TelemetryProperties
     public const string OccurrenceCount = "OccurrenceCount";
     /// <summary>Valid step definitions considered by Find Unused Step Definitions (distinct across projects).</summary>
     public const string TotalStepDefinitions = "TotalStepDefinitions";
+    /// <summary>
+    /// Project registries scanned by Find Unused Step Definitions (one per discovered project).
+    /// Renamed from the mislabelled <c>ScannedFeatureFiles</c>, which reported this same registry
+    /// count despite its name (issue #942).
+    /// </summary>
+    public const string ScannedProjects = "ScannedProjects";
     /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
     public const string LookupCounts = "LookupCounts";
     /// <summary>Compact key-sorted JSON object (string) of passive-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
