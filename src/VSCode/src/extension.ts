@@ -173,7 +173,8 @@ const registerCommand = <A extends unknown[], R>(
   handler: (...args: A) => R,
 ): vscode.Disposable => registerGuardedCommand(vscode.commands.registerCommand, commandId, handler);
 
-async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
+// Not `async`: nothing in here is awaited any more (issue #998), so it resolves the API itself.
+function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
   const api: ReqnrollExtensionApi = { getClient: () => client };
 
   const notReady = (label: string) => () => {
@@ -202,9 +203,12 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   // Project-local MTP reporter stubs (issue #741): obj/<Project>.csproj.reqnroll-ide.targets for each
   // MTP-capable Reqnroll project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
   // compiles the reporter in. Runs early, before any test run could plausibly start, and independent
-  // of the LSP client, unlike `activateTestOutcomes` below. Awaited because its MTP-capability scan
-  // can shell out to `dotnet msbuild` (issue #722).
-  await activateMtpProjectStubs(context);
+  // of the LSP client, unlike `activateTestOutcomes` below. Not awaited: its workspace walk and its
+  // MTP-capability scan (which can shell out to `dotnet msbuild`, issue #722) must not hold up command
+  // registration or the client start (issue #998).
+  void activateMtpProjectStubs(context).catch((err) =>
+    appLogChannel.warn(`testOutcomes: setting up the MTP reporter stubs failed: ${String(err)}`),
+  );
 
   const traceChannel = createTraceChannel();
 
@@ -388,7 +392,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
         );
       }
     });
-    return api;
+    return Promise.resolve(api);
   }
 
   // ── LSP client ─────────────────────────────────────────────────────────────
@@ -524,7 +528,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       void showError(`Reqnroll LSP server failed to start: ${msg}`);
     });
 
-  return api;
+  return Promise.resolve(api);
 }
 
 /** Extension teardown: disposes the project manager and stops the language client. */

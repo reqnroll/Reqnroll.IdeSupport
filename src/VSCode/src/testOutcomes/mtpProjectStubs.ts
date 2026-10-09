@@ -34,6 +34,12 @@ const EXTENSIONS_PATH_OVERRIDE =
 
 const MSBUILD_EVAL_TIMEOUT_MS = 30_000;
 
+/**
+ * How many projects are synced at once: each can shell out to `dotnet msbuild` (with a 20-30 s
+ * timeout), so a large workspace must not spawn one process per project in parallel (issue #998).
+ */
+const MAX_CONCURRENT_PROJECT_SYNCS = 4;
+
 /** NuGet's restore output, written to the same directory as the stub. */
 export const ASSETS_FILE_NAME = 'project.assets.json';
 
@@ -42,9 +48,10 @@ const ASSETS_LIBRARY_KEY = /"([^"/\\]+)\/\d[^"/]*"\s*:/g;
 
 /**
  * Enumerates every `.csproj` under `root`, pruning build-output/VCS/editor/dependency directories.
+ * Asynchronous so a large workspace never blocks the extension host's event loop (issue #998).
  * Exported for testing.
  */
-export function enumerateProjectFiles(root: string): string[] {
+export async function enumerateProjectFiles(root: string): Promise<string[]> {
   const found: string[] = [];
   const stack = [root];
 
@@ -52,7 +59,7 @@ export function enumerateProjectFiles(root: string): string[] {
     const dir = stack.pop()!;
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
       continue;
     }
@@ -288,8 +295,10 @@ export async function syncStubsForProjects(
       return 0;
     }
 
-    const results = await Promise.all(
-      projectFiles.map((projectFile) => syncStub(projectFile, bundleTargetsPath, isCapable)),
+    const results = await mapWithConcurrency(
+      projectFiles,
+      MAX_CONCURRENT_PROJECT_SYNCS,
+      (projectFile) => syncStub(projectFile, bundleTargetsPath, isCapable),
     );
     const count = results.filter((r) => r === 'written').length;
     logInfo(
@@ -304,16 +313,43 @@ export async function syncStubsForProjects(
 }
 
 /** {@link syncStubsForProjects} for every C# project under `workspaceFolderPaths`. */
-export function syncStubsForWorkspace(
+export async function syncStubsForWorkspace(
   workspaceFolderPaths: readonly string[],
   bundleTargetsPath: string,
   isCapable: (projectFile: string) => Promise<boolean> = isMtpCapable,
 ): Promise<number> {
   return syncStubsForProjects(
-    workspaceFolderPaths.flatMap((folder) => enumerateProjectFiles(folder)),
+    await enumerateWorkspaceProjectFiles(workspaceFolderPaths),
     bundleTargetsPath,
     isCapable,
   );
+}
+
+/** {@link enumerateProjectFiles} for every folder, in folder order. */
+async function enumerateWorkspaceProjectFiles(
+  workspaceFolderPaths: readonly string[],
+): Promise<string[]> {
+  return (
+    await Promise.all(workspaceFolderPaths.map((folder) => enumerateProjectFiles(folder)))
+  ).flat();
+}
+
+/** `items.map(fn)` with at most `limit` calls of `fn` pending at once; results keep `items`' order. */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 /**
@@ -338,6 +374,8 @@ export function projectsForAssetsFile(assetsFile: string): string[] {
  * NuGet writes its `obj/project.assets.json` — when a freshly cloned project is first restored (and
  * its Reqnroll use becomes known), or a Reqnroll package is added or removed. When disabled, removes any
  * stub this extension wrote earlier, so turning the feature off leaves no file of ours behind. Never throws.
+ * The workspace walk is asynchronous and the msbuild-backed checks are bounded, so activation starts
+ * this without awaiting it (issue #998).
  */
 export async function activateMtpProjectStubs(
   context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'subscriptions'>,
@@ -351,7 +389,7 @@ export async function activateMtpProjectStubs(
   if (!enabled) {
     // Cleanup must stay cheap for the (default) disabled case: only the obj/ fast path, never a
     // `dotnet msbuild` evaluation per project that moves its obj/.
-    const projectFiles = workspaceFolderPaths.flatMap((folder) => enumerateProjectFiles(folder));
+    const projectFiles = await enumerateWorkspaceProjectFiles(workspaceFolderPaths);
     await Promise.all(
       projectFiles.map((projectFile) =>
         removeStub(projectFile, undefined, () => Promise.resolve(undefined)),
