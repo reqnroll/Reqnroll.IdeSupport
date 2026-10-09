@@ -118,6 +118,45 @@ suite('testOutcomeCodeLens', () => {
       const result = combineOutcomes([response('Passed', [], false), response('Passed', [], true)]);
       assert.strictEqual(result.isStale, true);
     });
+
+    test('is Passed when passed and skipped responses are mixed (Passed outranks Skipped)', () => {
+      const result = combineOutcomes([response('Skipped'), response('Passed')]);
+      assert.strictEqual(result.aggregate, 'Passed');
+    });
+
+    test('is Skipped when only skipped responses are present (not Passed)', () => {
+      const result = combineOutcomes([response('Skipped'), response('Skipped')]);
+      assert.strictEqual(result.aggregate, 'Skipped');
+    });
+
+    test('is Failed when a failed response is mixed with skipped ones', () => {
+      const result = combineOutcomes([response('Skipped'), response('Failed')]);
+      assert.strictEqual(result.aggregate, 'Failed');
+    });
+
+    test('is NotFound when the only responses are NotFound or None (NotFound outranks None)', () => {
+      assert.strictEqual(
+        combineOutcomes([response('None'), response('NotFound')]).aggregate,
+        'NotFound',
+      );
+      assert.strictEqual(combineOutcomes([response('None')]).aggregate, 'None');
+    });
+
+    test('is Passed over an unrecognised aggregate, never a fabricated Passed', () => {
+      assert.strictEqual(
+        combineOutcomes([response('Mystery'), response('Passed')]).aggregate,
+        'Passed',
+      );
+    });
+
+    test('keeps an unrecognised aggregate when it is the only one (not coerced to Passed)', () => {
+      assert.strictEqual(combineOutcomes([response('Mystery')]).aggregate, 'Mystery');
+    });
+
+    test('reports isRunning when any response is running', () => {
+      const running = { ...response('Passed'), isRunning: true };
+      assert.strictEqual(combineOutcomes([response('Passed'), running]).isRunning, true);
+    });
   });
 
   suite('renderTitle', () => {
@@ -150,6 +189,28 @@ suite('testOutcomeCodeLens', () => {
       );
       assert.strictEqual(result, '✗ Failed (2 of 3 rows)');
     });
+
+    test('shows a skipped glyph, not a green check, for a skipped aggregate', () => {
+      assert.strictEqual(renderTitle(response('Skipped')), '⏭ Skipped');
+    });
+
+    test('shows "Not run" for a NotFound or None aggregate, not a green check', () => {
+      assert.strictEqual(renderTitle(response('NotFound')), 'Not run');
+      assert.strictEqual(renderTitle(response('None')), 'Not run');
+    });
+
+    test('shows an unknown aggregate as Unknown, never as a green check', () => {
+      assert.strictEqual(renderTitle(response('Mystery')), '? Unknown');
+    });
+
+    test('shows a running indicator while the server reports a run in progress', () => {
+      assert.strictEqual(renderTitle({ ...response('Passed'), isRunning: true }), '⟳ Running');
+      assert.strictEqual(renderTitle({ ...response('Failed'), isRunning: true }), '⟳ Running');
+    });
+
+    test('appends a stale marker to a skipped outcome', () => {
+      assert.strictEqual(renderTitle(response('Skipped', [], true)), '⏭ Skipped (stale)');
+    });
   });
 
   // ── buildTooltip (issue #723: lens hover showed nothing — same bug as VS's 4bdefaf5) ─────────
@@ -157,6 +218,17 @@ suite('testOutcomeCodeLens', () => {
   suite('buildTooltip', () => {
     test('is undefined for a passing, non-stale outcome', () => {
       assert.strictEqual(buildTooltip(response('Passed')), undefined);
+    });
+
+    test('does not show a hover for a non-stale skipped outcome, nor a green check', () => {
+      assert.strictEqual(buildTooltip(response('Skipped')), undefined);
+    });
+
+    test('notes a stale skipped outcome without a green check', () => {
+      assert.strictEqual(
+        buildTooltip(response('Skipped', [], true)),
+        '⏭ Skipped (stale — rerun to confirm)',
+      );
     });
 
     test('notes a stale passing outcome rather than showing nothing', () => {
