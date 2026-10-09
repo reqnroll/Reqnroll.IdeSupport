@@ -1,7 +1,11 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { resolveWorkspaceFolder, findOwningProjectFile } from '../../lsp/projectManager';
+import {
+  resolveWorkspaceFolder,
+  findOwningProjectFile,
+  ProjectManager,
+} from '../../lsp/projectManager';
 import { ReqnrollMethods } from '../../lsp/lspMethods';
 
 suite('ProjectManager', () => {
@@ -155,5 +159,134 @@ suite('ProjectManager', () => {
 
       assert.strictEqual(findOwningProjectFile(dll, known), csproj);
     });
+  });
+});
+
+/**
+ * Regression tests for issue #1010: a debounced membership resend — or a resend that is already
+ * in flight — must never re-announce a project after it has been unregistered, and a pending
+ * timer must not fire after the manager has been disposed. `resendProjectFiles` calls
+ * `sendProjectLoaded`, which sends even when MSBuild evaluation fails, so without a guard the
+ * removed project is resurrected on the server's side.
+ *
+ * The manager is driven through its internals (a `.cs` file event arms the debounce; the private
+ * `scheduleResend`/`resendProjectFiles`/`unregisterProject` methods are invoked directly) because
+ * the real trigger is an OS-level file-watch event that is not reliably delivered inside a
+ * headless Extension Host — see watcherExclude.test.ts.
+ */
+suite('ProjectManager resend cancellation (issue #1010)', () => {
+  interface SentNotification {
+    readonly method: string;
+    readonly params: { readonly projectFile?: string };
+  }
+
+  function makeManager(sent: SentNotification[]): ProjectManager {
+    // The manager only ever calls `sendNotification` on its client, so a minimal stub is enough.
+    const client = {
+      sendNotification: (method: string, params: { projectFile?: string }) => {
+        sent.push({ method, params });
+        return Promise.resolve();
+      },
+    };
+    return new ProjectManager(client as unknown as ConstructorParameters<typeof ProjectManager>[0]);
+  }
+
+  function projectLoadedCount(sent: SentNotification[], projectFile: string): number {
+    return sent.filter(
+      (n) => n.method === ReqnrollMethods.projectLoaded && n.params.projectFile === projectFile,
+    ).length;
+  }
+
+  function timersOf(manager: ProjectManager): Map<string, unknown> {
+    return (manager as unknown as { _resendTimers: Map<string, unknown> })._resendTimers;
+  }
+
+  function armDebounce(manager: ProjectManager, projectFile: string, changedFile: string): void {
+    (manager as unknown as { scheduleResend(u: vscode.Uri): void }).scheduleResend(
+      vscode.Uri.file(changedFile),
+    );
+  }
+
+  test('resendProjectFiles does not re-announce a project that is no longer known', async () => {
+    const sent: SentNotification[] = [];
+    const manager = makeManager(sent);
+    try {
+      const projectFile = path.join('C:', 'not-registered-1010', 'App.csproj');
+
+      await (
+        manager as unknown as { resendProjectFiles(p: string): Promise<void> }
+      ).resendProjectFiles(projectFile);
+
+      assert.strictEqual(
+        projectLoadedCount(sent, projectFile),
+        0,
+        'resendProjectFiles must be a no-op for a project that is not registered',
+      );
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  test('unregisterProject cancels a pending debounce resend so it cannot fire afterwards', async () => {
+    const sent: SentNotification[] = [];
+    const manager = makeManager(sent);
+    try {
+      const projectDir = path.join('C:', 'pending-1010');
+      const projectFile = path.join(projectDir, 'App.csproj');
+      const changedFile = path.join(projectDir, 'Steps.cs');
+
+      // Seed the manager as if the project had already been registered, then arm the debounce
+      // (a .cs file event) for its owning project.
+      (manager as unknown as { _knownProjects: Set<string> })._knownProjects.add(projectFile);
+      armDebounce(manager, projectFile, changedFile);
+      assert.ok(
+        timersOf(manager).has(projectFile),
+        'expected a pending resend timer to be armed for the project',
+      );
+
+      await (
+        manager as unknown as { unregisterProject(u: vscode.Uri): Promise<void> }
+      ).unregisterProject(vscode.Uri.file(projectFile));
+
+      const before = projectLoadedCount(sent, projectFile);
+
+      // Wait well past the debounce window (RESEND_DEBOUNCE_MS = 500): the cancelled timer must
+      // not fire and re-announce the removed project.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      assert.strictEqual(
+        projectLoadedCount(sent, projectFile),
+        before,
+        'a resend fired for a project that was unregistered',
+      );
+      assert.ok(
+        !timersOf(manager).has(projectFile),
+        'the pending resend timer should have been cleared on unregister',
+      );
+    } finally {
+      manager.dispose();
+    }
+  });
+
+  test('dispose cancels pending resend timers so they cannot fire afterwards', async () => {
+    const sent: SentNotification[] = [];
+    const manager = makeManager(sent);
+    const projectDir = path.join('C:', 'dispose-1010');
+    const projectFile = path.join(projectDir, 'App.csproj');
+    const changedFile = path.join(projectDir, 'Steps.cs');
+
+    (manager as unknown as { _knownProjects: Set<string> })._knownProjects.add(projectFile);
+    armDebounce(manager, projectFile, changedFile);
+    assert.ok(timersOf(manager).has(projectFile));
+
+    manager.dispose();
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    assert.strictEqual(
+      projectLoadedCount(sent, projectFile),
+      0,
+      'a resend fired after the manager was disposed',
+    );
   });
 });
