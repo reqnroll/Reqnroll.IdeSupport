@@ -77,6 +77,31 @@ public class DocumentBufferServiceConcurrencyTests
     }
 
     [Fact]
+    public async Task Concurrent_UpdateTags_and_Remove_for_the_same_uri_never_leave_a_ghost_buffer()
+    {
+        // Issue #938: whichever of a racing UpdateTags/Remove pair runs first, the document is
+        // closed afterwards, so no buffer may survive.
+        var uri = MakeUri(0);
+        var ghostAt = -1;
+
+        for (var round = 0; round < 500 && ghostAt < 0; round++)
+        {
+            var sut = new DocumentBufferService();
+            sut.Update(uri, 1, "Feature: X\n");
+
+            using var gate = new Barrier(2);
+            var t1 = Task.Run(() => { gate.SignalAndWait(); sut.UpdateTags(uri, new List<IdeSupportTag>()); });
+            var t2 = Task.Run(() => { gate.SignalAndWait(); sut.Remove(uri); });
+            await Task.WhenAll(t1, t2);
+
+            if (sut.TryGet(uri, out _))
+                ghostAt = round;
+        }
+
+        ghostAt.Should().Be(-1, $"a racing UpdateTags/Remove pair must not resurrect the buffer, at round {ghostAt}");
+    }
+
+    [Fact]
     public async Task Concurrent_Update_and_Remove_for_the_same_uri_never_throw()
     {
         var sut = new DocumentBufferService();

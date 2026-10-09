@@ -36,6 +36,9 @@ public class GherkinDocumentTaggerServiceTests
                        .Returns(ProjectBindingRegistry.Invalid);
         // Default: no primary owner resolved.
         _scopeManager.ResolvePrimaryOwner(Arg.Any<DocumentUri>()).Returns((LspReqnrollProject?)null);
+        // Default: the buffer is still open when the parse stores its tags (issue #938).
+        _bufferService.UpdateTags(Arg.Any<DocumentUri>(), Arg.Any<IReadOnlyCollection<IdeSupportTag>>())
+                      .Returns(true);
     }
 
     private GherkinDocumentTaggerService CreateSut() =>
