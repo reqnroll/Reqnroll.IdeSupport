@@ -186,6 +186,7 @@ internal object RunLensSupport {
             null -> "▶ Run$suffix"
             RunOutcome.PASSED -> "✓ Run$suffix"
             RunOutcome.FAILED -> "✗ Run$suffix"
+            RunOutcome.INCONCLUSIVE -> "? Run$suffix"
         }
     }
 
