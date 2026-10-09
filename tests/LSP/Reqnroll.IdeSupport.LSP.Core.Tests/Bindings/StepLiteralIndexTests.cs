@@ -159,6 +159,19 @@ public class StepLiteralIndexTests
         sut.GetCandidates("bar count").Should().Contain(target);
     }
 
+    [Fact]
+    public void A_top_level_alternation_does_not_require_every_branch_as_literal()
+    {
+        // "^I have apples|I have pears$" -- a top-level (depth-0) "|" means the step need match
+        // only one branch, so neither "i have apples" nor "i have pears" is genuinely required
+        // text. Treating both as required literals wrongly excludes a step matching one branch.
+        var target = Binding(@"^I have apples|I have pears$");
+        var sut = CreateSut(target);
+
+        sut.GetCandidates("I have apples").Should().Contain(target);
+        sut.GetCandidates("I have pears").Should().Contain(target);
+    }
+
     // ── Multiple bindings sharing literals ───────────────────────────────────
 
     [Fact]
