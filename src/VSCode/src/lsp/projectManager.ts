@@ -126,6 +126,10 @@ export class ProjectManager {
     // (below) already tears down these listeners, so their per-listener Disposables aren't tracked separately.
     this._watcher = vscode.workspace.createFileSystemWatcher('**/*.{csproj,slnx,sln}');
     this._watcher.onDidCreate((uri) => void this.onProjectCreated(uri));
+    // Editing a .csproj (TFM, package references, Include/Remove globs, linked files) changes
+    // what belongs to the project, so re-evaluate it through the same debounced resend path the
+    // .cs/.feature watcher uses below (issue #1009).
+    this._watcher.onDidChange((uri) => this.scheduleResend(uri));
     this._watcher.onDidDelete((uri) => void this.onProjectDeleted(uri));
 
     // Re-evaluate a project's file membership when a .cs/.feature file is added or removed
