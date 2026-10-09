@@ -43,8 +43,6 @@ import java.util.concurrent.TimeUnit
  * (implementation plan Phase 4) rather than becoming the only path immediately.
  */
 object RunTestRunner {
-    private const val TEST_TIMEOUT_SECONDS = 120L
-
     /** Mirrors ReqnrollIdeTestLogger's/TestLoggerRunSettings.cs's constants — the VS extension deliberately doesn't reference that assembly to avoid a second copy landing in its own output; same reasoning applies here. */
     internal const val LOGGER_FRIENDLY_NAME = "ReqnrollIde"
 
@@ -102,10 +100,15 @@ object RunTestRunner {
                 val reporterInjected = registration != null && mode != DotnetTestMode.VS_TEST &&
                     ReqnrollMtpReporterPathResolver.resolve() != null
 
-                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter, registration, loggerDirectory, mode)
+                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter, registration, loggerDirectory, mode) { indicator.isCanceled }
                 val fallbackResult = when (testOutcome) {
                     is DotnetTestOutcome.Failure -> {
                         notifyError(project, testOutcome.message)
+                        return
+                    }
+                    is DotnetTestOutcome.Cancelled -> {
+                        // The user pressed Cancel: not an error, so no notification.
+                        ReqnrollDebugLogger.info("RunTestRunner: dotnet test cancelled by the user")
                         return
                     }
                     is DotnetTestOutcome.Inconclusive -> {
@@ -352,6 +355,9 @@ object RunTestRunner {
         data class Success(val results: List<TrxUnitTestResult>) : DotnetTestOutcome()
         data class Failure(val message: String) : DotnetTestOutcome()
 
+        /** The user cancelled the run (issue #981); the process tree has been killed. Deliberately silent at the call site. */
+        object Cancelled : DotnetTestOutcome()
+
         /**
          * No TRX was produced, but [looksLikeMtpProject] says this is an MTP-mode project our
          * upfront [detectDotnetTestMode] scan missed (plan §7 risk #5's blind spots — a
@@ -396,6 +402,7 @@ object RunTestRunner {
         registration: RegisterTestRunResponse?,
         loggerDirectory: Path?,
         mode: DotnetTestMode,
+        isCanceled: () -> Boolean,
     ): DotnetTestOutcome {
         val resultsDir = Files.createTempDirectory("reqnroll-test-").toFile()
         val trxFileName = "result.trx"
@@ -467,10 +474,17 @@ object RunTestRunner {
                         "accessible to Rider, then retry."
                 )
             }
-            val completed = process.waitFor(TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroyForcibly()
-                return DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
+            // The budget covers the build as well as the tests (`dotnet test` builds first), so it
+            // is overridable (see DotnetTestProcessWaiter.TIMEOUT_PROPERTY) and a timeout says so.
+            val timeoutSeconds = DotnetTestProcessWaiter.resolveTimeoutSeconds()
+            when (DotnetTestProcessWaiter.await(process, TimeUnit.SECONDS.toMillis(timeoutSeconds), isCanceled)) {
+                ProcessWaitResult.COMPLETED -> Unit
+                ProcessWaitResult.CANCELLED -> return DotnetTestOutcome.Cancelled
+                ProcessWaitResult.TIMED_OUT -> return DotnetTestOutcome.Failure(
+                    "dotnet test for $projectFile did not finish within $timeoutSeconds seconds and was stopped. " +
+                        "The time includes building the project, so a large solution may need longer: set the " +
+                        "-D${DotnetTestProcessWaiter.TIMEOUT_PROPERTY}=<seconds> JVM option to raise the limit."
+                )
             }
 
             if (mode != DotnetTestMode.VS_TEST) {
