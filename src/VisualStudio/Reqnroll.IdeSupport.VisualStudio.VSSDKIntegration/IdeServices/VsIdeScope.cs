@@ -109,9 +109,10 @@ public class VsIdeScope : IVsIdeScope
         action();
     }
 
-    /// <summary>Cancels and disposes the background-task cancellation source.</summary>
+    /// <summary>Disposes the cached project scopes, then cancels and disposes the background-task cancellation source.</summary>
     public void Dispose()
     {
+        RemoveAllProjectScopes();
         _backgroundTaskTokenSource.Cancel();
         _backgroundTaskTokenSource.Dispose();
     }
@@ -131,6 +132,51 @@ public class VsIdeScope : IVsIdeScope
         var projectId = GetProjectId(project);
         var projectScope = _projectScopes.GetOrAdd(projectId, id => CreateProjectScope(id, project));
         return projectScope;
+    }
+
+    /// <summary>
+    /// Evicts and disposes the cached <see cref="VsProjectScope"/> for <paramref name="project"/>, if
+    /// any, so the next <see cref="GetProjectScope"/> call for a project at the same path (e.g. after
+    /// an unload/reload) builds a fresh scope around the new DTE <see cref="Project"/> instead of
+    /// serving the stale one (issue #1030). Call when the project is removed from the solution
+    /// (DTE also reports an unload as a removal). Callers that still hold the evicted scope keep a
+    /// usable object; only its <see cref="VsProjectScope.Properties"/> disposables are released.
+    /// </summary>
+    public void RemoveProjectScope(Project project)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (project == null ||
+            !VsUtils.IsSolutionProject(project))
+            return;
+
+        if (_projectScopes.TryRemove(GetProjectId(project), out var projectScope))
+            DisposeProjectScope(projectScope);
+    }
+
+    /// <summary>
+    /// Evicts and disposes every cached <see cref="VsProjectScope"/>; call when the solution closes,
+    /// so scopes cached under a path that no later removal will name (e.g. a renamed project's old
+    /// path) do not outlive the solution (issue #1030).
+    /// </summary>
+    public void RemoveAllProjectScopes()
+    {
+        foreach (var projectId in _projectScopes.Keys)
+        {
+            if (_projectScopes.TryRemove(projectId, out var projectScope))
+                DisposeProjectScope(projectScope);
+        }
+    }
+
+    private void DisposeProjectScope(VsProjectScope projectScope)
+    {
+        try
+        {
+            projectScope.Dispose();
+        }
+        catch (Exception e)
+        {
+            Logger.LogException(TelemetryService, e, $"Disposing project scope '{projectScope}'");
+        }
     }
 
     private void OnActivityStarted()
