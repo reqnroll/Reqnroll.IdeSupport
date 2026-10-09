@@ -228,6 +228,19 @@ export class ProjectManager {
   }
 
   /**
+   * Clears any pending debounced membership resend queued for `projectFile`, if one is queued.
+   * Used on unregister (issue #1010) so a timer armed before the project was removed can't fire
+   * afterwards and re-announce it; also used by {@link scheduleResend} to coalesce a burst.
+   */
+  private clearResendTimer(projectFile: string): void {
+    const timer = this._resendTimers.get(projectFile);
+    if (timer) {
+      clearTimeout(timer);
+      this._resendTimers.delete(projectFile);
+    }
+  }
+
+  /**
    * Debounces a full membership re-evaluation for the project (if any) that owns `uri`.
    * No-op for files under a project VS Code hasn't discovered yet — that project's own
    * registration will send a baseline that already includes the file.
@@ -236,8 +249,7 @@ export class ProjectManager {
     const projectFile = findOwningProjectFile(uri.fsPath, this._knownProjects);
     if (!projectFile) return;
 
-    const existing = this._resendTimers.get(projectFile);
-    if (existing) clearTimeout(existing);
+    this.clearResendTimer(projectFile);
 
     this._resendTimers.set(
       projectFile,
@@ -254,7 +266,17 @@ export class ProjectManager {
    * additions/removals, where the file *membership* itself may have changed.
    */
   private async resendProjectFiles(projectFile: string): Promise<void> {
+    // A debounce timer may fire — or a resend may still be in flight — after the project was
+    // unregistered or the manager was disposed. Never re-announce a project that is no longer
+    // known: `sendProjectLoaded` sends even when MSBuild evaluation fails, so without this the
+    // removed project would be resurrected on the server's side (issue #1010).
+    if (!this._knownProjects.has(projectFile)) return;
+
     const { props } = await this.sendProjectLoaded(projectFile);
+
+    // The project may have been unregistered while `sendProjectLoaded`'s MSBuild evaluation was
+    // awaited — don't follow up with a baseline for a project that is no longer known.
+    if (!this._knownProjects.has(projectFile)) return;
     if (!props) return; // msbuild unavailable — index stays Pending, same as v1 fallback
     await this.sendProjectFilesBaseline(projectFile, props.targetFrameworkMoniker, props.files);
   }
@@ -371,6 +393,10 @@ export class ProjectManager {
   private async unregisterProject(uri: vscode.Uri): Promise<void> {
     const projectFile = uri.fsPath;
     if (!this._knownProjects.has(projectFile)) return;
+
+    // Cancel any debounced membership resend queued for this project so a timer armed before
+    // the unload can't fire afterwards and re-announce the removed project (issue #1010).
+    this.clearResendTimer(projectFile);
 
     const params = { projectFile };
 
