@@ -1,7 +1,12 @@
-import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import {
+  MsbuildExec,
+  MSBUILD_MAX_BUFFER_MB,
+  execDotnetMsbuild,
+  isMaxBufferOverflowError,
+} from '../util/msbuildProcess';
 import { logInfo, logWarn } from '../logging/appNotify';
 import { isMtpCapable } from './mtpProjectDetection';
 import {
@@ -383,18 +388,27 @@ export async function activateMtpProjectStubs(
 }
 
 /** `dotnet msbuild <project> -getProperty:MSBuildProjectExtensionsPath` (a single property prints the bare value); `undefined` on any failure. */
-export function evaluateViaMsBuild(projectFile: string): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const child = execFile(
-      'dotnet',
-      ['msbuild', projectFile, '-getProperty:MSBuildProjectExtensionsPath', '-nologo'],
-      { timeout: MSBUILD_EVAL_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
-      (error, stdout) => resolve(error ? undefined : stdout.trim() || undefined),
-    );
-    child.on('error', () => {
-      /* handled in callback */
-    });
-  });
+export async function evaluateViaMsBuild(
+  projectFile: string,
+  exec: MsbuildExec = execDotnetMsbuild,
+): Promise<string | undefined> {
+  const { stdout, error } = await exec(
+    ['msbuild', projectFile, '-getProperty:MSBuildProjectExtensionsPath', '-nologo'],
+    { timeoutMs: MSBUILD_EVAL_TIMEOUT_MS },
+  );
+
+  if (error) {
+    // Warn when a project's evaluation output exceeds the buffer limit (issue #1008) rather than
+    // letting the caller fall back with no log at all.
+    if (isMaxBufferOverflowError(error)) {
+      logWarn(
+        `testOutcomes: msbuild evaluation of '${projectFile}' exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; MSBuildProjectExtensionsPath could not be determined.`,
+      );
+    }
+    return undefined;
+  }
+
+  return stdout.trim() || undefined;
 }
 
 function readTextOrNullFs(filePath: string): string | undefined {

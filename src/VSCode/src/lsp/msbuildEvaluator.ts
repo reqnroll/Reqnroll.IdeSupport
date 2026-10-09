@@ -1,6 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile } from 'child_process';
+import {
+  MsbuildExec,
+  MSBUILD_MAX_BUFFER_MB,
+  execDotnetMsbuild,
+  isMaxBufferOverflowError,
+} from '../util/msbuildProcess';
 
 /**
  * Result of evaluating a .csproj via dotnet msbuild.
@@ -82,75 +87,69 @@ interface MsbuildEvaluation {
   items: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
 }
 
-async function getMsbuildEvaluation(projectFile: string): Promise<MsbuildEvaluation | null> {
-  return new Promise((resolve) => {
-    const args = [
-      'msbuild',
-      projectFile,
-      '-p:DesignTimeBuild=true',
-      '-nologo',
-      '-getProperty:TargetFrameworkMoniker;OutputPath;AssemblyName;RootNamespace;ProjectAssetsFile',
-      // Compile (.cs bindings) + None/Content (.feature files, for projects that don't use
-      // Reqnroll's own MSBuild generation tooling) + ReqnrollFeatureFiles. Reqnroll.Tools.MsBuild.
-      // Generation.props (pulled in transitively by Reqnroll.MsTest/Reqnroll.xUnit/etc.) appends
-      // `**/*.feature` to $(DefaultItemExcludes), which removes .feature files from the default
-      // None/Content globs entirely for any project using it — they're tracked instead via this
-      // private `ReqnrollFeatureFiles` item, statically populated in that package's .props (so
-      // `-getItem` sees it without running a build target — unlike `EmbeddedResource`, which the
-      // same package only populates inside a Target that a bare item-evaluation never runs).
-      // Without this, every project using that (very common) package reports zero feature files
-      // in its reqnroll/projectFiles baseline, permanently orphaning its .feature files from the
-      // server's membership index (confirmed live: feature-file CodeLens stuck reporting no
-      // matches). Querying an item name that doesn't exist for a given project (e.g. one that
-      // doesn't reference the package) is safe — MSBuild just returns an empty array for it.
-      '-getItem:Compile;None;Content;ReqnrollFeatureFiles',
-    ];
+export async function getMsbuildEvaluation(
+  projectFile: string,
+  exec: MsbuildExec = execDotnetMsbuild,
+): Promise<MsbuildEvaluation | null> {
+  const args = [
+    'msbuild',
+    projectFile,
+    '-p:DesignTimeBuild=true',
+    '-nologo',
+    '-getProperty:TargetFrameworkMoniker;OutputPath;AssemblyName;RootNamespace;ProjectAssetsFile',
+    // Compile (.cs bindings) + None/Content (.feature files, for projects that don't use
+    // Reqnroll's own MSBuild generation tooling) + ReqnrollFeatureFiles. Reqnroll.Tools.MsBuild.
+    // Generation.props (pulled in transitively by Reqnroll.MsTest/Reqnroll.xUnit/etc.) appends
+    // `**/*.feature` to $(DefaultItemExcludes), which removes .feature files from the default
+    // None/Content globs entirely for any project using it — they're tracked instead via this
+    // private `ReqnrollFeatureFiles` item, statically populated in that package's .props (so
+    // `-getItem` sees it without running a build target — unlike `EmbeddedResource`, which the
+    // same package only populates inside a Target that a bare item-evaluation never runs).
+    // Without this, every project using that (very common) package reports zero feature files
+    // in its reqnroll/projectFiles baseline, permanently orphaning its .feature files from the
+    // server's membership index (confirmed live: feature-file CodeLens stuck reporting no
+    // matches). Querying an item name that doesn't exist for a given project (e.g. one that
+    // doesn't reference the package) is safe — MSBuild just returns an empty array for it.
+    '-getItem:Compile;None;Content;ReqnrollFeatureFiles',
+  ];
 
-    const child = execFile(
-      'dotnet',
-      args,
-      {
-        timeout: 30_000,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, MSYS_NO_PATHCONV: '1' },
-      },
-      (error, stdout, _stderr) => {
-        if (error) {
-          console.error(
-            `MsbuildEvaluator: dotnet msbuild failed for ${projectFile}: ${error.message}`,
-          );
-          resolve(null);
-          return;
-        }
-
-        try {
-          const parsed = JSON.parse(stdout) as {
-            Properties: MsbuildProperties;
-            Items?: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
-          };
-          const p = parsed.Properties;
-
-          if (!p.TargetFrameworkMoniker || !p.OutputPath || !p.AssemblyName) {
-            console.error(`MsbuildEvaluator: missing required properties for ${projectFile}`);
-            resolve(null);
-            return;
-          }
-
-          resolve({ properties: p, items: parsed.Items ?? {} });
-        } catch {
-          console.error(
-            `MsbuildEvaluator: failed to parse msbuild output for ${projectFile}: ${stdout.slice(0, 300)}`,
-          );
-          resolve(null);
-        }
-      },
-    );
-
-    // Suppress error on EPIPE / child process crashes — handled in callback
-    child.on('error', () => {
-      /* handled in callback */
-    });
+  const { stdout, error } = await exec(args, {
+    timeoutMs: 30_000,
+    env: { ...process.env, MSYS_NO_PATHCONV: '1' },
   });
+
+  if (error) {
+    // A large project's item JSON can exceed the buffer limit: warn loudly (issue #1008) rather
+    // than dropping the evaluation with no log at all.
+    if (isMaxBufferOverflowError(error)) {
+      console.warn(
+        `MsbuildEvaluator: msbuild output for ${projectFile} exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; evaluation dropped`,
+      );
+    } else {
+      console.error(`MsbuildEvaluator: dotnet msbuild failed for ${projectFile}: ${error.message}`);
+    }
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(stdout) as {
+      Properties: MsbuildProperties;
+      Items?: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
+    };
+    const p = parsed.Properties;
+
+    if (!p.TargetFrameworkMoniker || !p.OutputPath || !p.AssemblyName) {
+      console.error(`MsbuildEvaluator: missing required properties for ${projectFile}`);
+      return null;
+    }
+
+    return { properties: p, items: parsed.Items ?? {} };
+  } catch {
+    console.error(
+      `MsbuildEvaluator: failed to parse msbuild output for ${projectFile}: ${stdout.slice(0, 300)}`,
+    );
+    return null;
+  }
 }
 
 /**

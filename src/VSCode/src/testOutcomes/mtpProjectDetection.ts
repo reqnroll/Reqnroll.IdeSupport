@@ -1,6 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile } from 'child_process';
+import { logWarn } from '../logging/appNotify';
+import {
+  MsbuildExec,
+  MSBUILD_MAX_BUFFER_MB,
+  execDotnetMsbuild,
+  isMaxBufferOverflowError,
+} from '../util/msbuildProcess';
 
 /**
  * Ad hoc, narrow detection of whether a project is Microsoft.Testing.Platform (MTP)-capable —
@@ -92,52 +98,46 @@ export async function isMtpCapable(
  * `{"Properties": {...}}` shape; this must never throw or block extension activation on a
  * broken/unrestorable project.
  */
-export function evaluateViaMsBuild(projectFilePath: string): Promise<boolean | null> {
-  return new Promise((resolve) => {
-    const args = [
-      'msbuild',
-      projectFilePath,
-      `-getProperty:${MTP_CAPABLE_PROPERTY_NAMES.join(',')}`,
-      '-nologo',
-    ];
+export async function evaluateViaMsBuild(
+  projectFilePath: string,
+  exec: MsbuildExec = execDotnetMsbuild,
+): Promise<boolean | null> {
+  const args = [
+    'msbuild',
+    projectFilePath,
+    `-getProperty:${MTP_CAPABLE_PROPERTY_NAMES.join(',')}`,
+    '-nologo',
+  ];
 
-    const child = execFile(
-      'dotnet',
-      args,
-      { timeout: MSBUILD_EVAL_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
-      (error, stdout) => {
-        if (error) {
-          resolve(null);
-          return;
-        }
+  const { stdout, error } = await exec(args, { timeoutMs: MSBUILD_EVAL_TIMEOUT_MS });
 
-        try {
-          const parsed = JSON.parse(stdout) as { Properties?: Record<string, string> };
-          const properties = parsed.Properties;
-          if (!properties) {
-            resolve(null);
-            return;
-          }
+  if (error) {
+    // Warn when a project's evaluation output exceeds the buffer limit (issue #1008) rather than
+    // silently concluding "no evidence".
+    if (isMaxBufferOverflowError(error)) {
+      logWarn(
+        `testOutcomes: msbuild MTP-property evaluation of '${projectFilePath}' exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; treating the project as not MTP-capable.`,
+      );
+    }
+    return null;
+  }
 
-          for (const name of MTP_CAPABLE_PROPERTY_NAMES) {
-            if (properties[name]?.toLowerCase() === 'true') {
-              resolve(true);
-              return;
-            }
-          }
-          resolve(false);
-        } catch {
-          resolve(null);
-        }
-      },
-    );
+  try {
+    const parsed = JSON.parse(stdout) as { Properties?: Record<string, string> };
+    const properties = parsed.Properties;
+    if (!properties) {
+      return null;
+    }
 
-    // Suppress unhandled 'error' on process spawn failure (e.g. dotnet not on PATH) — handled via
-    // the exec callback's `error` parameter above.
-    child.on('error', () => {
-      /* handled in callback */
-    });
-  });
+    for (const name of MTP_CAPABLE_PROPERTY_NAMES) {
+      if (properties[name]?.toLowerCase() === 'true') {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return null;
+  }
 }
 
 function readTextOrNullFs(filePath: string): string | undefined {
