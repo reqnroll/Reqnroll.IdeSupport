@@ -145,19 +145,27 @@ public class ProjectSettingsProvider : IDisposable, IProjectSettingsProvider
         var featureFileCount = _projectScope.GetFeatureFileCount();
 
         var packageReferences = _projectScope.PackageReferences;
-        var isInvalid = packageReferences == null;
+
+        // A null target framework moniker from either source means the project's TFM is not known
+        // yet: the same transient "project not loaded" condition that makes PackageReferences null
+        // (VsUtils.GetTargetFrameworkMoniker(s) return null from their catch blocks). Treat it as
+        // uninitialized so the retry loop re-reads it, rather than caching a settings record that
+        // silently has no TFM. The optional chaining also removes the NullReferenceException that
+        // occurred when both sources were null (issue #963).
+        var targetFrameworkMoniker = TargetFrameworkMoniker.Create(_projectScope.TargetFrameworkMoniker);
+        var targetFrameworkMonikers = _projectScope.TargetFrameworkMonikers ?? targetFrameworkMoniker?.Value;
+
+        var isInvalid = packageReferences == null || targetFrameworkMonikers == null;
 
         var reqnrollSettings = _reqnrollProjectSettingsProvider.GetReqnrollSettings(packageReferences);
         var hasFeatureFiles = (featureFileCount ?? 0) > 0;
         var kind = GetKind(isInvalid, reqnrollSettings != null, hasFeatureFiles);
         var platformTarget = GetPlatformTarget(_projectScope.PlatformTargetName);
 
-        var targetFrameworkMoniker = TargetFrameworkMoniker.Create(_projectScope.TargetFrameworkMoniker);
-
         var settings = new ProjectSettings(
             kind,
             targetFrameworkMoniker,
-            _projectScope.TargetFrameworkMonikers ?? targetFrameworkMoniker.Value,
+            targetFrameworkMonikers,
             platformTarget,
             _projectScope.OutputAssemblyPath,
             _projectScope.DefaultNamespace,
