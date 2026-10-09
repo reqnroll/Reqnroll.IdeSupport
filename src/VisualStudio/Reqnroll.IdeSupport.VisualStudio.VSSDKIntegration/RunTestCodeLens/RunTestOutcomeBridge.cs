@@ -267,12 +267,39 @@ internal static class RunTestOutcomeBridge
             ResetForRetry(ex, step);
     }
 
+    /// <summary>
+    /// Drops the cached brokered-service proxy, disposing it first so its underlying ServiceHub
+    /// stream is released. Both failure paths (<see cref="ResetForRetry"/> and
+    /// <see cref="DisablePermanently"/>) drop the connection, and nothing else ever disposes it —
+    /// this class holds no instance state and has no finalizer, so without this an
+    /// <see cref="IDisposable"/> proxy (and the stream it owns) is leaked on every transient
+    /// failure and again on a permanent shape change (issue #1034). Disposal is best-effort and
+    /// never throws: <see cref="HandleFailure"/> is always invoked from inside a catch clause, so
+    /// a Dispose that itself fails must not escape it.
+    /// </summary>
+    private static void DropProxy()
+    {
+        if (_serviceProxy is IDisposable disposable)
+        {
+            try
+            {
+                disposable.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebugException(ex, "RunTestOutcomeBridge: disposing the cached service proxy failed (ignored)");
+            }
+        }
+
+        _serviceProxy = null;
+        _getTestOutcomeMethod = null;
+    }
+
     /// <summary>Shape change (type/member no longer found) — permanent for the process's lifetime; retrying can't fix a reflection lookup that will keep failing the same way.</summary>
     private static void DisablePermanently(Exception ex, string step)
     {
         _unavailable = true;
-        _serviceProxy = null;
-        _getTestOutcomeMethod = null;
+        DropProxy();
         Logger.LogWarning(
             $"RunTestOutcomeBridge: permanently disabling the Run CodeLens pass/fail glyph for this " +
             $"session — VS's internal test-outcome API ({step}) appears to have changed shape (type or " +
@@ -284,8 +311,7 @@ internal static class RunTestOutcomeBridge
     /// <summary>Connection/runtime failure — logged and the cached connection dropped, but not permanent; the next call gets a clean retry (this type's remarks explain why the first cut got this wrong).</summary>
     private static void ResetForRetry(Exception ex, string step)
     {
-        _serviceProxy = null;
-        _getTestOutcomeMethod = null;
+        DropProxy();
         Logger.LogException(ex, $"RunTestOutcomeBridge: {step} failed transiently — will retry on the next call");
     }
 
@@ -299,4 +325,14 @@ internal static class RunTestOutcomeBridge
         _serviceProxy = null;
         _getTestOutcomeMethod = null;
     }
+
+    /// <summary>Test-only: seeds the cached proxy/handle so a disposal path can be exercised with a substituted (<see cref="IDisposable"/>) proxy instead of the real (unsupported, internal) VS API.</summary>
+    internal static void SetProxyForTests(object? proxy, MethodInfo? getTestOutcomeMethod)
+    {
+        _serviceProxy = proxy;
+        _getTestOutcomeMethod = getTestOutcomeMethod;
+    }
+
+    /// <summary>Test-only: whether a proxy is currently cached — lets a disposal test assert the fields were also nulled, not just disposed.</summary>
+    internal static bool HasCachedProxyForTests => _serviceProxy is not null;
 }
