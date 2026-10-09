@@ -4,8 +4,6 @@ import com.intellij.ide.structureView.StructureViewModelBase
 import com.intellij.ide.structureView.StructureViewTreeElement
 import com.intellij.ide.util.treeView.smartTree.TreeElement
 import com.intellij.navigation.ItemPresentation
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.event.DocumentEvent
 import com.intellij.openapi.editor.event.DocumentListener
@@ -16,6 +14,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import com.intellij.util.Alarm
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.LatestResponseGate
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.DocumentSymbol
 import com.reqnroll.ide.rider.lsp.localPathToLspUri
@@ -49,6 +48,7 @@ class ReqnrollFeatureStructureViewModel(
 
     private val disposable = Disposer.newDisposable("Reqnroll.FeatureStructureView:${virtualFile.path}")
     private val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
+    private val gate = LatestResponseGate()
 
     // The instance StructureViewModelBase's superclass constructor was given above is a throwaway
     // — getRoot() below always returns this one instead, since that constructor argument's own
@@ -63,6 +63,7 @@ class ReqnrollFeatureStructureViewModel(
         editor?.document?.addDocumentListener(
             object : DocumentListener {
                 override fun documentChanged(event: DocumentEvent) {
+                    gate.invalidate()
                     alarm.cancelAllRequests()
                     if (!alarm.isDisposed) alarm.addRequest({ refresh() }, DEBOUNCE_MS)
                 }
@@ -82,22 +83,22 @@ class ReqnrollFeatureStructureViewModel(
     private fun refresh() {
         if (project.isDisposed) return
 
-        ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
+        // The gate applies only the newest response (issue #990); a null result was already
+        // ignored before it.
+        gate.fetchThenApply(
+            fetch = fetch@{
+                if (project.isDisposed) return@fetch null
 
-            val uri = localPathToLspUri(virtualFile.path)
-            val result = ReqnrollRequestSender.documentSymbol(project, uri)
-            ReqnrollDebugLogger.verbose("ReqnrollFeatureStructureViewModel: ${result?.size ?: "null"} top-level symbol(s) for $uri")
-            if (result == null) return@executeOnPooledThread
-
-            symbols = result
-            ApplicationManager.getApplication().invokeLater(
-                {
-                    if (!project.isDisposed) fireModelUpdate()
-                },
-                ModalityState.any(),
-            )
-        }
+                val uri = localPathToLspUri(virtualFile.path)
+                val result = ReqnrollRequestSender.documentSymbol(project, uri)
+                ReqnrollDebugLogger.verbose("ReqnrollFeatureStructureViewModel: ${result?.size ?: "null"} top-level symbol(s) for $uri")
+                result
+            },
+            apply = { result ->
+                symbols = result
+                if (!project.isDisposed) fireModelUpdate()
+            },
+        )
     }
 
     companion object {

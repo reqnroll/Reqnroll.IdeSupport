@@ -3,8 +3,6 @@ package com.reqnroll.ide.rider.inlayhints
 import com.intellij.codeInsight.hint.TooltipController
 import com.intellij.codeInsight.hint.TooltipGroup
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorCustomElementRenderer
@@ -27,6 +25,7 @@ import com.intellij.ui.JBColor
 import com.intellij.util.Alarm
 import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.LatestResponseGate
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.InlayHint
 import java.awt.Graphics
@@ -73,6 +72,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
         val alarm: Alarm,
         val docListener: DocumentListener,
         val mouseMotionListener: EditorMouseMotionListener,
+        val gate: LatestResponseGate,
     )
 
     override fun editorCreated(event: EditorFactoryEvent) {
@@ -83,9 +83,11 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
 
         val disposable = Disposer.newDisposable("ReqnrollFeatureInlayHints:${virtualFile.path}")
         val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
+        val gate = LatestResponseGate()
 
         val docListener = object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
+                gate.invalidate()
                 alarm.cancelAllRequests()
                 if (!alarm.isDisposed) alarm.addRequest({ refresh(project, editor, virtualFile) }, DEBOUNCE_MS)
             }
@@ -106,7 +108,7 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
         }
         editor.addEditorMouseMotionListener(mouseMotionListener, disposable)
 
-        editor.putUserData(SESSION_KEY, Session(disposable, alarm, docListener, mouseMotionListener))
+        editor.putUserData(SESSION_KEY, Session(disposable, alarm, docListener, mouseMotionListener, gate))
 
         refresh(project, editor, virtualFile)
     }
@@ -138,9 +140,11 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
 
         private fun refresh(project: Project, editor: Editor, virtualFile: VirtualFile) {
             if (project.isDisposed || editor.isDisposed) return
+            val gate = editor.getUserData(SESSION_KEY)?.gate ?: return
 
             // Rider 2026.2+ renders the server's inlay hints itself (see NativeLspInlayHints); ours would duplicate them.
             if (NativeLspInlayHints.isRenderedByPlatform || !ReqnrollFeatureInlayHintsSettings.isEnabled) {
+                gate.invalidate() // a request still in flight must not re-add what this clears
                 clearInlays(editor)
                 return
             }
@@ -149,20 +153,18 @@ class ReqnrollFeatureInlayHintsController : EditorFactoryListener {
             // thread for up to INLAY_HINT_TIMEOUT_MS — refresh() is called from the EDT (both
             // editorCreated and the SWING_THREAD debounce alarm), so the request itself must run
             // on a background thread or every editor open / debounced keystroke freezes the UI.
-            ApplicationManager.getApplication().executeOnPooledThread {
-                if (project.isDisposed || editor.isDisposed) return@executeOnPooledThread
+            // The gate renders only the newest response and skips a failed (null) one (issue #990).
+            gate.fetchThenApply(
+                fetch = fetch@{
+                    if (project.isDisposed || editor.isDisposed) return@fetch null
 
-                val uri = localPathToLspUri(virtualFile.path)
-                val hints = ReqnrollRequestSender.inlayHint(project, uri, 0, editor.document.lineCount)
-                ReqnrollDebugLogger.verbose("ReqnrollFeatureInlayHintsController: ${hints?.size ?: "null"} hint(s) for $uri")
-
-                ApplicationManager.getApplication().invokeLater(
-                    {
-                        if (!editor.isDisposed) renderInlays(editor, editor.document, hints.orEmpty())
-                    },
-                    ModalityState.any(),
-                )
-            }
+                    val uri = localPathToLspUri(virtualFile.path)
+                    val hints = ReqnrollRequestSender.inlayHint(project, uri, 0, editor.document.lineCount)
+                    ReqnrollDebugLogger.verbose("ReqnrollFeatureInlayHintsController: ${hints?.size ?: "null"} hint(s) for $uri")
+                    hints
+                },
+                apply = { hints -> if (!editor.isDisposed) renderInlays(editor, editor.document, hints) },
+            )
         }
 
         private fun renderInlays(editor: Editor, document: Document, hints: List<InlayHint>) {
