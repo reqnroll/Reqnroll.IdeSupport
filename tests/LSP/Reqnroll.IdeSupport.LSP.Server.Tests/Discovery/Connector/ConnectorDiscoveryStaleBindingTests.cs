@@ -5,6 +5,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem;
 using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 using Reqnroll.IdeSupport.LSP.Server.Discovery.Connector.AssemblyReflection;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
@@ -27,16 +28,24 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Discovery.Connector;
 /// anything this machine could hold (a NuGet package, a CI agent, a container) -- must be kept,
 /// because they will never have local source and are not stale.
 /// </para>
+/// <para>
+/// Issue #933 widens "inside the project folder" to "inside the project folder or the workspace
+/// folder that contains it", so a deleted shared-project file beside the project folder counts too.
+/// </para>
 /// </remarks>
 public class ConnectorDiscoveryStaleBindingTests : IDisposable
 {
     private readonly IIdeSupportLogger _logger = Substitute.For<IIdeSupportLogger>();
     private readonly IOutProcConnectorFactory _factory = Substitute.For<IOutProcConnectorFactory>();
-    private readonly string _projectFolder = Path.Combine(Path.GetTempPath(), "StaleBindings_" + Guid.NewGuid().ToString("N"));
+    // The workspace (solution) folder, with the project folder one level below it -- the layout of
+    // the Quickstart solution, where SharedProject1\ is a sibling of the test project's folder.
+    private readonly string _workspaceFolder = Path.Combine(Path.GetTempPath(), "StaleBindings_" + Guid.NewGuid().ToString("N"));
+    private readonly string _projectFolder;
     private readonly string _assemblyPath;
 
     public ConnectorDiscoveryStaleBindingTests()
     {
+        _projectFolder = Path.Combine(_workspaceFolder, "MyApp.Tests");
         Directory.CreateDirectory(_projectFolder);
         _assemblyPath = Path.Combine(_projectFolder, "MyApp.Tests.dll");
         File.WriteAllText(_assemblyPath, "not a real assembly");
@@ -44,8 +53,8 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_projectFolder))
-            Directory.Delete(_projectFolder, recursive: true);
+        if (Directory.Exists(_workspaceFolder))
+            Directory.Delete(_workspaceFolder, recursive: true);
     }
 
     // ── Fakes / helpers ───────────────────────────────────────────────────────
@@ -124,14 +133,49 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
         SourceLocation = sourceLocation
     };
 
-    private ProjectBindingRegistry Discover(DiscoveryResult result)
+    /// <summary>
+    /// The project as the server really holds it: an <see cref="LspReqnrollProject"/> built from a
+    /// <c>reqnroll/projectLoaded</c> payload, which carries the client's workspace folder (VS: the
+    /// solution folder; VS Code: the opened folder containing the project; Rider: the solution
+    /// folder).
+    /// </summary>
+    private LspReqnrollProject MakeLspProject(string workspaceFolder)
+    {
+        var ideScope = Substitute.For<IIdeScope>();
+        ideScope.FileSystem.Returns(new FileSystemForIDE());
+        return new LspReqnrollProject(new ReqnrollProjectLoadedParams
+        {
+            WorkspaceFolder = workspaceFolder,
+            ProjectFile = Path.Combine(_projectFolder, "MyApp.Tests.csproj"),
+            ProjectFolder = _projectFolder,
+            OutputAssemblyPath = _assemblyPath,
+            TargetFrameworkMoniker = ".NETCoreApp,Version=v8.0",
+            PackageReferences = [new PackageReferenceInfo { PackageId = "Reqnroll.MsTest", Version = "2.1.0" }]
+        }, ideScope);
+    }
+
+    private ProjectBindingRegistry Discover(DiscoveryResult result) => Discover(result, MakeScope());
+
+    private ProjectBindingRegistry Discover(DiscoveryResult result, IProjectScope scope)
     {
         _factory.Create(Arg.Any<IProjectScope>()).Returns(new FakeConnector(result));
         var sut = new ConnectorDiscoveryService(_logger, _factory, new FileSystemForIDE());
 
         var (registry, _) = sut.RunDiscovery(
-            MakeScope(), ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+            scope, ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
         return registry;
+    }
+
+    /// <summary>Path of a file in the workspace folder, beside the project folder; created only if <paramref name="content"/> is given.</summary>
+    private string WorkspaceFile(string relativePath, string? content = null)
+    {
+        var path = Path.Combine(_workspaceFolder, relativePath);
+        if (content is null)
+            return path;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+        return path;
     }
 
     // ── A1: DLL built on branch A; branch B deleted the source files, no rebuild ──
@@ -364,6 +408,142 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
             if (Directory.Exists(sharedFolder))
                 Directory.Delete(sharedFolder, recursive: true);
         }
+    }
+
+    // ── C5 (issue #933): shared-project file beside the project folder, inside the workspace ──
+
+    [Fact]
+    public void C5_binding_from_a_deleted_shared_project_file_under_the_workspace_folder_is_not_kept()
+    {
+        // The live repro: Quickstart\SharedProject1\Class1.cs, gone on the checked-out branch, while
+        // the DLL built on the other branch still reports Class1.GivenAnUsedStep().
+        var deletedShared = WorkspaceFile(Path.Combine("SharedProject1", "Class1.cs"));
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("a_shared_step", "#1|1|30")],
+            Hooks = [BeforeScenarioHook("#1|5|5")],
+            SourceFiles = new Dictionary<string, string> { ["1"] = deletedShared }
+        }, MakeLspProject(_workspaceFolder));
+
+        registry.StepDefinitions.Should().BeEmpty(
+            "the shared-project file is inside the workspace folder and gone, so the compiled step is stale");
+        registry.Hooks.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void C5_dropping_a_deleted_shared_project_binding_is_counted_in_the_ignored_log_line()
+    {
+        var deletedShared = WorkspaceFile(Path.Combine("SharedProject1", "Class1.cs"));
+        Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("a_shared_step", "#1|1|30")],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = deletedShared }
+        }, MakeLspProject(_workspaceFolder));
+
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Level == System.Diagnostics.TraceLevel.Warning &&
+            m.Message.Contains("Ignored 1 binding(s)") &&
+            m.Message.Contains(_workspaceFolder)));
+        _logger.DidNotReceive().Log(Arg.Is<LogMessage>(m =>
+            m.Level == System.Diagnostics.TraceLevel.Warning &&
+            m.Message.Contains("do not exist on this machine")));
+    }
+
+    [Fact]
+    public void C5_binding_from_an_existing_shared_project_file_under_the_workspace_folder_is_kept()
+    {
+        var shared = WorkspaceFile(Path.Combine("SharedProject1", "Class1.cs"),
+            "public class Class1 { [Given(\"a_shared_step\")] public void a_shared_step() { } }");
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("a_shared_step", "#1|1|30")],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = shared }
+        }, MakeLspProject(_workspaceFolder));
+
+        registry.StepDefinitions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void C5_deleted_project_folder_binding_is_still_dropped_when_a_workspace_folder_is_known()
+    {
+        var deletedFile = ProjectFile(Path.Combine("Support", "PriceCalculationHooks.cs"));
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [],
+            Hooks = [BeforeScenarioHook("#1|11|44")],
+            SourceFiles = new Dictionary<string, string> { ["1"] = deletedFile }
+        }, MakeLspProject(_workspaceFolder));
+
+        registry.Hooks.Should().BeEmpty();
+    }
+
+    // ── C1/C4 with a workspace folder: foreign paths are still kept ───────────
+
+    [Theory]
+    [InlineData(@"C:\build-agent\work\1\s\Specs\Support\Hooks.cs")]
+    [InlineData("/home/runner/work/repo/repo/Specs/Support/Hooks.cs")]
+    public void C4_foreign_build_machine_path_is_kept_when_a_workspace_folder_is_known(string foreignPath)
+    {
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("a_ci_built_step", "#1|20|5")],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = foreignPath }
+        }, MakeLspProject(_workspaceFolder));
+
+        registry.StepDefinitions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void C1_missing_source_outside_the_workspace_folder_is_kept()
+    {
+        // A sibling of the workspace folder: another repository's sources, or a package's.
+        var outside = Path.Combine(
+            Path.GetDirectoryName(_workspaceFolder)!, "OtherRepo_" + Guid.NewGuid().ToString("N"), "Steps.cs");
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("another_repos_step", "#1|20|5")],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = outside }
+        }, MakeLspProject(_workspaceFolder));
+
+        registry.StepDefinitions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void C1_workspace_folder_that_does_not_contain_the_project_is_not_used()
+    {
+        // VS Code falls back to its first workspace folder when none contains the project. That
+        // folder says nothing about where this project's sources live, so it must not widen the rule.
+        var unrelatedWorkspace = Path.Combine(Path.GetTempPath(), "StaleBindingsOther_" + Guid.NewGuid().ToString("N"));
+        var missingThere = Path.Combine(unrelatedWorkspace, "SharedProject1", "Class1.cs");
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("a_shared_step", "#1|1|30")],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = missingThere }
+        }, MakeLspProject(unrelatedWorkspace));
+
+        registry.StepDefinitions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void C1_workspace_folder_that_is_a_file_system_root_is_not_used()
+    {
+        // A drive or file-system root would make every missing path on it "owned", including a
+        // build agent's paths. Only the project folder rule applies then.
+        var root = Path.GetPathRoot(_workspaceFolder)!;
+        var missingOnSameDrive = Path.Combine(root, "build-agent-" + Guid.NewGuid().ToString("N"), "Steps.cs");
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions = [GivenStep("a_ci_built_step", "#1|20|5")],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = missingOnSameDrive }
+        }, MakeLspProject(root));
+
+        registry.StepDefinitions.Should().ContainSingle();
     }
 
     // ── C3: a missing source file is reported, not silently ignored ───────────

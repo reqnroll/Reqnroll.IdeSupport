@@ -46,6 +46,14 @@ public sealed class LspReqnrollProject : IProjectScope, IDisposable
     /// <inheritdoc/>  Directory containing the .csproj.
     public string ProjectFolder { get; }
 
+    /// <summary>
+    /// The workspace folder the client reported this project under
+    /// (<see cref="ReqnrollProjectLoadedParams.WorkspaceFolder"/>): the solution folder in VS and
+    /// Rider, the opened folder in VS Code. Not part of <see cref="IProjectScope"/>; empty when the
+    /// client sent none. It is not guaranteed to contain <see cref="ProjectFolder"/>.
+    /// </summary>
+    public string WorkspaceFolder { get; private set; } = string.Empty;
+
     /// <inheritdoc/>
     public ConcurrentDictionary<Type, object> Properties { get; } = new();
 
@@ -108,6 +116,7 @@ public sealed class LspReqnrollProject : IProjectScope, IDisposable
             !string.Equals(OutputAssemblyPath, info.OutputAssemblyPath, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(TargetFrameworkMoniker, info.TargetFrameworkMoniker, StringComparison.Ordinal);
 
+        WorkspaceFolder         = info.WorkspaceFolder ?? string.Empty;
         OutputAssemblyPath      = info.OutputAssemblyPath;
         TargetFrameworkMoniker  = info.TargetFrameworkMoniker;
         TargetFrameworkMonikers = info.TargetFrameworkMoniker;
