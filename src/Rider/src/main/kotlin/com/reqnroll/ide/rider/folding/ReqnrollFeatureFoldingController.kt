@@ -1,8 +1,6 @@
 package com.reqnroll.ide.rider.folding
 
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
@@ -19,6 +17,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.Alarm
 import com.reqnroll.ide.rider.isFeatureExtension
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.LatestResponseGate
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import org.eclipse.lsp4j.FoldingRange
 import com.reqnroll.ide.rider.lsp.localPathToLspUri
@@ -54,6 +53,7 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
         val disposable: Disposable,
         val alarm: Alarm,
         val docListener: DocumentListener,
+        val gate: LatestResponseGate,
     )
 
     override fun editorCreated(event: EditorFactoryEvent) {
@@ -64,16 +64,18 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
 
         val disposable = Disposer.newDisposable("ReqnrollFeatureFolding:${virtualFile.path}")
         val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
+        val gate = LatestResponseGate()
 
         val docListener = object : DocumentListener {
             override fun documentChanged(event: DocumentEvent) {
+                gate.invalidate()
                 alarm.cancelAllRequests()
                 if (!alarm.isDisposed) alarm.addRequest({ refresh(project, editor, virtualFile) }, DEBOUNCE_MS)
             }
         }
         editor.document.addDocumentListener(docListener, disposable)
 
-        editor.putUserData(SESSION_KEY, Session(disposable, alarm, docListener))
+        editor.putUserData(SESSION_KEY, Session(disposable, alarm, docListener, gate))
 
         refresh(project, editor, virtualFile)
     }
@@ -103,25 +105,24 @@ class ReqnrollFeatureFoldingController : EditorFactoryListener {
 
         private fun refresh(project: Project, editor: Editor, virtualFile: VirtualFile) {
             if (project.isDisposed || editor.isDisposed) return
+            val gate = editor.getUserData(SESSION_KEY)?.gate ?: return
 
             // ReqnrollRequestSender.foldingRange uses sendRequestSync, which blocks the calling
             // thread — refresh() runs on the EDT (editorCreated and the SWING_THREAD debounce
             // alarm both dispatch there), so the request itself must run on a background thread,
-            // matching ReqnrollFeatureInlayHintsController's identical rationale.
-            ApplicationManager.getApplication().executeOnPooledThread {
-                if (project.isDisposed || editor.isDisposed) return@executeOnPooledThread
+            // matching ReqnrollFeatureInlayHintsController's identical rationale. The gate renders
+            // only the newest response and skips a failed (null) one (issue #990).
+            gate.fetchThenApply(
+                fetch = fetch@{
+                    if (project.isDisposed || editor.isDisposed) return@fetch null
 
-                val uri = localPathToLspUri(virtualFile.path)
-                val ranges = ReqnrollRequestSender.foldingRange(project, uri)
-                ReqnrollDebugLogger.verbose("ReqnrollFeatureFoldingController: ${ranges?.size ?: "null"} range(s) for $uri")
-
-                ApplicationManager.getApplication().invokeLater(
-                    {
-                        if (!editor.isDisposed) renderFoldRegions(editor, editor.document, ranges.orEmpty())
-                    },
-                    ModalityState.any(),
-                )
-            }
+                    val uri = localPathToLspUri(virtualFile.path)
+                    val ranges = ReqnrollRequestSender.foldingRange(project, uri)
+                    ReqnrollDebugLogger.verbose("ReqnrollFeatureFoldingController: ${ranges?.size ?: "null"} range(s) for $uri")
+                    ranges
+                },
+                apply = { ranges -> if (!editor.isDisposed) renderFoldRegions(editor, editor.document, ranges) },
+            )
         }
 
         private fun renderFoldRegions(editor: Editor, document: Document, ranges: List<FoldingRange>) {

@@ -2,8 +2,6 @@ package com.reqnroll.ide.rider.breadcrumbs
 
 import com.intellij.codeInsight.breadcrumbs.FileBreadcrumbsCollector
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
@@ -19,6 +17,7 @@ import com.intellij.ui.components.breadcrumbs.Crumb
 import com.intellij.util.Alarm
 import com.intellij.xml.breadcrumbs.NavigatableCrumb
 import com.reqnroll.ide.rider.logging.ReqnrollDebugLogger
+import com.reqnroll.ide.rider.lsp.LatestResponseGate
 import com.reqnroll.ide.rider.lsp.ReqnrollRequestSender
 import com.reqnroll.ide.rider.structureview.ReqnrollSymbolTreeElement
 import org.eclipse.lsp4j.DocumentSymbol
@@ -74,6 +73,7 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
     private val symbolsByUri = ConcurrentHashMap<String, List<DocumentSymbol>>()
     private val watchedDisposables = ConcurrentHashMap.newKeySet<Disposable>()
     private val changeCallbacksByUri = ConcurrentHashMap<String, Runnable>()
+    private val gatesByCallback = ConcurrentHashMap<Runnable, LatestResponseGate>()
 
     init {
         instances[project] = this
@@ -87,10 +87,16 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
     override fun watchForChanges(file: VirtualFile, editor: Editor, disposable: Disposable, changeCallback: Runnable) {
         if (!watchedDisposables.add(disposable)) return
         val uri = uriOf(file)
+        // One gate per watched editor (its changeCallback), not per URI: with a split editor each
+        // editor's own response must still reach its own breadcrumb panel. Registered before the
+        // callback, so refreshOpenFeatureEditors never sees a callback without its gate.
+        val gate = LatestResponseGate()
+        gatesByCallback[changeCallback] = gate
         changeCallbacksByUri[uri] = changeCallback
         Disposer.register(disposable) {
             watchedDisposables.remove(disposable)
             changeCallbacksByUri.remove(uri, changeCallback)
+            gatesByCallback.remove(changeCallback, gate)
         }
 
         val alarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, disposable)
@@ -98,6 +104,7 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
         editor.document.addDocumentListener(
             object : DocumentListener {
                 override fun documentChanged(event: DocumentEvent) {
+                    gate.invalidate()
                     alarm.cancelAllRequests()
                     if (!alarm.isDisposed) alarm.addRequest({ refreshSymbols(uri, changeCallback) }, DEBOUNCE_MS)
                 }
@@ -121,20 +128,23 @@ class ReqnrollFeatureBreadcrumbsCollector(private val project: Project) : FileBr
 
     private fun refreshSymbols(uri: String, changeCallback: Runnable) {
         if (project.isDisposed) return
+        val gate = gatesByCallback[changeCallback] ?: return
 
-        ApplicationManager.getApplication().executeOnPooledThread {
-            if (project.isDisposed) return@executeOnPooledThread
+        // The gate applies only the newest response for this editor (issue #990); a null result
+        // was already ignored before it.
+        gate.fetchThenApply(
+            fetch = fetch@{
+                if (project.isDisposed) return@fetch null
 
-            val result = ReqnrollRequestSender.documentSymbol(project, uri)
-            ReqnrollDebugLogger.verbose("ReqnrollFeatureBreadcrumbsCollector: ${result?.size ?: "null"} top-level symbol(s) for $uri")
-            if (result == null) return@executeOnPooledThread
-
-            symbolsByUri[uri] = result
-            ApplicationManager.getApplication().invokeLater(
-                { if (!project.isDisposed) changeCallback.run() },
-                ModalityState.any(),
-            )
-        }
+                val result = ReqnrollRequestSender.documentSymbol(project, uri)
+                ReqnrollDebugLogger.verbose("ReqnrollFeatureBreadcrumbsCollector: ${result?.size ?: "null"} top-level symbol(s) for $uri")
+                result
+            },
+            apply = { result ->
+                symbolsByUri[uri] = result
+                if (!project.isDisposed) changeCallback.run()
+            },
+        )
     }
 
     private fun uriOf(file: VirtualFile): String = localPathToLspUri(file.path)
