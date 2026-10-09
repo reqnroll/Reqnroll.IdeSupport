@@ -66,7 +66,9 @@ internal sealed class GherkinSemanticClassifier : IClassifier
             ? SemanticTokenClassificationStore.NormalizeKey(document.FilePath)
             : null;
 
-        _store.TokensChanged += OnTokensChanged;
+        // The store is a process-wide singleton, and nothing tells a classifier when its buffer closes,
+        // so subscribing directly would root this classifier (and its buffer) for the whole VS session.
+        WeakTokensChangedSubscription.Subscribe(_store, this);
     }
 
     /// <summary>Returns classification spans for the given snapshot span by looking up the cached semantic tokens.</summary>
@@ -118,5 +120,33 @@ internal sealed class GherkinSemanticClassifier : IClassifier
         var snapshot = _buffer.CurrentSnapshot;
         ClassificationChanged?.Invoke(
             this, new ClassificationChangedEventArgs(new SnapshotSpan(snapshot, 0, snapshot.Length)));
+    }
+
+    /// <summary>
+    /// Forwards <see cref="SemanticTokenClassificationStore.TokensChanged"/> to a classifier held only weakly,
+    /// so the store keeps nothing alive but this small forwarder. Once the classifier has been collected, the
+    /// forwarder unsubscribes itself the next time the event is raised.
+    /// </summary>
+    private sealed class WeakTokensChangedSubscription
+    {
+        private readonly SemanticTokenClassificationStore _store;
+        private readonly WeakReference<GherkinSemanticClassifier> _classifier;
+
+        private WeakTokensChangedSubscription(SemanticTokenClassificationStore store, GherkinSemanticClassifier classifier)
+        {
+            _store = store;
+            _classifier = new WeakReference<GherkinSemanticClassifier>(classifier);
+        }
+
+        public static void Subscribe(SemanticTokenClassificationStore store, GherkinSemanticClassifier classifier) =>
+            store.TokensChanged += new WeakTokensChangedSubscription(store, classifier).OnTokensChanged;
+
+        private void OnTokensChanged(string fileKey)
+        {
+            if (_classifier.TryGetTarget(out var classifier))
+                classifier.OnTokensChanged(fileKey);
+            else
+                _store.TokensChanged -= OnTokensChanged;
+        }
     }
 }
