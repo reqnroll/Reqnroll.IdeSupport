@@ -13,6 +13,7 @@ import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
 import './lsp/manualDocumentSync.test';
 import './lsp/serverLifecycleTelemetry.test';
+import './lsp/serverRestart.test';
 // Must precede `commands/stepCodeLens.test` and `commands/hookCodeLens.test` below (and, for the
 // same reason, everything else that could reach a real `activate()`): `getCodeLensRefreshEvent`
 // guards a module-level singleton that only its first caller in the whole process actually wires

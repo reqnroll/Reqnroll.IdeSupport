@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { evaluateProject, ProjectFileItem, ProjectProperties } from './msbuildEvaluator';
 import { ReqnrollMethods } from './lspMethods';
+import { onServerRestarted } from './serverRestart';
 
 // Mirrors ProjectFilesKind / ProjectFileRole in
 // src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/ReqnrollProjectFilesParams.cs
@@ -68,6 +69,31 @@ export function findOwningProjectFile(
   return best;
 }
 
+/** Workspace scanning and MSBuild evaluation, injectable so tests needn't run `dotnet msbuild`. */
+export interface ProjectManagerDeps {
+  findProjectFiles(): Promise<vscode.Uri[]>;
+  evaluateProject(projectFile: string): Promise<ProjectProperties | null>;
+}
+
+async function findWorkspaceProjectFiles(): Promise<vscode.Uri[]> {
+  const patterns = ['**/*.csproj', '**/*.slnx', '**/*.sln'];
+  const uris = new Map<string, vscode.Uri>();
+
+  for (const pattern of patterns) {
+    const matches = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
+    for (const uri of matches) {
+      uris.set(uri.toString(), uri);
+    }
+  }
+
+  return [...uris.values()];
+}
+
+const defaultDeps: ProjectManagerDeps = {
+  findProjectFiles: findWorkspaceProjectFiles,
+  evaluateProject,
+};
+
 /**
  * Manages custom LSP notifications (reqnroll/projectLoaded, projectUnloaded, projectFiles)
  * for the VS Code extension.
@@ -109,6 +135,8 @@ export function findOwningProjectFile(
  *     (`HandleOutputAssemblyChange: ... triggering discovery for '<project>'`). This class was
  *     reverted to that canonical path; VS's `VsProjectEventMonitor` doesn't need any of this — it
  *     hooks `DTE.Events.BuildEvents.OnBuildDone` directly.
+ * v6: re-registers every project when vscode-languageclient restarts a crashed server on the same
+ *     client (issue #997) — the new server starts with no project state; see {@link onServerRestarted}.
  */
 export class ProjectManager {
   private readonly _client: LanguageClient;
@@ -118,8 +146,13 @@ export class ProjectManager {
   private readonly _outputAssemblyPaths = new Map<string, string>();
   private readonly _resendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private _disposables: vscode.Disposable[] = [];
+  /** Bumped on each server restart; work started under an older value must not send (issue #997). */
+  private _serverGeneration = 0;
 
-  constructor(client: LanguageClient) {
+  constructor(
+    client: LanguageClient,
+    private readonly _deps: ProjectManagerDeps = defaultDeps,
+  ) {
     this._client = client;
 
     // Watch for project/solution file changes across all workspace folders. Their FileSystemWatcher.dispose()
@@ -142,6 +175,9 @@ export class ProjectManager {
         (event) => void this.onWorkspaceFoldersChanged(event),
       ),
     );
+
+    // A restarted server knows nothing the old one was told; re-prime it (issue #997).
+    this._disposables.push(onServerRestarted(client, () => this.onServerRestarted()));
 
     // Discover any projects already present in the workspace
     void this.discoverExistingProjects();
@@ -181,18 +217,7 @@ export class ProjectManager {
    * Scans all workspace folders for .csproj files and registers them.
    */
   private async discoverExistingProjects(): Promise<void> {
-    const patterns = ['**/*.csproj', '**/*.slnx', '**/*.sln'];
-    const uris = new Set<string>();
-
-    for (const pattern of patterns) {
-      const matches = await vscode.workspace.findFiles(pattern, '**/node_modules/**');
-      for (const uri of matches) {
-        uris.add(uri.toString());
-      }
-    }
-
-    for (const uriStr of uris) {
-      const uri = vscode.Uri.parse(uriStr);
+    for (const uri of await this._deps.findProjectFiles()) {
       await this.registerProject(uri);
     }
   }
@@ -205,6 +230,20 @@ export class ProjectManager {
 
   private async onProjectDeleted(uri: vscode.Uri): Promise<void> {
     await this.unregisterProject(uri);
+  }
+
+  /**
+   * The language client restarted a crashed server on the same client object: forget what the old
+   * server was told and re-register every project with the new one. Registrations and resends still
+   * in flight from before the restart see the bumped generation and drop out without sending, so
+   * each project reaches the new server exactly once.
+   */
+  private onServerRestarted(): void {
+    this._serverGeneration += 1;
+    for (const timer of this._resendTimers.values()) clearTimeout(timer);
+    this._resendTimers.clear();
+    this._knownProjects.clear();
+    void this.discoverExistingProjects();
   }
 
   /**
@@ -254,9 +293,15 @@ export class ProjectManager {
    * additions/removals, where the file *membership* itself may have changed.
    */
   private async resendProjectFiles(projectFile: string): Promise<void> {
-    const { props } = await this.sendProjectLoaded(projectFile);
+    const generation = this._serverGeneration;
+    const { props } = await this.sendProjectLoaded(projectFile, generation);
     if (!props) return; // msbuild unavailable — index stays Pending, same as v1 fallback
-    await this.sendProjectFilesBaseline(projectFile, props.targetFrameworkMoniker, props.files);
+    await this.sendProjectFilesBaseline(
+      projectFile,
+      props.targetFrameworkMoniker,
+      props.files,
+      generation,
+    );
   }
 
   // ── Notification sending ──────────────────────────────────────────────
@@ -277,8 +322,11 @@ export class ProjectManager {
       return;
     }
 
-    const result = await this.sendProjectLoaded(projectFile);
-    if (!result.sent) return; // notification failed — do not mark known (matches pre-v5 behavior)
+    const generation = this._serverGeneration;
+    const result = await this.sendProjectLoaded(projectFile, generation);
+    // Not sent: the notification failed (do not mark known, matches pre-v5 behavior), or the server
+    // restarted during evaluation and the post-restart discovery registers the project instead.
+    if (!result.sent || generation !== this._serverGeneration) return;
     this._knownProjects.add(projectFile);
 
     // v3: populate the server's per-file membership index, same data VS's
@@ -288,6 +336,7 @@ export class ProjectManager {
         projectFile,
         result.props.targetFrameworkMoniker,
         result.props.files,
+        generation,
       );
     }
   }
@@ -299,18 +348,22 @@ export class ProjectManager {
    * re-evaluating after the output assembly is built, so `outputAssemblyPath` reaches the server
    * even though it didn't exist at initial registration time).
    *
-   * `sent` is `false` only when the notification itself failed to send (e.g. the client isn't
-   * running) — distinct from `props` being `null`, which means msbuild evaluation failed/was
-   * unavailable but the (empty-field) notification still went out successfully.
+   * `sent` is `false` when the notification itself failed to send (e.g. the client isn't
+   * running) or was skipped because the server restarted since `generation` was captured — distinct
+   * from `props` being `null`, which means msbuild evaluation failed/was unavailable but the
+   * (empty-field) notification still went out successfully.
    */
   private async sendProjectLoaded(
     projectFile: string,
+    generation: number,
   ): Promise<{ sent: boolean; props: ProjectProperties | null }> {
     const folders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
     const workspaceFolder = resolveWorkspaceFolder(projectFile, folders);
     const projectFolder = path.dirname(projectFile);
 
-    const props = await evaluateProject(projectFile);
+    const props = await this._deps.evaluateProject(projectFile);
+    // The server restarted while MSBuild ran; the post-restart discovery owns this project now.
+    if (generation !== this._serverGeneration) return { sent: false, props: null };
     if (props?.outputAssemblyPath) {
       this._outputAssemblyPaths.set(projectFile, props.outputAssemblyPath);
     }
@@ -340,12 +393,17 @@ export class ProjectManager {
     return { sent: true, props };
   }
 
-  /** Sends a reqnroll/projectFiles baseline (full snapshot) for one project. */
+  /**
+   * Sends a reqnroll/projectFiles baseline (full snapshot) for one project, unless the server
+   * restarted since `generation` was captured (the post-restart discovery sends it instead).
+   */
   private async sendProjectFilesBaseline(
     projectFile: string,
     targetFrameworkMoniker: string,
     files: readonly ProjectFileItem[],
+    generation: number,
   ): Promise<void> {
+    if (generation !== this._serverGeneration) return;
     const params = {
       projectFile,
       targetFrameworkMoniker,
