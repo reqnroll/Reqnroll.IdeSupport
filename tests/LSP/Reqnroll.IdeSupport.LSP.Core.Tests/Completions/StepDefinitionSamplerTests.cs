@@ -68,6 +68,13 @@ public class StepDefinitionSamplerTests
     [InlineData(@"foo. (\d+) bar")]
     [InlineData(@"foo* (\d+) bar")]
     [InlineData(@"foo+ (\d+) bar")]
+    [InlineData(@"I have \d apples")]
+    [InlineData(@"I have \w apples")]
+    [InlineData(@"I have \s apples")]
+    [InlineData(@"I have \D apples")]
+    [InlineData(@"I have \W apples")]
+    [InlineData(@"I have \S apples")]
+    [InlineData(@"I have \b apples")]
     public void Falls_back_to_regex(string regex)
     {
         var result = _sut.GetStepDefinitionSample(Binding(regex, "System.Int32"));
