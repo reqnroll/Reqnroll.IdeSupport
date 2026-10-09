@@ -29,14 +29,22 @@ export function formatLine(level: string, message: string): string {
  * trace() is deliberately NOT teed here — that's the LSP wire-message stream, already captured
  * separately by `lspInspectorLogger.ts`'s own file tee in lsp-viewer format.
  */
-class GeneralFileLogChannel implements vscode.LogOutputChannel {
+export class GeneralFileLogChannel implements vscode.LogOutputChannel {
   readonly name: string;
   private readonly _inner: vscode.LogOutputChannel;
   private _stream: fs.WriteStream | undefined;
   private readonly _autoShowOnWarnOrError: boolean;
+  private _hasAutoShownOnWarnOrError = false;
 
-  constructor(name: string, stream: fs.WriteStream | undefined, autoShowOnWarnOrError = false) {
-    this._inner = vscode.window.createOutputChannel(name, { log: true });
+  constructor(
+    name: string,
+    stream: fs.WriteStream | undefined,
+    autoShowOnWarnOrError = false,
+    // Test seam: lets unit tests supply a fake channel so the wrapper's show() forwarding and
+    // auto-show bookkeeping can be asserted without a real (or alive) VS Code window.
+    inner?: vscode.LogOutputChannel,
+  ) {
+    this._inner = inner ?? vscode.window.createOutputChannel(name, { log: true });
     this.name = this._inner.name;
     this._stream = stream;
     this._autoShowOnWarnOrError = autoShowOnWarnOrError;
@@ -63,7 +71,7 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
   warn(message: string, ...args: unknown[]): void {
     this._inner.warn(message, ...args);
     this._write('Warning', message);
-    if (this._autoShowOnWarnOrError) this.show(true);
+    this._autoShowOnFirstWarnOrError();
   }
   error(message: string | Error, ...args: unknown[]): void {
     this._inner.error(message, ...args);
@@ -71,7 +79,7 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
       'Error',
       message instanceof Error ? `${message.message}\n${message.stack ?? ''}` : message,
     );
-    if (this._autoShowOnWarnOrError) this.show(true);
+    this._autoShowOnFirstWarnOrError();
   }
 
   append(value: string): void {
@@ -89,8 +97,15 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
 
   show(preserveFocus?: boolean): void;
   show(column?: vscode.ViewColumn, preserveFocus?: boolean): void;
-  show(_colOrFocus?: vscode.ViewColumn | boolean, _focus?: boolean): void {
-    this._inner.show();
+  show(colOrFocus?: vscode.ViewColumn | boolean, focus?: boolean): void {
+    // Forward the caller's intent instead of unconditionally focusing (issue #1000): a bare
+    // show() (the `reqnroll.showOutputChannel` command) focuses, while show(true) — used for
+    // auto-reveal on warn/error — reveals the panel without stealing focus.
+    if (typeof colOrFocus === 'boolean') {
+      this._inner.show(colOrFocus);
+    } else {
+      this._inner.show(colOrFocus, focus);
+    }
   }
 
   hide(): void {
@@ -101,6 +116,17 @@ class GeneralFileLogChannel implements vscode.LogOutputChannel {
     this._inner.dispose();
     this._stream?.end();
     this._stream = undefined;
+  }
+
+  /**
+   * Reveals the panel on the *first* warn/error of the session, then stays quiet (issue #1000) —
+   * matching the documented behaviour and the VS side's `VsOutputPaneLogger.ShouldActivate`. Uses
+   * show(true) so the reveal preserves the editor focus the user is typing in.
+   */
+  private _autoShowOnFirstWarnOrError(): void {
+    if (!this._autoShowOnWarnOrError || this._hasAutoShownOnWarnOrError) return;
+    this._hasAutoShownOnWarnOrError = true;
+    this.show(true);
   }
 
   private _write(level: string, message: string): void {
@@ -119,6 +145,7 @@ export interface GeneralLogChannelOptions {
   /**
    * Auto-reveals the Output panel on this channel's first warn()/error() call in a session
    * (issue #661), mirroring `VsOutputPaneLogger.ShouldActivate` on the VS side (PR #656/#651).
+   * The reveal preserves focus (issue #1000) so it never interrupts typing.
    */
   autoShowOnWarnOrError?: boolean;
 }
