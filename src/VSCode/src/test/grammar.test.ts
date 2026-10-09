@@ -122,6 +122,43 @@ suite('gherkin.tmLanguage.json', () => {
       assert.ok(re.test('  # indented comment'));
       assert.ok(!re.test('Given something'));
     });
+
+    // Regression test for #1003: the rule used to be the unanchored "#.*$", so once the step
+    // keyword rule consumed only the keyword and the scanner resumed after it, the first #
+    // later on the line was comment-scoped. Real Gherkin comments are line-start only.
+    test('#1003: does not match a # that is not at the start of the line', () => {
+      const re = new RegExp(p().match);
+      assert.ok(!re.test('Given the colour is #FF0000'));
+      assert.ok(!re.test('  Given I filed issue #12'));
+      assert.ok(re.test('# a real comment'));
+      assert.ok(re.test('  # an indented real comment'));
+    });
+
+    test('#1003: does not comment-scope a mid-line # in a step', () => {
+      const results = tokenizeLines(['Given the colour is #FF0000']);
+      const scopes = results[0].tokens.map((t) => t.scopes).flat();
+      assert.ok(
+        !scopes.some((s) => s.includes('comment.line.gherkin')),
+        `Expected no comment.line.gherkin scope on step text, but got: ${JSON.stringify(scopes)}`,
+      );
+    });
+
+    test('#1003: does not comment-scope a mid-line # in a description', () => {
+      const results = tokenizeLines(['  This relates to issue #12']);
+      const scopes = results[0].tokens.map((t) => t.scopes).flat();
+      assert.ok(!scopes.some((s) => s.includes('comment.line.gherkin')));
+    });
+
+    test('#1003: still comment-scopes a real line-start comment', () => {
+      const results = tokenizeLines(['# a real comment', '  # an indented comment']);
+      for (const result of results) {
+        const scopes = result.tokens.map((t) => t.scopes).flat();
+        assert.ok(
+          scopes.some((s) => s.includes('comment.line.gherkin')),
+          `Expected comment.line.gherkin scope, but got: ${JSON.stringify(scopes)}`,
+        );
+      }
+    });
   });
 
   // ── Tags ────────────────────────────────────────────────────────────────
