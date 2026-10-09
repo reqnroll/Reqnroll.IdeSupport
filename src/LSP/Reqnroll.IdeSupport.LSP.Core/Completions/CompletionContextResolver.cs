@@ -40,7 +40,7 @@ public sealed class CompletionContextResolver : ICompletionContextResolver
         var docTag     = tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.Document);
         var gherkinDoc = docTag?.Data as IdeSupportGherkinDocument;
         var dialect    = gherkinDoc?.GherkinDialect
-                      ?? new GherkinDialectProvider(fallbackLanguage).DefaultDialect;
+                      ?? ReqnrollGherkinDialectProvider.GetDialect(fallbackLanguage);
 
         // ── Step-definition-sample completion ───────────────────────────────────
         // Cursor must be on a recognised step line and at or past the step text start
