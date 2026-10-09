@@ -144,8 +144,14 @@ class ReqnrollProjectFilesSync : ProjectActivity {
      * and macOS by default) even though they refer to the same location, non-deterministically
      * misattributing (or dropping) a file-change delta depending on how folders happen to sort.
      */
-    internal fun findOwningProject(path: String, folders: List<Pair<String, String>>): String? =
-        folders.firstOrNull { (folder, _) -> path.startsWith(folder + File.separator, ignoreCase = true) }?.second
+    internal fun findOwningProject(path: String, folders: List<Pair<String, String>>): String? {
+        // VFileEvent.path is always "/"-separated, while the folders come from File(...).parent,
+        // which is "\\"-separated on Windows (issue #978): compare both in "/" form.
+        val normalizedPath = path.replace('\\', '/')
+        return folders.firstOrNull { (folder, _) ->
+            normalizedPath.startsWith(folder.replace('\\', '/').trimEnd('/') + "/", ignoreCase = true)
+        }?.second
+    }
 
     private data class Change(val path: String, val role: Int, val added: Boolean)
 
