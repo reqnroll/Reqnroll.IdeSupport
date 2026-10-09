@@ -23,29 +23,29 @@ import com.reqnroll.ide.rider.lsp.localPathToLspUri
  */
 class ReqnrollDocumentActivationSync : ProjectActivity {
     override suspend fun execute(project: Project) {
-        val state = DocumentActivationState()
+        val dispatcher = DocumentActivationDispatcher(
+            DocumentActivationState(),
+            whenRunning = { action -> ReqnrollLspServerReadiness.runWhenRunning(project, action) },
+            send = { path -> send(project, path) },
+        )
 
         project.messageBus.connect(project).subscribe(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
                     if (!isFeatureFile(file)) return
-                    if (state.onDidOpen(file.path) == DocumentActivationAction.SEND_NOW) {
-                        send(project, file)
-                    }
+                    dispatcher.onFileOpened(file.path)
                 }
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
                     if (!isFeatureFile(file)) return
-                    state.onDidClose(file.path)
+                    dispatcher.onFileClosed(file.path)
                 }
 
                 override fun selectionChanged(event: FileEditorManagerEvent) {
                     val file = event.newFile ?: return
                     if (!isFeatureFile(file)) return
-                    if (state.onWindowActivated(file.path) == DocumentActivationAction.SEND_NOW) {
-                        send(project, file)
-                    }
+                    dispatcher.onFileSelected(file.path)
                 }
             },
         )
@@ -53,11 +53,41 @@ class ReqnrollDocumentActivationSync : ProjectActivity {
 
     private fun isFeatureFile(file: VirtualFile) = file.extension.equals("feature", ignoreCase = true)
 
-    private fun send(project: Project, file: VirtualFile) {
+    private fun send(project: Project, path: String) {
         // Same URI form as the platform's own textDocument/didOpen for this file — see localPathToLspUri.
-        val uri = localPathToLspUri(file.path)
+        val uri = localPathToLspUri(path)
         ReqnrollDebugLogger.verbose("documentActivated: $uri")
         ReqnrollNotificationSender.sendDocumentActivated(project, DocumentActivatedParams(uri))
+    }
+}
+
+/**
+ * Turns [DocumentActivationState] decisions into notifications (issue #986). The notification
+ * must not reach the server before it is Running (an Initializing server rejects it as an
+ * "Unexpected notification"), which is exactly the situation for restored tabs at project open,
+ * so every SEND_NOW is routed through [whenRunning] (`ReqnrollLspServerReadiness.runWhenRunning`).
+ * The state machine marks the file ACTIVATED at decision time; because [whenRunning] defers
+ * rather than drops, that stays correct — the send is owed and is delivered once the server is
+ * Running. If the file is closed (or re-opened) while the send is still deferred, the deferred
+ * send is skipped: that open-lifetime has ended and the next one gets its own activation.
+ */
+internal class DocumentActivationDispatcher(
+    private val state: DocumentActivationState,
+    private val whenRunning: (() -> Unit) -> Unit,
+    private val send: (String) -> Unit,
+) {
+    fun onFileOpened(path: String) = dispatch(path, state.onDidOpen(path))
+
+    fun onFileSelected(path: String) = dispatch(path, state.onWindowActivated(path))
+
+    fun onFileClosed(path: String) = state.onDidClose(path)
+
+    private fun dispatch(path: String, action: DocumentActivationAction) {
+        if (action != DocumentActivationAction.SEND_NOW) return
+        val generation = state.generation(path)
+        whenRunning {
+            if (state.generation(path) == generation && state.isActivated(path)) send(path)
+        }
     }
 }
 
@@ -70,6 +100,7 @@ internal enum class DocumentActivationAction { NONE, SEND_NOW }
 internal class DocumentActivationState {
     private val lock = Any()
     private val phases = HashMap<String, DocumentActivationPhase>()
+    private val generations = HashMap<String, Int>()
 
     fun onWindowActivated(filePath: String): DocumentActivationAction = synchronized(lock) {
         when (getPhase(filePath)) {
@@ -87,6 +118,7 @@ internal class DocumentActivationState {
     }
 
     fun onDidOpen(filePath: String): DocumentActivationAction = synchronized(lock) {
+        bumpGeneration(filePath)
         when (getPhase(filePath)) {
             DocumentActivationPhase.ACTIVATION_PENDING -> {
                 phases[filePath] = DocumentActivationPhase.ACTIVATED
@@ -103,8 +135,20 @@ internal class DocumentActivationState {
     }
 
     fun onDidClose(filePath: String) = synchronized(lock) {
+        bumpGeneration(filePath)
         phases.remove(filePath)
         Unit
+    }
+
+    fun isActivated(filePath: String): Boolean = synchronized(lock) {
+        getPhase(filePath) == DocumentActivationPhase.ACTIVATED
+    }
+
+    /** Bumped whenever the file's phase is reset (open/close), so a deferred send can detect a new open-lifetime. */
+    fun generation(filePath: String): Int = synchronized(lock) { generations[filePath] ?: 0 }
+
+    private fun bumpGeneration(filePath: String) {
+        generations[filePath] = (generations[filePath] ?: 0) + 1
     }
 
     private fun getPhase(filePath: String) = phases[filePath] ?: DocumentActivationPhase.NOT_SEEN
