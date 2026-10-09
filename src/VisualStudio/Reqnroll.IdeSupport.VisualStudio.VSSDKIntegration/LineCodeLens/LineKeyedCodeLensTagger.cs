@@ -37,8 +37,17 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// would make it treat every call as "new tags" and needlessly tear down/recreate data points on
 /// every scroll.
 /// </para>
+/// <para>
+/// Deliberately not <see cref="IDisposable"/> (issue #1028). The tagger providers hand every consumer
+/// of a buffer the same instance (a singleton in <see cref="ITextBuffer.Properties"/>), and VS's tag
+/// aggregator disposes each <see cref="IDisposable"/> tagger it got from a provider when that
+/// aggregator goes away (its view closes) or the buffer's content type changes, regardless of who
+/// else still uses it — so one view closing would have frozen the lenses in every other view on the
+/// same buffer. The instance lives exactly as long as its buffer's property bag, and
+/// <see cref="WeakTaggerRegistry{TTagger}"/> only holds it weakly, so it needs no explicit teardown.
+/// </para>
 /// </remarks>
-internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, IDisposable
+internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
 {
     private readonly ITextBuffer _buffer;
     private readonly string _filePath;
@@ -46,12 +55,10 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<TEntry>?>> _fetch;
     private readonly Func<TEntry, int> _lineSelector;
     private readonly Func<int, IEnumerable<TEntry>, string> _elementDescriptionEncoder;
-    private readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<TEntry>> _registry;
 
     private volatile IReadOnlyDictionary<int, LineCodeLensTag> _tagsByLine = EmptyTags;
     private int _refreshInFlight;
     private int _refreshPending;
-    private bool _disposed;
 
     private static readonly IReadOnlyDictionary<int, LineCodeLensTag> EmptyTags = new Dictionary<int, LineCodeLensTag>();
 
@@ -72,8 +79,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
         _fetch = fetch;
         _lineSelector = lineSelector;
         _elementDescriptionEncoder = elementDescriptionEncoder;
-        _registry = registry;
-        _registry.RegisterTagger(this, fileUri);
+        registry.RegisterTagger(this, fileUri);
         RequestRefresh();
     }
 
@@ -127,7 +133,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
         try
         {
             var entries = await _fetch(_fileUri, CancellationToken.None).ConfigureAwait(false);
-            if (entries is null || _disposed)
+            if (entries is null)
                 return;
 
             var snapshot = _buffer.CurrentSnapshot;
@@ -180,14 +186,8 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
             // A RequestRefresh arrived while the above was in flight — its caller was told "you're
             // covered", but the fetch above may have started before that request's reason for asking
             // even existed, so honour it with one more refresh instead of treating this one as good enough.
-            if (!_disposed && Interlocked.Exchange(ref _refreshPending, 0) == 1)
+            if (Interlocked.Exchange(ref _refreshPending, 0) == 1)
                 RequestRefresh();
         }
-    }
-
-    public void Dispose()
-    {
-        _disposed = true;
-        _registry.UnregisterTagger(this, _fileUri);
     }
 }

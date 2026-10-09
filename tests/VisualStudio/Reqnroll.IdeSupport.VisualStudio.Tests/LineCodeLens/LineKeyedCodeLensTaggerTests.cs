@@ -317,22 +317,17 @@ public class LineKeyedCodeLensTaggerTests
     }
 
     [Fact]
-    public void Dispose_unregisters_the_tagger_so_InvalidateFile_no_longer_reaches_it()
+    public void The_tagger_is_not_disposable_so_a_closing_view_cannot_stop_it_for_the_other_views_sharing_it()
     {
+        // Issue #1028: this used to assert that Dispose unregistered the tagger. But the providers share
+        // one instance per buffer, and VS's tag aggregator disposes every IDisposable tagger it obtained
+        // when its own view closes, so that Dispose froze the lenses in every other view on the buffer.
+        // The registry holds taggers weakly (see WeakTaggerRegistryTests'
+        // A_collected_tagger_is_dropped_and_no_longer_receives_refresh_requests), which is what releases
+        // a tagger once its buffer is gone. SharedCodeLensTaggerLifetimeTests covers the behaviour end to end.
         var snapshot = CreateSnapshot(lineCount: 5);
-        var buffer = CreateBuffer(snapshot);
-        var fetchCount = 0;
-        var registry = CreateRegistry();
-        var sut = CreateSut(buffer, (_, _) =>
-        {
-            fetchCount++;
-            return Task.FromResult<IReadOnlyList<TestEntry>?>(Array.Empty<TestEntry>());
-        }, registry, fileUri: "file:///a.feature");
-        fetchCount.Should().Be(1);
+        var sut = CreateSut(CreateBuffer(snapshot), (_, _) => Task.FromResult<IReadOnlyList<TestEntry>?>(Array.Empty<TestEntry>()));
 
-        sut.Dispose();
-        registry.InvalidateFile("file:///a.feature");
-
-        fetchCount.Should().Be(1);
+        sut.Should().NotBeAssignableTo<IDisposable>();
     }
 }
