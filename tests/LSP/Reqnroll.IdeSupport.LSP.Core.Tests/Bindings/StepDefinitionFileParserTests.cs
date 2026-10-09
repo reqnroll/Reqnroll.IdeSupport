@@ -280,6 +280,24 @@ namespace TestProject
     }
 
     [Fact]
+    public async Task Method_name_binding_with_a_verbatim_identifier_parameter_is_discovered()
+    {
+        // Issue #952: a parameter written as a verbatim identifier (e.g. @class) keeps the
+        // leading '@' in Identifier.Text, which was spliced straight into the named regex
+        // group ((?<@class>...)) -- an invalid group name that threw ArgumentException out of
+        // ParseBindings and dropped EVERY binding in the file. Identifier.ValueText returns
+        // the identifier's semantic name without the '@', so the group name is valid again.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given]
+              public void The_Value_Is_P0(string @class) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue();
+        binding.Regex!.IsMatch("the value is something").Should().BeTrue();
+        binding.Regex.Match("the value is something").Groups["class"].Value.Should().Be("something");
+    }
+
+    [Fact]
     public async Task Method_name_binding_ignores_a_parameter_not_reflected_in_the_method_name()
     {
         // Mirrors Reqnroll's SupportsExtraArguments (a trailing Table-typed parameter that
