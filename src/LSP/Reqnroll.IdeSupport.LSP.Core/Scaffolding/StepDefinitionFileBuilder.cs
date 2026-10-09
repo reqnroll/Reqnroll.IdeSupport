@@ -40,8 +40,12 @@ public static class StepDefinitionFileBuilder
 
         var sb = new StringBuilder();
 
-        // Using directives
+        // Using directives. `Task` is only referenced by an async snippet's rendered signature
+        // (`public async Task ...`), so the Tasks namespace is imported exactly when the file
+        // contains one — avoiding an unused using in the common synchronous case (#961).
         sb.Append("using System;").Append(newLine);
+        if (AnySnippetIsAsync(snippets))
+            sb.Append("using System.Threading.Tasks;").Append(newLine);
         sb.Append("using Reqnroll;").Append(newLine);
         sb.Append(newLine);
 
@@ -72,6 +76,31 @@ public static class StepDefinitionFileBuilder
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Determines whether any rendered <paramref name="snippets"/> declares an async method, so
+    /// <see cref="BuildNewFile"/> can import <c>System.Threading.Tasks</c> exactly when the
+    /// generated file needs it (issue #961).
+    /// </summary>
+    /// <remarks>
+    /// Matches the signature <see cref="StepSkeletonRenderer.Render"/> emits for an async style —
+    /// <c>public async Task &lt;Name&gt;(...)</c> — at the start of a line. A step-text line can't
+    /// satisfy it: the expression is always wrapped in the attribute on its own line
+    /// (<c>[When(@"...")]</c>), so a line whose content merely reads "async Task" never matches.
+    /// </remarks>
+    private static bool AnySnippetIsAsync(IReadOnlyList<string> snippets)
+    {
+        foreach (var snippet in snippets)
+        {
+            var normalized = snippet.Replace("\r\n", "\n").Replace("\r", "\n");
+            foreach (var line in normalized.Split('\n'))
+            {
+                if (line.TrimStart().StartsWith("public async Task", StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
