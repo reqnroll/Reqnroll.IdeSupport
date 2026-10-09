@@ -128,6 +128,31 @@ internal sealed class CSharpAttributeLiteralResolver
     /// </remarks>
     public async Task<LiteralExpressionSyntax?> FindAttributeLiteralAsync(
         DocumentUri uri,
+        ProjectStepDefinitionBinding binding) =>
+        (await ResolveAttributeLiteralAsync(uri, binding).ConfigureAwait(false)).Literal;
+
+    /// <summary>
+    /// The outcome of <see cref="ResolveAttributeLiteralAsync"/>: the attribute literal to rewrite,
+    /// or <see langword="null"/>. <see cref="IsAmbiguous"/> distinguishes "the method carries
+    /// several matching attributes and none can be identified as this binding's" (issue #940) —
+    /// which a rename must refuse rather than guess at — from "no literal found".
+    /// </summary>
+    public readonly record struct AttributeLiteralResolution(LiteralExpressionSyntax? Literal, bool IsAmbiguous)
+    {
+        public static readonly AttributeLiteralResolution NotFound  = new(null, IsAmbiguous: false);
+        public static readonly AttributeLiteralResolution Ambiguous = new(null, IsAmbiguous: true);
+
+        public static AttributeLiteralResolution Found(LiteralExpressionSyntax literal) => new(literal, IsAmbiguous: false);
+    }
+
+    /// <summary>
+    /// Same as <see cref="FindAttributeLiteralAsync"/>, but reports when the literal could not be
+    /// chosen among several same-type attributes on the binding's method (issue #940), so the
+    /// rename can fail with an explanation instead of rewriting an attribute that may not be this
+    /// binding's.
+    /// </summary>
+    public async Task<AttributeLiteralResolution> ResolveAttributeLiteralAsync(
+        DocumentUri uri,
         ProjectStepDefinitionBinding binding)
     {
         // A method-name-style binding (issue #344) has no string-literal attribute argument
@@ -139,12 +164,12 @@ internal sealed class CSharpAttributeLiteralResolver
         {
             _logger.LogVerbose(
                 "CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — method-name-style binding has no literal to find");
-            return null;
+            return AttributeLiteralResolution.NotFound;
         }
 
         var csPath = ResolveCSharpFilePath(uri, binding);
         if (csPath == null)
-            return null;
+            return AttributeLiteralResolution.NotFound;
 
         var csUri = string.Equals(uri.GetFileSystemPath(), csPath, StringComparison.OrdinalIgnoreCase)
             ? uri
@@ -154,7 +179,7 @@ internal sealed class CSharpAttributeLiteralResolver
         if (fileText == null)
         {
             _logger.LogVerbose("CSharpAttributeLiteralResolver: FindAttributeLiteralAsync — no file text available");
-            return null;
+            return AttributeLiteralResolution.NotFound;
         }
 
         // Cached across calls within the same rename operation (issue #491): a method carrying
@@ -247,9 +272,10 @@ internal sealed class CSharpAttributeLiteralResolver
     /// <see cref="RenameBindingResolver.FindBindingsAtCSharpMethod"/>, #170), falling back to the
     /// nearest candidate method when no exact match is found (a stale build's recorded line has
     /// drifted from the live buffer, or the binding is connector-discovered and never carried an
-    /// attribute line at all).
+    /// attribute line at all). Either way, the method's attribute literals are then narrowed by
+    /// <see cref="SelectAmongMethodLiterals"/> (issue #940).
     /// </summary>
-    private LiteralExpressionSyntax? FindAttributeLiteral(
+    private AttributeLiteralResolution FindAttributeLiteral(
         SyntaxTree tree, SyntaxNode rootNode, ProjectStepDefinitionBinding binding)
     {
         var stepType = binding.StepDefinitionType;
@@ -257,13 +283,19 @@ internal sealed class CSharpAttributeLiteralResolver
 
         if (binding.AttributeSourceLine.HasValue)
         {
-            var exact = methods
-                .SelectMany(m => GetStepAttributesWithLiterals(m, stepType))
-                .FirstOrDefault(x =>
+            var onLine = methods
+                .SelectMany(m => GetStepAttributesWithLiterals(m, stepType).Select(x => (Method: m, x.Attribute, x.Literal)))
+                .Where(x =>
                     x.Attribute.GetLocation().GetLineSpan().StartLinePosition.Line + 1
-                        == binding.AttributeSourceLine.Value);
-            if (exact.Literal != null)
-                return exact.Literal;
+                        == binding.AttributeSourceLine.Value)
+                .ToList();
+            if (onLine.Count > 0)
+            {
+                // Several attributes written on one line give the line no deciding power.
+                var lineMatch = onLine.Count == 1 ? onLine[0].Literal : null;
+                return SelectAmongMethodLiterals(
+                    GetStepAttributeLiterals(onLine[0].Method, stepType).ToList(), binding, lineMatch);
+            }
         }
 
         var candidates = methods
@@ -273,20 +305,107 @@ internal sealed class CSharpAttributeLiteralResolver
             .ToList();
 
         if (candidates.Count == 0)
-            return null;
+            return AttributeLiteralResolution.NotFound;
 
         var targetLine = binding.Implementation?.SourceLocation?.SourceFileLine;
         var chosen = targetLine.HasValue
             ? candidates.OrderBy(x => Math.Abs(x.Line - targetLine.Value)).ThenBy(x => x.Line).First()
             : candidates.First();
 
-        // Among the chosen method's matching step attributes, pick the literal to rewrite.
-        // A single matching attribute (the common case) is selected regardless of its text.
-        // When a method carries several same-type attributes, prefer the one whose literal
-        // equals the registry expression, falling back to the first.
-        var literals = GetStepAttributeLiterals(chosen.Method, stepType).ToList();
-        return literals.FirstOrDefault(e => e.Token.ValueText == binding.Expression)
-               ?? literals[0];
+        return SelectAmongMethodLiterals(
+            GetStepAttributeLiterals(chosen.Method, stepType).ToList(), binding, lineMatch: null);
+    }
+
+    /// <summary>
+    /// Picks which of one method's same-type attribute literals belongs to <paramref name="binding"/>,
+    /// refusing (<see cref="AttributeLiteralResolution.Ambiguous"/>) rather than guessing when the
+    /// evidence does not single one out (issue #940). It used to fall back to the method's first
+    /// literal, which rewrote the wrong attribute whenever the registry expression did not equal the
+    /// binding's own literal.
+    /// </summary>
+    /// <remarks>
+    /// <list type="number">
+    /// <item>A single literal is selected regardless of its text (the common case; its text may
+    /// differ only because the buffer was edited since discovery).</item>
+    /// <item>A literal whose text equals the registry expression identifies the binding. When
+    /// <paramref name="lineMatch"/> (the literal on the binding's
+    /// <see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/>) is not among those, the text
+    /// wins: a connector-discovered binding's attribute line is backfilled with the method's FIRST
+    /// matching attribute for every binding on the method
+    /// (<c>BindingImporter.TryGetAttributeSourceLine</c>), so that line cannot tell them apart.</item>
+    /// <item>Otherwise the registry expression may be a projection of the source (a Cucumber
+    /// expression's regex form, where <c>{int}</c> became <c>(.*)</c>), so literals are compared by
+    /// their static text around the parameter slots. The line match stands when it agrees or when
+    /// nothing matches (its literal was edited since discovery); without a line match a single
+    /// match is used; anything else is ambiguous.</item>
+    /// </list>
+    /// </remarks>
+    private AttributeLiteralResolution SelectAmongMethodLiterals(
+        IReadOnlyList<LiteralExpressionSyntax> literals,
+        ProjectStepDefinitionBinding binding,
+        LiteralExpressionSyntax? lineMatch)
+    {
+        if (literals.Count == 0)
+            return AttributeLiteralResolution.NotFound;
+        if (literals.Count == 1)
+            return AttributeLiteralResolution.Found(literals[0]);
+
+        var expression = binding.Expression;
+
+        var exactMatches = literals.Where(l => l.Token.ValueText == expression).ToList();
+        if (exactMatches.Count > 0)
+        {
+            if (lineMatch != null && exactMatches.Contains(lineMatch))
+                return AttributeLiteralResolution.Found(lineMatch);
+            return exactMatches.Count == 1
+                ? AttributeLiteralResolution.Found(exactMatches[0])
+                : ReportAmbiguous(literals, binding);
+        }
+
+        var shapeMatches = literals.Where(l => HasSameStaticText(l.Token.ValueText, expression)).ToList();
+        if (lineMatch != null)
+        {
+            return shapeMatches.Count == 0 || shapeMatches.Contains(lineMatch)
+                ? AttributeLiteralResolution.Found(lineMatch)
+                : ReportAmbiguous(literals, binding);
+        }
+
+        return shapeMatches.Count == 1
+            ? AttributeLiteralResolution.Found(shapeMatches[0])
+            : ReportAmbiguous(literals, binding);
+    }
+
+    private AttributeLiteralResolution ReportAmbiguous(
+        IReadOnlyList<LiteralExpressionSyntax> literals, ProjectStepDefinitionBinding binding)
+    {
+        _logger.LogWarning(
+            $"CSharpAttributeLiteralResolver: cannot tell which of {literals.Count} [{binding.StepDefinitionType}] attributes " +
+            $"on '{binding.Implementation?.Method}' belongs to the binding with expression '{binding.Expression}' " +
+            $"(source literals: {string.Join(", ", literals.Select(l => $"'{l.Token.ValueText}'"))}); refusing to pick one");
+        return AttributeLiteralResolution.Ambiguous;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="sourceExpression"/> and <paramref name="registryExpression"/> have
+    /// the same text around their parameter slots — e.g. <c>the number is {int}</c> and its regex
+    /// projection <c>the number is (.*)</c> — ignoring one leading <c>^</c> and trailing <c>$</c>.
+    /// </summary>
+    private static bool HasSameStaticText(string sourceExpression, string? registryExpression)
+    {
+        if (registryExpression == null)
+            return false;
+
+        return StepExpressionParameters.StaticSegments(TrimAnchors(sourceExpression))
+            .SequenceEqual(StepExpressionParameters.StaticSegments(TrimAnchors(registryExpression)), StringComparer.Ordinal);
+
+        static string TrimAnchors(string s)
+        {
+            if (s.StartsWith("^", StringComparison.Ordinal))
+                s = s.Substring(1);
+            if (s.EndsWith("$", StringComparison.Ordinal) && !s.EndsWith(@"\$", StringComparison.Ordinal))
+                s = s.Substring(0, s.Length - 1);
+            return s;
+        }
     }
 
     /// <summary>
