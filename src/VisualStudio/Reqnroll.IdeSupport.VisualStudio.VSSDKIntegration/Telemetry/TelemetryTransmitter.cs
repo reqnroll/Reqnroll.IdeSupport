@@ -219,7 +219,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         {
             try
             {
-                var exceptionTelemetry = new ExceptionTelemetry(exception) { Timestamp = DateTime.UtcNow };
+                var exceptionTelemetry = CreateSanitizedExceptionTelemetry(exception);
                 foreach (var prop in additionalPropsArray)
                 {
                     exceptionTelemetry.Properties.Add(prop.Key, prop.Value?.ToString() ?? string.Empty);
@@ -241,6 +241,37 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         _debugLog.Record("host", $"(exception) {exception.GetType().Name}",
             BuildExceptionProps(exception, additionalPropsArray),
             enabled: enabled, transmitted: transmitted, error: transmitError);
+    }
+
+    /// <summary>
+    /// Builds the exception telemetry from privacy-safe parts only (#1027), never from the raw exception:
+    /// <c>new ExceptionTelemetry(exception)</c> would serialize the message, the full stack (with source file
+    /// paths) and every inner exception verbatim. Sent instead, matching the LSP server's
+    /// <c>UnhandledException</c> event: the full type name, the message with paths redacted by
+    /// <see cref="TelemetryPathRedactor"/>, and the stack reduced by <see cref="ExceptionStackSanitizer"/>
+    /// (product frames as <c>Namespace.Type.Method:line</c>, everything else <c>[external]</c>; empty when no
+    /// product frame is on it). Inner exceptions are not sent. The local debug-log mirror keeps the raw message.
+    /// </summary>
+    internal static ExceptionTelemetry CreateSanitizedExceptionTelemetry(Exception exception)
+    {
+        var typeName = exception.GetType().FullName ?? exception.GetType().Name;
+        var captured = ExceptionStackSanitizer.Capture(exception);
+        var details = new ExceptionDetailsInfo(
+            id: 0,
+            outerId: 0,
+            typeName: typeName,
+            message: TelemetryPathRedactor.RedactPaths(exception.Message) ?? string.Empty,
+            hasFullStack: false,
+            stack: captured?.Sanitize() ?? string.Empty,
+            parsedStack: Enumerable.Empty<Microsoft.ApplicationInsights.DataContracts.StackFrame>());
+        // From a raw exception the SDK derives the problem id from the type and the throwing method; Source
+        // (the topmost product class) keeps a comparable grouping without naming anything outside the product.
+        var problemId = captured?.Source is { } source ? typeName + " at " + source : typeName;
+        return new ExceptionTelemetry(new[] { details }, severityLevel: null, problemId: problemId,
+            properties: new Dictionary<string, string>(), measurements: new Dictionary<string, double>())
+        {
+            Timestamp = DateTime.UtcNow,
+        };
     }
 
     private static Dictionary<string, object?> BuildExceptionProps(

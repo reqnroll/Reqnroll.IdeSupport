@@ -582,8 +582,13 @@ exceptions, and are deliberately not duplicated here. The VS host already report
 
 ### VS host exception transmission (not an event name)
 The VS host transmits exceptions with Application Insights' `ExceptionTelemetry` (fatal when
-classified so via `TransmitFatalExceptionEvent`); the debug mirror records them as
-`"(exception) {Type}"` with `ExceptionType`/`Message`/`IsFatal` props. `UnhandledException` is
+classified so via `TransmitFatalExceptionEvent`), built from sanitized parts only, never from the raw
+exception (#1027): the full type name, the message path/URL-redacted by `TelemetryPathRedactor` (Common;
+the rules behind the server's `TelemetryScrubber.RedactPaths`), and a stack reduced by
+`ExceptionStackSanitizer` (product frames as `Namespace.Type.Method:line`, everything else `[external]`,
+empty when no product frame is on it; no file paths); inner exceptions are not sent. The problem id is
+`{Type} at {Source}` (simple product class name) or just `{Type}`. The debug mirror records them as
+`"(exception) {Type}"` with `ExceptionType`/`Message`/`IsFatal` props (raw message, local only). `UnhandledException` is
 the server-side counterpart for LSP.Core exceptions.
 
 **Analytics use.** Error-rate by component: exception-type histogram, fatal vs normal split,
@@ -686,10 +691,10 @@ abrupt process death is accepted but detectable via `Sequence`.
   only. Open for the maintainer: (a) accept/reject/narrow the property; (b) the issue discussion
   prefers fuller data (inner exceptions, unscrubbed paths since exceptions come only
   from our code); line numbers on product frames are included, the rest is deliberately *not* done here because the opt-out event stays counts/names-only;
-  (c) the VS host `ExceptionTelemetry` path (`TransmitException`) is untouched — Application
-  Insights already serializes the full exception (stack with file paths and line numbers) there,
-  which is a **different, wider posture than the server path** and should be reconciled with
-  #621/#845; `ExceptionStackSanitizer` (Common, netstandard2.0) is reusable for that.
+  (c) the VS host `ExceptionTelemetry` path (`TransmitException`) previously let Application
+  Insights serialize the full exception (stack with file paths, inner exceptions); since #1027 it sends
+  the same sanitized stack and path-redacted message as the server path (see §6, VS host exception
+  transmission), so whatever #620 decides applies to both.
 - **#621 — client-side exception path for VS Code/Rider** is built (see `UnhandledException` (VS Code and
   Rider client code) in §6): activation, commands and the language-client error callback in VS Code, caught-and-logged
   exceptions in Rider. Stack traces stay out of the client events until #620 is decided (its `StackFrames` proposal currently covers the server path only).
