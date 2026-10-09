@@ -91,4 +91,36 @@ Scenario: Add two numbers
         gherkinDocument.Should().NotBeNull();
         result.Should().BeFalse();
     }
+
+    // Regression tests for issue #955. `_astBuilder` is assigned in Parse() only after the dialect
+    // provider / TokenMatcher are constructed, and the error-recovery paths re-enter the builder
+    // (GetResultOfInvalid -> GetResult) without guarding it. With an unsupported configured default
+    // language the dialect resolution fails at parse time, and the unguarded recovery call used to
+    // let a non-parser exception ("Stack empty" / NullReferenceException) escape
+    // ParseAndCollectErrors; callers swallowed it, so the user saw an empty result instead of a
+    // reported parser error.
+    [Fact]
+    public void Should_not_throw_for_unsupported_default_language()
+    {
+        var sut = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("xx-INVALID-not-a-language"),
+            Substitute.For<ITelemetryService>());
+
+        var act = () => sut.ParseAndCollectErrors("Feature: F\n", new IdeSupportNullLogger(), out _, out _);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Should_report_unsupported_default_language_as_parser_error()
+    {
+        var sut = new IdeSupportGherkinParser(new ReqnrollGherkinDialectProvider("xx-INVALID-not-a-language"),
+            Substitute.For<ITelemetryService>());
+
+        var result = sut.ParseAndCollectErrors("Feature: F\n", new IdeSupportNullLogger(),
+            out var gherkinDocument, out var errors);
+
+        result.Should().BeFalse();
+        gherkinDocument.Should().BeNull();
+        errors.Should().ContainSingle().Which.Should().BeOfType<global::Gherkin.NoSuchLanguageException>();
+    }
 }
