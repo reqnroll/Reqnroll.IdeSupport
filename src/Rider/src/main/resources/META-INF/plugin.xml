@@ -52,20 +52,20 @@ for what is available in each IDE.</p>
 
   <extensions defaultExtensionNs="com.intellij">
     <platform.lsp.serverSupportProvider
-        implementation="com.reqnroll.ide.rider.lsp.ReqnrollLspServerSupportProvider" />
+        implementation="net.reqnroll.idesupport.rider.lsp.ReqnrollLspServerSupportProvider" />
 
     <fileType
         name="Reqnroll Feature"
-        implementationClass="com.reqnroll.ide.rider.ReqnrollFeatureFileType"
+        implementationClass="net.reqnroll.idesupport.rider.ReqnrollFeatureFileType"
         fieldName="INSTANCE"
         language="Gherkin"
         extensions="feature" />
 
-    <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollRunnableProjectsListener" />
-    <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollProjectFilesSync" />
-    <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.project.ReqnrollDocumentActivationSync" />
-    <postStartupActivity implementation="com.reqnroll.ide.rider.lsp.ReqnrollServerLifecycleListener" />
-    <postStartupActivity implementation="com.reqnroll.ide.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollRunnableProjectsListener" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollProjectFilesSync" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.project.ReqnrollDocumentActivationSync" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.ReqnrollServerLifecycleListener" />
+    <postStartupActivity implementation="net.reqnroll.idesupport.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
 
     <!-- The built-in CommentByLineComment action (Ctrl+/) is a MultiCaretCodeInsightAction that
          hardcodes its own handler and gates on LanguageCommenters.forLanguage finding a Commenter
@@ -75,59 +75,59 @@ for what is available in each IDE.</p>
          candidate list specifically for .feature files so ours fires instead. See
          ReqnrollToggleCommentAction's doc comment for why decorating an EditorActionHandler (the
          first approach tried) doesn't work for this particular built-in action. -->
-    <actionPromoter implementation="com.reqnroll.ide.rider.commenting.ReqnrollCommentTogglePromoter" />
+    <actionPromoter implementation="net.reqnroll.idesupport.rider.commenting.ReqnrollCommentTogglePromoter" />
 
     <!-- Rider 2026.2 routes the Go to Declaration shortcuts (F12, Ctrl+B, Ctrl+click) through its
          ReSharper backend first, which knows nothing about Gherkin; ReqnrollGoToDefinitionAction runs
          the frontend action directly for .feature files instead (issue #909). -->
-    <actionPromoter implementation="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionPromoter" />
+    <actionPromoter implementation="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionPromoter" />
 
     <!-- Rider's generic LSP client has no rendering-side consumer for textDocument/codeLens or
          textDocument/inlayHint at all (confirmed by decompiling — only capability-name
          bookkeeping exists in com.intellij.platform.lsp.impl.LspDynamicCapabilities). Both
          requests are called directly (ReqnrollRequestSender) and rendered through IntelliJ's
          own native extension points instead. -->
-    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepUsagesCodeVisionProvider" />
+    <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.codevision.StepUsagesCodeVisionProvider" />
     <!-- Two separate providers for the Scenario-only and consolidated step-hooks counts (issue
          #372 follow-up) — a single provider can't reliably show two entries on the same
          Scenario: line, but two separately registered providers compose side by side
          automatically. See HookLensSupport.kt's doc comment. -->
-    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.HookCodeVisionProvider" />
-    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.codevision.StepHooksCodeVisionProvider" />
+    <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.codevision.HookCodeVisionProvider" />
+    <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.codevision.StepHooksCodeVisionProvider" />
 
     <!-- "▶ Run" lens on each Scenario/Scenario Outline line (design doc §5/§6, issue #262) — same
          PSI-free CodeVisionProvider mechanism as the hook-match lenses above; see
          RunTestCodeVisionProvider's doc comment for why RunLineMarkerContributor (the design doc's
          original recommendation, a PSI-based gutter-icon API) isn't viable for this plugin. -->
-    <codeInsight.codeVisionProvider implementation="com.reqnroll.ide.rider.testrunner.RunTestCodeVisionProvider" />
+    <codeInsight.codeVisionProvider implementation="net.reqnroll.idesupport.rider.testrunner.RunTestCodeVisionProvider" />
 
     <!-- Not a codeInsight.declarativeInlayProvider: that EP dispatches by PSI language, but
          .feature files have no ParserDefinition registered (see
          ReqnrollFeatureInlayHintsController's doc comment for why that silently breaks
          language-scoped routing). Managed manually via Editor.inlayModel instead. -->
-    <editorFactoryListener implementation="com.reqnroll.ide.rider.inlayhints.ReqnrollFeatureInlayHintsController" />
+    <editorFactoryListener implementation="net.reqnroll.idesupport.rider.inlayhints.ReqnrollFeatureInlayHintsController" />
 
     <!-- No generic-client rendering for textDocument/foldingRange either (confirmed via bytecode
          inspection of LspServerDescriptor for issue #162: no lspFoldingRangeSupport opt-in and no
          LspFoldingRangeSupport customization class exist at all, unlike lspGoToDefinitionSupport).
          Same "manage it manually" approach as the inlay hints controller above. -->
-    <editorFactoryListener implementation="com.reqnroll.ide.rider.folding.ReqnrollFeatureFoldingController" />
+    <editorFactoryListener implementation="net.reqnroll.idesupport.rider.folding.ReqnrollFeatureFoldingController" />
 
     <!-- Rider's generic LSP client never requests textDocument/documentLink either (clickable tags, issue #755),
          so the tag links are requested and rendered manually, same approach as folding above. -->
-    <editorFactoryListener implementation="com.reqnroll.ide.rider.taglinks.ReqnrollFeatureTagLinkController" />
+    <editorFactoryListener implementation="net.reqnroll.idesupport.rider.taglinks.ReqnrollFeatureTagLinkController" />
 
     <!-- Rider's generic LSP client has no bridge for textDocument/onTypeFormatting at all (unlike
          whole-document formatting's LspFormattingService — see
          ReqnrollLspServerDescriptor.lspFormattingSupport), so `|`-triggered table-column
          realignment is driven manually, same reasoning as the codeVision/inlay entries above. -->
-    <typedHandler implementation="com.reqnroll.ide.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler" />
+    <typedHandler implementation="net.reqnroll.idesupport.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler" />
 
     <!-- Rider's generic LSP client never starts a completion popup on the server's `@`/space trigger
          characters (it only labels requests with them; IntelliJ's auto-popup fires on identifier
          characters only), so tag and step completion would otherwise wait for the first letter
          (issue #902). -->
-    <typedHandler implementation="com.reqnroll.ide.rider.completion.ReqnrollFeatureCompletionAutoPopupHandler" />
+    <typedHandler implementation="net.reqnroll.idesupport.rider.completion.ReqnrollFeatureCompletionAutoPopupHandler" />
 
     <!-- Not com.intellij.structureViewBuilder (FileType-keyed StructureViewBuilderProvider): that
          EP resolves through a JDK dynamic proxy that throws a ClassCastException casting our
@@ -136,7 +136,7 @@ for what is available in each IDE.</p>
          ReqnrollStructureToolWindowFactory's doc comment, issue #163). A dedicated tool window
          sidesteps that EP — and its proxy — entirely. -->
     <toolWindow id="Reqnroll Structure" anchor="right" secondary="true"
-        factoryClass="com.reqnroll.ide.rider.structureview.ReqnrollStructureToolWindowFactory" />
+        factoryClass="net.reqnroll.idesupport.rider.structureview.ReqnrollStructureToolWindowFactory" />
 
     <!-- Curated, app-level-only console (issue #662) — plugin/LSP-client lifecycle and
          user-invoked-command outcomes, fed by ReqnrollDebugLogger's Info-and-above entries (its
@@ -144,14 +144,14 @@ for what is available in each IDE.</p>
          ReqnrollConsolePanel's doc comment). Not the raw per-server LSP wire trace, which the
          platform's own "Language Servers" tool window already covers for every running server. -->
     <toolWindow id="Reqnroll" anchor="bottom"
-        factoryClass="com.reqnroll.ide.rider.console.ReqnrollConsoleToolWindowFactory" />
+        factoryClass="net.reqnroll.idesupport.rider.console.ReqnrollConsoleToolWindowFactory" />
 
     <!-- Not com.intellij.ui.breadcrumbs.BreadcrumbsProvider (Language-keyed): same ParserDefinition
          gap as everywhere else in this plugin. fileBreadcrumbsCollector is VirtualFile/Document/
          offset-scoped instead — no PSI required (issue #161). See
          ReqnrollFeatureBreadcrumbsCollector's doc comment for why requiresProvider() must be
          overridden to false. -->
-    <fileBreadcrumbsCollector implementation="com.reqnroll.ide.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector" />
+    <fileBreadcrumbsCollector implementation="net.reqnroll.idesupport.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector" />
   </extensions>
 
   <actions>
@@ -159,7 +159,7 @@ for what is available in each IDE.</p>
       <add-to-group group-id="ToolsMenu" anchor="last" />
 
       <action id="Reqnroll.FindUnusedStepDefinitions"
-          class="com.reqnroll.ide.rider.actions.FindUnusedStepDefinitionsAction"
+          class="net.reqnroll.idesupport.rider.actions.FindUnusedStepDefinitionsAction"
           text="Find Unused Step Definitions"
           description="Scans the workspace for step-definition bindings with no matching steps in any feature file" />
 
@@ -167,7 +167,7 @@ for what is available in each IDE.</p>
            ReqnrollFeatureInlayHintsSettings's doc comment for why that page isn't reachable for
            .feature files. This checkable Tools-menu item is the only on/off switch. -->
       <action id="Reqnroll.ToggleFeatureInlayHints"
-          class="com.reqnroll.ide.rider.actions.ReqnrollToggleFeatureInlayHintsAction"
+          class="net.reqnroll.idesupport.rider.actions.ReqnrollToggleFeatureInlayHintsAction"
           text="Show Feature Inlay Hints"
           description="Toggles binding-info inlay hints in .feature file editors" />
 
@@ -175,7 +175,7 @@ for what is available in each IDE.</p>
            csharp) — the action's own update() restricts visibility to .cs files, so it's safe to
            also add it to the editor context menu below without a declarative language condition. -->
       <action id="Reqnroll.FindStepUsages"
-          class="com.reqnroll.ide.rider.actions.FindStepUsagesAction"
+          class="net.reqnroll.idesupport.rider.actions.FindStepUsagesAction"
           text="Find Step Usages"
           description="Finds feature-file steps that use the step-definition binding at the caret">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
@@ -185,7 +185,7 @@ for what is available in each IDE.</p>
            action's own update() restricts visibility to .feature files, so it's safe to also add
            it to the editor context menu below without a declarative language condition. -->
       <action id="Reqnroll.GoToHooks"
-          class="com.reqnroll.ide.rider.actions.GoToHooksAction"
+          class="net.reqnroll.idesupport.rider.actions.GoToHooksAction"
           text="Go to Hooks"
           description="Navigates to the hook bindings applicable at the caret position in a feature file">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
@@ -197,7 +197,7 @@ for what is available in each IDE.</p>
            own update() also restricts visibility to .feature files, matching the other actions
            here, so it's safe to add to the editor context menu unconditionally too. -->
       <action id="Reqnroll.ToggleComment"
-          class="com.reqnroll.ide.rider.commenting.ReqnrollToggleCommentAction"
+          class="net.reqnroll.idesupport.rider.commenting.ReqnrollToggleCommentAction"
           text="Comment/Uncomment"
           description="Toggles # comments on the selected line(s) of a feature file">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
@@ -205,7 +205,7 @@ for what is available in each IDE.</p>
       </action>
 
       <action id="Reqnroll.GoToDefinition"
-          class="com.reqnroll.ide.rider.navigation.ReqnrollGoToDefinitionAction"
+          class="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionAction"
           text="Reqnroll: Go to Step Definition"
           description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
         <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
@@ -223,7 +223,7 @@ for what is available in each IDE.</p>
            language is registered for Gherkin in this plugin, so nothing else (native or
            otherwise) is bound to that shortcut for .feature files. -->
       <action id="Reqnroll.RenameFeatureStep"
-          class="com.reqnroll.ide.rider.actions.RenameFeatureStepAction"
+          class="net.reqnroll.idesupport.rider.actions.RenameFeatureStepAction"
           text="Reqnroll: Rename Step"
           description="Renames a step's expression across the feature file and its C# binding">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
@@ -237,7 +237,7 @@ for what is available in each IDE.</p>
            (matching VS Code's and VS's command naming, issue #293) is what disambiguates it
            from the native "Rename..." entry already in that menu. -->
       <action id="Reqnroll.RenameCSharpStep"
-          class="com.reqnroll.ide.rider.actions.RenameCSharpStepAction"
+          class="net.reqnroll.idesupport.rider.actions.RenameCSharpStepAction"
           text="Reqnroll: Rename Step"
           description="Renames the step-definition binding's expression across this attribute and the feature file">
         <add-to-group group-id="EditorPopupMenu" anchor="last" />
