@@ -360,7 +360,18 @@ public sealed class RenameHandler
         // For a .cs-invoked rename this is the attribute string literal; otherwise it falls back
         // to the registry expression. It anchors both the feature edits (static-segment
         // substitution) and the C# attribute edit.
-        var sourceLiteral = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
+        var literalResolution = await _attributeLiteralResolver.ResolveAttributeLiteralAsync(uri, binding);
+        if (literalResolution.IsAmbiguous)
+        {
+            // Issue #940: the method carries several same-type attributes and none can be
+            // identified as this binding's - refuse rather than rewrite one that may not be it.
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "AttributeLiteralAmbiguous");
+            throw RenameFailedError(
+                "Could not tell which of the several step definition attributes on this method belongs to this step — save the file or rebuild the project so the step definitions are up to date, then rename again",
+                "rename");
+        }
+
+        var sourceLiteral = literalResolution.Literal;
         var sourceExpression = sourceLiteral?.Token.ValueText ?? expression;
 
         // Reconciles concrete step text (VS Code's native F2) against the binding's abstract

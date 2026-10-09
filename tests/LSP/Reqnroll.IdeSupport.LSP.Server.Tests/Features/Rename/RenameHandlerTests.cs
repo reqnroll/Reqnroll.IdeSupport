@@ -611,6 +611,45 @@ public class StepRenameHandlerTests
         edits[0].Range.Start.Line.Should().Be(7, "the selected (beta) attribute literal is on 0-based line 7");
     }
 
+    // ── Issue #940: when a method carries several same-type attributes and none of them can be
+    //    identified as the binding's own (a connector-discovered binding without an attribute
+    //    line whose expression no longer matches the source), the rename must fail with a
+    //    message instead of rewriting the method's first attribute. ─────────────────────────
+
+    [Fact]
+    public async Task Rename_throws_instead_of_rewriting_the_first_attribute_when_the_attribute_literal_is_ambiguous()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"alpha {int}\")]\n" +    // 0-based line 6
+            "        [Given(\"beta {int}\")]\n" +     // 0-based line 7
+            "        public void M(int x) { }\n" +    // 0-based line 8 → 1-based 9
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        // Stale registry expression (the source was edited since the last build): it matches
+        // neither attribute, and there is no attribute line to fall back on.
+        var impl = new ProjectBindingImplementation("Steps.M()", null, new SourceLocation(CsPath, 9, 9));
+        var stale = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex("^gamma (.*)$"), null, impl, "gamma {int}");
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { stale }));
+
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "delta {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("several");
+    }
+
     // ── Issue #671 (R5): a disambiguation session names WHICH binding was picked, so the rename
     //    finds that same binding again even if the candidate list has since been rebuilt — and
     //    refuses to guess when it is gone, rather than silently renaming a different step. ─────
