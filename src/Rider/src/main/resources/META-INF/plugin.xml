@@ -1,12 +1,43 @@
-<idea-plugin>
+<idea-plugin url="https://reqnroll.net">
   <id>net.reqnroll.idesupport</id>
-  <name>Reqnroll Extension for Rider (Preview)</name>
+  <name>Reqnroll Extension (Preview)</name>
   <vendor url="https://github.com/reqnroll/Reqnroll.IdeSupport">Reqnroll</vendor>
 
   <description>
 <![CDATA[
-Preview Reqnroll language support for Rider: Gherkin feature files and C# step-binding
-navigation, backed by the Reqnroll.IdeSupport LSP server.
+<p>Gherkin and <a href="https://reqnroll.net">Reqnroll</a> support for Rider: syntax highlighting, navigation,
+completion, diagnostics and more for your <code>.feature</code> files and the C# step definitions behind them.</p>
+
+<p><b>Preview &mdash; we want your feedback.</b> This is the new, consolidated <b>Reqnroll IDE Support</b>: one shared
+language server with a native extension for <b>Visual Studio</b>, <b>VS Code</b> and <b>Rider</b>, replacing the
+separate legacy extensions. It is in a preview period and we would like to hear how it works for you.</p>
+<ul>
+  <li>If you hit a severe problem, the earlier Reqnroll plugin is still available: you can disable this one and
+      switch back at any time. (Only keep one enabled for the same <code>.feature</code> files.)</li>
+  <li>Please report bugs and ideas on <a href="https://github.com/reqnroll/Reqnroll.IdeSupport/issues">GitHub Issues</a>.
+      Include your Rider and plugin versions and, if you can, the log output.</li>
+  <li>For how to locate the logs and turn up the log level, see
+      <a href="https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/site/ide-support/troubleshooting.md#where-are-the-logs-and-how-do-i-change-the-log-level">Troubleshooting</a>.</li>
+</ul>
+
+<p><b>Features</b></p>
+<ul>
+  <li>Syntax highlighting for Gherkin feature files</li>
+  <li>Errors and warnings for Gherkin syntax and for steps that have no matching step definition (or more than one)</li>
+  <li>Keyword, step and tag completion</li>
+  <li>Document and table formatting</li>
+  <li>Comment / uncomment</li>
+  <li>Code folding and document structure view</li>
+  <li>Go to step definition and hook navigation</li>
+  <li>Step definition usages and unused step definitions</li>
+  <li>Define missing steps from a quick fix</li>
+  <li>Rename a step across feature files and step definitions</li>
+  <li>Code Vision with step usage counts and hook matches, and a Run action on scenarios</li>
+  <li>Inlay hints showing the step definition a step is bound to</li>
+</ul>
+
+<p>See the <a href="https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/site/ide-support/feature-overview.md">feature overview</a>
+for what is available in each IDE.</p>
 ]]>
   </description>
 
