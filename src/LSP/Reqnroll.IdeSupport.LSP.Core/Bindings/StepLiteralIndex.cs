@@ -179,6 +179,7 @@ public sealed class StepLiteralIndex
         var segments = new List<string>();
         var current = new StringBuilder();
         var depth = 0;
+        var inCharClass = false;
         var i = 0;
 
         void Flush()
@@ -203,7 +204,28 @@ public sealed class StepLiteralIndex
                 continue;
             }
 
-            if (c is '(' or '[' or '{')
+            if (inCharClass)
+            {
+                // Inside a character class nothing contributes a literal and nothing affects
+                // nesting depth: a ')' or '(' here is a class member (or a literal), not a group
+                // delimiter. Skip until the closing ']' (issue #951).
+                if (c == ']')
+                    inCharClass = false;
+                i++;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                // A character class is not a nesting construct -- enter class mode so the stray
+                // brackets inside it can't change depth (issue #951).
+                Flush();
+                inCharClass = true;
+                i++;
+                continue;
+            }
+
+            if (c is '(' or '{')
             {
                 Flush();
                 depth++;
@@ -211,7 +233,7 @@ public sealed class StepLiteralIndex
                 continue;
             }
 
-            if (c is ')' or ']' or '}')
+            if (c is ')' or '}')
             {
                 if (depth > 0)
                     depth--;
