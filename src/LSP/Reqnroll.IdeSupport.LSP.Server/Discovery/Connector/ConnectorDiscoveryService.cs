@@ -78,11 +78,12 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// Runs discovery for <paramref name="scope"/>.
     /// </summary>
     /// <returns>
-    /// A new <see cref="ProjectBindingRegistry"/> and its content hash when discovery
-    /// succeeds.  Returns (<paramref name="lastGood"/>, <paramref name="lastHash"/>) unchanged
-    /// when the assembly is missing, unchanged, or the connector fails.
+    /// <see cref="ConnectorDiscoveryStatus.Discovered"/> with a new <see cref="ProjectBindingRegistry"/>
+    /// and its content hash when discovery succeeds. Otherwise <paramref name="lastGood"/> and
+    /// <paramref name="lastHash"/> unchanged, with a status saying why (see
+    /// <see cref="IConnectorDiscoveryService.RunDiscovery"/>).
     /// </returns>
-    public (ProjectBindingRegistry Registry, string Hash) RunDiscovery(
+    public ConnectorDiscoveryOutcome RunDiscovery(
         IProjectScope scope,
         ProjectBindingRegistry lastGood,
         string lastHash,
@@ -96,13 +97,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         if (string.IsNullOrEmpty(assemblyPath))
         {
             _logger.LogVerbose($"[{scope.ProjectName}] OutputAssemblyPath not set; skipping discovery.");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         if (!_fileSystem.File.Exists(assemblyPath))
         {
             _logger.LogInfo($"[{scope.ProjectName}] Output assembly not found (project not yet built?): {assemblyPath}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         // Gate the connector on the project actually being a Reqnroll *test* project -- one that
@@ -132,14 +133,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll test project; skipping binding discovery.");
             }
 
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         var currentHash = ComputeHash(_fileSystem, assemblyPath);
         if (currentHash == lastHash)
         {
             _logger.LogVerbose($"[{scope.ProjectName}] Assembly unchanged (hash match); skipping discovery.");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Unchanged(lastGood, lastHash);
         }
 
         ct.ThrowIfCancellationRequested();
@@ -158,7 +159,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {ex.Message}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
         }
         sw.Stop();
 
@@ -173,14 +174,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         {
             _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
                 $"{ConnectorPidSuffix(result)}: {result.ErrorMessage}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
         }
 
         var registry = BuildRegistry(scope, result);
         _logger.LogInfo(
             $"[{scope.ProjectName}] Discovery complete in {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
             $"{ConnectorPidSuffix(result)}: {registry.StepDefinitions.Length} step definition(s), {registry.Hooks.Length} hook(s).");
-        return (registry, currentHash);
+        return ConnectorDiscoveryOutcome.Discovered(registry, currentHash);
     }
 
     // ── Registry building ─────────────────────────────────────────────────────
