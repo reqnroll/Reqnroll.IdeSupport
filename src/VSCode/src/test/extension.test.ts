@@ -38,6 +38,7 @@ import './util/selectionUtils.test';
 import './util/navigationUtils.test';
 import './util/stepDefinitionItems.test';
 import './grammar.test';
+import './languageConfiguration.test';
 import './logging/logPaths.test';
 import './logging/generalFileLog.test';
 import './logging/appNotify.test';
