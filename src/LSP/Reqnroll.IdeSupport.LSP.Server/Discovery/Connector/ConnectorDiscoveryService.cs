@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Discovery;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
@@ -203,13 +204,16 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // path is inside this project's folder and did not resolve is therefore stale and is left
         // out. Paths outside the project folder (a NuGet package, a project reference, a container
         // or CI build) never had local source to begin with, so they are not stale and are kept.
+        // Issue #933: a shared project's files sit beside the project folder, not in it, so the
+        // workspace folder containing the project is owned too (see GetOwnedSourceRoots).
+        var ownedRoots = GetOwnedSourceRoots(scope);
         var staleSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var staleBindingCount = 0;
         bool IsStale(string sourceLocation)
         {
             var recordedPath = importer.GetRecordedSourcePath(sourceLocation);
             if (recordedPath == null
-                || !PathUtils.IsUnderFolder(recordedPath, scope.ProjectFolder)
+                || !ownedRoots.Any(root => PathUtils.IsUnderFolder(recordedPath, root))
                 || importer.ResolveSourceFilePath(sourceLocation) != null)
                 return false;
 
@@ -287,7 +291,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             .Where(h => h is not null)
             .ToList();
 
-        ReportStaleBindings(scope, staleBindingCount, staleSourcePaths);
+        ReportStaleBindings(scope, ownedRoots, staleBindingCount, staleSourcePaths);
         ReportUnresolvedSourceFiles(scope, importer, staleSourcePaths);
 
         // Use a stable hash of the output path as the project hash so the registry
@@ -354,10 +358,45 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     }
 
     /// <summary>
-    /// Reports, once per discovery run, the compiled bindings left out because their source file
-    /// under the project folder no longer exists (issue #930).
+    /// Returns the folders whose missing source files mark a compiled binding as stale: the project
+    /// folder (issue #930) and, when it contains the project folder, the workspace folder the client
+    /// reported the project under (issue #933).
     /// </summary>
-    private void ReportStaleBindings(IProjectScope scope, int staleBindingCount, ISet<string> staleSourcePaths)
+    /// <remarks>
+    /// The workspace folder is what covers a shared project (<c>.projitems</c>) beside the project
+    /// folder, e.g. <c>Quickstart\SharedProject1\Class1.cs</c> next to
+    /// <c>Quickstart\ReqnrollQuickstart.Specs\</c>. It is only used when it contains the project
+    /// folder (VS Code falls back to its first folder when none does, and to the project file when
+    /// none is open) and is not a file-system root, which would claim every path on the drive,
+    /// including a CI agent's. A path outside every owned root is kept, as before. The membership
+    /// index cannot answer this instead: a deleted file is no longer in it, and after a branch
+    /// switch the shared project itself is often gone.
+    /// </remarks>
+    private static IReadOnlyList<string> GetOwnedSourceRoots(IProjectScope scope)
+    {
+        var workspaceFolder = (scope as LspReqnrollProject)?.WorkspaceFolder;
+        if (string.IsNullOrEmpty(workspaceFolder)
+            || IsFileSystemRoot(workspaceFolder)
+            || PathUtils.IsSamePath(workspaceFolder, scope.ProjectFolder)
+            || !PathUtils.IsUnderFolder(scope.ProjectFolder, workspaceFolder))
+            return [scope.ProjectFolder];
+
+        return [scope.ProjectFolder, workspaceFolder];
+    }
+
+    private static bool IsFileSystemRoot(string folder)
+    {
+        // "C:\", "C:", "/" and "\\" all trim to something with no separator left.
+        var trimmed = folder.TrimEnd('\\', '/');
+        return trimmed.IndexOfAny(['\\', '/']) < 0;
+    }
+
+    /// <summary>
+    /// Reports, once per discovery run, the compiled bindings left out because their source file
+    /// under an owned folder no longer exists (issues #930, #933).
+    /// </summary>
+    private void ReportStaleBindings(
+        IProjectScope scope, IReadOnlyList<string> ownedRoots, int staleBindingCount, ISet<string> staleSourcePaths)
     {
         if (staleBindingCount == 0)
             return;
@@ -368,7 +407,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // output pane -- the server's app logger has no window/logMessage sink.
         _logger.LogWarning(
             $"[{scope.ProjectName}] Ignored {staleBindingCount} binding(s) in the compiled assembly whose " +
-            $"source file no longer exists under '{scope.ProjectFolder}' ({staleSourcePaths.Count} file(s), " +
+            $"source file no longer exists under '{string.Join("' or '", ownedRoots)}' ({staleSourcePaths.Count} file(s), " +
             $"e.g. '{staleSourcePaths.First()}'). The assembly is older than the working tree, for example " +
             "after a branch switch; rebuild the project to refresh it.");
 
