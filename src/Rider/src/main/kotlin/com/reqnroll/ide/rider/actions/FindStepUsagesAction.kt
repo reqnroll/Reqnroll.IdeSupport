@@ -31,8 +31,8 @@ class FindStepUsagesAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
         val uri = localPathToLspUri(file.path)
-        val position = editor.caretModel.logicalPosition
+        val position = lspCaretPosition(editor)
 
-        FindStepUsagesRunner.runAndShow(project, uri, position.line, position.column)
+        FindStepUsagesRunner.runAndShow(project, uri, position.line, position.character)
     }
 }
