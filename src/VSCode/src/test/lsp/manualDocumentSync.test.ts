@@ -130,6 +130,21 @@ suite('manualDocumentSync', () => {
     test('false for a path merely containing "cs" without the extension', () => {
       assert.strictEqual(isCSharpDocument(fakeDocument('file:///Discs.txt')), false);
     });
+
+    // Issue #1006: only real on-disk files may be synced; virtual documents of other schemes
+    // (git: diff/HEAD views, untitled:) must not be treated as workspace .cs files, or a HEAD
+    // version could override the working file's live text on the server.
+    test('false for a .cs path with the git: scheme (diff view / HEAD version)', () => {
+      assert.strictEqual(isCSharpDocument(fakeDocument('git:///Steps.cs')), false);
+    });
+
+    test('false for a .cs path with the untitled: scheme', () => {
+      assert.strictEqual(isCSharpDocument(fakeDocument('untitled:Untitled-1.cs')), false);
+    });
+
+    test('true for a .cs path with the file scheme survived alongside the scheme check', () => {
+      assert.strictEqual(isCSharpDocument(fakeDocument('file:///Steps.cs')), true);
+    });
   });
 
   suite('createManualSyncMiddleware', () => {
@@ -358,6 +373,19 @@ suite('manualDocumentSync', () => {
         sync.dispose();
 
         assert.strictEqual(ws.disposedCount(), 4);
+      });
+    });
+
+    test('does not sync a .cs document whose scheme is not file (issue #1006)', () => {
+      withStubbedWorkspace([], (ws) => {
+        const { client, notifications } = fakeClient();
+        const sync = new ManualDocumentSync(client, isCSharpDocument);
+
+        ws.fireOpen(fakeDocument('git:///WorkingFile.cs'));
+        ws.fireOpen(fakeDocument('untitled:Untitled-1.cs'));
+        sync.dispose();
+
+        assert.strictEqual(notifications.length, 0);
       });
     });
 
