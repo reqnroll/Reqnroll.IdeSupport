@@ -460,7 +460,7 @@ IDEs expose the same install -> upgrade funnel and daily-use retention signal di
 
 Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
 `reqnroll.telemetry.lifecycle` (`src/VSCode/src/extensionLifecycleTelemetry.ts`); Rider keeps the same
-three values in the application-level `PropertiesComponent` under `com.reqnroll.idesupport.telemetry.*`
+three values in the application-level `PropertiesComponent` under `net.reqnroll.idesupport.telemetry.*`
 (`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
 `WelcomeService`, and unit-tested. Because state is new, installs that predate this release report
 `Extension installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when

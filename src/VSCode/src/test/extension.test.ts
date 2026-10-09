@@ -80,7 +80,7 @@ async function waitForClientRunning(client: LanguageClient, timeoutMs = 10_000):
 }
 
 suite('Reqnroll Extension Tests', () => {
-  const extensionId = 'reqnroll.reqnroll-ide-support';
+  const extensionId = 'Reqnroll.reqnroll-ide-support';
 
   test('Extension should be present', () => {
     const ext = vscode.extensions.getExtension(extensionId);

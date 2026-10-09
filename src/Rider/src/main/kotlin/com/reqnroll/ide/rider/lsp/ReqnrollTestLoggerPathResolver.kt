@@ -15,7 +15,7 @@ import java.nio.file.Path
  * every platform.
  */
 object ReqnrollTestLoggerPathResolver {
-    private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
+    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
 
     const val ASSEMBLY_FILE_NAME = "Reqnroll.IdeSupport.TestLogger.dll"
 

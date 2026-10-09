@@ -12,7 +12,7 @@ import java.nio.file.Path
 object ReqnrollServerPathResolver {
     // Marketplace plugin ID (gradle.properties' `pluginId`) — deliberately not
     // "com.reqnroll.ide.rider": the Plugin Verifier rejects IDs containing "rider".
-    private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
+    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
 
     /** Locates the bundled server executable for the current OS/arch under this plugin's own install directory; throws with a descriptive message if it isn't there. */
     fun resolve(): Path {

@@ -515,7 +515,7 @@ A TypeScript extension under `src/VSCode/` using `vscode-languageclient` v10. Ne
 
 | Property | Value | Notes |
 |----------|-------|-------|
-| Publisher / ID | `reqnroll.reqnroll-ide-support` | VS Code Marketplace ID |
+| Publisher / ID | `Reqnroll.reqnroll-ide-support` | VS Code Marketplace ID |
 | Activation events | `onLanguage:gherkin`, `onLanguage:plaintext`, `workspaceContains:**/*.feature` | Server activates when a `.feature` file is opened, or earlier when the workspace is detected to contain `.feature` files |
 | Language registration | ID: `gherkin`, extensions: `.feature` | Associates `.feature` with the language server |
 | Default formatter | Reqnroll extension | `editor.defaultFormatter` for `gherkin` language |

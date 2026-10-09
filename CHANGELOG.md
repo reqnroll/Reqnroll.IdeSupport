@@ -2,6 +2,9 @@
 
 ## Improvements:
 
+* **Preview installs must be replaced:** the extensions now have consolidated package identities, so VS, VS Code and Rider treat them as new packages rather than upgrades — uninstall the earlier preview build first. Package IDs are now `Reqnroll.IdeSupport.VisualStudio` (VS), `Reqnroll.reqnroll-ide-support` (VS Code, publisher now `Reqnroll`) and `net.reqnroll.idesupport` (Rider); Rider's "Extension installed" telemetry state resets with the new ID (VS, VS Code, Rider) - see #914
+* Versions now follow `<year>.<minor>.<build number>` (e.g. `2026.1.345`), hand-bumped via `ReqnrollMainVersion` in `build/Version.props` (VS, VS Code, Rider, LSP server) - see #912
+* CI artifacts and package files are named consistently: `reqnroll-ide-support-vs|vscode|rider` artifacts containing `Reqnroll.IdeSupport.VisualStudio|VSCode|Rider.<version>` packages (CI) - see #911
 * In Rider, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (Rider) - see #921
 * In Visual Studio, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, and hovering one shows its target and how to follow it (VS) - see #921
 * In VS Code, tags that are links (matching a `tagLinks` pattern) are now permanently underlined in the link colour instead of only while Ctrl is held, so it is visible which tags are clickable (VS Code) - see #921

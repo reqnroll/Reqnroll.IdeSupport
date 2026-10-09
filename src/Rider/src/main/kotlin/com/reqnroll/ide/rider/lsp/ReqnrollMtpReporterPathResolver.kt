@@ -15,7 +15,7 @@ import java.nio.file.Path
  * `obj/<Project>.csproj.reqnroll-ide.targets` stub as an `Import` (see `MtpProjectStubs`).
  */
 object ReqnrollMtpReporterPathResolver {
-    private val PLUGIN_ID = PluginId.getId("com.reqnroll.idesupport")
+    private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
 
     const val BUNDLE_TARGETS_FILE_NAME = "Reqnroll.IdeSupport.TestReporter.MTP.targets"
     const val SOURCE_DIRECTORY_NAME = "ReporterSource"

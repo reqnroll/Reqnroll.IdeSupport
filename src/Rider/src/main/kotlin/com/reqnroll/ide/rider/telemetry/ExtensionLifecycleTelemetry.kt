@@ -53,9 +53,9 @@ class ExtensionLifecycleTelemetry(
     }
 
     companion object {
-        internal const val INSTALLED_VERSION_KEY = "com.reqnroll.idesupport.telemetry.installedVersion"
-        internal const val LAST_USED_DATE_KEY = "com.reqnroll.idesupport.telemetry.lastUsedDate"
-        internal const val USAGE_DAYS_KEY = "com.reqnroll.idesupport.telemetry.usageDays"
+        internal const val INSTALLED_VERSION_KEY = "net.reqnroll.idesupport.telemetry.installedVersion"
+        internal const val LAST_USED_DATE_KEY = "net.reqnroll.idesupport.telemetry.lastUsedDate"
+        internal const val USAGE_DAYS_KEY = "net.reqnroll.idesupport.telemetry.usageDays"
 
         /** Mirrors `TelemetryEvents.DaysOfUsageEventNameFormat` (`"{0} day usage"`). */
         internal fun daysOfUsageEventName(usageDays: Int) = "$usageDays day usage"
@@ -81,7 +81,7 @@ class ReqnrollExtensionLifecycleActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
         if (!reported.compareAndSet(false, true)) return
         try {
-            val version = PluginManagerCore.getPlugin(PluginId.getId("com.reqnroll.idesupport"))?.version ?: return
+            val version = PluginManagerCore.getPlugin(PluginId.getId("net.reqnroll.idesupport"))?.version ?: return
             val properties = PropertiesComponent.getInstance()
             val store = object : LifecycleStore {
                 override fun get(key: String): String? = properties.getValue(key)
