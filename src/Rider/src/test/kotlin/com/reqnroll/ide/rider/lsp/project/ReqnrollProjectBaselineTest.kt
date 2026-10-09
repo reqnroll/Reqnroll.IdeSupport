@@ -48,6 +48,14 @@ class ReqnrollProjectBaselineTest {
     }
 
     @Test
+    fun `isBuildOutput accepts slash event paths against a backslash Windows folder (issue 978)`() {
+        assertTrue(ReqnrollProjectBaseline.isBuildOutput("C:/proj/obj/Debug/x.cs", "C:\\proj"))
+        assertTrue(ReqnrollProjectBaseline.isBuildOutput("C:/proj/bin", "C:\\proj"))
+        assertFalse(ReqnrollProjectBaseline.isBuildOutput("C:/proj/Steps.cs", "C:\\proj"))
+        assertFalse(ReqnrollProjectBaseline.isBuildOutput("C:/proj/objects/A.cs", "C:\\proj"))
+    }
+
+    @Test
     fun `isBuildOutput ignores nested bin folders and look-alike names`() {
         assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}Features${sep}bin${sep}A.feature", folder))
         assertFalse(ReqnrollProjectBaseline.isBuildOutput("$folder${sep}objects${sep}A.cs", folder))
