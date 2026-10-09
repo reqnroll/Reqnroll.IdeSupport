@@ -349,11 +349,9 @@ public sealed class RenameHandler
         var expression = binding.Expression ?? string.Empty;
 
         // ── 2. Resolve feature step locations ──────────────────────────────────
-        var owners = _scopeManager.ResolveOwners(uri);
-        var projectFilter = owners.Count > 0
-            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
-            : null;
-
+        // Same widened scope as CodeLens / Find Step Usages / References (issue #936): a .cs binding
+        // is also used by feature files in projects that reference the binding's project.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
         var usages = _matchService.FindUsages(bindingLocation, projectFilter);
 
         // Resolve the live source expression once (preserves the original parameter syntax).
