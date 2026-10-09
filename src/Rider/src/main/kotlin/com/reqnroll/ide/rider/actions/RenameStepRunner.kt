@@ -158,8 +158,18 @@ object RenameStepRunner {
                 }
                 return@invokeLater
             }
-            RenameWorkspaceEditApplier.apply(project, edit)
-            reportRenameApplied(project, uri, applied = true)
+            val applied = RenameWorkspaceEditApplier.apply(project, edit)
+            reportRenameApplied(project, uri, applied = applied)
+            if (!applied) {
+                // Already on the EDT here (this runs inside invokeLater), so the modal can be shown
+                // directly -- unlike the background-thread call sites, which go through showOnEdt.
+                ReqnrollNotify.error(
+                    project,
+                    "The rename was not applied: a target file is read-only, or writing it failed. " +
+                        "Check the files' permissions and try again.",
+                    "Rename Step",
+                )
+            }
         }
     }
 
