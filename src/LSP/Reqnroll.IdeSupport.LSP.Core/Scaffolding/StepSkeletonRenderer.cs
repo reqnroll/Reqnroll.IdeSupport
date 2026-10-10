@@ -2,6 +2,7 @@
 
 using System.Text;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
 
@@ -82,8 +83,8 @@ public static class StepSkeletonRenderer
 
         var keyword   = BlockToKeyword(descriptor.Block);
         var attrValue = useCucumber
-            ? $"(\"{descriptor.ExpressionText}\")"
-            : $"(@\"{descriptor.ExpressionText}\")";
+            ? $"({CSharpStringLiteral.Format(descriptor.ExpressionText, isVerbatim: false)})"
+            : $"({CSharpStringLiteral.Format(descriptor.ExpressionText, isVerbatim: true)})";
 
         var paramList = string.Join(", ", descriptor.Parameters.Select(p => $"{p.Type} {p.Name}"));
         var returnType = isAsync ? "async Task" : "void";
