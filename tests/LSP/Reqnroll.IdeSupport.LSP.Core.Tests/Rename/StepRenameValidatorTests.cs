@@ -168,6 +168,93 @@ public class StepRenameValidatorTests
         result.Scope.Should().Be("rename");
     }
 
+    // ── Rule 3: only newly-introduced operators are rejected (issue #1126) ─────
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_original_anchors_passes()
+    {
+        // Visual Studio's "Rename Step" command seeds its prompt with the binding's own
+        // expression and submits the edited text verbatim, so a regex binding's own ^...$
+        // anchors arrive in newName without the user having introduced anything. A wording
+        // change that keeps them must be accepted.
+        var result = StepRenameValidator.ValidateNewName("^I have (.*) cukes$", "^I have (.*) gourds$");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_trailing_anchor_only_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName("I have (.*) cukes$", "I have (.*) gourds$");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_original_quantifier_passes()
+    {
+        // The optional-character quantifier in "colou?r" is part of the original expression, not
+        // something the rename introduces, so it must survive a wording change.
+        var result = StepRenameValidator.ValidateNewName("^colou?r (.*) step$", "^colou?r (.*) action$");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_original_operators_with_escaped_digit_group_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName(@"^I have (\d+) cukes$", @"^I have (\d+) gourds$");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_adding_a_second_anchor_still_fails()
+    {
+        // Adding one more of an operator the original already had is still an introduction.
+        var result = StepRenameValidator.ValidateNewName("^I have (.*) cukes$", "^^I have (.*) cukes$");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_adding_an_operator_absent_from_the_original_still_fails()
+    {
+        var result = StepRenameValidator.ValidateNewName("^I have (.*) cukes$", "^I have (.*) cukes?$");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_dropping_an_anchor_passes()
+    {
+        // Removal was never policed (an expression without operators trivially passed the old
+        // rule too) - this fix must not start rejecting it.
+        var result = StepRenameValidator.ValidateNewName("^I have (.*) cukes$", "I have (.*) gourds$");
+        result.Should().BeNull();
+    }
+
+    // ── Real-world repros from the Experimental-instance logs (issue #1126) ────
+    // The binding is `[Then(@"the basket price should be (\d+(\.\d+)?)")]` in a Quickstart
+    // project; Rename Step seeds the prompt with the source literal and submits the edited text
+    // verbatim. Both the anchored and the unanchored form were rejected.
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_nested_capture_groups_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"the basket price should be (\d+(\.\d+)?)",
+            @"the price should be (\d+(\.\d+)?)");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_keeps_anchors_and_nested_capture_groups_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"^the basket price should be \$(\d+(\.\d+)?)$",
+            @"^the price should be \$(\d+(\.\d+)?)$");
+        result.Should().BeNull();
+    }
+
     // ── ValidateProjectState ────────────────────────────────────────────────────
 
     [Fact]
