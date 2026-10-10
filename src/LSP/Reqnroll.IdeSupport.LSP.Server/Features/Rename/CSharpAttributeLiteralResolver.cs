@@ -94,7 +94,17 @@ internal sealed class CSharpAttributeLiteralResolver
         var startPos = lineSpan.StartLinePosition;
         var endPos   = lineSpan.EndLinePosition;
 
-        _logger.LogVerbose($"CSharpAttributeLiteralResolver: BuildEdit — returning edit at ({startPos.Line},{startPos.Character})-({endPos.Line},{endPos.Character}): '{finalText}'");
+        // Re-emit the literal in the form it was written in (issue #935): a verbatim literal
+        // keeps its @" prefix (and quotes inside are doubled), a regular literal re-escapes
+        // backslashes and quotes. Emitting a bare "..." over the token's full span (which
+        // includes the @ prefix) dropped the prefix - turning @"^I have (\\d+) cukes$" into an
+        // invalid-escape compile error - and emitted escaped quotes unescaped, corrupting
+        // literals like "click \"OK\"". The replaced span is the whole token, so the emitted
+        // text must include the @ prefix itself.
+        var isVerbatim = literalArgument.Token.Text.StartsWith("@\"", StringComparison.Ordinal);
+        var newText = CSharpStringLiteral.Format(finalText, isVerbatim);
+
+        _logger.LogVerbose($"CSharpAttributeLiteralResolver: BuildEdit — returning edit at ({startPos.Line},{startPos.Character})-({endPos.Line},{endPos.Character}): '{newText}'");
 
         return new TextEdit
         {
@@ -103,7 +113,7 @@ internal sealed class CSharpAttributeLiteralResolver
                 Start = new Position(startPos.Line, startPos.Character),
                 End   = new Position(endPos.Line, endPos.Character)
             },
-            NewText = "\"" + finalText + "\""
+            NewText = newText
         };
     }
 

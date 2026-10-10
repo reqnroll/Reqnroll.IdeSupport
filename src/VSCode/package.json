@@ -1,15 +1,26 @@
 {
   "name": "reqnroll-ide-support",
   "displayName": "Reqnroll Extension for VS Code (Preview)",
-  "description": "[Preview] Gherkin language support for Reqnroll — syntax highlighting, diagnostics, step navigation, completion, and more via the Reqnroll LSP server.",
+  "description": "[Preview] Support for Reqnroll & Gherkin — syntax highlighting, navigation, completion, and more.",
   "version": "0.1.0",
-  "publisher": "reqnroll",
+  "publisher": "Reqnroll",
   "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#c4d600",
+    "theme": "light"
+  },
+  "homepage": "https://reqnroll.net",
+  "bugs": {
+    "url": "https://github.com/reqnroll/Reqnroll.IdeSupport/issues"
+  },
   "engines": {
     "vscode": "^1.96.0"
   },
   "categories": [
     "Programming Languages",
+    "Testing",
+    "Formatters",
     "Linters",
     "Snippets"
   ],
@@ -23,16 +34,14 @@
   ],
   "activationEvents": [
     "onLanguage:plaintext",
+    "onLanguage:reqnroll",
     "workspaceContains:**/*.feature"
   ],
   "contributes": {
     "languages": [
       {
-        "id": "gherkin",
+        "id": "reqnroll",
         "aliases": [
-          "Gherkin",
-          "Feature",
-          "SpecFlow",
           "Reqnroll"
         ],
         "extensions": [
@@ -43,8 +52,8 @@
     ],
     "grammars": [
       {
-        "language": "gherkin",
-        "scopeName": "text.gherkin.feature",
+        "language": "reqnroll",
+        "scopeName": "text.reqnroll.feature",
         "path": "./syntaxes/gherkin.tmLanguage.json"
       }
     ],
@@ -95,29 +104,29 @@
         "key": "ctrl+/",
         "mac": "cmd+/",
         "command": "reqnroll.toggleComment",
-        "when": "editorTextFocus && editorLangId == gherkin"
+        "when": "editorTextFocus && editorLangId == reqnroll"
       },
       {
         "key": "f12",
         "command": "reqnroll.goToStepDefinition",
-        "when": "editorTextFocus && editorLangId == gherkin"
+        "when": "editorTextFocus && editorLangId == reqnroll"
       },
       {
         "key": "f2",
         "command": "reqnroll.renameStepOrSymbol",
-        "when": "editorTextFocus && (editorLangId == gherkin || editorLangId == csharp)"
+        "when": "editorTextFocus && (editorLangId == reqnroll || editorLangId == csharp)"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "reqnroll.toggleComment",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == reqnroll",
           "group": "1_modification"
         },
         {
           "command": "reqnroll.goToHooks",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == reqnroll",
           "group": "navigation@90"
         },
         {
@@ -127,23 +136,23 @@
         },
         {
           "command": "reqnroll.defineSteps",
-          "when": "editorLangId == gherkin",
+          "when": "editorLangId == reqnroll",
           "group": "1_modification@10"
         },
         {
           "command": "reqnroll.renameStep",
-          "when": "editorLangId == gherkin || editorLangId == csharp",
+          "when": "editorLangId == reqnroll || editorLangId == csharp",
           "group": "1_modification@20"
         }
       ],
       "commandPalette": [
         {
           "command": "reqnroll.toggleComment",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == reqnroll"
         },
         {
           "command": "reqnroll.goToHooks",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == reqnroll"
         },
         {
           "command": "reqnroll.findStepUsages",
@@ -159,11 +168,11 @@
         },
         {
           "command": "reqnroll.defineSteps",
-          "when": "editorLangId == gherkin"
+          "when": "editorLangId == reqnroll"
         },
         {
           "command": "reqnroll.renameStep",
-          "when": "editorLangId == gherkin || editorLangId == csharp"
+          "when": "editorLangId == reqnroll || editorLangId == csharp"
         },
         {
           "command": "reqnroll.renameStepOrSymbol",
@@ -182,7 +191,7 @@
             "verbose"
           ],
           "default": "off",
-          "description": "Traces the communication between VS Code and the Reqnroll LSP server, and also controls the server's own log verbosity ('off' -> Warning, 'messages' -> Info, 'verbose' -> Verbose). When set to 'verbose', a log file is also written to the Reqnroll log directory. Requires a window reload to take effect on the running server."
+          "description": "Turns on troubleshooting output for the Reqnroll extension and its language server. Use \"messages\" or \"verbose\" when you are asked for logs to report a problem; \"verbose\" also saves a log file to the Reqnroll log folder. Reload the window after changing it."
         },
         "reqnroll.protocolLogLevel": {
           "type": "string",
@@ -194,24 +203,24 @@
             "Verbose"
           ],
           "default": "Warning",
-          "description": "Controls the verbosity of the Reqnroll LSP server's own internal protocol diagnostics (OmniSharp request dispatch, DryIoc, JSON-RPC plumbing), passed to the server as --protocol-log-level and written to both window/logMessage and the dedicated reqnroll-vscode-protocol-*.log file. Independent of reqnroll.trace.server, which drives the server's --log-level. Requires a window reload to take effect on the running server."
+          "description": "How much low-level technical detail the Reqnroll language server writes to its protocol log. Leave it at Warning unless you are asked for more detail when reporting a problem. Reload the window after changing it."
         },
         "reqnroll.testOutcomes.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Opt-in (LSP-server outcome pipeline, #700/#702). C# Dev Kit owns test discovery/execution in VS Code, not this extension (issue #504) -- when enabled, Reqnroll registers a run with the LSP server and merges the bundled VSTest logger into the 'dotnet.unitTests.runSettingsPath' setting C# Dev Kit already reads, so per-row Scenario Outline outcomes and failed-step detail become available without changing how you run tests. Off by default because this writes to a setting your workspace may already have its own value for; your existing runsettings file's content is preserved and merged, never replaced. Requires a window reload to take effect."
+          "description": "Show the result of each example of a Scenario Outline, and the details of the failed step, after you run tests with C# Dev Kit. When turned on, Reqnroll adds its test logger to the runsettings file named by the dotnet.unitTests.runSettingsPath setting (provided by the C# extension and used by C# Dev Kit); your existing runsettings content is kept. It has no effect if that setting is not available. Off by default because it changes that setting. Reload the window after changing it."
         }
       }
     },
     "configurationDefaults": {
-      "[gherkin]": {
-        "editor.defaultFormatter": "reqnroll.reqnroll-ide-support",
+      "[reqnroll]": {
+        "editor.defaultFormatter": "Reqnroll.reqnroll-ide-support",
         "editor.formatOnType": true
       }
     },
     "semanticTokenScopes": [
       {
-        "language": "gherkin",
+        "language": "reqnroll",
         "scopes": {
           "reqnroll.keyword": [
             "keyword.control.gherkin"
@@ -312,7 +321,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes.git"
+    "url": "https://github.com/reqnroll/Reqnroll.IdeSupport.git"
   },
   "dependencies": {
     "@vscode/extension-telemetry": "^1.5.2",
