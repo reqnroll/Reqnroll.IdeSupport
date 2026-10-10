@@ -49,7 +49,4 @@ public record NuGetVersion
         if (IsFloating) str += $"({RequestedRange})";
         return str;
     }
-
-    /// <summary>Returns a compact version string in the form <c>{Major}{Minor:00}{Build}</c>.</summary>
-    public string ToShortVersionString() => $"{Version.Major}{Version.Minor:00}{Version.Build}";
 }

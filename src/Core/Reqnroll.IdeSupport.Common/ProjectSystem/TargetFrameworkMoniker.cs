@@ -12,14 +12,6 @@ public class TargetFrameworkMoniker
     public const string NetCorePlatform = ".NETCoreApp";
     /// <summary>The platform identifier used in TFMs for the .NET Framework.</summary>
     public const string NetFrameworkPlatform = ".NETFramework";
-    private const string NetCoreShortValuePrefix = "netcoreapp";
-    private const string NetFrameworkShortValuePrefix = "net";
-    private const string Net5ShortValuePrefix = "net5";
-    private const string Net6ShortValuePrefix = "net6";
-    private const string Net7ShortValuePrefix = "net7";
-    private const string Net8ShortValuePrefix = "net8";
-    private const string Net9ShortValuePrefix = "net9";
-    private const string Net10ShortValuePrefix = "net10";
 
     private TargetFrameworkMoniker(string value)
     {
@@ -66,64 +58,8 @@ public class TargetFrameworkMoniker
     public static TargetFrameworkMoniker Create(string value) =>
         value == null ? null : new TargetFrameworkMoniker(value);
 
-    /// <summary>Creates a <see cref="TargetFrameworkMoniker"/> from its short form (e.g. <c>net8.0</c>, <c>net472</c>).</summary>
-    public static TargetFrameworkMoniker CreateFromShortName(string shortValue)
-    {
-        var value = shortValue;
-        if (shortValue.StartsWith(NetCoreShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(NetCoreShortValuePrefix.Length)}";
-        }
-        else if (shortValue.StartsWith(Net5ShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(Net5ShortValuePrefix.Length - 1)}";
-        }
-        else if (shortValue.StartsWith(Net6ShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(Net6ShortValuePrefix.Length - 1)}";
-        }
-        else if (shortValue.StartsWith(Net7ShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(Net7ShortValuePrefix.Length - 1)}";
-        }
-        else if (shortValue.StartsWith(Net8ShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(Net8ShortValuePrefix.Length - 1)}";
-        }
-        else if (shortValue.StartsWith(Net9ShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(Net9ShortValuePrefix.Length - 1)}";
-        }
-        else if (shortValue.StartsWith(Net10ShortValuePrefix))
-        {
-            value = $".NETCoreApp,Version=v{shortValue.Substring(Net10ShortValuePrefix.Length - 2)}";
-        }
-        else if (shortValue.StartsWith(NetFrameworkShortValuePrefix))
-        {
-            if (shortValue.Length == 5)
-                value =
-                    $".NETFramework,Version=v{shortValue[NetFrameworkShortValuePrefix.Length]}.{shortValue[NetFrameworkShortValuePrefix.Length + 1]}";
-            else
-                value =
-                    $".NETFramework,Version=v{shortValue[NetFrameworkShortValuePrefix.Length]}.{shortValue[NetFrameworkShortValuePrefix.Length + 1]}.{shortValue[NetFrameworkShortValuePrefix.Length + 2]}";
-        }
-
-        return Create(value);
-    }
-
     /// <summary>Returns the raw target framework moniker string.</summary>
     public override string ToString() => Value;
-
-    // e.g netcoreapp2.1 or net452
-    /// <summary>Returns the moniker in its short form (e.g. <c>netcoreapp2.1</c> or <c>net452</c>).</summary>
-    public string ToShortString()
-    {
-        if (IsNetCore && HasVersion)
-            return NetCoreShortValuePrefix + Version;
-        if (IsNetFramework && HasVersion)
-            return NetFrameworkShortValuePrefix + Version.ToString().Replace(".", "");
-        return Value;
-    }
 
     #region Equality
 
