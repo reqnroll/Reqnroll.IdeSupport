@@ -765,7 +765,7 @@ require a **ReSharperHost backend plugin** — a `JetBrains.ReSharper.*`-SDK, C#
 implementing that side's own `IUnitTestProvider`/`IUnitTestElement` extensibility (the same mechanism
 NUnit/xUnit/MSTest's *built-in* Rider support presumably uses, unverified — not reachable from this
 devcontainer's JVM-only bytecode). This is a **different plugin architecture and SDK entirely** from
-`src/Rider`'s existing pure-Kotlin frontend plugin (`com.reqnroll.ide.rider.*`) — a new project with its
+`src/Rider`'s existing pure-Kotlin frontend plugin (`net.reqnroll.idesupport.rider.*`) — a new project with its
 own build/package/versioning story, not a follow-up feature inside the existing one. That's a
 qualitatively larger undertaking than anything else done for issue #504 across all three IDEs — closer
 in scope to standing up a new subsystem than extending an existing one.
