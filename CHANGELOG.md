@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* Step definitions whose step expression is a top-level alternation (for example `^I have apples|I have pears$`) are recognised again: the literal prefilter that narrows step matching wrongly required the literal text of *every* branch to appear in the step, so a step matching only one branch was never offered as a match (Go to Step Definition, "step not found" diagnostics and step completion could all miss it). A top-level `|` now disables the prefilter for that binding, which is then always considered (LSP server) - see #950, @clrudolphi
 * Go to Step Definition in VS Code no longer labels a step definition whose source file sits in a workspace folder that merely shares a prefix with another open folder (e.g. `Repo` and `RepoExtra`): the folder-prefix check now requires a path-separator boundary, so a file under `RepoExtra` falls back to its bare filename instead of being reported with a bogus `../RepoExtra/...` path resolved against `Repo` (VS Code) - see #1015
 
 * Fixed a negative `gherkin_table_cell_padding_size` in `.editorconfig` breaking Gherkin table formatting: the value is now clamped to a non-negative number instead of throwing `ArgumentOutOfRangeException` when the formatter builds the table cell padding (LSP server) - see #964, @clrudolphi
