@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* Fixed a negative `gherkin_table_cell_padding_size` in `.editorconfig` breaking Gherkin table formatting: the value is now clamped to a non-negative number instead of throwing `ArgumentOutOfRangeException` when the formatter builds the table cell padding (LSP server) - see #964, @clrudolphi
 * A configured tag link pattern (`Traceability.TagLinks[].tagPattern`) with top-level alternation, e.g. `ab|cd`, now has to match the whole Gherkin tag - it no longer also matches a tag that merely starts with `ab` or ends with `cd` - and a pattern ending in an escaped literal dollar (`\$`) keeps its end anchor instead of having the dollar stripped by anchor trimming (LSP server) - see #965
 
 * A `Scenario Outline:` declared without any `Examples:` block is no longer silently treated as a plain `Scenario`: it is now treated as an outline and reported as a parser error ("Scenario Outline '...' has no examples defined"), the same error already shown when an `Examples:` block is left empty, and its steps gain scenario-outline placeholder handling (LSP server, VS, VS Code, Rider) - see #956, @clrudolphi
