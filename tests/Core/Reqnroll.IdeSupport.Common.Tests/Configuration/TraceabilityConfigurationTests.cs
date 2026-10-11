@@ -51,6 +51,28 @@ public class TraceabilityConfigurationTests
     }
 
     [Fact]
+    public void ResolveTagLink_TopLevelAlternation_MatchesWholeTagOnly()
+    {
+        var config = Configure((@"ab|cd", "https://example.com/"));
+
+        Assert.NotNull(config.ResolveTagLink("@ab"));
+        Assert.NotNull(config.ResolveTagLink("@cd"));
+        Assert.Null(config.ResolveTagLink("@abX"));
+        Assert.Null(config.ResolveTagLink("@Xcd"));
+        Assert.Null(config.ResolveTagLink("@abcd"));
+    }
+
+    [Fact]
+    public void ResolveTagLink_TrailingEscapedDollar_KeepsLiteralDollarAndAnchors()
+    {
+        var config = Configure((@"v\d+\$", "https://example.com/"));
+
+        Assert.NotNull(config.ResolveTagLink("@v1$"));
+        Assert.Null(config.ResolveTagLink("@v1$extra"));
+        Assert.Null(config.ResolveTagLink("@v1"));
+    }
+
+    [Fact]
     public void ResolveTagLink_MultipleLinks_FirstMatchWins()
     {
         var config = Configure(
