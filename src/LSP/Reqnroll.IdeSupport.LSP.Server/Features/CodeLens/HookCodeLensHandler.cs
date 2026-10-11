@@ -66,15 +66,16 @@ public sealed class HookCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        // No per-request measurement here (issue #941): the single textDocument/codeLens
-        // measurement is owned by StepCodeLensHandler, which records above its own file-type
-        // check and therefore fires once for every request the combined registration dispatches,
-        // including this .feature path. Recording here too counted one client request twice.
         if (!IsFeatureFile(uri))
         {
             _logger.LogVerbose($"HookCodeLensHandler: ignoring non-.feature URI {uri}");
             return Task.FromResult(Empty);
         }
+
+        // Measured only past the file-type guard (issue #941): a request for a file this handler
+        // does not serve is not work it did. Each lens handler measures its own work; a .cs file
+        // legitimately yields one measurement per lens kind that serves it.
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
 
         if (!_bufferService.TryGet(uri, out var buffer) || buffer is null
             || buffer.Tags is null || buffer.Tags.Count == 0)

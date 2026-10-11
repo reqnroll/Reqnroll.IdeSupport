@@ -17,12 +17,12 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Features.CodeLens;
 /// <summary>
 /// Regression guard for issue #941: a single client <c>textDocument/codeLens</c> request is
 /// dispatched by the combined registration in <c>LanguageServerOptionsExtensions</c> to every
-/// lens handler at once — <see cref="StepCodeLensHandler"/> (.cs step usages),
+/// lens handler at once -- <see cref="StepCodeLensHandler"/> (.cs step usages),
 /// <see cref="HookCodeLensHandler"/> (.feature hook matches) and
-/// <see cref="HookMatchCountCodeLensHandler"/> (.cs hook-binding match counts) — and their lens
-/// arrays are concatenated into one response. <c>FeatureUsageCatalog</c> maps
-/// <c>textDocument/codeLens</c> as an exact-count Passive key, so that one request must be
-/// measured exactly once, not once per handler.
+/// <see cref="HookMatchCountCodeLensHandler"/> (.cs hook-binding match counts). Each handler
+/// measures only the work it actually does, i.e. past its own file-type guard: a handler that
+/// does not serve the file must not record, while a .cs file legitimately yields one measurement
+/// per lens kind that serves it (step usages and hook match counts).
 /// </summary>
 public class CodeLensCombinedRequestTelemetryTests
 {
@@ -41,13 +41,14 @@ public class CodeLensCombinedRequestTelemetryTests
 
     /// <summary>
     /// One shared <see cref="IOperationDurationRecorder"/> is injected into every lens handler, so
-    /// a duplicate measurement in ANY handler is observable here — this is what makes the guard
-    /// cover the whole combined request rather than a single handler.
+    /// a measurement from a handler that does not serve the file is observable here.
     /// </summary>
     [Theory]
-    [InlineData("/workspace/test.feature")]
-    [InlineData("/workspace/Steps.cs")]
-    public async Task A_single_combined_codeLens_request_is_measured_exactly_once(string path)
+    [InlineData("/workspace/test.feature", 1)] // HookCodeLensHandler only
+    [InlineData("/workspace/Steps.cs", 2)]     // StepCodeLensHandler + HookMatchCountCodeLensHandler
+    [InlineData("/workspace/readme.txt", 0)]   // no handler serves it
+    public async Task A_combined_codeLens_request_is_measured_once_per_handler_that_serves_the_file(
+        string path, int expectedMeasurements)
     {
         var recorder = Substitute.For<IOperationDurationRecorder>();
         var uri      = DocumentUri.FromFileSystemPath(path);
@@ -65,7 +66,7 @@ public class CodeLensCombinedRequestTelemetryTests
             hook.HandleAsync(request, CancellationToken.None),
             hookMatch.HandleAsync(request, CancellationToken.None));
 
-        recorder.Received(1).Measure(
+        recorder.Received(expectedMeasurements).Measure(
             LspStandardMethodNames.TextDocumentCodeLens, Arg.Any<DocumentUri?>(), Arg.Any<string?>());
     }
 }
