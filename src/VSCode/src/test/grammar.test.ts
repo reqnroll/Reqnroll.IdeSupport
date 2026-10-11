@@ -70,13 +70,13 @@ suite('gherkin.tmLanguage.json', () => {
       }),
       loadGrammar: (scopeName: string) =>
         Promise.resolve(
-          scopeName === 'text.gherkin.feature'
+          scopeName === 'text.reqnroll.feature'
             ? vsctm.parseRawGrammar(grammarSource, grammarPath)
             : null,
         ),
     });
 
-    const loaded = await registry.loadGrammar('text.gherkin.feature');
+    const loaded = await registry.loadGrammar('text.reqnroll.feature');
     assert.ok(loaded, 'Failed to load gherkin.tmLanguage.json into the TextMate registry');
     tmGrammar = loaded!;
   });
