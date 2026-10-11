@@ -74,6 +74,8 @@
 
 ## Bug fixes:
 
+* A configured tag link pattern (`Traceability.TagLinks[].tagPattern`) with top-level alternation, e.g. `ab|cd`, now has to match the whole Gherkin tag - it no longer also matches a tag that merely starts with `ab` or ends with `cd` - and a pattern ending in an escaped literal dollar (`\$`) keeps its end anchor instead of having the dollar stripped by anchor trimming (LSP server) - see #965
+
 * A `Scenario Outline:` declared without any `Examples:` block is no longer silently treated as a plain `Scenario`: it is now treated as an outline and reported as a parser error ("Scenario Outline '...' has no examples defined"), the same error already shown when an `Examples:` block is left empty, and its steps gain scenario-outline placeholder handling (LSP server, VS, VS Code, Rider) - see #956, @clrudolphi
 * A step-definition method with a parameter written as a verbatim C# identifier (e.g. `@class`) no longer makes every step definition and hook in that file disappear: the parameter's leading `@` was spliced into the generated method-name regex as an invalid group name, throwing while the file was parsed and dropping all of its bindings (LSP server) - see #952, @clrudolphi
 * Gherkin keyword completion in a `.feature` file no longer fails with `NoSuchLanguageException` when Reqnroll's `defaultFeatureLanguage` is a regional code such as `en-US`: when the parsed Gherkin document is not available, the completion fallback dialect now resolves through the same `ReqnrollGherkinDialectProvider` as the parser, falling back to the base language (`en`) (LSP server) - see #957
