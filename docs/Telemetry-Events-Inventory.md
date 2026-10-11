@@ -262,7 +262,7 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 |---|---|
 | **Emitter** | `FindUnusedStepDefinitionsHandler` |
 | **When** | After a Find Unused Step Definitions request completes |
-| **Properties** | `UnusedStepDefinitions` (int), `ScannedFeatureFiles` (int — in practice the number of project registries scanned), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
+| **Properties** | `UnusedStepDefinitions` (int), `ScannedProjects` (int — project registries scanned; renamed from the mislabelled `ScannedFeatureFiles`, which reported this same count, issue #942), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
 
 **Analytics use.** Feature hygiene: unused-step counts, the unused *ratio*
 (`UnusedStepDefinitions / TotalStepDefinitions`) and scan cost (duration bucket); the
