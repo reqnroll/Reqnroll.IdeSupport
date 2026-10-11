@@ -262,7 +262,7 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 |---|---|
 | **Emitter** | `FindUnusedStepDefinitionsHandler` |
 | **When** | After a Find Unused Step Definitions request completes |
-| **Properties** | `UnusedStepDefinitions` (int), `ScannedFeatureFiles` (int — in practice the number of project registries scanned), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
+| **Properties** | `UnusedStepDefinitions` (int), `ScannedProjects` (int — project registries scanned; renamed from the mislabelled `ScannedFeatureFiles`, which reported this same count, issue #942), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
 
 **Analytics use.** Feature hygiene: unused-step counts, the unused *ratio*
 (`UnusedStepDefinitions / TotalStepDefinitions`) and scan cost (duration bucket); the
@@ -460,7 +460,7 @@ IDEs expose the same install -> upgrade funnel and daily-use retention signal di
 
 Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
 `reqnroll.telemetry.lifecycle` (`src/VSCode/src/extensionLifecycleTelemetry.ts`); Rider keeps the same
-three values in the application-level `PropertiesComponent` under `com.reqnroll.idesupport.telemetry.*`
+three values in the application-level `PropertiesComponent` under `net.reqnroll.idesupport.telemetry.*`
 (`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
 `WelcomeService`, and unit-tested. Because state is new, installs that predate this release report
 `Extension installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when
