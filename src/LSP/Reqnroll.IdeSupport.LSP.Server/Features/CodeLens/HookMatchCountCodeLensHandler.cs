@@ -92,13 +92,14 @@ public sealed class HookMatchCountCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
-
         if (!IsCSharp(uri))
         {
             _logger.LogVerbose($"HookMatchCountCodeLensHandler: ignoring non-.cs URI {uri}");
             return Task.FromResult(Empty);
         }
+
+        // Measured only past the file-type guard (issue #941); see HookCodeLensHandler.
+        using var _perf = _recorder.Measure(LspStandardMethodNames.TextDocumentCodeLens, uri);
 
         var filePath = uri.GetFileSystemPath();
         if (string.IsNullOrEmpty(filePath))

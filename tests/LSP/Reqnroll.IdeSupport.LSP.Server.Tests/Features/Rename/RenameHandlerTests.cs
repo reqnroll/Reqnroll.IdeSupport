@@ -226,6 +226,192 @@ public class StepRenameHandlerTests
         edits[0].NewText.Should().Be("\"the renamed number is {int}\"");
         edits[0].Range.Start.Line.Should().Be(6, "the attribute literal lives on 0-based line 6");
     }
+    // ── Issue #935: the attribute literal must be re-emitted in its ORIGINAL form — a
+    //    verbatim @"…" literal keeps its @ prefix (embedded quotes doubled), a regular
+    //    literal re-escapes backslashes and quotes — and the edited source must still be
+    //    valid C#. The old code emitted a bare "…" over the token's full span, which
+    //    dropped the @ prefix (invalid escape: compile error) and emitted escaped quotes
+    //    unescaped (corrupting literals like "click \"OK\""). ──────────────────────────
+
+    private static string ApplyRenameEditToLiteral(string csText, string editNewText)
+    {
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(csText);
+        var literal = tree.GetRoot().DescendantNodes()
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax>()
+            .First(e => e.RawKind == (int)Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression);
+        var edited = tree.GetText().WithChanges(
+            new Microsoft.CodeAnalysis.Text.TextChange(literal.Token.Span, editNewText)).ToString();
+
+        // "then compile the result": the edited source must parse with zero diagnostics
+        // and the attribute's VALUE must be the renamed expression.
+        var newTree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(edited);
+        newTree.GetDiagnostics().Should().BeEmpty("the edited attribute must still be valid C#");
+        var newLiteral = newTree.GetRoot().DescendantNodes()
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax>()
+            .First(e => e.RawKind == (int)Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression);
+        return newLiteral.Token.ValueText;
+    }
+
+    [Fact]
+    public async Task Rename_preserves_verbatim_prefix_of_a_regex_attribute_literal()
+    {
+        // A verbatim literal is the idiomatic way to write a regex binding; dropping its
+        // @ prefix turned @"I have (\d+) cukes" into "I have (\d+) cukes" — an
+        // unrecognized escape sequence and a compile error (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(@\"I have (\\d+) cukes\")]\n" +   // 0-based line 6
+            "        public void GivenIHaveCukes(int count) { }\n" + // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"I have (\d+) cukes"),
+            specifiedExpression: "I have (\\d+) cukes",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: @"I have (\d+) gourds"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be(@"@""I have (\d+) gourds""",
+            "the verbatim @ prefix must be re-emitted over the full token span");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be(@"I have (\d+) gourds");
+    }
+
+    [Fact]
+    public async Task Rename_reescapes_embedded_quotes_in_a_verbatim_attribute_literal()
+    {
+        // Embedded quotes are doubled inside verbatim literals; the renamed expression must
+        // be re-doubled on the way out, not emitted raw (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(@\"click \"\"OK\"\" to confirm\")]\n" +   // 0-based line 6
+            "        public void ClickOk() { }\n" +                     // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"click ""OK"" to confirm"),
+            specifiedExpression: "click \"OK\" to confirm",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "click \"CANCEL\" to confirm"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be("@\"click \"\"CANCEL\"\" to confirm\"",
+            "quotes inside a verbatim literal are doubled, and the @ prefix is kept");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be("click \"CANCEL\" to confirm");
+    }
+
+    [Fact]
+    public async Task Rename_reescapes_backslashes_in_a_regular_attribute_literal()
+    {
+        // A regular (non-verbatim) literal's backslashes must be re-escaped on the way out;
+        // emitting the raw ValueText left "(\d+)" as "(\d+)" — invalid escape (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"I have (\\\\d+) cukes\")]\n" +   // 0-based line 6
+                        "        public void GivenIHaveCukes(int count) { }\n" + // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"I have (\d+) cukes"),
+            specifiedExpression: "I have (\\d+) cukes",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: @"I have (\d+) ponies"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be("\"I have (\\\\d+) ponies\"",
+            "the backslash in (\\d+) must be re-escaped in the regular literal");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be(@"I have (\d+) ponies");
+    }
+
+    [Fact]
+    public async Task Rename_reescapes_escaped_quotes_in_a_regular_attribute_literal()
+    {
+        // \" inside a regular literal must come back as \" — the old code emitted the
+        // unescaped ValueText, producing "click "OK"" and a broken token (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"click \\\"OK\\\" to confirm\")]\n" + // 0-based line 6
+            "        public void ClickOk() { }\n" +                      // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"click ""OK"" to confirm"),
+            specifiedExpression: "click \"OK\" to confirm",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "click \"CANCEL\" to confirm"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be("\"click \\\"CANCEL\\\" to confirm\"",
+            "quotes inside a regular literal are re-escaped");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be("click \"CANCEL\" to confirm");
+    }
 
     // ── Regression (issue #170's sibling bug, found while fixing the rename-targets picker):
     //    CSharpAttributeLiteralResolver used to pick the "nearest candidate method" purely by
