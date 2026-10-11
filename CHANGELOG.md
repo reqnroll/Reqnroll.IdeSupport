@@ -74,6 +74,8 @@
 
 ## Bug fixes:
 
+* Go to Step Definition in VS Code no longer labels a step definition whose source file sits in a workspace folder that merely shares a prefix with another open folder (e.g. `Repo` and `RepoExtra`): the folder-prefix check now requires a path-separator boundary, so a file under `RepoExtra` falls back to its bare filename instead of being reported with a bogus `../RepoExtra/...` path resolved against `Repo` (VS Code) - see #1015
+
 * Fixed a negative `gherkin_table_cell_padding_size` in `.editorconfig` breaking Gherkin table formatting: the value is now clamped to a non-negative number instead of throwing `ArgumentOutOfRangeException` when the formatter builds the table cell padding (LSP server) - see #964, @clrudolphi
 * A configured tag link pattern (`Traceability.TagLinks[].tagPattern`) with top-level alternation, e.g. `ab|cd`, now has to match the whole Gherkin tag - it no longer also matches a tag that merely starts with `ab` or ends with `cd` - and a pattern ending in an escaped literal dollar (`\$`) keeps its end anchor instead of having the dollar stripped by anchor trimming (LSP server) - see #965
 
