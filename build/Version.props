@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
 	<!-- Main version: hand-bumped for meaningful milestones. -->
-	<ReqnrollMainVersion>0.1</ReqnrollMainVersion>
+	<ReqnrollMainVersion>2026.1</ReqnrollMainVersion>
 	<!-- Build number: CI overrides this with the run number (-p:ReqnrollBuildNumber=...);
 	     locally it defaults high so a local build always sorts newer than any CI build. -->
 	<ReqnrollBuildNumber Condition="'$(ReqnrollBuildNumber)' == ''">99999</ReqnrollBuildNumber>
