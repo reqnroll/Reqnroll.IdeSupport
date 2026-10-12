@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* Visual Studio no longer offers the Ctrl+hover navigable symbol (and its clickable underline) for a tag link whose configured target is not an `http`/`https` URL (e.g. a misconfigured `file:` or custom-scheme target): such a target made the tag look clickable and win over Go To Definition, but the click did nothing because opening already refuses non-web schemes. The navigable-symbol provider now applies the same scheme allow-list as the link styling (VS) - see #1036, @clrudolphi
 * VS Code: an absolute MSBuild `OutputPath` (a project that sets one explicitly, or the SDK's `ArtifactsPath`/`UseArtifactsOutput` feature redirecting the build output to a repo-root `artifacts` folder) is no longer re-rooted under the project directory, which produced a non-existent output assembly path and left the project's feature files unmatched; the absolute root is now honoured and only a relative `OutputPath` is resolved against the project directory (VS Code) - see #1007, @clrudolphi
 
 * Tag completion in a `.feature` file no longer ranks tags with usage counts multiplied by the number of target frameworks a multi-targeted project targets: because a project contributes one owner per TFM, the same project's feature files were counted once per TFM, so a tag used once could be offered with a count of two or three (LSP server) - see #943, @clrudolphi
