@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* The Visual Studio navigation picker (shown when Go to Hooks or Go to Step Definition matches multiple targets) can now be dismissed with the Esc key, and has a Cancel button; previously only the window close box worked (Visual Studio) - see #1025, @clrudolphi
 * Visual Studio telemetry events no longer carry the computer name (`ai.cloud.roleInstance`), which the Application Insights SDK adds by default and which can identify the user or their employer (VS) - see #1141
 
 * Visual Studio no longer offers the Ctrl+hover navigable symbol (and its clickable underline) for a tag link whose configured target is not an `http`/`https` URL (e.g. a misconfigured `file:` or custom-scheme target): such a target made the tag look clickable and win over Go To Definition, but the click did nothing because opening already refuses non-web schemes. The navigable-symbol provider now applies the same scheme allow-list as the link styling (VS) - see #1036, @clrudolphi
