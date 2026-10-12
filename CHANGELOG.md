@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* Step completions built from a step-definition regex no longer insert an escaped character class such as `\d`, `\w` or `\s` as the literal letter ("I have d apples" for `I have \d apples`): the expression is now recognised as containing a regex operator, so the raw regex is offered instead (LSP server) - see #958, @clrudolphi
 * A `Scenario Outline` with a tagged `Examples` block followed by an untagged one no longer matches the untagged block's rows against the earlier block's tags, which could make tag-scoped bindings wrongly match (or fail to match) those rows (LSP server) - see #954, @clrudolphi
 * A step definition whose expression contains a character class with a stray bracket (for example `[x)abc]`) is no longer wrongly excluded from step matching: the literal prefilter treated the characters after the stray bracket as required literal text the step does not have to contain, which could make the step be reported as undefined even though the binding matched (LSP Core) - see #951, @clrudolphi
 * Step definitions whose step expression is a top-level alternation (for example `^I have apples|I have pears$`) are recognised again: the literal prefilter that narrows step matching wrongly required the literal text of *every* branch to appear in the step, so a step matching only one branch was never offered as a match (Go to Step Definition, "step not found" diagnostics and step completion could all miss it). A top-level `|` now disables the prefilter for that binding, which is then always considered (LSP server) - see #950, @clrudolphi
