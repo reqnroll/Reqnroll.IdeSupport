@@ -77,6 +77,24 @@ class RunTestRunnerTest {
     }
 
     @Test
+    fun `matches a forward-slashed project path against a backslashed file path`() {
+        val projects = listOf("C:/proj/Proj.csproj")
+        assertEquals("C:/proj/Proj.csproj", RunTestRunner.findOwningProjectPath("""C:\proj\F.feature""", projects))
+    }
+
+    @Test
+    fun `matches a lower-case file path against a mixed-case Windows project path`() {
+        val projects = listOf("""C:\Proj\Proj.csproj""")
+        assertEquals("""C:\Proj\Proj.csproj""", RunTestRunner.findOwningProjectPath("c:/proj/F.feature", projects))
+    }
+
+    @Test
+    fun `returns null when a Windows file is outside every project folder`() {
+        val projects = listOf("""C:\proj\Proj.csproj""")
+        assertNull(RunTestRunner.findOwningProjectPath("D:/other/F.feature", projects))
+    }
+
+    @Test
     fun `returns null when no project folder contains the file`() {
         val projects = listOf("/repo/Foo/Foo.csproj")
         assertNull(RunTestRunner.findOwningProjectPath("/elsewhere/A.feature", projects))
