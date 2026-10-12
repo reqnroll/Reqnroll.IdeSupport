@@ -321,5 +321,85 @@ suite('ProjectManager', () => {
       assert.strictEqual(projectLoaded(sent), 1);
       assert.strictEqual(projectFiles(sent), 1);
     });
+
+    // Several projects, evaluation held until `release()`, so a test can interleave restarts with
+    // registrations that are still awaiting MSBuild.
+    const projectA = vscode.Uri.file(path.join('C:', 'work', 'A', 'A.csproj')).fsPath;
+    const projectB = vscode.Uri.file(path.join('C:', 'work', 'B', 'B.csproj')).fsPath;
+    const projectC = vscode.Uri.file(path.join('C:', 'work', 'C', 'C.csproj')).fsPath;
+
+    function createGatedManager(client: LanguageClient) {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const manager = new ProjectManager(client, {
+        findProjectFiles: () =>
+          Promise.resolve([projectA, projectB, projectC].map((p) => vscode.Uri.file(p))),
+        evaluateProject: () => gate.then(() => props),
+      });
+      managers.push(manager);
+      return { manager, release };
+    }
+
+    const loadedFor = (sent: { method: string; projectFile: string }[], projectFile: string) =>
+      sent.filter((s) => s.method === ReqnrollMethods.projectLoaded && s.projectFile === projectFile)
+        .length;
+
+    test('back-to-back restarts with discoveries in flight send each project once', async () => {
+      const { client, sent, move } = createFakeClient(State.Running);
+      const { release } = createGatedManager(client);
+      await settle();
+
+      crashAndRestart(move);
+      await settle();
+      crashAndRestart(move);
+      await settle();
+      release();
+      await settle();
+
+      // The superseded loops must stop at their next project instead of registering the rest again.
+      for (const project of [projectA, projectB, projectC]) {
+        assert.strictEqual(loadedFor(sent, project), 1, `projectLoaded for ${project}`);
+      }
+    });
+
+    test('a project already being registered under the same generation is not evaluated twice', async () => {
+      const { client, sent } = createFakeClient(State.Running);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let evaluations = 0;
+      const manager = new ProjectManager(client, {
+        findProjectFiles: () => Promise.resolve([]),
+        evaluateProject: () => {
+          evaluations += 1;
+          return gate.then(() => props);
+        },
+      });
+      managers.push(manager);
+      await settle();
+      const register = (manager as unknown as { registerProject(uri: vscode.Uri): Promise<void> })
+        .registerProject.bind(manager);
+
+      // e.g. a watcher event arriving while a workspace-folder discovery is still evaluating.
+      const first = register(vscode.Uri.file(projectA));
+      const second = register(vscode.Uri.file(projectA));
+      release();
+      await Promise.all([first, second]);
+
+      assert.strictEqual(evaluations, 1);
+      assert.strictEqual(loadedFor(sent, projectA), 1);
+    });
+
+    test('dispose stops a discovery in flight from notifying the server', async () => {
+      const { client, sent } = createFakeClient(State.Running);
+      const { manager, release } = createGatedManager(client);
+      await settle();
+
+      manager.dispose();
+      release();
+      await settle();
+
+      assert.strictEqual(sent.length, 0);
+      assert.strictEqual(manager.getKnownProjects().size, 0);
+    });
   });
 });

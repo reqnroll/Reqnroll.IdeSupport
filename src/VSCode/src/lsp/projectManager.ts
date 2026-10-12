@@ -148,6 +148,13 @@ export class ProjectManager {
   private _disposables: vscode.Disposable[] = [];
   /** Bumped on each server restart; work started under an older value must not send (issue #997). */
   private _serverGeneration = 0;
+  /**
+   * Projects whose first registration is in flight, with the generation it runs under. `registerProject`
+   * checks `_knownProjects` before it awaits MSBuild and only adds to it afterwards, so without this a
+   * watcher event, a workspace-folder add or a restart's rediscovery could evaluate and send the same
+   * project twice. An entry from an older generation does not block: its result will be dropped.
+   */
+  private readonly _registering = new Map<string, number>();
 
   constructor(
     client: LanguageClient,
@@ -201,10 +208,14 @@ export class ProjectManager {
 
   /** Releases watchers, pending timers, and event subscriptions. */
   dispose(): void {
+    // Invalidate work still in flight: a discovery loop stops at its next project and a registration
+    // awaiting MSBuild drops its result instead of notifying the server and re-filling the cleared set.
+    this._serverGeneration += 1;
     this._watcher.dispose();
     this._fileWatcher.dispose();
     for (const timer of this._resendTimers.values()) clearTimeout(timer);
     this._resendTimers.clear();
+    this._registering.clear();
     for (const d of this._disposables) d.dispose();
     this._disposables = [];
     this._knownProjects.clear();
@@ -217,7 +228,11 @@ export class ProjectManager {
    * Scans all workspace folders for .csproj files and registers them.
    */
   private async discoverExistingProjects(): Promise<void> {
+    // A restart (or dispose) while this loop runs starts its own discovery under a newer generation;
+    // carrying on here would register the remaining projects a second time under that generation.
+    const generation = this._serverGeneration;
     for (const uri of await this._deps.findProjectFiles()) {
+      if (generation !== this._serverGeneration) return;
       await this.registerProject(uri);
     }
   }
@@ -323,6 +338,16 @@ export class ProjectManager {
     }
 
     const generation = this._serverGeneration;
+    if (this._registering.get(projectFile) === generation) return; // already being registered under this generation
+    this._registering.set(projectFile, generation);
+    try {
+      await this.registerCsproj(projectFile, generation);
+    } finally {
+      if (this._registering.get(projectFile) === generation) this._registering.delete(projectFile);
+    }
+  }
+
+  private async registerCsproj(projectFile: string, generation: number): Promise<void> {
     const result = await this.sendProjectLoaded(projectFile, generation);
     // Not sent: the notification failed (do not mark known, matches pre-v5 behavior), or the server
     // restarted during evaluation and the post-restart discovery registers the project instead.
