@@ -850,9 +850,10 @@ namespace TestProject
     }
 
     [Fact]
-    public async Task Combines_class_level_and_method_level_scope()
+    public async Task Treats_class_level_and_method_level_scope_as_alternatives()
     {
-        // Class scope @ui AND method scope @smoke -> only matches when both tags are present.
+        // Class scope @ui OR method scope @smoke (Reqnroll concatenates type and method scopes, #1133):
+        // matches when either tag is present.
         var content = @"
 namespace TestProject
 {
@@ -870,8 +871,9 @@ namespace TestProject
 
         var scope = bindings.StepDefinitions.Should().ContainSingle().Subject!.Scope;
         scope.Tag!.Evaluate(new[] { "@ui", "@smoke" }).Should().BeTrue();
-        scope.Tag!.Evaluate(new[] { "@ui" }).Should().BeFalse();
-        scope.Tag!.Evaluate(new[] { "@smoke" }).Should().BeFalse();
+        scope.Tag!.Evaluate(new[] { "@ui" }).Should().BeTrue();
+        scope.Tag!.Evaluate(new[] { "@smoke" }).Should().BeTrue();
+        scope.Tag!.Evaluate(new[] { "@other" }).Should().BeFalse();
     }
 
     [Fact]

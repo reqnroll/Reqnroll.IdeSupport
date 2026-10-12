@@ -643,9 +643,9 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             first.Scenario ?? second.Scenario);
 
     /// <summary>
-    /// Combines the type-level and method-level [Scope] alternatives: every type-level
-    /// alternative is combined (see <see cref="CombineScopes(RawScope, RawScope)"/>) with every
-    /// method-level one. With a single alternative per level this is exactly that combination.
+    /// Combines the type-level and method-level [Scope] alternatives. Reqnroll registers one binding
+    /// per scope over <c>typeScopes.Concat(methodScopes)</c> (<c>BindingSourceProcessor.ProcessMethod</c>),
+    /// so a class-level and a method-level [Scope] are alternatives (OR), not a conjunction (issue #1133).
     /// </summary>
     private static IReadOnlyList<RawScope> CombineScopeAlternatives(IReadOnlyList<RawScope> typeScopes,
         IReadOnlyList<RawScope> methodScopes)
@@ -655,33 +655,14 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         if (methodScopes == null)
             return typeScopes;
 
-        return typeScopes
-            .SelectMany(typeScope => methodScopes.Select(methodScope => CombineScopes(typeScope, methodScope)))
-            .ToArray();
+        return FoldAlternatives(typeScopes.Concat(methodScopes).ToArray());
     }
 
     /// <summary>
-    /// Combines the type-level and method-level [Scope] attributes. A binding is in scope only
-    /// when both levels match, so their tags are AND-combined; the more specific method-level
-    /// feature/scenario title wins.
-    /// </summary>
-    private static RawScope CombineScopes(RawScope typeScope, RawScope methodScope)
-    {
-        if (typeScope == null)
-            return methodScope;
-        if (methodScope == null)
-            return typeScope;
-
-        return new RawScope(
-            CombineTags(typeScope.Tag, methodScope.Tag, " and "),
-            methodScope.Feature ?? typeScope.Feature,
-            methodScope.Scenario ?? typeScope.Scenario);
-    }
-
-    /// <summary>
-    /// A hook applies when the scenario is within the method/type scope and carries one of the
-    /// tags listed on the hook attribute. The hook's tags are OR-combined and then AND-combined
-    /// with the surrounding [Scope] (with each of its alternatives, when there are several).
+    /// A hook applies when the scenario matches any of the method/type [Scope] alternatives or carries
+    /// one of the tags listed on the hook attribute: Reqnroll appends each hook tag to the method's
+    /// scopes as a further scope of its own (<c>BindingSourceProcessor.ProcessHookAttribute</c>), so the
+    /// hook's tags are alternatives to the [Scope]s, not restricted by them (issue #1133).
     /// </summary>
     private static IReadOnlyList<RawScope> CombineWithHookTags(IReadOnlyList<RawScope> methodScopes,
         IReadOnlyList<string> hookTags)
@@ -689,13 +670,20 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
         if (hookTags.Count == 0)
             return methodScopes;
 
-        var tagsExpression = string.Join(" or ", hookTags.Select(NormalizeTag));
-        var hookScope = new RawScope(tagsExpression, null, null);
+        // A hook with no [Scope] keeps its tags as one plain "a or b" expression.
         if (methodScopes == null)
-            return new[] { hookScope };
+            return new[] { new RawScope(string.Join(" or ", hookTags.Select(NormalizeTag)), null, null) };
 
-        return methodScopes.Select(methodScope => CombineScopes(methodScope, hookScope)).ToArray();
+        var tagScopes = hookTags.Select(tag => new RawScope(NormalizeTag(tag), null, null));
+        return FoldAlternatives(methodScopes.Concat(tagScopes).ToArray());
     }
+
+    /// <summary>
+    /// Folds <paramref name="scopes"/> into one scope when that is exact (see
+    /// <see cref="CanOrIntoOneScope"/>); otherwise keeps them as alternatives.
+    /// </summary>
+    private static IReadOnlyList<RawScope> FoldAlternatives(IReadOnlyList<RawScope> scopes) =>
+        scopes.Count > 1 && CanOrIntoOneScope(scopes) ? new[] { scopes.Aggregate(OrScopes) } : scopes;
 
     private static string CombineTags(string left, string right, string op)
     {
