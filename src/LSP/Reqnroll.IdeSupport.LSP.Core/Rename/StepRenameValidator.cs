@@ -81,11 +81,18 @@ public static class StepRenameValidator
             ? CucumberExpressionOperators
             : RegexOperators;
 
-        // Scan non-parameter segments for operators
+        // Scan non-parameter segments for operators the rename INTRODUCES. An operator the
+        // original expression already carries outside its parameter slots - most importantly the
+        // ^...$ anchors of a regex binding - is not an introduction: Visual Studio's "Rename Step"
+        // command seeds its prompt with the binding's own expression and submits the edited text
+        // verbatim as newName, so those characters arrive without the user having typed them.
+        // Rejecting on mere presence made every anchored regex binding unrenamable in Visual
+        // Studio (issue #1126).
         var newNonParamSegments = SplitNonParameterSegments(newName);
-        foreach (var segment in newNonParamSegments)
+        var originalNonParamSegments = SplitNonParameterSegments(originalExpression);
+        foreach (var operatorChar in forbiddenOperators)
         {
-            if (segment.IndexOfAny(forbiddenOperators) >= 0)
+            if (CountOccurrences(newNonParamSegments, operatorChar) > CountOccurrences(originalNonParamSegments, operatorChar))
                 return new ValidationError("The non-parameter parts cannot contain expression operators", "rename");
         }
 
@@ -132,6 +139,14 @@ public static class StepRenameValidator
                 .Where(s => !string.IsNullOrEmpty(s) && !ParameterSlotPattern.IsMatch(s))
                 .ToArray();
     }
+
+    /// <summary>
+    /// Counts occurrences of <paramref name="operatorChar"/> across the given non-parameter
+    /// segments, so an operator the rename introduces can be told apart from one the original
+    /// expression already carried (issue #1126).
+    /// </summary>
+    private static int CountOccurrences(string[] segments, char operatorChar)
+        => segments.Sum(segment => segment.Count(c => c == operatorChar));
 }
 
 /// <summary>
