@@ -124,8 +124,7 @@ are transmitted. Every exception-derived string — the `UnhandledException` `Me
 last server hop before the event goes to the client (`LspTelemetryService` →
 `TelemetryScrubber.ScrubProperties`, #843), so emit sites and the local debug-log mirror keep the raw text for
 debugging. Other string properties are fixed literals
-(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
-*name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
 ---
@@ -150,7 +149,6 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn (issue #845): counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
 | `ErrorMessage` | string | Connector failure: the exception message, filesystem-path-scrubbed (`<path>`) |
-| `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
 | `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
