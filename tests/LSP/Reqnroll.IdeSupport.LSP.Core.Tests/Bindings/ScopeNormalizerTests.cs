@@ -88,6 +88,47 @@ public class ScopeNormalizerTests
         result.Should().Equal(Tag("(@smoke) or (@web)"));
     }
 
+    // A scope tag may be a full tag expression; each member that is OR-ed is parenthesized so the
+    // combined text keeps every member as a self-contained group, whatever it contains.
+    [Fact]
+    public void Full_tag_expressions_are_each_parenthesized_when_they_are_ored_together()
+    {
+        var result = ScopeNormalizer.Normalize(new[] { Tag("@a and @b"), Tag("@c or @d"), Tag("not @e") });
+
+        result.Should().Equal(Tag("(@a and @b) or (@c or @d) or (not @e)"));
+    }
+
+    [Fact]
+    public void A_lone_tag_expression_is_not_wrapped()
+    {
+        ScopeNormalizer.Normalize(new[] { Tag("@a and @b") }).Should().Equal(Tag("@a and @b"));
+    }
+
+    [Theory]
+    [InlineData(new[] { "@a" }, false)]
+    [InlineData(new[] { "@b" }, false)]
+    [InlineData(new[] { "@a", "@b" }, true)]
+    [InlineData(new[] { "@c" }, true)]
+    [InlineData(new[] { "@d" }, false)]
+    [InlineData(new string[0], false)]
+    public void Ored_tag_expressions_evaluate_as_the_union_of_their_members(string[] scenarioTags, bool expected)
+    {
+        // (@a and @b) or (@c): a scenario matches when it has both @a and @b, or has @c.
+        var scope = ScopeNormalizer.Build(new ScopeSpec?[] { Tag("@a and @b"), Tag("@c") }, new ReqnrollTagExpressionParser());
+
+        scope!.Tag!.Evaluate(scenarioTags).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Ored_expressions_with_not_evaluate_as_the_union_of_their_members()
+    {
+        var scope = ScopeNormalizer.Build(new ScopeSpec?[] { Tag("not @a"), Tag("@b") }, new ReqnrollTagExpressionParser());
+
+        scope!.Tag!.Evaluate(new[] { "@a" }).Should().BeFalse();
+        scope.Tag.Evaluate(new[] { "@a", "@b" }).Should().BeTrue();
+        scope.Tag.Evaluate(new string[0]).Should().BeTrue();
+    }
+
     [Fact]
     public void Duplicate_scopes_collapse()
     {

@@ -104,9 +104,17 @@ public static class ScopeNormalizer
             return new ScopeSpec(null, feature, scenario);
 
         var tags = group.Select(scope => scope.Tag!).Distinct().OrderBy(tag => tag, StringComparer.Ordinal).ToArray();
-        var tag = tags.Length == 1 ? tags[0] : string.Join(" or ", tags.Select(t => $"({t})"));
-        return new ScopeSpec(tag, feature, scenario);
+        return new ScopeSpec(OrTogether(tags), feature, scenario);
     }
+
+    // Each member is parenthesized whenever two or more are OR-ed. A scope tag may be a full tag
+    // expression (and/or/not) and Reqnroll's runtime will accept those, so every member is kept as a
+    // self-contained group: the result reads the same however rich a member is, and does not depend on
+    // the precedence rules of whichever parser evaluates it (with today's parser the parentheses do not
+    // change the outcome -- "and" binds tighter than "or" and OR is associative -- they make the
+    // boundaries explicit). A lone member is returned as written: nothing is combined.
+    private static string OrTogether(IReadOnlyList<string> tags) =>
+        tags.Count == 1 ? tags[0] : string.Join(" or ", tags.Select(tag => $"({tag})"));
 
     // Reqnroll drops the leading '@' of a single tag name and accepts it with or without one, while
     // the tag expression parser requires '@' on every name of a multi-term expression, so a bare

@@ -801,7 +801,7 @@ flowchart LR
 | Rule | Why it is exact |
 | --- | --- |
 | No scope, or any scope that restricts nothing (a bare `[Scope]`), makes the binding unrestricted (`Scope == null`). | `X OR everything = everything`. The hook match-count CodeLens then shows its static "all scenarios" label. |
-| Scopes with the same feature and scenario title merge, OR-ing their tags (`@a` + `@b` becomes `(@a) or (@b)`). | `(t1 AND F) OR (t2 AND F) = (t1 OR t2) AND F` |
+| Scopes with the same feature and scenario title merge, OR-ing their tags (`@a` + `@b` becomes `(@a) or (@b)`). Each OR-ed member is parenthesized, so a scope tag that is a full tag expression (`@a and @b`, `not @c`) stays a self-contained group in the combined expression; a lone member is left as written. | `(t1 AND F) OR (t2 AND F) = (t1 OR t2) AND F` |
 | A scope with that title and no tag absorbs the tagged ones. | `F OR (t AND F) = F` |
 | Duplicates collapse, bare tag names get their `@`, and groups and tags are sorted ordinally. | The reflection API does not promise attribute order, so the result must not depend on it. |
 | A scope that arrived with an error is never merged or absorbed. | Its error must stay visible on the binding. |
