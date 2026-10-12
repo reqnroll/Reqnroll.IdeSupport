@@ -192,7 +192,7 @@ cd src/Rider
 This publishes the bundled LSP server and TestLogger, both `Release` (see "Bundling the LSP server"/
 "Bundling the TestLogger" above — `buildPlugin` always uses `Release`, unlike `runIde`'s `Debug`/
 `Verbose` build), the server for the host RID only, and produces
-`build/distributions/reqnroll-ide-support-rider-<version>.zip` (`<version>` from `gradle.properties`).
+`build/distributions/reqnroll-ide-support-rider-<version>.zip` (CI publishes it as `Reqnroll.IdeSupport.Rider.<version>.zip`) (`<version>` from `gradle.properties`).
 Cross-publish other server RIDs with `-PserverRid=<rid>` (e.g. `linux-x64`, `osx-arm64`) first if you
 need the plugin to run on a different OS than the one you built it on — the TestLogger needs no such
 step, since one build already covers every OS.
