@@ -231,7 +231,7 @@ export function withClientIdentity(
 }
 
 function extensionVersion(): string {
-  const packageJson = vscode.extensions.getExtension('reqnroll.reqnroll-ide-support')
+  const packageJson = vscode.extensions.getExtension('Reqnroll.reqnroll-ide-support')
     ?.packageJSON as { version?: unknown } | undefined;
   return typeof packageJson?.version === 'string' ? packageJson.version : 'unknown';
 }
