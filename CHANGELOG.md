@@ -75,6 +75,8 @@
 
 ## Bug fixes:
 
+* In Visual Studio, a transient failure or timeout while looking up a project's `MSBuildProjectExtensionsPath` (only needed for projects that move `obj`) is no longer remembered for the whole session, so the MTP test-outcome reporter stub is written once the lookup succeeds (VS) - see #1037
+
 * An unnamed Feature or Rule line - e.g. a bare `Feature:` while the title is still being typed - no longer puts an empty name on its Outline symbol: the symbol now falls back to the keyword (`Feature`/`Rule`), matching Scenarios, Background and Examples. An empty `DocumentSymbol.name` is invalid in LSP, and clients rejected the whole `textDocument/documentSymbol` response, blanking the entire Outline (LSP server) - see #959
 * In Rider on Windows, running a scenario, rule or feature from the CodeLens in a `.feature` file no longer fails with "Could not find the project that owns ...": the owning project is now found whatever the drive letter or path separator style (Rider) - see #1122
 
