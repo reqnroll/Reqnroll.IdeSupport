@@ -1,5 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
+import * as vscode from 'vscode';
+import { setAppLogChannel } from '../../logging/appNotify';
 import {
   buildOutputPath,
   findTargetKey,
@@ -173,26 +175,25 @@ suite('msbuildEvaluator', () => {
         code: MAX_BUFFER_OVERFLOW_CODE,
       });
 
-    test('warns and returns null instead of dropping the evaluation silently', async () => {
-      const warnings: unknown[] = [];
-      const originalWarn = console.warn;
-      console.warn = (...args: unknown[]): void => {
-        warnings.push(args[0]);
-      };
+    teardown(() => setAppLogChannel(undefined));
 
-      let result: unknown;
-      try {
-        result = await getMsbuildEvaluation('C:\\proj\\Big.csproj', () =>
-          Promise.resolve({ stdout: '', error: overflowError() }),
-        );
-      } finally {
-        console.warn = originalWarn;
-      }
+    test('warns and returns null instead of dropping the evaluation silently', async () => {
+      // console.warn cannot be replaced inside the Extension Host, so capture through the app log channel.
+      const warnings: string[] = [];
+      setAppLogChannel({
+        info: () => undefined,
+        warn: (message: string) => warnings.push(message),
+        error: () => undefined,
+      } as unknown as vscode.LogOutputChannel);
+
+      const result = await getMsbuildEvaluation('C:\\proj\\Big.csproj', () =>
+        Promise.resolve({ stdout: '', error: overflowError() }),
+      );
 
       assert.strictEqual(result, null);
       assert.strictEqual(warnings.length, 1, 'the dropped evaluation must be logged');
-      assert.match(String(warnings[0]), /buffer limit/);
-      assert.match(String(warnings[0]), /Big\.csproj/);
+      assert.match(warnings[0], /buffer limit/);
+      assert.match(warnings[0], /Big\.csproj/);
     });
   });
 });

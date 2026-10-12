@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { logWarn } from '../logging/appNotify';
 import {
   MsbuildExec,
   MSBUILD_MAX_BUFFER_MB,
@@ -122,7 +123,8 @@ export async function getMsbuildEvaluation(
     // A large project's item JSON can exceed the buffer limit: warn loudly (issue #1008) rather
     // than dropping the evaluation with no log at all.
     if (isMaxBufferOverflowError(error)) {
-      console.warn(
+      // The curated "Reqnroll" output channel, not console.warn: that only reaches the Extension Host log.
+      logWarn(
         `MsbuildEvaluator: msbuild output for ${projectFile} exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; evaluation dropped`,
       );
     } else {
