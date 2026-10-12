@@ -130,6 +130,27 @@ public class TelemetryTransmitterTests
             .And.Contain("ExtensionVersion", "1.2.3");
     }
 
+    [Fact]
+    public void ApplyPrivacyDefaults_replaces_the_machine_name_on_events_and_exceptions()
+    {
+        var channel = new InMemoryTelemetryChannel();
+        var config = new TelemetryConfiguration
+        {
+            TelemetryChannel = channel,
+            ConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        };
+        var client = new TelemetryClient(config);
+        VsTelemetryTransmitter.ApplyPrivacyDefaults(client.Context);
+
+        client.TrackEvent(new EventTelemetry("probe"));
+        client.TrackException(new ExceptionTelemetry(new InvalidOperationException("boom")));
+
+        channel.SentTelemtries.Should().HaveCount(2);
+        channel.SentTelemtries.Select(t => t.Context.Cloud.RoleInstance)
+            .Should().OnlyContain(r => r == VsTelemetryTransmitter.RedactedRoleInstance)
+            .And.NotContain(Environment.MachineName);
+    }
+
     // NSubstitute doesn't auto-populate ImmutableDictionary-typed members with an empty
     // instance the way it does for common collection interfaces, so a bare
     // Substitute.For<ITelemetryEvent>() has a null Properties and blows up in the

@@ -124,8 +124,8 @@ are transmitted. Every exception-derived string — the `UnhandledException` `Me
 client (`LspTelemetryService` → `TelemetryScrubber.ScrubProperties`, #843, #1139): quoted spans (which routinely hold class
 names, step expressions, feature text, tags or config values) become `<text>`, URLs `<url>` and filesystem paths `<path>`, and the
 result is capped at 128 characters, so emit sites and the local debug-log mirror keep the raw text for debugging. Other string properties are fixed literals
-(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
-*name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs.
+Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
 ---
@@ -150,7 +150,6 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn (issue #845): counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
 | `ErrorMessage` | string | Connector failure: the exception message, scrubbed (quoted spans `<text>`, URLs `<url>`, paths `<path>`, capped at 128 characters) |
-| `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
 | `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
@@ -529,7 +528,7 @@ killed outright, cannot be reported by anything and shows up only as a `ServerSe
 | | |
 |---|---|
 | **Emitter** | VS `TagLinkNavigableSymbolProvider` (via `TagLinkRedirect.LinkOpened`, wired in `ReqnrollLanguageClient`); VS Code `openTagLink` (`src/VSCode/src/lsp/tagLinks.ts`); Rider `ReqnrollFeatureTagLinkController` - three client copies of the same constant, per the catalog's mirror rule |
-| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the browser. Only http(s) targets are opened, so a refused target emits nothing |
+| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the operating system. Any scheme except `javascript:`, `vbscript:`, `data:` and `command:` is opened, so a refused target emits nothing |
 | **Properties** | none - the target URL and tag text come from repository configuration and are never sent |
 
 The server only answers `textDocument/documentLink` (counted in `PassiveCounts` as `DocumentLink`), and
