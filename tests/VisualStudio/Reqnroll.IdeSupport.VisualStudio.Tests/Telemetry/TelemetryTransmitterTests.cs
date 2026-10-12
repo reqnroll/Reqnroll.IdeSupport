@@ -340,6 +340,42 @@ public class TelemetryTransmitterTests
     }
 
     [Fact]
+    public void Exceptions_are_sent_as_a_sanitised_UnhandledException_event_not_a_raw_ExceptionTelemetry()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        var inner = new ArgumentException("inner secret 'Acme.Inner'");
+        Exception thrown;
+        try
+        {
+            throw new InvalidOperationException(
+                @"Could not load type 'Acme.Payroll.Steps.PaymentSteps' from C:\Users\Jane\Payroll\Salary.feature", inner);
+        }
+        catch (Exception ex) { thrown = ex; }
+
+        sut.TransmitFatalExceptionEvent(thrown, isFatal: true);
+
+        var sent = _telemetryChannel.SentTelemtries.Should().ContainSingle().Subject;
+        sent.Should().BeOfType<EventTelemetry>("a raw ExceptionTelemetry would serialise the full message, stack and inner exceptions");
+        var evt = (EventTelemetry)sent;
+        evt.Name.Should().Be("UnhandledException");
+        evt.Properties["ExceptionType"].Should().Be(typeof(InvalidOperationException).FullName);
+        evt.Properties["IsFatal"].Should().Be("True");
+        evt.Properties["Message"].Should().Be("Could not load type <text> from <path>");
+        evt.Properties.Values.Should().NotContain(v => v.Contains("Acme") || v.Contains("Jane") || v.Contains("Salary"));
+    }
+
+    [Fact]
+    public void Sanitised_exception_properties_cap_the_message_and_omit_the_raw_stack()
+    {
+        var props = VsTelemetryTransmitter.BuildSanitizedExceptionProps(
+            new InvalidOperationException(new string('x', 1000)), Array.Empty<KeyValuePair<string, object>>());
+
+        props["Message"].Length.Should().BeLessThanOrEqualTo(TelemetryScrubber.MaxMessageLength);
+        props.Should().NotContainKey("StackTrace");
+    }
+
+    [Fact]
     public void Should_MirrorException_WithError_WhenTransmissionFails()
     {
         var sut = CreateSut();

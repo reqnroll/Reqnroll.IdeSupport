@@ -27,7 +27,7 @@ internal readonly record struct TrackedLink(ITrackingSpan Span, string Target);
 /// Between refreshes each link is a tracking span, so the styling follows edits instead of lagging behind them.
 /// </para>
 /// <para>
-/// Only http(s) targets are kept - see <see cref="TagLinkRedirect.IsOpenableUrl"/> - so nothing the server hands over
+/// Only targets with a non-blocked scheme are kept - see <see cref="TagLinkRedirect.IsOpenableUrl"/> - so nothing the server hands over
 /// is ever styled as a link unless a click on it would be allowed to open it.
 /// </para>
 /// </remarks>
