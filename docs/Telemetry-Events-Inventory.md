@@ -124,9 +124,7 @@ are transmitted. Every exception-derived string — the `UnhandledException` `Me
 last server hop before the event goes to the client (`LspTelemetryService` →
 `TelemetryScrubber.ScrubProperties`, #843), so emit sites and the local debug-log mirror keep the raw text for
 debugging. Other string properties are fixed literals
-(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. No event carries a file name: the Roslyn discovery
-event used to send the changed file's name as `AffectedFile`, which could identify the user or their project, and
-it was removed (#1123). Discovery and command events carry counts and flags. (The local `PERF` log line may
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
 ---
