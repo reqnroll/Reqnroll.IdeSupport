@@ -56,7 +56,7 @@ public class IdeSupportGherkinParser
         catch (Exception e)
         {
             logger.LogException(_telemetryService, e, "Exception during Gherkin parsing");
-            gherkinDocument = TryGetResult();
+            TryGetResult(out gherkinDocument);
         }
 
         return false;
@@ -67,8 +67,7 @@ public class IdeSupportGherkinParser
         // trying to "finish" open nodes by sending dummy <endrule> messages up to 5 levels of nesting
         for (int i = 0; i < 10; i++)
         {
-            var result = TryGetResult();
-            if (result != null)
+            if (TryGetResult(out var result))
                 return result;
 
             try
@@ -84,20 +83,25 @@ public class IdeSupportGherkinParser
     }
 
     /// <summary>
-    /// Best-effort access to the partially built AST for error recovery. Returns null and never
-    /// throws when no builder has been created yet — e.g. dialect/TokenMatcher construction failed
-    /// before <see cref="_astBuilder"/> could be assigned — or when the builder cannot produce a
-    /// result, e.g. its node stack is empty because parsing failed before any node was opened.
+    /// Best-effort access to the partially built AST for error recovery. Returns false (with a null
+    /// <paramref name="result"/>) when no builder has been created yet — e.g. dialect/TokenMatcher
+    /// construction failed before <see cref="_astBuilder"/> could be assigned — or when the builder
+    /// cannot produce a result yet: the document node is still open (null result) or the Gherkin
+    /// <c>AstBuilder.GetResult()</c> throws <see cref="InvalidOperationException"/> (empty node
+    /// stack because parsing failed before any node was opened). Any other exception is a genuine
+    /// defect and is allowed to propagate.
     /// </summary>
-    private IdeSupportGherkinDocument TryGetResult()
+    private bool TryGetResult(out IdeSupportGherkinDocument result)
     {
         try
         {
-            return GetResult();
+            result = GetResult();
+            return result != null;
         }
-        catch (Exception)
+        catch (InvalidOperationException)
         {
-            return null;
+            result = null;
+            return false;
         }
     }
 
