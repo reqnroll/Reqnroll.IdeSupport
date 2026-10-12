@@ -341,8 +341,9 @@ suite('ProjectManager', () => {
     }
 
     const loadedFor = (sent: { method: string; projectFile: string }[], projectFile: string) =>
-      sent.filter((s) => s.method === ReqnrollMethods.projectLoaded && s.projectFile === projectFile)
-        .length;
+      sent.filter(
+        (s) => s.method === ReqnrollMethods.projectLoaded && s.projectFile === projectFile,
+      ).length;
 
     test('back-to-back restarts with discoveries in flight send each project once', async () => {
       const { client, sent, move } = createFakeClient(State.Running);
@@ -376,8 +377,9 @@ suite('ProjectManager', () => {
       });
       managers.push(manager);
       await settle();
-      const register = (manager as unknown as { registerProject(uri: vscode.Uri): Promise<void> })
-        .registerProject.bind(manager);
+      const register = (
+        manager as unknown as { registerProject(uri: vscode.Uri): Promise<void> }
+      ).registerProject.bind(manager);
 
       // e.g. a watcher event arriving while a workspace-folder discovery is still evaluating.
       const first = register(vscode.Uri.file(projectA));
