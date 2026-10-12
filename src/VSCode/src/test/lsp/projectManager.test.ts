@@ -191,6 +191,13 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
     return new ProjectManager(client as unknown as ConstructorParameters<typeof ProjectManager>[0]);
   }
 
+  // The manager keys its state by `Uri.fsPath`, which differs from a raw `path.join` result (VS Code
+  // lowercases a Windows drive letter and prefixes a slash on POSIX). Seeding `_knownProjects` with the
+  // raw form makes `unregisterProject` miss the project and return before it cancels the timer.
+  function fsPathOf(p: string): string {
+    return vscode.Uri.file(p).fsPath;
+  }
+
   function projectLoadedCount(sent: SentNotification[], projectFile: string): number {
     return sent.filter(
       (n) => n.method === ReqnrollMethods.projectLoaded && n.params.projectFile === projectFile,
@@ -211,7 +218,7 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
     const sent: SentNotification[] = [];
     const manager = makeManager(sent);
     try {
-      const projectFile = path.join('C:', 'not-registered-1010', 'App.csproj');
+      const projectFile = fsPathOf(path.join('C:', 'not-registered-1010', 'App.csproj'));
 
       await (
         manager as unknown as { resendProjectFiles(p: string): Promise<void> }
@@ -232,7 +239,7 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
     const manager = makeManager(sent);
     try {
       const projectDir = path.join('C:', 'pending-1010');
-      const projectFile = path.join(projectDir, 'App.csproj');
+      const projectFile = fsPathOf(path.join(projectDir, 'App.csproj'));
       const changedFile = path.join(projectDir, 'Steps.cs');
 
       // Seed the manager as if the project had already been registered, then arm the debounce
@@ -272,7 +279,7 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
     const sent: SentNotification[] = [];
     const manager = makeManager(sent);
     const projectDir = path.join('C:', 'dispose-1010');
-    const projectFile = path.join(projectDir, 'App.csproj');
+    const projectFile = fsPathOf(path.join(projectDir, 'App.csproj'));
     const changedFile = path.join(projectDir, 'Steps.cs');
 
     (manager as unknown as { _knownProjects: Set<string> })._knownProjects.add(projectFile);
