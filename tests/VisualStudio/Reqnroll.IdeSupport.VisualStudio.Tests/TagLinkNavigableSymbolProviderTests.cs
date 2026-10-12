@@ -144,20 +144,35 @@ public class TagLinkNavigableSymbolProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task Returns_null_for_a_non_openable_target_so_the_ctrl_hover_symbol_is_never_offered_issue_1036()
+    public async Task Returns_null_for_a_blocked_scheme_target_so_the_ctrl_hover_symbol_is_never_offered_issue_1036()
     {
-        // The server emits target.AbsoluteUri for any configured pattern, so a misconfigured non-http(s)
-        // target reaches the provider; offering a symbol for it would underline the tag and win over
+        // The server emits target.AbsoluteUri for any configured pattern, so a blocked-scheme target
+        // reaches the provider; offering a symbol for it would underline the tag and win over
         // Go To Definition, only to have Navigate refuse to open it.
         var snapshot = CreateSnapshot();
         TagLinkRedirect.GetLinksAsync = (_, _) => Task.FromResult<IReadOnlyList<TagLinkEntry>>(
-            new[] { new TagLinkEntry(1, 0, 1, 11, "file:///C:/Windows/System32/calc.exe") });
+            new[] { new TagLinkEntry(1, 0, 1, 11, "javascript:alert(1)") });
 
         var symbol = await CreateSut(CreateTextViewWithDocument())
             .GetNavigableSymbolAsync(TriggerOnLine1(snapshot), CancellationToken.None);
 
         symbol.Should().BeNull();
-        TagLinkRedirect.IsOpenableUrl("file:///C:/Windows/System32/calc.exe").Should().BeFalse();
+        TagLinkRedirect.IsOpenableUrl("javascript:alert(1)").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("file:///C:/specs/story.html")]
+    [InlineData("jira://browse/PROJ-1")]
+    public async Task Returns_a_symbol_for_a_non_http_target_with_an_allowed_scheme(string target)
+    {
+        var snapshot = CreateSnapshot();
+        TagLinkRedirect.GetLinksAsync = (_, _) => Task.FromResult<IReadOnlyList<TagLinkEntry>>(
+            new[] { new TagLinkEntry(1, 0, 1, 11, target) });
+
+        var symbol = await CreateSut(CreateTextViewWithDocument())
+            .GetNavigableSymbolAsync(TriggerOnLine1(snapshot), CancellationToken.None);
+
+        symbol.Should().NotBeNull();
     }
 
     [Fact]
