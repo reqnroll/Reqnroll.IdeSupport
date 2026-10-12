@@ -266,6 +266,23 @@ public class FileSystemEditorConfigOptionsProviderTests
     [InlineData("Login[z-a].feature", @"Loginb.feature", false)]
     [InlineData("Login[12.feature", @"Login[12.feature", true)] // unterminated [ is literal
     [InlineData("*.{feature,cs", @"Login.{feature,cs", true)]   // unterminated { is literal
+    // an escaped '-' inside [seq] is a literal hyphen, not a range operator
+    [InlineData(@"Login[a\-z].feature", @"Loginb.feature", false)]
+    [InlineData(@"Login[a\-z].feature", @"Login-.feature", true)]
+    [InlineData(@"Login[a\-z].feature", @"Loginz.feature", true)]
+    // only '!' negates; '^' is an ordinary member of the class
+    [InlineData("Login[^ab].feature", @"Login^.feature", true)]
+    [InlineData("Login[^ab].feature", @"Loginc.feature", false)]
+    [InlineData("Login[^ab].feature", @"Logina.feature", true)]
+    // a numeric range can take digits back from a preceding '*' or another range
+    [InlineData("*{10..99}.cs", @"x123.cs", true)]
+    [InlineData("*{10..99}.cs", @"x1.cs", false)]
+    [InlineData("{1..9}{10..99}.cs", @"123.cs", true)]
+    // ranges are matched as written: no leading zeros
+    [InlineData("Step{1..10}.cs", @"Step007.cs", false)]
+    // a range too wide to expand is still compared numerically
+    [InlineData("Id{1..100000}.cs", @"Id99999.cs", true)]
+    [InlineData("Id{1..100000}.cs", @"Id100001.cs", false)]
     public void Section_glob_follows_EditorConfig_spec(string pattern, string relativeFile, bool expectedToApply)
     {
         var ec   = @"C:\Repo\.editorconfig";

@@ -28,6 +28,9 @@ internal static class EditorConfigGlob
         RegexOptions.CultureInvariant |
         (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? RegexOptions.IgnoreCase : RegexOptions.None);
 
+    /// <summary>Numeric ranges spanning fewer values than this are expanded into a regex alternation.</summary>
+    private const int MaxExpandedRange = 1000;
+
     private static readonly Regex NumericRange = new(@"^([+-]?\d+)\.\.([+-]?\d+)$", RegexOptions.CultureInvariant);
 
     private static readonly ConcurrentDictionary<string, CompiledGlob> Cache = new(StringComparer.Ordinal);
@@ -171,15 +174,19 @@ internal static class EditorConfigGlob
             return start + 1;
         }
 
-        bool negate = content[0] == '!' || content[0] == '^';
+        bool negate = content[0] == '!';
         if (negate) content = content.Substring(1);
 
         sb.Append(negate ? "[^/" : "[");
         for (int j = 0; j < content.Length; j++)
         {
             char c = content[j];
+            bool escaped = false;
             if (c == '\\' && j + 1 < content.Length)
+            {
                 c = content[++j];
+                escaped = true;
+            }
             else if (c == '-')
             {
                 // A leading or trailing '-' is literal; elsewhere it forms a range.
@@ -188,7 +195,8 @@ internal static class EditorConfigGlob
             }
 
             // Only these are special inside a .NET character class ('-' ranges are handled above).
-            if (c is '\\' or ']' or '[' or '^')
+            // An escaped '-' is a literal hyphen, not a range operator, so it is escaped for .NET too.
+            if (c is '\\' or ']' or '[' or '^' || (escaped && c == '-'))
                 sb.Append('\\');
             sb.Append(c);
         }
@@ -213,8 +221,28 @@ internal static class EditorConfigGlob
             long.TryParse(range.Groups[1].Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var a) &&
             long.TryParse(range.Groups[2].Value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var b))
         {
+            long min = Math.Min(a, b), max = Math.Max(a, b);
+            if (max - min < MaxExpandedRange)
+            {
+                // Spelled out as an alternation, so the regex can backtrack into another split of
+                // the surrounding '*' / adjacent ranges ("*{10..99}.cs" against "x123.cs" needs
+                // '*' = "x1" and the range = "23"). Matches the number exactly as written: no
+                // leading zeros or '+', per the spec.
+                sb.Append("(?:");
+                for (long v = max; v >= min; v--)
+                {
+                    sb.Append(v.ToString(CultureInfo.InvariantCulture));
+                    if (v > min) sb.Append('|');
+                }
+                sb.Append(')');
+                return end + 1;
+            }
+
+            // Too wide to spell out: capture the digits and compare numerically after the match.
+            // This takes the first (greedy) split, so an adjacent '*' or range cannot give back
+            // digits to a wide range.
             sb.Append("(?<").Append(RangeGroupName(ranges.Count)).Append(@">[+-]?\d+)");
-            ranges.Add((Math.Min(a, b), Math.Max(a, b)));
+            ranges.Add((min, max));
             return end + 1;
         }
 
