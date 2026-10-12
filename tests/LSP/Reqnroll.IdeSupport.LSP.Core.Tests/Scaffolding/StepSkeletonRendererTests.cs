@@ -282,9 +282,9 @@ public class StepSkeletonRendererTests
         var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
         var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
 
-        // Cucumber escaping turns '(' into '\('; the C# literal must then escape
-        // that backslash again -> "a cart \\(empty)" in the emitted source.
-        snippet.Should().Contain("[When(\"a cart \\\\(empty)\")]");
+        // Cucumber escaping turns '(' and ')' into '\(' and '\)'; the C# literal must
+        // then escape each backslash again -> "a cart \\(empty\\)" in the emitted source.
+        snippet.Should().Contain("[When(\"a cart \\\\(empty\\\\)\")]");
     }
 
     [Fact]
