@@ -74,6 +74,8 @@
 
 ## Bug fixes:
 
+* Visual Studio now reports host exceptions as the same sanitised `UnhandledException` event as the language server (scrubbed message, product-only stack) instead of a raw Application Insights exception record that carried the full message, the full stack with file paths and line numbers, and inner exceptions (VS) - see #1140
+
 * Server telemetry for exceptions (`UnhandledException` `Message` and the discovery failure `ErrorMessage`) now drops quoted text, which routinely held class and assembly names, step expressions, feature text, tags or configuration values, and caps the message at 128 characters, as the VS Code and Rider clients already did for their own exceptions; previously only URLs and file paths were redacted (LSP server, VS, VS Code, Rider) - see #1139
 
 * A step definition whose expression contains a character class with a stray bracket (for example `[x)abc]`) is no longer wrongly excluded from step matching: the literal prefilter treated the characters after the stray bracket as required literal text the step does not have to contain, which could make the step be reported as undefined even though the binding matched (LSP Core) - see #951, @clrudolphi

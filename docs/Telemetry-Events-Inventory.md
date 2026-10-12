@@ -123,7 +123,7 @@ are transmitted. Every exception-derived string — the `UnhandledException` `Me
 `ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed at the last server hop before the event goes to the
 client (`LspTelemetryService` → `TelemetryScrubber.ScrubProperties`, #843, #1139): quoted spans (which routinely hold class
 names, step expressions, feature text, tags or config values) become `<text>`, URLs `<url>` and filesystem paths `<path>`, and the
-result is capped at 128 characters, so emit sites and the local debug-log mirror keep the raw text for debugging. Other string properties are fixed literals
+result is capped at 128 characters, so emit sites and the local debug-log mirror keep the raw text for debugging. Exceptions raised in the Visual Studio host take the same shape: they are sent as the sanitised `UnhandledException` event (scrubbed `Message`, product-only `StackFrames`), never as a raw Application Insights exception record with the full message, stack and inner exceptions (#1140). Other string properties are fixed literals
 (`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
 *name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
