@@ -74,6 +74,8 @@
 
 ## Bug fixes:
 
+* Renaming a step whose regex expression contains nested capture groups, such as `(\d+(\.\d+)?)`, no longer fails with "The non-parameter parts cannot contain expression operators": the whole group is now treated as one parameter slot (LSP server, VS, VS Code, Rider) - see #1131
+
 * A step definition whose expression contains a character class with a stray bracket (for example `[x)abc]`) is no longer wrongly excluded from step matching: the literal prefilter treated the characters after the stray bracket as required literal text the step does not have to contain, which could make the step be reported as undefined even though the binding matched (LSP Core) - see #951, @clrudolphi
 * Step definitions whose step expression is a top-level alternation (for example `^I have apples|I have pears$`) are recognised again: the literal prefilter that narrows step matching wrongly required the literal text of *every* branch to appear in the step, so a step matching only one branch was never offered as a match (Go to Step Definition, "step not found" diagnostics and step completion could all miss it). A top-level `|` now disables the prefilter for that binding, which is then always considered (LSP server) - see #950, @clrudolphi
 * Go to Step Definition in VS Code no longer labels a step definition whose source file sits in a workspace folder that merely shares a prefix with another open folder (e.g. `Repo` and `RepoExtra`): the folder-prefix check now requires a path-separator boundary, so a file under `RepoExtra` falls back to its bare filename instead of being reported with a bogus `../RepoExtra/...` path resolved against `Repo` (VS Code) - see #1015

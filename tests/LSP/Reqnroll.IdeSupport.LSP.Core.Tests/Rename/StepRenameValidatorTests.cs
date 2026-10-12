@@ -281,4 +281,61 @@ public class StepRenameValidatorTests
         result.Message.Should().Be("No Reqnroll project with feature files found");
         result.Scope.Should().Be("project");
     }
+
+    // ── Nested groups (issue #1131) ─────────────────────────────────────────────
+
+    [Theory]
+    // The whole group is one parameter slot; the wording change introduces nothing.
+    [InlineData(@"the basket price should be (\d+(\.\d+)?)", @"the price should be (\d+(\.\d+)?)")]
+    [InlineData(@"^the basket price should be (\d+(\.\d+)?)$", @"^the price should be (\d+(\.\d+)?)$")]
+    // Adding an optional nested group INSIDE a slot is still a single slot, with no operator left in the text.
+    [InlineData(@"the price should be (\d+)", @"the price should be (\d+(\.\d+)?)")]
+    [InlineData(@"the price is (\d+(\.(\d+(,\d+)?))?)", @"the cost is (\d+(\.(\d+(,\d+)?))?)")]
+    // Non-capturing, named and inline-option groups keep behaving as a single slot each.
+    [InlineData(@"I pick (?:a|an) item", @"I choose (?:a|an) item")]
+    [InlineData(@"I pick (?<name>\w+(-\w+)?) now", @"I choose (?<name>\w+(-\w+)?) now")]
+    [InlineData(@"(?i)I pick (.*)", @"(?i)I choose (.*)")]
+    public void ValidateNewName_treats_a_group_with_nested_groups_as_one_parameter_slot(string original, string newName)
+    {
+        StepRenameValidator.ValidateNewName(original, newName).Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_rejects_a_nested_group_rename_that_changes_the_parameter_count()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"the price should be (\d+(\.\d+)?)", @"the price should be (\d+(\.\d+)?) (.*)");
+
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+    }
+
+    [Fact]
+    public void ValidateNewName_rejects_a_quantifier_added_after_a_nested_group()
+    {
+        // The trailing '?' makes the whole parameter optional and sits outside the slot, so it is an
+        // introduced operator (Rule 3), not part of the group.
+        var result = StepRenameValidator.ValidateNewName(
+            @"the price should be (\d+(\.\d+)?)", @"the price should be (\d+(\.\d+)?)?");
+
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+    }
+
+    [Fact]
+    public void ValidateNewName_still_rejects_an_operator_introduced_outside_the_nested_group()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"the price should be (\d+(\.\d+)?)", @"the price* should be (\d+(\.\d+)?)");
+
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+    }
+
+    [Fact]
+    public void ValidateNewName_ignores_escaped_parentheses_when_counting_slots()
+    {
+        // \( and \) are literal text, so this expression has one real slot, (\d+).
+        StepRenameValidator.ValidateNewName(@"the total \((\d+)\)", @"the sum \((\d+)\)").Should().BeNull();
+    }
 }
