@@ -229,6 +229,150 @@ public class GherkinDocumentContextCalculatorTests
         results[1].Key.Should().Be("2");
     }
 
+    [Fact]
+    public void ScenarioOutline_untagged_examples_block_does_not_inherit_previous_tagged_block_context()
+    {
+        // Regression for #954: an untagged Examples block following a tagged one must use the
+        // plain outline context, not inherit the previous block's tag-matching scope.
+        const string text = """
+            Feature: F
+            Scenario Outline: SO
+              Given <x>
+              @tagA
+              Examples: set1
+                | x |
+                | 1 |
+              Examples: set2
+                | x |
+                | 2 |
+            """;
+
+        var doc = ParseFeature(text);
+        var outline = doc.Feature.Children.OfType<ScenarioOutline>().Single();
+        var step = outline.Steps.First();
+
+        var featureCtx = new SimpleContext(null!, doc.Feature);
+        var outlineCtx = new SimpleContext(featureCtx, outline);
+
+        var results = GherkinDocumentContextCalculator
+            .GetScenarioOutlineStepsWithContexts(step, outlineCtx)
+            .ToList();
+
+        results.Should().HaveCount(2);
+
+        // Row from the tagged block carries @tagA...
+        results[0].Key.Should().Be("1");
+        results[0].Value.GetTagNames().Should().Contain("@tagA");
+
+        // ...but the untagged block's row must NOT inherit @tagA from the previous block.
+        results[1].Key.Should().Be("2");
+        results[1].Value.GetTagNames().Should().NotContain("@tagA");
+        results[1].Value.GetTagNames().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ScenarioOutline_differently_tagged_examples_blocks_do_not_leak_tags_into_each_other()
+    {
+        const string text = """
+            Feature: F
+            Scenario Outline: SO
+              Given <x>
+              @tagA
+              Examples: set1
+                | x |
+                | 1 |
+                | 2 |
+              @tagB
+              Examples: set2
+                | x |
+                | 3 |
+                | 4 |
+            """;
+
+        var results = GetOutlineStepContexts(text);
+
+        results.Select(r => r.Key).Should().Equal("1", "2", "3", "4");
+        results[0].Value.GetTagNames().Should().Equal("@tagA");
+        results[1].Value.GetTagNames().Should().Equal("@tagA");
+        results[2].Value.GetTagNames().Should().Equal("@tagB");
+        results[3].Value.GetTagNames().Should().Equal("@tagB");
+    }
+
+    [Fact]
+    public void ScenarioOutline_untagged_tagged_untagged_examples_blocks_each_get_their_own_context()
+    {
+        // The untagged block *after* a tagged one is the #954 case; the untagged block *before* it
+        // pins that nothing is carried backwards or left over from the initial state, and the
+        // sequence ends untagged again to prove the tag scope is reset after a tagged block.
+        const string text = """
+            Feature: F
+            Scenario Outline: SO
+              Given <x>
+              Examples: first
+                | x |
+                | 1 |
+              @tagA
+              Examples: second
+                | x |
+                | 2 |
+              Examples: third
+                | x |
+                | 3 |
+            """;
+
+        var results = GetOutlineStepContexts(text);
+
+        results.Select(r => r.Key).Should().Equal("1", "2", "3");
+        results[0].Value.GetTagNames().Should().BeEmpty();
+        results[1].Value.GetTagNames().Should().Equal("@tagA");
+        results[2].Value.GetTagNames().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ScenarioOutline_untagged_examples_block_still_sees_outline_tags_but_not_other_blocks_tags()
+    {
+        // Tags on the outline itself apply to every block (via the parent chain); a block's own
+        // tags are added on top for that block only.
+        const string text = """
+            Feature: F
+            @outlineTag
+            Scenario Outline: SO
+              Given <x>
+              @tagA
+              Examples: set1
+                | x |
+                | 1 |
+              Examples: set2
+                | x |
+                | 2 |
+              @tagB
+              Examples: set3
+                | x |
+                | 3 |
+            """;
+
+        var results = GetOutlineStepContexts(text);
+
+        results.Select(r => r.Key).Should().Equal("1", "2", "3");
+        results[0].Value.GetTagNames().Should().BeEquivalentTo("@outlineTag", "@tagA");
+        results[1].Value.GetTagNames().Should().BeEquivalentTo("@outlineTag");
+        results[2].Value.GetTagNames().Should().BeEquivalentTo("@outlineTag", "@tagB");
+    }
+
+    private List<KeyValuePair<string, IGherkinDocumentContext>> GetOutlineStepContexts(string text)
+    {
+        var doc = ParseFeature(text);
+        var outline = doc.Feature.Children.OfType<ScenarioOutline>().Single();
+        var step = outline.Steps.First();
+
+        var featureCtx = new SimpleContext(null!, doc.Feature);
+        var outlineCtx = new SimpleContext(featureCtx, outline);
+
+        return GherkinDocumentContextCalculator
+            .GetScenarioOutlineStepsWithContexts(step, outlineCtx)
+            .ToList();
+    }
+
     // ── minimal IGherkinDocumentContext helper ─────────────────────────────────
 
     private sealed class SimpleContext(IGherkinDocumentContext parent, object node) : IGherkinDocumentContext
