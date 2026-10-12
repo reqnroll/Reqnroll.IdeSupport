@@ -135,4 +135,22 @@ public class RegexStepDefinitionExpressionAnalyzerTests
 
         result.Parts.Select(p => p.ExpressionText).Should().Equal("I have ", @"(\d+)", " cukes");
     }
+
+    [Theory]
+    [InlineData(@"I have \d apples")]
+    [InlineData(@"I have \w apples")]
+    [InlineData(@"I have \s apples")]
+    [InlineData(@"I have \D apples")]
+    [InlineData(@"I have \W apples")]
+    [InlineData(@"I have \S apples")]
+    [InlineData(@"I have \b apples")]
+    public void Parse_treats_escaped_character_classes_as_operators(string expression)
+    {
+        var result = CreateSut().Parse(expression);
+
+        result.ContainsOnlySimpleText.Should().BeFalse(
+            "escaped character classes such as \\d are regex operators, not literal characters (issue #958)");
+        result.Parts.Should().ContainSingle().Which.Should()
+            .BeOfType<AnalyzedStepDefinitionExpressionWithOperatorsTextPart>();
+    }
 }
