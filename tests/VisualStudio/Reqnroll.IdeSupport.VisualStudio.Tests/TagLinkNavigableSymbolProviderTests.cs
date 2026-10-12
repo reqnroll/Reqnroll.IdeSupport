@@ -38,6 +38,44 @@ public class TagLinkNavigableSymbolProviderTests : IDisposable
         return textView;
     }
 
+    // The test text is three lines: "Feature: F" (0), "@issue:1234 @smoke" (11), "Scenario: S" (30).
+    private static readonly int[] LineStarts = { 0, 11, 30 };
+
+    private static ITextSnapshot CreateSnapshot()
+    {
+        var snapshot = Substitute.For<ITextSnapshot>();
+        snapshot.Length.Returns(42);
+        snapshot.LineCount.Returns(LineStarts.Length);
+        // Built up front: SnapshotPoint's constructor reads snapshot.Length, and calling the snapshot
+        // between `line.Start` and `.Returns(...)` would be taken as the call being configured.
+        var lines = LineStarts.Select((start, number) =>
+        {
+            var startPoint = new SnapshotPoint(snapshot, start);
+            var line = Substitute.For<ITextSnapshotLine>();
+            line.LineNumber.Returns(number);
+            line.Start.Returns(startPoint);
+            return line;
+        }).ToArray();
+        snapshot.GetLineFromLineNumber(Arg.Any<int>()).Returns(ci => lines[ci.Arg<int>()]);
+        // GetContainingLine() resolves the line through GetLineFromPosition.
+        snapshot.GetLineFromPosition(Arg.Any<int>()).Returns(ci =>
+        {
+            var position = ci.Arg<int>();
+            var index = 0;
+            for (var i = 0; i < LineStarts.Length; i++)
+            {
+                if (LineStarts[i] <= position)
+                    index = i;
+            }
+            return lines[index];
+        });
+        return snapshot;
+    }
+
+    // A zero-width trigger span on the tag at line 1 (character 11), used to drive the link lookup.
+    private static SnapshotSpan TriggerOnLine1(ITextSnapshot snapshot) =>
+        new(new SnapshotPoint(snapshot, 11), new SnapshotPoint(snapshot, 11));
+
     // ── MEF metadata ─────────────────────────────────────────────────────
 
     [Fact]
@@ -103,6 +141,38 @@ public class TagLinkNavigableSymbolProviderTests : IDisposable
 
         symbol.Should().BeNull();
         askedFor.Should().Be(new Uri(@"C:\repo\Feature1.feature").AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task Returns_null_for_a_non_openable_target_so_the_ctrl_hover_symbol_is_never_offered_issue_1036()
+    {
+        // The server emits target.AbsoluteUri for any configured pattern, so a misconfigured non-http(s)
+        // target reaches the provider; offering a symbol for it would underline the tag and win over
+        // Go To Definition, only to have Navigate refuse to open it.
+        var snapshot = CreateSnapshot();
+        TagLinkRedirect.GetLinksAsync = (_, _) => Task.FromResult<IReadOnlyList<TagLinkEntry>>(
+            new[] { new TagLinkEntry(1, 0, 1, 11, "file:///C:/Windows/System32/calc.exe") });
+
+        var symbol = await CreateSut(CreateTextViewWithDocument())
+            .GetNavigableSymbolAsync(TriggerOnLine1(snapshot), CancellationToken.None);
+
+        symbol.Should().BeNull();
+        TagLinkRedirect.IsOpenableUrl("file:///C:/Windows/System32/calc.exe").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Returns_a_symbol_for_an_http_target_issue_1036()
+    {
+        var snapshot = CreateSnapshot();
+        TagLinkRedirect.GetLinksAsync = (_, _) => Task.FromResult<IReadOnlyList<TagLinkEntry>>(
+            new[] { new TagLinkEntry(1, 0, 1, 11, "https://example.com/issues/1036") });
+
+        var symbol = await CreateSut(CreateTextViewWithDocument())
+            .GetNavigableSymbolAsync(TriggerOnLine1(snapshot), CancellationToken.None);
+
+        symbol.Should().NotBeNull();
+        symbol!.SymbolSpan.Start.Position.Should().Be(11);
+        symbol.SymbolSpan.Length.Should().Be(11);
     }
 
     // ── FindLink ─────────────────────────────────────────────────────────
