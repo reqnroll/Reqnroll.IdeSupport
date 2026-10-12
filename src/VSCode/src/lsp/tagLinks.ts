@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Middleware } from 'vscode-languageclient/node';
-import { GHERKIN_LANGUAGE_ID } from '../languageIds';
+import { REQNROLL_LANGUAGE_ID } from '../languageIds';
 import { sendTelemetryEvent } from '../telemetry';
 import { TelemetryEvents } from '../telemetryEvents';
 
@@ -152,7 +152,7 @@ export async function openTagLink(
 export function nudgeDocumentLinkRefresh(): void {
   vscode.languages
     .registerDocumentLinkProvider(
-      { language: GHERKIN_LANGUAGE_ID },
+      { language: REQNROLL_LANGUAGE_ID },
       { provideDocumentLinks: () => undefined },
     )
     .dispose();
