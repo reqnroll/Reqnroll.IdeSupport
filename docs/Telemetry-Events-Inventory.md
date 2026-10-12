@@ -527,7 +527,7 @@ killed outright, cannot be reported by anything and shows up only as a `ServerSe
 | | |
 |---|---|
 | **Emitter** | VS `TagLinkNavigableSymbolProvider` (via `TagLinkRedirect.LinkOpened`, wired in `ReqnrollLanguageClient`); VS Code `openTagLink` (`src/VSCode/src/lsp/tagLinks.ts`); Rider `ReqnrollFeatureTagLinkController` - three client copies of the same constant, per the catalog's mirror rule |
-| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the browser. Only http(s) targets are opened, so a refused target emits nothing |
+| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the operating system. Any scheme except `javascript:`, `vbscript:`, `data:` and `command:` is opened, so a refused target emits nothing |
 | **Properties** | none - the target URL and tag text come from repository configuration and are never sent |
 
 The server only answers `textDocument/documentLink` (counted in `PassiveCounts` as `DocumentLink`), and

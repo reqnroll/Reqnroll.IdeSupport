@@ -163,12 +163,19 @@ object RunTestRunner {
      * `internal`ly testable without a platform fixture.
      */
     internal fun findOwningProjectPath(filePath: String, projectFilePaths: Collection<String>): String? {
+        // [lspUriToLocalPath] yields forward-slash paths ("W:/repo/A.feature") while the project model
+        // reports platform paths ("W:\repo\A.csproj" on Windows), so compare with both normalised to '/'.
+        // A prefix built from File.separatorChar never matched on Windows, which made every run from a
+        // .feature file fail with "Could not find the project that owns ..." (#1122).
+        val normalizedFile = filePath.replace('\\', '/')
         var best: String? = null
         var bestLen = 0
         for (projectFilePath in projectFilePaths) {
-            val folder = File(projectFilePath).parent ?: continue
-            val prefix = folder.trimEnd(File.separatorChar) + File.separatorChar
-            if (filePath.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
+            val normalized = projectFilePath.replace('\\', '/')
+            val slash = normalized.lastIndexOf('/')
+            if (slash < 0) continue
+            val prefix = normalized.substring(0, slash).trimEnd('/') + '/'
+            if (normalizedFile.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
                 best = projectFilePath
                 bestLen = prefix.length
             }
