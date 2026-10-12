@@ -1,6 +1,8 @@
 ﻿#nullable enable
 
 using Gherkin;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
@@ -215,6 +217,101 @@ public class StepSkeletonRendererTests
 
         snippet.Should().Contain("[Given(\"the operand {int} has been entered\")]");
         snippet.Should().Contain("public void GivenTheOperandHasBeenEntered(int p0)");
+    }
+
+    // ── Render — C# literal escaping of the expression text (#944) ─────────────
+
+    [Theory]
+    [InlineData("a cart (empty)",        SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("I use {unmatched",      SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("I say \"hi",            SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("a \\ b",                SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("I say \"hello\"",       SnippetExpressionStyle.RegularExpression)]
+    [InlineData("I use (paren)",         SnippetExpressionStyle.RegularExpression)]
+    public void Rendered_snippet_has_no_csharp_syntax_errors(
+        string text, SnippetExpressionStyle style)
+    {
+        var step       = MakeStep(text, ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, style);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // Wrap the generated method body in a class and parse it. The escaping
+        // defect surfaces here as a lexer/parser error (CS1009 unrecognized
+        // escape sequence / CS1010 newline in constant / CS1039 unterminated
+        // literal) without needing a full semantic compilation.
+        var source = "public class Snippet\n{\n" + snippet + "}\n";
+        var errors = CSharpSyntaxTree.ParseText(source)
+            .GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToList();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_parenthesis_for_the_csharp_literal()
+    {
+        var step       = MakeStep("a cart (empty)", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // Cucumber escaping turns '(' into '\('; the C# literal must then escape
+        // that backslash again -> "a cart \\(empty)" in the emitted source.
+        snippet.Should().Contain("[When(\"a cart \\\\(empty)\")]");
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_unmatched_brace_for_the_csharp_literal()
+    {
+        var step       = MakeStep("I use {unmatched", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        snippet.Should().Contain("[When(\"I use \\\\{unmatched\")]");
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_embedded_quote_for_the_csharp_literal()
+    {
+        var step       = MakeStep("I say \"hi", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        snippet.Should().Contain("[When(\"I say \\\"hi\")]");
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_backslash_for_the_csharp_literal()
+    {
+        var step       = MakeStep("a \\ b", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // EscapeForCucumber doubles the backslash -> "a \\ b"; the C# literal then
+        // doubles each of those again -> "a \\\\ b" in the emitted source.
+        snippet.Should().Contain("[When(\"a \\\\\\\\ b\")]");
+    }
+
+    [Fact]
+    public void Render_regex_doubles_embedded_quotes_for_the_verbatim_literal()
+    {
+        var step       = MakeStep("I say \"hello\"", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        snippet.Should().Contain("[When(@\"I say \"\"hello\"\"\")]");
+    }
+
+    [Fact]
+    public void Render_regex_does_not_re_escape_backslashes_in_the_verbatim_literal()
+    {
+        var step       = MakeStep("I use (paren)", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // EscapeForRegex produces '\(' then the capture-group pass yields "\(.*)";
+        // a verbatim literal keeps the backslash as-is (NOT doubled).
+        snippet.Should().Contain("[When(@\"I use \\(.*)\")]");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

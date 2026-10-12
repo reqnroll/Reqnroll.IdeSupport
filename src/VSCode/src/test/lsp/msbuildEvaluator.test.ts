@@ -163,5 +163,61 @@ suite('msbuildEvaluator', () => {
       const expected = path.resolve('repo', 'MyProject', 'bin', 'Debug', 'net8.0', 'MyProject.dll');
       assert.strictEqual(result, expected);
     });
+
+    test('keeps an absolute OutputPath absolute instead of re-rooting it under the project dir', () => {
+      // ArtifactsPath / UseArtifactsOutput, or a hand-set absolute OutputPath, make MSBuild emit
+      // an absolute OutputPath (e.g. /home/x/out/ or C:\out\). Splitting it into segments and
+      // resolving against the project directory silently drops its root, pointing the membership
+      // index at a path under the project dir that does not exist.
+      const absoluteOut = path.resolve(path.sep + path.join('abs', 'out')) + path.sep;
+      const props = {
+        TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+        OutputPath: absoluteOut,
+        AssemblyName: 'MyProject',
+        RootNamespace: 'MyProject',
+        ProjectAssetsFile: '',
+      };
+
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
+
+      assert.ok(path.isAbsolute(result), `expected an absolute result, got ${result}`);
+      assert.strictEqual(result, path.join(absoluteOut, 'MyProject.dll'));
+    });
+
+    test('keeps the /home/x/out/ root of a forward-slash absolute OutputPath (issue #1007 example)', () => {
+      const props = {
+        TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+        OutputPath: '/home/x/out/',
+        AssemblyName: 'MyProject',
+        RootNamespace: 'MyProject',
+        ProjectAssetsFile: '',
+      };
+
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
+
+      assert.strictEqual(result, path.resolve('/home/x/out', 'MyProject.dll'));
+    });
+
+    test('keeps a Windows drive-absolute OutputPath absolute', () => {
+      if (process.platform !== 'win32') {
+        // path.isAbsolute('C:\out\') is false on POSIX hosts, so a drive path is only meaningful
+        // where the host path module treats a drive letter plus separator as rooted.
+        return;
+      }
+      const props = {
+        TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+        OutputPath: 'C:\\out\\',
+        AssemblyName: 'MyProject',
+        RootNamespace: 'MyProject',
+        ProjectAssetsFile: '',
+      };
+
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
+
+      assert.strictEqual(result, path.resolve('C:\\out', 'MyProject.dll'));
+    });
   });
 });
