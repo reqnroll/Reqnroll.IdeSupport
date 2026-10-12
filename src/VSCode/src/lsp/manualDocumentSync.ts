@@ -11,9 +11,14 @@ import {
 /** A predicate selecting which text documents a sync path is responsible for. */
 export type DocumentPredicate = (document: vscode.TextDocument) => boolean;
 
-/** True when `document` is a C# source file (matched by its `.cs` file extension). */
+/**
+ * True when `document` is a real on-disk C# source file: both the `file` URI scheme and the `.cs`
+ * extension must match. The scheme check (issue #1006) keeps virtual documents -- `git:` diff/HEAD
+ * views, `untitled:` scratch buffers, etc. -- out of the sync, since the server keys documents by
+ * path alone and a HEAD-version document could otherwise override the working file's live text.
+ */
 export function isCSharpDocument(document: vscode.TextDocument): boolean {
-  return document.uri.path.toLowerCase().endsWith('.cs');
+  return document.uri.scheme === 'file' && document.uri.path.toLowerCase().endsWith('.cs');
 }
 
 /**
