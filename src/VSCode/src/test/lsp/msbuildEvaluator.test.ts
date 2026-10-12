@@ -1,12 +1,16 @@
 import * as assert from 'assert';
 import * as path from 'path';
+import * as vscode from 'vscode';
+import { setAppLogChannel } from '../../logging/appNotify';
 import {
   buildOutputPath,
   findTargetKey,
+  getMsbuildEvaluation,
   readPackageReferences,
   tfmToShort,
   toProjectFileItems,
 } from '../../lsp/msbuildEvaluator';
+import { MAX_BUFFER_OVERFLOW_CODE } from '../../util/msbuildProcess';
 
 suite('msbuildEvaluator', () => {
   suite('tfmToShort', () => {
@@ -218,6 +222,34 @@ suite('msbuildEvaluator', () => {
       const result = buildOutputPath(projectFile, props);
 
       assert.strictEqual(result, path.resolve('C:\\out', 'MyProject.dll'));
+    });
+  });
+
+  suite('msbuild output exceeding the buffer (issue #1008)', () => {
+    const overflowError = (): Error =>
+      Object.assign(new Error('stdout maxBuffer length exceeded'), {
+        code: MAX_BUFFER_OVERFLOW_CODE,
+      });
+
+    teardown(() => setAppLogChannel(undefined));
+
+    test('warns and returns null instead of dropping the evaluation silently', async () => {
+      // console.warn cannot be replaced inside the Extension Host, so capture through the app log channel.
+      const warnings: string[] = [];
+      setAppLogChannel({
+        info: () => undefined,
+        warn: (message: string) => warnings.push(message),
+        error: () => undefined,
+      } as unknown as vscode.LogOutputChannel);
+
+      const result = await getMsbuildEvaluation('C:\\proj\\Big.csproj', () =>
+        Promise.resolve({ stdout: '', error: overflowError() }),
+      );
+
+      assert.strictEqual(result, null);
+      assert.strictEqual(warnings.length, 1, 'the dropped evaluation must be logged');
+      assert.match(warnings[0], /buffer limit/);
+      assert.match(warnings[0], /Big\.csproj/);
     });
   });
 });
