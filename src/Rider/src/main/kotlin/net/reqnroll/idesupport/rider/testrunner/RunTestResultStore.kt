@@ -3,8 +3,11 @@ package net.reqnroll.idesupport.rider.testrunner
 import net.reqnroll.idesupport.rider.lsp.protocol.ScenarioTestTargetItem
 import java.util.concurrent.ConcurrentHashMap
 
-/** Outcome of the last `dotnet test` run for one scenario. */
-enum class RunOutcome { PASSED, FAILED }
+/**
+ * Outcome of the last `dotnet test` run for one scenario. [INCONCLUSIVE] means the run produced no
+ * usable result (e.g. an empty or unparseable TRX, issue #983) — it must never render as a pass.
+ */
+enum class RunOutcome { PASSED, FAILED, INCONCLUSIVE }
 
 /**
  * Last-run result for one scenario, keyed by (file URI, 0-based scenario header line).

@@ -124,7 +124,23 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         client.Context.User.Id = userStore.GetUserId();
         client.Context.User.AccountId = userStore.GetUserId();
         ApplyClientIdentity(client.Context.GlobalProperties, versionProvider);
+        ApplyPrivacyDefaults(client.Context);
         return client;
+    }
+
+    /// <summary>
+    /// The value sent in place of the machine name (<c>ai.cloud.roleInstance</c>).
+    /// </summary>
+    internal const string RedactedRoleInstance = "REDACTED";
+
+    /// <summary>
+    /// Replaces the machine name with a constant. Left alone, the Application Insights SDK stamps
+    /// <c>Cloud.RoleInstance</c> with <see cref="Environment.MachineName"/> on every event and exception,
+    /// and a hostname can identify the user or their employer (issue #1141).
+    /// </summary>
+    internal static void ApplyPrivacyDefaults(TelemetryContext context)
+    {
+        context.Cloud.RoleInstance = RedactedRoleInstance;
     }
 
     /// <summary>

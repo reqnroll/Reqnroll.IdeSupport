@@ -122,15 +122,13 @@ public sealed class CSharpBindingDiscoveryService : ICSharpBindingDiscoveryServi
         if (!appliedToAnyProject)
             return;
 
-        // Telemetry: Roslyn discovery event (membership index / telemetry design §2.3).
-        var fileName = Path.GetFileName(filePath);
+        // Telemetry: Roslyn discovery event (membership index / telemetry design §2.3). 
         var triggerContext = isOpen ? "csOpen" : "csEdit";
         var roslynProperties = new Dictionary<string, object?>
         {
             ["DiscoverySource"] = "Roslyn",
             ["TriggerContext"] = triggerContext,
             ["IsFailed"] = false,
-            ["AffectedFile"] = fileName,
             ["ProjectCount"] = owners.Count,
             ["ProjectTargetFramework"] = owners.FirstOrDefault()?.TargetFrameworkMonikers,
         };

@@ -8,14 +8,17 @@ import { TelemetryEvents } from '../telemetryEvents';
 export const OPEN_TAG_LINK_COMMAND = 'reqnroll.openTagLink';
 
 /**
- * Only web links are opened: the target comes from `reqnroll.json`, which a cloned repository
- * controls, so `file:`, `command:` and other handler schemes are refused (issue #755).
+ * Schemes that execute script or embed content rather than navigate to a tracker: the target comes
+ * from `reqnroll.json`, which a cloned repository controls, so these are refused (issue #755).
+ * `command:` in particular would run any VS Code command.
  */
+const BLOCKED_SCHEMES = new Set(['javascript:', 'vbscript:', 'data:', 'command:']);
+
+/** Any absolute URL is opened (`https:`, `file:`, `jira:`, `vscode:`, `slack:` ...) except {@link BLOCKED_SCHEMES}. */
 export function isOpenableUrl(target: string | undefined): target is string {
   if (!target) return false;
   try {
-    const protocol = new URL(target).protocol;
-    return protocol === 'http:' || protocol === 'https:';
+    return !BLOCKED_SCHEMES.has(new URL(target).protocol.toLowerCase());
   } catch {
     return false;
   }
@@ -25,7 +28,7 @@ export function isOpenableUrl(target: string | undefined): target is string {
  * Re-targets one server-provided link at {@link OPEN_TAG_LINK_COMMAND} so a click reaches
  * the extension (VS Code would otherwise open the URL itself, invisibly to telemetry); the real URL
  * moves into the tooltip and the command's argument. Returns `undefined` for a link that is not an
- * openable web link, which drops it.
+ * openable URL, which drops it.
  */
 export function retargetLink(link: vscode.DocumentLink): vscode.DocumentLink | undefined {
   const target = link.target?.toString();
@@ -129,9 +132,9 @@ export function createTagLinkMiddleware(decorations?: TagLinkDecorations): Middl
 }
 
 /**
- * Handler of {@link OPEN_TAG_LINK_COMMAND}: opens the URL in the default browser and reports the
+ * Handler of {@link OPEN_TAG_LINK_COMMAND}: opens the URL in the registered handler for its scheme and reports the
  * "TagLink command executed" event (no properties - the URL and tag text are never sent).
- * Anything that is not an openable web link is ignored, whoever invoked the command.
+ * Anything that is not an openable URL is ignored, whoever invoked the command.
  */
 export async function openTagLink(
   url: unknown,
