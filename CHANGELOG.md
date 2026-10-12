@@ -74,6 +74,8 @@
 
 ## Bug fixes:
 
+* In Rider on Windows, running a scenario, rule or feature from the CodeLens in a `.feature` file no longer fails with "Could not find the project that owns ...": the owning project is now found whatever the drive letter or path separator style (Rider) - see #1122
+
 * The Visual Studio navigation picker (shown when Go to Hooks or Go to Step Definition matches multiple targets) can now be dismissed with the Esc key, and has a Cancel button; previously only the window close box worked (Visual Studio) - see #1025, @clrudolphi
 * Visual Studio telemetry events no longer carry the computer name (`ai.cloud.roleInstance`), which the Application Insights SDK adds by default and which can identify the user or their employer (VS) - see #1141
 
