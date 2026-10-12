@@ -225,7 +225,7 @@ All subsequent requests for a document (semantic tokens, outline, folding, diagn
 
 Binding information enters the registry from two sources:
 
-- **Roslyn Discovery** (in-process, in `LSP.Server/Discovery/Roslyn/`; the binding data itself lives in `LSP.Core/Bindings/`): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` (`LSP.Core/Parsing/CSharp/`, behind `IStepDefinitionFileParser`) also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures.
+- **Roslyn Discovery** (in-process, in `LSP.Server/Discovery/Roslyn/`; the binding data itself lives in `LSP.Core/Bindings/`): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` (`LSP.Core/Parsing/CSharp/`, behind `IStepDefinitionFileParser`) also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures. It also builds each binding's scope from the union of the class-level `[Scope]`s, method-level `[Scope]`s and hook tags, reduced by the same `ScopeNormalizer` the Connector import uses (see [§7, Scope parity](#7-binding-connector)).
 - **Reflection Discovery** (out-of-process Connector): when a build is detected (see [Q9](LSP-IDE-Support-Open-Questions.md) for per-IDE detection reliability), the Connector scans the compiled assembly and replaces the full registry.
 
 **3 · Binding Match Service**
@@ -777,6 +777,49 @@ In-process (LSP.Core)                Out-of-process
 **Merge strategy**: When a `.cs` source file changes, Roslyn-derived bindings for that file replace previous entries for that file. When the Connector returns results after a build, its output replaces the entire registry. This ensures the editor always reflects the latest source edits without waiting for a build, while also capturing anything only visible after compilation.
 
 **Error parity between the two paths**: `ProjectBinding.Error` is the single field every diagnostics consumer reads ([F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)'s `.cs` squiggles, [F3](LSP-IDE-Support-Feature-Designs.md#f3--gherkin-file-diagnostics)'s `.feature` near-miss enrichment), so both discovery paths must populate it the same way for the same failure. `BindingImporter.GetBindingError` (connector path) has always combined a binding-level import error with the binding's `Scope.Error` into one `ProjectBinding.Error`; `StepDefinitionFileParser`'s equivalent (`CombineErrors`, Roslyn path) folds in the same scope error plus a malformed step-expression's exception message (from the real `Cucumber.CucumberExpressions`/`Cucumber.TagExpressions` libraries, which were already being invoked — only their failures were previously discarded) alongside the structural-validation error.
+
+**Scope parity between the two paths** (issues [#953](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/953), [#1133](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/1133)): a binding's `[Scope]`s decide which scenarios it applies to, and the Roslyn and Connector paths must give the same answer for the same source. Because Roslyn results replace a file's Connector results on every edit, any difference in the *shape* of a binding (not only in what it matches) would show up as a change nobody made.
+
+Reqnroll's runtime (`BindingSourceProcessor.ProcessMethod`/`ProcessHookAttribute`) registers **one binding per scope** over the union of the class-level `[Scope]`s, the method-level `[Scope]`s and, for a hook, each tag on the hook attribute. Those scopes are **alternatives (OR)**: the binding is in scope when any one matches. Inside one scope, `Tag`, `Feature` and `Scenario` must **all** match (AND). The Connector sees the runtime registry, so it receives one wire entry per scope; Roslyn rebuilds the same union from syntax.
+
+```mermaid
+flowchart LR
+    SRC["C# source<br/>[Scope] on class and method, hook tags"]
+    RT["Reqnroll runtime registry<br/>one entry per scope"]
+    CON["Connector import<br/>BindingImporter.GroupByAttribute"]
+    ROS["StepDefinitionFileParser<br/>class + method + hook-tag scopes unioned"]
+    NRM["ScopeNormalizer<br/>(LSP.Core/Bindings)"]
+    BIN["One step-definition or hook binding per attribute<br/>Scope = null, one scope, or Alternatives"]
+    USE["Consumers: step matching, usage counts,<br/>hook match-count CodeLens, Go to matching scenarios, rename"]
+    SRC --> RT --> CON --> NRM
+    SRC --> ROS --> NRM
+    NRM --> BIN --> USE
+```
+
+`ScopeNormalizer` (`LSP.Core/Bindings/ScopeNormalizer.cs`) is the single place that reduces a binding attribute's scopes, using only rewrites that cannot change which scenarios match:
+
+| Rule | Why it is exact |
+| --- | --- |
+| No scope, or any scope that restricts nothing (a bare `[Scope]`), makes the binding unrestricted (`Scope == null`). | `X OR everything = everything`. The hook match-count CodeLens then shows its static "all scenarios" label. |
+| Scopes with the same feature and scenario title merge, OR-ing their tags (`@a` + `@b` becomes `(@a) or (@b)`). | `(t1 AND F) OR (t2 AND F) = (t1 OR t2) AND F` |
+| A scope with that title and no tag absorbs the tagged ones. | `F OR (t AND F) = F` |
+| Duplicates collapse, bare tag names get their `@`, and groups and tags are sorted ordinally. | The reflection API does not promise attribute order, so the result must not depend on it. |
+| A scope that arrived with an error is never merged or absorbed. | Its error must stay visible on the binding. |
+
+What remains is **one scope** (an ordinary `BindingScope`: the common case, including every tag-only binding) or, when the scopes restrict different things, **`BindingScope.Alternatives`**, which `ProjectBinding.MatchScope` evaluates as "any alternative matches". Examples:
+
+| Source | Runtime entries | Resulting `Scope` |
+| --- | --- | --- |
+| `[Scope(Tag="@a")] [Scope(Tag="@b")]` | `@a`, `@b` | one scope, tag `(@a) or (@b)` |
+| `[Scope(Tag="@web")] [Scope(Feature="Checkout")]` | `@web`, `Feature=Checkout` | alternatives: `(@web) or (Feature='Checkout')` |
+| class `[Scope(Tag="@ui")]`, method `[Scope(Feature="Checkout")]` | `@ui`, `Feature=Checkout` | alternatives (class and method scopes are OR-ed, not AND-ed) |
+| `[Scope(Feature="Checkout")] [BeforeScenario("web","smoke")]` | `Feature=Checkout`, `@web`, `@smoke` | alternatives: `(@smoke) or (@web)` and `Feature=Checkout` |
+| `[Scope] [Scope(Tag="@web")]` | one unrestricted, `@web` | `null` (matches everything) |
+| `[Scope(Tag="@web", Feature="Checkout")]` | one entry | one scope, both required |
+
+**One binding per attribute is a contract, not a convenience.** The CodeLens handlers (`StepCodeLensHandler`, `HookMatchCountCodeLensHandler`), `FindMatchingScenariosHandler` and the rename picker each identify a binding by the location of its attribute and keep the first binding found there. With one binding per scope, a hook with two scopes would be counted against its first scope only, and the rename picker would list the same attribute twice. `BindingImporter.GroupByAttribute` therefore groups the wire entries that are identical but for their scope (same type, expression, method, source location, error and, for hooks, order) before import. The wire format carries no attribute ordinal, so two textually identical attributes on one method form one group; they already share one `BindingId`, which does not include the scope. `ScopeParityTests` pins the parity: each case pairs C# source with the entries the runtime registers for it and asserts that both paths give the same `Scope.ToString()` and the same match result across a set of scenario tag combinations, in either entry order.
+
+Known difference not addressed here: the runtime compares feature and scenario titles case-insensitively (`BindingScope.Match`), while `ProjectBinding.MatchScope` compares them case-sensitively. That predates scope normalization and is independent of it.
 
 The Connector code is ported from `Reqnroll.VisualStudio.ReqnrollConnector.Generic` in the legacy VS extension — the team already understands its assembly-loading and discovery logic. One addition beyond the ported code: the Connector also ships .NET Framework TFM variants (net462/net472/net481) that use `AppDomain` isolation to analyze .NET Framework test projects, since the cross-platform LSP server cannot load a .NET Framework assembly into an `AssemblyLoadContext` directly. The LSP server selects the appropriate connector variant based on the target project's TFM.
 

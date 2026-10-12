@@ -186,7 +186,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     }
 
     private static void AddStepDefinitions(List<ProjectStepDefinitionBinding> target, AttributeSyntax attribute,
-        ScenarioBlock[] blocks, IReadOnlyList<RawScope> scope, ProjectBindingImplementation implementation,
+        ScenarioBlock[] blocks, IReadOnlyList<ScopeSpec> scope, ProjectBindingImplementation implementation,
         string methodName, IReadOnlyList<string> parameterNames, string structuralError)
     {
         var expression = GetStepDefinitionExpression(attribute);
@@ -391,7 +391,7 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             : new ParamPosition(-1, 0, paramIndex);
     }
 
-    private static ProjectHookBinding CreateHook(AttributeSyntax attribute, HookType hookType, IReadOnlyList<RawScope> methodScope,
+    private static ProjectHookBinding CreateHook(AttributeSyntax attribute, HookType hookType, IReadOnlyList<ScopeSpec> methodScope,
         ProjectBindingImplementation implementation, string error)
     {
         var hookTags = GetHookTags(attribute);
@@ -574,43 +574,22 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     }
 
     /// <summary>
-    /// Reads the [Scope] attributes at one level (type or method) as a list of alternatives, or
-    /// <c>null</c> when there are none. Multiple [Scope] attributes broaden the match (OR
-    /// semantics; Reqnroll registers one binding per scope), while the properties inside one
-    /// [Scope] are AND-combined. The alternatives are folded into a single scope whenever that is
-    /// exact (see <see cref="CanOrIntoOneScope"/>), so e.g. tag-only scopes keep their single
-    /// OR-ed tag expression; otherwise (issue #953) they are kept as separate alternatives.
+    /// Reads the [Scope] attributes at one level (type or method) as the scopes Reqnroll registers
+    /// them as, or <c>null</c> when there are none. Each attribute is a scope of its own; the
+    /// properties inside one [Scope] are AND-combined, and the scopes are alternatives (OR) that
+    /// <see cref="ScopeNormalizer"/> reduces once the type, method and hook-tag scopes are combined.
     /// </summary>
-    private static IReadOnlyList<RawScope> ReadScopeAttributes(SyntaxList<AttributeListSyntax> attributeLists)
+    private static IReadOnlyList<ScopeSpec> ReadScopeAttributes(SyntaxList<AttributeListSyntax> attributeLists)
     {
         var scopes = EnumerateAttributes(attributeLists)
             .Where(attribute => GetAttributeName(attribute) == "Scope")
             .Select(ReadScopeAttribute)
             .ToArray();
 
-        if (scopes.Length == 0)
-            return null;
-
-        return CanOrIntoOneScope(scopes) ? new[] { scopes.Aggregate(OrScopes) } : scopes;
+        return scopes.Length == 0 ? null : scopes;
     }
 
-    /// <summary>
-    /// (t1 AND F AND S) OR (t2 AND F AND S) equals (t1 OR t2) AND F AND S, so alternatives can be
-    /// folded into one scope when they all share the same feature and scenario title and either
-    /// all or none of them carry a tag (a missing tag means "any tags", which OR-ing only the
-    /// remaining tags would wrongly narrow).
-    /// </summary>
-    private static bool CanOrIntoOneScope(IReadOnlyList<RawScope> scopes)
-    {
-        var first = scopes[0];
-        var firstHasTag = !string.IsNullOrWhiteSpace(first.Tag);
-        return scopes.All(scope =>
-            scope.Feature == first.Feature &&
-            scope.Scenario == first.Scenario &&
-            !string.IsNullOrWhiteSpace(scope.Tag) == firstHasTag);
-    }
-
-    private static RawScope ReadScopeAttribute(AttributeSyntax attribute)
+    private static ScopeSpec ReadScopeAttribute(AttributeSyntax attribute)
     {
         string tag = null, feature = null, scenario = null;
         if (attribute.ArgumentList != null)
@@ -632,30 +611,23 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
             }
         }
 
-        return new RawScope(tag, feature, scenario);
+        return new ScopeSpec(tag, feature, scenario);
     }
 
-    // Only valid for alternatives that CanOrIntoOneScope accepts: they share Feature/Scenario.
-    private static RawScope OrScopes(RawScope first, RawScope second) =>
-        new(
-            CombineTags(first.Tag, second.Tag, " or "),
-            first.Feature ?? second.Feature,
-            first.Scenario ?? second.Scenario);
-
     /// <summary>
-    /// Combines the type-level and method-level [Scope] alternatives. Reqnroll registers one binding
+    /// Combines the type-level and method-level [Scope] attributes. Reqnroll registers one binding
     /// per scope over <c>typeScopes.Concat(methodScopes)</c> (<c>BindingSourceProcessor.ProcessMethod</c>),
     /// so a class-level and a method-level [Scope] are alternatives (OR), not a conjunction (issue #1133).
     /// </summary>
-    private static IReadOnlyList<RawScope> CombineScopeAlternatives(IReadOnlyList<RawScope> typeScopes,
-        IReadOnlyList<RawScope> methodScopes)
+    private static IReadOnlyList<ScopeSpec> CombineScopeAlternatives(IReadOnlyList<ScopeSpec> typeScopes,
+        IReadOnlyList<ScopeSpec> methodScopes)
     {
         if (typeScopes == null)
             return methodScopes;
         if (methodScopes == null)
             return typeScopes;
 
-        return FoldAlternatives(typeScopes.Concat(methodScopes).ToArray());
+        return typeScopes.Concat(methodScopes).ToArray();
     }
 
     /// <summary>
@@ -664,86 +636,24 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
     /// scopes as a further scope of its own (<c>BindingSourceProcessor.ProcessHookAttribute</c>), so the
     /// hook's tags are alternatives to the [Scope]s, not restricted by them (issue #1133).
     /// </summary>
-    private static IReadOnlyList<RawScope> CombineWithHookTags(IReadOnlyList<RawScope> methodScopes,
+    private static IReadOnlyList<ScopeSpec> CombineWithHookTags(IReadOnlyList<ScopeSpec> methodScopes,
         IReadOnlyList<string> hookTags)
     {
         if (hookTags.Count == 0)
             return methodScopes;
 
-        // A hook with no [Scope] keeps its tags as one plain "a or b" expression.
-        if (methodScopes == null)
-            return new[] { new RawScope(string.Join(" or ", hookTags.Select(NormalizeTag)), null, null) };
-
-        var tagScopes = hookTags.Select(tag => new RawScope(NormalizeTag(tag), null, null));
-        return FoldAlternatives(methodScopes.Concat(tagScopes).ToArray());
+        var tagScopes = hookTags.Select(tag => new ScopeSpec(tag, null, null));
+        return (methodScopes ?? Array.Empty<ScopeSpec>()).Concat(tagScopes).ToArray();
     }
 
     /// <summary>
-    /// Folds <paramref name="scopes"/> into one scope when that is exact (see
-    /// <see cref="CanOrIntoOneScope"/>); otherwise keeps them as alternatives.
+    /// Builds the binding scope from the scopes Reqnroll would register for one attribute, using the
+    /// same <see cref="ScopeNormalizer"/> the connector import uses so both discovery paths produce
+    /// the same scope for the same source (issues #953, #1133).
     /// </summary>
-    private static IReadOnlyList<RawScope> FoldAlternatives(IReadOnlyList<RawScope> scopes) =>
-        scopes.Count > 1 && CanOrIntoOneScope(scopes) ? new[] { scopes.Aggregate(OrScopes) } : scopes;
+    private static BindingScope BuildScope(IReadOnlyList<ScopeSpec> scopes) =>
+        scopes == null ? null : ScopeNormalizer.Build(scopes, TagExpressionParser);
 
-    private static string CombineTags(string left, string right, string op)
-    {
-        if (string.IsNullOrWhiteSpace(left))
-            return right;
-        if (string.IsNullOrWhiteSpace(right))
-            return left;
-        return $"({left}){op}({right})";
-    }
-
-    private static string NormalizeTag(string tag) =>
-        tag.StartsWith("@", StringComparison.Ordinal) ? tag : "@" + tag;
-
-    /// <summary>
-    /// Builds the binding scope from its alternatives: a single alternative yields the ordinary
-    /// single scope, several yield a scope with <see cref="BindingScope.Alternatives"/> (issue
-    /// #953) whose <see cref="BindingScope.Error"/> combines the alternatives' errors.
-    /// </summary>
-    private static BindingScope BuildScope(IReadOnlyList<RawScope> scopes)
-    {
-        if (scopes == null)
-            return null;
-        if (scopes.Count == 1)
-            return BuildScope(scopes[0]);
-
-        // An alternative without any restriction builds to null; it still matches everything.
-        var alternatives = scopes.Select(scope => BuildScope(scope) ?? new BindingScope()).ToArray();
-        return new BindingScope
-        {
-            Alternatives = alternatives,
-            Error = CombineErrors(alternatives.Select(alternative => alternative.Error).ToArray())
-        };
-    }
-
-    private static BindingScope BuildScope(RawScope raw)
-    {
-        if (raw == null || (string.IsNullOrWhiteSpace(raw.Tag) && raw.Feature == null && raw.Scenario == null))
-            return null;
-
-        ITagExpression tagExpression = null;
-        string error = null;
-        if (!string.IsNullOrWhiteSpace(raw.Tag))
-        {
-            var parsed = TagExpressionParser.Parse(raw.Tag);
-            if (parsed is InvalidTagExpression invalid)
-                error = $"Invalid tag expression '{raw.Tag}': {invalid.Message}";
-            else
-                tagExpression = parsed;
-        }
-
-        return new BindingScope
-        {
-            Tag = tagExpression,
-            FeatureTitle = raw.Feature,
-            ScenarioTitle = raw.Scenario,
-            Error = error
-        };
-    }
-
-    private sealed record RawScope(string Tag, string Feature, string Scenario);
 
 #nullable enable
     /// <summary>
