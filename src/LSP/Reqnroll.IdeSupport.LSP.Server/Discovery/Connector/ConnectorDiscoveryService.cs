@@ -241,7 +241,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 var root = TryGetParsedRoot(importer, sd.SourceLocation, sd.Method, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
                 var bareMethodName = BindingImporter.ExtractBareMethodName(sd.Method);
-                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock);
+                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock, sd.Expression);
                 var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
 
                 // The one case worth a warning even when a root parsed successfully: no method

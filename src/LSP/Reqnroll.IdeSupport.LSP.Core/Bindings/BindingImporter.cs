@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Core.Documents;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
+using Reqnroll.IdeSupport.LSP.Core.Rename;
 using Reqnroll.IdeSupport.LSP.Core.TagExpressions;
 using System.Collections.Generic;
 using System.Linq;
@@ -105,8 +106,25 @@ public class BindingImporter
     /// line instead of collapsing onto whichever attribute is scanned first. <see cref="ScenarioBlock.Unknown"/>
     /// matches any binding attribute, for callers that cannot determine the wire type.
     /// Returns null when no matching attribute is found on any candidate method.</summary>
-    public static int? TryGetAttributeSourceLine(SyntaxNode root, string methodName, ScenarioBlock scenarioBlock)
+    public static int? TryGetAttributeSourceLine(SyntaxNode root, string methodName, ScenarioBlock scenarioBlock) =>
+        TryGetAttributeSourceLine(root, methodName, scenarioBlock, expression: null);
+
+    /// <summary>Same as <see cref="TryGetAttributeSourceLine(SyntaxNode,string,ScenarioBlock)"/>, but when
+    /// <paramref name="expression"/> (the connector's expression for the binding) is supplied and the
+    /// candidate methods carry several attributes for <paramref name="scenarioBlock"/>, picks the
+    /// attribute that belongs to this binding instead of the first one. Every binding on such a method
+    /// used to be backfilled with the FIRST attribute's line, which pointed a rename at the wrong
+    /// attribute (issue #940). The attribute is the one whose string literal equals the expression;
+    /// failing that, the only one whose literal has the same text around its parameter slots (the
+    /// connector's expression can be a regex projection of a Cucumber expression). When neither singles
+    /// one out, returns null rather than a line that may belong to a sibling attribute — consumers then
+    /// fall back to matching by text. With no <paramref name="expression"/>, or with only one candidate
+    /// attribute, the first match is returned as before.</summary>
+    public static int? TryGetAttributeSourceLine(SyntaxNode root, string methodName, ScenarioBlock scenarioBlock,
+        string expression)
     {
+        var candidates = new List<(AttributeSyntax Attribute, string Literal)>();
+
         var candidateMethods = root.DescendantNodes()
             .OfType<MethodDeclarationSyntax>()
             .Where(m => m.Identifier.Text == methodName);
@@ -124,12 +142,35 @@ public class BindingImporter
                     if (scenarioBlock != ScenarioBlock.Unknown && !blocks.Contains(scenarioBlock))
                         continue;
 
-                    return attribute.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+                    var literal = attribute.ArgumentList?.Arguments
+                        .Select(a => a.Expression)
+                        .OfType<LiteralExpressionSyntax>()
+                        .FirstOrDefault(e => e.IsKind(SyntaxKind.StringLiteralExpression))
+                        ?.Token.ValueText;
+                    candidates.Add((attribute, literal));
                 }
             }
         }
 
-        return null;
+        if (candidates.Count == 0)
+            return null;
+
+        if (candidates.Count == 1 || expression == null)
+            return LineOf(candidates[0].Attribute);
+
+        var exact = candidates.Where(c => c.Literal == expression).ToList();
+        if (exact.Count == 1)
+            return LineOf(exact[0].Attribute);
+        if (exact.Count > 1)
+            return null;
+
+        var sameShape = candidates
+            .Where(c => c.Literal != null && StepExpressionParameters.HasSameStaticText(c.Literal, expression))
+            .ToList();
+        return sameShape.Count == 1 ? LineOf(sameShape[0].Attribute) : null;
+
+        static int LineOf(AttributeSyntax attribute) =>
+            attribute.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
     }
 
     /// <summary>

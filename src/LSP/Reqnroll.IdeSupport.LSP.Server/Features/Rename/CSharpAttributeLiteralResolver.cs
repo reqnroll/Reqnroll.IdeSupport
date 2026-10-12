@@ -330,9 +330,11 @@ internal sealed class CSharpAttributeLiteralResolver
     /// <item>A literal whose text equals the registry expression identifies the binding. When
     /// <paramref name="lineMatch"/> (the literal on the binding's
     /// <see cref="ProjectStepDefinitionBinding.AttributeSourceLine"/>) is not among those, the text
-    /// wins: a connector-discovered binding's attribute line is backfilled with the method's FIRST
-    /// matching attribute for every binding on the method
-    /// (<c>BindingImporter.TryGetAttributeSourceLine</c>), so that line cannot tell them apart.</item>
+    /// wins: a binding whose attribute line was backfilled from an older registry (the backfill used to
+    /// give every binding on a method the FIRST matching attribute's line) cannot be told apart by that
+    /// line. <c>BindingImporter.TryGetAttributeSourceLine</c> now picks the attribute by the binding's
+    /// expression and leaves the line null when it cannot, but the text still outranks a line that
+    /// disagrees with it.</item>
     /// <item>Otherwise the registry expression may be a projection of the source (a Cucumber
     /// expression's regex form, where <c>{int}</c> became <c>(.*)</c>), so literals are compared by
     /// their static text around the parameter slots. The line match stands when it agrees or when
@@ -362,7 +364,7 @@ internal sealed class CSharpAttributeLiteralResolver
                 : ReportAmbiguous(literals, binding);
         }
 
-        var shapeMatches = literals.Where(l => HasSameStaticText(l.Token.ValueText, expression)).ToList();
+        var shapeMatches = literals.Where(l => StepExpressionParameters.HasSameStaticText(l.Token.ValueText, expression)).ToList();
         if (lineMatch != null)
         {
             return shapeMatches.Count == 0 || shapeMatches.Contains(lineMatch)
@@ -383,29 +385,6 @@ internal sealed class CSharpAttributeLiteralResolver
             $"on '{binding.Implementation?.Method}' belongs to the binding with expression '{binding.Expression}' " +
             $"(source literals: {string.Join(", ", literals.Select(l => $"'{l.Token.ValueText}'"))}); refusing to pick one");
         return AttributeLiteralResolution.Ambiguous;
-    }
-
-    /// <summary>
-    /// Whether <paramref name="sourceExpression"/> and <paramref name="registryExpression"/> have
-    /// the same text around their parameter slots — e.g. <c>the number is {int}</c> and its regex
-    /// projection <c>the number is (.*)</c> — ignoring one leading <c>^</c> and trailing <c>$</c>.
-    /// </summary>
-    private static bool HasSameStaticText(string sourceExpression, string? registryExpression)
-    {
-        if (registryExpression == null)
-            return false;
-
-        return StepExpressionParameters.StaticSegments(TrimAnchors(sourceExpression))
-            .SequenceEqual(StepExpressionParameters.StaticSegments(TrimAnchors(registryExpression)), StringComparer.Ordinal);
-
-        static string TrimAnchors(string s)
-        {
-            if (s.StartsWith("^", StringComparison.Ordinal))
-                s = s.Substring(1);
-            if (s.EndsWith("$", StringComparison.Ordinal) && !s.EndsWith(@"\$", StringComparison.Ordinal))
-                s = s.Substring(0, s.Length - 1);
-            return s;
-        }
     }
 
     /// <summary>
