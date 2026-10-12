@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* `.editorconfig` sections now follow the EditorConfig glob rules, so common sections such as `[*.{feature,cs}]`, `[*.{cs,vb}]`, `[Step{1..9}.cs]`, `[Login[123].feature]` and `[Login?.feature]` apply to matching files; previously brace alternatives, numeric ranges, `[seq]`, `?` and backslash escapes were not understood and those sections were silently ignored. Section matching stays case-insensitive on Windows and is now case-sensitive on Linux and macOS, as the spec requires. A backslash in a section name is now an escape, as in the spec, rather than a path separator, so a section such as `[src\*.feature]` no longer applies (LSP server, VS, VS Code, Rider) - see #968
 * Visual Studio telemetry events no longer carry the computer name (`ai.cloud.roleInstance`), which the Application Insights SDK adds by default and which can identify the user or their employer (VS) - see #1141
 
 * Visual Studio no longer offers the Ctrl+hover navigable symbol (and its clickable underline) for a tag link whose configured target is not an `http`/`https` URL (e.g. a misconfigured `file:` or custom-scheme target): such a target made the tag look clickable and win over Go To Definition, but the click did nothing because opening already refuses non-web schemes. The navigable-symbol provider now applies the same scheme allow-list as the link styling (VS) - see #1036, @clrudolphi
