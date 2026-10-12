@@ -36,7 +36,10 @@ public class TagLinkConfiguration
 
         try
         {
-            ResolvedTagPattern = new Regex("^" + TagPattern.TrimStart('^').TrimEnd('$') + "$", RegexOptions.None, MatchTimeout);
+            // Wrap the user pattern in a non-capturing group so a top-level alternation
+            // (e.g. "ab|cd") is anchored as a whole instead of matching by prefix/suffix, and
+            // do not trim anchors: TrimEnd('$') also ate an escaped literal trailing dollar ($).
+            ResolvedTagPattern = new Regex("^(?:" + TagPattern + ")$", RegexOptions.None, MatchTimeout);
         }
         catch (Exception e)
         {
