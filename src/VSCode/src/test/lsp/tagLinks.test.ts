@@ -14,10 +14,17 @@ const range = new vscode.Range(1, 0, 1, 11);
 const issueUrl = 'https://github.com/org/repo/issues/1234';
 
 suite('tagLinks', () => {
-  test('isOpenableUrl allows only http and https', () => {
+  test('isOpenableUrl allows any scheme except the blocked ones', () => {
     assert.strictEqual(isOpenableUrl('https://example.com/a'), true);
     assert.strictEqual(isOpenableUrl('http://example.com/a'), true);
-    assert.strictEqual(isOpenableUrl('file:///C:/Windows/System32/calc.exe'), false);
+    assert.strictEqual(isOpenableUrl('file:///C:/specs/story.html'), true);
+    assert.strictEqual(isOpenableUrl('jira://browse/PROJ-1'), true);
+    assert.strictEqual(isOpenableUrl('vscode://file/C:/repo/a.cs'), true);
+    assert.strictEqual(isOpenableUrl('slack://channel?id=C1'), true);
+    assert.strictEqual(isOpenableUrl('javascript:alert(1)'), false);
+    assert.strictEqual(isOpenableUrl('JavaScript:alert(1)'), false);
+    assert.strictEqual(isOpenableUrl('vbscript:msgbox(1)'), false);
+    assert.strictEqual(isOpenableUrl('data:text/html,<b>x</b>'), false);
     assert.strictEqual(isOpenableUrl('command:workbench.action.reloadWindow'), false);
     assert.strictEqual(isOpenableUrl('not a url'), false);
     assert.strictEqual(isOpenableUrl(undefined), false);
@@ -34,9 +41,11 @@ suite('tagLinks', () => {
     assert.strictEqual(retargeted.tooltip, issueUrl);
   });
 
-  test('retargetLink drops links that are not openable web links', () => {
+  test('retargetLink drops links that are not openable URLs', () => {
     assert.strictEqual(
-      retargetLink(new vscode.DocumentLink(range, vscode.Uri.file('/etc/passwd'))),
+      retargetLink(
+        new vscode.DocumentLink(range, vscode.Uri.parse('command:workbench.action.reloadWindow')),
+      ),
       undefined,
     );
     assert.strictEqual(retargetLink(new vscode.DocumentLink(range)), undefined);
@@ -46,7 +55,7 @@ suite('tagLinks', () => {
     const middleware = createTagLinkMiddleware();
     const next = () => [
       new vscode.DocumentLink(range, vscode.Uri.parse(issueUrl)),
-      new vscode.DocumentLink(range, vscode.Uri.file('/etc/passwd')),
+      new vscode.DocumentLink(range, vscode.Uri.parse('command:workbench.action.reloadWindow')),
     ];
 
     const result = await middleware.provideDocumentLinks!({} as never, {} as never, next);
@@ -121,7 +130,7 @@ suite('tagLinks', () => {
       const other = new vscode.Range(3, 0, 3, 5);
       const next = () => [
         new vscode.DocumentLink(range, vscode.Uri.parse(issueUrl)),
-        new vscode.DocumentLink(other, vscode.Uri.file('/etc/passwd')),
+        new vscode.DocumentLink(other, vscode.Uri.parse('command:workbench.action.reloadWindow')),
       ];
 
       await middleware.provideDocumentLinks!({ uri: docUri } as never, {} as never, next);
@@ -156,14 +165,25 @@ suite('tagLinks', () => {
     assert.deepStrictEqual(opened, [vscode.Uri.parse(issueUrl).toString()]);
   });
 
-  test('openTagLink ignores anything that is not an openable web link', async () => {
+  test('openTagLink opens a custom-scheme URL', async () => {
+    const opened: string[] = [];
+
+    await openTagLink('jira://browse/PROJ-1', (uri) => {
+      opened.push(uri.toString());
+      return Promise.resolve(true);
+    });
+
+    assert.deepStrictEqual(opened, [vscode.Uri.parse('jira://browse/PROJ-1').toString()]);
+  });
+
+  test('openTagLink ignores anything that is not an openable URL', async () => {
     const opened: string[] = [];
     const opener = (uri: vscode.Uri) => {
       opened.push(uri.toString());
       return Promise.resolve(true);
     };
 
-    await openTagLink('file:///C:/Windows/System32/calc.exe', opener);
+    await openTagLink('command:workbench.action.reloadWindow', opener);
     await openTagLink(42, opener);
     await openTagLink(undefined, opener);
 

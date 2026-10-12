@@ -49,6 +49,34 @@ class RunTestRunnerTest {
     }
 
     @Test
+    fun `finds the owner of a forward-slash file path on a non-C Windows drive from backslash project paths (#1122)`() {
+        // lspUriToLocalPath yields "W:/..." while the project model reports "W:\..." on Windows.
+        val projects = listOf(
+            "W:\\Reqnroll\\Reqnroll.ExploratoryTestProjects\\ReqnrollCalculator\\ReqnrollCalculator.Specs\\ReqnrollCalculator.Specs.csproj",
+        )
+        assertEquals(
+            projects[0],
+            RunTestRunner.findOwningProjectPath(
+                "W:/Reqnroll/Reqnroll.ExploratoryTestProjects/ReqnrollCalculator/ReqnrollCalculator.Specs/Features/Addition.feature",
+                projects,
+            ),
+        )
+    }
+
+    @Test
+    fun `matches across drive-letter case and separator style, deepest folder still wins (#1122)`() {
+        val projects = listOf("w:\\repo\\Foo.csproj", "W:\\repo\\Foo\\Nested\\Nested.csproj")
+        assertEquals(projects[1], RunTestRunner.findOwningProjectPath("W:/repo/Foo/Nested/A.feature", projects))
+        assertEquals(projects[0], RunTestRunner.findOwningProjectPath("W:/repo/Other/A.feature", projects))
+    }
+
+    @Test
+    fun `a sibling folder sharing a name prefix does not own the file (#1122)`() {
+        val projects = listOf("W:\\repo\\Foo\\Foo.csproj")
+        assertNull(RunTestRunner.findOwningProjectPath("W:/repo/FooBar/A.feature", projects))
+    }
+
+    @Test
     fun `returns null when no project folder contains the file`() {
         val projects = listOf("/repo/Foo/Foo.csproj")
         assertNull(RunTestRunner.findOwningProjectPath("/elsewhere/A.feature", projects))
