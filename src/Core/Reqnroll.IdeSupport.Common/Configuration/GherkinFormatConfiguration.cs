@@ -51,11 +51,20 @@ public class GherkinFormatConfiguration
     [EditorConfigSetting("gherkin_indent_examples_table")]
     public bool IndentExamplesTable { get; set; } = true;
 
+    private int _tableCellPaddingSize = 1;
+
     /// <summary>
     ///     The number of space characters to be used on each sides as table cell padding.
+    ///     Negative values (e.g. from <c>.editorconfig</c>) are clamped to 0 when read: the formatter
+    ///     builds the padding with <c>new string(' ', TableCellPaddingSize)</c>, which would otherwise
+    ///     throw an <see cref="ArgumentOutOfRangeException"/> and break table formatting.
     /// </summary>
     [EditorConfigSetting("gherkin_table_cell_padding_size")]
-    public int TableCellPaddingSize { get; set; } = 1;
+    public int TableCellPaddingSize
+    {
+        get => _tableCellPaddingSize < 0 ? 0 : _tableCellPaddingSize;
+        set => _tableCellPaddingSize = value;
+    }
 
     /// <summary>
     ///     Right-align numeric table cells

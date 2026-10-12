@@ -188,13 +188,25 @@ export function toProjectFileItems(
 // ── Output assembly path ─────────────────────────────────────────────────
 
 export function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
-  // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\). MSBuild's
-  // built-in targets emit this with literal backslashes regardless of host OS, so it must be
-  // split into segments rather than handed to `path` as a single (possibly POSIX) path piece.
   // AssemblyName is the file name without extension.
+  const fileName = `${props.AssemblyName}.dll`;
+
+  // OutputPath is normally relative to the project directory (e.g. bin\Debug\net10.0\), but it
+  // can be absolute — e.g. a project that sets an absolute OutputPath, or the SDK's ArtifactsPath /
+  // UseArtifactsOutput feature redirecting output to a repo-root artifacts folder. Re-rooting an
+  // absolute value under the project directory silently drops its root, so an absolute OutputPath
+  // must keep its own root. MSBuild's built-in targets emit the value with literal backslashes
+  // regardless of host OS, so normalize separators before handing it to `path.resolve` (a raw
+  // Windows-style path given to a POSIX `path` would otherwise be treated as a single segment).
+  if (path.isAbsolute(props.OutputPath)) {
+    return path.resolve(props.OutputPath.replace(/[\\/]/g, path.sep), fileName);
+  }
+
+  // Relative OutputPath: split into segments rather than handing the raw backslash-delimited value
+  // to `path` as a single (possibly POSIX) piece.
   const projectDir = path.dirname(projectFile);
   const relativeSegments = props.OutputPath.split(/[\\/]/).filter(Boolean);
-  return path.resolve(projectDir, ...relativeSegments, `${props.AssemblyName}.dll`);
+  return path.resolve(projectDir, ...relativeSegments, fileName);
 }
 
 // ── Package references from project.assets.json ──────────────────────────
