@@ -28,10 +28,26 @@ public class StepCodeLensServiceTests
         new(server.Pipe, NullLogger<StepCodeLensService>.Instance);
 
     [Fact]
-    public async Task A_ContentModified_failure_is_not_cached_and_the_next_call_refetches()
+    public async Task A_ContentModified_failure_is_not_cached_and_is_retried_within_the_same_call()
     {
         await using var server = await ScriptedServerPipe.StartAsync();
         server.ReplyWithError(ContentModified, "content modified");
+        server.ReplyWithResult(OneLens);
+        var sut = CreateSut(server);
+
+        // VS never asks again for an unchanged lens, so the cache retries ContentModified itself (#1017).
+        var lenses = await sut.GetLensesAsync(FileUri, CancellationToken.None);
+
+        lenses.Should().ContainSingle().Which.Title.Should().Be("2 step usages");
+        server.RequestCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_persistent_ContentModified_failure_surfaces_after_the_bounded_restarts_and_is_not_cached()
+    {
+        await using var server = await ScriptedServerPipe.StartAsync();
+        for (var i = 0; i <= StepCodeLensResultCache.MaxContentModifiedRestarts; i++)
+            server.ReplyWithError(ContentModified, "content modified");
         server.ReplyWithResult(OneLens);
         var sut = CreateSut(server);
 
@@ -39,8 +55,8 @@ public class StepCodeLensServiceTests
 
         var lenses = await sut.GetLensesAsync(FileUri, CancellationToken.None);
 
-        lenses.Should().ContainSingle().Which.Title.Should().Be("2 step usages");
-        server.RequestCount.Should().Be(2);
+        lenses.Should().ContainSingle();
+        server.RequestCount.Should().Be(StepCodeLensResultCache.MaxContentModifiedRestarts + 2);
     }
 
     [Fact]
