@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* Step scaffolding for an undefined step now escapes the full set of special characters in the generated binding, so a step containing regex metacharacters (`. * + ? [ ] ^ $`) or the Cucumber alternation and close-paren characters (`/` `)`) no longer produces a binding that fails to match its own step; regex mode also escapes `#` for parity with `Regex.Escape` but leaves spaces literal to keep snippets readable (LSP server) - see #946
 * In Visual Studio, a transient failure or timeout while looking up a project's `MSBuildProjectExtensionsPath` (only needed for projects that move `obj`) is no longer remembered for the whole session, so the MTP test-outcome reporter stub is written once the lookup succeeds (VS) - see #1037
 
 * An unnamed Feature or Rule line - e.g. a bare `Feature:` while the title is still being typed - no longer puts an empty name on its Outline symbol: the symbol now falls back to the keyword (`Feature`/`Rule`), matching Scenarios, Background and Examples. An empty `DocumentSymbol.name` is invalid in LSP, and clients rejected the whole `textDocument/documentSymbol` response, blanking the entire Outline (LSP server) - see #959
