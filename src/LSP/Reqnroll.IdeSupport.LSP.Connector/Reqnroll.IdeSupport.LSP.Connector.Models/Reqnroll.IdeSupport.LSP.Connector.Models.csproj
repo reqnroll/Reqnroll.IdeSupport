@@ -9,8 +9,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Required for ConnectorJsonSerialization on netstandard2.0 targets -->
-    <PackageReference Include="System.Text.Json" Version="9.*" />
+    <!-- Required for ConnectorJsonSerialization on netstandard2.0 targets.
+         Pinned, not floating (`9.*`): a freshly published System.Text.Json 9.x servicing release can be
+         visible on nuget.org before its own same-version dependencies are resolvable, which makes a
+         floating range resolve the new version and then fail with NU1603 plus a cascading NU1605
+         package downgrade - both promoted to errors by build/Directory.Build.props, which turned CI red
+         repo-wide on 2026-10-13 (System.Text.Json 9.0.21 published 16:58Z; Microsoft.Bcl.AsyncInterfaces
+         9.0.21 not resolvable until ~20:29Z). Move the pin deliberately when adopting a newer 9.x. -->
+    <PackageReference Include="System.Text.Json" Version="9.0.20" />
   </ItemGroup>
 
 </Project>
