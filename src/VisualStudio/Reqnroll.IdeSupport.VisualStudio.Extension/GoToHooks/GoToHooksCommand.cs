@@ -13,7 +13,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 
 /// <summary>
-/// "Go to Hooks" command — placed in the code-editor context menu navigation group,
+/// "Find Hooks" command — placed in the Reqnroll group of the code-editor context menu,
 /// visible only when a <c>.feature</c> file editor is active (design doc: Hook Navigation).
 /// </summary>
 /// <remarks>
@@ -49,7 +49,7 @@ internal sealed class GoToHooksCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Go to Hooks")
+    public override CommandConfiguration CommandConfiguration => new("Find Hooks")
     {
         Icon        = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
@@ -114,7 +114,7 @@ internal sealed class GoToHooksCommand : Command
                 await NavigationPickerHelper.PickAndNavigateAsync(
                         targets,
                         _fileLogger,
-                        promptTitle: "Go to Hooks",
+                        promptTitle: "Find Hooks",
                         cancellationToken)
                     .ConfigureAwait(false);
                 return;
