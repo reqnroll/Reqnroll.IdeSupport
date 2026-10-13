@@ -226,6 +226,192 @@ public class StepRenameHandlerTests
         edits[0].NewText.Should().Be("\"the renamed number is {int}\"");
         edits[0].Range.Start.Line.Should().Be(6, "the attribute literal lives on 0-based line 6");
     }
+    // ── Issue #935: the attribute literal must be re-emitted in its ORIGINAL form — a
+    //    verbatim @"…" literal keeps its @ prefix (embedded quotes doubled), a regular
+    //    literal re-escapes backslashes and quotes — and the edited source must still be
+    //    valid C#. The old code emitted a bare "…" over the token's full span, which
+    //    dropped the @ prefix (invalid escape: compile error) and emitted escaped quotes
+    //    unescaped (corrupting literals like "click \"OK\""). ──────────────────────────
+
+    private static string ApplyRenameEditToLiteral(string csText, string editNewText)
+    {
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(csText);
+        var literal = tree.GetRoot().DescendantNodes()
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax>()
+            .First(e => e.RawKind == (int)Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression);
+        var edited = tree.GetText().WithChanges(
+            new Microsoft.CodeAnalysis.Text.TextChange(literal.Token.Span, editNewText)).ToString();
+
+        // "then compile the result": the edited source must parse with zero diagnostics
+        // and the attribute's VALUE must be the renamed expression.
+        var newTree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(edited);
+        newTree.GetDiagnostics().Should().BeEmpty("the edited attribute must still be valid C#");
+        var newLiteral = newTree.GetRoot().DescendantNodes()
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax>()
+            .First(e => e.RawKind == (int)Microsoft.CodeAnalysis.CSharp.SyntaxKind.StringLiteralExpression);
+        return newLiteral.Token.ValueText;
+    }
+
+    [Fact]
+    public async Task Rename_preserves_verbatim_prefix_of_a_regex_attribute_literal()
+    {
+        // A verbatim literal is the idiomatic way to write a regex binding; dropping its
+        // @ prefix turned @"I have (\d+) cukes" into "I have (\d+) cukes" — an
+        // unrecognized escape sequence and a compile error (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(@\"I have (\\d+) cukes\")]\n" +   // 0-based line 6
+            "        public void GivenIHaveCukes(int count) { }\n" + // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"I have (\d+) cukes"),
+            specifiedExpression: "I have (\\d+) cukes",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: @"I have (\d+) gourds"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be(@"@""I have (\d+) gourds""",
+            "the verbatim @ prefix must be re-emitted over the full token span");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be(@"I have (\d+) gourds");
+    }
+
+    [Fact]
+    public async Task Rename_reescapes_embedded_quotes_in_a_verbatim_attribute_literal()
+    {
+        // Embedded quotes are doubled inside verbatim literals; the renamed expression must
+        // be re-doubled on the way out, not emitted raw (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(@\"click \"\"OK\"\" to confirm\")]\n" +   // 0-based line 6
+            "        public void ClickOk() { }\n" +                     // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"click ""OK"" to confirm"),
+            specifiedExpression: "click \"OK\" to confirm",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "click \"CANCEL\" to confirm"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be("@\"click \"\"CANCEL\"\" to confirm\"",
+            "quotes inside a verbatim literal are doubled, and the @ prefix is kept");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be("click \"CANCEL\" to confirm");
+    }
+
+    [Fact]
+    public async Task Rename_reescapes_backslashes_in_a_regular_attribute_literal()
+    {
+        // A regular (non-verbatim) literal's backslashes must be re-escaped on the way out;
+        // emitting the raw ValueText left "(\d+)" as "(\d+)" — invalid escape (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"I have (\\\\d+) cukes\")]\n" +   // 0-based line 6
+                        "        public void GivenIHaveCukes(int count) { }\n" + // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"I have (\d+) cukes"),
+            specifiedExpression: "I have (\\d+) cukes",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: @"I have (\d+) ponies"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be("\"I have (\\\\d+) ponies\"",
+            "the backslash in (\\d+) must be re-escaped in the regular literal");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be(@"I have (\d+) ponies");
+    }
+
+    [Fact]
+    public async Task Rename_reescapes_escaped_quotes_in_a_regular_attribute_literal()
+    {
+        // \" inside a regular literal must come back as \" — the old code emitted the
+        // unescaped ValueText, producing "click "OK"" and a broken token (issue #935).
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"click \\\"OK\\\" to confirm\")]\n" + // 0-based line 6
+            "        public void ClickOk() { }\n" +                      // 0-based line 7
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex(@"click ""OK"" to confirm"),
+            specifiedExpression: "click \"OK\" to confirm",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "click \"CANCEL\" to confirm"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var edits = result!.Changes![CsUri].ToList();
+        edits.Should().ContainSingle();
+        edits[0].NewText.Should().Be("\"click \\\"CANCEL\\\" to confirm\"",
+            "quotes inside a regular literal are re-escaped");
+
+        var valueText = ApplyRenameEditToLiteral(csText, edits[0].NewText);
+        valueText.Should().Be("click \"CANCEL\" to confirm");
+    }
 
     // ── Regression (issue #170's sibling bug, found while fixing the rename-targets picker):
     //    CSharpAttributeLiteralResolver used to pick the "nearest candidate method" purely by
@@ -912,6 +1098,177 @@ public class StepRenameHandlerTests
         featureEdits.Should().ContainSingle();
         featureEdits[0].NewText.Should().Be("the second no is <secondNumber>",
             "the outline placeholder is preserved; the binding's {int} token must not leak into the feature");
+    }
+
+    // Issue #936: renaming from a .cs binding must search the same widened usage scope as
+    // CodeLens / Find Step Usages / References (IProjectBindingRegistryLookup.ResolveUsageSearchScope),
+    // so a feature file in a project that references the binding project is also renamed.
+    [Fact]
+    public async Task Rename_from_cs_binding_includes_feature_usages_in_a_referencing_project()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the second number is {int}\")]\n" +     // 0-based line 6
+            "        public void GivenTheSecondNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+
+        const string featureText =
+            "Feature: F\n" +
+            "Scenario: x\n" +
+            "\tGiven the second number is 5\n";
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/Consumer/x.feature");
+
+        SetupBuffers((CsUri, csText), (featureUri, featureText));
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the second number is (-?\\d+)$"),
+            specifiedExpression: "the second number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        // The binding lives in MyProject (the direct owner of Steps.cs); Consumer.csproj references
+        // it and owns the feature file. Direct ownership alone does not include Consumer.
+        var bindingProject = new ProjectOwner("/workspace/MyProject.csproj", ".NETCoreApp,Version=v8.0");
+        var consumerProject = new ProjectOwner("/workspace/Consumer.csproj", ".NETCoreApp,Version=v8.0");
+        _scopeManager.ResolveOwners(CsUri).Returns(new[] { MakeTestProject() });
+        _registryLookup.ResolveUsageSearchScope(CsUri).Returns(new[] { bindingProject, consumerProject });
+
+        var snapshot = new LspTextSnapshot(featureUri.ToString(), 1, featureText);
+        var match = new StepBindingMatch(
+            featureUri.ToString(),
+            GherkinRange.FromPoint(snapshot, startOffset: 30, length: 22),   // "the second number is 5"
+            MatchResult.NoMatch);
+        // Only a search that includes the referencing project finds the feature usage.
+        _matchService.FindUsages(Arg.Any<SourceLocation>(),
+                Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f != null && f.Contains(consumerProject)))
+                     .Returns(new[] { match });
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the third number is {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Changes!.Should().ContainKey(featureUri,
+            "the referencing project's feature usage must be renamed too (issue #936)");
+    }
+
+    [Fact]
+    public async Task Rename_emits_one_feature_edit_when_the_same_step_range_is_reported_twice()
+    {
+        // A feature owned by several projects (or linked into several) can report the same step
+        // range once per owner. Duplicate TextEdits on one range are rejected or double-applied.
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the second number is {int}\")]\n" +
+            "        public void GivenTheSecondNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        const string featureText =
+            "Feature: F\n" +
+            "Scenario Outline: x\n" +
+            "\tGiven the second number is <secondNumber>\n";
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/x.feature");
+
+        SetupBuffers((CsUri, csText), (featureUri, featureText));
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the second number is (-?\\d+)$"),
+            specifiedExpression: "the second number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var snapshot = new LspTextSnapshot(featureUri.ToString(), 1, featureText);
+        var stepOffset = featureText.IndexOf("the second", StringComparison.Ordinal);
+        var stepLength = "the second number is <secondNumber>".Length;
+        var first = new StepBindingMatch(
+            featureUri.ToString(),
+            GherkinRange.FromPoint(snapshot, startOffset: stepOffset, length: stepLength),
+            MatchResult.NoMatch);
+        var duplicate = new StepBindingMatch(
+            featureUri.ToString(),
+            GherkinRange.FromPoint(snapshot, startOffset: stepOffset, length: stepLength),
+            MatchResult.NoMatch);
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(new[] { first, duplicate });
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the second no is {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var featureEdits = result!.Changes![featureUri].ToList();
+        featureEdits.Should().ContainSingle("two usages of one step range must produce one TextEdit");
+        featureEdits[0].NewText.Should().Be("the second no is <secondNumber>");
+    }
+
+    [Fact]
+    public async Task Rename_keeps_a_feature_edit_for_each_distinct_step_range()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the second number is {int}\")]\n" +
+            "        public void GivenTheSecondNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+        const string featureText =
+            "Feature: F\n" +
+            "Scenario Outline: x\n" +
+            "\tGiven the second number is <secondNumber>\n" +
+            "\tGiven the second number is <secondNumber>\n";
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/x.feature");
+
+        SetupBuffers((CsUri, csText), (featureUri, featureText));
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the second number is (-?\\d+)$"),
+            specifiedExpression: "the second number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        var snapshot = new LspTextSnapshot(featureUri.ToString(), 1, featureText);
+        var stepLength = "the second number is <secondNumber>".Length;
+        var firstOffset = featureText.IndexOf("the second", StringComparison.Ordinal);
+        var secondOffset = featureText.IndexOf("the second", firstOffset + 1, StringComparison.Ordinal);
+        var matches = new[]
+        {
+            new StepBindingMatch(featureUri.ToString(),
+                GherkinRange.FromPoint(snapshot, startOffset: firstOffset, length: stepLength), MatchResult.NoMatch),
+            new StepBindingMatch(featureUri.ToString(),
+                GherkinRange.FromPoint(snapshot, startOffset: secondOffset, length: stepLength), MatchResult.NoMatch),
+        };
+        _matchService.FindUsages(Arg.Any<SourceLocation>(), Arg.Any<IReadOnlyCollection<ProjectOwner>>())
+                     .Returns(matches);
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the second no is {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        var featureEdits = result!.Changes![featureUri].ToList();
+        featureEdits.Should().HaveCount(2);
+        featureEdits.Select(e => e.Range.Start.Line).Should().OnlyHaveUniqueItems();
     }
 
     // ── Feature-file renaming tests ─────────────────────────────────────────────
