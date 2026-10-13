@@ -32,7 +32,7 @@ public interface IFeatureTagIndex
 }
 
 /// <summary>Default implementation of <see cref="IFeatureTagIndex"/>.</summary>
-public sealed class FeatureTagIndex : IFeatureTagIndex
+public sealed class FeatureTagIndex : IFeatureTagIndex, IDisposable
 {
     private readonly ILspWorkspaceScopeManager _scopeManager;
     private readonly IDocumentBufferService _bufferService;
@@ -59,6 +59,8 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
         _fileSystem = fileSystem;
         _logger = logger;
         _telemetryService = telemetryService;
+
+        _scopeManager.ProjectRemoved += OnProjectRemoved;
     }
 
     /// <inheritdoc/>
@@ -70,9 +72,21 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
             return Array.Empty<StepCandidate>();
 
         var merged = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        // ResolveOwners can return the same project more than once: the membership index keys
+        // ownership per (project file, TFM), so a multi-targeted project contributes one owner
+        // per target framework even though they all resolve back to the single
+        // LspReqnrollProject for that .csproj. Merge each project file once, otherwise its
+        // feature files' usage counts are multiplied by the number of target frameworks
+        // (issue #943).
+        var mergedProjectFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var owner in owners)
         {
-            var index = _indexes.GetOrAdd(Normalise(owner.ProjectFullName), _ => new ProjectTagIndex());
+            var projectFileKey = Normalise(owner.ProjectFullName);
+            if (!mergedProjectFiles.Add(projectFileKey))
+                continue;
+
+            var index = _indexes.GetOrAdd(projectFileKey, _ => new ProjectTagIndex());
             await MergeProjectTagsAsync(index, owner, merged, ct).ConfigureAwait(false);
         }
 
@@ -254,6 +268,25 @@ public sealed class FeatureTagIndex : IFeatureTagIndex
     }
 
     private static string Normalise(string path) => MembershipIndex.NormaliseFilePath(path);
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Discards the cached index for a project that has been removed (unloaded). A reloaded
+    /// project builds a fresh index on its next request; dropping the entry here also stops
+    /// <see cref="_indexes"/> growing without bound across load/unload cycles.
+    /// </summary>
+    private void OnProjectRemoved(LspReqnrollProject project)
+    {
+        if (project is null)
+            return;
+
+        _indexes.TryRemove(Normalise(project.ProjectFullName), out _);
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+        => _scopeManager.ProjectRemoved -= OnProjectRemoved;
 
     // ── State ─────────────────────────────────────────────────────────────────
 
