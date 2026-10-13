@@ -13,7 +13,6 @@ using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 

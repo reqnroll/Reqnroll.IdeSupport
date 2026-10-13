@@ -10,15 +10,14 @@ using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>
 /// "Find Unused Step Definitions" command placed in the Reqnroll group of the editor context menu.
-/// Unlike Find Step Definition Usages, this command is not scoped to a C# editor — it is a workspace-wide operation
-/// available whenever the server is running.
+/// It is a workspace-wide operation, not tied to the caret, and is offered from both .feature and C# editors
+/// (available whenever the server is running).
 /// </summary>
 [VisualStudioContribution]
 internal sealed class FindUnusedStepDefinitionsCommand : Command

@@ -11,8 +11,9 @@ panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 :sync: vs
 
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
-then use the **Find Step Usages** command (assign a keyboard shortcut to it under
-**Tools → Options → Environment → Keyboard**).
+then click the **N step usages** CodeLens shown above the method. (The **Find Step Usages**
+command is also available for binding to a keyboard shortcut under
+**Tools → Options → Environment → Keyboard**.)
 
 Results open in the standard Find All References window.
 
@@ -23,7 +24,7 @@ Results open in the standard Find All References window.
 
 Visual Studio's built-in **Find All References** (Shift+F12) does not route
 to Reqnroll bindings — it only searches C# symbol references. Use
-**Find Step Usages** instead (see above), not the native command.
+the **N step usages** CodeLens (see above) instead of the native command.
 ```
 `````
 

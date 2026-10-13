@@ -9,7 +9,6 @@ using Microsoft.VisualStudio.Extensibility.Commands;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
@@ -39,13 +38,13 @@ internal sealed class FindStepUsagesCommand : Command
     /// <inheritdoc />
     public override CommandConfiguration CommandConfiguration => new("Find Step Usages")
     {
-        // Carried on the command item itself; shown in the Reqnroll group of the editor context menu.
-        Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
+                Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
         VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
-        // Deliberately not in the editor context menu (#1118); reachable via CodeLens / keybinding only.
+        // Deliberately not in the editor context menu (#1118); no menu placement, so it can only be
+        // invoked through a user-assigned keyboard shortcut. The step-usages CodeLens does not use this command.
         Placements = [],
     };
 
