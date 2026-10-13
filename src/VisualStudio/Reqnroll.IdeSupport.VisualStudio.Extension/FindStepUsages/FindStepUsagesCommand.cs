@@ -39,24 +39,14 @@ internal sealed class FindStepUsagesCommand : Command
     /// <inheritdoc />
     public override CommandConfiguration CommandConfiguration => new("Find Step Usages")
     {
-        // VS.Extensibility MenuConfiguration has no Icon property, so the icon is carried on the
-        // command item itself.  It appears in both placements: the Reqnroll submenu (Surface 1) and
-        // the C# editor context menu (Surface 2).
+        // Carried on the command item itself; shown in the Reqnroll group of the editor context menu.
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
         VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
-        Placements =
-        [
-            // Surface 1 — child of the Reqnroll submenu in the Extensions menu (ReqnrollMenu.cs).
-
-            // Surface 2 — C# editor context menu, in the built-in navigation group next to
-            // "Find All References".  VisualStudio.Extensibility's VsctParent can target groups
-            // defined by the shell directly, so it needs no .vsct file.
-            CommandPlacement.VsctParent(
-                ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
-        ],
+        // Placed in the Reqnroll group of the editor context menu (ReqnrollContextMenu.cs).
+        Placements = [],
     };
 
     /// <inheritdoc />

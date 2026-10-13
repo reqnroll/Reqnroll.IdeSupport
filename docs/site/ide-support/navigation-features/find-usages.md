@@ -13,9 +13,8 @@ panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
 then either:
 
-- Right-click → **Find Step Usages** (in the code editor context menu,
-  next to "Find All References"), or
-- **Extensions → Reqnroll → Find Step Usages**.
+- Right-click → **Find Step Usages** (in the Reqnroll group of the code
+  editor context menu).
 
 Results open in the standard Find All References window.
 

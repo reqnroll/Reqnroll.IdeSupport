@@ -56,12 +56,8 @@ internal sealed class GoToHooksCommand : Command
         // Show only when a .feature file editor is active; invisible in all other editors.
         VisibleWhen = ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType),
 
-        // Placed in the navigation group of the code-editor context menu alongside
-        // "Go To Definition" and "Find All References".
-        Placements  =
-        [
-            CommandPlacement.VsctParent(ShellMenuIds.GuidSHLMainMenu, ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, 0x0200),
-        ],
+        // Placed in the Reqnroll group of the editor context menu (ReqnrollContextMenu.cs).
+        Placements  = [],
     };
 
     /// <inheritdoc />
