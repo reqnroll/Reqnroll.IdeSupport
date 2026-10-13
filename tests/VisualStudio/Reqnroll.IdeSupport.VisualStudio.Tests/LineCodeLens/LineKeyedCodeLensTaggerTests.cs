@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Text;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 using Xunit;
 
@@ -260,6 +262,32 @@ public class LineKeyedCodeLensTaggerTests
         sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle();
     }
 
+    [Fact]
+    public void A_fetch_that_throws_is_logged_at_Info_with_the_exception()
+    {
+        // Issue #1032: the failure used to vanish into a bare catch { }. Info, not Warning: a Warning
+        // would bring the Output window to the front for a best-effort background refresh.
+        var snapshot = CreateSnapshot(lineCount: 5);
+        var buffer = CreateBuffer(snapshot);
+        var failure = new InvalidOperationException("server unavailable");
+        var shouldThrow = false;
+        var sut = CreateSut(buffer, (_, _) =>
+            shouldThrow ? throw failure : Task.FromResult<IReadOnlyList<TestEntry>?>(new[] { new TestEntry(1, "a") }));
+        var logged = new List<LogMessage>();
+        var logger = Substitute.For<IIdeSupportLogger>();
+        logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(ci => logged.Add(ci.Arg<LogMessage>()));
+        sut.Logger = logger;
+
+        shouldThrow = true;
+        sut.RequestRefresh();
+
+        var message = logged.Should().ContainSingle().Subject;
+        message.Level.Should().Be(TraceLevel.Info);
+        message.Exception.Should().BeSameAs(failure);
+        message.Message.Should().Contain("file:///a.feature");
+        sut.GetTags(WholeDocument(snapshot)).Should().ContainSingle("the previous tag set stays in place");
+    }
+
     // ── Fresh-eyes review: a request arriving mid-flight is queued, not dropped ───
 
     [Fact]
@@ -289,6 +317,52 @@ public class LineKeyedCodeLensTaggerTests
             await Task.Delay(10);
 
         fetchCount.Should().Be(2, "the request that arrived mid-flight must still be honoured once the in-flight one finishes, not silently lost");
+    }
+
+    [Fact]
+    public async Task RequestRefresh_is_not_lost_when_the_in_flight_refresh_finishes_between_its_in_flight_check_and_its_return()
+    {
+        // Issue #1032 (lost wakeup): request B finds refresh A in flight; before B does anything else,
+        // A finishes and checks whether a request arrived meanwhile. A must see B, or nobody ever runs
+        // B's refresh and the lens stays stale until some unrelated later trigger. The
+        // RefreshInFlightObserved seam fires on B's thread at exactly that point; completing A's fetch
+        // there runs A's whole continuation (finally block included) before B resumes.
+        //
+        // Run on a pool thread: TPL only runs an await continuation inline from SetResult when the
+        // completing thread has no SynchronizationContext (xUnit installs one on its test threads) and
+        // the continuation was registered under the default TaskScheduler. The seam asserts that A
+        // really did finish inline, so the interleaving cannot silently degrade into a different one.
+        await Task.Run(() =>
+        {
+            var snapshot = CreateSnapshot(lineCount: 5);
+            var buffer = CreateBuffer(snapshot);
+            var fetchCount = 0;
+            var gate = new TaskCompletionSource<IReadOnlyList<TestEntry>?>(); // not RunContinuationsAsynchronously
+            var sut = CreateSut(buffer, (_, _) =>
+            {
+                fetchCount++;
+                return fetchCount == 1 ? gate.Task : Task.FromResult<IReadOnlyList<TestEntry>?>(Array.Empty<TestEntry>());
+            });
+            fetchCount.Should().Be(1, "the constructor's own initial refresh (A) is in flight on `gate`");
+
+            var refreshAFinished = false;
+            sut.TagsChanged += (_, _) => refreshAFinished = true;
+            var seamCalls = 0;
+            var refreshAFinishedBeforeBResumed = false;
+            sut.RefreshInFlightObserved = () =>
+            {
+                seamCalls++;
+                sut.RefreshInFlightObserved = null;
+                gate.SetResult(new[] { new TestEntry(1, "a") }); // A finishes now
+                refreshAFinishedBeforeBResumed = refreshAFinished;
+            };
+
+            sut.RequestRefresh(); // B
+
+            seamCalls.Should().Be(1, "B must have found A in flight for this interleaving to occur");
+            refreshAFinishedBeforeBResumed.Should().BeTrue("A's continuation must have run to completion inside the seam, before B resumed");
+            fetchCount.Should().Be(2, "A finished after B had found it in flight, so A must re-run the refresh for B instead of dropping it");
+        });
     }
 
     // ── Registry integration ─────────────────────────────────────────────────────

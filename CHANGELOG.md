@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* The Run and hook-count CodeLenses in a `.feature` file no longer occasionally stay out of date after a refresh request that arrives just as a previous refresh finishes; such a request is now always followed by another refresh. A failed CodeLens refresh is now logged at Info instead of being silently ignored (VS) - see #1032
 * Fixed the "Define step(s)" quick fix generating a step-definition file that does not compile when the async snippet style is selected and the project has implicit usings disabled: a new step-definition file now imports `System.Threading.Tasks` whenever a generated method is async, instead of leaving the `Task` return type unresolved (LSP server) - see #961, @clrudolphi
 * A `.feature` file no longer loses all of its tags (document, scenarios, steps) when the configured default feature language is unsupported — for example a typo in `language: feature` in `reqnroll.json`. The parser's error-recovery path could re-enter the half-built AST and throw, and that exception was swallowed, so the file silently produced no tags instead of reporting the language error; the language error is now reported as a parser error on the file (LSP server) - see #955, @clrudolphi
 * If starting the LSP server fails after its process has already been launched (for example while setting up its pipe), Visual Studio now stops that process and releases its job object and inspector log straight away, instead of leaving an unused server running until Visual Studio exits (VS) - see #1024
