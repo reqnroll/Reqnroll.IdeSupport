@@ -45,7 +45,7 @@ internal sealed class FindStepUsagesCommand : Command
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
         VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
-        // Placed in the Reqnroll group of the editor context menu (ReqnrollContextMenu.cs).
+        // Deliberately not in the editor context menu (#1118); reachable via CodeLens / keybinding only.
         Placements = [],
     };
 

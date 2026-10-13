@@ -11,10 +11,8 @@ panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 :sync: vs
 
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
-then either:
-
-- Right-click → **Find Step Usages** (in the Reqnroll group of the code
-  editor context menu).
+then use the **Find Step Usages** command (assign a keyboard shortcut to it under
+**Tools → Options → Environment → Keyboard**).
 
 Results open in the standard Find All References window.
 

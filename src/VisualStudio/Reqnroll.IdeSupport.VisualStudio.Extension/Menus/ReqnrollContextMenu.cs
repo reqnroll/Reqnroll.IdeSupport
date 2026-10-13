@@ -1,6 +1,5 @@
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
-using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 using Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
@@ -22,7 +21,6 @@ internal static class ReqnrollContextMenu
     {
         Children =
         [
-            GroupChild.Command<FindStepUsagesCommand>(),
             GroupChild.Command<GoToHooksCommand>(),
             GroupChild.Command<FindUnusedStepDefinitionsCommand>(),
             GroupChild.Command<RenameStepCommand>(),
