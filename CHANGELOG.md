@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* Renaming a step whose regex expression contains nested capture groups, such as `(\d+(\.\d+)?)`, no longer fails with "The non-parameter parts cannot contain expression operators": the whole group is now treated as one parameter slot (LSP server, VS, VS Code, Rider) - see #1131
 * Renaming a step from its C# binding now also renames the step's usages in feature files of projects that reference the binding's project, matching Find Step Usages, References and the step-usage CodeLens; previously those feature files were left with the old step text (LSP server, VS, VS Code, Rider) - see #936
 * The VS Code Gherkin syntax highlighting now colours the whole of tags containing `:`, `=`, `.` or `/` (for example `@category:smoke`, `@Jira:ABC-1`), colours a trailing `# comment` on a tag line, recognises the `Scenarios:` alias of `Examples:`, and supports backtick (```` ``` ````) doc strings (VS Code) - see #1004, @clrudolphi
 * The VS Code test-outcome CodeLens no longer shows a green `✓ Passed` for scenarios that were skipped or not run: it now preserves the server's aggregate (Failed > Passed > Skipped > NotFound/None) and renders `⏭ Skipped`, `Not run`, or `⟳ Running` distinctly, and an unrecognised aggregate shows `? Unknown` rather than a pass (VS Code) - see #1001
