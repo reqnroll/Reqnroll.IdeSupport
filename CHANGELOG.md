@@ -75,6 +75,8 @@
 
 ## Bug fixes:
 
+* Visual Studio telemetry no longer faults, and through it breaks the extension's telemetry (and the VS integration that imports it), when the per-user profile directory is read-only, locked or unreachable: the anonymous user id is now read and written defensively and falls back to an in-memory id for the session when it cannot be persisted; an unset `%APPDATA%` is no longer turned into a literal relative path (Visual Studio) - see #1029, @clrudolphi
+
 * The Visual Studio extension no longer leaks one COM reference per open document each time it scans the Running Document Table for restored `.feature` tabs at server start-up; the document-data pointer returned by `GetDocumentInfo` is now released (VS) - see #1022
 * In VS Code, a `.cs` or `.feature` file event could re-announce a project that had just been deleted or unloaded (or the extension deactivated), leaving the removed project registered on the server with stale step/hook/feature membership until VS Code was reloaded: a pending debounced resend is now cancelled when the project is unregistered or the manager is disposed, and a resend for a project that is no longer known is ignored (VS Code) - see #1010, @clrudolphi
 * Renaming a step whose regex expression contains nested capture groups, such as `(\d+(\.\d+)?)`, no longer fails with "The non-parameter parts cannot contain expression operators": the whole group is now treated as one parameter slot (LSP server, VS, VS Code, Rider) - see #1131
