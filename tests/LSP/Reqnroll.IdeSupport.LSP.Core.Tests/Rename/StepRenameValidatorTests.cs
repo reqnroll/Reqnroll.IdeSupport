@@ -338,4 +338,92 @@ public class StepRenameValidatorTests
         // \( and \) are literal text, so this expression has one real slot, (\d+).
         StepRenameValidator.ValidateNewName(@"the total \((\d+)\)", @"the sum \((\d+)\)").Should().BeNull();
     }
+
+    // ── Rule 4 across several parameter slots (#1131) ───────────────────────────
+    // Rule 4 compares the NUMBER of parameter slots, not their identity, so a rename may re-shape
+    // or reorder slots as long as the binding keeps the same number of them. An expression with
+    // more than one slot is where a truncated slot scan (the #1131 defect) shows up as a wrong
+    // verdict rather than a count that happens to come out right on a single-slot expression.
+
+    [Theory]
+    // Cucumber-authored: two and three placeholders, wording-only changes (the '$' is a plain
+    // literal in a Cucumber Expression - issue #649).
+    [InlineData("I have {int} cukes and {int} gourds", "I have {int} apples and {int} pears")]
+    [InlineData("the basket has {int} apples, {int} pears and {int} plums", "the cart holds {int} apples, {int} pears and {int} plums")]
+    [InlineData("the price of {word} is ${float} and the discount is {float}", "the cost of {word} is ${float} and the rebate is {float}")]
+    // Regex-authored: two and three capturing groups, two of them containing a nested group.
+    [InlineData(@"^I have (\d+) cukes and (\d+) gourds$", @"^I have (\d+) apples and (\d+) pears$")]
+    [InlineData(@"^(\d+(\.\d+)?) to (\d+(\.\d+)?) costs (\d+)$", @"^(\d+(\.\d+)?) from (\d+(\.\d+)?) costs (\d+)$")]
+    public void ValidateNewName_several_parameter_slots_with_a_wording_change_pass(string original, string newName)
+    {
+        StepRenameValidator.ValidateNewName(original, newName).Should().BeNull();
+    }
+
+    [Theory]
+    // The added group sits inside one of the two slots, so the slot count stays 2 and no operator
+    // leaks into the non-parameter text - whichever of the two slots gains the nested group.
+    [InlineData(@"^I have (\d+) cukes and (\d+) gourds$", @"^I have (\d+(,\d+)?) cukes and (\d+) gourds$")]
+    [InlineData(@"^I have (\d+) cukes and (\d+) gourds$", @"^I have (\d+) cukes and (\d+(,\d+)?) gourds$")]
+    public void ValidateNewName_adding_a_nested_group_to_one_of_two_slots_passes(string original, string newName)
+    {
+        StepRenameValidator.ValidateNewName(original, newName).Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_re_shaping_one_of_two_nested_slots_keeps_the_count_so_it_passes()
+    {
+        var result = StepRenameValidator.ValidateNewName(
+            @"^(\d+(\.\d+)?) to (\d+(\.\d+)?)$",
+            @"^(\d+(\.\d+)?) to (\d+(,\d+)?)$");
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    // Dropping one of two Cucumber placeholders, and adding a third.
+    [InlineData("I have {int} cukes and {int} gourds", "I have {int} gourds")]
+    [InlineData("I have {int} cukes and {int} gourds", "I have {int} cukes, {int} gourds and {int} plums")]
+    // Dropping one of two regex groups, and adding a second to a single-slot expression.
+    [InlineData(@"^I have (\d+) cukes and (\d+) gourds$", @"^I have (\d+) gourds$")]
+    [InlineData(@"^I have (\d+) cukes$", @"^I have (\d+) cukes and (\d+) gourds$")]
+    // Three same-shaped slots: removing one is still a mismatch, so the slots are not compared as a set.
+    [InlineData(@"^(\d+) (\d+) (\d+)$", @"^(\d+) (\d+)$")]
+    // Two slots that each contain a nested group: dropping one of them.
+    [InlineData(@"^(\d+(\.\d+)?) to (\d+(\.\d+)?)$", @"^(\d+(\.\d+)?)$")]
+    public void ValidateNewName_changing_the_number_of_parameter_slots_fails(string original, string newName)
+    {
+        var result = StepRenameValidator.ValidateNewName(original, newName);
+
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Theory]
+    // An operator introduced outside the slots is reported as the Rule 3 failure even when the slot
+    // count also changed: Rule 3 is evaluated first, so the message the user sees names the operator.
+    [InlineData(@"^I have (\d+) cukes and (\d+) gourds$", @"^I have (\d+) cukes? and (\d+) gourds?$")]
+    [InlineData(@"^I have (\d+) cukes and (\d+) gourds$", @"^I have (\d+) cukes?$")]
+    public void ValidateNewName_operator_introduced_outside_several_slots_reports_the_operator(string original, string newName)
+    {
+        var result = StepRenameValidator.ValidateNewName(original, newName);
+
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+        result.Scope.Should().Be("rename");
+    }
+
+    [Fact]
+    public void ValidateNewName_reordering_two_slots_keeps_the_count_so_it_passes()
+    {
+        // Rule 4 is a count, not a positional comparison - swapping two slots or changing a
+        // placeholder's type keeps the count and is accepted.
+        StepRenameValidator.ValidateNewName(
+            @"^I have (\d+) cukes and (\w+) gourds$",
+            @"^I have (\w+) gourds and (\d+) cukes$").Should().BeNull();
+
+        StepRenameValidator.ValidateNewName(
+            "I have {int} cukes and {word} gourds",
+            "I have {float} cukes and {word} gourds").Should().BeNull();
+    }
 }
