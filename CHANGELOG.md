@@ -75,6 +75,8 @@
 
 ## Bug fixes:
 
+* In VS Code, a backslash-escaped pipe (`\|`) inside a data-table cell is no longer counted as a column separator, so a cell such as `a \| b` is no longer split into extra columns or highlighted in the wrong colour; escape handling follows Gherkin's `\|` (literal pipe) and `\\` (literal backslash) sequences (VS Code) - see #1014, @clrudolphi
+
 * The Run and hook-count CodeLenses in a `.feature` file no longer occasionally stay out of date after a refresh request that arrives just as a previous refresh finishes; such a request is now always followed by another refresh. A failed CodeLens refresh is now logged at Info instead of being silently ignored (VS) - see #1032
 * Fixed the "Define step(s)" quick fix generating a step-definition file that does not compile when the async snippet style is selected and the project has implicit usings disabled: a new step-definition file now imports `System.Threading.Tasks` whenever a generated method is async, instead of leaving the `Task` return type unresolved (LSP server) - see #961, @clrudolphi
 * A `.feature` file no longer loses all of its tags (document, scenarios, steps) when the configured default feature language is unsupported — for example a typo in `language: feature` in `reqnroll.json`. The parser's error-recovery path could re-enter the half-built AST and throw, and that exception was swallowed, so the file silently produced no tags instead of reporting the language error; the language error is now reported as a parser error on the file (LSP server) - see #955, @clrudolphi
