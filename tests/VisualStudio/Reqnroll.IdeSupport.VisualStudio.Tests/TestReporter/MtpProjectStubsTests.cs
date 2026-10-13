@@ -268,6 +268,40 @@ public sealed class MtpProjectStubsTests : IDisposable
         MtpProjectStubs.TryRemoveLegacyImportAfterFile(_logger, importAfter).Should().BeFalse("nothing left to remove");
     }
 
+    // ── Evaluated-directory cache (issue #1037) ─────────────────────────────
+
+    [Fact]
+    public void A_transient_failed_evaluation_is_not_cached_so_a_later_call_retries()
+    {
+        var project = CreateProject(@"App\App.csproj");
+        var attempts = 0;
+        string? Evaluate(string _)
+        {
+            attempts++;
+            return attempts == 1 ? null : Path.Combine(_dir, "App", "artifacts", "obj") + Path.DirectorySeparatorChar;
+        }
+
+        MtpProjectStubs.GetOrEvaluateProjectExtensionsPath(project, Evaluate).Should().BeNull();
+        MtpProjectStubs.GetOrEvaluateProjectExtensionsPath(project, Evaluate)
+            .Should().Be(Path.Combine(_dir, "App", "artifacts", "obj") + Path.DirectorySeparatorChar);
+
+        attempts.Should().Be(2, "a null from a timeout or a transient dotnet msbuild failure must be retried, not cached for the whole session");
+    }
+
+    [Fact]
+    public void A_successful_evaluation_is_cached_for_the_session()
+    {
+        var project = CreateProject(@"App\App.csproj");
+        var attempts = 0;
+        string? Evaluate(string _) { attempts++; return Path.Combine(_dir, "App", "artifacts", "obj"); }
+
+        var first = MtpProjectStubs.GetOrEvaluateProjectExtensionsPath(project, Evaluate);
+        var second = MtpProjectStubs.GetOrEvaluateProjectExtensionsPath(project, Evaluate);
+
+        second.Should().Be(first);
+        attempts.Should().Be(1, "dotnet msbuild runs once per project, not on every call");
+    }
+
     private string CreateDir(string relative)
     {
         var path = Path.Combine(_dir, relative);
