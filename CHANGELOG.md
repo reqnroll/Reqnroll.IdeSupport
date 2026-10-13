@@ -75,6 +75,8 @@
 
 ## Bug fixes:
 
+* Visual Studio status-bar messages shown by the Rename Step, Find Step Usages and Find Unused Step Definitions commands are now posted from the UI thread, so a message the command means to show ("LSP server not yet initialized", "No step definition found to rename at this position", "Step renamed successfully.", and similar) is no longer at risk of being dropped when the command runs off the UI thread (Visual Studio) - see #1021, @clrudolphi
+
 * Visual Studio's Format Selection no longer formats one extra line when the selection ends at the very start of the line after the last one you selected: it now applies the same whole-line end adjustment Comment/Uncomment Selection uses, so a drag-selection that stops at column 0 of the following line leaves that line untouched (VS) - see #1035, @clrudolphi
 * Visual Studio telemetry no longer faults, and through it breaks the extension's telemetry (and the VS integration that imports it), when the per-user profile directory is read-only, locked or unreachable: the anonymous user id is now read and written defensively and falls back to an in-memory id for the session when it cannot be persisted; an unset `%APPDATA%` is no longer turned into a literal relative path (Visual Studio) - see #1029, @clrudolphi
 
