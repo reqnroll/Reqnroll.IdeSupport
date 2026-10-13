@@ -76,9 +76,14 @@ internal class IdeSupportGherkinAstBuilder : AstBuilder<IdeSupportGherkinDocumen
         string description, IEnumerable<Step> steps, IEnumerable<Examples> examples, AstNode node)
     {
         ResetBlock();
-        if (examples == null || !examples.Any())
+        // Outline-ness is decided from the keyword, not from the presence of Examples: a
+        // "Scenario Outline:" with no Examples block must still be a ScenarioOutline so the
+        // "no examples defined" check can fire (issue #956) and it gains outline placeholder
+        // handling. A plain "Scenario:" keeps the examples-based fallback for robustness.
+        var isOutline = _documentDialectProvider()?.ScenarioOutlineKeywords.Contains(keyword) == true;
+        if (!isOutline && (examples == null || !examples.Any()))
             return new SingleScenario(tags, location, keyword, name, description, steps, examples);
-        return new ScenarioOutline(tags, location, keyword, name, description, steps, examples);
+        return new ScenarioOutline(tags, location, keyword, name, description, steps, examples ?? new Examples[0]);
     }
 
     protected override Background CreateBackground(Location location, string keyword, string name, string description,

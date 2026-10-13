@@ -182,7 +182,7 @@ public class FindUnusedStepDefinitionsHandlerTests
             "FindUnusedStepDefinitions command executed",
             Arg.Is<Dictionary<string, object?>>(d =>
                 1.Equals(d["UnusedStepDefinitions"]) &&
-                1.Equals(d["ScannedFeatureFiles"]) &&
+                1.Equals(d["ScannedProjects"]) &&
                 false.Equals(d["IsCancellationRequested"]) &&
                 0.Equals(d["TotalStepDefinitions"]) &&
                 d["DurationBucket"] is string));
@@ -211,6 +211,49 @@ public class FindUnusedStepDefinitionsHandlerTests
 
         telemetry.Received(1).SendEvent(
             "FindUnusedStepDefinitions command executed",
-            Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["TotalStepDefinitions"]) && 2.Equals(d["ScannedFeatureFiles"])));
+            Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["TotalStepDefinitions"]) && 2.Equals(d["ScannedProjects"])));
+    }
+
+    [Fact]
+    public async Task HandleAsync_reports_the_scanned_project_count_under_the_scanned_count_property()
+    {
+        // Issue #942: the scanned-count property reports how many project registries the handler
+        // enumerated -- one registry per discovered project. The handler never sees feature files,
+        // so it must not claim to count them (the old ScannedFeatureFiles name did).
+        SetupRegistries(
+            ("A", new ProjectOwner("/ws/A/A.csproj", "net8.0"),
+                ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())),
+            ("B", new ProjectOwner("/ws/B/B.csproj", "net8.0"),
+                ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
+                .Returns(Array.Empty<UnusedStepDefinition>());
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        await CreateSutWithTelemetry(telemetry).HandleAsync(CancellationToken.None);
+
+        telemetry.Received(1).SendEvent(
+            "FindUnusedStepDefinitions command executed",
+            Arg.Is<Dictionary<string, object?>>(d => 2.Equals(d["ScannedProjects"])));
+    }
+
+    [Fact]
+    public async Task HandleAsync_reports_the_real_cancellation_state()
+    {
+        // Issue #942: IsCancellationRequested used to be hard-coded false, so a cancelled request was
+        // indistinguishable from a completed one; it must reflect the token the handler was given.
+        SetupRegistries(("A", new ProjectOwner("/ws/A/A.csproj", "net8.0"),
+            ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>())));
+        _service.FindUnusedStepDefinitions(Arg.Any<IReadOnlyList<(string, string, ProjectBindingRegistry)>>())
+                .Returns(Array.Empty<UnusedStepDefinition>());
+
+        // An already-cancelled token: the handler must report what the token actually says.
+        var cancelled = new CancellationToken(canceled: true);
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        await CreateSutWithTelemetry(telemetry).HandleAsync(cancelled);
+
+        telemetry.Received(1).SendEvent(
+            "FindUnusedStepDefinitions command executed",
+            Arg.Is<Dictionary<string, object?>>(d => true.Equals(d["IsCancellationRequested"])));
     }
 }
