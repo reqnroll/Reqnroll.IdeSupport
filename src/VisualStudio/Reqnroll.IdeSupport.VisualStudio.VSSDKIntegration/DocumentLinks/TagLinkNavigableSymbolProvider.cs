@@ -24,7 +24,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 /// <para>
 /// VS's own LSP client never sends <c>textDocument/documentLink</c>, so the links are requested through
 /// <see cref="TagLinkRedirect"/> (set by <c>ReqnrollLanguageClient</c>), the same bridge pattern as
-/// <see cref="GoToDefinitionRedirect"/>. Only http(s) targets are opened - see <see cref="TagLinkRedirect.IsOpenableUrl"/>.
+/// <see cref="GoToDefinitionRedirect"/>. Any scheme except the blocked ones is opened - see <see cref="TagLinkRedirect.IsOpenableUrl"/>.
 /// </para>
 /// <para>
 /// The editor asks each <see cref="INavigableSymbolSourceProvider"/> for a symbol in MEF order and uses the
@@ -89,6 +89,16 @@ public sealed class TagLinkNavigableSymbolProvider : INavigableSymbolSourceProvi
                 var link  = FindLink(links, line.LineNumber, char0);
                 if (link is null)
                     return null;
+
+                // A blocked-scheme target is refused by Navigate, so offering a symbol for it would put a
+                // Ctrl+hover underline on the tag (winning over Go To Definition) that does nothing when
+                // clicked. Keep the provider in step with the styling (TagLinkTracker) and Navigate (#1036).
+                if (!TagLinkRedirect.IsOpenableUrl(link.Value.Target))
+                {
+                    _logger.LogVerbose(
+                        $"TagLinkNavigableSymbolProvider: not offering tag link with a blocked scheme '{link.Value.Target}'.");
+                    return null;
+                }
 
                 _logger.LogVerbose(
                     $"TagLinkNavigableSymbolProvider: offering tag link symbol uri='{fileUri}' at {line.LineNumber}:{char0} -> '{link.Value.Target}'");
@@ -168,7 +178,7 @@ public sealed class TagLinkNavigableSymbolProvider : INavigableSymbolSourceProvi
 
             if (!TagLinkRedirect.IsOpenableUrl(_target))
             {
-                _logger.LogWarning($"TagLinkNavigableSymbolProvider: refusing to open non-http(s) tag link '{_target}'.");
+                _logger.LogWarning($"TagLinkNavigableSymbolProvider: refusing to open tag link with a blocked scheme '{_target}'.");
                 return;
             }
 

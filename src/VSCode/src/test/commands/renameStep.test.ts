@@ -173,7 +173,7 @@ suite('renameStep', () => {
   suite('collapseActiveSelectionForFeatureStepRename', () => {
     const featureDocument = {
       uri: vscode.Uri.parse('file:///Steps.feature'),
-      languageId: 'gherkin',
+      languageId: 'reqnroll',
     } as vscode.TextDocument;
     const csDocument = {
       uri: vscode.Uri.parse('file:///Steps.cs'),

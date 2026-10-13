@@ -73,7 +73,7 @@ internal sealed class FindStepUsagesCommand : Command
                 _logger.LogWarning(
                     "FindStepUsagesCommand: LSP server not yet initialized (service={ServiceState}, renderer={RendererState}).",
                     service is null ? "null" : "set", renderer is null ? "null" : "set");
-                VsUtils.ShowStatusBarMessage("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
                 return;
             }
 
@@ -100,7 +100,7 @@ internal sealed class FindStepUsagesCommand : Command
             {
                 _logger.LogInformation(
                     "FindStepUsagesCommand: caret is not on a binding at {FileUri}:{LineNum} — nothing to show.", fileUri, lineNum);
-                VsUtils.ShowStatusBarMessage("Reqnroll: The caret is not on a step definition binding.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: The caret is not on a step definition binding.");
                 return;
             }
 
