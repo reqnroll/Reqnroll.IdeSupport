@@ -46,6 +46,18 @@ public class IdeSupportTagParserTests
     private static IdeSupportTag Single(IReadOnlyCollection<IdeSupportTag> tags, string type) =>
         tags.Single(t => t.Type == type);
 
+    /// <summary>The document text each tag's range covers, in tag order.</summary>
+    private static IEnumerable<string> Slice(string text, IEnumerable<IdeSupportTag> tags) =>
+        tags.Select(t => Slice(text, t));
+
+    private static string Slice(string text, IdeSupportTag tag) =>
+        tag.Range.Start + tag.Range.Length <= text.Length
+            ? text.Substring(tag.Range.Start, tag.Range.Length)
+            : "<range outside the document>";
+
+    private static IEnumerable<string> HeaderCellSpans(IReadOnlyCollection<IdeSupportTag> tags, string text) =>
+        Slice(text, OfType(tags, IdeSupportTagTypes.DataTableHeader));
+
     // ScenarioOutlinePlaceholder tags come from two independent sources: TagRowCells tags every
     // Examples header cell with this type (Data is a Gherkin.Ast.TableCell), and AddPlaceholderTags
     // tags each <placeholder> found within a step's own text (Data is a
@@ -220,6 +232,50 @@ public class IdeSupportTagParserTests
         var text = "Feature: F\nScenario: S\n  Given a table step\n    | col1 | col2 |\n    | a    | b    |\n";
         var tags = ParseTags(text);
         tags.Any(t => t.Type == IdeSupportTagTypes.DataTableHeader).Should().BeTrue();
+    }
+
+    [Fact]
+    public void DataTable_header_cell_spans_cover_the_whole_raw_cell_text()
+    {
+        var text = "Feature: F\nScenario: S\n  Given a table step\n" +
+                   "    | col1 | col2 |\n    | a    | b    |\n";
+        var tags = ParseTags(text);
+        HeaderCellSpans(tags, text).Should().Equal("col1", "col2");
+    }
+
+    // The parser hands back the *unescaped* cell value, so an escaped cell is longer in the
+    // document than its value: sizing the classification span from the value left the cell's last
+    // character uncoloured (issue #1014).
+    [Fact]
+    public void DataTable_header_cell_spans_cover_escaped_pipes_and_backslashes()
+    {
+        var text = "Feature: F\nScenario: S\n  Given a table step\n" +
+                   "    | col1 | a \\| b | c \\\\ d |\n    | v1   | x      | y      |\n";
+        var tags = ParseTags(text);
+        HeaderCellSpans(tags, text).Should().Equal("col1", "a \\| b", "c \\\\ d");
+    }
+
+    // An escape sequence that abuts the closing separator must still not end the cell early, and
+    // an even backslash run before a pipe must still split there.
+    [Fact]
+    public void DataTable_header_cell_span_handles_escapes_adjacent_to_the_closing_separator()
+    {
+        var text = "Feature: F\nScenario: S\n  Given a table step\n" +
+                   "    | col1 | a \\|| c \\\\|\n";
+        var tags = ParseTags(text);
+        HeaderCellSpans(tags, text).Should().Equal("col1", "a \\|", "c \\\\");
+    }
+
+    [Fact]
+    public void Examples_header_cell_span_covers_the_whole_raw_cell_text()
+    {
+        var text = "Feature: F\nScenario Outline: SO\n  Given <a>\n  Examples:\n" +
+                   "    | a \\| b |\n    | x      |\n";
+        var tags = ParseTags(text);
+        OfType(tags, IdeSupportTagTypes.ScenarioOutlinePlaceholder)
+            .Where(t => t.Data is TableCell)
+            .Select(t => Slice(text, t))
+            .Should().Equal("a \\| b");
     }
 
     // ── DocString argument ────────────────────────────────────────────────────
