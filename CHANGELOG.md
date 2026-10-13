@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* In VS Code, a `.cs` or `.feature` file event could re-announce a project that had just been deleted or unloaded (or the extension deactivated), leaving the removed project registered on the server with stale step/hook/feature membership until VS Code was reloaded: a pending debounced resend is now cancelled when the project is unregistered or the manager is disposed, and a resend for a project that is no longer known is ignored (VS Code) - see #1010, @clrudolphi
 * Renaming a step whose regex expression contains nested capture groups, such as `(\d+(\.\d+)?)`, no longer fails with "The non-parameter parts cannot contain expression operators": the whole group is now treated as one parameter slot (LSP server, VS, VS Code, Rider) - see #1131
 * Renaming a step from its C# binding now also renames the step's usages in feature files of projects that reference the binding's project, matching Find Step Usages, References and the step-usage CodeLens; previously those feature files were left with the old step text (LSP server, VS, VS Code, Rider) - see #936
 * The VS Code Gherkin syntax highlighting now colours the whole of tags containing `:`, `=`, `.` or `/` (for example `@category:smoke`, `@Jira:ABC-1`), colours a trailing `# comment` on a tag line, recognises the `Scenarios:` alias of `Examples:`, and supports backtick (```` ``` ````) doc strings (VS Code) - see #1004, @clrudolphi
