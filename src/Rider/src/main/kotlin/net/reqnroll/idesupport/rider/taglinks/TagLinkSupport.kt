@@ -14,9 +14,12 @@ data class TagLinkRange(val start: Int, val end: Int, val target: String) {
  */
 object TagLinkSupport {
     /**
-     * Only web links are opened: the target comes from `reqnroll.json`, which a cloned repository controls, so
-     * `file:` and other handler schemes are refused.
+     * Schemes that execute script or embed content rather than navigate to a tracker: the target comes from
+     * `reqnroll.json`, which a cloned repository controls, so these are refused.
      */
+    private val blockedSchemes = setOf("javascript", "vbscript", "data", "command")
+
+    /** Any absolute URI is opened (`https:`, `file:`, `jira:`, `vscode:`, `slack:` ...) except [blockedSchemes]. */
     fun isOpenableUrl(target: String?): Boolean {
         if (target.isNullOrEmpty()) return false
         val scheme = try {
@@ -24,7 +27,7 @@ object TagLinkSupport {
         } catch (_: Exception) {
             return false
         }
-        return scheme == "http" || scheme == "https"
+        return scheme != null && scheme !in blockedSchemes
     }
 
     /**
