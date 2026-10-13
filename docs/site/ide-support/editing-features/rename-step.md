@@ -37,7 +37,7 @@ picker to choose which binding to rename.
 Place the cursor on the step (in a `.feature` file) and press **F2**, or
 on the attribute string (in a `.cs` file) and use the standard **Rename
 Symbol** gesture. On the `.feature` side, F2 is also available via
-right-click → **Reqnroll: Rename Step** or the Command Palette.
+right-click → **Rename Step...** or the Command Palette (**Reqnroll: Rename Step...**).
 
 **Renaming from the feature file**
 

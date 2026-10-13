@@ -60,43 +60,53 @@
     "commands": [
       {
         "command": "reqnroll.toggleComment",
-        "title": "Reqnroll: Comment/Uncomment"
+        "title": "Comment/Uncomment",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.findStepUsages",
-        "title": "Reqnroll: Find Step Usages"
+        "title": "Find Step Usages",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.findUnusedStepDefinitions",
-        "title": "Reqnroll: Find Unused Step Definitions"
+        "title": "Find Unused Step Definitions in Project",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.goToHooks",
-        "title": "Reqnroll: Go to Hooks"
+        "title": "Find Hooks",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.openTagLink",
-        "title": "Reqnroll: Open Tag Link"
+        "title": "Open Tag Link",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.showOutputChannel",
-        "title": "Reqnroll: Show Output Channel"
+        "title": "Show Output Channel",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.goToStepDefinition",
-        "title": "Reqnroll: Go to Step Definition"
+        "title": "Go to Step Definition",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.defineSteps",
-        "title": "Reqnroll: Define Steps"
+        "title": "Define Steps",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.renameStep",
-        "title": "Reqnroll: Rename Step"
+        "title": "Rename Step...",
+        "category": "Reqnroll"
       },
       {
         "command": "reqnroll.renameStepOrSymbol",
-        "title": "Reqnroll: Rename Step or Symbol"
+        "title": "Rename Step or Symbol",
+        "category": "Reqnroll"
       }
     ],
     "keybindings": [
@@ -120,29 +130,29 @@
     "menus": {
       "editor/context": [
         {
-          "command": "reqnroll.toggleComment",
-          "when": "editorLangId == reqnroll",
-          "group": "1_modification"
-        },
-        {
           "command": "reqnroll.goToHooks",
           "when": "editorLangId == reqnroll",
-          "group": "navigation@90"
+          "group": "reqnroll@10"
         },
         {
-          "command": "reqnroll.findStepUsages",
-          "when": "editorLangId == csharp",
-          "group": "navigation@90"
+          "command": "reqnroll.findUnusedStepDefinitions",
+          "when": "editorLangId == reqnroll || editorLangId == csharp",
+          "group": "reqnroll@20"
         },
         {
           "command": "reqnroll.defineSteps",
           "when": "editorLangId == reqnroll",
-          "group": "1_modification@10"
+          "group": "reqnroll@30"
         },
         {
           "command": "reqnroll.renameStep",
           "when": "editorLangId == reqnroll || editorLangId == csharp",
-          "group": "1_modification@20"
+          "group": "reqnroll@40"
+        },
+        {
+          "command": "reqnroll.toggleComment",
+          "when": "editorLangId == reqnroll",
+          "group": "reqnroll@50"
         }
       ],
       "commandPalette": [

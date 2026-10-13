@@ -34,7 +34,7 @@ interface RenameTargetsResponse {
  * steal an ordinary C# rename-symbol away from a method or local identifier. Without it, the
  * server also matches a cursor anywhere on the bound method's declaration line (not just within
  * the binding attribute itself) — the correct, deliberately loose behavior for the explicit
- * "Reqnroll: Rename Step" context-menu/palette command, but wrong for F2, which must fall through
+ * "Rename Step..." context-menu/palette command, but wrong for F2, which must fall through
  * to `editor.action.rename` unless the cursor is genuinely on the binding expression.
  */
 export async function getRenameTargets(
@@ -277,7 +277,7 @@ export function extractStepTextFromLabel(label: string): string {
  * instead of showing "No step definition found". This is what the F2 keybinding needs: F2 has to
  * work as an ordinary C# rename everywhere else in a `.cs` file (locals, methods, non-Reqnroll
  * projects), so silently eating the keystroke with an unrelated message would break the most-used
- * refactor shortcut in the language. The explicit "Reqnroll: Rename Step" context-menu/palette
+ * refactor shortcut in the language. The explicit "Rename Step..." context-menu/palette
  * command leaves this off — a user who deliberately picked that command wants to know their cursor
  * wasn't on a binding.
  */

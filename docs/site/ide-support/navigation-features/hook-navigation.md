@@ -28,8 +28,8 @@ Extensions menu placement for this one — it's editor-context-menu only.
 
 Place the cursor in a `.feature` file, then either:
 
-- Right-click → **Reqnroll: Go to Hooks**, or
-- Command Palette → **Reqnroll: Go to Hooks**.
+- Right-click → **Find Hooks**, or
+- Command Palette → **Reqnroll: Find Hooks**.
 
 No default keybinding.
 

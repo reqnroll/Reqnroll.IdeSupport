@@ -22,8 +22,7 @@ workspace-wide scan, not tied to a specific line.
 ```{tab-item} VS Code
 :sync: vscode
 
-Command Palette → **Reqnroll: Find Unused Step Definitions**. No
-context-menu placement or default keybinding.
+Right-click → **Find Unused Step Definitions in Project**, or Command Palette → **Reqnroll: Find Unused Step Definitions in Project**. There's no default keybinding.
 
 ![](find-unused/find-unused-vscode.gif)
 ```
