@@ -9,10 +9,24 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
+/// <c>ThreadHelper</c>'s UI-thread dispatcher is process-wide static state. Tests that swap it to simulate the
+/// UI thread must not overlap any other test: the first touch of <c>ThreadHelper.JoinableTaskFactory</c> /
+/// <c>ServiceProvider.GlobalProvider</c> anywhere else in the process re-points it at that caller's thread
+/// (<c>SetGlobalProvider</c> → <c>SetUIThread</c>) and makes the simulated UI thread fail its thread check.
+/// Parallelization is disabled for this collection, so xUnit runs it alone after the parallel collections.
+/// </summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ThreadHelperUiThreadCollection
+{
+    public const string Name = "ThreadHelper UI-thread state";
+}
+
+/// <summary>
 /// Issue #1022: <c>IVsRunningDocumentTable.GetDocumentInfo</c> hands back an AddRef'd
 /// <c>IUnknown</c> in <c>ppunkDocData</c> (the shell's own <c>RunningDocumentTable</c> wrapper
 /// releases it after use), so the RDT scan must release it for every document it visits.
 /// </summary>
+[Collection(ThreadHelperUiThreadCollection.Name)]
 public class VsStubFrameInitializerTests
 {
     [ComVisible(true)]
