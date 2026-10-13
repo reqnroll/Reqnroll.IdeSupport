@@ -68,12 +68,20 @@ public class TagLinkTests
     [Theory]
     [InlineData("https://example.com/issues/1", true)]
     [InlineData("http://example.com/issues/1", true)]
-    [InlineData("file:///C:/Windows/System32/calc.exe", false)]
-    [InlineData("ms-msdt:/id", false)]
+    [InlineData("file:///C:/specs/story.html", true)]
+    [InlineData("jira://browse/PROJ-1", true)]
+    [InlineData("vscode://file/C:/repo/a.cs", true)]
+    [InlineData("slack://channel?id=C1", true)]
+    [InlineData("JIRA://browse/PROJ-1", true)]
     [InlineData("javascript:alert(1)", false)]
+    [InlineData("JavaScript:alert(1)", false)]
+    [InlineData("vbscript:msgbox(1)", false)]
+    [InlineData("data:text/html,<b>x</b>", false)]
+    [InlineData("command:workbench.action.reloadWindow", false)]
     [InlineData("not a url", false)]
+    [InlineData("", false)]
     [InlineData(null, false)]
-    public void IsOpenableUrl_allows_only_http_and_https(string? target, bool expected)
+    public void IsOpenableUrl_allows_any_scheme_except_the_blocked_ones(string? target, bool expected)
     {
         TagLinkRedirect.IsOpenableUrl(target).Should().Be(expected);
     }

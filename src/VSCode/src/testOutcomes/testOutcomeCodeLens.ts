@@ -7,7 +7,7 @@ import {
   SymbolKind,
 } from 'vscode-languageclient/node';
 import { ReqnrollMethods } from '../lsp/lspMethods';
-import { GHERKIN_LANGUAGE_ID } from '../languageIds';
+import { REQNROLL_LANGUAGE_ID } from '../languageIds';
 import { findOwningProjectFile, ProjectManager } from '../lsp/projectManager';
 import { GetTestOutcomeResponse, TestOutcomeRow, getTestOutcome } from './testOutcomesService';
 
@@ -63,7 +63,7 @@ export function registerTestOutcomeCodeLens(
   };
 
   context.subscriptions.push(
-    vscode.languages.registerCodeLensProvider({ language: GHERKIN_LANGUAGE_ID }, provider),
+    vscode.languages.registerCodeLensProvider({ language: REQNROLL_LANGUAGE_ID }, provider),
   );
 }
 

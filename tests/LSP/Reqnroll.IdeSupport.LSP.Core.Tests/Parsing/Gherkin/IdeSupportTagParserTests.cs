@@ -484,4 +484,19 @@ public class IdeSupportTagParserTests
         var tags = ParseTags("Feature: F\nScenario: S\n  Given a step\n");
         tags.Should().BeEmpty();
     }
+
+    // Issue #955: an unsupported configured default feature language used to make the parser's
+    // recovery path throw, which Parse swallowed, so no ParserError tag was produced.
+    [Fact]
+    public void Unsupported_configured_default_language_produces_ParserError_tag()
+    {
+        _configProvider.GetConfiguration().Returns(new IdeSupportConfiguration
+        {
+            DefaultFeatureLanguage = "xx-INVALID-not-a-language"
+        });
+
+        var tags = ParseTags("Feature: F\nScenario: S\n  Given a step\n");
+
+        tags.Any(t => t.Type == IdeSupportTagTypes.ParserError).Should().BeTrue();
+    }
 }

@@ -130,6 +130,27 @@ public class TelemetryTransmitterTests
             .And.Contain("ExtensionVersion", "1.2.3");
     }
 
+    [Fact]
+    public void ApplyPrivacyDefaults_replaces_the_machine_name_on_events_and_exceptions()
+    {
+        var channel = new InMemoryTelemetryChannel();
+        var config = new TelemetryConfiguration
+        {
+            TelemetryChannel = channel,
+            ConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        };
+        var client = new TelemetryClient(config);
+        VsTelemetryTransmitter.ApplyPrivacyDefaults(client.Context);
+
+        client.TrackEvent(new EventTelemetry("probe"));
+        client.TrackException(new ExceptionTelemetry(new InvalidOperationException("boom")));
+
+        channel.SentTelemtries.Should().HaveCount(2);
+        channel.SentTelemtries.Select(t => t.Context.Cloud.RoleInstance)
+            .Should().OnlyContain(r => r == VsTelemetryTransmitter.RedactedRoleInstance)
+            .And.NotContain(Environment.MachineName);
+    }
+
     // NSubstitute doesn't auto-populate ImmutableDictionary-typed members with an empty
     // instance the way it does for common collection interfaces, so a bare
     // Substitute.For<ITelemetryEvent>() has a null Properties and blows up in the
@@ -316,6 +337,42 @@ public class TelemetryTransmitterTests
         props["ExceptionType"].Should().Be(typeof(InvalidOperationException).FullName);
         props["Message"].Should().Be("boom");
         props["IsFatal"].Should().Be("True");
+    }
+
+    [Fact]
+    public void Exceptions_are_sent_as_a_sanitised_UnhandledException_event_not_a_raw_ExceptionTelemetry()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        var inner = new ArgumentException("inner secret 'Acme.Inner'");
+        Exception thrown;
+        try
+        {
+            throw new InvalidOperationException(
+                @"Could not load type 'Acme.Payroll.Steps.PaymentSteps' from C:\Users\Jane\Payroll\Salary.feature", inner);
+        }
+        catch (Exception ex) { thrown = ex; }
+
+        sut.TransmitFatalExceptionEvent(thrown, isFatal: true);
+
+        var sent = _telemetryChannel.SentTelemtries.Should().ContainSingle().Subject;
+        sent.Should().BeOfType<EventTelemetry>("a raw ExceptionTelemetry would serialise the full message, stack and inner exceptions");
+        var evt = (EventTelemetry)sent;
+        evt.Name.Should().Be("UnhandledException");
+        evt.Properties["ExceptionType"].Should().Be(typeof(InvalidOperationException).FullName);
+        evt.Properties["IsFatal"].Should().Be("True");
+        evt.Properties["Message"].Should().Be("Could not load type <text> from <path>");
+        evt.Properties.Values.Should().NotContain(v => v.Contains("Acme") || v.Contains("Jane") || v.Contains("Salary"));
+    }
+
+    [Fact]
+    public void Sanitised_exception_properties_cap_the_message_and_omit_the_raw_stack()
+    {
+        var props = VsTelemetryTransmitter.BuildSanitizedExceptionProps(
+            new InvalidOperationException(new string('x', 1000)), Array.Empty<KeyValuePair<string, object>>());
+
+        props["Message"].Length.Should().BeLessThanOrEqualTo(TelemetryScrubber.MaxMessageLength);
+        props.Should().NotContainKey("StackTrace");
     }
 
     [Fact]

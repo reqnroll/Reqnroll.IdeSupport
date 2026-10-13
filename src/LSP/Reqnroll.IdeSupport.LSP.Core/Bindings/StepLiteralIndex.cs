@@ -20,8 +20,9 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// depth (<c>(</c>/<c>[</c>/<c>{</c> and their closers), and only characters seen at depth zero —
 /// outside every group, character class, and quantifier — that aren't themselves a regex
 /// metacharacter or part of an escape sequence are accumulated as literal text. Anything at depth
-/// zero that touches an operator (<c>. ^ $ * + ? |</c>) breaks the current run instead of being
-/// included, and depth &gt; 0 content is skipped entirely rather than trusted. Because a depth-zero
+/// zero that touches an operator (<c>. ^ $ * + ?</c>) breaks the current run instead of being
+/// included; a depth-zero alternation <c>|</c> instead disqualifies the whole binding, and depth
+/// &gt; 0 content is skipped entirely rather than trusted. Because a depth-zero
 /// literal run contains no regex syntax at all, it is — by construction — exactly the text
 /// <see cref="Regex.Escape(string)"/> would have produced, so any string the full regex matches
 /// must contain it verbatim.
@@ -41,8 +42,10 @@ namespace Reqnroll.IdeSupport.LSP.Core.Bindings;
 /// for it instead.
 /// </para>
 /// <para>
-/// A binding whose regex resolves to zero depth-zero literal runs (e.g. <c>(.*)</c>, or a
-/// Cucumber Expression that is a single <c>{string}</c> placeholder) has no required literals and
+/// A binding whose regex resolves to zero depth-zero literal runs (e.g. <c>(.*)</c>, a
+/// Cucumber Expression that is a single <c>{string}</c> placeholder, or a top-level alternation
+/// like <c>^I have apples|I have pears$</c>, where only one branch need be present) has no
+/// required literals and
 /// is unconditionally returned as a candidate for every step — the same behavior as if this index
 /// didn't exist, just with no speedup for that specific binding.
 /// </para>
@@ -160,11 +163,18 @@ public sealed class StepLiteralIndex
         if (pattern.EndsWith("$", StringComparison.Ordinal))
             pattern = pattern.Substring(0, pattern.Length - 1);
 
-        foreach (var segment in ExtractLiteralSegments(pattern))
+        bool hasTopLevelAlternation;
+        foreach (var segment in ExtractLiteralSegments(pattern, out hasTopLevelAlternation))
             if (segment.Length >= MinLiteralLength)
                 // Lowercased here so every downstream consumer (dedup, the trie, the scan) works
                 // on a consistent case-folded form -- see the case-insensitivity remark on GetCandidates.
                 result.Add(segment.ToLowerInvariant());
+
+        // A depth-zero "|" makes the pattern a top-level alternation: the step only has to match one
+        // branch, so no branch's literal is genuinely required. Disable the literal prefilter for
+        // this binding entirely (issue #950) rather than wrongly requiring every branch.
+        if (hasTopLevelAlternation)
+            result.Clear();
 
         return result;
     }
@@ -174,12 +184,14 @@ public sealed class StepLiteralIndex
     /// occur outside every group, character class, and quantifier. See the type's remarks for why
     /// this depth-tracking approach, not a single-pass character scan, is required for soundness.
     /// </summary>
-    private static List<string> ExtractLiteralSegments(string pattern)
+    private static List<string> ExtractLiteralSegments(string pattern, out bool hasTopLevelAlternation)
     {
         var segments = new List<string>();
         var current = new StringBuilder();
         var depth = 0;
+        var inCharClass = false;
         var i = 0;
+        hasTopLevelAlternation = false;
 
         void Flush()
         {
@@ -203,7 +215,28 @@ public sealed class StepLiteralIndex
                 continue;
             }
 
-            if (c is '(' or '[' or '{')
+            if (inCharClass)
+            {
+                // Inside a character class nothing contributes a literal and nothing affects
+                // nesting depth: a ')' or '(' here is a class member (or a literal), not a group
+                // delimiter. Skip until the closing ']' (issue #951).
+                if (c == ']')
+                    inCharClass = false;
+                i++;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                // A character class is not a nesting construct -- enter class mode so the stray
+                // brackets inside it can't change depth (issue #951).
+                Flush();
+                inCharClass = true;
+                i++;
+                continue;
+            }
+
+            if (c is '(' or '{')
             {
                 Flush();
                 depth++;
@@ -211,7 +244,7 @@ public sealed class StepLiteralIndex
                 continue;
             }
 
-            if (c is ')' or ']' or '}')
+            if (c is ')' or '}')
             {
                 if (depth > 0)
                     depth--;
@@ -221,8 +254,15 @@ public sealed class StepLiteralIndex
 
             if (depth == 0)
             {
-                if (c is '.' or '^' or '$' or '*' or '+' or '?' or '|')
+                if (c is '.' or '^' or '$' or '*' or '+' or '?')
                     Flush();
+                else if (c == '|')
+                {
+                    // A depth-zero alternation splits the pattern into branches only one of which
+                    // need match -- so no branch's literal text is genuinely required (issue #950).
+                    hasTopLevelAlternation = true;
+                    Flush();
+                }
                 else
                     current.Append(c);
             }
