@@ -145,7 +145,7 @@ Scenario: S
       "Fixture must start unbuilt to recreate issue #2's precondition",
     );
 
-    const ext = vscode.extensions.getExtension('reqnroll.reqnroll-ide-support')!;
+    const ext = vscode.extensions.getExtension('Reqnroll.reqnroll-ide-support')!;
     await ext.activate();
 
     await openFeatureDoc();
