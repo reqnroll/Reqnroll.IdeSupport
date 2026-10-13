@@ -22,11 +22,19 @@ class TagLinkSupportTest {
         TagLinkSupport.toRanges(links.toList(), documentLength) { lineStarts.getOrNull(it) }
 
     @Test
-    fun `isOpenableUrl allows only http and https`() {
+    fun `isOpenableUrl allows any scheme except the blocked ones`() {
         assertTrue(TagLinkSupport.isOpenableUrl("https://example.com/issues/1"))
         assertTrue(TagLinkSupport.isOpenableUrl("HTTP://example.com/issues/1"))
-        assertFalse(TagLinkSupport.isOpenableUrl("file:///C:/Windows/System32/calc.exe"))
+        assertTrue(TagLinkSupport.isOpenableUrl("file:///C:/specs/story.html"))
+        assertTrue(TagLinkSupport.isOpenableUrl("jira://browse/PROJ-1"))
+        assertTrue(TagLinkSupport.isOpenableUrl("vscode://file/C:/repo/a.cs"))
+        assertTrue(TagLinkSupport.isOpenableUrl("slack://channel?id=C1"))
         assertFalse(TagLinkSupport.isOpenableUrl("javascript:alert(1)"))
+        assertFalse(TagLinkSupport.isOpenableUrl("JavaScript:alert(1)"))
+        assertFalse(TagLinkSupport.isOpenableUrl("vbscript:msgbox(1)"))
+        assertFalse(TagLinkSupport.isOpenableUrl("data:text/html,<b>x</b>"))
+        assertFalse(TagLinkSupport.isOpenableUrl("command:workbench.action.reloadWindow"))
+        assertFalse(TagLinkSupport.isOpenableUrl("relative/path"))
         assertFalse(TagLinkSupport.isOpenableUrl("not a url"))
         assertFalse(TagLinkSupport.isOpenableUrl(""))
         assertFalse(TagLinkSupport.isOpenableUrl(null))
@@ -42,7 +50,7 @@ class TagLinkSupportTest {
     @Test
     fun `toRanges drops non-openable targets and out-of-range positions`() {
         val result = ranges(
-            link(1, 0, 11, "file:///C:/secret.txt"),
+            link(1, 0, 11, "javascript:alert(1)"),
             link(1, 0, 11, null),
             link(9, 0, 3, "https://example.com/stale-line"),
             link(1, 5, 5, "https://example.com/empty"),
