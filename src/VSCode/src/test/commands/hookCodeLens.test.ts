@@ -79,7 +79,7 @@ suite('hookCodeLens', () => {
     test('registers the provider for gherkin documents', () => {
       const { selector } = captureProvider(fakeClient({}));
 
-      assert.deepStrictEqual(selector, { language: 'gherkin' });
+      assert.deepStrictEqual(selector, { language: 'reqnroll' });
     });
   });
 
