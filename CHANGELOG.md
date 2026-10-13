@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* The VS Code test-outcome CodeLens no longer shows a green `✓ Passed` for scenarios that were skipped or not run: it now preserves the server's aggregate (Failed > Passed > Skipped > NotFound/None) and renders `⏭ Skipped`, `Not run`, or `⟳ Running` distinctly, and an unrecognised aggregate shows `? Unknown` rather than a pass (VS Code) - see #1001
 * In VS Code, a backslash-escaped pipe (`\|`) inside a data-table cell is no longer counted as a column separator, so a cell such as `a \| b` is no longer split into extra columns or highlighted in the wrong colour; escape handling follows Gherkin's `\|` (literal pipe) and `\\` (literal backslash) sequences (VS Code) - see #1014, @clrudolphi
 
 * The Run and hook-count CodeLenses in a `.feature` file no longer occasionally stay out of date after a refresh request that arrives just as a previous refresh finishes; such a request is now always followed by another refresh. A failed CodeLens refresh is now logged at Info instead of being silently ignored (VS) - see #1032
