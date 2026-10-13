@@ -124,7 +124,23 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         client.Context.User.Id = userStore.GetUserId();
         client.Context.User.AccountId = userStore.GetUserId();
         ApplyClientIdentity(client.Context.GlobalProperties, versionProvider);
+        ApplyPrivacyDefaults(client.Context);
         return client;
+    }
+
+    /// <summary>
+    /// The value sent in place of the machine name (<c>ai.cloud.roleInstance</c>).
+    /// </summary>
+    internal const string RedactedRoleInstance = "REDACTED";
+
+    /// <summary>
+    /// Replaces the machine name with a constant. Left alone, the Application Insights SDK stamps
+    /// <c>Cloud.RoleInstance</c> with <see cref="Environment.MachineName"/> on every event and exception,
+    /// and a hostname can identify the user or their employer (issue #1141).
+    /// </summary>
+    internal static void ApplyPrivacyDefaults(TelemetryContext context)
+    {
+        context.Cloud.RoleInstance = RedactedRoleInstance;
     }
 
     /// <summary>
@@ -219,12 +235,15 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         {
             try
             {
-                var exceptionTelemetry = new ExceptionTelemetry(exception) { Timestamp = DateTime.UtcNow };
-                foreach (var prop in additionalPropsArray)
+                // Never TrackException(new ExceptionTelemetry(exception)): that serialises the raw message,
+                // the full stack (with file names and line numbers) and inner exceptions, none of which are
+                // privacy-safe (issue #1140). Send the same sanitised UnhandledException event the LSP server does.
+                var eventTelemetry = new EventTelemetry(TelemetryEvents.UnhandledException) { Timestamp = DateTime.UtcNow };
+                foreach (var prop in BuildSanitizedExceptionProps(exception, additionalPropsArray))
                 {
-                    exceptionTelemetry.Properties.Add(prop.Key, prop.Value?.ToString() ?? string.Empty);
+                    eventTelemetry.Properties.Add(prop.Key, prop.Value);
                 }
-                _telemetryClient.TrackException(exceptionTelemetry);
+                _telemetryClient.TrackEvent(eventTelemetry);
                 transmitted = true;
             }
             catch (Exception ex)
@@ -253,6 +272,30 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         };
         foreach (var p in additionalProps)
             props[p.Key] = p.Value;
+        return props;
+    }
+
+    /// <summary>
+    /// The privacy-safe payload for an exception: its type name, the message scrubbed by
+    /// <see cref="TelemetryScrubber.ScrubMessage"/> (quoted text, URLs and paths removed, capped), the simple name
+    /// of the topmost product class and the product-only stack from <see cref="ExceptionStackSanitizer"/>, plus
+    /// the caller's extra properties. Inner exceptions and the raw stack are never read.
+    /// </summary>
+    internal static Dictionary<string, string> BuildSanitizedExceptionProps(
+        Exception exception, IEnumerable<KeyValuePair<string, object>> additionalProps)
+    {
+        var props = new Dictionary<string, string>
+        {
+            ["ExceptionType"] = exception.GetType().FullName ?? exception.GetType().Name,
+            ["Message"] = TelemetryScrubber.ScrubMessage(exception.Message) ?? string.Empty,
+        };
+        var captured = ExceptionStackSanitizer.Capture(exception);
+        if (captured?.Source is { } source)
+            props["Source"] = source;
+        if (captured?.Sanitize() is { } stackFrames)
+            props[TelemetryScrubber.StackFramesKey] = TelemetryScrubber.RedactPaths(stackFrames) ?? stackFrames;
+        foreach (var prop in additionalProps)
+            props[prop.Key] = prop.Value?.ToString() ?? string.Empty;
         return props;
     }
 
