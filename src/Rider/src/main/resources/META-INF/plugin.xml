@@ -181,22 +181,6 @@ for what is available in each IDE.</p>
           description="Finds feature-file steps that use the step-definition binding at the caret" />
     </group>
 
-    <!-- The Reqnroll block of the editor context menu (issue #1118): one non-popup group, set off
-         from the platform's entries by a separator on each side. Every member's update() hides it
-         outside the files it applies to, and the platform drops the separators of a group whose
-         members are all hidden. Items that open a dialog end in "...". The unprefixed "Rename
-         Step..." sits apart from the native "Rename..." entry because of this grouping. -->
-    <group id="Reqnroll.EditorContextGroup">
-      <add-to-group group-id="EditorPopupMenu" anchor="last" />
-      <separator />
-      <reference ref="Reqnroll.GoToHooks" />
-      <reference ref="Reqnroll.FindUnusedStepDefinitions" />
-      <reference ref="Reqnroll.RenameFeatureStep" />
-      <reference ref="Reqnroll.RenameCSharpStep" />
-      <reference ref="Reqnroll.ToggleComment" />
-      <separator />
-    </group>
-
     <action id="Reqnroll.GoToHooks"
         class="net.reqnroll.idesupport.rider.actions.GoToHooksAction"
         text="Find Hooks"
@@ -245,5 +229,23 @@ for what is available in each IDE.</p>
         class="net.reqnroll.idesupport.rider.actions.RenameCSharpStepAction"
         text="Rename Step..."
         description="Renames the step-definition binding's expression across this attribute and the feature file" />
+
+    <!-- Declared after the actions it references: <reference ref=...> resolves against actions that
+         are already registered, so the group must come last. -->
+    <!-- The Reqnroll block of the editor context menu (issue #1118): one non-popup group, set off
+         from the platform's entries by a separator on each side. Every member's update() hides it
+         outside the files it applies to, and the platform drops the separators of a group whose
+         members are all hidden. Items that open a dialog end in "...". The unprefixed "Rename
+         Step..." sits apart from the native "Rename..." entry because of this grouping. -->
+    <group id="Reqnroll.EditorContextGroup">
+      <add-to-group group-id="EditorPopupMenu" anchor="last" />
+      <separator />
+      <reference ref="Reqnroll.GoToHooks" />
+      <reference ref="Reqnroll.FindUnusedStepDefinitions" />
+      <reference ref="Reqnroll.RenameFeatureStep" />
+      <reference ref="Reqnroll.RenameCSharpStep" />
+      <reference ref="Reqnroll.ToggleComment" />
+      <separator />
+    </group>
   </actions>
 </idea-plugin>
