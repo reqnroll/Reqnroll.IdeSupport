@@ -12,9 +12,9 @@ your cursor on anything first.
 ```{tab-item} Visual Studio
 :sync: vs
 
-**Extensions → Reqnroll → Find Unused Step Definitions**. There's no
-editor context-menu placement or keybinding for this one — it's a
-workspace-wide scan, not tied to a specific line.
+Right-click in a `.feature` or `.cs` editor → **Find Unused Step Definitions in Project**
+(in the Reqnroll group of the editor context menu). There's no keybinding for
+this one — it's a workspace-wide scan, not tied to a specific line.
 
 ![](find-unused/find-unused-vs.gif)
 ```

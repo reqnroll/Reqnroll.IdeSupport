@@ -13,7 +13,6 @@ using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
@@ -39,16 +38,14 @@ internal sealed class RenameStepCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Reqnroll: Rename Step")
+    public override CommandConfiguration CommandConfiguration => new("Rename Step...")
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
             ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
             ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType)),
-        Placements =
-        [
-            CommandPlacement.VsctParent(ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
-        ],
+        // Placed in the Reqnroll group of the editor context menu (ReqnrollContextMenu.cs).
+        Placements = [],
     };
 
     /// <inheritdoc />

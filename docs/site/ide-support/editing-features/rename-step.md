@@ -25,7 +25,7 @@ handles the common, unambiguous case directly.
 **Renaming an ambiguously bound step**
 
 If a binding method has more than one candidate attribute, use
-**Extensions → Reqnroll → Reqnroll: Rename Step** instead — it opens a dialog with a
+right-click → **Rename Step...** (in the Reqnroll group of the editor context menu) instead — it opens a dialog with a
 picker to choose which binding to rename.
 
 ![](rename-step/rename-step-vs-picker.gif)
