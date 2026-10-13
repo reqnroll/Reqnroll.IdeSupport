@@ -155,12 +155,15 @@ for what is available in each IDE.</p>
   </extensions>
 
   <actions>
+    <!-- Tools > Reqnroll holds only the app-level actions: the workspace-wide scan, the inlay-hint
+         switch, and Find Step Usages (no editor context-menu entry any more, issue #1118; the
+         step-usages CodeVision lens is its main entry point). -->
     <group id="Reqnroll.ActionGroup" text="Reqnroll" popup="true">
       <add-to-group group-id="ToolsMenu" anchor="last" />
 
       <action id="Reqnroll.FindUnusedStepDefinitions"
           class="net.reqnroll.idesupport.rider.actions.FindUnusedStepDefinitionsAction"
-          text="Find Unused Step Definitions"
+          text="Find Unused Step Definitions in Project"
           description="Scans the workspace for step-definition bindings with no matching steps in any feature file" />
 
       <!-- Not surfaced via Settings > Editor > Inlay Hints — see
@@ -171,77 +174,76 @@ for what is available in each IDE.</p>
           text="Show Feature Inlay Hints"
           description="Toggles binding-info inlay hints in .feature file editors" />
 
-      <!-- Mirrors VS Code's editor/context "Find Step Usages" entry (when editorLangId ==
-           csharp) — the action's own update() restricts visibility to .cs files, so it's safe to
-           also add it to the editor context menu below without a declarative language condition. -->
+      <!-- The action's own update() restricts visibility to .cs files. -->
       <action id="Reqnroll.FindStepUsages"
           class="net.reqnroll.idesupport.rider.actions.FindStepUsagesAction"
           text="Find Step Usages"
-          description="Finds feature-file steps that use the step-definition binding at the caret">
-        <add-to-group group-id="EditorPopupMenu" anchor="last" />
-      </action>
-
-      <!-- Mirrors VS's GoToHooksCommand / VS Code's "Go to Hooks" editor context entry — the
-           action's own update() restricts visibility to .feature files, so it's safe to also add
-           it to the editor context menu below without a declarative language condition. -->
-      <action id="Reqnroll.GoToHooks"
-          class="net.reqnroll.idesupport.rider.actions.GoToHooksAction"
-          text="Go to Hooks"
-          description="Navigates to the hook bindings applicable at the caret position in a feature file">
-        <add-to-group group-id="EditorPopupMenu" anchor="last" />
-      </action>
-
-      <!-- Bound to the platform's own default Ctrl+/ keystroke — ReqnrollCommentTogglePromoter
-           (registered under <extensions> above) suppresses the built-in CommentByLineComment
-           action from that keystroke for .feature files, so this one fires instead. The action's
-           own update() also restricts visibility to .feature files, matching the other actions
-           here, so it's safe to add to the editor context menu unconditionally too. -->
-      <action id="Reqnroll.ToggleComment"
-          class="net.reqnroll.idesupport.rider.commenting.ReqnrollToggleCommentAction"
-          text="Comment/Uncomment"
-          description="Toggles # comments on the selected line(s) of a feature file">
-        <add-to-group group-id="EditorPopupMenu" anchor="last" />
-        <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH" />
-      </action>
-
-      <action id="Reqnroll.GoToDefinition"
-          class="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionAction"
-          text="Reqnroll: Go to Step Definition"
-          description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
-        <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
-             dispatcher did not pick up for this action. "Visual Studio 2022" is listed explicitly too: bindings added to
-             its parent "Visual Studio" alone did not take effect for it. -->
-        <keyboard-shortcut keymap="$default" first-keystroke="control B" />
-        <mouse-shortcut keymap="$default" keystroke="ctrl button1" />
-        <keyboard-shortcut keymap="Visual Studio" first-keystroke="F12" />
-        <mouse-shortcut keymap="Visual Studio" keystroke="ctrl button1" />
-        <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F12" />
-        <mouse-shortcut keymap="Visual Studio 2022" keystroke="ctrl button1" />
-      </action>
-
-      <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI
-           language is registered for Gherkin in this plugin, so nothing else (native or
-           otherwise) is bound to that shortcut for .feature files. -->
-      <action id="Reqnroll.RenameFeatureStep"
-          class="net.reqnroll.idesupport.rider.actions.RenameFeatureStepAction"
-          text="Reqnroll: Rename Step"
-          description="Renames a step's expression across the feature file and its C# binding">
-        <add-to-group group-id="EditorPopupMenu" anchor="last" />
-        <keyboard-shortcut keymap="$default" first-keystroke="shift F6" />
-      </action>
-
-      <!-- Rename Step (issue #160), .cs side. Deliberately no keyboard shortcut: Rider's native
-           Shift+F6 rename already owns that shortcut for ordinary C# symbols, and this action's
-           update() can't cheaply tell "caret is on a step attribute" from "caret is on any other
-           C# identifier" to safely take it over. Context-menu only. The "Reqnroll: " prefix
-           (matching VS Code's and VS's command naming, issue #293) is what disambiguates it
-           from the native "Rename..." entry already in that menu. -->
-      <action id="Reqnroll.RenameCSharpStep"
-          class="net.reqnroll.idesupport.rider.actions.RenameCSharpStepAction"
-          text="Reqnroll: Rename Step"
-          description="Renames the step-definition binding's expression across this attribute and the feature file">
-        <add-to-group group-id="EditorPopupMenu" anchor="last" />
-      </action>
+          description="Finds feature-file steps that use the step-definition binding at the caret" />
     </group>
+
+    <!-- The Reqnroll block of the editor context menu (issue #1118): one non-popup group, set off
+         from the platform's entries by a separator on each side. Every member's update() hides it
+         outside the files it applies to, and the platform drops the separators of a group whose
+         members are all hidden. Items that open a dialog end in "...". The unprefixed "Rename
+         Step..." sits apart from the native "Rename..." entry because of this grouping. -->
+    <group id="Reqnroll.EditorContextGroup">
+      <add-to-group group-id="EditorPopupMenu" anchor="last" />
+      <separator />
+      <reference ref="Reqnroll.GoToHooks" />
+      <reference ref="Reqnroll.FindUnusedStepDefinitions" />
+      <reference ref="Reqnroll.RenameFeatureStep" />
+      <reference ref="Reqnroll.RenameCSharpStep" />
+      <reference ref="Reqnroll.ToggleComment" />
+      <separator />
+    </group>
+
+    <action id="Reqnroll.GoToHooks"
+        class="net.reqnroll.idesupport.rider.actions.GoToHooksAction"
+        text="Find Hooks"
+        description="Navigates to the hook bindings applicable at the caret position in a feature file" />
+
+    <!-- Bound to the platform's own default Ctrl+/ keystroke — ReqnrollCommentTogglePromoter
+         (registered under <extensions> above) suppresses the built-in CommentByLineComment
+         action from that keystroke for .feature files, so this one fires instead. -->
+    <action id="Reqnroll.ToggleComment"
+        class="net.reqnroll.idesupport.rider.commenting.ReqnrollToggleCommentAction"
+        text="Comment/Uncomment"
+        description="Toggles # comments on the selected line(s) of a feature file">
+      <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH" />
+    </action>
+
+    <action id="Reqnroll.GoToDefinition"
+        class="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionAction"
+        text="Go to Step Definition"
+        description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
+      <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
+           dispatcher did not pick up for this action. "Visual Studio 2022" is listed explicitly too: bindings added to
+           its parent "Visual Studio" alone did not take effect for it. -->
+      <keyboard-shortcut keymap="$default" first-keystroke="control B" />
+      <mouse-shortcut keymap="$default" keystroke="ctrl button1" />
+      <keyboard-shortcut keymap="Visual Studio" first-keystroke="F12" />
+      <mouse-shortcut keymap="Visual Studio" keystroke="ctrl button1" />
+      <keyboard-shortcut keymap="Visual Studio 2022" first-keystroke="F12" />
+      <mouse-shortcut keymap="Visual Studio 2022" keystroke="ctrl button1" />
+    </action>
+
+    <!-- Rename Step (issue #160), .feature side. Safe to claim Shift+F6 outright: no PSI
+         language is registered for Gherkin in this plugin, so nothing else (native or
+         otherwise) is bound to that shortcut for .feature files. -->
+    <action id="Reqnroll.RenameFeatureStep"
+        class="net.reqnroll.idesupport.rider.actions.RenameFeatureStepAction"
+        text="Rename Step..."
+        description="Renames a step's expression across the feature file and its C# binding">
+      <keyboard-shortcut keymap="$default" first-keystroke="shift F6" />
+    </action>
+
+    <!-- Rename Step (issue #160), .cs side. Deliberately no keyboard shortcut: Rider's native
+         Shift+F6 rename already owns that shortcut for ordinary C# symbols, and this action's
+         update() can't cheaply tell "caret is on a step attribute" from "caret is on any other
+         C# identifier" to safely take it over. Context-menu only. -->
+    <action id="Reqnroll.RenameCSharpStep"
+        class="net.reqnroll.idesupport.rider.actions.RenameCSharpStepAction"
+        text="Rename Step..."
+        description="Renames the step-definition binding's expression across this attribute and the feature file" />
   </actions>
 </idea-plugin>

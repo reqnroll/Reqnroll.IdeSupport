@@ -3,6 +3,7 @@ package net.reqnroll.idesupport.rider.actions
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -22,7 +23,10 @@ class FindUnusedStepDefinitionsAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        // Always available from the Tools menu; in an editor context menu only for the files the
+        // Reqnroll group applies to, so it doesn't appear in every other editor (issue #1118).
+        e.presentation.isEnabledAndVisible = e.project != null &&
+            (!e.isFromContextMenu || isReqnrollContextFile(e.getData(CommonDataKeys.VIRTUAL_FILE)?.extension))
     }
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -83,6 +87,10 @@ class FindUnusedStepDefinitionsAction : AnAction() {
     }
 
     companion object {
+        /** `.feature` and `.cs` files, the two editors the Reqnroll context-menu group appears in. */
+        internal fun isReqnrollContextFile(extension: String?): Boolean =
+            extension.equals("feature", ignoreCase = true) || extension.equals("cs", ignoreCase = true)
+
         /** Pulled out to `internal` (rather than a private member function) purely so it's unit-testable without an AnAction/platform fixture. */
         internal fun renderLabel(item: UnusedStepDefinitionItem): String {
             val name = listOfNotNull(item.className, item.methodName).joinToString(".")

@@ -51,8 +51,8 @@ step in its `.feature` file.
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
 then either:
 
-- Right-click → **Find Step Usages**, or
-- **Tools → Reqnroll → Find Step Usages**.
+- **Tools → Reqnroll → Find Step Usages**, or
+- the **N step usages** CodeLens above the method.
 
 ![](find-usages/find-usages-rider.gif)
 ```

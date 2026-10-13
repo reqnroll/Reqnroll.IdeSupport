@@ -72,12 +72,12 @@ object GoToHooksRunner {
     private fun showResult(project: Project, response: FindHooksResponse?, alwaysShowPicker: Boolean) {
         if (response == null) {
             ReqnrollNotify.error(
-                project, "The Reqnroll LSP server is not running or did not respond.", "Go to Hooks")
+                project, "The Reqnroll LSP server is not running or did not respond.", "Find Hooks")
             return
         }
 
         if (response.hooks.isEmpty()) {
-            ReqnrollNotify.info(project, "No hooks found at this position.", "Go to Hooks")
+            ReqnrollNotify.info(project, "No hooks found at this position.", "Find Hooks")
             return
         }
 

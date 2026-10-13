@@ -43,7 +43,7 @@ and set it on the `Edit.*` commands above.
 :sync: rider
 
 `Ctrl+/` works directly. Also available via right-click →
-**Comment/Uncomment**, or **Tools → Reqnroll → Comment/Uncomment**.
+**Comment/Uncomment**.
 
 ![](comment-uncomment/comment-uncomment-rider.gif)
 ```

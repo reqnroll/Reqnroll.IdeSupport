@@ -73,10 +73,10 @@ Visual Studio and Rider tabs for how to reach that picker).
 :sync: rider
 
 - **On the `.feature` step line:** press **Shift+F6**, or right-click →
-  **Reqnroll: Rename Step**.
-- **On the C# attribute:** right-click → **Reqnroll: Rename Step** — its
-  `Reqnroll: ` prefix distinguishes it from Rider's native "Rename" entry in
-  the same context menu, since native Shift+F6 stays bound to ordinary C#
+  **Rename Step...**.
+- **On the C# attribute:** right-click → **Rename Step...** — it sits in the
+  Reqnroll group of the context menu, set off by separators from Rider's native
+  "Rename" entry, since native Shift+F6 stays bound to ordinary C#
   symbol rename here.
 
 Both surfaces handle disambiguation via a picker when the binding has more

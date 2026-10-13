@@ -6,6 +6,14 @@ import kotlin.test.assertEquals
 
 class FindUnusedStepDefinitionsActionTest {
     @Test
+    fun `context menu entry is limited to feature and C# files`() {
+        assertEquals(true, FindUnusedStepDefinitionsAction.isReqnrollContextFile("feature"))
+        assertEquals(true, FindUnusedStepDefinitionsAction.isReqnrollContextFile("CS"))
+        assertEquals(false, FindUnusedStepDefinitionsAction.isReqnrollContextFile("kt"))
+        assertEquals(false, FindUnusedStepDefinitionsAction.isReqnrollContextFile(null))
+    }
+
+    @Test
     fun `renderLabel includes class, method, attribute, and project when all present`() {
         val item = UnusedStepDefinitionItem(
             projectName = "Calculator",
