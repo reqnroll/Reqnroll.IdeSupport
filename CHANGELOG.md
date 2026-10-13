@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* Closing one of several views on the same `.feature` file (for example a second window opened on the document) no longer freezes the Run and hook-count CodeLenses in the views that are still open: the views share one CodeLens tagger per file, and Visual Studio disposes a tagger when the view that requested it closes, which stopped that shared tagger refreshing for everyone (VS) - see #1028
 * Visual Studio status-bar messages shown by the Rename Step, Find Step Usages and Find Unused Step Definitions commands are now posted from the UI thread, so a message the command means to show ("LSP server not yet initialized", "No step definition found to rename at this position", "Step renamed successfully.", and similar) is no longer at risk of being dropped when the command runs off the UI thread (Visual Studio) - see #1021, @clrudolphi
 
 * Visual Studio's Format Selection no longer formats one extra line when the selection ends at the very start of the line after the last one you selected: it now applies the same whole-line end adjustment Comment/Uncomment Selection uses, so a drag-selection that stops at column 0 of the following line leaves that line untouched (VS) - see #1035, @clrudolphi
