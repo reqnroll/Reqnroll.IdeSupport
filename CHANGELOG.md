@@ -75,6 +75,7 @@
 
 ## Bug fixes:
 
+* The VS Code Gherkin syntax highlighting now colours the whole of tags containing `:`, `=`, `.` or `/` (for example `@category:smoke`, `@Jira:ABC-1`), colours a trailing `# comment` on a tag line, recognises the `Scenarios:` alias of `Examples:`, and supports backtick (```` ``` ````) doc strings (VS Code) - see #1004, @clrudolphi
 * The VS Code test-outcome CodeLens no longer shows a green `✓ Passed` for scenarios that were skipped or not run: it now preserves the server's aggregate (Failed > Passed > Skipped > NotFound/None) and renders `⏭ Skipped`, `Not run`, or `⟳ Running` distinctly, and an unrecognised aggregate shows `? Unknown` rather than a pass (VS Code) - see #1001
 * In VS Code, a backslash-escaped pipe (`\|`) inside a data-table cell is no longer counted as a column separator, so a cell such as `a \| b` is no longer split into extra columns or highlighted in the wrong colour; escape handling follows Gherkin's `\|` (literal pipe) and `\\` (literal backslash) sequences (VS Code) - see #1014, @clrudolphi
 
