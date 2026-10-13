@@ -305,4 +305,22 @@ public class DiagnosticsAggregatorTests
 
         result.Should().BeEmpty();
     }
+
+    // ── Outline without Examples (issue #956) ─────────────────────────────────
+
+    [Fact]
+    public void Scenario_outline_without_examples_produces_no_examples_diagnostic()
+    {
+        // A "Scenario Outline:" with no Examples block must be treated as an outline so the
+        // "no examples defined" check can fire; previously it collapsed to a SingleScenario and
+        // the check (which only visits ScenarioOutline) never ran.
+        const string feature = "Feature: F\nScenario Outline: S\n  Given a step <x>\n";
+        var matchSet = MatchSetFor(feature);
+
+        var result = CreateSut().Aggregate(ParseTags(feature), matchSet);
+
+        result.Should().Contain(d =>
+            d.Severity == GherkinDiagnosticSeverity.Error &&
+            d.Message.Contains("has no examples defined"));
+    }
 }

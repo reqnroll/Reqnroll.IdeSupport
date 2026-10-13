@@ -52,6 +52,14 @@ internal sealed class LspServerConnectionService : IDisposable
     private readonly StepCodeLensState _stepCodeLensState;
     private readonly DocumentActivationState _activationState = new();
 
+    // Launch seams (issue #1024): production uses the bundled server exe, Process.Start and the real
+    // LspInterceptingPipe; tests substitute a harmless process and a pipe factory that throws, to
+    // exercise the failure-after-Process.Start path without a real server.
+    private readonly Microsoft.VisualStudio.Threading.JoinableTaskFactory _joinableTaskFactory;
+    private readonly string _serverExe;
+    private readonly Func<ProcessStartInfo, Process?> _startProcess;
+    private readonly Func<IDuplexPipe, IReadOnlyList<ILspMessageInterceptor>, IReadOnlyList<ILspMessageInterceptor>, ILogger<LspInterceptingPipe>, LspInterceptingPipe> _createInterceptingPipe;
+
     // JoinableTask (not a plain Task) so GetConnectionAsync's await is JTF-aware — avoids the
     // VSTHRD003 "awaiting a foreign task" analyzer error for a task started outside the awaiting
     // method's own async context. StartAsync itself never touches the UI thread.
@@ -102,16 +110,43 @@ internal sealed class LspServerConnectionService : IDisposable
     /// </summary>
     public LspServerConnectionService(
         ILogger<LspServerConnectionService> logger, ILoggerFactory loggerFactory, StepCodeLensState stepCodeLensState)
+        : this(
+            logger, loggerFactory, stepCodeLensState,
+            ThreadHelper.JoinableTaskFactory,
+            ResolveServerExePath(typeof(LspServerConnectionService).Assembly.Location),
+            Process.Start,
+            (serverPipe, sendInterceptors, receiveInterceptors, pipeLogger) =>
+                new LspInterceptingPipe(serverPipe, sendInterceptors, receiveInterceptors, pipeLogger))
     {
-        _logger            = logger            ?? throw new ArgumentNullException(nameof(logger));
-        _loggerFactory     = loggerFactory     ?? throw new ArgumentNullException(nameof(loggerFactory));
-        _stepCodeLensState = stepCodeLensState ?? throw new ArgumentNullException(nameof(stepCodeLensState));
+    }
+
+    /// <summary>
+    /// Creates the service with substitutable launch steps (issue #1024). Only the public
+    /// constructor is used by DI; this one exists so tests can fail the start sequence after the
+    /// process has been started.
+    /// </summary>
+    internal LspServerConnectionService(
+        ILogger<LspServerConnectionService> logger,
+        ILoggerFactory loggerFactory,
+        StepCodeLensState stepCodeLensState,
+        Microsoft.VisualStudio.Threading.JoinableTaskFactory joinableTaskFactory,
+        string serverExe,
+        Func<ProcessStartInfo, Process?> startProcess,
+        Func<IDuplexPipe, IReadOnlyList<ILspMessageInterceptor>, IReadOnlyList<ILspMessageInterceptor>, ILogger<LspInterceptingPipe>, LspInterceptingPipe> createInterceptingPipe)
+    {
+        _logger                 = logger                 ?? throw new ArgumentNullException(nameof(logger));
+        _loggerFactory          = loggerFactory          ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _stepCodeLensState      = stepCodeLensState      ?? throw new ArgumentNullException(nameof(stepCodeLensState));
+        _joinableTaskFactory    = joinableTaskFactory    ?? throw new ArgumentNullException(nameof(joinableTaskFactory));
+        _serverExe              = serverExe              ?? throw new ArgumentNullException(nameof(serverExe));
+        _startProcess           = startProcess           ?? throw new ArgumentNullException(nameof(startProcess));
+        _createInterceptingPipe = createInterceptingPipe ?? throw new ArgumentNullException(nameof(createInterceptingPipe));
 
         _logger.LogInformation("LspServerConnectionService: instance created — starting server eagerly.");
 
         // Fire off immediately; not awaited here. Consumers (ReqnrollLanguageClient) await
         // GetConnectionAsync() whenever they're ready, which may be well after this completes.
-        _startTask = ThreadHelper.JoinableTaskFactory.RunAsync(() => StartAsync(_generation));
+        _startTask = _joinableTaskFactory.RunAsync(() => StartAsync(_generation));
     }
 
     /// <summary>
@@ -120,6 +155,13 @@ internal sealed class LspServerConnectionService : IDisposable
     /// to send notifications directly to the server, bypassing VS.
     /// </summary>
     public LspInterceptingPipe? InterceptingPipe => _interceptingPipe;
+
+    /// <summary>
+    /// Whether any of the current generation's server process, job object, inspector log or pipe is
+    /// still held. Lets tests check that a failed start released everything (issue #1024).
+    /// </summary>
+    internal bool HoldsServerResources =>
+        _serverProcess is not null || _childJob is not null || _inspectorLogger is not null || _interceptingPipe is not null;
 
     /// <summary>
     /// Set by <see cref="ReqnrollLanguageClient"/> once the MEF-resolved analytics transmitter is
@@ -262,7 +304,7 @@ internal sealed class LspServerConnectionService : IDisposable
             _activationState.Reset();
 
             var generation = _generation;
-            _startTask = ThreadHelper.JoinableTaskFactory.RunAsync(() => StartAsync(generation));
+            _startTask = _joinableTaskFactory.RunAsync(() => StartAsync(generation));
             return _startTask;
         }
     }
@@ -426,7 +468,7 @@ internal sealed class LspServerConnectionService : IDisposable
 
     private async Task<LspInterceptingPipe?> StartAsync(int generation)
     {
-        var serverExe = ResolveServerExePath(typeof(LspServerConnectionService).Assembly.Location);
+        var serverExe = _serverExe;
 
         _logger.LogInformation(
             "LspServerConnectionService: starting server (generation #{Generation}). Server exe path: {ServerExe}",
@@ -451,7 +493,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 Arguments              = ServerArguments,
             };
 
-            _serverProcess = Process.Start(psi)
+            _serverProcess = _startProcess(psi)
                 ?? throw new InvalidOperationException("Process.Start returned null.");
 
             // Fire-and-forget: pushes project/discovery data to the server's preload side
@@ -565,7 +607,7 @@ internal sealed class LspServerConnectionService : IDisposable
             var receiveInterceptors = new ILspMessageInterceptor[]
                 { _inspectorLogger, semanticTokensInterceptor, scaffoldInterceptor, _codeLensRefreshInterceptor, testOutcomesChangedInterceptor, _shutdownHandshakeInterceptor, telemetryInterceptor };
 
-            _interceptingPipe = new LspInterceptingPipe(
+            _interceptingPipe = _createInterceptingPipe(
                 rawPipe, sendInterceptors, receiveInterceptors, _loggerFactory.CreateLogger<LspInterceptingPipe>());
             // Pass CancellationToken.None: the pumps must live for the entire connection
             // lifetime, not just for the duration of this async creation call. The pipe's
@@ -576,10 +618,70 @@ internal sealed class LspServerConnectionService : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "LspServerConnectionService: failed to start server.");
+            ReleaseFailedStart();
+            _logger.LogError(ex, "LspServerConnectionService: failed to start server; any server process it had started was stopped.");
             _lifecycleReporter.Report(TelemetryEvents.ServerStartFailed, ServerFailureReason.StartFailed, generation);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Stops the server process a failed <see cref="StartAsync"/> may already have started, and
+    /// releases its job object, inspector log and pipe (issue #1024).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this, a failure after <c>Process.Start</c> left the fields assigned and the server
+    /// running with an open stdin until VS exited and the kill-on-close job reaped it: a failed
+    /// launch produces no pipe, so <see cref="IsCurrentServerDead"/> never treats it as dead and
+    /// nothing else would ever discard it.
+    /// </para>
+    /// <para>
+    /// Each resource is released in its own try/catch so one failure cannot leak the rest, and
+    /// nothing here throws: it runs inside <see cref="StartAsync"/>'s own catch. No graceful
+    /// <c>shutdown</c>/<c>exit</c> is attempted — the server never got a working connection — so
+    /// the process is killed outright, before the job is closed. The fields are cleared, matching
+    /// <see cref="DiscardDeadGeneration"/>; a failed launch is still not retried (see
+    /// <see cref="IsCurrentServerDead"/>).
+    /// </para>
+    /// </remarks>
+    private void ReleaseFailedStart()
+    {
+        LspInterceptingPipe? interceptingPipe;
+        LspInspectorLogger? inspectorLogger;
+        Process? serverProcess;
+        ChildProcessJob? childJob;
+        CodeLensRefreshInterceptor? codeLensRefreshInterceptor;
+
+        lock (_startLock)
+        {
+            interceptingPipe           = _interceptingPipe;
+            inspectorLogger            = _inspectorLogger;
+            serverProcess              = _serverProcess;
+            childJob                   = _childJob;
+            codeLensRefreshInterceptor = _codeLensRefreshInterceptor;
+
+            _codeLensRefreshInterceptor   = null;
+            _shutdownHandshakeInterceptor = null;
+            _interceptingPipe             = null;
+            _inspectorLogger              = null;
+            _serverProcess                = null;
+            _childJob                     = null;
+        }
+
+        try { interceptingPipe?.Dispose(); } catch { /* best-effort */ }
+        try { inspectorLogger?.Dispose(); } catch { /* best-effort */ }
+        try { codeLensRefreshInterceptor?.Dispose(); } catch { /* best-effort */ }
+        try
+        {
+            if (serverProcess is not null && !serverProcess.HasExited)
+                serverProcess.Kill();
+        }
+        catch { /* best-effort: already exited, or no longer accessible */ }
+        try { serverProcess?.Dispose(); } catch { /* best-effort */ }
+        // Closing the job's last handle also kills the process (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE),
+        // which covers a Kill() that failed above.
+        try { childJob?.Dispose(); } catch { /* best-effort */ }
     }
 
     /// <summary>

@@ -94,7 +94,7 @@ interface PriorSettingState {
 /**
  * Reads/writes `dotnet.unitTests.runSettingsPath`, injected so `recordPriorSettingIfNeeded` and
  * `cleanupRunSettingsOnOptOut` are testable without a real `dotnet.*` configuration contribution
- * present — that key is contributed by C# Dev Kit, not this extension, and does not exist at all
+ * present — that key is contributed by the C# extension (`ms-dotnettools.csharp`), not this extension, and does not exist at all
  * in a bare Extension Development Host that has it disabled (`workspace.getConfiguration(...)
  * .update(...)` throws "not a registered configuration" there). Mirrors the injected
  * `readTextOrNull`/`evaluate` parameters `mtpProjectStubs.ts` uses for the same reason.
