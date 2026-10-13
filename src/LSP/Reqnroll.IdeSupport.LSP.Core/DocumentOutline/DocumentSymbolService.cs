@@ -26,7 +26,7 @@ public class DocumentSymbolService : IDocumentSymbolService
     {
         var feature = (Feature)featureTag.Data;
         return new GherkinDocumentSymbol(
-            Name: feature.Name ?? feature.Keyword.Trim(),
+            Name: NameOrKeyword(feature.Name, feature.Keyword),
             Detail: null,
             Kind: GherkinSymbolKind.Feature,
             Range: featureTag.Range,
@@ -56,7 +56,7 @@ public class DocumentSymbolService : IDocumentSymbolService
     {
         var rule = (Rule)ruleTag.Data;
         return new GherkinDocumentSymbol(
-            Name: rule.Name ?? rule.Keyword.Trim(),
+            Name: NameOrKeyword(rule.Name, rule.Keyword),
             Detail: null,
             Kind: GherkinSymbolKind.Rule,
             Range: ruleTag.Range,

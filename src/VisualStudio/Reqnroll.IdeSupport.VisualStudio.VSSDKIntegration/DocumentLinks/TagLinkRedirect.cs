@@ -55,10 +55,18 @@ public static class TagLinkRedirect
     public static void InvalidateAll() => TrackerRegistry.InvalidateAll();
 
     /// <summary>
-    /// Only web links are opened: the target comes from user configuration (<c>reqnroll.json</c>), which a
-    /// cloned repository controls, so <c>file:</c>, <c>ms-*:</c> and other handler schemes are refused.
+    /// Schemes that execute script or embed content rather than navigate to a tracker: the target comes from user
+    /// configuration (<c>reqnroll.json</c>), which a cloned repository controls, so these are refused.
+    /// </summary>
+    private static readonly HashSet<string> BlockedSchemes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "javascript", "vbscript", "data", "command"
+    };
+
+    /// <summary>
+    /// Any well-formed absolute URI is opened (<c>https:</c>, <c>file:</c>, <c>jira:</c>, <c>vscode:</c>, <c>slack:</c>
+    /// ...) except the schemes in <see cref="BlockedSchemes"/>.
     /// </summary>
     public static bool IsOpenableUrl(string? target) =>
-        Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
-        (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+        Uri.TryCreate(target, UriKind.Absolute, out var uri) && !BlockedSchemes.Contains(uri.Scheme);
 }
