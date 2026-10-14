@@ -31,8 +31,9 @@ context-menu placement or default keybinding.
 ```{tab-item} Rider
 :sync: rider
 
-Right-click in a `.feature` or `.cs` editor → **Find Unused Step Definitions in Project**,
-or **Tools → Reqnroll → Find Unused Step Definitions in Project**. No default keybinding.
+Right-click in a C# editor → **Reqnroll: Find Unused Step Definitions in Projects**,
+or use **Reqnroll: Find Unused Step Definitions in Projects** from Find Action
+(Ctrl+Shift+A). No default keybinding.
 
 ![](find-unused/find-unused-rider.gif)
 ```

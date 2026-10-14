@@ -46,16 +46,13 @@ menu instead — see the linked feature page for the full how-to.
 | Command | Shortcut | Menu |
 |---|---|---|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | Ctrl+B / Cmd+B, or Ctrl+Click *(native Rider "Go to Declaration" default)* | — |
-| [Rename Step](editing-features/rename-step.md) — `.feature` side | Shift+F6 | Right-click → Rename Step... |
-| [Rename Step](editing-features/rename-step.md) — C# side | — *(native Rider Shift+F6 stays bound to ordinary C# rename)* | Right-click → Rename Step... |
-| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ | Right-click → Comment/Uncomment |
+| [Rename Step](editing-features/rename-step.md) — `.feature` side | Shift+F6 | Right-click → Reqnroll: Rename Step... |
+| [Rename Step](editing-features/rename-step.md) — C# side | — *(native Rider Shift+F6 stays bound to ordinary C# rename)* | Right-click → Reqnroll: Rename Step... |
+| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ | Find Action → Reqnroll: Comment/Uncomment |
 | [Format Document](editing-features/formatting.md) | Ctrl+Alt+L (⌘⌥L on macOS) *(native Rider "Reformat Code" default)* | — |
-| [Find Step Definition Usages](navigation-features/find-usages.md) | — | Tools → Reqnroll → Find Step Usages, or the CodeLens |
-| [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click → Find Unused Step Definitions in Project, or Tools → Reqnroll → Find Unused Step Definitions in Project |
-| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Find Hooks |
-
-TODO(media): 📷 screenshot of the Tools → Reqnroll submenu.
-**Target:** `keyboard-shortcuts/keyboard-shortcuts-rider-menu.png`
+| [Find Step Definition Usages](navigation-features/find-usages.md) | — | Find Action → Reqnroll: Find Step Usages, or the CodeLens |
+| [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Reqnroll: Find Unused Step Definitions in Projects, or Find Action |
+| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Find Hooks |
 ````
 
 :::

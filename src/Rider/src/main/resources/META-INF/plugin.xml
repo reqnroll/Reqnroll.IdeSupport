@@ -155,35 +155,34 @@ for what is available in each IDE.</p>
   </extensions>
 
   <actions>
-    <!-- Tools > Reqnroll holds only the app-level actions: the workspace-wide scan, the inlay-hint
-         switch, and Find Step Usages (no editor context-menu entry any more, issue #1118; the
-         step-usages CodeVision lens is its main entry point). -->
-    <group id="Reqnroll.ActionGroup" text="Reqnroll" popup="true">
-      <add-to-group group-id="ToolsMenu" anchor="last" />
+    <!-- No Reqnroll entry in any menu other than the editor context menu below (issue #1118): the
+         former Tools > Reqnroll submenu is gone. These app-level actions stay registered so they
+         are still reachable through Find Action (Ctrl+Shift+A); Find Step Usages is also offered by
+         its CodeVision lens. Every action text carries the "Reqnroll: " prefix because there is no
+         Reqnroll icon beside it to show where it belongs. -->
+    <action id="Reqnroll.FindUnusedStepDefinitions"
+        class="net.reqnroll.idesupport.rider.actions.FindUnusedStepDefinitionsAction"
+        text="Reqnroll: Find Unused Step Definitions in Projects"
+        description="Scans the workspace for step-definition bindings with no matching steps in any feature file" />
 
-      <action id="Reqnroll.FindUnusedStepDefinitions"
-          class="net.reqnroll.idesupport.rider.actions.FindUnusedStepDefinitionsAction"
-          text="Find Unused Step Definitions in Project"
-          description="Scans the workspace for step-definition bindings with no matching steps in any feature file" />
+    <!-- Not surfaced via Settings > Editor > Inlay Hints — see
+         ReqnrollFeatureInlayHintsSettings's doc comment for why that page isn't reachable for
+         .feature files. Since issue #1118 removed the Tools-menu entry, this action is the only
+         on/off switch, reached through Find Action. -->
+    <action id="Reqnroll.ToggleFeatureInlayHints"
+        class="net.reqnroll.idesupport.rider.actions.ReqnrollToggleFeatureInlayHintsAction"
+        text="Reqnroll: Show Feature Inlay Hints"
+        description="Toggles binding-info inlay hints in .feature file editors" />
 
-      <!-- Not surfaced via Settings > Editor > Inlay Hints — see
-           ReqnrollFeatureInlayHintsSettings's doc comment for why that page isn't reachable for
-           .feature files. This checkable Tools-menu item is the only on/off switch. -->
-      <action id="Reqnroll.ToggleFeatureInlayHints"
-          class="net.reqnroll.idesupport.rider.actions.ReqnrollToggleFeatureInlayHintsAction"
-          text="Show Feature Inlay Hints"
-          description="Toggles binding-info inlay hints in .feature file editors" />
-
-      <!-- The action's own update() restricts visibility to .cs files. -->
-      <action id="Reqnroll.FindStepUsages"
-          class="net.reqnroll.idesupport.rider.actions.FindStepUsagesAction"
-          text="Find Step Usages"
-          description="Finds feature-file steps that use the step-definition binding at the caret" />
-    </group>
+    <!-- The action's own update() restricts visibility to .cs files. -->
+    <action id="Reqnroll.FindStepUsages"
+        class="net.reqnroll.idesupport.rider.actions.FindStepUsagesAction"
+        text="Reqnroll: Find Step Usages"
+        description="Finds feature-file steps that use the step-definition binding at the caret" />
 
     <action id="Reqnroll.GoToHooks"
         class="net.reqnroll.idesupport.rider.actions.GoToHooksAction"
-        text="Find Hooks"
+        text="Reqnroll: Find Hooks"
         description="Navigates to the hook bindings applicable at the caret position in a feature file" />
 
     <!-- Bound to the platform's own default Ctrl+/ keystroke — ReqnrollCommentTogglePromoter
@@ -191,14 +190,14 @@ for what is available in each IDE.</p>
          action from that keystroke for .feature files, so this one fires instead. -->
     <action id="Reqnroll.ToggleComment"
         class="net.reqnroll.idesupport.rider.commenting.ReqnrollToggleCommentAction"
-        text="Comment/Uncomment"
+        text="Reqnroll: Comment/Uncomment"
         description="Toggles # comments on the selected line(s) of a feature file">
       <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH" />
     </action>
 
     <action id="Reqnroll.GoToDefinition"
         class="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionAction"
-        text="Go to Step Definition"
+        text="Reqnroll: Go to Step Definition"
         description="Go to Declaration for .feature files on Rider 2026.2+ (see ReqnrollGoToDefinitionAction)">
       <!-- Explicit copies of GotoDeclaration's bindings rather than use-shortcut-of, which the shortcut
            dispatcher did not pick up for this action. "Visual Studio 2022" is listed explicitly too: bindings added to
@@ -216,7 +215,7 @@ for what is available in each IDE.</p>
          otherwise) is bound to that shortcut for .feature files. -->
     <action id="Reqnroll.RenameFeatureStep"
         class="net.reqnroll.idesupport.rider.actions.RenameFeatureStepAction"
-        text="Rename Step..."
+        text="Reqnroll: Rename Step..."
         description="Renames a step's expression across the feature file and its C# binding">
       <keyboard-shortcut keymap="$default" first-keystroke="shift F6" />
     </action>
@@ -227,7 +226,7 @@ for what is available in each IDE.</p>
          C# identifier" to safely take it over. Context-menu only. -->
     <action id="Reqnroll.RenameCSharpStep"
         class="net.reqnroll.idesupport.rider.actions.RenameCSharpStepAction"
-        text="Rename Step..."
+        text="Reqnroll: Rename Step..."
         description="Renames the step-definition binding's expression across this attribute and the feature file" />
 
     <!-- Declared after the actions it references: <reference ref=...> resolves against actions that
@@ -235,8 +234,10 @@ for what is available in each IDE.</p>
     <!-- The Reqnroll block of the editor context menu (issue #1118): one non-popup group, set off
          from the platform's entries by a separator on each side. Every member's update() hides it
          outside the files it applies to, and the platform drops the separators of a group whose
-         members are all hidden. Items that open a dialog end in "...". The unprefixed "Rename
-         Step..." sits apart from the native "Rename..." entry because of this grouping. -->
+         members are all hidden. Items that open a dialog end in "...". A `.feature` editor offers
+         Find Hooks + Rename Step..., a C# editor offers Find Unused Step Definitions in Projects +
+         Rename Step...; the prefixed "Reqnroll: Rename Step..." sits apart from the native
+         "Rename..." entry because of this grouping as well as the prefix. -->
     <group id="Reqnroll.EditorContextGroup">
       <add-to-group group-id="EditorPopupMenu" anchor="last" />
       <separator />
@@ -244,7 +245,6 @@ for what is available in each IDE.</p>
       <reference ref="Reqnroll.FindUnusedStepDefinitions" />
       <reference ref="Reqnroll.RenameFeatureStep" />
       <reference ref="Reqnroll.RenameCSharpStep" />
-      <reference ref="Reqnroll.ToggleComment" />
       <separator />
     </group>
   </actions>

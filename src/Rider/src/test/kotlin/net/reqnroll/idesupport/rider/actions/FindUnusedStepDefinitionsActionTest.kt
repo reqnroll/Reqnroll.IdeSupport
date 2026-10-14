@@ -6,11 +6,12 @@ import kotlin.test.assertEquals
 
 class FindUnusedStepDefinitionsActionTest {
     @Test
-    fun `context menu entry is limited to feature and C# files`() {
-        assertEquals(true, FindUnusedStepDefinitionsAction.isReqnrollContextFile("feature"))
-        assertEquals(true, FindUnusedStepDefinitionsAction.isReqnrollContextFile("CS"))
-        assertEquals(false, FindUnusedStepDefinitionsAction.isReqnrollContextFile("kt"))
-        assertEquals(false, FindUnusedStepDefinitionsAction.isReqnrollContextFile(null))
+    fun `context menu entry is limited to C# files`() {
+        assertEquals(true, FindUnusedStepDefinitionsAction.isCSharpContextMenuFile("cs"))
+        assertEquals(true, FindUnusedStepDefinitionsAction.isCSharpContextMenuFile("CS"))
+        assertEquals(false, FindUnusedStepDefinitionsAction.isCSharpContextMenuFile("feature"))
+        assertEquals(false, FindUnusedStepDefinitionsAction.isCSharpContextMenuFile("kt"))
+        assertEquals(false, FindUnusedStepDefinitionsAction.isCSharpContextMenuFile(null))
     }
 
     @Test
