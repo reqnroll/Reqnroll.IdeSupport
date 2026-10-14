@@ -12,7 +12,7 @@ your cursor on anything first.
 ```{tab-item} Visual Studio
 :sync: vs
 
-Right-click in a `.feature` or `.cs` editor → **Find Unused Step Definitions in Project**
+Right-click in a C# editor → **Find Unused Step Definitions in Projects**
 (in the Reqnroll group of the editor context menu). There's no keybinding for
 this one — it's a workspace-wide scan, not tied to a specific line.
 

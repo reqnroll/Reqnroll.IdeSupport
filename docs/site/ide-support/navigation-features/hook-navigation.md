@@ -1,6 +1,6 @@
 # Hook Navigation
 
-**Go to Hooks**, invoked from a `.feature` file, lists the hook bindings in
+**Find Hooks**, invoked from a `.feature` file, lists the hook bindings in
 scope at the cursor position, filtered by the tags and `[Scope]`
 expressions that apply there:
 

@@ -16,7 +16,7 @@ menu instead — see the linked feature page for the full how-to.
 | [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ (toggle), Ctrl+K, Ctrl+C (comment), Ctrl+K, Ctrl+U (uncomment) *(native VS defaults)* | Edit → Advanced → Toggle Line Comment / Comment Selection / Uncomment Selection |
 | [Format Document](editing-features/formatting.md) | Ctrl+K, Ctrl+D *(native VS default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Assign a shortcut to Find Step Usages (Tools → Options → Keyboard) |
-| [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click → Find Unused Step Definitions in Project |
+| [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Find Unused Step Definitions in Projects |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Find Hooks |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (lightbulb) *(native VS default)* | — |
 
