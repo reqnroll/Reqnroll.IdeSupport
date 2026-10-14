@@ -68,12 +68,12 @@ public class VsSdkHeaderConstantsTests
     }
 
     [SkippableFact]
-    public void IDG_VS_CODEWIN_NAVIGATETOLOCATION_matches_vsshlids_h()
+    public void IDM_VS_CTXT_CODEWIN_matches_vsshlids_h()
     {
-        var expected = DefinedInt(ReadHeader("vsshlids.h"), "IDG_VS_CODEWIN_NAVIGATETOLOCATION");
+        var expected = DefinedInt(ReadHeader("vsshlids.h"), "IDM_VS_CTXT_CODEWIN");
 
-        VsWellKnownIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION.Should().Be(expected);
-        ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION.Should().Be(expected);
+        VsWellKnownIds.IDM_VS_CTXT_CODEWIN.Should().Be(expected);
+        ShellMenuIds.IDM_VS_CTXT_CODEWIN.Should().Be(expected);
     }
 
     [SkippableFact]

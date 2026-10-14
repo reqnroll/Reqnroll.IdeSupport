@@ -2,7 +2,6 @@
 
 using System.IO;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.Shell;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
@@ -105,9 +104,6 @@ internal sealed class GoToStepDefinitionPresenter
         await _renderer.RenderAsync(title, items, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task ShowStatusAsync(string message, CancellationToken cancellationToken)
-    {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
-        VsUtils.ShowStatusBarMessage(message);
-    }
+    private static Task ShowStatusAsync(string message, CancellationToken cancellationToken) =>
+        VsUtils.ShowStatusBarMessageAsync(message, cancellationToken);
 }
