@@ -76,6 +76,7 @@
 
 ## Bug fixes:
 
+* Closed `.feature` editors are no longer kept in memory for the rest of the Visual Studio session: each buffer's semantic-colouring classifier was held by the session-wide token store's change event, so every `.feature` buffer ever opened (and the cost of notifying it on each token update) accumulated; the store now holds the classifier only weakly and drops its subscription once the buffer is released (VS) - see #1018
 * Closing one of several views on the same `.feature` file (for example a second window opened on the document) no longer freezes the Run and hook-count CodeLenses in the views that are still open: the views share one CodeLens tagger per file, and Visual Studio disposes a tagger when the view that requested it closes, which stopped that shared tagger refreshing for everyone (VS) - see #1028
 * Visual Studio status-bar messages shown by the Rename Step, Find Step Usages and Find Unused Step Definitions commands are now posted from the UI thread, so a message the command means to show ("LSP server not yet initialized", "No step definition found to rename at this position", "Step renamed successfully.", and similar) is no longer at risk of being dropped when the command runs off the UI thread (Visual Studio) - see #1021, @clrudolphi
 
