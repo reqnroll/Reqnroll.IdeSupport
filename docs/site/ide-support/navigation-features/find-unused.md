@@ -30,8 +30,9 @@ Right-click in a C# file → **Reqnroll: Find Unused Step Definitions in Project
 ```{tab-item} Rider
 :sync: rider
 
-**Tools → Reqnroll → Find Unused Step Definitions**. No editor
-context-menu placement or keybinding.
+Right-click in a C# editor → **Reqnroll: Find Unused Step Definitions in Projects**,
+or use **Reqnroll: Find Unused Step Definitions in Projects** from Find Action
+(Ctrl+Shift+A). No default keybinding.
 
 ![](find-unused/find-unused-rider.gif)
 ```

@@ -38,10 +38,7 @@ No default keybinding.
 ```{tab-item} Rider
 :sync: rider
 
-Place the cursor in a `.feature` file, then either:
-
-- Right-click → **Go to Hooks**, or
-- **Tools → Reqnroll → Go to Hooks**.
+Place the cursor in a `.feature` file, then right-click → **Reqnroll: Find Hooks**.
 
 No default keybinding.
 
