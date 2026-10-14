@@ -34,8 +34,7 @@ the **N step usages** CodeLens (see above) instead of the native command.
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
 then either:
 
-- Right-click → **Reqnroll: Find Step Usages**, or
-- Command Palette → **Reqnroll: Find Step Usages**.
+- Command Palette → **Reqnroll: Find Step Usages**, or the **N step usages** CodeLens.
 
 Results appear in a Quick Pick list — selecting an entry jumps to that
 step in its `.feature` file.
