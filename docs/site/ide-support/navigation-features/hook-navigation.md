@@ -27,8 +27,8 @@ Place the cursor in a `.feature` file, then right-click → **Find Hooks**
 
 Place the cursor in a `.feature` file, then either:
 
-- Right-click → **Reqnroll: Go to Hooks**, or
-- Command Palette → **Reqnroll: Go to Hooks**.
+- Right-click → **Reqnroll: Find Hooks**, or
+- find **Reqnroll: Find Hooks** in the Command Palette.
 
 No default keybinding.
 
