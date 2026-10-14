@@ -158,8 +158,14 @@ object RenameStepRunner {
                 }
                 return@invokeLater
             }
-            RenameWorkspaceEditApplier.apply(project, edit)
-            reportRenameApplied(project, uri, applied = true)
+            val applied = RenameWorkspaceEditApplier.apply(project, edit)
+            if (!applied) {
+                ReqnrollDebugLogger.warn(
+                    "RenameStepRunner: the rename edit for $uri was not applied in full; " +
+                        "reporting renameApplied=false so the server drops the staged update.",
+                )
+            }
+            reportRenameApplied(project, uri, applied = applied)
         }
     }
 

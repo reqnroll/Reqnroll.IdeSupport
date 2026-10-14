@@ -163,12 +163,19 @@ object RunTestRunner {
      * `internal`ly testable without a platform fixture.
      */
     internal fun findOwningProjectPath(filePath: String, projectFilePaths: Collection<String>): String? {
+        // [lspUriToLocalPath] yields forward-slash paths ("W:/repo/A.feature") while the project model
+        // reports platform paths ("W:\repo\A.csproj" on Windows), so compare with both normalised to '/'.
+        // A prefix built from File.separatorChar never matched on Windows, which made every run from a
+        // .feature file fail with "Could not find the project that owns ..." (#1122).
+        val normalizedFile = filePath.replace('\\', '/')
         var best: String? = null
         var bestLen = 0
         for (projectFilePath in projectFilePaths) {
-            val folder = File(projectFilePath).parent ?: continue
-            val prefix = folder.trimEnd(File.separatorChar) + File.separatorChar
-            if (filePath.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
+            val normalized = projectFilePath.replace('\\', '/')
+            val slash = normalized.lastIndexOf('/')
+            if (slash < 0) continue
+            val prefix = normalized.substring(0, slash).trimEnd('/') + '/'
+            if (normalizedFile.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
                 best = projectFilePath
                 bestLen = prefix.length
             }
@@ -343,9 +350,19 @@ object RunTestRunner {
         return RunResult(outcome, rows)
     }
 
-    /** The pre-#700 result shape: one aggregate bit over every TRX row, no per-row detail. */
-    private fun trxResult(results: List<TrxUnitTestResult>): RunResult =
-        RunResult(if (results.any { it.outcome == "Failed" }) RunOutcome.FAILED else RunOutcome.PASSED)
+    /**
+     * The pre-#700 result shape: one aggregate bit over every TRX row, no per-row detail. Zero rows
+     * (a TRX with no `UnitTestResult` entries, or one [TrxParser] couldn't parse) proves nothing ran
+     * or was readable, so it is [RunOutcome.INCONCLUSIVE] rather than a vacuous pass (issue #983).
+     * `internal` for testability.
+     */
+    internal fun trxResult(results: List<TrxUnitTestResult>): RunResult = RunResult(
+        when {
+            results.isEmpty() -> RunOutcome.INCONCLUSIVE
+            results.any { it.outcome == "Failed" } -> RunOutcome.FAILED
+            else -> RunOutcome.PASSED
+        },
+    )
 
     /** The outcome of a [runDotnetTest] call — [Failure.message] is shown to the user verbatim, so it distinguishes an unresolvable `dotnet` CLI (issue #452) from every other launch failure. */
     private sealed class DotnetTestOutcome {

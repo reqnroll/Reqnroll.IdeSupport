@@ -11,11 +11,9 @@ panel. This is the inverse of [Go to Step Definition](go-to-definition.md).
 :sync: vs
 
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
-then either:
-
-- Right-click → **Find Step Usages** (in the code editor context menu,
-  next to "Find All References"), or
-- **Extensions → Reqnroll → Find Step Usages**.
+then click the **N step usages** CodeLens shown above the method. (The **Find Step Usages**
+command is also available for binding to a keyboard shortcut under
+**Tools → Options → Environment → Keyboard**.)
 
 Results open in the standard Find All References window.
 
@@ -26,7 +24,7 @@ Results open in the standard Find All References window.
 
 Visual Studio's built-in **Find All References** (Shift+F12) does not route
 to Reqnroll bindings — it only searches C# symbol references. Use
-**Find Step Usages** instead (see above), not the native command.
+the **N step usages** CodeLens (see above) instead of the native command.
 ```
 `````
 
@@ -36,8 +34,7 @@ to Reqnroll bindings — it only searches C# symbol references. Use
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
 then either:
 
-- Right-click → **Reqnroll: Find Step Usages**, or
-- Command Palette → **Reqnroll: Find Step Usages**.
+- Command Palette → **Reqnroll: Find Step Usages**, or the **N step usages** CodeLens.
 
 Results appear in a Quick Pick list — selecting an entry jumps to that
 step in its `.feature` file.
@@ -51,8 +48,8 @@ step in its `.feature` file.
 Place the cursor on a binding attribute or on the binding method declaration in a `.cs` file,
 then either:
 
-- Right-click → **Find Step Usages**, or
-- **Tools → Reqnroll → Find Step Usages**.
+- **Reqnroll: Find Step Usages** from Find Action (Ctrl+Shift+A), or
+- the **N step usages** CodeLens above the method.
 
 ![](find-usages/find-usages-rider.gif)
 ```

@@ -19,7 +19,7 @@ src/VisualStudio/
     ReqnrollPluginPackage.cs                         ← the VSSDK package (activation-recovery trigger, welcome dialog)
     Activation/                                      ← language-server activation signal + scratch-file recovery trigger
     Documents/                                       ← Gherkin/C# document types, RDT initialization, content-type guard
-    Menus/                                           ← ReqnrollMenu and the shell menu IDs
+    Menus/                                           ← ReqnrollContextMenu group and the shell menu IDs
     LspInterception/                                 ← LspServerConnectionService, LspInterceptingPipe,
                                                         per-message interceptors
     LspNotifications/                                ← VsProjectEventMonitor + preload-pipe pusher —
