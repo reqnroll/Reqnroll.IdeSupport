@@ -1478,6 +1478,47 @@ namespace TestProject
     }
 
     [Fact]
+    public void HasExpressionChanges_returns_true_when_only_the_scope_changes()
+    {
+        // A [Scope] added to (or changed on) a step definition changes which scenarios it matches
+        // while leaving its expression untouched; without detecting it, the step-usage CodeLens
+        // stayed stale until a rebuild.
+        var before = new ProjectBindingRegistry(
+            new[] { BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath, scope: null) },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Pricing" }),
+            },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        ProjectBindingRegistry.HasExpressionChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasExpressionChanges_returns_false_when_the_scope_is_unchanged()
+    {
+        var before = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Pricing" }),
+            },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Pricing" }),
+            },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        ProjectBindingRegistry.HasExpressionChanges(before, after, FilePath).Should().BeFalse();
+    }
+
+    [Fact]
     public void HasExpressionChanges_returns_true_when_a_binding_is_added()
     {
         var before = new ProjectBindingRegistry(
@@ -1576,8 +1617,8 @@ namespace TestProject
     }
 
     private static ProjectStepDefinitionBinding BuildStepDefinition(string regex, string method, string sourceFile,
-        ScenarioBlock stepDefinitionType = ScenarioBlock.Given, string? error = null) =>
-        new(stepDefinitionType, new Regex(regex), null,
+        ScenarioBlock stepDefinitionType = ScenarioBlock.Given, string? error = null, BindingScope? scope = null) =>
+        new(stepDefinitionType, new Regex(regex), scope,
             new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)),
             error: error);
 
