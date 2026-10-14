@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
 using Microsoft.VisualStudio.Extensibility.Editor;
-using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
@@ -16,8 +15,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>
 /// "Find Unused Step Definitions" command placed in the Reqnroll group of the editor context menu.
-/// It is a workspace-wide operation, not tied to the caret, and is offered from both .feature and C# editors
-/// (available whenever the server is running).
+/// It is a workspace-wide operation, not tied to the caret, and is offered from the C# editor
+/// context menu only (the Reqnroll group in a .feature editor offers Find Hooks and Rename Step...
+/// instead); available whenever the server is running.
 /// </summary>
 [VisualStudioContribution]
 internal sealed class FindUnusedStepDefinitionsCommand : Command
@@ -35,13 +35,11 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Find Unused Step Definitions in Project")
+    public override CommandConfiguration CommandConfiguration => new("Find Unused Step Definitions in Projects")
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
-        // Shown in both .feature and C# editors; placed via ReqnrollContextMenu.cs.
-        VisibleWhen = ActivationConstraint.Or(
-            ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
-            ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType)),
+        // Shown in C# editors only; placed via ReqnrollContextMenu.cs.
+        VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
         Placements = [],
     };
 
