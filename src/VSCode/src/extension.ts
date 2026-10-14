@@ -27,7 +27,7 @@ import { doGoToMatchingScenarios } from './commands/goToMatchingScenarios';
 import { doGoToStepDefinition } from './commands/stepNavigation';
 import { registerStepCodeLens } from './commands/stepCodeLens';
 import { registerHookCodeLens } from './commands/hookCodeLens';
-import { CSHARP_LANGUAGE_ID, GHERKIN_LANGUAGE_ID } from './languageIds';
+import { CSHARP_LANGUAGE_ID, REQNROLL_LANGUAGE_ID } from './languageIds';
 import {
   ManualDocumentSync,
   createManualSyncMiddleware,
@@ -215,7 +215,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
 
     registerCommand('reqnroll.showOutputChannel', () => appLogChannel.show()),
 
-    // Comment/Uncomment toggle (Ctrl+/ for gherkin files)
+    // Comment/Uncomment toggle (Ctrl+/ for .feature files)
     registerCommand('reqnroll.toggleComment', async () => {
       if (!client) {
         notReady('Comment/Uncomment')();
@@ -267,7 +267,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       await doFindUnusedStepDefinitions(client);
     }),
 
-    // Hook Navigation ("Go to Hooks"; invoked from the command palette, editor context menu,
+    // Hook Navigation ("Find Hooks"; invoked from the command palette, editor context menu,
     // or the hook-count CodeLens — issue #269). When invoked from a CodeLens the server passes
     // [uri, line, char, ownLevelOnly] as arguments, same convention as reqnroll.findStepUsages
     // plus the extra ownLevelOnly flag so the picker matches exactly what the lens counted.
@@ -280,7 +280,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
 
     registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
-        notReady('Go to Hooks')();
+        notReady('Find Hooks')();
         return;
       }
       if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
@@ -355,7 +355,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     }),
 
     // F2 keybinding target (issue #506). F2 is the default C# rename-symbol shortcut, so unlike
-    // the explicit "Reqnroll: Rename Step" command above, a miss at the cursor (not on a binding
+    // the explicit "Rename Step..." command above, a miss at the cursor (not on a binding
     // expression, or a .cs file the Reqnroll server doesn't own at all) must fall through to VS
     // Code's own editor.action.rename rather than showing a Reqnroll-specific message — otherwise
     // F2 would stop renaming ordinary C# symbols everywhere in every .cs file.
@@ -384,7 +384,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     void showError(`Reqnroll: ${message}`, 'Open Documentation').then((choice) => {
       if (choice === 'Open Documentation') {
         void vscode.env.openExternal(
-          vscode.Uri.parse('https://github.com/clrudolphi/Reqnroll.Plugin.VisualStudio_Prototypes'),
+          vscode.Uri.parse('https://docs.reqnroll.net/latest/ide-integrations/vscode/index.html'),
         );
       }
     });
@@ -412,7 +412,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   context.subscriptions.push(tagLinkDecorations);
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: GHERKIN_LANGUAGE_ID, pattern: '**/*.feature' }],
+    documentSelector: [{ language: REQNROLL_LANGUAGE_ID, pattern: '**/*.feature' }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.{feature,cs}'),
     },

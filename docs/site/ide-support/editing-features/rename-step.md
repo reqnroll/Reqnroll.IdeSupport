@@ -25,7 +25,7 @@ handles the common, unambiguous case directly.
 **Renaming an ambiguously bound step**
 
 If a binding method has more than one candidate attribute, use
-**Extensions → Reqnroll → Reqnroll: Rename Step** instead — it opens a dialog with a
+right-click → **Rename Step...** (in the Reqnroll group of the editor context menu) instead — it opens a dialog with a
 picker to choose which binding to rename.
 
 ![](rename-step/rename-step-vs-picker.gif)
@@ -37,7 +37,7 @@ picker to choose which binding to rename.
 Place the cursor on the step (in a `.feature` file) and press **F2**, or
 on the attribute string (in a `.cs` file) and use the standard **Rename
 Symbol** gesture. On the `.feature` side, F2 is also available via
-right-click → **Reqnroll: Rename Step** or the Command Palette.
+right-click → **Reqnroll: Rename Step...** or the Command Palette.
 
 **Renaming from the feature file**
 

@@ -1,6 +1,6 @@
 # Hook Navigation
 
-**Go to Hooks**, invoked from a `.feature` file, lists the hook bindings in
+**Find Hooks**, invoked from a `.feature` file, lists the hook bindings in
 scope at the cursor position, filtered by the tags and `[Scope]`
 expressions that apply there:
 
@@ -16,9 +16,8 @@ Selecting an entry navigates to the C# hook method.
 ```{tab-item} Visual Studio
 :sync: vs
 
-Place the cursor in a `.feature` file, then right-click → **Go to Hooks**
-(in the code editor context menu, next to "Go To Definition"). There's no
-Extensions menu placement for this one — it's editor-context-menu only.
+Place the cursor in a `.feature` file, then right-click → **Find Hooks**
+(in the Reqnroll group of the code editor context menu).
 
 ![](hook-navigation/hook-navigation-vs.gif)
 ```
@@ -28,8 +27,8 @@ Extensions menu placement for this one — it's editor-context-menu only.
 
 Place the cursor in a `.feature` file, then either:
 
-- Right-click → **Reqnroll: Go to Hooks**, or
-- Command Palette → **Reqnroll: Go to Hooks**.
+- Right-click → **Reqnroll: Find Hooks**, or
+- find **Reqnroll: Find Hooks** in the Command Palette.
 
 No default keybinding.
 

@@ -13,7 +13,6 @@ using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
@@ -39,16 +38,14 @@ internal sealed class RenameStepCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Reqnroll: Rename Step")
+    public override CommandConfiguration CommandConfiguration => new("Rename Step...")
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
         VisibleWhen = ActivationConstraint.Or(
             ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
             ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType)),
-        Placements =
-        [
-            CommandPlacement.VsctParent(ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
-        ],
+        // Placed in the Reqnroll group of the editor context menu (ReqnrollContextMenu.cs).
+        Placements = [],
     };
 
     /// <inheritdoc />
@@ -62,7 +59,7 @@ internal sealed class RenameStepCommand : Command
             if (service is null)
             {
                 _logger.LogWarning("RenameStepCommand: LSP server not yet initialized.");
-                VsUtils.ShowStatusBarMessage("Reqnroll: LSP server not yet initialized.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: LSP server not yet initialized.");
                 return;
             }
 
@@ -89,7 +86,7 @@ internal sealed class RenameStepCommand : Command
             if (targets is null || targets.Targets.Count == 0)
             {
                 _logger.LogInformation("RenameStepCommand: no renameable targets at cursor position.");
-                VsUtils.ShowStatusBarMessage("Reqnroll: No step definition found to rename at this position.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: No step definition found to rename at this position.");
                 return;
             }
 
@@ -171,7 +168,7 @@ internal sealed class RenameStepCommand : Command
                 // rejected push has no in-flight request left to fail and is logged server-side
                 // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
                 _logger.LogInformation("RenameStepCommand: rename rejected by server: {Message}", ex.Message);
-                VsUtils.ShowStatusBarMessage($"Reqnroll: {ex.Message}");
+                await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: {ex.Message}");
                 return;
             }
 
@@ -181,7 +178,7 @@ internal sealed class RenameStepCommand : Command
             // that request with ContentModified, issue #654), so the edit lands a moment after this
             // message is shown.
             _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
-            VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
+            await VsUtils.ShowStatusBarMessageAsync("Reqnroll: Step renamed successfully.");
         }
         catch (Exception ex)
         {

@@ -36,7 +36,7 @@ for how to tell the two listings apart in the Marketplace.
 
 If the same `.feature` file is linked into more than one project — for example, a
 `Calculator.feature` that physically lives in `ProjectA` and is also linked into `ProjectB` —
-Code Lens hook-match counts, **Go to Hooks**, diagnostics/squiggles, and syntax highlighting for
+Code Lens hook-match counts, **Find Hooks**, diagnostics/squiggles, and syntax highlighting for
 that file always reflect **the project that physically contains the file on disk**, regardless
 of which project's node you used to open it (Solution Explorer, VS Code's Explorer, or Rider's
 Project view).

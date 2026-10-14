@@ -32,7 +32,7 @@ export function sourceForArgs(args: readonly unknown[]): GoToHookSource {
 }
 
 /**
- * Implements Hook Navigation ("Go to Hooks"): queries the server for hooks applicable at
+ * Implements Hook Navigation ("Find Hooks"): queries the server for hooks applicable at
  * `position` (defaulting to the active editor's cursor when omitted — the command-palette/
  * keybinding invocation path). When invoked from the hook-count CodeLens (issue #269) the server
  * passes `[uri, line, char, ownLevelOnly]` as arguments, resolved to `position` by the
@@ -84,7 +84,7 @@ export async function doGoToHooks(
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    void showError(`Reqnroll: Go to Hooks failed — ${msg}`);
+    void showError(`Reqnroll: Find Hooks failed — ${msg}`);
     return;
   }
 

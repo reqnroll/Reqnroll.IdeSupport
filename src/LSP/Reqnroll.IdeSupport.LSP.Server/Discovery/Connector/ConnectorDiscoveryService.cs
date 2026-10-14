@@ -219,9 +219,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return true;
         }
 
-        var stepDefinitions = (result.StepDefinitions ?? [])
-            .Where(sd => !IsStale(sd.SourceLocation))
-            .Select(sd => {
+        // The runtime registers one binding per [Scope], so an attribute with several scopes arrives as
+        // several DTOs. They are imported as one binding per attribute, their scopes reduced together
+        // by ScopeNormalizer -- the same reduction Roslyn discovery applies -- so both paths give the
+        // consumers the same shape (issues #953, #1133).
+        var stepDefinitions = BindingImporter.GroupByAttribute(result.StepDefinitions ?? [])
+            .Where(group => !IsStale(group.Binding.SourceLocation))
+            .Select(group => {
+                var sd = group.Binding;
                 // For connector-discovered bindings, backfill the attribute source line and the
                 // method identifier's own location from the source file using Roslyn syntax
                 // parsing. The attribute line enables exact AST-based matching in
@@ -264,7 +269,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                         "the method body rather than on its declaration line.");
                 }
 
-                return importer.ImportStepDefinition(sd, attrLine, methodLocation);
+                return importer.ImportStepDefinition(sd, attrLine, methodLocation, group.Scopes);
             })
             .Where(sd => sd is not null)
             .ToList();
@@ -274,16 +279,17 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // on its declaration -- and skipped the source-file resolution the backfill performs on the
         // way (issue #540 F2). Hooks carry no attribute line (ProjectHookBinding does not model one),
         // so only the identifier location is backfilled here.
-        var hooks = (result.Hooks ?? [])
-            .Where(h => !IsStale(h.SourceLocation))
-            .Select(h => {
+        var hooks = BindingImporter.GroupByAttribute(result.Hooks ?? [])
+            .Where(group => !IsStale(group.Binding.SourceLocation))
+            .Select(group => {
+                var h = group.Binding;
                 var root = TryGetParsedRoot(importer, h.SourceLocation, h.Method, parsedFiles, _fileSystem, _logger);
                 var bareMethodName = BindingImporter.ExtractBareMethodName(h.Method);
                 var methodLocation = root == null
                     ? null
                     : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
 
-                return importer.ImportHook(h, methodLocation);
+                return importer.ImportHook(h, methodLocation, group.Scopes);
             })
             .Where(h => h is not null)
             .ToList();

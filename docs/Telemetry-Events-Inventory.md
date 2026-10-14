@@ -120,12 +120,12 @@ back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExec
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
 are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
-`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed for filesystem paths (`<path>`) at the
-last server hop before the event goes to the client (`LspTelemetryService` →
-`TelemetryScrubber.ScrubProperties`, #843), so emit sites and the local debug-log mirror keep the raw text for
-debugging. Other string properties are fixed literals
-(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
-*name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
+`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed at the last server hop before the event goes to the
+client (`LspTelemetryService` → `TelemetryScrubber.ScrubProperties`, #843, #1139): quoted spans (which routinely hold class
+names, step expressions, feature text, tags or config values) become `<text>`, URLs `<url>` and filesystem paths `<path>`, and the
+result is capped at 128 characters, so emit sites and the local debug-log mirror keep the raw text for debugging. Exceptions raised in the Visual Studio host take the same shape: they are sent as the sanitised `UnhandledException` event (scrubbed `Message`, product-only `StackFrames`), never as a raw Application Insights exception record with the full message, stack and inner exceptions (#1140). Other string properties are fixed literals
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs.
+Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
 ---
@@ -149,8 +149,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 | `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure: an unexpected exception, or the connector threw or reported failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn (issue #845): counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
-| `ErrorMessage` | string | Connector failure from an unexpected exception: the exception message, filesystem-path-scrubbed (`<path>`). Not sent when the connector itself threw or reported failure (its raw error text is never forwarded) |
-| `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
+| `ErrorMessage` | string | Connector failure from an unexpected exception: the exception message, scrubbed (quoted spans `<text>`, URLs `<url>`, paths `<path>`, capped at 128 characters). Not sent when the connector itself threw or reported failure (its raw error text is never forwarded) |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
 | `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
@@ -262,7 +261,7 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 |---|---|
 | **Emitter** | `FindUnusedStepDefinitionsHandler` |
 | **When** | After a Find Unused Step Definitions request completes |
-| **Properties** | `UnusedStepDefinitions` (int), `ScannedFeatureFiles` (int — in practice the number of project registries scanned), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
+| **Properties** | `UnusedStepDefinitions` (int), `ScannedProjects` (int — project registries scanned; renamed from the mislabelled `ScannedFeatureFiles`, which reported this same count, issue #942), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
 
 **Analytics use.** Feature hygiene: unused-step counts, the unused *ratio*
 (`UnusedStepDefinitions / TotalStepDefinitions`) and scan cost (duration bucket); the
@@ -460,7 +459,7 @@ IDEs expose the same install -> upgrade funnel and daily-use retention signal di
 
 Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
 `reqnroll.telemetry.lifecycle` (`src/VSCode/src/extensionLifecycleTelemetry.ts`); Rider keeps the same
-three values in the application-level `PropertiesComponent` under `com.reqnroll.idesupport.telemetry.*`
+three values in the application-level `PropertiesComponent` under `net.reqnroll.idesupport.telemetry.*`
 (`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
 `WelcomeService`, and unit-tested. Because state is new, installs that predate this release report
 `Extension installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when
@@ -529,7 +528,7 @@ killed outright, cannot be reported by anything and shows up only as a `ServerSe
 | | |
 |---|---|
 | **Emitter** | VS `TagLinkNavigableSymbolProvider` (via `TagLinkRedirect.LinkOpened`, wired in `ReqnrollLanguageClient`); VS Code `openTagLink` (`src/VSCode/src/lsp/tagLinks.ts`); Rider `ReqnrollFeatureTagLinkController` - three client copies of the same constant, per the catalog's mirror rule |
-| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the browser. Only http(s) targets are opened, so a refused target emits nothing |
+| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the operating system. Any scheme except `javascript:`, `vbscript:`, `data:` and `command:` is opened, so a refused target emits nothing |
 | **Properties** | none - the target URL and tag text come from repository configuration and are never sent |
 
 The server only answers `textDocument/documentLink` (counted in `PassiveCounts` as `DocumentLink`), and
@@ -550,7 +549,7 @@ each inlay-hint refresh.
 |---|---|
 | **Emitter** | `LspErrorTelemetryService.MonitorError` — the LSP server's `ITelemetryService` implementation; every other `Monitor*` member is a no-op there |
 | **When** | Any exception reported through `IErrorTelemetryService` (e.g. `IdeSupportGherkinParser`, `IdeSupportTagParser`, `CompletionContextResolver`, `WatchedFilesHandler` config loads), driven by `IdeSupportLoggerExtensions.LogException` |
-| **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is not sent under this property), `StackFrames` (string, **proposed in #620, awaiting maintainer decision**; omitted when unknown — up to 8 newline-separated, innermost-first entries of `Namespace.Type.Method:line` for product frames only (`:line` is the integer source line from the shipped PDB, omitted when none resolves) (declaring type's namespace **and** assembly are both `Reqnroll.IdeSupport` or `Reqnroll.IdeSupport.*`; a foreign assembly reusing the namespace, or `Reqnroll.IdeSupportLookalike`, does not qualify; assembly names are never emitted); runs of frames from any other assembly collapse to `[external]`; no file paths, column numbers, parameter lists or generic arguments; compiler-generated lambda/async/local members normalised to `Method{lambda}`/`Method`/`Method{local}`; ≤1024 chars; sanitized by `ExceptionStackSanitizer`, also passed through `TelemetryScrubber`; attached only to the first occurrence of each distinct exception-type+stack per server session and to at most 25 distinct stacks per session — the event itself is still sent every time; the cap is exact under concurrency). Caveats: frames the JIT inlined are absent, and the `[external]` collapse plus the 8-entry cap can push deeper product frames out. Only the exception's own stack is read — never inner exceptions or the exception type name beyond the unchanged `ExceptionType` property. The surrounding event (`ExceptionType`, path-scrubbed `Message`, `IsFatal`, `Source`) is unchanged |
+| **Properties** | `ExceptionType` (full type name), `Message` (scrubbed by `TelemetryScrubber.ScrubMessage`: quoted spans → `<text>`, URLs → `<url>`, paths → `<path>`, capped at 128 characters), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is not sent under this property), `StackFrames` (string, **proposed in #620, awaiting maintainer decision**; omitted when unknown — up to 8 newline-separated, innermost-first entries of `Namespace.Type.Method:line` for product frames only (`:line` is the integer source line from the shipped PDB, omitted when none resolves) (declaring type's namespace **and** assembly are both `Reqnroll.IdeSupport` or `Reqnroll.IdeSupport.*`; a foreign assembly reusing the namespace, or `Reqnroll.IdeSupportLookalike`, does not qualify; assembly names are never emitted); runs of frames from any other assembly collapse to `[external]`; no file paths, column numbers, parameter lists or generic arguments; compiler-generated lambda/async/local members normalised to `Method{lambda}`/`Method`/`Method{local}`; ≤1024 chars; sanitized by `ExceptionStackSanitizer`, also passed through `TelemetryScrubber`; attached only to the first occurrence of each distinct exception-type+stack per server session and to at most 25 distinct stacks per session — the event itself is still sent every time; the cap is exact under concurrency). Caveats: frames the JIT inlined are absent, and the `[external]` collapse plus the 8-entry cap can push deeper product frames out. Only the exception's own stack is read — never inner exceptions or the exception type name beyond the unchanged `ExceptionType` property. The surrounding event (`ExceptionType`, path-scrubbed `Message`, `IsFatal`, `Source`) is unchanged |
 
 ### `UnhandledException` (VS Code and Rider client code, #621)
 | | |
@@ -567,8 +566,8 @@ on the line, because V8 embeds JSON snippets unescaped) and every backtick or mu
 `<text>`, so a `JSON.parse` snippet cannot leak; URLs become `<url>` (query string and fragment included); absolute drive-letter, UNC and POSIX
 paths (directory names may contain interior spaces, so `C:\Users\John Smith\x` is one path), `~`/`%VAR%`/`$VAR` paths, `./` and `../` paths and bare file
 names or relative paths ending in a source/config extension (`.feature`, `.cs`, `.csproj`, `.json`, `.md`, ...) become `<path>`; and the result is capped at
-128 characters, which also bounds anything the rules miss. The server's `TelemetryScrubber.RedactPaths` got the same URL/path hardening (not
-the quote drop or cap, which would change its `ErrorMessage` semantics). Known limits: a file name with spaces and no
+128 characters, which also bounds anything the rules miss. The shared `TelemetryScrubber` (now in `Reqnroll.IdeSupport.Common`) applies the same URL/path hardening and,
+since #1139, the same quote drop and cap to the server's `Message` and `ErrorMessage` (before #1139 it redacted paths only). Known limits: a file name with spaces and no
 directory (`My File.feature`) keeps its first word; a bare name with an extension outside the list is not recognized.
 
 **Decision: reuse the `UnhandledException` event rather than add one.** The property schema is identical, so
