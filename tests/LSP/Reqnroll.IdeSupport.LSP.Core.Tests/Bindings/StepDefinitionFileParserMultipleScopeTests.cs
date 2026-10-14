@@ -131,15 +131,65 @@ namespace TestProject
     }
 
     [Fact]
-    public async Task Type_level_scope_is_and_combined_with_each_method_scope_alternative()
+    public async Task Type_level_scope_is_an_alternative_to_the_method_scopes()
     {
         var binding = await ParseSingleStepDefinition(
             @"[Scope(Tag = ""@web"")]
-              [Scope(Feature = ""my feature"")]",
+              [Scope(Feature = ""other feature"")]",
             typeAttributes: @"[Scope(Tag = ""@ui"")]");
 
-        Matches(binding, "@ui").Should().BeTrue("@ui (type) and Feature='my feature' (method alternative) both hold");
-        Matches(binding).Should().BeFalse("the type-level @ui scope still applies to every alternative");
+        Matches(binding, "@ui").Should().BeTrue("the type-level @ui scope matches on its own");
+        Matches(binding, "@web").Should().BeTrue("a method-level alternative matches on its own");
+        Matches(binding).Should().BeFalse("no type or method alternative matches an untagged scenario of 'my feature'");
+    }
+
+    [Fact]
+    public async Task Type_level_feature_scope_or_method_level_tag_scope_matches_either()
+    {
+        var binding = await ParseSingleStepDefinition(
+            @"[Scope(Tag = ""@web"")]",
+            typeAttributes: @"[Scope(Feature = ""my feature"")]");
+
+        Matches(binding).Should().BeTrue("the type-level Feature scope names this feature");
+        Matches(binding, "@web").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Hook_tags_are_alternatives_to_the_scope_attributes()
+    {
+        var bindings = await ParseBindings(
+            @"[Scope(Feature = ""other feature"")]
+              [BeforeScenario(""web"")]
+              public void Setup() { }");
+
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Match(null!, CreateScenarioContext(null, "@web")).Should().BeTrue("the hook tag matches on its own (Reqnroll appends it as a further scope)");
+        hook.Match(null!, CreateScenarioContext(null)).Should().BeFalse("neither the hook tag nor the [Scope(Feature)] matches");
+    }
+
+    [Fact]
+    public async Task Hook_scope_feature_alternative_matches_without_the_hook_tag()
+    {
+        var bindings = await ParseBindings(
+            @"[Scope(Feature = ""my feature"")]
+              [BeforeScenario(""web"")]
+              public void Setup() { }");
+
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Match(null!, CreateScenarioContext(null)).Should().BeTrue("the [Scope(Feature)] alternative names this feature");
+    }
+
+    [Fact]
+    public async Task Hook_tags_without_a_scope_stay_a_single_scope()
+    {
+        var bindings = await ParseBindings(
+            @"[BeforeScenario(""web"", ""smoke"")]
+              public void Setup() { }");
+
+        var hook = bindings.Hooks.Should().ContainSingle().Subject!;
+        hook.Scope!.Alternatives.Should().BeNull("one plain tag expression, not several alternatives");
+        hook.Match(null!, CreateScenarioContext(null, "@smoke")).Should().BeTrue();
+        hook.Match(null!, CreateScenarioContext(null)).Should().BeFalse();
     }
 
     [Fact]

@@ -221,8 +221,17 @@ public class BindingImporter
     }
 
     /// <summary>Converts a wire-format step definition DTO into a <see cref="ProjectStepDefinitionBinding"/>, or null if it's invalid.</summary>
+    /// <param name="stepDefinition">The wire-format step definition to import.</param>
+    /// <param name="attributeSourceLine">The attribute's own source line, when known.</param>
+    /// <param name="methodIdentifierLocation">The AST-backfilled method-identifier position, when known.</param>
+    /// <param name="scopes">
+    /// All the scopes the runtime registered for this attribute (see <see cref="GroupByAttribute(IEnumerable{StepDefinition})"/>),
+    /// reduced to one scope by <see cref="ScopeNormalizer"/>; when <see langword="null"/>, the step definition's own
+    /// <see cref="StepDefinition.Scope"/> is the only one.
+    /// </param>
     public ProjectStepDefinitionBinding ImportStepDefinition(StepDefinition stepDefinition,
-        int? attributeSourceLine = null, (int Line, int Column)? methodIdentifierLocation = null)
+        int? attributeSourceLine = null, (int Line, int Column)? methodIdentifierLocation = null,
+        IReadOnlyList<StepScope> scopes = null)
     {
         try
         {
@@ -231,7 +240,7 @@ public class BindingImporter
                 : ScenarioBlock.Unknown;
             var regex = ParseRegex(stepDefinition);
             var sourceLocation = ParseSourceLocation(stepDefinition.SourceLocation);
-            var scope = ParseScope(stepDefinition.Scope);
+            var scope = ParseScopes(scopes ?? new[] { stepDefinition.Scope });
             var parameterTypes = ParseParameterTypes(stepDefinition.ParamTypes);
 
             if (!_implementations.TryGetValue(stepDefinition.Method, out var implementation))
@@ -273,7 +282,12 @@ public class BindingImporter
     /// backfill is also what forces a source path to be resolved, made hook navigation the first
     /// casualty of a foreign-path build (issue #540 F2).
     /// </param>
-    public ProjectHookBinding ImportHook(Hook hook, (int Line, int Column)? methodIdentifierLocation = null)
+    /// <param name="scopes">
+    /// All the scopes the runtime registered for this hook (see <see cref="GroupByAttribute(IEnumerable{Hook})"/>); when
+    /// <see langword="null"/>, the hook's own <see cref="Hook.Scope"/> is the only one.
+    /// </param>
+    public ProjectHookBinding ImportHook(Hook hook, (int Line, int Column)? methodIdentifierLocation = null,
+        IReadOnlyList<StepScope> scopes = null)
     {
         try
         {
@@ -281,7 +295,7 @@ public class BindingImporter
                 ? parsedHookType
                 : HookType.Unknown;
             var sourceLocation = ParseSourceLocation(hook.SourceLocation);
-            var scope = ParseScope(hook.Scope);
+            var scope = ParseScopes(scopes ?? new[] { hook.Scope });
 
             if (!_implementations.TryGetValue(hook.Method, out var implementation))
             {
@@ -385,32 +399,60 @@ public class BindingImporter
         return resolved;
     }
 
-    private BindingScope ParseScope(StepScope bindingScope)
+    private BindingScope ParseScopes(IEnumerable<StepScope> scopes)
     {
-        if (bindingScope == null)
-            return null;
+        var specs = scopes.Select(scope => scope == null
+            ? null
+            : new ScopeSpec(scope.Tag, scope.FeatureTitle, scope.ScenarioTitle, scope.Error)).ToList();
+        var bindingScope = ScopeNormalizer.Build(specs, _tagExpressionParser);
+        if (bindingScope?.Error != null)
+            _logger.LogVerbose($"Invalid scope: {bindingScope.Error}");
+        return bindingScope;
+    }
 
-        var tagExpression = _tagExpressionParser.Parse(bindingScope.Tag);
+    /// <summary>
+    /// Groups the connector's step definitions into one entry per attribute. The runtime registers one
+    /// binding per scope (<c>BindingSourceProcessor.ApplyForScope</c>), so an attribute with several
+    /// scopes arrives as several otherwise identical DTOs; this pairs the first of them with all of
+    /// their scopes, for <see cref="ImportStepDefinition"/> to reduce with <see cref="ScopeNormalizer"/>.
+    /// The wire format carries no attribute ordinal, so textually identical attributes on one method
+    /// are one group (they already share one <see cref="BindingId"/>).
+    /// </summary>
+    public static IReadOnlyList<AttributeGroup<StepDefinition>> GroupByAttribute(IEnumerable<StepDefinition> stepDefinitions) =>
+        Group(stepDefinitions, sd => sd.Scope,
+            sd => new object[] { sd.Type, sd.Regex, sd.Method, sd.ParamTypes, sd.Expression, sd.Error, sd.SourceLocation });
 
-        if (tagExpression is InvalidTagExpression ite)
+    /// <summary>The hook counterpart of <see cref="GroupByAttribute(IEnumerable{StepDefinition})"/>.</summary>
+    public static IReadOnlyList<AttributeGroup<Hook>> GroupByAttribute(IEnumerable<Hook> hooks) =>
+        Group(hooks, hook => hook.Scope,
+            hook => new object[] { hook.Type, hook.HookOrder, hook.Method, hook.Error, hook.SourceLocation });
+
+    private static IReadOnlyList<AttributeGroup<T>> Group<T>(IEnumerable<T> items, Func<T, StepScope> scopeOf,
+        Func<T, object[]> keyOf)
+    {
+        var groups = new List<(T First, List<StepScope> Scopes)>();
+        var indexByKey = new Dictionary<string, int>();
+        foreach (var item in items)
         {
-            _logger.LogVerbose($"Invalid tag expression '{bindingScope.Tag}': {ite.Message}");
-            return new BindingScope
+            var key = string.Join("\u001F", keyOf(item).Select(part => part?.ToString() ?? "\u0000"));
+            if (!indexByKey.TryGetValue(key, out var index))
             {
-                FeatureTitle = bindingScope.FeatureTitle,
-                ScenarioTitle = bindingScope.ScenarioTitle,
-                Tag = null,
-                Error = $"Invalid tag expression '{bindingScope.Tag}': {ite.Message}"
-            };
+                index = groups.Count;
+                indexByKey.Add(key, index);
+                groups.Add((item, new List<StepScope>()));
+            }
+
+            groups[index].Scopes.Add(scopeOf(item));
         }
-        return new BindingScope
-        {
-            FeatureTitle = bindingScope.FeatureTitle,
-            ScenarioTitle = bindingScope.ScenarioTitle,
-            Tag = string.IsNullOrWhiteSpace(bindingScope.Tag)
-                    ? null
-                    : tagExpression,
-            Error = bindingScope.Error
-        };
+
+        return groups.Select(group => new AttributeGroup<T>(group.First, group.Scopes)).ToArray();
     }
 }
+
+/// <summary>
+/// One binding attribute as the connector reported it: the first of its (otherwise identical) wire
+/// DTOs plus the scope of every DTO, <see langword="null"/> entries standing for an unscoped one.
+/// </summary>
+/// <param name="Binding">The first DTO of the attribute.</param>
+/// <param name="Scopes">The scope of each DTO, in wire order.</param>
+public sealed record AttributeGroup<T>(T Binding, IReadOnlyList<StepScope> Scopes);
