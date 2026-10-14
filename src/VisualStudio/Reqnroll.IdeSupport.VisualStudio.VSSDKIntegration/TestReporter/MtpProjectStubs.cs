@@ -143,7 +143,7 @@ public static class MtpProjectStubs
             var directory = ResolveProjectExtensionsDirectory(
                 projectFile,
                 readTextOrNull ?? ReadTextOrNull,
-                evaluateProjectExtensionsPath ?? (p => EvaluatedDirectories.GetOrAdd(p, EvaluateProjectExtensionsPathViaDotnet)));
+                evaluateProjectExtensionsPath ?? (p => GetOrEvaluateProjectExtensionsPath(p, EvaluateProjectExtensionsPathViaDotnet)));
             if (directory is null)
             {
                 logger.LogVerbose($"{nameof(MtpProjectStubs)}: could not determine MSBuildProjectExtensionsPath for '{projectFile}'; no MTP reporter stub written.");
@@ -188,7 +188,7 @@ public static class MtpProjectStubs
             var directory = ResolveProjectExtensionsDirectory(
                 projectFile,
                 readTextOrNull,
-                evaluateProjectExtensionsPath ?? (p => EvaluatedDirectories.GetOrAdd(p, EvaluateProjectExtensionsPathViaDotnet)));
+                evaluateProjectExtensionsPath ?? (p => GetOrEvaluateProjectExtensionsPath(p, EvaluateProjectExtensionsPathViaDotnet)));
             if (directory is null)
                 return MtpStubSyncResult.Skipped;
 
@@ -272,6 +272,23 @@ public static class MtpProjectStubs
         try { return File.Exists(path) ? File.ReadAllText(path) : null; }
         catch (IOException) { return null; }
         catch (UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>
+    /// Evaluates a project's extensions path via <paramref name="evaluate"/>, caching a successful
+    /// result for the session. A null result (a timeout or a transient <c>dotnet msbuild</c> failure)
+    /// is not cached, so a later call retries instead of reusing the failure until restart
+    /// (issue #1037). Extracted so the caching decision is one testable place.
+    /// </summary>
+    internal static string? GetOrEvaluateProjectExtensionsPath(string projectFile, Func<string, string?> evaluate)
+    {
+        if (EvaluatedDirectories.TryGetValue(projectFile, out var cached))
+            return cached;
+
+        var evaluated = evaluate(projectFile);
+        if (evaluated is not null)
+            EvaluatedDirectories[projectFile] = evaluated;
+        return evaluated;
     }
 
     /// <summary><c>dotnet msbuild &lt;project&gt; -getProperty:MSBuildProjectExtensionsPath</c> — only for projects that move obj\. Null on any failure or timeout.</summary>

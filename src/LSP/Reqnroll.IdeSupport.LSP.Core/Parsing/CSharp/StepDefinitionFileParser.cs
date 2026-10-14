@@ -157,8 +157,13 @@ public class StepDefinitionFileParser : IStepDefinitionFileParser
                 .Where(p => p.Type != null)
                 .Select(p => p.Type.ToString())
                 .ToArray();
+            // Issue #952: use ValueText (the identifier's semantic name) rather than Text so a
+            // verbatim-identifier parameter (e.g. @class) loses its leading '@'. Identifier.Text
+            // keeps the '@', which the method-name regex spliced straight into a named group
+            // ((?<@class>...)) -- an invalid group name that threw ArgumentException out of
+            // ParseBindings and dropped every binding in the file.
             var parameterNames = method.ParameterList.Parameters
-                .Select(p => p.Identifier.Text)
+                .Select(p => p.Identifier.ValueText)
                 .ToArray();
             var implementation =
                 new ProjectBindingImplementation(FullMethodName(method), parameterTypes, sourceLocation);
