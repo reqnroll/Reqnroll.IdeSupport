@@ -205,7 +205,7 @@ The extension writes to two Output panel channels, each with a distinct purpose:
 - **Reqnroll** — the curated app-status channel (issue #661): extension activation, LSP client
   start/connect/stop, and each command's one-line result (mirroring the popup notification you
   also see). This is the one to check first for "is the extension doing something" — it also
-  auto-reveals itself on a warning or worse, and the `Reqnroll: Show Output Channel` command opens it
+  auto-reveals itself on a warning or worse, and `Reqnroll: Show Output Channel` opens it
   directly. Also teed to `reqnroll-vscode-app-<yyyyMMdd>-<pid>.log`.
 - **Reqnroll LSP** — `vscode-languageclient`'s own general client channel: connection-level
   diagnostics. Also teed to `reqnroll-vscode-ext-<yyyyMMdd>-<pid>.log`.

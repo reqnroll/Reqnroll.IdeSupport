@@ -33,8 +33,9 @@ and set it on the `Edit.*` commands above.
 ```{tab-item} VS Code
 :sync: vscode
 
-`Ctrl+/` (`Cmd+/` on macOS) works directly. Also available via right-click
-→ **Comment/Uncomment**, or the Command Palette (**Reqnroll: Comment/Uncomment**).
+`Ctrl+/` (`Cmd+/` on macOS) works directly, or use
+**Reqnroll: Comment/Uncomment** from the Command Palette. There is no
+context-menu entry for this command.
 
 ![](comment-uncomment/comment-uncomment-vscode.gif)
 ```

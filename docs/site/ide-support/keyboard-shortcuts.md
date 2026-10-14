@@ -30,12 +30,12 @@ menu instead — see the linked feature page for the full how-to.
 | Command | Shortcut | Menu |
 |---|---|---|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | F12, or Ctrl+Click / Cmd+Click | — |
-| [Rename Step](editing-features/rename-step.md) | F2 | Right-click → Rename Step... |
-| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ (Cmd+/ on macOS) | Right-click → Comment/Uncomment |
+| [Rename Step](editing-features/rename-step.md) | F2 | Right-click → Reqnroll: Rename Step... |
+| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ (Cmd+/ on macOS) | Command Palette → Reqnroll: Comment/Uncomment |
 | [Format Document](editing-features/formatting.md) | Shift+Alt+F (⇧⌥F on macOS) *(native VS Code default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Command Palette → Reqnroll: Find Step Usages, or the CodeLens |
-| [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click → Find Unused Step Definitions in Project, or Command Palette |
-| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Find Hooks, or Command Palette |
+| [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Reqnroll: Find Unused Step Definitions in Projects, or Command Palette |
+| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Find Hooks, or Command Palette |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | — |
 | [Toggle inlay hints](editing-features/inlay-hints.md) | Hold Ctrl-Alt (⌥ on macOS) *(only in an `...UnlessPressed` mode)* | — |
 ````
