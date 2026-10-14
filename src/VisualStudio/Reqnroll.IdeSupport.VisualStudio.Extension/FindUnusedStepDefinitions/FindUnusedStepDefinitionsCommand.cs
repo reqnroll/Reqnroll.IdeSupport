@@ -6,16 +6,18 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
+using Microsoft.VisualStudio.Extensibility.Editor;
+using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 using Reqnroll.IdeSupport.VisualStudio;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>
-/// "Find Unused Step Definitions" command placed in the Reqnroll submenu under Extensions.
-/// Unlike Find Step Definition Usages, this command is not scoped to a C# editor — it is a workspace-wide operation
-/// available whenever the server is running.
+/// "Find Unused Step Definitions" command placed in the Reqnroll group of the editor context menu.
+/// It is a workspace-wide operation, not tied to the caret, and is offered from both .feature and C# editors
+/// (available whenever the server is running).
 /// </summary>
 [VisualStudioContribution]
 internal sealed class FindUnusedStepDefinitionsCommand : Command
@@ -33,11 +35,14 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Find Unused Step Definitions")
+    public override CommandConfiguration CommandConfiguration => new("Find Unused Step Definitions in Project")
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
-        // No VisibleWhen constraint — available in any context once the server is running.
-        Placements = [],  // Placed via ReqnrollMenu only; no context-menu placement for this command.
+        // Shown in both .feature and C# editors; placed via ReqnrollContextMenu.cs.
+        VisibleWhen = ActivationConstraint.Or(
+            ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
+            ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType)),
+        Placements = [],
     };
 
     /// <inheritdoc />
