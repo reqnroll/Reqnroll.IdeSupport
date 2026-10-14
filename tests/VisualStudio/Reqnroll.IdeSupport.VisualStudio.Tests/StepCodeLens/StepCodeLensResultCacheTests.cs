@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
-using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Threading;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 using Xunit;
@@ -24,9 +23,12 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.StepCodeLens;
 /// </summary>
 public class StepCodeLensResultCacheTests
 {
-    // ThreadHelper's own JoinableTaskContext/Factory works outside a real VS host too — it lazily
-    // initializes against whatever thread first touches it rather than requiring devenv.exe.
-    private static readonly JoinableTaskFactory Jtf = ThreadHelper.JoinableTaskFactory;
+    // A private context rather than the ThreadHelper singleton: ThreadHelper's lazy initialization is not
+    // safe to race (xUnit runs test classes in parallel, and a contender can observe a half-initialized
+    // ThreadHelper and fault this class's type initializer, failing every test in it).
+#pragma warning disable VSSDK005 // No VS host here: there is no ThreadHelper singleton to share.
+    private static readonly JoinableTaskFactory Jtf = new JoinableTaskContext().Factory;
+#pragma warning restore VSSDK005
 
     private static readonly StepLensItem[] SampleItems =
     {
