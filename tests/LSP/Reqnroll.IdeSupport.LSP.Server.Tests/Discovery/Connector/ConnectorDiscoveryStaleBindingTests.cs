@@ -200,6 +200,28 @@ public class ConnectorDiscoveryStaleBindingTests : IDisposable
     }
 
     [Fact]
+    public void A1_a_stale_binding_with_several_scopes_is_dropped_and_counted_once()
+    {
+        // The runtime reports an attribute with two [Scope]s as two DTOs; they are one binding
+        // (ScopeNormalizer, issues #953/#1133), so the log counts it once.
+        var deletedFile = ProjectFile(Path.Combine("Support", "PriceCalculationHooks.cs"));
+        var step = GivenStep("a_removed_step", "#1|12|5");
+        var registry = Discover(new DiscoveryResult
+        {
+            StepDefinitions =
+            [
+                new StepDefinition { Type = step.Type, Regex = step.Regex, Method = step.Method, Expression = step.Expression, SourceLocation = step.SourceLocation, Scope = new StepScope { Tag = "@web" } },
+                new StepDefinition { Type = step.Type, Regex = step.Regex, Method = step.Method, Expression = step.Expression, SourceLocation = step.SourceLocation, Scope = new StepScope { FeatureTitle = "Checkout" } }
+            ],
+            Hooks = [],
+            SourceFiles = new Dictionary<string, string> { ["1"] = deletedFile }
+        });
+
+        registry.StepDefinitions.Should().BeEmpty();
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m => m.Message.Contains("Ignored 1 binding(s)")));
+    }
+
+    [Fact]
     public void A1_stale_paths_are_not_misreported_as_built_on_another_machine()
     {
         var deletedFile = ProjectFile(Path.Combine("Support", "PriceCalculationHooks.cs"));

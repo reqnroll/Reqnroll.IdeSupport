@@ -173,6 +173,39 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public void RunDiscovery_imports_the_runtimes_one_entry_per_scope_as_one_binding_per_attribute()
+    {
+        // Reqnroll registers one binding per scope, so one attribute with two [Scope]s (or a hook with
+        // two tags) arrives as several otherwise identical DTOs (issues #953, #1133). The registry
+        // holds one binding whose scope is the alternatives, the same shape Roslyn discovery produces.
+        StepDefinition Step(StepScope scope) => new()
+        {
+            Type = "Given", Regex = "^pay$", Method = "MyApp.Steps.Pay", SourceLocation = "Steps.cs|10|5", Scope = scope
+        };
+        Hook HookFor(string tag) => new()
+        {
+            Type = "BeforeScenario", Method = "MyApp.Steps.Setup", SourceLocation = "Steps.cs|20|5", Scope = new StepScope { Tag = tag }
+        };
+        GivenConnectorReturns(new DiscoveryResult
+        {
+            StepDefinitions = [Step(new StepScope { Tag = "@web" }), Step(new StepScope { FeatureTitle = "Checkout" })],
+            Hooks = [HookFor("@web"), HookFor("@smoke")]
+        });
+
+        var (registry, _) = CreateSut().RunDiscovery(
+            MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        var step = registry.StepDefinitions.Should().ContainSingle().Subject;
+        step.Scope!.Alternatives.Should().HaveCount(2);
+        step.Scope.ToString().Should().Be("(@web) or (Feature='Checkout')");
+        var hook = registry.Hooks.Should().ContainSingle().Subject;
+        hook.Scope!.Alternatives.Should().BeNull("tag-only scopes fold into one expression");
+        hook.Scope.Tag!.Evaluate(new[] { "@smoke" }).Should().BeTrue();
+        hook.Scope.Tag.Evaluate(new[] { "@web" }).Should().BeTrue();
+        hook.Scope.Tag.Evaluate(new[] { "@other" }).Should().BeFalse();
+    }
+
+    [Fact]
     public void RunDiscovery_invokes_the_factory_to_create_a_connector()
     {
         GivenConnectorReturns(SuccessfulResult());

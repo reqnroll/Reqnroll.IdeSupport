@@ -168,8 +168,8 @@ function toVscodeRange(range: {
 }
 
 /**
- * Queries every distinct target method and combines the results with the same `Failed` > `Passed`
- * precedence the server's own `TestOutcomeStore.Aggregate` uses. Returns `undefined` (render
+ * Queries every distinct target method and combines the results with the same precedence the
+ * server's own `TestOutcomeStore.Aggregate` uses (see `AGGREGATE_RANK`). Returns `undefined` (render
  * nothing) when every target comes back `found: false` — "the server hasn't heard about this
  * scenario this session," same as VS/Rider's "no run yet" state.
  */
@@ -193,14 +193,37 @@ async function fetchAggregateOutcome(
   return combineOutcomes(found);
 }
 
+/**
+ * Precedence used when combining aggregates, mirroring the server's `TestOutcomeStore.Aggregate`:
+ * Failed > Passed > Skipped > NotFound > None. An unrecognised aggregate ranks below all of them so
+ * it can never outrank a known state, and is never coerced to Passed.
+ */
+const AGGREGATE_RANK: ReadonlyMap<string, number> = new Map([
+  ['Failed', 4],
+  ['Passed', 3],
+  ['Skipped', 2],
+  ['NotFound', 1],
+  ['None', 0],
+]);
+const UNKNOWN_AGGREGATE_RANK = -1;
+
+function aggregateRank(aggregate: string): number {
+  return AGGREGATE_RANK.get(aggregate) ?? UNKNOWN_AGGREGATE_RANK;
+}
+
 /** `export`ed for unit testing — combines one `GetTestOutcomeResponse` per target method into one aggregate for the scenario. */
 export function combineOutcomes(
   responses: readonly GetTestOutcomeResponse[],
 ): GetTestOutcomeResponse {
-  const aggregate = responses.some((r) => r.aggregate === 'Failed') ? 'Failed' : 'Passed';
+  let aggregate: string | undefined;
+  for (const r of responses) {
+    if (aggregate === undefined || aggregateRank(r.aggregate) > aggregateRank(aggregate)) {
+      aggregate = r.aggregate;
+    }
+  }
   return {
     found: true,
-    aggregate,
+    aggregate: aggregate ?? 'None',
     rows: responses.flatMap((r) => r.rows),
     isRunning: responses.some((r) => r.isRunning),
     isStale: responses.some((r) => r.isStale),
@@ -214,8 +237,9 @@ export function combineOutcomes(
  * `export`ed for unit testing.
  */
 export function renderTitle(outcome: GetTestOutcomeResponse): string {
+  if (outcome.isRunning) return '⟳ Running';
   const suffix = outcome.isStale ? ' (stale)' : '';
-  if (outcome.aggregate !== 'Failed') return `✓ Passed${suffix}`;
+  if (outcome.aggregate !== 'Failed') return `${aggregateLabel(outcome.aggregate)}${suffix}`;
 
   const failedRows = outcome.rows.filter((r) => r.outcome === 'Failed');
   if (failedRows.length === 1) {
@@ -225,6 +249,21 @@ export function renderTitle(outcome: GetTestOutcomeResponse): string {
     return `✗ Failed${suffix} (${failedRows.length} of ${outcome.rows.length} rows)`;
   }
   return `✗ Failed${suffix}`;
+}
+
+/** The inline label for a non-Failed aggregate. Each state is distinct so a skipped or not-run scenario never reads as a pass. */
+function aggregateLabel(aggregate: string): string {
+  switch (aggregate) {
+    case 'Passed':
+      return '✓ Passed';
+    case 'Skipped':
+      return '⏭ Skipped';
+    case 'NotFound':
+    case 'None':
+      return 'Not run';
+    default:
+      return '? Unknown';
+  }
 }
 
 function describeFailedRow(row: TestOutcomeRow): string {
@@ -243,7 +282,9 @@ function describeFailedRow(row: TestOutcomeRow): string {
  */
 export function buildTooltip(outcome: GetTestOutcomeResponse): string | undefined {
   if (outcome.aggregate !== 'Failed') {
-    return outcome.isStale ? '✓ Passed (stale — rerun to confirm)' : undefined;
+    return outcome.isStale
+      ? `${aggregateLabel(outcome.aggregate)} (stale — rerun to confirm)`
+      : undefined;
   }
 
   const failedRows = outcome.rows.filter((r) => r.outcome === 'Failed');
