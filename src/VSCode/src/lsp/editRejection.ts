@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Middleware, ResponseError } from 'vscode-languageclient/node';
-import { showEditRejected } from '../logging/appNotify';
+import { logWarn, showEditRejected } from '../logging/appNotify';
+import { SaveTracker, saveTracker } from './saveTracker';
 
 /**
  * LSP `RequestFailed`: the server's code for an edit it refuses for a reason the user can fix
@@ -28,21 +29,28 @@ export function asEditRejection(err: unknown): string | undefined {
  * unchanged, so the client's default handling (logging, the generic toast) still applies.
  * An empty edit list from the server — "already formatted" — never reaches the catch and stays
  * silent.
+ *
+ * **Implicit triggers never get a modal.** A rejection that arrives while the document is being
+ * saved (`editor.formatOnSave`, see {@link SaveTracker}) is only logged: the user did not ask for a
+ * format, and a half-typed file would otherwise raise a dialog on every save. Format-on-type goes
+ * through `textDocument/onTypeFormatting`, which neither this middleware nor the server ever
+ * rejects. (Format-on-paste arrives as a range format and cannot be told apart from Format
+ * Selection, so it is treated as explicit.)
  */
-export function createEditRejectionMiddleware(): Middleware {
+export function createEditRejectionMiddleware(tracker: SaveTracker = saveTracker): Middleware {
   return {
     provideDocumentFormattingEdits: async (document, options, token, next) => {
       try {
         return await next(document, options, token);
       } catch (err) {
-        return rejectedOrRethrow<vscode.TextEdit[]>(err);
+        return rejectedOrRethrow<vscode.TextEdit[]>(err, tracker.isSaving(document.uri.toString()));
       }
     },
     provideDocumentRangeFormattingEdits: async (document, range, options, token, next) => {
       try {
         return await next(document, range, options, token);
       } catch (err) {
-        return rejectedOrRethrow<vscode.TextEdit[]>(err);
+        return rejectedOrRethrow<vscode.TextEdit[]>(err, tracker.isSaving(document.uri.toString()));
       }
     },
   };
@@ -51,10 +59,16 @@ export function createEditRejectionMiddleware(): Middleware {
 /**
  * Shows `err` as a rejection and returns `null` ("no edits") when it is one, otherwise rethrows.
  * Shared with the rename middleware so every standard request treats rejections the same way.
+ * When `implicit` (an automatic trigger such as format-on-save) the rejection is only logged, never
+ * shown.
  */
-export function rejectedOrRethrow<T>(err: unknown): T | null {
+export function rejectedOrRethrow<T>(err: unknown, implicit = false): T | null {
   const rejection = asEditRejection(err);
   if (rejection === undefined) throw err;
-  void showEditRejected(rejection);
+  if (implicit) {
+    logWarn(`Format skipped on an automatic trigger: ${rejection}`);
+  } else {
+    void showEditRejected(rejection);
+  }
   return null;
 }

@@ -40,6 +40,7 @@ import {
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
 import { createEditRejectionMiddleware } from './lsp/editRejection';
+import { registerSaveTracking } from './lsp/saveTracker';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import {
   deferTelemetryTeardownUntil,
@@ -411,6 +412,8 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   // Permanent link styling for clickable tags (issue #921); fed by the tag-link middleware below.
   const tagLinkDecorations = new TagLinkDecorations().register();
   context.subscriptions.push(tagLinkDecorations);
+  // Lets the formatting middleware tell format-on-save from an explicit Format Document (issue #1132).
+  context.subscriptions.push(registerSaveTracking());
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: REQNROLL_LANGUAGE_ID, pattern: '**/*.feature' }],

@@ -6,6 +6,7 @@ import {
   createEditRejectionMiddleware,
   EDIT_REJECTED_CODE,
 } from '../../lsp/editRejection';
+import { SaveTracker } from '../../lsp/saveTracker';
 import { createRenameMiddleware } from '../../commands/renameStep';
 
 /** Stubs `vscode.window.showErrorMessage`, recording each call, for the duration of `fn`. */
@@ -60,7 +61,7 @@ suite('editRejection', () => {
   });
 
   suite('createEditRejectionMiddleware', () => {
-    const doc = {} as vscode.TextDocument;
+    const doc = { uri: vscode.Uri.parse('file:///doc.feature') } as vscode.TextDocument;
     const options = {} as vscode.FormattingOptions;
     const range = {} as vscode.Range;
     const token = {} as vscode.CancellationToken;
@@ -98,6 +99,62 @@ suite('editRejection', () => {
       assert.strictEqual(result, null);
       assert.strictEqual(calls.length, 1);
       assert.deepStrictEqual(calls[0].options, { modal: true });
+    });
+
+    test('a rejection while the document is being saved (format on save) is not shown', async () => {
+      const calls: { message: string; options: unknown }[] = [];
+      const tracker = new SaveTracker();
+      tracker.begin('file:///a.feature');
+      const mw = createEditRejectionMiddleware(tracker);
+      const saving = { uri: vscode.Uri.parse('file:///a.feature') } as vscode.TextDocument;
+
+      const result = await withErrorMessageStub(calls, () =>
+        Promise.resolve(
+          mw.provideDocumentFormattingEdits!(saving, options, token, () =>
+            Promise.reject(new ResponseError(-32803, 'no Feature could be parsed')),
+          ),
+        ),
+      );
+
+      assert.strictEqual(result, null, 'the save continues with no edits');
+      assert.strictEqual(calls.length, 0, 'no dialog on an automatic trigger');
+    });
+
+    test('the same rejection on a document that is not being saved (explicit Format Document) is shown', async () => {
+      const calls: { message: string; options: unknown }[] = [];
+      const tracker = new SaveTracker();
+      tracker.begin('file:///other.feature');
+      const mw = createEditRejectionMiddleware(tracker);
+      const explicit = { uri: vscode.Uri.parse('file:///a.feature') } as vscode.TextDocument;
+
+      await withErrorMessageStub(calls, () =>
+        Promise.resolve(
+          mw.provideDocumentFormattingEdits!(explicit, options, token, () =>
+            Promise.reject(new ResponseError(-32803, 'no Feature could be parsed')),
+          ),
+        ),
+      );
+
+      assert.strictEqual(calls.length, 1);
+    });
+
+    test('a range-format rejection while the document is being saved is not shown', async () => {
+      const calls: { message: string; options: unknown }[] = [];
+      const tracker = new SaveTracker();
+      tracker.begin('file:///a.feature');
+      const mw = createEditRejectionMiddleware(tracker);
+      const saving = { uri: vscode.Uri.parse('file:///a.feature') } as vscode.TextDocument;
+
+      const result = await withErrorMessageStub(calls, () =>
+        Promise.resolve(
+          mw.provideDocumentRangeFormattingEdits!(saving, range, options, token, () =>
+            Promise.reject(new ResponseError(-32803, 'no Feature could be parsed')),
+          ),
+        ),
+      );
+
+      assert.strictEqual(result, null);
+      assert.strictEqual(calls.length, 0);
     });
 
     test('a successful result, including an empty edit list, is passed through with no dialog', async () => {
