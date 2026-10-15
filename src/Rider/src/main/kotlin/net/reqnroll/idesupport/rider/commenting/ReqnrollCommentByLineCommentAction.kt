@@ -1,51 +1,58 @@
 package net.reqnroll.idesupport.rider.commenting
 
-import com.intellij.openapi.actionSystem.ActionUpdateThread
-import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.codeInsight.generation.actions.CommentByLineCommentAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import net.reqnroll.idesupport.rider.actions.ReqnrollNotify
+import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
 import net.reqnroll.idesupport.rider.lsp.ToggleCommentOutcome
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
- * Comment/Uncomment toggle for `.feature` files (issue #159). Neither VS nor VS Code has a native
- * `#`-comment understanding of Gherkin either — both redirect their own comment-toggle shortcut
+ * Comment/Uncomment toggle for `.feature` files (issues #159, #1151). Neither VS nor VS Code has a
+ * native `#`-comment understanding of Gherkin either — both redirect the IDE's own comment command
  * to the server's `workspace/executeCommand` (`reqnroll.toggleComment`), which replies with a
  * `workspace/applyEdit` the client's built-in LSP infrastructure applies natively. This mirrors
  * that design on Rider.
  *
- * **Not** an [com.intellij.openapi.editor.actionSystem.EditorActionHandler] decorating
- * `IdeActions.ACTION_COMMENT_LINE` — that was the first approach tried here and it doesn't work:
- * the actual `CommentByLineCommentAction` bound to that ID is a
- * `com.intellij.codeInsight.actions.MultiCaretCodeInsightAction`, not an `EditorAction`. It
- * hardcodes `new CommentByLineCommentHandler()` in its own `getHandler()` (ignoring
- * `EditorActionManager` entirely) and gates `isValidFor` on `LanguageCommenters.forLanguage`
- * finding a registered `Commenter` for the PSI file's language — confirmed by decompiling both
- * classes. `.feature` has no `Commenter` and no PSI language, so that action is simply disabled
- * for it and never reaches any wrapped `EditorActionHandler`.
+ * It intercepts the *command*, not a keystroke: `plugin.xml` registers this class with
+ * `overrides="true"` under the platform's own `CommentByLineComment` action ID, which is what every
+ * keymap binds its comment shortcuts to (`Ctrl+/` in the default keymap; `Ctrl+K,C`, `Ctrl+K,U`
+ * and friends in the Visual Studio keymaps). So whichever keymap the user runs, and however they
+ * rebind it, the shortcut reaches this class — nothing here names a key. Anywhere but a `.feature`
+ * file it is the platform's [CommentByLineCommentAction] unchanged.
  *
- * Instead, this is a plain [AnAction] bound to the *same* default `Ctrl+/` keystroke
- * (`plugin.xml`'s `<keyboard-shortcut>`), and [ReqnrollCommentTogglePromoter] suppresses the
- * built-in `CommentByLineComment` action from that keystroke's candidate list specifically for
- * `.feature` files, so this action fires instead without touching the shortcut for any other file
- * type.
+ * Decorating the action's `EditorActionHandler` does not work, and neither does an `AnAction` that
+ * merely competes for one keystroke (the earlier approach): the platform action is a
+ * `MultiCaretCodeInsightAction` that hardcodes its own handler and gates `isValidFor` on
+ * `LanguageCommenters.forLanguage` finding a `Commenter` for the PSI file's language — `.feature`
+ * has no `Commenter` and no PSI language, so the platform action is simply disabled there.
  */
-class ReqnrollToggleCommentAction : AnAction() {
-    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
-
+class ReqnrollCommentByLineCommentAction : CommentByLineCommentAction() {
     override fun update(e: AnActionEvent) {
-        val file = e.getData(CommonDataKeys.VIRTUAL_FILE)
-        e.presentation.isEnabledAndVisible =
-            e.project != null && e.getData(CommonDataKeys.EDITOR) != null &&
-                file != null && file.extension.equals("feature", ignoreCase = true)
+        if (!isFeatureEditor(e)) {
+            super.update(e)
+            return
+        }
+        e.presentation.isEnabledAndVisible = e.project != null && e.getData(CommonDataKeys.EDITOR) != null
     }
 
     override fun actionPerformed(e: AnActionEvent) {
+        if (!isFeatureEditor(e)) {
+            super.actionPerformed(e)
+            return
+        }
+        toggleFeatureComment(e)
+    }
+
+    private fun isFeatureEditor(e: AnActionEvent): Boolean =
+        isFeatureExtension(e.getData(CommonDataKeys.VIRTUAL_FILE)?.extension)
+
+    private fun toggleFeatureComment(e: AnActionEvent) {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
@@ -54,7 +61,7 @@ class ReqnrollToggleCommentAction : AnAction() {
         val (startLine, endLine) = selectionLines(editor)
 
         ReqnrollDebugLogger.info(
-            "ReqnrollToggleCommentAction: invoked for $uri, lines [$startLine..$endLine]")
+            "ReqnrollCommentByLineCommentAction: invoked for $uri, lines [$startLine..$endLine]")
 
         // ReqnrollRequestSender.toggleComment blocks the calling thread — actionPerformed() runs on
         // the EDT, so the request itself must run on a background thread, matching every other
@@ -65,7 +72,7 @@ class ReqnrollToggleCommentAction : AnAction() {
         ApplicationManager.getApplication().executeOnPooledThread {
             val outcome = ReqnrollRequestSender.toggleComment(project, uri, startLine, endLine)
             ReqnrollDebugLogger.info(
-                "ReqnrollToggleCommentAction: toggleComment outcome=$outcome")
+                "ReqnrollCommentByLineCommentAction: toggleComment outcome=$outcome")
             if (outcome is ToggleCommentOutcome.Rejected) {
                 ApplicationManager.getApplication().invokeLater {
                     if (!project.isDisposed) {
