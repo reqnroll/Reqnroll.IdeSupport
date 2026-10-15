@@ -287,11 +287,19 @@ jobs:
           }
           Write-Host "VSIX Identity Version: $actual"
 
+      # The VSIX tooling names the file after the project; stage a copy under the consolidated
+      # package name (issue #911) so the artifact carries it.
+      - name: Stage VSIX under package name
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staged | Out-Null
+          Copy-Item "src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/${{ env.CONFIGURATION }}/net481/*.vsix" "staged/Reqnroll.IdeSupport.VisualStudio.${{ needs.changes.outputs.build_version }}.vsix"
+
       - name: Upload VSIX candidate artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-vs-extension-vsix-candidate
-          path: src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/${{ env.CONFIGURATION }}/net481/*.vsix
+          name: reqnroll-ide-support-vs-candidate
+          path: staged/*.vsix
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -409,13 +417,13 @@ jobs:
       - name: Download VSIX candidate artifact
         uses: actions/download-artifact@v8
         with:
-          name: reqnroll-vs-extension-vsix-candidate
+          name: reqnroll-ide-support-vs-candidate
           path: vsix
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-vs-extension-vsix
+          name: reqnroll-ide-support-vs
           path: vsix/*.vsix
           if-no-files-found: error
 
@@ -541,12 +549,12 @@ jobs:
         working-directory: ${{ env.VSCODE_DIR }}
 
       - name: Package VSIX
-        run: npx @vscode/vsce package --out "reqnroll-ide-support-${{ github.sha }}.vsix"
+        run: npx @vscode/vsce package --out "Reqnroll.IdeSupport.VSCode.${{ needs.changes.outputs.build_version }}.vsix"
         working-directory: ${{ env.VSCODE_DIR }}
 
       - name: Verify VSIX version
         run: |
-          actual=$(unzip -p "reqnroll-ide-support-${{ github.sha }}.vsix" extension/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
+          actual=$(unzip -p "Reqnroll.IdeSupport.VSCode.${{ needs.changes.outputs.build_version }}.vsix" extension/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
           expected="${{ needs.changes.outputs.build_version }}"
           if [ "$actual" != "$expected" ]; then
             echo "::error::VSIX version is '$actual', expected '$expected'"
@@ -558,8 +566,8 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-ide-support-vsix
-          path: ${{ env.VSCODE_DIR }}/reqnroll-ide-support-*.vsix
+          name: reqnroll-ide-support-vscode
+          path: ${{ env.VSCODE_DIR }}/Reqnroll.IdeSupport.VSCode.*.vsix
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -730,11 +738,19 @@ jobs:
           -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
         working-directory: ${{ env.RIDER_DIR }}
 
+      # Gradle names the zip after the plugin; stage a copy under the consolidated package name
+      # (issue #911) so the artifact carries it.
+      - name: Stage plugin zip under package name
+        run: |
+          mkdir -p build/staged
+          cp build/distributions/*.zip "build/staged/Reqnroll.IdeSupport.Rider.${{ needs.changes.outputs.build_version }}.zip"
+        working-directory: ${{ env.RIDER_DIR }}
+
       - name: Upload plugin candidate artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-ide-support-rider-plugin-candidate
-          path: ${{ env.RIDER_DIR }}/build/distributions/*.zip
+          name: reqnroll-ide-support-rider-candidate
+          path: ${{ env.RIDER_DIR }}/build/staged/*.zip
           if-no-files-found: error
 
       # Only the raw Action log was available for a buildPlugin/verifyPlugin failure otherwise —
@@ -795,12 +811,12 @@ jobs:
       - name: Download plugin candidate artifact
         uses: actions/download-artifact@v8
         with:
-          name: reqnroll-ide-support-rider-plugin-candidate
+          name: reqnroll-ide-support-rider-candidate
           path: plugin
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-ide-support-rider-plugin
+          name: reqnroll-ide-support-rider
           path: plugin/*.zip
           if-no-files-found: error

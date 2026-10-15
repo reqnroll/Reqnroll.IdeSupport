@@ -355,4 +355,53 @@ public class FeatureTagIndexTests : IDisposable
         result.Select(t => t.Sample).Should().BeEquivalentTo("@smoke", "@wip");
         result.Single(t => t.Sample == "@smoke").UsageCount.Should().Be(2, "one occurrence in each owning project");
     }
+
+    [Fact]
+    public async Task Owners_resolving_to_the_same_project_file_are_merged_only_once()
+    {
+        // A multi-targeted project's membership index keys ownership per (project file, TFM), so
+        // ResolveOwners legitimately hands back the same LspReqnrollProject once per target
+        // framework even though all of them are the single project for that .csproj. Counts must
+        // not be multiplied by the number of TFMs (issue #943).
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        var project = RegisterOwner(uri, _root, hasBaseline: true,
+            indexedFiles: new[]
+            {
+                Path.Combine(_root, "Target.feature"),
+                Path.Combine(_root, "Sibling.feature")
+            });
+
+        // Two TFM keys of one project file both resolve back to the same instance.
+        _scopeManager.ResolveOwners(uri).Returns(new[] { project, project });
+
+        WriteFeature(_root, "Target.feature", FeatureWithTags("@smoke @wip"));
+        WriteFeature(_root, "Sibling.feature", FeatureWithTags("@smoke"));
+
+        var result = await CreateProvider().GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        result.Single(t => t.Sample == "@smoke").UsageCount.Should().Be(2,
+            "each feature file counts once regardless of how many target frameworks the owner resolves through");
+        result.Single(t => t.Sample == "@wip").UsageCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Removing_a_project_prunes_its_index_so_a_reloaded_project_scans_afresh()
+    {
+        var uri = DocumentUri.FromFileSystemPath(Path.Combine(_root, "Target.feature"));
+        var project = RegisterOwner(uri, _root, hasBaseline: false);
+        WriteFeature(_root, "Target.feature", FeatureWithTags("@smoke"));
+
+        var provider = CreateProvider();
+        await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        // Project unloaded: its cached index must be discarded.
+        _scopeManager.ProjectRemoved += Raise.Event<Action<LspReqnrollProject>>(project);
+
+        // Reloaded (same project file): a fresh index scans again, so the once-per-index first-scan
+        // telemetry event fires a second time. A retained index would keep suppressing it.
+        await provider.GetTagCandidatesAsync(uri, CancellationToken.None);
+
+        _telemetry.Received(2).SendEvent(
+            TelemetryEvents.TagIndexFirstScanCompleted, Arg.Any<Dictionary<string, object?>>());
+    }
 }

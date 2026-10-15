@@ -95,6 +95,21 @@ public class StepLiteralIndexTests
     }
 
     [Fact]
+    public void A_stray_bracket_inside_a_character_class_does_not_make_following_text_a_required_literal()
+    {
+        // [x)abc] is a single character class matching one of x, ), a, b, c -- the stray ')'
+        // inside it must not drop the nesting depth, or "abc" would be misread as a depth-0
+        // required literal even though the pattern never requires that text (issue #951).
+        var target = Binding(@"^[x)abc] step$");
+        var sut = CreateSut(target);
+
+        sut.GetCandidates("x step").Should().Contain(target);
+        sut.GetCandidates(") step").Should().Contain(target);
+        // A step genuinely lacking the trailing literal must still be excluded.
+        sut.GetCandidates("x nope").Should().NotContain(target);
+    }
+
+    [Fact]
     public void A_non_capturing_group_containing_nested_capturing_groups_does_not_leak_its_closing_paren_as_literal()
     {
         // (?:(cool)|(bad)) is what Cucumber Expression alternation compiles to when combined with
@@ -157,6 +172,19 @@ public class StepLiteralIndexTests
 
         sut.GetCandidates("foo count").Should().Contain(target);
         sut.GetCandidates("bar count").Should().Contain(target);
+    }
+
+    [Fact]
+    public void A_top_level_alternation_does_not_require_every_branch_as_literal()
+    {
+        // "^I have apples|I have pears$" -- a top-level (depth-0) "|" means the step need match
+        // only one branch, so neither "i have apples" nor "i have pears" is genuinely required
+        // text. Treating both as required literals wrongly excludes a step matching one branch.
+        var target = Binding(@"^I have apples|I have pears$");
+        var sut = CreateSut(target);
+
+        sut.GetCandidates("I have apples").Should().Contain(target);
+        sut.GetCandidates("I have pears").Should().Contain(target);
     }
 
     // ── Multiple bindings sharing literals ───────────────────────────────────

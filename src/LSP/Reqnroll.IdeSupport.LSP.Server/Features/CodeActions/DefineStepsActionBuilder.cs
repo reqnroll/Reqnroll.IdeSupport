@@ -3,6 +3,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common;
 using Reqnroll.IdeSupport.Common.Configuration;
+using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Diagnostics;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -23,16 +24,19 @@ internal sealed class DefineStepsActionBuilder
     private readonly IStepScaffoldService _scaffoldService;
     private readonly IFileSystemForIDE _fileSystem;
     private readonly ICSharpFileTextCache _csharpFileTextCache;
+    private readonly IIdeSupportLogger? _logger;
 
     /// <summary>Initializes a new instance of the <see cref="DefineStepsActionBuilder"/> class.</summary>
     public DefineStepsActionBuilder(
         IStepScaffoldService scaffoldService,
         IFileSystemForIDE    fileSystem,
-        ICSharpFileTextCache csharpFileTextCache)
+        ICSharpFileTextCache csharpFileTextCache,
+        IIdeSupportLogger?   logger = null)
     {
         _scaffoldService     = scaffoldService;
         _fileSystem          = fileSystem;
         _csharpFileTextCache = csharpFileTextCache;
+        _logger              = logger;
     }
 
     /// <summary>
@@ -66,7 +70,19 @@ internal sealed class DefineStepsActionBuilder
         var successfulAppends = new List<(string TargetPath, string ExistingContent, string AppendedContent)>();
         foreach (var candidate in target.AppendCandidates)
         {
-            var existingContent = ReadCandidateContent(candidate);
+            // A candidate that cannot be read (deleted or locked since it was ranked) is skipped, not
+            // allowed to fail the whole code-action request: the other targets, including the new-file
+            // fallback, are still offered (issue #1132 audit).
+            string existingContent;
+            try
+            {
+                existingContent = ReadCandidateContent(candidate);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger?.LogWarning($"DefineStepsActionBuilder: skipping unreadable append candidate '{candidate}': {ex.Message}");
+                continue;
+            }
             var appendedContent = StepDefinitionFileBuilder.AppendToFile(
                 existingContent, snippets, target.Indent, target.NewLine);
             if (appendedContent is not null)
