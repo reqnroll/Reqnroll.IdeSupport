@@ -33,9 +33,15 @@ import java.util.concurrent.TimeUnit
 object RiderTelemetryTransmitter {
     // Same Application Insights resource VS's TelemetryTransmitter.cs and VS Code's telemetry.ts
     // use (see TelemetryConnections.kt), so usage events from every Reqnroll IDE client land in the
-    // same place. Which resource (dev or prod) is fixed at build time (issue #1160).
-    private val INSTRUMENTATION_KEY = TelemetryConnections.instrumentationKey(TelemetryBuildConfig.ENVIRONMENT)
-    private val INGESTION_ENDPOINT = TelemetryConnections.ingestionEndpoint(TelemetryBuildConfig.ENVIRONMENT)
+    // same place. Which resource (dev or prod) is fixed at build time (issue #1160), except that the
+    // `runIde` dev sandbox (`reqnroll.devSandbox`, see build.gradle.kts) is always dev.
+    private val ENVIRONMENT = effectiveEnvironment(TelemetryBuildConfig.ENVIRONMENT, System.getProperty("reqnroll.devSandbox") == "true")
+    private val INSTRUMENTATION_KEY = TelemetryConnections.instrumentationKey(ENVIRONMENT)
+    private val INGESTION_ENDPOINT = TelemetryConnections.ingestionEndpoint(ENVIRONMENT)
+
+    /** A dev sandbox is always `dev`, so a `prod` build setting never sends a developer's `runIde` session to prod. */
+    internal fun effectiveEnvironment(buildEnvironment: String, isDevSandbox: Boolean): String =
+        if (isDevSandbox) "dev" else buildEnvironment
 
     /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
     internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING"

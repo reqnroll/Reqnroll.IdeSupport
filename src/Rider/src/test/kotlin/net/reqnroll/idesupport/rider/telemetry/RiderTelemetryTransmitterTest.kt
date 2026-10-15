@@ -20,6 +20,14 @@ class RiderTelemetryTransmitterTest {
     }
 
     @Test
+    fun `effectiveEnvironment is always dev in the dev sandbox`() {
+        assertEquals("dev", RiderTelemetryTransmitter.effectiveEnvironment("prod", true))
+        assertEquals("dev", RiderTelemetryTransmitter.effectiveEnvironment("dev", true))
+        assertEquals("prod", RiderTelemetryTransmitter.effectiveEnvironment("prod", false))
+        assertEquals("dev", RiderTelemetryTransmitter.effectiveEnvironment("dev", false))
+    }
+
+    @Test
     fun `resolveConnection falls back to the built-in connection when unset or blank`() {
         val builtIn = RiderTelemetryTransmitter.resolveConnection(null)
         val invalid = mutableListOf<String>()

@@ -73,7 +73,7 @@ If `src/Rider` is open as the VS Code workspace folder, `.vscode/tasks.json` wra
 The Gradle task `generateTelemetryBuildConfig` (a dependency of Kotlin compilation) writes
 `TelemetryBuildConfig.ENVIRONMENT`, which picks the dev or prod values in
 `TelemetryConnections.kt`. The default is `dev`; for a release build pass `-PtelemetryEnv=prod` or
-set `REQNROLL_TELEMETRY_ENV=prod` (e.g. `./gradlew buildPlugin -PtelemetryEnv=prod`). A prod build
+set `REQNROLL_TELEMETRY_ENV=prod` (e.g. `./gradlew buildPlugin -PtelemetryEnv=prod`); `runIde` is always dev regardless. A prod build
 fails while a `PROD_` value is a `TODO` placeholder. See the root
 [CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
 

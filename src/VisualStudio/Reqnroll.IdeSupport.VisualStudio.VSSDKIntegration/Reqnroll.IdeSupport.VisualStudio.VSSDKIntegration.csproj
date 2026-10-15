@@ -22,11 +22,15 @@
   <PropertyGroup>
     <!-- Which Application Insights resource this build reports to (#1160): Dev (default) or Prod.
          Set -p:TelemetryEnvironment=Prod, or the REQNROLL_TELEMETRY_ENV environment variable that the
-         VS Code and Rider builds also read, for a release build. Telemetry\InstrumentationKey.<env>.txt
-         is embedded as InstrumentationKey.txt. -->
+         VS Code and Rider builds also read, for a release build. A Debug build is always Dev, whatever
+         is requested (TelemetryEffectiveEnvironment), so a stray REQNROLL_TELEMETRY_ENV=prod in a
+         developer's shell cannot send F5 sessions to the prod resource. Telemetry\InstrumentationKey.<env>.txt
+         for the effective environment is embedded as InstrumentationKey.txt. -->
     <TelemetryEnvironment Condition="'$(TelemetryEnvironment)' == ''">$(REQNROLL_TELEMETRY_ENV)</TelemetryEnvironment>
     <TelemetryEnvironment Condition="'$(TelemetryEnvironment)' == ''">Dev</TelemetryEnvironment>
-    <TelemetryConnectionFile>Telemetry\InstrumentationKey.$(TelemetryEnvironment).txt</TelemetryConnectionFile>
+    <TelemetryEffectiveEnvironment>$(TelemetryEnvironment)</TelemetryEffectiveEnvironment>
+    <TelemetryEffectiveEnvironment Condition="'$(Configuration)' == 'Debug'">Dev</TelemetryEffectiveEnvironment>
+    <TelemetryConnectionFile>Telemetry\InstrumentationKey.$(TelemetryEffectiveEnvironment).txt</TelemetryConnectionFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -101,7 +105,7 @@
   <Target Name="ValidateTelemetryConnection" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(TelemetryEnvironment)' != 'Dev' And '$(TelemetryEnvironment)' != 'Prod'"
            Text="TelemetryEnvironment must be 'Dev' or 'Prod' (was '$(TelemetryEnvironment)')." />
-    <Error Condition="'$(TelemetryEnvironment)' == 'Prod' And $([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\$(TelemetryConnectionFile)').Contains('TODO'))"
+    <Error Condition="'$(TelemetryEffectiveEnvironment)' == 'Prod' And $([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\$(TelemetryConnectionFile)').Contains('TODO'))"
            Text="$(TelemetryConnectionFile) still contains a TODO placeholder; paste the real Application Insights connection string before a Prod build." />
   </Target>
 

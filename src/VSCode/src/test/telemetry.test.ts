@@ -14,6 +14,7 @@ import {
   registerTelemetry,
   resetTelemetryReporterForTests,
   resolveConnectionString,
+  effectiveTelemetryEnvironment,
   sendTelemetryEvent,
   withClientIdentity,
 } from '../telemetry';
@@ -76,6 +77,21 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
+  suite('effectiveTelemetryEnvironment (#1160)', () => {
+    test('a development host is always dev, whatever the build asked for', () => {
+      const dev = vscode.ExtensionMode.Development;
+      assert.strictEqual(effectiveTelemetryEnvironment('prod', dev), 'dev');
+      assert.strictEqual(effectiveTelemetryEnvironment('dev', dev), 'dev');
+    });
+
+    test('other modes use the build-time environment', () => {
+      for (const mode of [vscode.ExtensionMode.Production, vscode.ExtensionMode.Test]) {
+        assert.strictEqual(effectiveTelemetryEnvironment('prod', mode), 'prod');
+        assert.strictEqual(effectiveTelemetryEnvironment('dev', mode), 'dev');
+      }
+    });
+  });
+
   suite('resolveConnectionString (#889)', () => {
     const builtIn = resolveConnectionString(undefined);
 

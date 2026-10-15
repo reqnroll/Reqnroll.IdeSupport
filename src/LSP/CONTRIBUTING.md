@@ -328,8 +328,9 @@ in `devenv.exe` and `CodeLensHostLogger.Instance` in the CodeLens ServiceHub hos
   (`src/VSCode/src/logging/telemetryDebugLog.ts`) and `RiderTelemetryDebugLog.kt`
   (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/telemetry/RiderTelemetryDebugLog.kt`).
 - **Sending telemetry from a dev build.** Nothing extra is needed: development builds (VS `DEBUG`,
-  VS Code Development host, Rider `runIde`) send to the dev Application Insights resource embedded
-  at build time (`REQNROLL_TELEMETRY_ENV`, default `dev`; see the root `CONTRIBUTING.md`) unless
+  VS Code Development host, Rider `runIde`) always send to the dev Application Insights resource
+  (`REQNROLL_TELEMETRY_ENV` defaults to `dev`, and a development build ignores `prod`; see the root
+  `CONTRIBUTING.md`) unless
   `REQNROLL_TELEMETRY_ENABLED` turns telemetry off. To send to your own resource instead, set
   `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` to its connection string before launching the IDE
   (the Rider dev container forwards it from the host); it replaces the embedded one. See

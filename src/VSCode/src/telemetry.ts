@@ -4,14 +4,20 @@ import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { createTelemetryDebugLogFromEnvironment } from './logging/telemetryDebugLog';
 import { logInfo } from './logging/appNotify';
 import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
-import { builtInConnectionString } from './telemetryConnections';
+import { builtInConnectionString, TelemetryEnvironment } from './telemetryConnections';
 import { TELEMETRY_ENVIRONMENT } from './generated/telemetryEnvironment';
 
 // Same Application Insights resource VS's TelemetryTransmitter uses (see
 // src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.*.txt)
 // so usage events from every Reqnroll IDE client land in the same place. Which resource (dev or
-// prod) is fixed at build time; see telemetryConnections.ts.
-const CONNECTION_STRING = builtInConnectionString(TELEMETRY_ENVIRONMENT);
+// prod) is fixed at build time, except that an extension running from source (F5,
+// `ExtensionMode.Development`) is always dev; see telemetryConnections.ts.
+export function effectiveTelemetryEnvironment(
+  buildEnvironment: TelemetryEnvironment,
+  extensionMode: vscode.ExtensionMode,
+): TelemetryEnvironment {
+  return extensionMode === vscode.ExtensionMode.Development ? 'dev' : buildEnvironment;
+}
 
 /**
  * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
@@ -21,14 +27,15 @@ const CONNECTION_STRING = builtInConnectionString(TELEMETRY_ENVIRONMENT);
 export function resolveConnectionString(
   override: string | undefined,
   onInvalid?: (message: string) => void,
+  builtIn: string = builtInConnectionString(TELEMETRY_ENVIRONMENT),
 ): string {
   const value = override?.trim();
-  if (!value) return CONNECTION_STRING;
+  if (!value) return builtIn;
   if (!hasInstrumentationKey(value)) {
     onInvalid?.(
       'REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING has no InstrumentationKey; ignoring it.',
     );
-    return CONNECTION_STRING;
+    return builtIn;
   }
   return value;
 }
@@ -143,7 +150,12 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
 
   const connectionOverride = process.env.REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING;
   breaker = newBreaker();
-  const created = new TelemetryReporter(resolveConnectionString(connectionOverride, logInfo));
+  const builtIn = builtInConnectionString(
+    effectiveTelemetryEnvironment(TELEMETRY_ENVIRONMENT, context.extensionMode),
+  );
+  const created = new TelemetryReporter(
+    resolveConnectionString(connectionOverride, logInfo, builtIn),
+  );
   reporter = created;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),

@@ -57,7 +57,7 @@ doesn't seem to be running" confusion.
 The extension embeds one of `Telemetry/InstrumentationKey.Dev.txt` / `InstrumentationKey.Prod.txt`
 (from `Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration`) as the built-in Application Insights
 connection string. The default is **Dev**; for a release build pass `-p:TelemetryEnvironment=Prod`
-or set `REQNROLL_TELEMETRY_ENV=prod`. A Prod build fails while the Prod file still contains a
+or set `REQNROLL_TELEMETRY_ENV=prod`; a **Debug** build is always Dev regardless. A Prod build fails while the Prod file still contains a
 `TODO` placeholder. See the root [CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
 
 ## Local install of a dev build

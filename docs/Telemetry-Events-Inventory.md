@@ -55,9 +55,12 @@ Development builds (#1160, replacing the #889 "development-build guard"): there 
 guard that silences a Debug build (VS), the VS Code F5 host or Rider's `runIde` sandbox. They send
 to whichever resource they were built for — the **dev** resource by default, since `dev` is the
 default `REQNROLL_TELEMETRY_ENV` — so `REQNROLL_TELEMETRY_ENABLED` is the only switch needed to
-turn sending on or off. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
-redirect to your own resource. (Building with `REQNROLL_TELEMETRY_ENV=prod` and running that build
-from the IDE does send to prod; that is your explicit choice.)
+turn sending on or off. The `prod` selection is tied to the build kind: a VS `Debug` build
+(`TelemetryEffectiveEnvironment`), the VS Code Extension Development host
+(`effectiveTelemetryEnvironment`, `ExtensionMode.Development`) and Rider's `runIde` sandbox
+(`effectiveEnvironment`, `reqnroll.devSandbox`) are **always dev**, whatever `REQNROLL_TELEMETRY_ENV`
+requests; only a Release/packaged build can report to prod. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
+redirect to your own resource.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in

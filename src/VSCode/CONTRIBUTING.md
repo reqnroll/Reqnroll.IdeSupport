@@ -186,7 +186,7 @@ described below.
 `npm run compile` (and so `npm run build:vsix`, via `vscode:prepublish`) first runs
 `scripts/generate-telemetry-environment.mjs`, which writes the git-ignored
 `src/generated/telemetryEnvironment.ts`. The default is `dev`; for a release build set
-`REQNROLL_TELEMETRY_ENV=prod` (e.g. `REQNROLL_TELEMETRY_ENV=prod npm run build:vsix`). The
+`REQNROLL_TELEMETRY_ENV=prod` (e.g. `REQNROLL_TELEMETRY_ENV=prod npm run build:vsix`); the F5 Extension Development Host is always dev regardless. The
 connection strings themselves are in `src/telemetryConnections.ts`; a prod build fails while the
 prod string is a `TODO` placeholder. See the root [CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
 
