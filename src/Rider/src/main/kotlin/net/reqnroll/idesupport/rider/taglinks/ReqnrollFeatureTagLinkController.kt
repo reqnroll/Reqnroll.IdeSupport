@@ -55,7 +55,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
  * clickable without holding a key. Hovering one (no modifier needed, after a short delay) shows its target and how
  * to follow it. Ctrl/Cmd+hover adds the hand cursor and Ctrl/Cmd+click opens the link in the browser.
  *
- * Only http(s) targets are opened - see [TagLinkSupport.isOpenableUrl]. Each followed link reports the
+ * Any scheme except the blocked ones is opened - see [TagLinkSupport.isOpenableUrl]. Each followed link reports the
  * "TagLink command executed" telemetry event, which carries no properties (the URL and tag text are never sent).
  */
 class ReqnrollFeatureTagLinkController : EditorFactoryListener {

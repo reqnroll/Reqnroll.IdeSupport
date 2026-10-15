@@ -140,6 +140,48 @@ public class HookMatchCountCodeLensHandlerTests
         result[0].Command!.Title.Should().Be("2 scenarios matched");
     }
 
+    // A hook scoped by several [Scope]s / hook tags is one binding whose alternatives are OR-ed
+    // (ScopeNormalizer, issues #953/#1133): the lens counts the union, not just the first scope's scenarios.
+    private async Task<string?> TitleForHookScopedBy(params ScopeSpec[] scopes)
+    {
+        var hook = new ProjectHookBinding(
+            new ProjectBindingImplementation("MyHook", parameterTypes: null, new SourceLocation("/workspace/Hooks.cs", 5, 1)),
+            ScopeNormalizer.Build(scopes, new Reqnroll.IdeSupport.LSP.Core.TagExpressions.ReqnrollTagExpressionParser()),
+            HookType.BeforeScenario, hookOrder: null, error: null);
+        var registry = ProjectBindingRegistry.FromBindings(Array.Empty<ProjectStepDefinitionBinding>(), new[] { hook });
+        _registryLookup.GetRegistryForUri(CsUri).Returns(registry);
+        const string feature = "Feature: F\n@web\nScenario: Tagged\n    Given a step\nScenario: Untagged\n    Given a step\n";
+        var matchSet = BuildMatchSet(feature, registry, FeatureUri.ToString());
+        _matchService.GetAll(Arg.Any<IReadOnlyCollection<ProjectOwner>?>()).Returns(new[] { matchSet });
+
+        var result = await CreateSut().HandleAsync(RequestFor(CsUri), CancellationToken.None);
+
+        return result.Should().ContainSingle().Subject.Command!.Title;
+    }
+
+    [Fact]
+    public async Task Handle_hook_with_tag_and_feature_scopes_counts_scenarios_matching_either()
+    {
+        (await TitleForHookScopedBy(new ScopeSpec("@web", null, null), new ScopeSpec(null, "F", null)))
+            .Should().Be("2 scenarios matched", "the Feature scope matches both scenarios and the tag scope only one of them");
+    }
+
+    [Fact]
+    public async Task Handle_hook_with_tag_and_other_feature_scopes_counts_only_the_tag_matches()
+    {
+        (await TitleForHookScopedBy(new ScopeSpec("@web", null, null), new ScopeSpec(null, "Other", null)))
+            .Should().Be("1 scenario matched");
+    }
+
+    [Fact]
+    public async Task Handle_hook_with_a_bare_scope_alternative_matches_every_scenario()
+    {
+        // An unrestricted alternative makes the binding unrestricted, so the lens shows the static
+        // label rather than a count (issue #403).
+        (await TitleForHookScopedBy(new ScopeSpec(null, null, null), new ScopeSpec("@web", null, null)))
+            .Should().Be("all scenarios");
+    }
+
     [Fact]
     public async Task Handle_hook_matching_no_scenarios_still_renders_the_lens_at_zero()
     {

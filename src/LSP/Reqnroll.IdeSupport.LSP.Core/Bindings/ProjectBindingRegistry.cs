@@ -411,7 +411,7 @@ public record ProjectBindingRegistry
     /// <c>(StepDefinitionType, Method, ParameterTypes)</c> rather than source line -- an edit
     /// elsewhere in the file shifts line numbers without changing binding identity, and line
     /// number is deliberately excluded from this comparison. Returns <see langword="true"/> if a
-    /// binding for this file was added, removed, had its matched expression change, or had its
+    /// binding for this file was added, removed, had its matched expression or scope change, or had its
     /// <see cref="ProjectBinding.Error"/> change; edits to method bodies, comments, or anything
     /// else that doesn't touch either report no change.
     /// </summary>
@@ -433,6 +433,12 @@ public record ProjectBindingRegistry
     /// on this method to decide whether to notify (<c>ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync</c>)
     /// would silently skip it.
     /// </para>
+    /// <para>
+    /// The scope (formatted via <see cref="Documents.BindingScope.ToString"/>) is included for the same
+    /// reason: adding or changing a <c>[Scope]</c> changes which scenarios the binding matches without
+    /// touching its expression, so the step-usage CodeLens and match cache would otherwise stay stale
+    /// until the next full rebuild. <see cref="HasHookChanges"/> has always compared hook scopes.
+    /// </para>
     /// </remarks>
     public static bool HasExpressionChanges(
         ProjectBindingRegistry before, ProjectBindingRegistry after, string sourceFile)
@@ -441,7 +447,7 @@ public record ProjectBindingRegistry
             $"{b.StepDefinitionType}|{b.Implementation.Method}|{string.Join(",", b.Implementation.ParameterTypes)}";
 
         static string Signature(ProjectStepDefinitionBinding b) =>
-            $"{b.Expression}|{b.Error}";
+            $"{b.Expression}|{b.Scope?.ToString() ?? string.Empty}|{b.Error}";
 
         bool OwnedByFile(ProjectStepDefinitionBinding b) =>
             IsSameSourceFile(b.Implementation.SourceLocation?.SourceFile, sourceFile);

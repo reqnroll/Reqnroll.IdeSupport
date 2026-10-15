@@ -3,6 +3,7 @@ package net.reqnroll.idesupport.rider.actions
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -22,7 +23,11 @@ class FindUnusedStepDefinitionsAction : AnAction() {
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
-        e.presentation.isEnabledAndVisible = e.project != null
+        // Always enabled (reachable through Find Action); in an editor context menu only for C#
+        // files, so it doesn't appear in the .feature context menu or in every other editor
+        // (issue #1118).
+        e.presentation.isEnabledAndVisible = e.project != null &&
+            (!e.isFromContextMenu || isCSharpContextMenuFile(e.getData(CommonDataKeys.VIRTUAL_FILE)?.extension))
     }
 
     override fun actionPerformed(e: AnActionEvent) {
@@ -44,12 +49,12 @@ class FindUnusedStepDefinitionsAction : AnAction() {
         if (response == null) {
             ReqnrollNotify.error(
                 project, "The Reqnroll LSP server is not running or did not respond.",
-                "Find Unused Step Definitions")
+                "Find Unused Step Definitions in Projects")
             return
         }
 
         if (response.items.isEmpty()) {
-            ReqnrollNotify.info(project, "No unused step definitions found.", "Find Unused Step Definitions")
+            ReqnrollNotify.info(project, "No unused step definitions found.", "Find Unused Step Definitions in Projects")
             return
         }
 
@@ -75,7 +80,7 @@ class FindUnusedStepDefinitionsAction : AnAction() {
                 project,
                 "This step definition's source isn't on this machine.$where " +
                     "Rebuild the project locally to navigate to it.",
-                "Find Unused Step Definitions")
+                "Find Unused Step Definitions in Projects")
             return
         }
 
@@ -83,6 +88,14 @@ class FindUnusedStepDefinitionsAction : AnAction() {
     }
 
     companion object {
+        /**
+         * `.cs` only: Find Unused is offered from the C# editor context menu, not the `.feature`
+         * one (issue #1118) — the scan is workspace-wide, so it isn't feature-file specific, but
+         * keeping it C#-side stops it competing with Find Hooks in the feature menu.
+         */
+        internal fun isCSharpContextMenuFile(extension: String?): Boolean =
+            extension.equals("cs", ignoreCase = true)
+
         /** Pulled out to `internal` (rather than a private member function) purely so it's unit-testable without an AnAction/platform fixture. */
         internal fun renderLabel(item: UnusedStepDefinitionItem): String {
             val name = listOfNotNull(item.className, item.methodName).joinToString(".")

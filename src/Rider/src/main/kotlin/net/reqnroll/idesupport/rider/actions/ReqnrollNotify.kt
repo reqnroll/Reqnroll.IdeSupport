@@ -22,6 +22,16 @@ object ReqnrollNotify {
         Messages.showWarningDialog(project, message, title)
     }
 
+    /**
+     * Shows the language server's reason for rejecting an edit (rename, comment toggle, …) in a modal
+     * dialog and mirrors it to the curated "Reqnroll" console (issue #1132). The single place edit
+     * rejections are presented in Rider; must be called on the EDT.
+     */
+    fun editRejected(project: Project, message: String, title: String) {
+        ReqnrollDebugLogger.info("$title: rejected by server: $message")
+        Messages.showWarningDialog(project, message, title)
+    }
+
     fun error(project: Project, message: String, title: String) {
         ReqnrollDebugLogger.error("$title: $message")
         Messages.showErrorDialog(project, message, title)

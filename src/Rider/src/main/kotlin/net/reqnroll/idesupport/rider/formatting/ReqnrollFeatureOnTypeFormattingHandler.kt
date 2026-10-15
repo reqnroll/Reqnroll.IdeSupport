@@ -20,7 +20,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
  * `GherkinFormattingHandler.cs`) when `|` is typed in a `.feature` file.
  *
  * Rider's platform has no generic client-side bridge for on-type formatting — unlike whole-document
- * formatting's `LspFormattingService` (see `ReqnrollLspServerDescriptor.lspFormattingSupport`),
+ * formatting's `ReqnrollFormattingService`,
  * confirmed by enumerating every class under `com.intellij.platform.lsp.api.customization` in the
  * real 2024.3.5 jar: nothing exists for it. So this is manual client glue, the same pattern already
  * used for CodeLens/inlay hints/semantic tokens elsewhere in this plugin.
