@@ -50,9 +50,15 @@ internal sealed class CommentToggleService
         _logger.LogTrace(
             "CommentToggleService: sending reqnroll.toggleComment params={ParamsJson}", paramsJson);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(LspStandardMethodNames.WorkspaceExecuteCommand, paramsJson, cancellationToken)
+        var (result, error) = await _pipe
+            .SendRequestToServerWithErrorAsync(LspStandardMethodNames.WorkspaceExecuteCommand, paramsJson, cancellationToken)
             .ConfigureAwait(false);
+
+        // A user-correctable rejection (-32803: the document is not open in the server) is surfaced to
+        // the caller to show; any other error keeps the old behaviour (already logged by the pipe), so
+        // an unexpected failure or ContentModified never pops a dialog (issue #1132).
+        if (EditRejection.TryCreateException(error) is { } rejection)
+            throw rejection;
 
         _logger.LogTrace(
             "CommentToggleService: server response = {Result}", result is null ? "<null>" : result.ToString());

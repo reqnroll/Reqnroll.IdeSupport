@@ -11,6 +11,8 @@ import './lsp/lspInspectorLogger.test';
 import './lsp/lspInspectorFormatConformance.test';
 import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
+import './lsp/editRejection.test';
+import './lsp/saveTracker.test';
 import './lsp/manualDocumentSync.test';
 import './lsp/serverLifecycleTelemetry.test';
 import './lsp/serverRestart.test';

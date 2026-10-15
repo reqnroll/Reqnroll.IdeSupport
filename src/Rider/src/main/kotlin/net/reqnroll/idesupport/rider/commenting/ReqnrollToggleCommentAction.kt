@@ -6,8 +6,10 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
+import net.reqnroll.idesupport.rider.actions.ReqnrollNotify
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
+import net.reqnroll.idesupport.rider.lsp.ToggleCommentOutcome
 import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
@@ -54,16 +56,23 @@ class ReqnrollToggleCommentAction : AnAction() {
         ReqnrollDebugLogger.info(
             "ReqnrollToggleCommentAction: invoked for $uri, lines [$startLine..$endLine]")
 
-        // ReqnrollRequestSender.toggleComment uses sendRequestSync, which blocks the calling
-        // thread — actionPerformed() runs on the EDT, so the request itself must run on a
-        // background thread, matching every other Reqnroll request-sender caller's identical
-        // rationale. The actual edit arrives asynchronously via the server's own
-        // workspace/applyEdit request, applied natively by Rider's platform Lsp4jClient — this
-        // action has nothing further to do once the command is dispatched.
+        // ReqnrollRequestSender.toggleComment blocks the calling thread — actionPerformed() runs on
+        // the EDT, so the request itself must run on a background thread, matching every other
+        // Reqnroll request-sender caller's identical rationale. The actual edit arrives
+        // asynchronously via the server's own workspace/applyEdit request, applied natively by
+        // Rider's platform Lsp4jClient — once the command is dispatched there is nothing further to
+        // do, except show the reason when the server rejects it (issue #1132).
         ApplicationManager.getApplication().executeOnPooledThread {
-            val dispatched = ReqnrollRequestSender.toggleComment(project, uri, startLine, endLine)
+            val outcome = ReqnrollRequestSender.toggleComment(project, uri, startLine, endLine)
             ReqnrollDebugLogger.info(
-                "ReqnrollToggleCommentAction: toggleComment dispatched=$dispatched")
+                "ReqnrollToggleCommentAction: toggleComment outcome=$outcome")
+            if (outcome is ToggleCommentOutcome.Rejected) {
+                ApplicationManager.getApplication().invokeLater {
+                    if (!project.isDisposed) {
+                        ReqnrollNotify.editRejected(project, outcome.message, "Comment/Uncomment")
+                    }
+                }
+            }
         }
     }
 

@@ -68,11 +68,11 @@
       },
       {
         "command": "reqnroll.findUnusedStepDefinitions",
-        "title": "Reqnroll: Find Unused Step Definitions"
+        "title": "Reqnroll: Find Unused Step Definitions in Projects"
       },
       {
         "command": "reqnroll.goToHooks",
-        "title": "Reqnroll: Go to Hooks"
+        "title": "Reqnroll: Find Hooks"
       },
       {
         "command": "reqnroll.openTagLink",
@@ -92,7 +92,7 @@
       },
       {
         "command": "reqnroll.renameStep",
-        "title": "Reqnroll: Rename Step"
+        "title": "Reqnroll: Rename Step..."
       },
       {
         "command": "reqnroll.renameStepOrSymbol",
@@ -120,29 +120,19 @@
     "menus": {
       "editor/context": [
         {
-          "command": "reqnroll.toggleComment",
-          "when": "editorLangId == reqnroll",
-          "group": "1_modification"
-        },
-        {
           "command": "reqnroll.goToHooks",
           "when": "editorLangId == reqnroll",
-          "group": "navigation@90"
+          "group": "reqnroll@10"
         },
         {
-          "command": "reqnroll.findStepUsages",
+          "command": "reqnroll.findUnusedStepDefinitions",
           "when": "editorLangId == csharp",
-          "group": "navigation@90"
-        },
-        {
-          "command": "reqnroll.defineSteps",
-          "when": "editorLangId == reqnroll",
-          "group": "1_modification@10"
+          "group": "reqnroll@20"
         },
         {
           "command": "reqnroll.renameStep",
           "when": "editorLangId == reqnroll || editorLangId == csharp",
-          "group": "1_modification@20"
+          "group": "reqnroll@30"
         }
       ],
       "commandPalette": [
@@ -309,13 +299,13 @@
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "mocha": "^12.0.3",
     "prettier": "^3.9.9",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.0",
+    "typescript-eslint": "^8.71.1",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.3.2"
   },
