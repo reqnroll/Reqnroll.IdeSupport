@@ -296,7 +296,7 @@ visible; `DurationBucket` the search cost.
 |---|---|
 | **Emitter** | `CommentToggleHandler` |
 | **When** | After a comment/uncomment `workspace/executeCommand` round trip |
-| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*), `ResolvedMode` (`"Comment"` \| `"Uncomment"` — the direction the request actually took, issue #861; equals `Mode` unless `Mode` is `Toggle`, where it records whether the toggle added or removed comments. It is the service's decision (`GherkinCommentToggleResult.Uncommented`), reported even when no edit was needed, e.g. an `Uncomment` over uncommented lines), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below) |
+| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*), `ResolvedMode` (`"Comment"` \| `"Uncomment"` — the direction the request actually took, issue #861; equals `Mode` unless `Mode` is `Toggle`, where it records whether the toggle added or removed comments. It is the service's decision (`GherkinCommentToggleResult.Uncommented`), reported even when no edit was needed, e.g. an `Uncomment` over uncommented lines), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below). A request the server **rejects** because the document is not open in it (issue #1132: `-32803` error response) still sends the event, with `Mode`, `Erroneous` = `true` and `Reason` = `"DocumentUnknown"` instead of `ResolvedMode`/`LineCountBucket`. Successful events carry no `Erroneous` property. |
 
 **Analytics use.** Comment-toggle usage (a proxy for "users authoring Gherkin interactively"),
 which command flavor is used, and whether it is applied to single lines or blocks.
@@ -306,10 +306,10 @@ which command flavor is used, and whether it is applied to single lines or block
 |---|---|
 | **Emitter** | `FormattingHandler` |
 | **When** | After `textDocument/formatting` (whole document) or `textDocument/rangeFormatting` (selection) |
-| **Properties** | `IsSelectionFormatting` (bool), `EditCount` (int — edits returned that change the text; the handler returns one whole-range replacement, so this is 0 or 1, and 0 = already formatted), `DocumentLineBucket` (string — document length in lines; see "Bucket schemes" below) |
+| **Properties** | `IsSelectionFormatting` (bool), `EditCount` (int — edits returned that change the text; the handler returns one whole-range replacement, so this is 0 or 1, and 0 = already formatted), `DocumentLineBucket` (string — document length in lines; see "Bucket schemes" below). A request the server **rejects** (issue #1132: `-32803` error response) still sends the event, with `Erroneous` = `true` and `Reason` (`"DocumentUnknown"` — document not open in the server; `"NoFeatureParsed"` — no Feature could be parsed) instead of `EditCount`; `DocumentLineBucket` is omitted for `DocumentUnknown`. Successful events carry no `Erroneous` property. |
 
 **Analytics use.** Format-on-demand usage, whole-document vs selection split, how often the
-command is a no-op (`EditCount = 0`), and the document sizes it runs on. (On-type table
+command is a no-op (`EditCount = 0`) or rejected (`Erroneous = true`, by `Reason`), and the document sizes it runs on. (On-type table
 formatting is deliberately *not* telemetried — see the retired-event table below.)
 
 ### `GoToMatchingScenariosCommandExecuted`

@@ -15,6 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.Common.Telemetry;
@@ -491,19 +492,9 @@ public sealed class RenameHandler
         _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, properties);
     }
 
-    /// <summary>
-    /// Builds the <see cref="RpcErrorException"/> a <c>textDocument/rename</c> failure throws
-    /// (issue #650) so it reaches the client as a proper LSP <c>ResponseError</c> — code
-    /// <see cref="ErrorCodes.RequestFailed"/> ("the request was syntactically valid but could
-    /// not complete"), the human-readable reason as the error message, and
-    /// <paramref name="scope"/> (matching <see cref="ValidationError.Scope"/> where the failure
-    /// came from <see cref="StepRenameValidator"/>) as the error's <c>data</c> payload.
-    /// </summary>
+    // Rejections go through the shared EditRejected contract (issue #1132); see its remarks.
     private static RpcErrorException RenameFailedError(string message, string? scope = null) =>
-        // RpcErrorException's `error` parameter isn't nullable-annotated (it predates this
-        // codebase's NRT adoption), but a null `data` is handled fine at the wire level —
-        // ErrorMessage.Data is [JsonProperty(NullValueHandling = NullValueHandling.Ignore)].
-        new(ErrorCodes.RequestFailed, scope!, message);
+        EditRejected.Error(message, scope);
 
     /// <summary>
     /// Resolves the source location to search for feature-step usages of <paramref name="binding"/>:

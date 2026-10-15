@@ -22,6 +22,14 @@ public class LspInterceptingPipeServerErrorLogLevelTests
         LspInterceptingPipe.ServerErrorLogLevel(error).Should().Be(LogLevel.Debug);
     }
 
+    [Fact]
+    public void A_user_correctable_edit_rejection_is_logged_at_Information()
+    {
+        var error = new JObject { ["code"] = EditRejectedException.ErrorCode, ["message"] = "Parameter count mismatch" };
+
+        LspInterceptingPipe.ServerErrorLogLevel(error).Should().Be(LogLevel.Information);
+    }
+
     [Theory]
     [InlineData(-32603)] // InternalError
     [InlineData(-32601)] // MethodNotFound

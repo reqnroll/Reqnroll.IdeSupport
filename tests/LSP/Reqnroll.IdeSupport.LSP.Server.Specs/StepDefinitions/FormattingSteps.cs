@@ -22,6 +22,25 @@ public sealed class FormattingSteps
             .ConfigureAwait(false);
     }
 
+    [When(@"the document ""(.*)"" is formatted and an error is expected")]
+    public async Task WhenTheDocumentIsFormattedAndAnErrorIsExpected(string fileName)
+    {
+        await _ctx.EnsureStartedAsync().ConfigureAwait(false);
+        var uri = _ctx.UriFor(fileName);
+        _ctx.LastFormattingEdits = null;
+        _ctx.LastFormattingError = null;
+        try
+        {
+            _ctx.LastFormattingEdits = await _ctx.Harness.Client
+                .RequestFormattingAsync(uri)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _ctx.LastFormattingError = ex;
+        }
+    }
+
     [When(@"range formatting is requested for ""(.*)"" from line (\d+) to line (\d+)")]
     public async Task WhenRangeFormattingIsRequested(string fileName, int startLine, int endLine)
     {
@@ -54,6 +73,15 @@ public sealed class FormattingSteps
     {
         var count = _ctx.LastFormattingEdits?.Length ?? 0;
         count.Should().Be(0, "non-.feature files should not receive formatting edits");
+    }
+
+    [Then(@"formatting fails with error message ""(.*)""")]
+    public void ThenFormattingFailsWithErrorMessage(string expectedMessage)
+    {
+        _ctx.LastFormattingEdits.Should().BeNull("a rejected format must not also return edits");
+        _ctx.LastFormattingError.Should().NotBeNull(
+            "a document that cannot be formatted must surface as a JSON-RPC error response (issue #1132), not a silent empty result");
+        _ctx.LastFormattingError!.Message.Should().Contain(expectedMessage);
     }
 
     [Then(@"the formatted text contains ""(.*)""")]
