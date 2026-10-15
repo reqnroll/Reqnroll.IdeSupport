@@ -39,6 +39,8 @@ import {
   renameStepFromCSharp,
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
+import { createEditRejectionMiddleware } from './lsp/editRejection';
+import { registerSaveTracking } from './lsp/saveTracker';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import {
   deferTelemetryTeardownUntil,
@@ -410,6 +412,8 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   // Permanent link styling for clickable tags (issue #921); fed by the tag-link middleware below.
   const tagLinkDecorations = new TagLinkDecorations().register();
   context.subscriptions.push(tagLinkDecorations);
+  // Lets the formatting middleware tell format-on-save from an explicit Format Document (issue #1132).
+  context.subscriptions.push(registerSaveTracking());
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: REQNROLL_LANGUAGE_ID, pattern: '**/*.feature' }],
@@ -431,6 +435,9 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     middleware: {
       ...createManualSyncMiddleware(isCSharpDocument),
       ...createRenameMiddleware(() => client),
+      // Format Document / Format Selection: a server rejection (-32803) is shown in a modal instead of
+      // the platform's transient error toast (issue #1132).
+      ...createEditRejectionMiddleware(),
       // 'reqnroll.toggleComment' is registered as a VS Code command above (Ctrl+/ handler);
       // drop the server's redundant dynamic workspace/executeCommand registration for it so
       // vscode-languageclient never attempts a duplicate registerCommand call — see
