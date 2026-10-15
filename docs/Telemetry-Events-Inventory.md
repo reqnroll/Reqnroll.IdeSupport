@@ -296,7 +296,7 @@ visible; `DurationBucket` the search cost.
 |---|---|
 | **Emitter** | `CommentToggleHandler` |
 | **When** | After a comment/uncomment `workspace/executeCommand` round trip |
-| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*), `ResolvedMode` (`"Comment"` \| `"Uncomment"` — the direction the request actually took, issue #861; equals `Mode` unless `Mode` is `Toggle`, where it records whether the toggle added or removed comments. It is the service's decision (`GherkinCommentToggleResult.Uncommented`), reported even when no edit was needed, e.g. an `Uncomment` over uncommented lines), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below) |
+| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*), `ResolvedMode` (`"Comment"` \| `"Uncomment"` — the direction the request actually took, issue #861; equals `Mode` unless `Mode` is `Toggle`, where it records whether the toggle added or removed comments. It is the service's decision (`GherkinCommentToggleResult.Uncommented`), reported even when no edit was needed, e.g. an `Uncomment` over uncommented lines), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below). A request the server **rejects** because the document is not open in it (issue #1132: `-32803` error response) still sends the event, with `Mode`, `Erroneous` = `true` and `Reason` = `"DocumentUnknown"` instead of `ResolvedMode`/`LineCountBucket`. Successful events carry no `Erroneous` property. |
 
 **Analytics use.** Comment-toggle usage (a proxy for "users authoring Gherkin interactively"),
 which command flavor is used, and whether it is applied to single lines or blocks.

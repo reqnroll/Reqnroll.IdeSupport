@@ -113,6 +113,21 @@ error. On-type formatting never rejects (it fires while the user types). The ser
 not use `window/showMessage` / `window/showMessageRequest` for this: the request already has a reply
 channel, and the presentation (modal vs. toast) is a client decision.
 
+Which edit-producing requests can reject (audit of every server edit surface, issue #1132):
+
+| Request | Rejects when | Otherwise |
+|---|---|---|
+| `textDocument/rename` | validation / resolution failures (several `scope`s) | edit |
+| `textDocument/formatting`, `rangeFormatting` | `.feature` document unknown to the server, or no parsable Feature | empty/no-op edit |
+| `workspace/executeCommand` `reqnroll.toggleComment` | document not open in the server | edits pushed via `workspace/applyEdit`; none needed ⇒ no-op |
+| `textDocument/codeAction` (define step, insert keyword) | never — an action that cannot be built is simply not offered; the client applies the edit | — |
+| `textDocument/completion`, `onTypeFormatting` | never (completion has no rejection concept; on-type fires while typing) | empty list/edits |
+
+For `reqnroll.toggleComment` the server also logs (Warning) when the client answers
+`workspace/applyEdit` with `applied: false`; presenting a failed apply is the client's job. Malformed
+`executeCommand` arguments (unknown command/mode, missing or null arguments) are client bugs and stay
+silent, logged at Verbose.
+
 Two adjacent things that are **not** protocol extensions, despite looking like candidates:
 
 - `--ide <identifier>` (e.g. `visualstudio`) is a process command-line argument read in
