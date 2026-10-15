@@ -1,5 +1,6 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -104,6 +105,16 @@ internal sealed class FindStepUsagesCommand : Command
             await renderer.RenderAsync(label, result, cancellationToken).ConfigureAwait(false);
 
             _logger.LogDebug("FindStepUsagesCommand: render complete.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("FindStepUsagesCommand: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            _logger.LogWarning("FindStepUsagesCommand: request failed: {Reason}", reason);
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Step Usages failed - {reason}.");
         }
         catch (Exception ex)
         {
