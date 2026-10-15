@@ -178,6 +178,23 @@ public class LspRequestOutcomeTests
         Assert.Throws<OperationCanceledException>(() => LspRequestOutcome.Cancelled().GetResultOrThrow(Method, Uri));
     }
 
+    [Fact]
+    public void LspRequestFailure_describes_owned_request_failures_but_not_other_exceptions()
+    {
+        LspRequestFailure.TryGetReason(LspRequestOutcome.TimedOut().CreateException(Method, Uri), out var timedOut).Should().BeTrue();
+        timedOut.Should().Be("the server did not respond in time");
+
+        LspRequestFailure.TryGetReason(new LspContentModifiedException(Method, Uri), out var modified).Should().BeTrue();
+        modified.Should().Contain("document changed");
+
+        var error = LspRequestOutcome.ServerError(JObject.Parse("{\"code\":-32603,\"message\":\"boom\"}")).CreateException(Method, Uri);
+        LspRequestFailure.TryGetReason(error, out var server).Should().BeTrue();
+        server.Should().Contain("boom");
+
+        LspRequestFailure.TryGetReason(new OperationCanceledException(), out _).Should().BeFalse("caller cancellation is not a failure to report");
+        LspRequestFailure.TryGetReason(new InvalidOperationException(), out _).Should().BeFalse();
+    }
+
     private static async Task WaitForAsync(Func<bool> condition)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);

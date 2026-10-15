@@ -100,9 +100,13 @@ internal sealed class LspRequestOutcome
     }
 
     /// <summary>A short, user-presentable reason for a failed outcome, e.g. for a status-bar message.</summary>
-    public string DescribeFailure() => Status switch
+    public string DescribeFailure() => Describe(Status, Error);
+
+    internal static string Describe(LspRequestStatus status, JObject? error) => status switch
     {
-        LspRequestStatus.ServerError => Error?["message"]?.ToString() is { Length: > 0 } message
+        LspRequestStatus.ServerError when ErrorCodeOf(error) == LspContentModifiedException.ErrorCode
+                                     => "the document changed while the request was being answered",
+        LspRequestStatus.ServerError => error?["message"]?.ToString() is { Length: > 0 } message
             ? $"the server reported an error: {message}"
             : "the server reported an error",
         LspRequestStatus.TimedOut    => "the server did not respond in time",
@@ -125,7 +129,11 @@ internal sealed class LspRequestFailedException : InvalidOperationException
         DocumentUri = documentUri;
         Status = status;
         Error = error;
+        Reason = LspRequestOutcome.Describe(status, error);
     }
+
+    /// <summary>A short, user-presentable reason, e.g. "the server did not respond in time".</summary>
+    public string Reason { get; }
 
     /// <summary>The LSP method that failed.</summary>
     public string Method { get; }
@@ -143,4 +151,33 @@ internal sealed class LspRequestFailedException : InvalidOperationException
         status == LspRequestStatus.ServerError
             ? $"{method} for {documentUri} failed: server error {error?["code"]}: {error?["message"]}."
             : $"{method} for {documentUri} failed: {status} (no response).";
+}
+
+/// <summary>
+/// Lets an interactive command present a failed owned request (see <see cref="LspRequestOutcome.GetResultOrThrow"/>)
+/// as "it failed, and why" instead of as an answer such as "none found" (issues #1019, #1020).
+/// </summary>
+internal static class LspRequestFailure
+{
+    /// <summary>
+    /// True when <paramref name="exception"/> is an owned-request failure — a server error, timeout, missing
+    /// server or <c>ContentModified</c> — and gives a short <paramref name="reason"/> for a status-bar message.
+    /// Caller cancellation is not a failure: it is an <see cref="OperationCanceledException"/>.
+    /// </summary>
+    public static bool TryGetReason(Exception exception, out string reason)
+    {
+        switch (exception)
+        {
+            case LspRequestFailedException failed:
+                reason = failed.Reason;
+                return true;
+            case LspContentModifiedException:
+                reason = LspRequestOutcome.Describe(
+                    LspRequestStatus.ServerError, new JObject { ["code"] = LspContentModifiedException.ErrorCode });
+                return true;
+            default:
+                reason = string.Empty;
+                return false;
+        }
+    }
 }
