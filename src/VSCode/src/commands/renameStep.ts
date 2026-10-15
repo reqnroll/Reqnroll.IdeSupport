@@ -5,12 +5,12 @@ import {
   Middleware,
   PrepareRenameSignature,
   RenameRequest,
-  ResponseError,
   WorkspaceEdit as LspWorkspaceEdit,
 } from 'vscode-languageclient/node';
 import { REQNROLL_LANGUAGE_ID } from '../languageIds';
 import { ReqnrollMethods } from '../lsp/lspMethods';
-import { showError, showInfo } from '../logging/appNotify';
+import { logWarn, showEditRejected, showError, showInfo } from '../logging/appNotify';
+import { asEditRejection, rejectedOrRethrow } from '../lsp/editRejection';
 import { executeForeignCommand } from '../clientExceptionTelemetry';
 
 /** One renameable binding attribute at the queried position (mirrors RenameTargetItem.cs). */
@@ -232,7 +232,14 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
     provideRenameEdits: async (document, position, newName, token, next) => {
       const client = getClient();
       const versionBeforeRequest = document.version;
-      const edit = await next(document, position, newName, token);
+      let edit: vscode.WorkspaceEdit | null | undefined;
+      try {
+        edit = await next(document, position, newName, token);
+      } catch (err) {
+        // A server rejection (-32803) is shown in a modal and resolves to "no edit" so VS Code does
+        // not also show its own error toast; anything else is rethrown (issue #1132).
+        return rejectedOrRethrow<vscode.WorkspaceEdit>(err);
+      }
 
       if (client && edit) {
         reportRenameApplied(
@@ -322,11 +329,17 @@ export async function renameStepFromCSharp(
     });
   } catch (err) {
     // The server rejects an invalid/unmatchable rename with a real JSON-RPC error response
-    // (issue #650) instead of a null result, so its human-readable reason can be shown
-    // directly — sendRequest rejects the promise with a ResponseError in that case (confirmed
-    // in vscode-jsonrpc's connection.js) rather than resolving to null.
-    const message = err instanceof ResponseError ? err.message : 'Rename failed.';
-    void showError(`Reqnroll: ${message}`);
+    // (issue #650) instead of a null result — sendRequest rejects the promise with a ResponseError
+    // in that case (confirmed in vscode-jsonrpc's connection.js) rather than resolving to null.
+    // A user-correctable rejection (-32803) carries a reason meant to be shown verbatim, in a
+    // modal (issue #1132); any other failure is unexpected, so log it and show only a generic message.
+    const rejection = asEditRejection(err);
+    if (rejection !== undefined) {
+      void showEditRejected(rejection);
+    } else {
+      logWarn(`Rename failed: ${err instanceof Error ? err.message : String(err)}`);
+      void showError('Reqnroll: Rename failed.');
+    }
     return;
   }
 

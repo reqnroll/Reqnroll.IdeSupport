@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { LanguageClient } from 'vscode-languageclient/node';
+import { LanguageClient, ResponseError } from 'vscode-languageclient/node';
 import { doToggleComment } from '../../commands/commentToggle';
 
 suite('commentToggle', () => {
@@ -55,7 +55,42 @@ suite('commentToggle', () => {
         (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = original;
       }
 
-      assert.match(shownMessage ?? '', /Comment\/Uncomment failed.*boom/);
+      // An unexpected failure is generic: the detail is logged, not shown.
+      assert.strictEqual(shownMessage, 'Reqnroll: Comment/Uncomment failed.');
+    });
+
+    test('shows a server rejection (-32803) in a modal (issue #1132)', async () => {
+      editor.selection = new vscode.Selection(0, 0, 0, 3);
+      const client = {
+        sendRequest: () =>
+          Promise.reject(
+            new ResponseError(
+              -32803,
+              'The document is not open in the Reqnroll language server, so comments cannot be toggled.',
+            ),
+          ),
+      } as unknown as LanguageClient;
+
+      let shownMessage: string | undefined;
+      let shownOptions: unknown;
+      const original = vscode.window.showErrorMessage;
+      (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = (
+        msg: string,
+        options?: unknown,
+      ) => {
+        shownMessage = msg;
+        shownOptions = options;
+        return Promise.resolve(undefined);
+      };
+
+      try {
+        await doToggleComment(client);
+      } finally {
+        (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = original;
+      }
+
+      assert.match(shownMessage ?? '', /not open in the Reqnroll language server/);
+      assert.deepStrictEqual(shownOptions, { modal: true });
     });
   });
 });
