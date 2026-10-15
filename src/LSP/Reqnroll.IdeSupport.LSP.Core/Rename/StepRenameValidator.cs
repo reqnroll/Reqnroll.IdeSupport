@@ -26,8 +26,8 @@ public static class StepRenameValidator
     /// <summary>Characters that are regex operators and must not appear in non-parameter text of a regex-authored binding.</summary>
     private static readonly char[] RegexOperators = { '?', '*', '+', '[', ']', '{', '}', '(', ')', '^', '$', '|' };
 
-    private static readonly Regex ParameterSlotPattern = new(
-        @"(\([^)]*\)|\{\w+\})",
+    private static readonly Regex CucumberPlaceholderPattern = new(
+        @"\{\w+\}",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // ── Validation methods ─────────────────────────────────────────────────────
@@ -81,11 +81,18 @@ public static class StepRenameValidator
             ? CucumberExpressionOperators
             : RegexOperators;
 
-        // Scan non-parameter segments for operators
+        // Scan non-parameter segments for operators the rename INTRODUCES. An operator the
+        // original expression already carries outside its parameter slots - most importantly the
+        // ^...$ anchors of a regex binding - is not an introduction: Visual Studio's "Rename Step"
+        // command seeds its prompt with the binding's own expression and submits the edited text
+        // verbatim as newName, so those characters arrive without the user having typed them.
+        // Rejecting on mere presence made every anchored regex binding unrenamable in Visual
+        // Studio (issue #1126).
         var newNonParamSegments = SplitNonParameterSegments(newName);
-        foreach (var segment in newNonParamSegments)
+        var originalNonParamSegments = SplitNonParameterSegments(originalExpression);
+        foreach (var operatorChar in forbiddenOperators)
         {
-            if (segment.IndexOfAny(forbiddenOperators) >= 0)
+            if (CountOccurrences(newNonParamSegments, operatorChar) > CountOccurrences(originalNonParamSegments, operatorChar))
                 return new ValidationError("The non-parameter parts cannot contain expression operators", "rename");
         }
 
@@ -115,23 +122,89 @@ public static class StepRenameValidator
     /// regex capture groups like <c>(.*)</c> or Cucumber placeholders like <c>{word}</c>.
     /// </summary>
     private static int CountParameterSlots(string expression)
-    {
-        if (string.IsNullOrEmpty(expression))
-            return 0;
-        return ParameterSlotPattern.Matches(expression).Count;
-    }
+        => string.IsNullOrEmpty(expression) ? 0 : FindParameterSlots(expression).Count;
 
     /// <summary>
     /// Splits an expression into non-parameter segments by removing parameter slots.
     /// </summary>
     private static string[] SplitNonParameterSegments(string expression)
     {
-        return string.IsNullOrEmpty(expression)
-            ? Array.Empty<string>()
-            : ParameterSlotPattern.Split(expression)
-                .Where(s => !string.IsNullOrEmpty(s) && !ParameterSlotPattern.IsMatch(s))
-                .ToArray();
+        if (string.IsNullOrEmpty(expression))
+            return Array.Empty<string>();
+
+        var segments = new System.Collections.Generic.List<string>();
+        var last = 0;
+        foreach (var (start, length) in FindParameterSlots(expression))
+        {
+            if (start > last)
+                segments.Add(expression.Substring(last, start - last));
+            last = start + length;
+        }
+        if (last < expression.Length)
+            segments.Add(expression.Substring(last));
+        return segments.ToArray();
     }
+
+    /// <summary>
+    /// Finds the parameter slots of <paramref name="expression"/>, left to right: Cucumber
+    /// placeholders (<c>{word}</c>) and regex groups. A group is matched with balanced parentheses
+    /// so one containing nested groups (<c>(\d+(\.\d+)?)</c>) is a single slot (issue #1131); a
+    /// <c>[^)]*</c>-style match stopped at the first <c>)</c> and leaked the group's tail into the
+    /// non-parameter text. Escaped parentheses are literal text, not group delimiters, and an
+    /// unbalanced <c>(</c> is plain text.
+    /// </summary>
+    private static System.Collections.Generic.List<(int Start, int Length)> FindParameterSlots(string expression)
+    {
+        var slots = new System.Collections.Generic.List<(int Start, int Length)>();
+        var i = 0;
+        while (i < expression.Length)
+        {
+            if (expression[i] == '(' && !StepExpressionParameters.IsEscaped(expression, i))
+            {
+                var end = FindGroupEnd(expression, i);
+                if (end > 0)
+                {
+                    slots.Add((i, end - i + 1));
+                    i = end + 1;
+                    continue;
+                }
+            }
+            else if (expression[i] == '{')
+            {
+                var placeholder = CucumberPlaceholderPattern.Match(expression, i);
+                if (placeholder.Success && placeholder.Index == i)
+                {
+                    slots.Add((i, placeholder.Length));
+                    i += placeholder.Length;
+                    continue;
+                }
+            }
+            i++;
+        }
+        return slots;
+    }
+
+    /// <summary>Returns the index of the <c>)</c> closing the group opened at <paramref name="open"/>, or -1 when it is unbalanced.</summary>
+    private static int FindGroupEnd(string expression, int open)
+    {
+        var depth = 0;
+        for (var j = open; j < expression.Length; j++)
+        {
+            if (StepExpressionParameters.IsEscaped(expression, j))
+                continue;
+            if (expression[j] == '(') depth++;
+            else if (expression[j] == ')' && --depth == 0) return j;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Counts occurrences of <paramref name="operatorChar"/> across the given non-parameter
+    /// segments, so an operator the rename introduces can be told apart from one the original
+    /// expression already carried (issue #1126).
+    /// </summary>
+    private static int CountOccurrences(string[] segments, char operatorChar)
+        => segments.Sum(segment => segment.Count(c => c == operatorChar));
 }
 
 /// <summary>

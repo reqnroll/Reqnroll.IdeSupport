@@ -95,6 +95,149 @@ public class CSharpAttributeLiteralResolverTests
             "a method-name-style binding has no literal to find, and must not fall back to an unrelated method's");
     }
 
+    // ── Several same-type attributes on one method (issue #940) ─────────────────────────
+    //    The binding being renamed is the SECOND [Given] on the method. A connector-discovered
+    //    binding either carries no AttributeSourceLine, or carries the one ConnectorDiscoveryService
+    //    backfills via BindingImporter.TryGetAttributeSourceLine — which returns the FIRST matching
+    //    attribute of the method for every binding on it. The resolver must not silently fall back
+    //    to the first literal: pick the one the binding's expression identifies, or refuse.
+
+    private const string TwoGivenAttributesText =
+        "using Reqnroll;\n" +                                       // line 1
+        "namespace N\n" +                                           // 2
+        "{\n" +                                                     // 3
+        "    [Binding]\n" +                                         // 4
+        "    public class Steps\n" +                                // 5
+        "    {\n" +                                                 // 6
+        "        [Given(\"the first number is {int}\")]\n" +        // 7 (0-based line 6)
+        "        [Given(\"the second number is {int}\")]\n" +       // 8 (0-based line 7)
+        "        public void GivenANumber(int p0) { }\n" +          // 9
+        "    }\n" +
+        "}\n";
+
+    private static ProjectStepDefinitionBinding MakeGivenBinding(
+        string regex, string specifiedExpression, int? attributeSourceLine)
+    {
+        var implementation = new ProjectBindingImplementation(
+            "Steps.GivenANumber(Int32)", new[] { "System.Int32" },
+            new SourceLocation(CsUri.GetFileSystemPath()!, sourceFileLine: 9, sourceFileColumn: 21));
+        return new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex(regex), null, implementation,
+            specifiedExpression, error: null, attributeSourceLine: attributeSourceLine);
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_picks_the_second_attribute_by_its_authored_expression_when_there_is_no_attribute_line()
+    {
+        var binding = MakeGivenBinding(
+            "^the second number is (-?\\d+)$", "the second number is {int}", attributeSourceLine: null);
+
+        var literal = await CreateSut(TwoGivenAttributesText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().NotBeNull();
+        literal!.Token.ValueText.Should().Be("the second number is {int}");
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_picks_the_second_attribute_when_the_registry_holds_a_regex_projection()
+    {
+        // The registry expression is the regex projection of the Cucumber expression (the F16
+        // shape), so it never equals either literal's text; the static text around the
+        // parameter slots still identifies the second attribute.
+        var binding = MakeGivenBinding(
+            "^the second number is (.*)$", "the second number is (.*)", attributeSourceLine: null);
+
+        var literal = await CreateSut(TwoGivenAttributesText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().NotBeNull();
+        literal!.Token.ValueText.Should().Be("the second number is {int}");
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_picks_the_second_attribute_when_the_backfilled_attribute_line_points_at_the_first()
+    {
+        // ConnectorDiscoveryService backfills line 7 (the method's first [Given]) for both bindings.
+        var binding = MakeGivenBinding(
+            "^the second number is (-?\\d+)$", "the second number is {int}", attributeSourceLine: 7);
+
+        var literal = await CreateSut(TwoGivenAttributesText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().NotBeNull();
+        literal!.Token.ValueText.Should().Be("the second number is {int}");
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_keeps_the_exact_attribute_line_match_when_its_literal_was_edited_since_discovery()
+    {
+        // Syntax-discovered binding on line 8 whose literal was edited in the buffer after
+        // discovery: no literal matches the stale expression, so the exact line still decides.
+        var binding = MakeGivenBinding(
+            "^the 2nd number is (-?\\d+)$", "the 2nd number is {int}", attributeSourceLine: 8);
+
+        var literal = await CreateSut(TwoGivenAttributesText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().NotBeNull();
+        literal!.Token.ValueText.Should().Be("the second number is {int}");
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_refuses_when_no_attribute_matches_the_expression_and_there_is_no_attribute_line()
+    {
+        // A stale expression (the source changed since the last build) that matches neither
+        // literal: guessing the first one would rewrite an unrelated step definition.
+        var binding = MakeGivenBinding(
+            "^the 2nd number is (-?\\d+)$", "the 2nd number is {int}", attributeSourceLine: null);
+
+        var literal = await CreateSut(TwoGivenAttributesText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().BeNull("neither attribute can be identified as this binding's, so none may be rewritten");
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_refuses_when_the_projected_expression_matches_several_attributes()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"a {int} item\")]\n" +
+            "        [Given(\"a {word} item\")]\n" +
+            "        public void GivenAnItem(string p0) { }\n" +
+            "    }\n" +
+            "}\n";
+        var binding = MakeGivenBinding("^a (.*) item$", "a (.*) item", attributeSourceLine: null);
+
+        var literal = await CreateSut(csText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().BeNull("both attributes have the same shape, so neither can be identified as this binding's");
+    }
+
+    [Fact]
+    public async Task FindAttributeLiteralAsync_still_selects_a_single_attribute_regardless_of_its_text()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the only number is {int}\")]\n" +
+            "        public void GivenANumber(int p0) { }\n" +
+            "    }\n" +
+            "}\n";
+        var binding = MakeGivenBinding(
+            "^the stale number is (.*)$", "the stale number is {int}", attributeSourceLine: null);
+
+        var literal = await CreateSut(csText).FindAttributeLiteralAsync(CsUri, binding);
+
+        literal.Should().NotBeNull();
+        literal!.Token.ValueText.Should().Be("the only number is {int}");
+    }
+
     // ── Shared syntax-tree cache wiring (issue #491) ────────────────────────────────────
 
     /// <summary>Wraps a real <see cref="CSharpSyntaxTreeCache"/>, recording the root returned on

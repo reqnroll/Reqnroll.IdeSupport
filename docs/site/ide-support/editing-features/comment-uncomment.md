@@ -33,8 +33,9 @@ and set it on the `Edit.*` commands above.
 ```{tab-item} VS Code
 :sync: vscode
 
-`Ctrl+/` (`Cmd+/` on macOS) works directly. Also available via right-click
-→ **Reqnroll: Comment/Uncomment**, or the Command Palette.
+`Ctrl+/` (`Cmd+/` on macOS) works directly, or use
+**Reqnroll: Comment/Uncomment** from the Command Palette. There is no
+context-menu entry for this command.
 
 ![](comment-uncomment/comment-uncomment-vscode.gif)
 ```
@@ -42,8 +43,8 @@ and set it on the `Edit.*` commands above.
 ```{tab-item} Rider
 :sync: rider
 
-`Ctrl+/` works directly. Also available via right-click →
-**Comment/Uncomment**, or **Tools → Reqnroll → Comment/Uncomment**.
+`Ctrl+/` works directly, or use **Reqnroll: Comment/Uncomment** from
+Find Action (Ctrl+Shift+A). There is no context-menu entry for this command.
 
 ![](comment-uncomment/comment-uncomment-rider.gif)
 ```

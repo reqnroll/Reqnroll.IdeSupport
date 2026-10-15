@@ -38,6 +38,10 @@ public class ProjectSettingsProviderTests : IDisposable
         _projectScope.IdeScope.Returns(_ideScope);
         _projectScope.ProjectFullName.Returns(@"C:\proj\Test.csproj");
         _projectScope.GetFeatureFileCount().Returns((int?)0);
+        // A real, fully-loaded project always reports a target framework; individual tests
+        // override these to exercise the "unknown target framework" (null) transient state.
+        _projectScope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        _projectScope.TargetFrameworkMonikers.Returns(".NETCoreApp,Version=v8.0");
     }
 
     private ProjectSettingsProvider CreateSut(TimeSpan retryDelay)
@@ -156,5 +160,54 @@ public class ProjectSettingsProviderTests : IDisposable
 
         callCount.Should().Be(callCountAtCeiling, "no further retries should fire once MAX_RETRY_COUNT is reached");
         sut.GetProjectSettings().IsUninitialized.Should().BeTrue();
+    }
+
+    // ── Unknown (null) target framework monikers — issue #963 ─────────────────────
+
+    [Fact]
+    public void Constructor_with_both_target_framework_moniker_sources_null_does_not_throw_and_stays_uninitialized()
+    {
+        _projectScope.PackageReferences.Returns(Array.Empty<NuGetPackageReference>());
+        _projectScope.TargetFrameworkMoniker.Returns((string)null!);
+        _projectScope.TargetFrameworkMonikers.Returns((string)null!);
+
+        var sut = CreateSut(TimeSpan.FromMinutes(10)); // never actually fires during this test
+
+        sut.GetProjectSettings().IsUninitialized.Should().BeTrue(
+            "an unknown target framework is a transient not-ready state and must be retried, " +
+            "not cached as an initialized setting that silently has no TFM");
+    }
+
+    [Fact]
+    public async Task Unknown_target_framework_is_retried_and_initializes_once_a_moniker_becomes_available()
+    {
+        var monikerAvailable = false;
+        _projectScope.PackageReferences.Returns(Array.Empty<NuGetPackageReference>());
+        _projectScope.TargetFrameworkMoniker.Returns(_ => monikerAvailable ? ".NETCoreApp,Version=v8.0" : null!);
+        _projectScope.TargetFrameworkMonikers.Returns(_ => monikerAvailable ? ".NETCoreApp,Version=v8.0" : null!);
+
+        var sut = CreateSut(ShortRetryDelay);
+        sut.GetProjectSettings().IsUninitialized.Should().BeTrue("no moniker is available yet");
+
+        monikerAvailable = true;
+        await WaitUntilAsync(() => !sut.GetProjectSettings().IsUninitialized, TimeSpan.FromSeconds(2));
+
+        var settings = sut.GetProjectSettings();
+        settings.IsUninitialized.Should().BeFalse();
+        settings.TargetFrameworkMonikers.Should().Be(".NETCoreApp,Version=v8.0");
+    }
+
+    [Fact]
+    public void Constructor_falls_back_to_the_single_moniker_when_the_multi_target_list_is_null()
+    {
+        _projectScope.PackageReferences.Returns(Array.Empty<NuGetPackageReference>());
+        _projectScope.TargetFrameworkMoniker.Returns(".NETCoreApp,Version=v8.0");
+        _projectScope.TargetFrameworkMonikers.Returns((string)null!);
+
+        var sut = CreateSut(TimeSpan.FromMinutes(10));
+
+        var settings = sut.GetProjectSettings();
+        settings.IsUninitialized.Should().BeFalse("the single moniker is still known");
+        settings.TargetFrameworkMonikers.Should().Be(".NETCoreApp,Version=v8.0");
     }
 }
