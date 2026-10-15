@@ -5,6 +5,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 using Reqnroll.IdeSupport.VisualStudio.NavigationBar;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Xunit;
@@ -49,7 +50,7 @@ public class ScenarioTestTargetServiceTests
         server.NeverReply();
         var sut = CreateSut(server);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<LspRequestFailedException>(
             () => sut.ResolveTestTargetsAsync(FileUri, Range, CancellationToken.None));
     }
 

@@ -61,6 +61,9 @@ internal sealed class ScriptedServerPipe : IDuplexPipe, IAsyncDisposable
     public void ReplyWithError(int code, string message) =>
         _script.Enqueue($"\"error\":{{\"code\":{code},\"message\":\"{message}\"}}");
 
+    /// <summary>Queues a reply whose members after <c>id</c> are exactly <paramref name="membersJson"/> (e.g. a response with neither <c>result</c> nor <c>error</c>).</summary>
+    public void ReplyWithRaw(string membersJson) => _script.Enqueue(membersJson);
+
     /// <summary>Queues "no reply at all".</summary>
     public void NeverReply() => _script.Enqueue(null);
 

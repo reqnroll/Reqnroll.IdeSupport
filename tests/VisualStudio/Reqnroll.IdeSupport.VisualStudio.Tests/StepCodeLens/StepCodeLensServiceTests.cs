@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Xunit;
@@ -67,7 +68,7 @@ public class StepCodeLensServiceTests
         server.ReplyWithResult(OneLens);
         var sut = CreateSut(server);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GetLensesAsync(FileUri, CancellationToken.None));
+        await Assert.ThrowsAsync<LspRequestFailedException>(() => sut.GetLensesAsync(FileUri, CancellationToken.None));
 
         var lenses = await sut.GetLensesAsync(FileUri, CancellationToken.None);
 
@@ -83,7 +84,7 @@ public class StepCodeLensServiceTests
         server.ReplyWithResult(OneLens);
         var sut = CreateSut(server);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GetLensesAsync(FileUri, CancellationToken.None));
+        await Assert.ThrowsAsync<LspRequestFailedException>(() => sut.GetLensesAsync(FileUri, CancellationToken.None));
 
         (await sut.GetLensesAsync(FileUri, CancellationToken.None)).Should().ContainSingle();
     }

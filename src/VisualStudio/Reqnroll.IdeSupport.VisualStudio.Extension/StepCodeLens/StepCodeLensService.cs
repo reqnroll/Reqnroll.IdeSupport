@@ -62,23 +62,18 @@ internal sealed class StepCodeLensService
 
         _logger.LogDebug("StepCodeLensService: requesting {RequestMethod} for {FileUri}", LspStandardMethodNames.TextDocumentCodeLens, fileUri);
 
-        var (result, error) = await _pipe
-            .SendRequestToServerWithErrorAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogTrace(
-            "StepCodeLensService: raw result = {Result}", result is null ? "<null>" : result.ToString());
+        // Issue #1017: this result is cached per file until invalidated, so a failed request (server
+        // error incl. ContentModified, timeout, terminated server, cancellation) must fault rather
+        // than read as "no lenses": a faulted entry is retried by the next caller, an empty one is served.
+        if (!outcome.Succeeded)
+            _logger.LogDebug("StepCodeLensService: request failed for {FileUri} ({Status}) — not caching", fileUri, outcome.Status);
+        var result = outcome.GetResultOrThrow(LspStandardMethodNames.TextDocumentCodeLens, fileUri, cancellationToken);
 
-        // Issue #1017: the server answers textDocument/codeLens with an array — an empty one when
-        // the file has no step definitions — never JSON null, so no result at all means the request
-        // failed (server error incl. ContentModified, timeout, terminated server, cancellation).
-        // Throw rather than return "no lenses": this result is cached per file until invalidated,
-        // and a faulted entry is retried by the next caller where an empty one would be served.
-        if (result is null || result.Type == JTokenType.Null)
-        {
-            _logger.LogDebug("StepCodeLensService: no result for {FileUri} (error: {Error}) — not caching", fileUri, error);
-            throw OwnedRequestFailure.Create(LspStandardMethodNames.TextDocumentCodeLens, fileUri, error);
-        }
+        _logger.LogTrace("StepCodeLensService: raw result = {Result}", result.ToString());
 
         if (result is JArray array)
         {

@@ -253,7 +253,9 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Injects a JSON-RPC request into the server-bound stream and awaits the server's response.
-    /// The response is <b>consumed</b> by the receive pump and never forwarded to VS.
+    /// The response is <b>consumed</b> by the receive pump and never forwarded to VS. Collapses every
+    /// failure to <see langword="null"/>; use <see cref="SendRequestAsync"/> wherever a failure must
+    /// not read as "nothing found".
     /// </summary>
     /// <param name="method">LSP method name, e.g. <c>textDocument/references</c>.</param>
     /// <param name="paramsJson">Already-serialized JSON for <c>params</c>, or <c>null</c> to omit it.</param>
@@ -287,10 +289,9 @@ internal sealed class LspInterceptingPipe : IDisposable
 
     /// <summary>
     /// Like <see cref="SendRequestToServerAsync"/>, but also surfaces the JSON-RPC <c>error</c>
-    /// object when the server rejected the request (issue #650), instead of collapsing it to
-    /// <c>null</c> indistinguishably from "no result". Use this over the plain overload only when
-    /// a caller actually needs to report the server's reason back to the user (e.g. Rename Step's
-    /// status-bar message) — every other caller's "null on error" contract is unchanged.
+    /// object when the server rejected the request (issue #650). A timeout, cancellation or missing
+    /// server is still <c>(null, null)</c> — prefer <see cref="SendRequestAsync"/>, which says which
+    /// of them it was.
     /// </summary>
     /// <returns>
     /// <c>Result</c>: the response's <c>result</c> field, or <c>null</c> on error/no-server/cancellation/timeout.
@@ -302,7 +303,22 @@ internal sealed class LspInterceptingPipe : IDisposable
         string? paramsJson,
         CancellationToken cancellationToken)
     {
-        if (_disposed) return (null, null);
+        var outcome = await SendRequestAsync(method, paramsJson, cancellationToken).ConfigureAwait(false);
+        return (outcome.Succeeded ? outcome.Result : null, outcome.Error);
+    }
+
+    /// <summary>
+    /// Injects a request and reports exactly how it ended (issues #1017, #1019, #1020): a result
+    /// (possibly JSON <c>null</c>), a server error, a timeout, a cancellation, or no server. Prefer
+    /// this over the two older overloads, which collapse the failure cases into a <see langword="null"/>
+    /// result that cannot be told from a server that answered JSON <c>null</c>.
+    /// </summary>
+    public async Task<LspRequestOutcome> SendRequestAsync(
+        string method,
+        string? paramsJson,
+        CancellationToken cancellationToken)
+    {
+        if (_disposed) return LspRequestOutcome.Unavailable();
 
         // Issue #764: bound every owned request, whatever token the caller passed — several pass
         // CancellationToken.None (the VSSDK command-filter redirects, the shared CodeLens fetch), so
@@ -322,7 +338,7 @@ internal sealed class LspInterceptingPipe : IDisposable
             // than finding out immediately that there is no server.
             if (!await _serverChannel.InjectAsync(LspFrameCodec.Encode(body), method, requestToken)
                                      .ConfigureAwait(false))
-                return (null, null);
+                return LspRequestOutcome.Unavailable();
 
             // Notify interceptors about the injected request (issue #491), the same way
             // SendNotificationToServerAsync already does, so it appears in the inspector log —
@@ -350,9 +366,13 @@ internal sealed class LspInterceptingPipe : IDisposable
                     ServerErrorLogLevel(error),
                     "LspInterceptingPipe: request {Method} id={Id} failed on the server: code={Code} message={Message}",
                     method, pending.Id, error["code"]?.ToString(), error["message"]?.ToString());
+                return LspRequestOutcome.ServerError(error);
             }
 
-            return (result, error);
+            // A real response always carries a result token (JSON null included — see
+            // LspRequestCorrelator.Consume), so a null here means the waiter was released because the
+            // server terminated (issue #555): there is no answer and none is coming.
+            return result is null ? LspRequestOutcome.Unavailable() : LspRequestOutcome.Success(result);
         }
         catch (OperationCanceledException) when (
             timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -361,14 +381,15 @@ internal sealed class LspInterceptingPipe : IDisposable
                 "LspInterceptingPipe: request {Method} id={Id} timed out after {ElapsedMs} ms with no response " +
                 "from the server (limit {TimeoutMs} ms)",
                 method, pending.Id, stopwatch.ElapsedMilliseconds, (long)_ownedRequestTimeout.TotalMilliseconds);
-            return (null, null);
+            return LspRequestOutcome.TimedOut();
         }
         catch (OperationCanceledException)
         {
             _logger.LogDebug(
                 "LspInterceptingPipe: request {Method} id={Id} cancelled after {ElapsedMs} ms",
                 method, pending.Id, stopwatch.ElapsedMilliseconds);
-            return (null, null);
+            // Dispose() cancels every pending waiter; that is "no server", not the caller giving up.
+            return _disposed ? LspRequestOutcome.Unavailable() : LspRequestOutcome.Cancelled();
         }
     }
 
