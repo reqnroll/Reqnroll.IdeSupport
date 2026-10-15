@@ -2,6 +2,8 @@
 
 ## Improvements:
 
+* In Rider, Comment/Uncomment in a `.feature` file now follows the IDE's own comment command instead of one fixed key: whatever your keymap binds to Comment with Line Comment works - Ctrl+/ in the default keymap, Ctrl+K,C and Ctrl+K,U in the Visual Studio keymaps - including keys you rebind. **Note:** in the Visual Studio keymaps Ctrl+/ no longer comments in a `.feature` file (it did only because the default keymap's binding leaked in); it does what your keymap says it does in C# (Rider) - see #1151
+
 * In Rider, an explicit Reformat Code (Code > Reformat Code, or the Reformat File dialog) on a `.feature` file the language server cannot format - unknown to the server, or with no parsable Feature - now shows the server's reason in the shared modal dialog instead of doing nothing. Only an explicit Reformat Code can show it: a rejection on format on save, on paste or any other automatic reformat is logged and never shown. Reformat Code is now handled by a Reqnroll formatting service instead of the platform's LSP one, which swallowed the error (Rider) - see #1172, #1132
 
 * In Rider, an edit the language server rejects with a reason you can fix is now shown in the shared modal dialog, and only those: a Rename Step that fails validation (for example a changed parameter count) and a Comment/Uncomment on a document the server does not have open (which used to do nothing, silently). Any other server error is logged and shown only generically. (Rider) - see #1132

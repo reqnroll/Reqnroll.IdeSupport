@@ -11,7 +11,7 @@ import net.reqnroll.idesupport.rider.isFeatureExtension
 /**
  * Suppresses the platform's `GotoDeclaration` from its own shortcuts' candidate list for `.feature`
  * files (Rider 2026.2+ only), so [ReqnrollGoToDefinitionAction] — bound to the same shortcuts —
- * fires instead. Same technique as [net.reqnroll.idesupport.rider.commenting.ReqnrollCommentTogglePromoter].
+ * fires instead.
  */
 class ReqnrollGoToDefinitionPromoter : ActionPromoter {
     override fun suppress(actions: List<AnAction>, context: DataContext): List<AnAction> {

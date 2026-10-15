@@ -52,6 +52,35 @@ read this from `build/Version.props`, and the Rider build derives it from there 
 not passed. The VS Code `package.json` holds the same `<main>.99999` literal, so update it (and
 `package-lock.json`) when bumping `ReqnrollIdeSupportMainVersion` — CI fails if they differ.
 
+## Telemetry: dev vs prod Application Insights
+
+There are two Application Insights resources, `reqnroll-ide-appinsights-dev` and
+`reqnroll-ide-appinsights-prod`, and each client build is hard-wired to one of them at **build
+time** (issue #1160). Everything defaults to **dev**; only a build that is meant to be released
+uses **prod**. Set `REQNROLL_TELEMETRY_ENV=prod` (or `dev`) when building — the same variable is
+read by all three clients:
+
+| Client | Where the connection strings live | Build-time switch |
+|---|---|---|
+| Visual Studio | `src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.{Dev,Prod}.txt` | MSBuild property `TelemetryEnvironment` (`Dev`/`Prod`), defaulting from `REQNROLL_TELEMETRY_ENV` |
+| VS Code | `src/VSCode/src/telemetryConnections.ts` | `scripts/generate-telemetry-environment.mjs` (the `precompile`/`prewatch` npm hooks) writes the git-ignored `src/generated/telemetryEnvironment.ts` |
+| Rider | `src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/telemetry/TelemetryConnections.kt` | Gradle task `generateTelemetryBuildConfig` (`-PtelemetryEnv=prod` or the environment variable) generates `TelemetryBuildConfig` |
+
+`prod` only takes effect for a non-development build: a VS **Debug** build, the VS Code **F5**
+(Extension Development) host and Rider's **`runIde`** sandbox always use the dev resource, whatever
+`REQNROLL_TELEMETRY_ENV` says, so a stray `prod` in your shell can't send a debugging session to prod.
+
+A `prod` build fails fast while a prod connection string is still a `TODO` placeholder. CI runs
+are `dev` unless the workflow is started manually with `telemetry_env = prod`. The
+connection strings are not secrets (they ship inside every client), so they are committed.
+
+Whether telemetry is sent is controlled only by `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on,
+anything else = off). A build you launch from the IDE (VS Debug, VS Code F5, Rider `runIde`) always
+sends to the dev resource — there is no extra step. Optionally set
+`REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` to your own Application Insights connection string to
+redirect it, replacing the embedded one — see [src/LSP/CONTRIBUTING.md](src/LSP/CONTRIBUTING.md#debugging) and
+[docs/Telemetry-Events-Inventory.md](docs/Telemetry-Events-Inventory.md).
+
 ## Reporting bugs / requesting features
 
 Use the [Issues](../../issues) tab. Include, where relevant: which IDE (VS/VS Code), repro steps

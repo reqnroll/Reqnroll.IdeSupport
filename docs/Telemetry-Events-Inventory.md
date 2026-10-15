@@ -13,8 +13,18 @@
 
 ## 1. How telemetry flows
 
-There is **one** Application Insights resource (`InstrumentationKey 3fd018ff-819d-4685-a6e1-6f09bc98d20b`)
-shared by every Reqnroll IDE client, so event names form one flat namespace regardless of emitter.
+There are two Application Insights resources, `reqnroll-ide-appinsights-prod` (released builds) and
+`reqnroll-ide-appinsights-dev` (everything else), each shared by every Reqnroll IDE client, so
+within a resource event names form one flat namespace regardless of emitter. Which of the two a
+build reports to is fixed at **build time** (issue #1160): `REQNROLL_TELEMETRY_ENV=prod|dev`
+(default `dev`), read by the VS project (`TelemetryEnvironment` MSBuild property, embedding
+`InstrumentationKey.{Dev,Prod}.txt`), by VS Code's `precompile` script (generating the git-ignored
+`src/generated/telemetryEnvironment.ts`) and by Rider's `generateTelemetryBuildConfig` Gradle task
+(generating `TelemetryBuildConfig`). The connection strings are committed: VS
+`Telemetry/InstrumentationKey.{Dev,Prod}.txt`, VS Code `src/telemetryConnections.ts`, Rider
+`TelemetryConnections.kt`. A `prod` build fails while a prod string is still a `TODO` placeholder,
+and CI builds are `dev` unless the workflow is dispatched with `telemetry_env = prod`. Query the prod
+resource for real usage; the dev resource holds CI/pre-release and developer-override traffic.
 
 Two emission paths exist:
 
@@ -41,12 +51,16 @@ resource. Unset uses the built-in connection; a value with no `InstrumentationKe
 ignored. `REQNROLL_TELEMETRY_ENABLED` still takes precedence. The LSP server never transmits, so it
 needs no change.
 
-Development-build guard (issue #889): a development build with no usable override sends **nothing**
-rather than falling back to the production resource: a Debug build of the VS extension
-(`#if DEBUG`, `TelemetryTransmitter.ApplyDebugBuildGuard`), VS Code running from source
-(`ExtensionMode.Development`, i.e. F5), and Rider's `runIde` sandbox (`reqnroll.devSandbox`). The
-event is still mirrored to the local debug log as not transmitted, and a released build is never
-affected. To exercise telemetry from a dev build, set `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`.
+Development builds (#1160, replacing the #889 "development-build guard"): there is no longer a
+guard that silences a Debug build (VS), the VS Code F5 host or Rider's `runIde` sandbox. They send
+to whichever resource they were built for — the **dev** resource by default, since `dev` is the
+default `REQNROLL_TELEMETRY_ENV` — so `REQNROLL_TELEMETRY_ENABLED` is the only switch needed to
+turn sending on or off. The `prod` selection is tied to the build kind: a VS `Debug` build
+(`TelemetryEffectiveEnvironment`), the VS Code Extension Development host
+(`effectiveTelemetryEnvironment`, `ExtensionMode.Development`) and Rider's `runIde` sandbox
+(`effectiveEnvironment`, `reqnroll.devSandbox`) are **always dev**, whatever `REQNROLL_TELEMETRY_ENV`
+requests; only a Release/packaged build can report to prod. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
+redirect to your own resource.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
