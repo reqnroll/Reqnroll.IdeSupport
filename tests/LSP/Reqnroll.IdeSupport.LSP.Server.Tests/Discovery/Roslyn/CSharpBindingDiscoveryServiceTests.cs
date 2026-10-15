@@ -364,6 +364,31 @@ namespace S
     }
 
     [Fact]
+    public async Task UpdateFromSourceAsync_roslyn_event_does_not_carry_the_file_name()
+    {
+        var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
+        var provider = new ConnectorBindingRegistryProvider(project, _logger);
+        project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
+        _scopeManager.ResolveOwners(Arg.Any<DocumentUri>())
+            .Returns(new[] { project });
+
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sut = CreateSutWithTelemetry(telemetry);
+        var csUri = DocumentUri.FromFileSystemPath(Path.Combine(_root1, "AcmeCorpSecretSteps.cs"));
+
+        await sut.UpdateFromSourceAsync(csUri, "class C {}", false, CancellationToken.None);
+
+        // Issue #1123: a user's file name can identify them or their project.
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                !d.ContainsKey("AffectedFile") &&
+                !d.Values.Any(v => (v != null ? v.ToString() : "")!.Contains("AcmeCorpSecretSteps"))));
+        provider.Dispose();
+        project.Dispose();
+    }
+
+    [Fact]
     public async Task UpdateFromSourceAsync_roslyn_event_carries_the_owner_registry_binding_counts()
     {
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
@@ -430,7 +455,7 @@ namespace S
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
         discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((new ProjectBindingRegistry(
+            .Returns(ConnectorDiscoveryOutcome.Discovered(new ProjectBindingRegistry(
                 ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
         var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
         project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
@@ -475,7 +500,7 @@ namespace S
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
         discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((new ProjectBindingRegistry(
+            .Returns(ConnectorDiscoveryOutcome.Discovered(new ProjectBindingRegistry(
                 ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
         var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
         project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
@@ -509,7 +534,7 @@ namespace S
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
         discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((new ProjectBindingRegistry(
+            .Returns(ConnectorDiscoveryOutcome.Discovered(new ProjectBindingRegistry(
                 ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
         var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
         project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;

@@ -19,6 +19,7 @@ using System.Windows.Media;
 using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 using IOleServiceProvider = Microsoft.VisualStudio.OLE.Interop.IServiceProvider;
 using IServiceProvider = System.IServiceProvider;
+using System.Threading.Tasks;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Utilities;
 
@@ -839,4 +840,38 @@ public static class VsUtils
         statusBar?.SetText(message);
     }
 #pragma warning restore VSTHRD010
+
+    /// <summary>
+    /// Switches to the UI thread and then shows <paramref name="message"/> in the VS status bar via
+    /// <see cref="ShowStatusBarMessage"/>. Use this from background continuations
+    /// (<c>ConfigureAwait(false)</c>) -- such as VS.Extensibility command handlers -- where the
+    /// caller is not guaranteed to be on the UI thread (issue #1021).
+    /// </summary>
+    public static Task ShowStatusBarMessageAsync(string message) =>
+        ShowStatusBarMessageAsync(message, CancellationToken.None);
+
+    /// <inheritdoc cref="ShowStatusBarMessageAsync(string)"/>
+    public static async Task ShowStatusBarMessageAsync(string message, CancellationToken cancellationToken)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        ShowStatusBarMessage(message);
+    }
+
+    /// <summary>
+    /// Shows the language server's reason for rejecting an edit (rename, format, …) in a modal message
+    /// box, so it cannot be missed the way a status bar message can (issue #1132). Switches to the UI
+    /// thread first, so it is safe to call from background continuations. The single place
+    /// edit rejections are presented in Visual Studio.
+    /// </summary>
+    public static async Task ShowEditRejectedAsync(string message, CancellationToken cancellationToken)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        VsShellUtilities.ShowMessageBox(
+            ServiceProvider.GlobalProvider,
+            message,
+            "Reqnroll",
+            OLEMSGICON.OLEMSGICON_WARNING,
+            OLEMSGBUTTON.OLEMSGBUTTON_OK,
+            OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+    }
 }

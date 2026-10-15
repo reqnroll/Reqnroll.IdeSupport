@@ -50,7 +50,7 @@ the faster path since you don't have to invoke anything.
 | [Go to Step Definition](navigation-features/go-to-definition.md) | ✅ | ✅ | ✅ |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️⁴ | ✅ |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | ✅ | ✅ | ✅ |
-| [Hook Navigation ("Go to Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
+| [Hook Navigation ("Find Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
 
 ## Running Scenarios
 
