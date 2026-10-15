@@ -13,6 +13,7 @@ using Microsoft.VisualStudio.Shell;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
@@ -157,17 +158,23 @@ internal sealed class RenameStepCommand : Command
                     fileUri, lineNum, charNum, newStepText, cancellationToken)
                     .ConfigureAwait(false);
             }
-            catch (RenameFailedException ex)
+            catch (EditRejectedException ex)
             {
-                // The server rejected the rename with a specific reason (issue #650) — e.g. a
-                // step-rename validation failure. Show that reason directly instead of the generic
-                // "Rename failed." this used to collapse every distinct failure into.
+                // The server rejected the rename with a specific, user-correctable reason (issue
+                // #650) — e.g. a step-rename validation failure. Show it in a modal (issue #1132)
+                // rather than a status bar message that is easy to miss.
                 //
                 // No longer includes "VS failed to apply the edit": the server now returns the
                 // rename response before pushing workspace/applyEdit (issue #671, R1), so a
                 // rejected push has no in-flight request left to fail and is logged server-side
                 // instead. See RenamePostApplyCoordinator.SchedulePostResponseApply.
-                _logger.LogInformation("RenameStepCommand: rename rejected by server: {Message}", ex.Message);
+                await EditRejection.ReportAsync(_logger, "RenameStepCommand", ex.Message, cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+            catch (RenameFailedException ex)
+            {
+                // Any other server failure: already logged by the service; generic message only.
                 await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: {ex.Message}");
                 return;
             }
