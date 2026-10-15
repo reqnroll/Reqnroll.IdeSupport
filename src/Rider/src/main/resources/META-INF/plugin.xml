@@ -117,9 +117,14 @@ for what is available in each IDE.</p>
          so the tag links are requested and rendered manually, same approach as folding above. -->
     <editorFactoryListener implementation="net.reqnroll.idesupport.rider.taglinks.ReqnrollFeatureTagLinkController" />
 
+    <!-- Whole-document Reformat Code for .feature files. Replaces the platform LspFormattingService
+         (enabled by the descriptor's lspFormattingSupport, now removed), whose sendRequestSync swallows
+         the server's -32803 "edit rejected" error; this one can show it, for an explicit Reformat Code
+         only (issue #1172). Listed first so it wins over any generic formatting service. -->
+    <formattingService implementation="net.reqnroll.idesupport.rider.formatting.ReqnrollFormattingService" order="first" />
+
     <!-- Rider's generic LSP client has no bridge for textDocument/onTypeFormatting at all (unlike
-         whole-document formatting's LspFormattingService — see
-         ReqnrollLspServerDescriptor.lspFormattingSupport), so `|`-triggered table-column
+         whole-document formatting's ReqnrollFormattingService above), so `|`-triggered table-column
          realignment is driven manually, same reasoning as the codeVision/inlay entries above. -->
     <typedHandler implementation="net.reqnroll.idesupport.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler" />
 
@@ -153,6 +158,12 @@ for what is available in each IDE.</p>
          overridden to false. -->
     <fileBreadcrumbsCollector implementation="net.reqnroll.idesupport.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector" />
   </extensions>
+
+  <applicationListeners>
+    <!-- Tells ReqnrollFormattingService which reformats the user asked for explicitly (issue #1172). -->
+    <listener class="net.reqnroll.idesupport.rider.formatting.ExplicitReformatActionListener"
+              topic="com.intellij.openapi.actionSystem.ex.AnActionListener" />
+  </applicationListeners>
 
   <actions>
     <!-- No Reqnroll entry in any menu other than the editor context menu below (issue #1118): the

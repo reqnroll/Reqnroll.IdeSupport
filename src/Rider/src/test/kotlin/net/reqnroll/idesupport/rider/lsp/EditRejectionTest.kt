@@ -84,4 +84,18 @@ class EditRejectionTest {
         assertEquals(ToggleCommentOutcome.Failed, ReqnrollRequestSender.classifyToggleCommentFailure(responseError(-32801, "Content Modified")))
         assertEquals(ToggleCommentOutcome.Failed, ReqnrollRequestSender.classifyToggleCommentFailure(java.io.IOException("pipe")))
     }
+
+    @Test
+    fun `a formatting rejection is classified as Rejected with the server's reason`() {
+        assertEquals(
+            FormatOutcome.Rejected("Cannot format: no Feature"),
+            ReqnrollRequestSender.classifyFormatFailure(responseError(-32803, "Cannot format: no Feature")))
+    }
+
+    @Test
+    fun `any other formatting failure is Failed`() {
+        assertEquals(FormatOutcome.Failed, ReqnrollRequestSender.classifyFormatFailure(responseError(-32603, "boom")))
+        assertEquals(FormatOutcome.Failed, ReqnrollRequestSender.classifyFormatFailure(responseError(-32801, "Content Modified")))
+        assertEquals(FormatOutcome.Failed, ReqnrollRequestSender.classifyFormatFailure(java.io.IOException("pipe")))
+    }
 }

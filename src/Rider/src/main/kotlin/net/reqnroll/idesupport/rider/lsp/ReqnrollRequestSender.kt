@@ -26,6 +26,7 @@ import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
 import org.eclipse.lsp4j.DocumentLink
 import org.eclipse.lsp4j.DocumentLinkParams
+import org.eclipse.lsp4j.DocumentFormattingParams
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.DocumentSymbolParams
@@ -70,6 +71,7 @@ object ReqnrollRequestSender {
     private const val FIND_HOOKS_TIMEOUT_MS = 10_000
     private const val FIND_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
     private const val TOGGLE_COMMENT_TIMEOUT_MS = 10_000
+    private const val FORMAT_TIMEOUT_MS = 10_000
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
@@ -313,6 +315,55 @@ object ReqnrollRequestSender {
         ReqnrollDebugLogger.warn("toggleComment: request failed", ex)
         return ToggleCommentOutcome.Failed
     }
+
+    /**
+     * Runs the standard `textDocument/formatting` request for [uri] on behalf of
+     * [net.reqnroll.idesupport.rider.formatting.ReqnrollFormattingService]. Uses the suspend
+     * `sendRequest` rather than `sendRequestSync` so a `-32803` rejection reaches the caller as
+     * [FormatOutcome.Rejected] (issue #1172); see [rename] for the `runBlockingCancellable`/`withTimeout`
+     * rationale. Must be called off the EDT.
+     */
+    fun formatDocument(project: Project, uri: String, tabSize: Int, insertSpaces: Boolean): FormatOutcome {
+        val server = firstRunningServer(project) ?: return FormatOutcome.Failed
+        val params = DocumentFormattingParams(
+            TextDocumentIdentifier(uri),
+            FormattingOptions(tabSize, insertSpaces),
+        )
+        return try {
+            val edits = runBlockingCancellable {
+                withTimeout(FORMAT_TIMEOUT_MS.toLong()) {
+                    server.sendRequest { languageServer ->
+                        languageServer.textDocumentService.formatting(params)
+                    }
+                }
+            }
+            FormatOutcome.Edits(edits.orEmpty())
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: TimeoutCancellationException) {
+            ReqnrollDebugLogger.warn("formatDocument: request timed out after ${FORMAT_TIMEOUT_MS}ms", ex)
+            FormatOutcome.Failed
+        } catch (ex: Exception) {
+            classifyFormatFailure(ex)
+        }
+    }
+
+    /** Maps a failed `textDocument/formatting` request to its outcome; `internal` so it is testable without a live server. */
+    internal fun classifyFormatFailure(ex: Throwable): FormatOutcome {
+        val rejection = EditRejection.messageOf(ex)
+        if (rejection != null) {
+            ReqnrollDebugLogger.info("formatDocument: rejected by server: $rejection")
+            return FormatOutcome.Rejected(rejection)
+        }
+        ReqnrollDebugLogger.warn("formatDocument: request failed", ex)
+        return FormatOutcome.Failed
+    }
+
+    /** True when a Reqnroll LSP server is running for [project]. */
+    fun hasRunningServer(project: Project): Boolean =
+        LspServerManager.getInstance(project)
+            .getServersForProvider(ReqnrollLspServerSupportProvider::class.java)
+            .isNotEmpty()
 
     /** Runs `reqnroll/renameTargets` for the position (uri, line, character). Returns null if no Reqnroll LSP server is running, or on failure. */
     fun renameTargets(project: Project, uri: String, line: Int, character: Int): RenameTargetsResponse? {
@@ -583,4 +634,15 @@ sealed interface ToggleCommentOutcome {
     data object Dispatched : ToggleCommentOutcome
     data class Rejected(val message: String) : ToggleCommentOutcome
     data object Failed : ToggleCommentOutcome
+}
+
+/**
+ * Outcome of [ReqnrollRequestSender.formatDocument]: the [Edits] to apply (possibly none), a [Rejected]
+ * with a reason the server wants the user to see (`-32803`, issue #1132/#1172), or [Failed] for
+ * anything else (logged only).
+ */
+sealed interface FormatOutcome {
+    data class Edits(val edits: List<TextEdit>) : FormatOutcome
+    data class Rejected(val message: String) : FormatOutcome
+    data object Failed : FormatOutcome
 }
