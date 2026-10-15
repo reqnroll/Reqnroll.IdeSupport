@@ -11,10 +11,10 @@ import {
   deferTelemetryTeardownUntil,
   drainTelemetryTeardown,
   ensureTelemetryReporter,
-  isBuiltInConnectionBlocked,
   registerTelemetry,
   resetTelemetryReporterForTests,
   resolveConnectionString,
+  effectiveTelemetryEnvironment,
   sendTelemetryEvent,
   withClientIdentity,
 } from '../telemetry';
@@ -77,17 +77,18 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
-  suite('isBuiltInConnectionBlocked (#889)', () => {
-    test('blocks the built-in connection only in Development mode without a usable override', () => {
+  suite('effectiveTelemetryEnvironment (#1160)', () => {
+    test('a development host is always dev, whatever the build asked for', () => {
       const dev = vscode.ExtensionMode.Development;
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, undefined), true);
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, 'nonsense'), true);
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, 'InstrumentationKey=abc'), false);
-      assert.strictEqual(
-        isBuiltInConnectionBlocked(vscode.ExtensionMode.Production, undefined),
-        false,
-      );
-      assert.strictEqual(isBuiltInConnectionBlocked(vscode.ExtensionMode.Test, undefined), false);
+      assert.strictEqual(effectiveTelemetryEnvironment('prod', dev), 'dev');
+      assert.strictEqual(effectiveTelemetryEnvironment('dev', dev), 'dev');
+    });
+
+    test('other modes use the build-time environment', () => {
+      for (const mode of [vscode.ExtensionMode.Production, vscode.ExtensionMode.Test]) {
+        assert.strictEqual(effectiveTelemetryEnvironment('prod', mode), 'prod');
+        assert.strictEqual(effectiveTelemetryEnvironment('dev', mode), 'dev');
+      }
     });
   });
 

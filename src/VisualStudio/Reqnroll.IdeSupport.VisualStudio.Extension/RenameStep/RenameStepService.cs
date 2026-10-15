@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.RenameStep;
 
@@ -122,10 +123,14 @@ internal sealed class RenameStepService
     /// twice — so there is nothing in it to parse.
     /// </summary>
     /// <exception cref="OperationCanceledException">The caller's token was cancelled before the server answered.</exception>
+    /// <exception cref="EditRejectedException">
+    /// The server rejected the rename with a user-correctable reason (issue #650, #1132) — e.g. a
+    /// step-rename validation rule failed. Carries the server's human-readable reason as
+    /// <see cref="Exception.Message"/>, to be shown to the user verbatim.
+    /// </exception>
     /// <exception cref="RenameFailedException">
-    /// The server rejected the rename, or gave no answer (issues #650, #1019) — e.g. a step-rename validation rule failed.
-    /// Carries the server's human-readable reason as <see cref="Exception.Message"/>, so callers
-    /// can show it directly instead of a generic "Rename failed."
+    /// The server failed the rename for any other reason, or gave no answer (issue #1019); the
+    /// message is generic or describes why no answer arrived.
     /// </exception>
     public async Task SendRenameRequestAsync(
         string fileUri, int line0, int char0, string newName,
@@ -146,11 +151,15 @@ internal sealed class RenameStepService
                 break;
 
             case LspRequestStatus.ServerError:
-                var message = outcome.Error?["message"]?.Value<string>() ?? "Rename failed.";
-                _logger.LogDebug(
-                    "RenameStepService: {RenameMethod} rejected by server: {Message}",
-                    LspStandardMethodNames.TextDocumentRename, message);
-                throw new RenameFailedException(message);
+                // A user-correctable rejection (-32803) carries a message meant to be shown verbatim; any
+                // other error is an unexpected failure — logged, and reported only generically (issue #1132).
+                if (EditRejection.TryCreateException(outcome.Error!) is { } rejection)
+                    throw rejection;
+
+                _logger.LogWarning(
+                    "RenameStepService: {RenameMethod} failed on the server: {Error}",
+                    LspStandardMethodNames.TextDocumentRename, outcome.Error!.ToString(Newtonsoft.Json.Formatting.None));
+                throw new RenameFailedException("Rename failed.");
 
             case LspRequestStatus.Cancelled:
                 throw new OperationCanceledException(cancellationToken);
@@ -185,10 +194,9 @@ internal sealed class RenameStepService
 }
 
 /// <summary>
-/// Thrown by <see cref="RenameStepService.SendRenameRequestAsync"/> when the server rejects a
-/// <c>textDocument/rename</c> request (issue #650) — carries the server's human-readable reason
-/// (e.g. a step-rename validation message) as <see cref="Exception.Message"/>, so
-/// <see cref="RenameStepCommand"/> can show it on the status bar instead of a generic failure.
+/// Thrown by <see cref="RenameStepService.SendRenameRequestAsync"/> when the server fails a
+/// <c>textDocument/rename</c> request for a reason that is <i>not</i> a user-correctable rejection
+/// (see <see cref="EditRejectedException"/> for that). The message is generic.
 /// </summary>
 internal sealed class RenameFailedException : Exception
 {

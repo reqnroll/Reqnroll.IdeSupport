@@ -41,6 +41,19 @@ Scenario: Doc strings and data tables are tokenized
 	Then the semantic tokens include a "reqnroll.data_table_header" token for "operand"
 	And the semantic tokens include a "reqnroll.data_table_header" token for "type"
 
+Scenario: A data-table header cell containing an escaped pipe is tokenized across its whole raw text (issue #1014)
+	Given the LSP server is started
+	When the feature file "escaped-pipe.feature" is opened with
+		"""
+		Feature: Data
+
+		Scenario: S
+			Given the operands entered
+				| operand | a \| b |
+				| 42      | text   |
+		"""
+	Then the semantic tokens include a "reqnroll.data_table_header" token for "a \| b"
+
 Scenario: Scenario outline placeholders are tokenized as parameters and do not overlap
 	Given the LSP server is started
 	When the feature file "outline.feature" is opened with

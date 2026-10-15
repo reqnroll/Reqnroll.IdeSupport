@@ -123,6 +123,13 @@ object RenameStepRunner {
 
         val outcome = ReqnrollRequestSender.rename(project, uri, line, character, newExpression)
         val edit = when (outcome) {
+            // A server rejection (-32803) the user can fix: its reason, in the shared modal (issue #1132).
+            is RenameOutcome.Rejected -> {
+                showOnEdt(project) {
+                    ReqnrollNotify.editRejected(project, outcome.message, "Rename Step")
+                }
+                return
+            }
             is RenameOutcome.Failed -> {
                 showOnEdt(project) {
                     ReqnrollNotify.error(project, outcome.message, "Rename Step")
@@ -158,8 +165,14 @@ object RenameStepRunner {
                 }
                 return@invokeLater
             }
-            RenameWorkspaceEditApplier.apply(project, edit)
-            reportRenameApplied(project, uri, applied = true)
+            val applied = RenameWorkspaceEditApplier.apply(project, edit)
+            if (!applied) {
+                ReqnrollDebugLogger.warn(
+                    "RenameStepRunner: the rename edit for $uri was not applied in full; " +
+                        "reporting renameApplied=false so the server drops the staged update.",
+                )
+            }
+            reportRenameApplied(project, uri, applied = applied)
         }
     }
 

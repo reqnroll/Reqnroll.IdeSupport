@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import {
   buildOutputPath,
+  evaluateProject,
   findTargetKey,
   readPackageReferences,
   tfmToShort,
@@ -142,6 +143,125 @@ suite('msbuildEvaluator', () => {
 
     test('returns an empty array when there are no items of any type', () => {
       assert.deepStrictEqual(toProjectFileItems({}), []);
+    });
+  });
+
+  suite('evaluateProject', () => {
+    const projectFile = path.resolve('repo', 'Multi', 'Multi.csproj');
+
+    // Shapes mirror real `dotnet msbuild -getProperty/-getItem` output (SDK 10.0.401) for a
+    // project with <TargetFrameworks>net8.0;net10.0</TargetFrameworks>: the outer (no
+    // TargetFramework) evaluation has an empty TargetFrameworkMoniker/ProjectAssetsFile, a
+    // TFM-less OutputPath and an empty Compile list; the inner evaluation has all of them.
+    const innerEvaluation = (tfm: string, moniker: string) =>
+      JSON.stringify({
+        Properties: {
+          TargetFrameworkMoniker: moniker,
+          OutputPath: `bin\\Debug\\${tfm}\\`,
+          AssemblyName: 'Multi',
+          RootNamespace: 'Multi',
+          ProjectAssetsFile: '',
+          TargetFramework: tfm,
+          TargetFrameworks: 'net8.0;net10.0',
+        },
+        Items: { Compile: [{ Identity: 'Steps.cs', FullPath: 'C:\\repo\\Multi\\Steps.cs' }] },
+      });
+
+    const outerEvaluation = (targetFrameworks: string) =>
+      JSON.stringify({
+        Properties: {
+          TargetFrameworkMoniker: '',
+          OutputPath: 'bin\\Debug\\',
+          AssemblyName: 'Multi',
+          RootNamespace: 'Multi',
+          ProjectAssetsFile: '',
+          TargetFramework: '',
+          TargetFrameworks: targetFrameworks,
+        },
+        Items: { Compile: [] },
+      });
+
+    /** Records each invocation's args and answers outer/inner evaluations like real MSBuild. */
+    const stubRunner = (targetFrameworks: string) => {
+      const calls: string[][] = [];
+      const run = (args: readonly string[]): Promise<string | null> => {
+        calls.push([...args]);
+        const tfArg = args.find((a) => a.startsWith('-p:TargetFramework='));
+        if (!tfArg) return Promise.resolve(outerEvaluation(targetFrameworks));
+        const tfm = tfArg.slice('-p:TargetFramework='.length);
+        return Promise.resolve(
+          innerEvaluation(
+            tfm,
+            tfm === 'net8.0' ? '.NETCoreApp,Version=v8.0' : '.NETCoreApp,Version=v10.0',
+          ),
+        );
+      };
+      return { calls, run };
+    };
+
+    test('single-targeted project is evaluated once, without a TargetFramework override', async () => {
+      const calls: string[][] = [];
+      const run = (args: readonly string[]): Promise<string | null> => {
+        calls.push([...args]);
+        return Promise.resolve(innerEvaluation('net8.0', '.NETCoreApp,Version=v8.0'));
+      };
+
+      const result = await evaluateProject(projectFile, run);
+
+      assert.ok(result, 'expected a result for a single-targeted project');
+      assert.strictEqual(result.targetFrameworkMoniker, '.NETCoreApp,Version=v8.0');
+      assert.strictEqual(
+        result.outputAssemblyPath,
+        path.resolve('repo', 'Multi', 'bin', 'Debug', 'net8.0', 'Multi.dll'),
+      );
+      assert.strictEqual(calls.length, 1);
+      assert.ok(!calls[0].some((a) => a.startsWith('-p:TargetFramework=')));
+    });
+
+    test('multi-targeted project is re-evaluated for the first listed TargetFramework', async () => {
+      const { calls, run } = stubRunner('net8.0;net10.0');
+
+      const result = await evaluateProject(projectFile, run);
+
+      assert.ok(result, 'expected a result for a multi-targeted project');
+      assert.strictEqual(result.targetFrameworkMoniker, '.NETCoreApp,Version=v8.0');
+      assert.strictEqual(
+        result.outputAssemblyPath,
+        path.resolve('repo', 'Multi', 'bin', 'Debug', 'net8.0', 'Multi.dll'),
+      );
+      assert.deepStrictEqual(result.files, [
+        { path: 'C:\\repo\\Multi\\Steps.cs', role: 'binding' },
+      ]);
+      assert.strictEqual(calls.length, 2);
+      assert.ok(calls[1].includes('-p:TargetFramework=net8.0'));
+    });
+
+    test('multi-target TFM choice ignores whitespace and empty entries in TargetFrameworks', async () => {
+      const { calls, run } = stubRunner(' ; net10.0 ;net8.0;');
+
+      const result = await evaluateProject(projectFile, run);
+
+      assert.strictEqual(result?.targetFrameworkMoniker, '.NETCoreApp,Version=v10.0');
+      assert.ok(calls[1].includes('-p:TargetFramework=net10.0'));
+    });
+
+    test('project with no TargetFramework information still evaluates to null', async () => {
+      const { calls, run } = stubRunner('');
+
+      assert.strictEqual(await evaluateProject(projectFile, run), null);
+      assert.strictEqual(calls.length, 1);
+    });
+
+    test('returns null when the inner evaluation of a multi-targeted project fails', async () => {
+      let call = 0;
+      const run = () => Promise.resolve(call++ === 0 ? outerEvaluation('net8.0;net10.0') : null);
+
+      assert.strictEqual(await evaluateProject(projectFile, run), null);
+      assert.strictEqual(call, 2);
+    });
+
+    test('returns null when dotnet msbuild fails', async () => {
+      assert.strictEqual(await evaluateProject(projectFile, () => Promise.resolve(null)), null);
     });
   });
 

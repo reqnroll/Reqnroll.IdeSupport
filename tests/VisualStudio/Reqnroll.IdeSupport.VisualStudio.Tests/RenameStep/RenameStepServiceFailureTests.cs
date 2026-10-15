@@ -65,10 +65,22 @@ public class RenameStepServiceFailureTests
         await using var server = await ScriptedServerPipe.StartAsync();
         server.ReplyWithError(-32803, "Parameter count mismatch");
 
-        var ex = await Assert.ThrowsAsync<RenameFailedException>(
+        var ex = await Assert.ThrowsAsync<EditRejectedException>(
             () => CreateSut(server).SendRenameRequestAsync(FileUri, 3, 4, "a new step", CancellationToken.None));
 
         ex.Message.Should().Be("Parameter count mismatch");
+    }
+
+    [Fact]
+    public async Task Any_other_server_error_is_a_generic_rename_failure()
+    {
+        await using var server = await ScriptedServerPipe.StartAsync();
+        server.ReplyWithError(-32603, "internal detail");
+
+        var ex = await Assert.ThrowsAsync<RenameFailedException>(
+            () => CreateSut(server).SendRenameRequestAsync(FileUri, 3, 4, "a new step", CancellationToken.None));
+
+        ex.Message.Should().Be("Rename failed.");
     }
 
     [Fact]

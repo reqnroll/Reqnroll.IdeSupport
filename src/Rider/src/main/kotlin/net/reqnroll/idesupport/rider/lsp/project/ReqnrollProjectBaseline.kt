@@ -151,12 +151,17 @@ object ReqnrollProjectBaseline {
      * project-root `bin`/`obj` count: a `bin` folder deeper down is ordinary source.
      * Case-insensitive, like the rest of this plugin's path matching (issue #328).
      */
-    internal fun isBuildOutput(path: String, projectFolder: String): Boolean =
-        listOf("bin", "obj").any { name ->
-            val outputDir = projectFolder.trimEnd(File.separatorChar) + File.separator + name
-            path.equals(outputDir, ignoreCase = true) ||
-                path.startsWith(outputDir + File.separator, ignoreCase = true)
+    internal fun isBuildOutput(path: String, projectFolder: String): Boolean {
+        // Both "/" (VFileEvent.path) and "\\" (File.path on Windows) spellings arrive here
+        // (issue #978): compare in "/" form.
+        val normalizedPath = path.replace('\\', '/')
+        val normalizedFolder = projectFolder.replace('\\', '/').trimEnd('/')
+        return listOf("bin", "obj").any { name ->
+            val outputDir = "$normalizedFolder/$name"
+            normalizedPath.equals(outputDir, ignoreCase = true) ||
+                normalizedPath.startsWith("$outputDir/", ignoreCase = true)
         }
+    }
 
     /**
      * Builds the classic MSBuild target framework moniker (e.g. `.NETCoreApp,Version=v9.0`) the
