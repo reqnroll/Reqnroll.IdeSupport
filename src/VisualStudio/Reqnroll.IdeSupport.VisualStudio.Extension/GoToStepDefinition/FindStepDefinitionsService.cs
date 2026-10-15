@@ -36,6 +36,8 @@ internal sealed class FindStepDefinitionsService
     /// Queries the step definitions matching the step at <paramref name="line0"/> /
     /// <paramref name="char0"/> in <paramref name="fileUri"/> (all 0-based).
     /// </summary>
+    /// <exception cref="LspRequestFailedException">The request failed (server error, timeout, no server).</exception>
+    /// <exception cref="Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException">The server answered ContentModified.</exception>
     public async Task<IReadOnlyList<StepDefinitionListItem>> GetDefinitionsAsync(
         string            fileUri,
         int               line0,
@@ -48,12 +50,14 @@ internal sealed class FindStepDefinitionsService
             "FindStepDefinitionsService: querying {RequestMethod} at {FileUri}:{Line0}:{Char0}",
             CustomLspMethodNames.ReqnrollFindStepDefinitions, fileUri, line0, char0);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindStepDefinitions, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(CustomLspMethodNames.ReqnrollFindStepDefinitions, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogTrace(
-            "FindStepDefinitionsService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
+        // Issue #1020: a failed request throws rather than reading as "no step definition found".
+        var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindStepDefinitions, fileUri, cancellationToken);
+
+        _logger.LogTrace("FindStepDefinitionsService: raw server result = {Result}", result.ToString());
 
         var items = MapResult(result);
         _logger.LogDebug("FindStepDefinitionsService: {ItemCount} step definition(s) returned", items.Count);
@@ -71,8 +75,20 @@ internal sealed class FindStepDefinitionsService
         int               char0,
         CancellationToken cancellationToken)
     {
-        var items = await GetDefinitionsAsync(fileUri, line0, char0, cancellationToken).ConfigureAwait(false);
-        return HasNavigableItem(items);
+        try
+        {
+            var items = await GetDefinitionsAsync(fileUri, line0, char0, cancellationToken).ConfigureAwait(false);
+            return HasNavigableItem(items);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException || LspRequestFailure.TryGetReason(ex, out _))
+        {
+            // A probe for the Ctrl+hover underline: "can't tell" means no underline, and the user
+            // has not asked for anything, so there is nothing to report (the pipe has logged it).
+            _logger.LogDebug(
+                "FindStepDefinitionsService: navigability probe for {FileUri}:{Line0}:{Char0} did not complete ({Reason})",
+                fileUri, line0, char0, ex.Message);
+            return false;
+        }
     }
 
     /// <summary>The same test <c>GoToStepDefinitionPresenter</c> applies before navigating to a row.</summary>

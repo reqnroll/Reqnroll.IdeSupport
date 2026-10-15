@@ -74,6 +74,7 @@
 
 ## Bug fixes:
 
+* In Visual Studio, Find Unused Step Definitions, Find Step Usages (command and CodeLens click), Go To Step Definition and Go To Hooks no longer present a failed or timed-out request as an answer - "0 unused step definitions", "the caret is not on a step definition binding", "No step definition found" or no hooks; the status bar now says the request failed and why. A failed Ctrl+hover lookup simply shows no underline - see #1020
 * In Visual Studio, a step-usage, hook-match-count or Run CodeLens request that failed (a ContentModified error caused by an unrelated edit, a timeout, a restarting server) was cached as "no lenses" until the next invalidation, leaving the lens blank; failed requests are no longer cached (only a genuine empty answer from the server is), and the step-usage and hook-match-count lenses retry a ContentModified failure themselves, as the Run lens already did, since VS does not ask again for an unchanged lens - see #1017
 * Visual Studio telemetry events no longer carry the computer name (`ai.cloud.roleInstance`), which the Application Insights SDK adds by default and which can identify the user or their employer (VS) - see #1141
 

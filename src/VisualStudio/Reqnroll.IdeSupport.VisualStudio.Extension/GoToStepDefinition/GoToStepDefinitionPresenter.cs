@@ -1,5 +1,7 @@
 #nullable enable
 
+using System.Collections.Generic;
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System.IO;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Shell;
@@ -57,14 +59,24 @@ internal sealed class GoToStepDefinitionPresenter
         string            caretLineText,
         CancellationToken cancellationToken)
     {
-        var items = await _service
-            .GetDefinitionsAsync(fileUri, line0, char0, cancellationToken)
-            .ConfigureAwait(false);
-
-        // A cancelled request comes back as "no result" (the pipe returns null on cancellation);
-        // presenting it would tell the user "No step definition found" for a press that a newer one
-        // superseded. The caller (GoToDefinitionCommandFilter) treats this as a quiet cancellation.
-        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyList<StepDefinitionListItem> items;
+        try
+        {
+            // A cancelled request throws OperationCanceledException rather than reading as "no step
+            // definition found" for a press that a newer one superseded; the caller
+            // (GoToDefinitionCommandFilter) treats that as a quiet cancellation.
+            items = await _service
+                .GetDefinitionsAsync(fileUri, line0, char0, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: a failed lookup is not "no step definition found".
+            _logger.LogWarning(
+                "GoToStepDefinitionPresenter: lookup failed at {FileUri}:{Line0}:{Char0}: {Reason}", fileUri, line0, char0, reason);
+            await ShowStatusAsync($"Reqnroll: Go to Step Definition failed - {reason}.", cancellationToken);
+            return;
+        }
 
         _goToDefinitionRun?.Invoke(items.Count(item => item.IsResolved && item.SourceFile is { Length: > 0 }));
 

@@ -1,5 +1,6 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,6 +67,16 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
             await renderer.RenderAsync(result, cancellationToken).ConfigureAwait(false);
 
             _logger.LogDebug("FindUnusedStepDefinitionsCommand: render complete.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("FindUnusedStepDefinitionsCommand: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            _logger.LogWarning("FindUnusedStepDefinitionsCommand: request failed: {Reason}", reason);
+            VsUtils.ShowStatusBarMessage($"Reqnroll: Find Unused Step Definitions failed - {reason}.");
         }
         catch (Exception ex)
         {

@@ -1,6 +1,7 @@
 #nullable enable
 #pragma warning disable VSEXTPREVIEW_CODELENS
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System;
 using System.Linq;
 using System.Threading;
@@ -254,6 +255,16 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
                 : $"{count} usage{(count == 1 ? "" : "s")} of step definition";
 
             await renderer.RenderAsync(label, result, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("StepCodeLens.ExecuteAsync: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            _logger.LogWarning("StepCodeLens.ExecuteAsync: request failed: {Reason}", reason);
+            VsUtils.ShowStatusBarMessage($"Reqnroll: Find Step Usages failed - {reason}.");
         }
         catch (Exception ex)
         {

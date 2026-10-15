@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using Reqnroll.IdeSupport.VisualStudio.Utilities;
+using System.IO;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
@@ -137,6 +138,16 @@ internal sealed class GoToHooksCommand : Command
             var label     = $"Reqnroll: {locations.Count} hooks";
             await renderer.RenderAsync(label, new StepUsagesResult(locations), cancellationToken)
                 .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("GoToHooksCommand: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            _logger.LogWarning("GoToHooksCommand: request failed: {Reason}", reason);
+            VsUtils.ShowStatusBarMessage($"Reqnroll: Go to Hooks failed - {reason}.");
         }
         catch (Exception ex)
         {
