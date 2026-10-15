@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AwesomeAssertions;
 using Microsoft.VisualStudio.Threading;
 using Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 using Xunit;
 
 // VS threading analyzers assume every Task in play is real VS UI-thread-affinitized work whose
@@ -177,6 +179,89 @@ public class StepCodeLensResultCacheTests
 
         result.Should().BeEquivalentTo(SampleItems);
         callCount.Should().Be(2, "a faulted result must not be handed to a later caller");
+    }
+
+    [Fact]
+    public async Task A_ContentModified_failure_is_retried_within_one_call()
+    {
+        var callCount = 0;
+        Task<IReadOnlyList<StepLensItem>> Fetch(string uri, CancellationToken ct)
+        {
+            callCount++;
+            return callCount == 1
+                ? Task.FromException<IReadOnlyList<StepLensItem>>(new LspContentModifiedException("textDocument/codeLens", uri))
+                : Task.FromResult<IReadOnlyList<StepLensItem>>(SampleItems);
+        }
+
+        var sut = new StepCodeLensResultCache(Fetch, Jtf);
+
+        var result = await sut.GetLensesAsync("file:///Steps.cs", CancellationToken.None);
+
+        result.Should().BeEquivalentTo(SampleItems, "nothing re-asks after a blank label, so the cache has to retry itself");
+        callCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Concurrent_callers_that_hit_ContentModified_all_recover_from_one_refetch()
+    {
+        var callCount = 0;
+        var release = new TaskCompletionSource<bool>();
+        async Task<IReadOnlyList<StepLensItem>> Fetch(string uri, CancellationToken ct)
+        {
+            if (Interlocked.Increment(ref callCount) == 1)
+            {
+                await release.Task.ConfigureAwait(false);
+                throw new LspContentModifiedException("textDocument/codeLens", uri);
+            }
+            return SampleItems;
+        }
+
+        var sut = new StepCodeLensResultCache(Fetch, Jtf);
+
+        var callers = Enumerable.Range(0, 5).Select(_ => sut.GetLensesAsync("file:///Steps.cs", CancellationToken.None)).ToArray();
+        release.SetResult(true);
+        var results = await Task.WhenAll(callers);
+
+        results.Should().AllSatisfy(r => r.Should().BeEquivalentTo(SampleItems));
+        callCount.Should().BeLessThanOrEqualTo(2 + 4, "siblings sharing the faulted entry restart against a shared fresh one, not one fetch each forever");
+    }
+
+    [Fact]
+    public async Task A_persistent_ContentModified_failure_stops_after_the_bounded_restarts()
+    {
+        var callCount = 0;
+        Task<IReadOnlyList<StepLensItem>> Fetch(string uri, CancellationToken ct)
+        {
+            Interlocked.Increment(ref callCount);
+            return Task.FromException<IReadOnlyList<StepLensItem>>(new LspContentModifiedException("textDocument/codeLens", uri));
+        }
+
+        var sut = new StepCodeLensResultCache(Fetch, Jtf);
+
+        await Assert.ThrowsAsync<LspContentModifiedException>(
+            () => sut.GetLensesAsync("file:///Steps.cs", CancellationToken.None));
+
+        callCount.Should().Be(StepCodeLensResultCache.MaxContentModifiedRestarts + 1);
+    }
+
+    [Fact]
+    public async Task A_ContentModified_failure_is_not_retried_once_the_caller_has_cancelled()
+    {
+        var callCount = 0;
+        Task<IReadOnlyList<StepLensItem>> Fetch(string uri, CancellationToken ct)
+        {
+            Interlocked.Increment(ref callCount);
+            return Task.FromException<IReadOnlyList<StepLensItem>>(new LspContentModifiedException("textDocument/codeLens", uri));
+        }
+
+        var sut = new StepCodeLensResultCache(Fetch, Jtf);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => sut.GetLensesAsync("file:///Steps.cs", cts.Token));
+
+        callCount.Should().BeLessThanOrEqualTo(1);
     }
 
     [Fact]

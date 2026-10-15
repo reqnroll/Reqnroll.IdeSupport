@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
@@ -178,6 +179,14 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
             // Benign: a fresh reqnroll/refreshCodeLens invalidated this data point while the
             // shared fetch was still in flight (issue #679) -- VS re-requests the label on its
             // own, so this isn't a failure worth surfacing to the output pane.
+            return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
+        }
+        catch (LspContentModifiedException)
+        {
+            // The server's state changed under the fetch even after the cache's bounded restarts
+            // (issue #1017). Routine during a refresh storm, so not a Warning with a stack trace.
+            _logger.LogDebug(
+                "StepCodeLens.GetLabelAsync: ContentModified for {FileUri}:{MethodStartLine}", _fileUri, _methodStartLine);
             return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
         }
         catch (Exception ex)
