@@ -5,12 +5,10 @@
 //   - VS:    src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.{Dev,Prod}.txt
 //   - Rider: src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/telemetry/TelemetryConnections.kt
 // Connection strings are not secrets (they ship inside every client), so they are committed.
-//
-// TODO(#1160): paste the real connection strings (reqnroll-ide-appinsights-dev / -prod).
 export const DEV_CONNECTION_STRING =
-  'InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://TODO-region.in.applicationinsights.azure.com/;LiveEndpoint=https://TODO-region.livediagnostics.monitor.azure.com/;ApplicationId=00000000-0000-0000-0000-000000000000';
+  'InstrumentationKey=88a37add-31e4-4fff-bb4d-fc6ea8278559;IngestionEndpoint=https://westus3-1.in.applicationinsights.azure.com/;LiveEndpoint=https://westus3.livediagnostics.monitor.azure.com/;ApplicationId=d7821db2-7d0f-425d-b29f-81c4045e856d';
 export const PROD_CONNECTION_STRING =
-  'InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://TODO-region.in.applicationinsights.azure.com/;LiveEndpoint=https://TODO-region.livediagnostics.monitor.azure.com/;ApplicationId=00000000-0000-0000-0000-000000000000';
+  'InstrumentationKey=515d6796-e169-41ba-81e1-a52564258c25;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=e579b405-7f07-4af3-af5a-91d12a6d2ec0';
 
 export type TelemetryEnvironment = 'dev' | 'prod';
 

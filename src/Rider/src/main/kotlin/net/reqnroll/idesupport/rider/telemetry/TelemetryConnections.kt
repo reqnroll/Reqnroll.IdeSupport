@@ -12,12 +12,11 @@ package net.reqnroll.idesupport.rider.telemetry
  * `generateTelemetryBuildConfig` task refuses a `prod` build while any PROD value still contains `TODO`.
  */
 internal object TelemetryConnections {
-    // TODO(#1160): paste the real values (reqnroll-ide-appinsights-dev / -prod). The endpoint is the
-    // connection string's IngestionEndpoint with /v2/track appended.
-    const val DEV_INSTRUMENTATION_KEY = "00000000-0000-0000-0000-000000000000"
-    const val DEV_INGESTION_ENDPOINT = "https://TODO-region.in.applicationinsights.azure.com/v2/track"
-    const val PROD_INSTRUMENTATION_KEY = "00000000-0000-0000-0000-000000000000"
-    const val PROD_INGESTION_ENDPOINT = "https://TODO-region.in.applicationinsights.azure.com/v2/track"
+    // The endpoint is the connection string's IngestionEndpoint with /v2/track appended.
+    const val DEV_INSTRUMENTATION_KEY = "88a37add-31e4-4fff-bb4d-fc6ea8278559"
+    const val DEV_INGESTION_ENDPOINT = "https://westus3-1.in.applicationinsights.azure.com/v2/track"
+    const val PROD_INSTRUMENTATION_KEY = "515d6796-e169-41ba-81e1-a52564258c25"
+    const val PROD_INGESTION_ENDPOINT = "https://eastus-8.in.applicationinsights.azure.com/v2/track"
 
     fun instrumentationKey(environment: String): String =
         if (environment == "prod") PROD_INSTRUMENTATION_KEY else DEV_INSTRUMENTATION_KEY
