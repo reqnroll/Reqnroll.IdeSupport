@@ -14,7 +14,22 @@ plugins {
 }
 
 group = providers.gradleProperty("pluginGroup").get()
-version = providers.gradleProperty("pluginVersion").get()
+
+// CI passes -PpluginVersion=<ReqnrollIdeSupportMainVersion>.<run number>. A local build falls back to the
+// same <ReqnrollIdeSupportMainVersion>.99999 that build/Version.props gives the .NET projects, so a local
+// install always sorts newer than any CI build (issue #1163).
+val pluginVersionValue: String = providers.gradleProperty("pluginVersion").orNull
+    ?: run {
+        val versionProps = rootDir.resolve("../../build/Version.props").readText()
+        val mainVersion = Regex("<ReqnrollIdeSupportMainVersion>([^<]+)</ReqnrollIdeSupportMainVersion>")
+            .find(versionProps)?.groupValues?.get(1)?.trim()
+            ?: error("ReqnrollIdeSupportMainVersion not found in build/Version.props")
+        val buildNumber = Regex("<ReqnrollIdeSupportBuildNumber[^>]*>([^<]+)</ReqnrollIdeSupportBuildNumber>")
+            .find(versionProps)?.groupValues?.get(1)?.trim()
+            ?: error("ReqnrollIdeSupportBuildNumber default not found in build/Version.props")
+        "$mainVersion.$buildNumber"
+    }
+version = pluginVersionValue
 
 repositories {
     mavenCentral()
@@ -89,7 +104,7 @@ intellijPlatform {
         // Not "... for Rider": the Plugin Verifier rejects a plugin name containing the IDE name (same
         // rule as for the plugin ID, see gradle.properties). Rider's plugin list is Rider-only anyway.
         name = "Reqnroll Extension (Preview)"
-        version = providers.gradleProperty("pluginVersion")
+        version = pluginVersionValue
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")

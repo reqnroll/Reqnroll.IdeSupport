@@ -51,7 +51,7 @@ env:
   # AssemblyInformationalVersion / ServerInfo.Version (see Program.GetServerVersion). The
   # GitHub Actions run number is monotonically increasing and never reused, so it sorts
   # consistently across builds — see reqnroll/Reqnroll.VisualStudio's ci.yml for the pattern.
-  BUILD_NUMBER_ARG: -p:ReqnrollBuildNumber=${{ github.run_number }}
+  BUILD_NUMBER_ARG: -p:ReqnrollIdeSupportBuildNumber=${{ github.run_number }}
   CONNECTOR_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Connector/Connector/Connector.csproj
   LSP_CORE_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Core/Reqnroll.IdeSupport.LSP.Core.csproj
   LSP_SERVER_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Server/Reqnroll.IdeSupport.LSP.Server.csproj

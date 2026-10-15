@@ -118,7 +118,7 @@ env:
   # See test-lsp.yml for what this feeds (VersionPrefix -> AssemblyInformationalVersion ->
   # ServerInfo.Version). Applied to every project built here so the whole run carries the
   # same build number.
-  BUILD_NUMBER_ARG: -p:ReqnrollBuildNumber=${{ github.run_number }}
+  BUILD_NUMBER_ARG: -p:ReqnrollIdeSupportBuildNumber=${{ github.run_number }}
   EXTENSION_PROJECT: src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/Reqnroll.IdeSupport.VisualStudio.Extension.csproj
   TESTS_PROJECT: tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Tests/Reqnroll.IdeSupport.VisualStudio.Tests.csproj
   WIZARDS_TESTS_PROJECT: tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Wizards.Tests/Reqnroll.IdeSupport.VisualStudio.Wizards.Tests.csproj
@@ -145,7 +145,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # <ReqnrollMainVersion>.<run number> — the same version build/Version.props gives the .NET
+      # <ReqnrollIdeSupportMainVersion>.<run number> — the same version build/Version.props gives the .NET
       # projects via BUILD_NUMBER_ARG, computed once here so the VS Code and Rider packages (which
       # don't go through MSBuild) carry it too. Every IDE installs a package as an upgrade only when
       # its version is higher than the installed one, so each CI build must carry its run number
@@ -153,11 +153,18 @@ jobs:
       - name: Compute build version
         id: version
         run: |
-          main_version=$(sed -n 's:.*<ReqnrollMainVersion>\(.*\)</ReqnrollMainVersion>.*:\1:p' build/Version.props)
+          main_version=$(sed -n 's:.*<ReqnrollIdeSupportMainVersion>\(.*\)</ReqnrollIdeSupportMainVersion>.*:\1:p' build/Version.props)
           # Numeric major.minor only: the VSIX manifest needs a plain System.Version (no suffix), and
           # the result is spliced into later jobs' scripts, so reject anything else here.
           if ! [[ "$main_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::ReqnrollMainVersion in build/Version.props must be <major>.<minor>, got '$main_version'"
+            echo "::error::ReqnrollIdeSupportMainVersion in build/Version.props must be <major>.<minor>, got '$main_version'"
+            exit 1
+          fi
+          # The VS Code package.json carries the local-build default <main>.99999 (issue #1163); keep it
+          # in step with build/Version.props. CI overwrites it with `npm version` below.
+          vscode_version=$(sed -n 's|.*"version": "\(.*\)",|\1|p' src/VSCode/package.json | head -n1)
+          if [ "$vscode_version" != "$main_version.99999" ]; then
+            echo "::error::src/VSCode/package.json version is '$vscode_version', expected '$main_version.99999' (ReqnrollIdeSupportMainVersion in build/Version.props)"
             exit 1
           fi
           echo "build_version=$main_version.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
