@@ -1,7 +1,7 @@
 # [vNext]
 
 ## Improvements:
-* In Rider, the custom Reqnroll Structure tool window is removed; newer Rider versions render the language server's document outline in their native Structure view. Older Rider versions no longer show a Gherkin outline (Rider) - see #1183
+* In Rider, the custom Reqnroll Structure tool window and the custom editor breadcrumbs are removed; newer Rider versions render the language server's document outline in their native Structure view and breadcrumbs. Older Rider versions no longer show a Gherkin outline or breadcrumbs (Rider) - see #1183
 
 * In Rider, Comment/Uncomment in a `.feature` file now follows the IDE's own comment command instead of one fixed key: whatever your keymap binds to Comment with Line Comment works - Ctrl+/ in the default keymap, Ctrl+K,C and Ctrl+K,U in the Visual Studio keymaps - including keys you rebind. **Note:** in the Visual Studio keymaps Ctrl+/ no longer comments in a `.feature` file (it did only because the default keymap's binding leaked in); it does what your keymap says it does in C# (Rider) - see #1151
 

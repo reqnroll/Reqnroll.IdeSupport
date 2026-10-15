@@ -131,13 +131,6 @@ for what is available in each IDE.</p>
          platform's own "Language Servers" tool window already covers for every running server. -->
     <toolWindow id="Reqnroll" anchor="bottom"
         factoryClass="net.reqnroll.idesupport.rider.console.ReqnrollConsoleToolWindowFactory" />
-
-    <!-- Not com.intellij.ui.breadcrumbs.BreadcrumbsProvider (Language-keyed): same ParserDefinition
-         gap as everywhere else in this plugin. fileBreadcrumbsCollector is VirtualFile/Document/
-         offset-scoped instead — no PSI required (issue #161). See
-         ReqnrollFeatureBreadcrumbsCollector's doc comment for why requiresProvider() must be
-         overridden to false. -->
-    <fileBreadcrumbsCollector implementation="net.reqnroll.idesupport.rider.breadcrumbs.ReqnrollFeatureBreadcrumbsCollector" />
   </extensions>
 
   <applicationListeners>
