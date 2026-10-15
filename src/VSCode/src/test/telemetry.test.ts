@@ -11,7 +11,6 @@ import {
   deferTelemetryTeardownUntil,
   drainTelemetryTeardown,
   ensureTelemetryReporter,
-  isBuiltInConnectionBlocked,
   registerTelemetry,
   resetTelemetryReporterForTests,
   resolveConnectionString,
@@ -77,20 +76,6 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
-  suite('isBuiltInConnectionBlocked (#889)', () => {
-    test('blocks the built-in connection only in Development mode without a usable override', () => {
-      const dev = vscode.ExtensionMode.Development;
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, undefined), true);
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, 'nonsense'), true);
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, 'InstrumentationKey=abc'), false);
-      assert.strictEqual(
-        isBuiltInConnectionBlocked(vscode.ExtensionMode.Production, undefined),
-        false,
-      );
-      assert.strictEqual(isBuiltInConnectionBlocked(vscode.ExtensionMode.Test, undefined), false);
-    });
-  });
-
   suite('resolveConnectionString (#889)', () => {
     const builtIn = resolveConnectionString(undefined);
 

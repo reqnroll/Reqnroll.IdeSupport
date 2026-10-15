@@ -20,14 +20,6 @@ class RiderTelemetryTransmitterTest {
     }
 
     @Test
-    fun `isBuiltInBlocked blocks only the dev sandbox without a usable override`() {
-        assertTrue(RiderTelemetryTransmitter.isBuiltInBlocked(true, null))
-        assertTrue(RiderTelemetryTransmitter.isBuiltInBlocked(true, "nonsense"))
-        assertFalse(RiderTelemetryTransmitter.isBuiltInBlocked(true, "InstrumentationKey=abc"))
-        assertFalse(RiderTelemetryTransmitter.isBuiltInBlocked(false, null))
-    }
-
-    @Test
     fun `resolveConnection falls back to the built-in connection when unset or blank`() {
         val builtIn = RiderTelemetryTransmitter.resolveConnection(null)
         val invalid = mutableListOf<String>()

@@ -51,12 +51,13 @@ resource. Unset uses the built-in connection; a value with no `InstrumentationKe
 ignored. `REQNROLL_TELEMETRY_ENABLED` still takes precedence. The LSP server never transmits, so it
 needs no change.
 
-Development-build guard (issue #889): a development build with no usable override sends **nothing**
-rather than falling back to the production resource: a Debug build of the VS extension
-(`#if DEBUG`, `TelemetryTransmitter.ApplyDebugBuildGuard`), VS Code running from source
-(`ExtensionMode.Development`, i.e. F5), and Rider's `runIde` sandbox (`reqnroll.devSandbox`). The
-event is still mirrored to the local debug log as not transmitted, and a released build is never
-affected. To exercise telemetry from a dev build, set `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`.
+Development builds (#1160, replacing the #889 "development-build guard"): there is no longer a
+guard that silences a Debug build (VS), the VS Code F5 host or Rider's `runIde` sandbox. They send
+to whichever resource they were built for — the **dev** resource by default, since `dev` is the
+default `REQNROLL_TELEMETRY_ENV` — so `REQNROLL_TELEMETRY_ENABLED` is the only switch needed to
+turn sending on or off. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
+redirect to your own resource. (Building with `REQNROLL_TELEMETRY_ENV=prod` and running that build
+from the IDE does send to prod; that is your explicit choice.)
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in

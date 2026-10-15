@@ -52,14 +52,6 @@ object RiderTelemetryTransmitter {
     internal fun resolveConnection(envValue: String?, onInvalid: (String) -> Unit = {}): Connection =
         parseOverride(envValue, onInvalid) ?: BUILT_IN_CONNECTION
 
-    /**
-     * Debug-build guard (issue #889): the `runIde` dev sandbox (`reqnroll.devSandbox`, see
-     * build.gradle.kts) must not send to the built-in production resource, so without a usable
-     * override it sends nothing.
-     */
-    internal fun isBuiltInBlocked(isDevSandbox: Boolean, envValue: String?): Boolean =
-        isDevSandbox && parseOverride(envValue) == null
-
     private fun parseOverride(envValue: String?, onInvalid: (String) -> Unit = {}): Connection? {
         val value = envValue?.trim()
         if (value.isNullOrEmpty()) return null
@@ -156,8 +148,7 @@ object RiderTelemetryTransmitter {
      */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
         val debugLog = RiderTelemetryDebugLog.fromEnvironment()
-        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR)) &&
-            !isBuiltInBlocked(System.getProperty("reqnroll.devSandbox") == "true", System.getenv(CONNECTION_STRING_ENV_VAR))
+        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
 
         if (!enabled) {
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
