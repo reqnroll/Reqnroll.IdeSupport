@@ -129,6 +129,7 @@
 * In Rider on Windows, running a scenario, rule or feature from the CodeLens in a `.feature` file no longer fails with "Could not find the project that owns ...": the owning project is now found whatever the drive letter or path separator style (Rider) - see #1122
 
 * The Visual Studio navigation picker (shown when Go to Hooks or Go to Step Definition matches multiple targets) can now be dismissed with the Esc key, and has a Cancel button; previously only the window close box worked (Visual Studio) - see #1025, @clrudolphi
+* In Visual Studio, Rename Step no longer reports "Step renamed successfully" when the rename request timed out, was cancelled or reached no server, and a failed target lookup is no longer shown as "No step definition found to rename"; the status bar says the rename did not complete and why - see #1019
 * In Visual Studio, a step-usage, hook-match-count or Run CodeLens request that failed (a ContentModified error caused by an unrelated edit, a timeout, a restarting server) was cached as "no lenses" until the next invalidation, leaving the lens blank; failed requests are no longer cached (only a genuine empty answer from the server is), and the step-usage and hook-match-count lenses retry a ContentModified failure themselves, as the Run lens already did, since VS does not ask again for an unchanged lens - see #1017
 * Visual Studio telemetry events no longer carry the computer name (`ai.cloud.roleInstance`), which the Application Insights SDK adds by default and which can identify the user or their employer (VS) - see #1141
 
