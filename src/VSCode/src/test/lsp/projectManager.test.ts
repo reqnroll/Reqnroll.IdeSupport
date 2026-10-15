@@ -1,12 +1,72 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { State } from 'vscode-languageclient';
+import { LanguageClient, StateChangeEvent } from 'vscode-languageclient/node';
 import {
   resolveWorkspaceFolder,
   findOwningProjectFile,
   ProjectManager,
 } from '../../lsp/projectManager';
 import { ReqnrollMethods } from '../../lsp/lspMethods';
+import { ProjectProperties } from '../../lsp/msbuildEvaluator';
+
+/**
+ * A LanguageClient stand-in exposing only what ProjectManager touches: `state`/`onDidChangeState`
+ * (driven by {@link move}, mirroring vscode-languageclient 10.x's restart sequence) and
+ * `sendNotification` (recorded).
+ */
+function createFakeClient(initial: State) {
+  let state = initial;
+  const listeners: ((e: StateChangeEvent) => void)[] = [];
+  const sent: { method: string; projectFile: string }[] = [];
+  const client = {
+    get state() {
+      return state;
+    },
+    onDidChangeState: (l: (e: StateChangeEvent) => void) => {
+      listeners.push(l);
+      return { dispose: () => listeners.splice(listeners.indexOf(l), 1) };
+    },
+    sendNotification: (method: string, params: { projectFile: string }) => {
+      sent.push({ method, projectFile: params.projectFile });
+      return Promise.resolve();
+    },
+  } as unknown as LanguageClient;
+  return {
+    client,
+    sent,
+    move: (to: State) => {
+      const oldState = state;
+      state = to;
+      for (const l of [...listeners]) l({ oldState, newState: to });
+    },
+  };
+}
+
+/** What vscode-languageclient emits when its default error handler restarts a crashed server. */
+function crashAndRestart(move: (to: State) => void): void {
+  move(State.Stopped);
+  move(State.Starting);
+  move(State.Running);
+}
+
+// Round-tripped through Uri.fsPath (as ProjectManager does) so the drive-letter case matches.
+const csproj = vscode.Uri.file(path.join('C:', 'work', 'App', 'App.csproj')).fsPath;
+const sln = vscode.Uri.file(path.join('C:', 'work', 'App.sln')).fsPath;
+
+const props: ProjectProperties = {
+  outputAssemblyPath: path.join('C:', 'work', 'App', 'bin', 'App.dll'),
+  targetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+  defaultNamespace: 'App',
+  packageReferences: [],
+  files: [{ path: path.join('C:', 'work', 'App', 'A.feature'), role: 'feature' }],
+};
+
+/** Lets pending promise continuations (discovery, evaluation, sends) run. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
+}
 
 suite('ProjectManager', () => {
   test('ReqnrollMethods defines the LSP method names ProjectManager sends', () => {
@@ -160,6 +220,190 @@ suite('ProjectManager', () => {
       assert.strictEqual(findOwningProjectFile(dll, known), csproj);
     });
   });
+
+  // Issue #997: vscode-languageclient restarts a crashed server on the same LanguageClient
+  // (Running -> Stopped -> Starting -> Running), so the new server must be re-sent project state.
+  suite('server restart (issue #997)', () => {
+    const managers: ProjectManager[] = [];
+    teardown(() => {
+      for (const m of managers.splice(0)) m.dispose();
+    });
+
+    function createManager(
+      client: LanguageClient,
+      evaluate: () => Promise<ProjectProperties | null> = () => Promise.resolve(props),
+    ): ProjectManager {
+      const manager = new ProjectManager(client, {
+        findProjectFiles: () => Promise.resolve([vscode.Uri.file(csproj), vscode.Uri.file(sln)]),
+        evaluateProject: evaluate,
+      });
+      managers.push(manager);
+      return manager;
+    }
+
+    const projectLoaded = (sent: { method: string }[]) =>
+      sent.filter((s) => s.method === ReqnrollMethods.projectLoaded).length;
+    const projectFiles = (sent: { method: string }[]) =>
+      sent.filter((s) => s.method === ReqnrollMethods.projectFiles).length;
+
+    test('initial discovery sends projectLoaded and projectFiles once per .csproj', async () => {
+      const { client, sent } = createFakeClient(State.Running);
+      createManager(client);
+      await settle();
+
+      assert.strictEqual(projectLoaded(sent), 1);
+      assert.strictEqual(projectFiles(sent), 1);
+    });
+
+    test('a restart re-sends projectLoaded and projectFiles exactly once', async () => {
+      const { client, sent, move } = createFakeClient(State.Running);
+      const manager = createManager(client);
+      await settle();
+      sent.length = 0;
+
+      crashAndRestart(move);
+      await settle();
+
+      assert.deepStrictEqual(
+        sent.map((s) => s.method),
+        [ReqnrollMethods.projectLoaded, ReqnrollMethods.projectFiles],
+      );
+      assert.ok(sent.every((s) => s.projectFile === csproj));
+      assert.deepStrictEqual([...manager.getKnownProjects()].sort(), [csproj, sln].sort());
+    });
+
+    test('each of several restarts re-sends project state once', async () => {
+      const { client, sent, move } = createFakeClient(State.Running);
+      createManager(client);
+      await settle();
+      sent.length = 0;
+
+      crashAndRestart(move);
+      await settle();
+      crashAndRestart(move);
+      await settle();
+
+      assert.strictEqual(projectLoaded(sent), 2);
+      assert.strictEqual(projectFiles(sent), 2);
+    });
+
+    test('the first Running (manager created before the client started) does not re-send', async () => {
+      const { client, sent, move } = createFakeClient(State.Starting);
+      createManager(client);
+      await settle();
+
+      move(State.Running);
+      await settle();
+
+      assert.strictEqual(projectLoaded(sent), 1);
+      assert.strictEqual(projectFiles(sent), 1);
+    });
+
+    test('a discovery in flight when the server restarts does not double-send', async () => {
+      const { client, sent, move } = createFakeClient(State.Running);
+      let release: (() => void) | undefined;
+      let calls = 0;
+      createManager(client, () => {
+        calls += 1;
+        // Hold the first (pre-restart) evaluation until after the restart has re-discovered.
+        if (calls === 1) {
+          return new Promise((resolve) => (release = () => resolve(props)));
+        }
+        return Promise.resolve(props);
+      });
+      await settle();
+
+      crashAndRestart(move);
+      await settle();
+      release!();
+      await settle();
+
+      assert.strictEqual(projectLoaded(sent), 1);
+      assert.strictEqual(projectFiles(sent), 1);
+    });
+
+    // Several projects, evaluation held until `release()`, so a test can interleave restarts with
+    // registrations that are still awaiting MSBuild.
+    const projectA = vscode.Uri.file(path.join('C:', 'work', 'A', 'A.csproj')).fsPath;
+    const projectB = vscode.Uri.file(path.join('C:', 'work', 'B', 'B.csproj')).fsPath;
+    const projectC = vscode.Uri.file(path.join('C:', 'work', 'C', 'C.csproj')).fsPath;
+
+    function createGatedManager(client: LanguageClient) {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const manager = new ProjectManager(client, {
+        findProjectFiles: () =>
+          Promise.resolve([projectA, projectB, projectC].map((p) => vscode.Uri.file(p))),
+        evaluateProject: () => gate.then(() => props),
+      });
+      managers.push(manager);
+      return { manager, release };
+    }
+
+    const loadedFor = (sent: { method: string; projectFile: string }[], projectFile: string) =>
+      sent.filter(
+        (s) => s.method === ReqnrollMethods.projectLoaded && s.projectFile === projectFile,
+      ).length;
+
+    test('back-to-back restarts with discoveries in flight send each project once', async () => {
+      const { client, sent, move } = createFakeClient(State.Running);
+      const { release } = createGatedManager(client);
+      await settle();
+
+      crashAndRestart(move);
+      await settle();
+      crashAndRestart(move);
+      await settle();
+      release();
+      await settle();
+
+      // The superseded loops must stop at their next project instead of registering the rest again.
+      for (const project of [projectA, projectB, projectC]) {
+        assert.strictEqual(loadedFor(sent, project), 1, `projectLoaded for ${project}`);
+      }
+    });
+
+    test('a project already being registered under the same generation is not evaluated twice', async () => {
+      const { client, sent } = createFakeClient(State.Running);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      let evaluations = 0;
+      const manager = new ProjectManager(client, {
+        findProjectFiles: () => Promise.resolve([]),
+        evaluateProject: () => {
+          evaluations += 1;
+          return gate.then(() => props);
+        },
+      });
+      managers.push(manager);
+      await settle();
+      const register = (
+        manager as unknown as { registerProject(uri: vscode.Uri): Promise<void> }
+      ).registerProject.bind(manager);
+
+      // e.g. a watcher event arriving while a workspace-folder discovery is still evaluating.
+      const first = register(vscode.Uri.file(projectA));
+      const second = register(vscode.Uri.file(projectA));
+      release();
+      await Promise.all([first, second]);
+
+      assert.strictEqual(evaluations, 1);
+      assert.strictEqual(loadedFor(sent, projectA), 1);
+    });
+
+    test('dispose stops a discovery in flight from notifying the server', async () => {
+      const { client, sent } = createFakeClient(State.Running);
+      const { manager, release } = createGatedManager(client);
+      await settle();
+
+      manager.dispose();
+      release();
+      await settle();
+
+      assert.strictEqual(sent.length, 0);
+      assert.strictEqual(manager.getKnownProjects().size, 0);
+    });
+  });
 });
 
 /**
@@ -181,8 +425,11 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
   }
 
   function makeManager(sent: SentNotification[]): ProjectManager {
-    // The manager only ever calls `sendNotification` on its client, so a minimal stub is enough.
+    // The manager only calls `sendNotification` plus the `state`/`onDidChangeState` pair that
+    // `onServerRestarted` reads on construction (issue #997), so a minimal stub is enough.
     const client = {
+      state: State.Running,
+      onDidChangeState: () => ({ dispose: () => undefined }),
       sendNotification: (method: string, params: { projectFile?: string }) => {
         sent.push({ method, params });
         return Promise.resolve();
