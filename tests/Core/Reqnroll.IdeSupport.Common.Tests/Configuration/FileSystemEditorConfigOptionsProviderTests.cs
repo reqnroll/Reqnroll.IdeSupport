@@ -1,4 +1,4 @@
-using System.IO.Abstractions.TestingHelpers;
+﻿using System.IO.Abstractions.TestingHelpers;
 using Reqnroll.IdeSupport.Common.Configuration;
 
 namespace Reqnroll.IdeSupport.Common.Tests.Configuration;
@@ -81,6 +81,128 @@ public class FileSystemEditorConfigOptionsProviderTests
         var opts = sut.GetEditorConfigOptionsByPath(file);
         Assert.Equal("file_scoped:suggestion",
             opts.GetOption<string?>("csharp_style_namespace_declarations", null));
+    }
+
+    // ── Unparsable / unset bool values fall back to the default ───────────────
+
+    [Fact]
+    public void Bool_with_garbage_value_falls_back_to_default_true()
+    {
+        var root = Path.GetTempPath();
+        var ec   = Path.Combine(root, ".editorconfig");
+        var file = Path.Combine(root, "Login.feature");
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.feature]
+                   gherkin_indent_steps = maybe
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.True(opts.GetBoolOption("gherkin_indent_steps", true));
+    }
+
+    [Fact]
+    public void Bool_with_unset_keyword_falls_back_to_default_true()
+    {
+        var root = Path.GetTempPath();
+        var ec   = Path.Combine(root, ".editorconfig");
+        var file = Path.Combine(root, "Login.feature");
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.feature]
+                   gherkin_indent_steps = unset
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.True(opts.GetBoolOption("gherkin_indent_steps", true));
+    }
+
+    [Fact]
+    public void Bool_with_garbage_value_falls_back_to_default_false()
+    {
+        var root = Path.GetTempPath();
+        var ec   = Path.Combine(root, ".editorconfig");
+        var file = Path.Combine(root, "Login.feature");
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.feature]
+                   gherkin_indent_steps = maybe
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.False(opts.GetBoolOption("gherkin_indent_steps", false));
+    }
+
+    [Fact]
+    public void Bool_with_explicit_true_still_returns_true()
+    {
+        var root = Path.GetTempPath();
+        var ec   = Path.Combine(root, ".editorconfig");
+        var file = Path.Combine(root, "Login.feature");
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.feature]
+                   gherkin_indent_steps = TRUE
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.True(opts.GetBoolOption("gherkin_indent_steps", false));
+    }
+
+    [Fact]
+    public void Bool_with_explicit_false_still_returns_false()
+    {
+        var root = Path.GetTempPath();
+        var ec   = Path.Combine(root, ".editorconfig");
+        var file = Path.Combine(root, "Login.feature");
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.feature]
+                   gherkin_indent_steps = false
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.False(opts.GetBoolOption("gherkin_indent_steps", true));
+    }
+
+    [Fact]
+    public void Int_with_garbage_value_falls_back_to_default()
+    {
+        var root = Path.GetTempPath();
+        var ec   = Path.Combine(root, ".editorconfig");
+        var file = Path.Combine(root, "Login.feature");
+
+        var (sut, _) = MakeProviderWithFs(new()
+        {
+            [ec] = """
+                   root = true
+                   [*.feature]
+                   gherkin_table_cell_padding_size = not-a-number
+                   """
+        });
+
+        var opts = sut.GetEditorConfigOptionsByPath(file);
+        Assert.Equal(7, opts.GetOption("gherkin_table_cell_padding_size", 7));
     }
 
     // ── Non-matching sections ─────────────────────────────────────────────────

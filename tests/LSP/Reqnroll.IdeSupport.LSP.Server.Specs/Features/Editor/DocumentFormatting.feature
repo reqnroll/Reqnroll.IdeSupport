@@ -238,3 +238,22 @@ Scenario: Format document preserves an Examples block with only a header row
     And the document "HeaderOnlyExamples.feature" is formatted
     Then formatting edits are returned
     And the formatted text contains "| x |"
+
+# ── Rejections surface as a real LSP error, not a silent empty result (issue #1132) ──
+
+Scenario: A document with no parsable Feature is rejected with an error
+    When the feature file "NoFeature.feature" is opened with
+        """
+        Scenario: Orphan
+            Given a step
+        """
+    And the document "NoFeature.feature" is formatted and an error is expected
+    Then formatting fails with error message "no Feature could be parsed"
+
+Scenario: A blank document is not an error
+    When the feature file "Blank.feature" is opened with
+        """
+
+        """
+    And the document "Blank.feature" is formatted and an error is expected
+    Then no formatting edits are returned

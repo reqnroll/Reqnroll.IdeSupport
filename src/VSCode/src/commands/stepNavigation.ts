@@ -129,7 +129,14 @@ export function resolveRelativePathIn(uriStr: string, folderFsPaths: readonly st
     const uri = vscode.Uri.parse(uriStr);
     const fsPathLower = uri.fsPath.toLowerCase();
     for (const folderFsPath of folderFsPaths) {
-      if (fsPathLower.startsWith(folderFsPath.toLowerCase())) {
+      // Require a path-separator boundary after the folder prefix, so a sibling folder that merely
+      // shares a prefix (e.g. /w/Foo vs /w/FooBar) is not treated as containing the file and the
+      // label resolved against the wrong folder (issue #1015). A folder path can itself end in a
+      // separator (a filesystem root, or a caller-supplied trailing separator), so only append one
+      // when it is missing.
+      const folderLower = folderFsPath.toLowerCase();
+      const prefixLower = folderLower.endsWith(path.sep) ? folderLower : folderLower + path.sep;
+      if (fsPathLower.startsWith(prefixLower)) {
         return path.relative(folderFsPath, uri.fsPath);
       }
     }
