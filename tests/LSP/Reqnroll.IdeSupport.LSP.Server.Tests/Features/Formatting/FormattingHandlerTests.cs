@@ -2,7 +2,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.Common.ProjectSystem.Configuration;
+using OmniSharp.Extensions.JsonRpc;
 using Reqnroll.IdeSupport.LSP.Server.Features.Formatting;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -38,6 +40,91 @@ public class FormattingHandlerTests
         new(_bufferService, _editorConfigOptionsProvider, _configProvider, _logger, _telemetryService);
 
     private static FormattingOptions Options() => new() { TabSize = 4, InsertSpaces = true };
+
+    private static DocumentFormattingParams FormatRequest(DocumentUri uri) =>
+        new() { TextDocument = new TextDocumentIdentifier { Uri = uri }, Options = Options() };
+
+    private void SetupBuffer(DocumentUri uri, string text) =>
+        _bufferService.TryGet(uri, out Arg.Any<DocumentBuffer?>())
+            .Returns(x =>
+            {
+                x[1] = new DocumentBuffer(uri, 1, text);
+                return true;
+            });
+
+    [Fact]
+    public async Task Handle_document_formatting_rejects_a_document_unknown_to_the_server()
+    {
+        var unknown = DocumentUri.FromFileSystemPath("/workspace/unknown.feature");
+        _bufferService.TryGet(unknown, out Arg.Any<DocumentBuffer?>()).Returns(false);
+
+        var act = () => CreateSut().Handle(FormatRequest(unknown), CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(EditRejected.Code);
+        exception.Which.Message.Should().Contain("not open");
+    }
+
+    [Fact]
+    public async Task Handle_document_formatting_rejects_a_document_with_no_parsable_feature()
+    {
+        var orphan = DocumentUri.FromFileSystemPath("/workspace/orphan.feature");
+        SetupBuffer(orphan, "Scenario: Orphan\n    Given a step\n");
+
+        var act = () => CreateSut().Handle(FormatRequest(orphan), CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(EditRejected.Code);
+        exception.Which.Message.Should().Contain("no Feature could be parsed");
+    }
+
+    [Fact]
+    public async Task Handle_range_formatting_rejects_a_document_with_no_parsable_feature()
+    {
+        var orphan = DocumentUri.FromFileSystemPath("/workspace/orphan.feature");
+        SetupBuffer(orphan, "Scenario: Orphan\n    Given a step\n");
+
+        var act = () => CreateSut().Handle(new DocumentRangeFormattingParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = orphan },
+            Options = Options(),
+            Range = new LspRange(new Position(0, 0), new Position(1, 0))
+        }, CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(EditRejected.Code);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \n\n")]
+    public async Task Handle_document_formatting_of_an_empty_document_is_no_change_not_a_rejection(string text)
+    {
+        var blank = DocumentUri.FromFileSystemPath("/workspace/blank.feature");
+        SetupBuffer(blank, text);
+
+        var result = await CreateSut().Handle(FormatRequest(blank), CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_on_type_formatting_of_an_unknown_document_stays_silent()
+    {
+        var unknown = DocumentUri.FromFileSystemPath("/workspace/unknown.feature");
+        _bufferService.TryGet(unknown, out Arg.Any<DocumentBuffer?>()).Returns(false);
+
+        var result = await CreateSut().Handle(new DocumentOnTypeFormattingParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = unknown },
+            Options = Options(),
+            Position = new Position(0, 0),
+            Character = "|"
+        }, CancellationToken.None);
+
+        result.Should().BeEmpty();
+    }
 
     [Fact]
     public async Task Handle_document_formatting_sends_telemetry_with_IsSelectionFormatting_false()
