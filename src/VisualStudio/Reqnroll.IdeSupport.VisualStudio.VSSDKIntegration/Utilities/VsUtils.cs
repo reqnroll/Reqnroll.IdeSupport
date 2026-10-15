@@ -856,4 +856,22 @@ public static class VsUtils
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
         ShowStatusBarMessage(message);
     }
+
+    /// <summary>
+    /// Shows the language server's reason for rejecting an edit (rename, format, …) in a modal message
+    /// box, so it cannot be missed the way a status bar message can (issue #1132). Switches to the UI
+    /// thread first, so it is safe to call from background continuations. The single place
+    /// edit rejections are presented in Visual Studio.
+    /// </summary>
+    public static async Task ShowEditRejectedAsync(string message, CancellationToken cancellationToken)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+        VsShellUtilities.ShowMessageBox(
+            ServiceProvider.GlobalProvider,
+            message,
+            "Reqnroll",
+            OLEMSGICON.OLEMSGICON_WARNING,
+            OLEMSGBUTTON.OLEMSGBUTTON_OK,
+            OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
+    }
 }

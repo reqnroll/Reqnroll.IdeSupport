@@ -180,6 +180,13 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                         _logger.LogVerbose(
                             "FormatDocumentCommandFilter: format superseded by a newer request or VS shutdown.");
                     }
+                    catch (EditRejectedException ex)
+                    {
+                        // The server refused to format this document for a reason the user can fix
+                        // (issue #1132). An empty edit list is "already formatted" and never reaches here.
+                        _logger.LogInfo($"FormatDocumentCommandFilter: format rejected by server: {ex.Message}");
+                        await VsUtils.ShowEditRejectedAsync(ex.Message, ct).ConfigureAwait(true);
+                    }
                     finally
                     {
                         inFlight.End(operation);
