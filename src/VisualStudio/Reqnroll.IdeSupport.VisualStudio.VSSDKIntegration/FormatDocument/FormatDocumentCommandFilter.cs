@@ -128,11 +128,16 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
             {
                 var wpfTextView = _wpfTextView;
                 var fileUri     = GetTextBufferFileUri(wpfTextView);
+                var savePath    = GetTextBufferFilePath(wpfTextView);
                 var isSelection = commandId == CmdIdFormatSelection;
 
-                var selection  = wpfTextView.Selection;
-                var startLine  = selection.Start.Position.GetContainingLine().LineNumber;
-                var endLine    = selection.End.Position.GetContainingLine().LineNumber;
+                var selection         = wpfTextView.Selection;
+                var selectionEnd      = selection.End.Position;
+                var endContainingLine = selectionEnd.GetContainingLine();
+                var (startLine, endLine) = GetFormatLineRange(
+                    selection.Start.Position.GetContainingLine().LineNumber,
+                    endContainingLine.LineNumber,
+                    selectionEnd == endContainingLine.Start);
 
                 // Captured now so the applied edits can be dropped if the buffer moves on (the
                 // user types, or presses Format again) before the round trip completes.
@@ -175,6 +180,24 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                     {
                         _logger.LogVerbose(
                             "FormatDocumentCommandFilter: format superseded by a newer request or VS shutdown.");
+                    }
+                    catch (EditRejectedException ex)
+                    {
+                        // The server refused to format this document for a reason the user can fix
+                        // (issue #1132). An empty edit list is "already formatted" and never reaches here.
+                        _logger.LogInfo($"FormatDocumentCommandFilter: format rejected by server: {ex.Message}");
+
+                        // A format fired from the save sequence (a format-on-save extension, Code Cleanup
+                        // on save) is automatic: the user did not ask for it, and a half-typed file would
+                        // otherwise raise a dialog on every save. Log it, show nothing.
+                        if (RecentSaveTracker.Instance.SavedRecently(savePath))
+                        {
+                            _logger.LogInfo(
+                                "FormatDocumentCommandFilter: rejection not shown — a save of this file began moments ago (automatic format).");
+                            return;
+                        }
+
+                        await VsUtils.ShowEditRejectedAsync(ex.Message, ct).ConfigureAwait(true);
                     }
                     finally
                     {
@@ -230,6 +253,19 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
     // internal rather than private so Reqnroll.IdeSupport.VisualStudio.Tests (an InternalsVisibleTo
     // friend assembly) can construct this filter directly to unit test ApplyEdits/IsSnapshotStale/
     // GetTextBufferFileUri, which need no real VS host.
+    /// <summary>
+    /// Computes the line range a Format Document/Format Selection request should cover, applying the
+    /// shared <see cref="SelectionLineRange.AdjustEndLineForWholeLineSelection"/> correction so a
+    /// whole-line selection whose end sits at column 0 of the line <em>after</em> the last selected
+    /// line does not format one extra line (issue #1035).
+    /// </summary>
+    /// <remarks>
+    /// Kept pure (no <c>ThreadHelper</c>), like <see cref="IsSnapshotStale"/>, so the line-range
+    /// decision can be unit tested without a real VS UI thread.
+    /// </remarks>
+    internal static (int StartLine, int EndLine) GetFormatLineRange(int startLine, int endLine, bool endPositionIsAtLineStart)
+        => (startLine, SelectionLineRange.AdjustEndLineForWholeLineSelection(startLine, endLine, endPositionIsAtLineStart));
+
     internal static bool IsSnapshotStale(ITextSnapshot requestSnapshot, ITextSnapshot currentSnapshot) =>
         currentSnapshot.Version.VersionNumber != requestSnapshot.Version.VersionNumber;
 
@@ -254,6 +290,15 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
 
         edit.Apply();
     }
+
+    /// <summary>
+    /// The buffer's file path as the RDT reports it (what <see cref="RecentSaveTracker"/> is keyed by),
+    /// or an empty string when the buffer has no backing file.
+    /// </summary>
+    internal static string GetTextBufferFilePath(IWpfTextView wpfTextView) =>
+        wpfTextView.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out ITextDocument doc)
+            ? doc.FilePath ?? string.Empty
+            : string.Empty;
 
     internal string GetTextBufferFileUri(IWpfTextView wpfTextView)
     {

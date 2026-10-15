@@ -19,7 +19,7 @@ src/VisualStudio/
     ReqnrollPluginPackage.cs                         ← the VSSDK package (activation-recovery trigger, welcome dialog)
     Activation/                                      ← language-server activation signal + scratch-file recovery trigger
     Documents/                                       ← Gherkin/C# document types, RDT initialization, content-type guard
-    Menus/                                           ← ReqnrollMenu and the shell menu IDs
+    Menus/                                           ← ReqnrollContextMenu group and the shell menu IDs
     LspInterception/                                 ← LspServerConnectionService, LspInterceptingPipe,
                                                         per-message interceptors
     LspNotifications/                                ← VsProjectEventMonitor + preload-pipe pusher —
@@ -186,6 +186,14 @@ those scenarios test behavior that now lives server-side and is already covered 
 
 ## Conventions specific to this codebase
 
+- **A server rejection (`-32803`) is shown in a modal only for an explicit command** (issue #1132).
+  A format fired from the save sequence (a format-on-save extension, Code Cleanup on save) is logged,
+  never shown: `SaveTrackingRdtListener` (Extension) records `IVsRunningDocTableEvents3.OnBeforeSave`
+  into `RecentSaveTracker.Instance`, and `FormatDocumentCommandFilter` skips the dialog when a save of
+  that file began within the last 3 seconds (the format round trip is asynchronous, and RDT listeners
+  run in no guaranteed order, so a window is used rather than an in-progress flag). Format-on-type goes
+  through `textDocument/onTypeFormatting`, which the server never rejects. Not verified against a
+  real format-on-save extension.
 - **Gate every VS-specific workaround behind an `IdeBehaviours` flag** (`ClientIdeContext.Behaviours`,
   populated for VS by `IdeBehavioursResolver`), even in server-side code that happens to be triggered from here — a fix for a
   VS quirk should never silently change behavior for VS Code/Rider.
