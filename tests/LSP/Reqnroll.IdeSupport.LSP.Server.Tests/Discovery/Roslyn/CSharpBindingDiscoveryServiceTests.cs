@@ -455,7 +455,7 @@ namespace S
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
         discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((new ProjectBindingRegistry(
+            .Returns(ConnectorDiscoveryOutcome.Discovered(new ProjectBindingRegistry(
                 ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
         var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
         project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
@@ -500,7 +500,7 @@ namespace S
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
         discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((new ProjectBindingRegistry(
+            .Returns(ConnectorDiscoveryOutcome.Discovered(new ProjectBindingRegistry(
                 ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
         var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
         project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
@@ -534,7 +534,7 @@ namespace S
         var project = DiscoveryTestSupport.MakeProject(_ideScope, _root1);
         var discovery = Substitute.For<IConnectorDiscoveryService>();
         discovery.RunDiscovery(Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((new ProjectBindingRegistry(
+            .Returns(ConnectorDiscoveryOutcome.Discovered(new ProjectBindingRegistry(
                 ImmutableArray<ProjectStepDefinitionBinding>.Empty, ImmutableArray<ProjectHookBinding>.Empty, projectHash: 1), "hash-1"));
         var provider = new ConnectorBindingRegistryProvider(project, discovery, _logger);
         project.Properties[typeof(ConnectorBindingRegistryProvider)] = provider;
