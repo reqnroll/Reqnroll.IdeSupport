@@ -90,6 +90,44 @@ the protocol's own designated extensible slots:
 | `textDocument/publishDiagnostics` | `Diagnostic.source` | `reqnroll.binding` for .cs binding diagnostics — see [`CSharpDiagnosticsPublisher.cs:18`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Pipeline/CSharpDiagnosticsPublisher.cs) |
 | `telemetry/event` | params (spec: `any`) | `{eventName, properties}` shape — see [`LspTelemetryService.cs:26`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Telemetry/LspTelemetryService.cs) |
 
+### Rejected edits (issue #1132)
+
+An edit-producing request the server refuses because the *user* can correct something
+(`textDocument/rename` today; `textDocument/formatting` and `textDocument/rangeFormatting` of a
+`.feature` file that is unknown to the server or has no parsable Feature) answers with a JSON-RPC
+**error response** built by [`EditRejected.Error`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/EditRejected.cs):
+
+| Part | Value |
+|---|---|
+| `code` | `-32803` (LSP `RequestFailed`), exposed as `EditRejected.Code` |
+| `message` | Short, actionable reason, safe to show to the user verbatim |
+| `data` | Optional string naming what was rejected (e.g. the rename validation scope: `position`, `rename`, `project`, …) |
+
+Client rule: **`-32803` ⇒ show `message` to the user** (modal dialog, per #1132); **any other error
+code ⇒ unexpected failure** — log it and show at most a generic message. `ContentModified`
+(`-32801`) is a routine, retryable cancellation and is never a rejection.
+
+An edit request that has nothing to change is **not** a rejection: "already formatted", an empty or
+whitespace-only document, and any non-`.feature` document return an empty/no-op edit result with no
+error. On-type formatting never rejects (it fires while the user types). The server deliberately does
+not use `window/showMessage` / `window/showMessageRequest` for this: the request already has a reply
+channel, and the presentation (modal vs. toast) is a client decision.
+
+Which edit-producing requests can reject (audit of every server edit surface, issue #1132):
+
+| Request | Rejects when | Otherwise |
+|---|---|---|
+| `textDocument/rename` | validation / resolution failures (several `scope`s) | edit |
+| `textDocument/formatting`, `rangeFormatting` | `.feature` document unknown to the server, or no parsable Feature | empty/no-op edit |
+| `workspace/executeCommand` `reqnroll.toggleComment` | document not open in the server | edits pushed via `workspace/applyEdit`; none needed ⇒ no-op |
+| `textDocument/codeAction` (define step, insert keyword) | never — an action that cannot be built is simply not offered; the client applies the edit | — |
+| `textDocument/completion`, `onTypeFormatting` | never (completion has no rejection concept; on-type fires while typing) | empty list/edits |
+
+For `reqnroll.toggleComment` the server also logs (Warning) when the client answers
+`workspace/applyEdit` with `applied: false`; presenting a failed apply is the client's job. Malformed
+`executeCommand` arguments (unknown command/mode, missing or null arguments) are client bugs and stay
+silent, logged at Verbose.
+
 Two adjacent things that are **not** protocol extensions, despite looking like candidates:
 
 - `--ide <identifier>` (e.g. `visualstudio`) is a process command-line argument read in
