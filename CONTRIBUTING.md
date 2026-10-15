@@ -43,6 +43,15 @@ significantly between the .NET server/VS pieces and the TypeScript VS Code piece
   existing entries there for the pattern) rather than leaving a "done" plan sitting alongside the
   active ones.
 
+## Build versions
+
+Every IDE package is versioned `<ReqnrollIdeSupportMainVersion>.<build number>`. `ReqnrollIdeSupportMainVersion` lives in
+`build/Version.props` and is hand-bumped; CI supplies the build number (the run number). Local builds use
+build number `99999`, so a local install sorts newer than any CI build. The .NET and Visual Studio builds
+read this from `build/Version.props`, and the Rider build derives it from there when `-PpluginVersion` is
+not passed. The VS Code `package.json` holds the same `<main>.99999` literal, so update it (and
+`package-lock.json`) when bumping `ReqnrollIdeSupportMainVersion` — CI fails if they differ.
+
 ## Reporting bugs / requesting features
 
 Use the [Issues](../../issues) tab. Include, where relevant: which IDE (VS/VS Code), repro steps

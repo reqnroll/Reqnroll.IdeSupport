@@ -583,7 +583,7 @@ public class Program
     /// <c>initialize</c>. Reads <see cref="AssemblyInformationalVersionAttribute"/>, which the SDK
     /// populates from <c>VersionPrefix</c>/<c>VersionSuffix</c> (see build/Version.props) plus the
     /// commit SHA, so it always reflects the build number CI passed via
-    /// <c>-p:ReqnrollBuildNumber=...</c> without any further wiring here.
+    /// <c>-p:ReqnrollIdeSupportBuildNumber=...</c> without any further wiring here.
     /// </summary>
     internal static string GetServerVersion()
         => typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
