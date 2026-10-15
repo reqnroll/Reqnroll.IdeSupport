@@ -280,12 +280,15 @@ internal sealed class LspInterceptingPipe : IDisposable
     /// The level a server-rejected request is logged at. <c>ContentModified</c> is Debug: the
     /// server raises it for every in-flight request whenever it processes a Serial notification
     /// (e.g. the startup project baseline), and callers retry it, so at Warning it only put
-    /// false alarms in the Output pane (issue #800 follow-up). Every other error stays Warning.
+    /// false alarms in the Output pane (issue #800 follow-up). A user-correctable edit rejection
+    /// (<see cref="EditRejectedException.ErrorCode"/>, issue #1132) is Information: the user is told
+    /// in a dialog and the caller logs it too, so it is not a fault. Every other error stays Warning.
     /// </summary>
     internal static LogLevel ServerErrorLogLevel(JObject error) =>
-        error["code"]?.Type == JTokenType.Integer && error["code"]!.Value<int>() == LspContentModifiedException.ErrorCode
-            ? LogLevel.Debug
-            : LogLevel.Warning;
+        error["code"]?.Type != JTokenType.Integer ? LogLevel.Warning
+        : error["code"]!.Value<int>() == LspContentModifiedException.ErrorCode ? LogLevel.Debug
+        : error["code"]!.Value<int>() == EditRejectedException.ErrorCode ? LogLevel.Information
+        : LogLevel.Warning;
 
     /// <summary>
     /// Like <see cref="SendRequestToServerAsync"/>, but also surfaces the JSON-RPC <c>error</c>

@@ -8,13 +8,12 @@ using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Navigation;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.GoToHooks;
 
 /// <summary>
-/// "Go to Hooks" command — placed in the code-editor context menu navigation group,
+/// "Find Hooks" command — placed in the Reqnroll group of the code-editor context menu,
 /// visible only when a <c>.feature</c> file editor is active (design doc: Hook Navigation).
 /// </summary>
 /// <remarks>
@@ -50,19 +49,15 @@ internal sealed class GoToHooksCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Go to Hooks")
+    public override CommandConfiguration CommandConfiguration => new("Find Hooks")
     {
         Icon        = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a .feature file editor is active; invisible in all other editors.
         VisibleWhen = ActivationConstraint.EditorContentType(VsWellKnownIds.GherkinContentType),
 
-        // Placed in the navigation group of the code-editor context menu alongside
-        // "Go To Definition" and "Find All References".
-        Placements  =
-        [
-            CommandPlacement.VsctParent(ShellMenuIds.GuidSHLMainMenu, ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, 0x0200),
-        ],
+        // Placed in the Reqnroll group of the editor context menu (ReqnrollContextMenu.cs).
+        Placements  = [],
     };
 
     /// <inheritdoc />
@@ -119,7 +114,7 @@ internal sealed class GoToHooksCommand : Command
                 await NavigationPickerHelper.PickAndNavigateAsync(
                         targets,
                         _fileLogger,
-                        promptTitle: "Go to Hooks",
+                        promptTitle: "Find Hooks",
                         cancellationToken)
                     .ConfigureAwait(false);
                 return;
@@ -147,7 +142,7 @@ internal sealed class GoToHooksCommand : Command
         {
             // Issue #1020: say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("GoToHooksCommand: request failed: {Reason}", reason);
-            VsUtils.ShowStatusBarMessage($"Reqnroll: Go to Hooks failed - {reason}.");
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Go to Hooks failed - {reason}.");
         }
         catch (Exception ex)
         {

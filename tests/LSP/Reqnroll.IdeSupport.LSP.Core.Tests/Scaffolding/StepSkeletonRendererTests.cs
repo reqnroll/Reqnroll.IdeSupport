@@ -1,5 +1,6 @@
 ﻿#nullable enable
 
+using System.Text.RegularExpressions;
 using Gherkin;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -129,9 +130,10 @@ public class StepSkeletonRendererTests
     // ── Escaping — CucumberExpression ─────────────────────────────────────────
 
     [Theory]
-    [InlineData("I use (parenthesis)",          "I use \\(parenthesis)")]
+    [InlineData("I use (parenthesis)",          "I use \\(parenthesis\\)")]
     [InlineData("I use {curly braces}",         "I use \\{curly braces}")]
     [InlineData("I use \\ backslash",           "I use \\\\ backslash")]
+    [InlineData("yes/no maybe",                 "yes\\/no maybe")]
     public void Cucumber_expression_escapes_special_chars(string text, string expected)
     {
         var result = StepSkeletonRenderer.EscapeForCucumber(text);
@@ -145,10 +147,35 @@ public class StepSkeletonRendererTests
     [InlineData("I use {curly braces}",     "I use \\{curly braces}")]
     [InlineData("I use \\ backslash",       "I use \\\\ backslash")]
     [InlineData("I use . period",           "I use \\. period")]
+    [InlineData("Are you sure?",            "Are you sure\\?")]
+    [InlineData("2 * 3 + 4",                "2 \\* 3 \\+ 4")]
+    [InlineData("the range [0..9]",         "the range \\[0\\.\\.9]")]
+    [InlineData("start ^ and $ end",        "start \\^ and \\$ end")]
+    [InlineData("pipe | and # hash",        "pipe \\| and \\# hash")]
     public void Regex_expression_escapes_special_chars(string text, string expected)
     {
         var result = StepSkeletonRenderer.EscapeForRegex(text);
         result.Should().Be(expected);
+    }
+
+    // ── Round-trip — the escaped expression must match its own step text ──────
+
+    [Theory]
+    [InlineData("Are you sure?")]
+    [InlineData("I have 2 * 3 apples")]
+    [InlineData("a + b + c")]
+    [InlineData("the range [0..9]")]
+    [InlineData("start ^ and $ end")]
+    [InlineData("dot.dot and (paren)")]
+    [InlineData("pipe | char")]
+    [InlineData("curly {brace}")]
+    [InlineData("hash # tag")]
+    [InlineData("back\\slash")]
+    public void Regex_escaped_expression_matches_its_own_step_text(string stepText)
+    {
+        var escaped = StepSkeletonRenderer.EscapeForRegex(stepText);
+        Regex.IsMatch(stepText, "^" + escaped + "$")
+             .Should().BeTrue($"the escaped expression '{escaped}' must match its own step text");
     }
 
     // ── Render — output format ────────────────────────────────────────────────
@@ -255,9 +282,9 @@ public class StepSkeletonRendererTests
         var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
         var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
 
-        // Cucumber escaping turns '(' into '\('; the C# literal must then escape
-        // that backslash again -> "a cart \\(empty)" in the emitted source.
-        snippet.Should().Contain("[When(\"a cart \\\\(empty)\")]");
+        // Cucumber escaping turns '(' and ')' into '\(' and '\)'; the C# literal must
+        // then escape each backslash again -> "a cart \\(empty\\)" in the emitted source.
+        snippet.Should().Contain("[When(\"a cart \\\\(empty\\\\)\")]");
     }
 
     [Fact]

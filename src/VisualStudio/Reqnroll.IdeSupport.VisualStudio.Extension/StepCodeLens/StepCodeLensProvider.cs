@@ -264,7 +264,7 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
         {
             // Issue #1020: say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("StepCodeLens.ExecuteAsync: request failed: {Reason}", reason);
-            VsUtils.ShowStatusBarMessage($"Reqnroll: Find Step Usages failed - {reason}.");
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Step Usages failed - {reason}.");
         }
         catch (Exception ex)
         {

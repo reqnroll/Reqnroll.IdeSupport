@@ -10,6 +10,7 @@ import org.eclipse.lsp4j.WorkspaceEdit
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RenameWorkspaceEditApplierTest {
@@ -103,5 +104,42 @@ class RenameWorkspaceEditApplierTest {
         val ordered = RenameWorkspaceEditApplier.orderForApplication(edits)
 
         assertEquals(listOf("third", "second", "first"), ordered.map { it.newText })
+    }
+
+    @Test
+    fun `applyEditsByUri returns false for an empty edit set`() {
+        val ok = RenameWorkspaceEditApplier.applyEditsByUri<String>(emptyMap(), { null }, { _, _ -> })
+
+        assertFalse(ok, "an edit that reaches no file must not be reported as applied (#989)")
+    }
+
+    @Test
+    fun `applyEditsByUri returns true and applies every edit when all documents resolve`() {
+        val uriA = "file:///repo/Calculator.feature"
+        val uriB = "file:///repo/CalculatorSteps.cs"
+        val byUri = mapOf(uriA to listOf(textEdit(3, 4, "a")), uriB to listOf(textEdit(9, 1, "b")))
+        val applied = mutableListOf<String>()
+
+        val ok = RenameWorkspaceEditApplier.applyEditsByUri(byUri, { it }, { doc, _ -> applied += doc })
+
+        assertTrue(ok)
+        assertEquals(setOf(uriA, uriB), applied.toSet())
+    }
+
+    @Test
+    fun `applyEditsByUri returns false when a document cannot be resolved`() {
+        val uriA = "file:///repo/Calculator.feature"
+        val uriB = "file:///repo/Vanished.feature"
+        val byUri = mapOf(uriA to listOf(textEdit(3, 4, "a")), uriB to listOf(textEdit(1, 0, "b")))
+        val applied = mutableListOf<String>()
+
+        val ok = RenameWorkspaceEditApplier.applyEditsByUri(
+            byUri,
+            { uri -> uri.takeUnless { it.contains("Vanished") } },
+            { doc, _ -> applied += doc },
+        )
+
+        assertFalse(ok, "a skipped edit must make the whole apply report not-applied (#989)")
+        assertEquals(setOf(uriA), applied.toSet())
     }
 }

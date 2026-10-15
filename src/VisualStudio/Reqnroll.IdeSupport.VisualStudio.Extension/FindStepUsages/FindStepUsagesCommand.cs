@@ -10,7 +10,6 @@ using Microsoft.VisualStudio.Extensibility.Commands;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
@@ -40,24 +39,14 @@ internal sealed class FindStepUsagesCommand : Command
     /// <inheritdoc />
     public override CommandConfiguration CommandConfiguration => new("Find Step Usages")
     {
-        // VS.Extensibility MenuConfiguration has no Icon property, so the icon is carried on the
-        // command item itself.  It appears in both placements: the Reqnroll submenu (Surface 1) and
-        // the C# editor context menu (Surface 2).
-        Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
+                Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
 
         // Show only when a C# file editor is active; invisible in all other editors (including .feature files).
         VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
 
-        Placements =
-        [
-            // Surface 1 — child of the Reqnroll submenu in the Extensions menu (ReqnrollMenu.cs).
-
-            // Surface 2 — C# editor context menu, in the built-in navigation group next to
-            // "Find All References".  VisualStudio.Extensibility's VsctParent can target groups
-            // defined by the shell directly, so it needs no .vsct file.
-            CommandPlacement.VsctParent(
-                ShellMenuIds.GuidSHLMainMenu, id: ShellMenuIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION, priority: 0x0100),
-        ],
+        // Deliberately not in the editor context menu (#1118); no menu placement, so it can only be
+        // invoked through a user-assigned keyboard shortcut. The step-usages CodeLens does not use this command.
+        Placements = [],
     };
 
     /// <inheritdoc />
@@ -74,7 +63,7 @@ internal sealed class FindStepUsagesCommand : Command
                 _logger.LogWarning(
                     "FindStepUsagesCommand: LSP server not yet initialized (service={ServiceState}, renderer={RendererState}).",
                     service is null ? "null" : "set", renderer is null ? "null" : "set");
-                VsUtils.ShowStatusBarMessage("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
                 return;
             }
 
@@ -101,7 +90,7 @@ internal sealed class FindStepUsagesCommand : Command
             {
                 _logger.LogInformation(
                     "FindStepUsagesCommand: caret is not on a binding at {FileUri}:{LineNum} — nothing to show.", fileUri, lineNum);
-                VsUtils.ShowStatusBarMessage("Reqnroll: The caret is not on a step definition binding.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: The caret is not on a step definition binding.");
                 return;
             }
 
@@ -125,7 +114,7 @@ internal sealed class FindStepUsagesCommand : Command
         {
             // Issue #1020: say the request failed, rather than present it as an empty answer.
             _logger.LogWarning("FindStepUsagesCommand: request failed: {Reason}", reason);
-            VsUtils.ShowStatusBarMessage($"Reqnroll: Find Step Usages failed - {reason}.");
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Step Usages failed - {reason}.");
         }
         catch (Exception ex)
         {

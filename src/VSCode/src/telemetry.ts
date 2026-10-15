@@ -4,11 +4,20 @@ import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { createTelemetryDebugLogFromEnvironment } from './logging/telemetryDebugLog';
 import { logInfo } from './logging/appNotify';
 import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
+import { builtInConnectionString, TelemetryEnvironment } from './telemetryConnections';
+import { TELEMETRY_ENVIRONMENT } from './generated/telemetryEnvironment';
 
-// Same Application Insights resource VS's AnalyticsTransmitter uses (see
-// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt)
-// so usage events from every Reqnroll IDE client land in the same place.
-const CONNECTION_STRING = 'InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d20b';
+// Same Application Insights resource VS's TelemetryTransmitter uses (see
+// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.*.txt)
+// so usage events from every Reqnroll IDE client land in the same place. Which resource (dev or
+// prod) is fixed at build time, except that an extension running from source (F5,
+// `ExtensionMode.Development`) is always dev; see telemetryConnections.ts.
+export function effectiveTelemetryEnvironment(
+  buildEnvironment: TelemetryEnvironment,
+  extensionMode: vscode.ExtensionMode,
+): TelemetryEnvironment {
+  return extensionMode === vscode.ExtensionMode.Development ? 'dev' : buildEnvironment;
+}
 
 /**
  * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
@@ -18,34 +27,21 @@ const CONNECTION_STRING = 'InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d2
 export function resolveConnectionString(
   override: string | undefined,
   onInvalid?: (message: string) => void,
+  builtIn: string = builtInConnectionString(TELEMETRY_ENVIRONMENT),
 ): string {
   const value = override?.trim();
-  if (!value) return CONNECTION_STRING;
+  if (!value) return builtIn;
   if (!hasInstrumentationKey(value)) {
     onInvalid?.(
       'REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING has no InstrumentationKey; ignoring it.',
     );
-    return CONNECTION_STRING;
+    return builtIn;
   }
   return value;
 }
 
 function hasInstrumentationKey(value: string): boolean {
   return value.split(';').some((part) => /^\s*InstrumentationKey\s*=\s*\S/i.test(part));
-}
-
-/**
- * Debug-build guard (issue #889): an extension running from source (F5, `ExtensionMode.Development`)
- * must not send to the built-in production resource, so without a usable override it sends nothing.
- */
-export function isBuiltInConnectionBlocked(
-  extensionMode: vscode.ExtensionMode,
-  override: string | undefined,
-): boolean {
-  return (
-    extensionMode === vscode.ExtensionMode.Development &&
-    !hasInstrumentationKey(override?.trim() ?? '')
-  );
 }
 
 type TelemetryPropertyValue = string | number | boolean | null | undefined;
@@ -153,15 +149,13 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
   if (reporter || !isTelemetryEnabledByEnv()) return;
 
   const connectionOverride = process.env.REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING;
-  if (isBuiltInConnectionBlocked(context.extensionMode, connectionOverride)) {
-    logInfo(
-      'Telemetry is not sent from a development build unless REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING is set.',
-    );
-    return;
-  }
-
   breaker = newBreaker();
-  const created = new TelemetryReporter(resolveConnectionString(connectionOverride, logInfo));
+  const builtIn = builtInConnectionString(
+    effectiveTelemetryEnvironment(TELEMETRY_ENVIRONMENT, context.extensionMode),
+  );
+  const created = new TelemetryReporter(
+    resolveConnectionString(connectionOverride, logInfo, builtIn),
+  );
   reporter = created;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),

@@ -797,6 +797,45 @@ public class StepRenameHandlerTests
         edits[0].Range.Start.Line.Should().Be(7, "the selected (beta) attribute literal is on 0-based line 7");
     }
 
+    // ── Issue #940: when a method carries several same-type attributes and none of them can be
+    //    identified as the binding's own (a connector-discovered binding without an attribute
+    //    line whose expression no longer matches the source), the rename must fail with a
+    //    message instead of rewriting the method's first attribute. ─────────────────────────
+
+    [Fact]
+    public async Task Rename_throws_instead_of_rewriting_the_first_attribute_when_the_attribute_literal_is_ambiguous()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"alpha {int}\")]\n" +    // 0-based line 6
+            "        [Given(\"beta {int}\")]\n" +     // 0-based line 7
+            "        public void M(int x) { }\n" +    // 0-based line 8 → 1-based 9
+            "    }\n" +
+            "}\n";
+        SetupBuffer(csText);
+
+        // Stale registry expression (the source was edited since the last build): it matches
+        // neither attribute, and there is no attribute line to fall back on.
+        var impl = new ProjectBindingImplementation("Steps.M()", null, new SourceLocation(CsPath, 9, 9));
+        var stale = new ProjectStepDefinitionBinding(
+            ScenarioBlock.Given, new Regex("^gamma (.*)$"), null, impl, "gamma {int}");
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { stale }));
+
+        var act = () => CreateSut().HandleRenameAsync(
+            RenameAt(line: 8, character: 8, newName: "delta {int}"),
+            CancellationToken.None);
+
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(ErrorCodes.RequestFailed);
+        exception.Which.Message.Should().Contain("several");
+    }
+
     // ── Issue #671 (R5): a disambiguation session names WHICH binding was picked, so the rename
     //    finds that same binding again even if the candidate list has since been rebuilt — and
     //    refuses to guess when it is gone, rather than silently renaming a different step. ─────
@@ -1098,6 +1137,66 @@ public class StepRenameHandlerTests
         featureEdits.Should().ContainSingle();
         featureEdits[0].NewText.Should().Be("the second no is <secondNumber>",
             "the outline placeholder is preserved; the binding's {int} token must not leak into the feature");
+    }
+
+    // Issue #936: renaming from a .cs binding must search the same widened usage scope as
+    // CodeLens / Find Step Usages / References (IProjectBindingRegistryLookup.ResolveUsageSearchScope),
+    // so a feature file in a project that references the binding project is also renamed.
+    [Fact]
+    public async Task Rename_from_cs_binding_includes_feature_usages_in_a_referencing_project()
+    {
+        const string csText =
+            "using Reqnroll;\n" +
+            "namespace N\n" +
+            "{\n" +
+            "    [Binding]\n" +
+            "    public class Steps\n" +
+            "    {\n" +
+            "        [Given(\"the second number is {int}\")]\n" +     // 0-based line 6
+            "        public void GivenTheSecondNumberIs(int number) { }\n" +
+            "    }\n" +
+            "}\n";
+
+        const string featureText =
+            "Feature: F\n" +
+            "Scenario: x\n" +
+            "\tGiven the second number is 5\n";
+        var featureUri = DocumentUri.FromFileSystemPath("/workspace/Consumer/x.feature");
+
+        SetupBuffers((CsUri, csText), (featureUri, featureText));
+
+        var binding = MakeBinding(
+            ScenarioBlock.Given,
+            new Regex("^the second number is (-?\\d+)$"),
+            specifiedExpression: "the second number is {int}",
+            line: 8, column: 9);
+        _registryLookup.GetRegistryForUri(Arg.Any<DocumentUri>())
+                       .Returns(ProjectBindingRegistry.FromBindings(new[] { binding }));
+
+        // The binding lives in MyProject (the direct owner of Steps.cs); Consumer.csproj references
+        // it and owns the feature file. Direct ownership alone does not include Consumer.
+        var bindingProject = new ProjectOwner("/workspace/MyProject.csproj", ".NETCoreApp,Version=v8.0");
+        var consumerProject = new ProjectOwner("/workspace/Consumer.csproj", ".NETCoreApp,Version=v8.0");
+        _scopeManager.ResolveOwners(CsUri).Returns(new[] { MakeTestProject() });
+        _registryLookup.ResolveUsageSearchScope(CsUri).Returns(new[] { bindingProject, consumerProject });
+
+        var snapshot = new LspTextSnapshot(featureUri.ToString(), 1, featureText);
+        var match = new StepBindingMatch(
+            featureUri.ToString(),
+            GherkinRange.FromPoint(snapshot, startOffset: 30, length: 22),   // "the second number is 5"
+            MatchResult.NoMatch);
+        // Only a search that includes the referencing project finds the feature usage.
+        _matchService.FindUsages(Arg.Any<SourceLocation>(),
+                Arg.Is<IReadOnlyCollection<ProjectOwner>?>(f => f != null && f.Contains(consumerProject)))
+                     .Returns(new[] { match });
+
+        var result = await CreateSut().HandleRenameAsync(
+            RenameAt(line: 7, character: 8, newName: "the third number is {int}"),
+            CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.Changes!.Should().ContainKey(featureUri,
+            "the referencing project's feature usage must be renamed too (issue #936)");
     }
 
     [Fact]

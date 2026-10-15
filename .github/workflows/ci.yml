@@ -85,6 +85,16 @@ on:
       - '.github/workflows/test-lsp.yml'
       - '.github/actions/setup-rider-gradle-env/**'
   workflow_dispatch:
+    inputs:
+      telemetry_env:
+        description: >-
+          Application Insights resource the built VS/VS Code/Rider packages report to (#1160).
+          Use 'prod' only for a build that is meant to be released.
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
 
 # Cancel a superseded run (e.g. a new push to the same PR) rather than letting both finish.
 concurrency:
@@ -98,6 +108,10 @@ permissions:
 env:
   DOTNET_VERSION: '10.0.x'
   CONFIGURATION: Release
+  # Selects the built-in Application Insights resource in every client build (#1160): read by the VS
+  # project (MSBuild picks up the environment variable), VS Code's precompile script and Rider's
+  # Gradle build. Every automatic run (push, PR) is dev; only a manual run can opt into prod.
+  REQNROLL_TELEMETRY_ENV: ${{ inputs.telemetry_env || 'dev' }}
   NODE_VERSION: '22.x'
   RIDER_DIR: src/Rider
   VSCODE_DIR: src/VSCode
@@ -705,6 +719,16 @@ jobs:
         with:
           name: testlogger
           path: ${{ env.RIDER_DIR }}/downloaded-testlogger
+
+      - name: Restore executable bit on downloaded server/connector binaries
+        # Artifact zips don't preserve the Unix executable bit (see the VS Code job's equivalent
+        # step, issue #252), so without this the plugin zip would ship non-executable
+        # linux/osx apphosts (issue #979). build.gradle.kts also forces the mode when copying.
+        run: |
+          find "downloaded-server/linux-x64" "downloaded-server/linux-arm64" "downloaded-server/osx-x64" "downloaded-server/osx-arm64" \
+            \( -name 'Reqnroll.IdeSupport.LSP.Server' -o -name 'reqnroll-ide-connector' \) \
+            -type f -exec chmod +x {} +
+        working-directory: ${{ env.RIDER_DIR }}
 
       # -PpluginVersion overrides gradle.properties' placeholder with the build version, so Rider
       # treats each CI build as an upgrade of the last (issue #746).

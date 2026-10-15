@@ -225,7 +225,7 @@ All subsequent requests for a document (semantic tokens, outline, folding, diagn
 
 Binding information enters the registry from two sources:
 
-- **Roslyn Discovery** (in-process, in `LSP.Server/Discovery/Roslyn/`; the binding data itself lives in `LSP.Core/Bindings/`): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` (`LSP.Core/Parsing/CSharp/`, behind `IStepDefinitionFileParser`) also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures.
+- **Roslyn Discovery** (in-process, in `LSP.Server/Discovery/Roslyn/`; the binding data itself lives in `LSP.Core/Bindings/`): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` (`LSP.Core/Parsing/CSharp/`, behind `IStepDefinitionFileParser`) also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures. It also builds each binding's scope from the union of the class-level `[Scope]`s, method-level `[Scope]`s and hook tags, reduced by the same `ScopeNormalizer` the Connector import uses (see [§7, Scope parity](#7-binding-connector)).
 - **Reflection Discovery** (out-of-process Connector): when a build is detected (see [Q9](LSP-IDE-Support-Open-Questions.md) for per-IDE detection reliability), the Connector scans the compiled assembly and replaces the full registry.
 
 **3 · Binding Match Service**
@@ -642,8 +642,7 @@ The Rider plugin is a **Kotlin-only** IntelliJ Platform plugin — there is no R
 | `editorFactoryListener` (×2) | `ReqnrollFeatureInlayHintsController`, `ReqnrollFeatureFoldingController` | Step-binding-info inlay hints (F23) / Code Folding (F10) |
 | `typedHandler` | `ReqnrollFeatureOnTypeFormattingHandler` | `\|`-triggered data-table column realignment (F12) |
 | `action` (×3) | `FindUnusedStepDefinitionsAction`, `FindStepUsagesAction`, `GoToHooksAction` | F15 (Tools menu) / F14 (Tools menu + editor context menu) / F17 (Tools menu + editor context menu) |
-| `action` | `ReqnrollToggleCommentAction` | F13 (Tools menu + editor context menu + `Ctrl+/` keystroke) |
-| `actionPromoter` | `ReqnrollCommentTogglePromoter` | Suppresses the built-in `CommentByLineComment` action from `Ctrl+/` for `.feature` files (F13) |
+| `action` (`overrides="true"`, id `CommentByLineComment`) | `ReqnrollCommentByLineCommentAction` | F13 — replaces the platform's comment action by ID, so every keymap's comment shortcuts reach it (#1151) |
 | `toolWindow` (`id="Reqnroll Structure"`) | `ReqnrollStructureToolWindowFactory` | Feature/Rule/Scenario/Step document outline (F9), as a dedicated tool window (Alt+7) |
 | `fileBreadcrumbsCollector` | `ReqnrollFeatureBreadcrumbsCollector` | Editor breadcrumbs above `.feature` files, mirroring the Structure View hierarchy |
 | `action` (×2) | `RenameFeatureStepAction`, `RenameCSharpStepAction` | Step Rename refactoring (F16) — editor context menu, `.feature` side bound to Shift+F6; `.cs` side context-menu only |
@@ -668,7 +667,7 @@ Rider's declared module dependencies are `com.intellij.modules.rider` and `com.i
 | `ReqnrollFeatureOnTypeFormattingHandler` | Calls the standard `textDocument/onTypeFormatting` request directly and applies the returned edits manually |
 | `ReqnrollProjectFilesSync` / `ReqnrollRunnableProjectsListener` / `ReqnrollDocumentActivationSync` / `ReqnrollProjectBaseline` / `ReqnrollLspServerReadiness` | Project/file membership and activation sync (F2), sourced from Rider's backend project model |
 | `FindStepUsagesAction` / `FindUnusedStepDefinitionsAction` / `GoToHooksAction` / `ReqnrollResultPopup` | F14/F15/F17 actions with a shared result-popup renderer |
-| `ReqnrollToggleCommentAction` / `ReqnrollCommentTogglePromoter` | F13 — a plain `AnAction` bound to the platform's own `Ctrl+/` keystroke, paired with an `ActionPromoter` that suppresses the built-in `CommentByLineComment` action from that keystroke for `.feature` files. **Not** an `EditorActionHandler` decoration (the first approach tried, which doesn't work): `CommentByLineCommentAction` is a `MultiCaretCodeInsightAction` that hardcodes its own handler and gates on `LanguageCommenters.forLanguage` finding a `Commenter`, so it never consults `EditorActionManager` at all — confirmed by decompiling both classes |
+| `ReqnrollCommentByLineCommentAction` | F13 — subclasses the platform's `CommentByLineCommentAction` and is registered with `overrides="true"` under its action ID, which every keymap binds its comment shortcuts to (`Ctrl+/`; `Ctrl+K,C`/`Ctrl+K,U` in the Visual Studio keymaps), so the *command* is intercepted, not a keystroke. Outside `.feature` files it defers to the platform. Not an `EditorActionHandler` decoration: the platform action hardcodes its handler and gates on `LanguageCommenters.forLanguage`, so it never consults `EditorActionManager` — confirmed by decompiling |
 | `ReqnrollStructureToolWindowFactory` / `ReqnrollFeatureStructureViewBuilder` / `ReqnrollStructurePanel` | F9 — the "Reqnroll Structure" tool window. **Not** a `com.intellij.structureViewBuilder` (`FileType`-keyed `StructureViewBuilderProvider`): that EP resolves through a JDK dynamic proxy that throws `ClassCastException` casting the provider to `StructureViewBuilder` on this Rider platform version (confirmed via `idea.log` and by decompiling the platform's own `KeyedExtensionFactory`). A dedicated tool window sidesteps that EP entirely; `ReqnrollStructurePanel` hosts a `StructureView` built directly from `ReqnrollFeatureStructureViewBuilder` |
 | `ReqnrollFeatureBreadcrumbsCollector` | Editor breadcrumbs for `.feature` files. **Not** a `com.intellij.ui.breadcrumbs.BreadcrumbsProvider` (`Language`-keyed — same `ParserDefinition` gap as everywhere else in this plugin, since `.feature` has no PSI language registered); `fileBreadcrumbsCollector` is `VirtualFile`/`Document`/offset-scoped instead, with `requiresProvider()` overridden to `false` |
 | `RenameFeatureStepAction` / `RenameCSharpStepAction` / `RenameStepRunner` / `RenameWorkspaceEditApplier` | F16 — Step Rename. `RenameStepRunner` holds the shared "disambiguate via `reqnroll/renameTargets`, prompt, then drive `textDocument/rename`" logic behind both actions, mirroring VS's `RenameStepCommand` / VS Code's `renameStep.ts`. Rider has no native rename bridge (confirmed by decompiling `LspServerDescriptor` — no `lspRenameSupport`-style customization exists) and the server only proactively pushes `workspace/applyEdit` for Visual Studio, so `RenameWorkspaceEditApplier` applies the returned `WorkspaceEdit` locally, inside one write command |
@@ -723,7 +722,7 @@ For every shipped feature, each IDE's **client-side implementation** falls into 
 | F10 · Code Folding | OOB (`textDocument/foldingRange`) | OOB | Glue — `ReqnrollFeatureFoldingController` calls the standard request directly and renders via `Editor.foldingModel`, since Rider's generic client has no rendering-side consumer for folding either (#162) | No |
 | F11 · Document Auto-formatting | OOB | OOB | OOB (config opt-in: `lspFormattingSupport` property override activates the platform's generic `LspFormattingService`) | No |
 | F12 · Table Auto-formatting (on-type) | OOB (`editor.formatOnType` + `textDocument/onTypeFormatting`) | OOB | Glue — `ReqnrollFeatureOnTypeFormattingHandler` (a `typedHandler`) calls the standard request and applies edits manually, since Rider's generic client has no bridge for `textDocument/onTypeFormatting` at all | No |
-| F13 · Comment/Uncomment | Glue — `workspace/executeCommand` (`reqnroll.toggleComment`) bound to Ctrl+/, applied via the client's native `workspace/applyEdit` handling | Glue — same standard `workspace/executeCommand` route, bound via a VSSDK command-filter redirect on the built-in Edit.CommentSelection / UncommentSelection / ToggleLineComment commands, passing the matching `mode` (#747) | Glue — `ReqnrollToggleCommentAction` (a plain `AnAction`, not an `EditorActionHandler` decoration — that doesn't work for this specific built-in action) bound to the same `Ctrl+/` keystroke via `ReqnrollCommentTogglePromoter` suppressing the built-in action for `.feature`; sends the same `workspace/executeCommand` directly, and the resulting `workspace/applyEdit` is applied natively by Rider's platform `Lsp4jClient`, no consumer glue needed for that half (#159) | No |
+| F13 · Comment/Uncomment | Glue — `workspace/executeCommand` (`reqnroll.toggleComment`) bound to Ctrl+/, applied via the client's native `workspace/applyEdit` handling | Glue — same standard `workspace/executeCommand` route, bound via a VSSDK command-filter redirect on the built-in Edit.CommentSelection / UncommentSelection / ToggleLineComment commands, passing the matching `mode` (#747) | Glue — `ReqnrollCommentByLineCommentAction` (overrides the platform's `CommentByLineComment` action by ID, so whatever keys the active keymap binds to it work; #1151); sends the same `workspace/executeCommand` directly, and the resulting `workspace/applyEdit` is applied natively by Rider's platform `Lsp4jClient`, no consumer glue needed for that half (#159) | No |
 | F14 · Find Step Usages | Custom — `reqnroll/findStepUsages` + `QuickPick` | Custom — same message + `NavigationPickerDialog` | Custom — same message + `StepUsagesCodeVisionProvider`/`FindStepUsagesAction` | No |
 | F15 · Find Unused Step Definitions | Custom — `reqnroll/findUnusedStepDefinitions` | Custom — same message | Custom — same message + `FindUnusedStepDefinitionsAction` | No |
 | F16 · Step Rename Refactoring | Custom — `renameStep.ts` (`reqnroll/renameTargets` + `reqnroll/selectRenameTarget`) atop standard `textDocument/rename` | Custom — same messages + `RenameStep/*` | **Custom** — `RenameFeatureStepAction`/`RenameCSharpStepAction` + `RenameStepRunner`/`RenameWorkspaceEditApplier`, same `reqnroll/renameTargets` + `reqnroll/selectRenameTarget` messages as VS Code/VS. Implemented, #160 | **Yes** — `RenamePostApplyCoordinator` branches on `Behaviours.AppliesRenameResponseEditNatively` for post-apply handling |
@@ -777,6 +776,49 @@ In-process (LSP.Core)                Out-of-process
 **Merge strategy**: When a `.cs` source file changes, Roslyn-derived bindings for that file replace previous entries for that file. When the Connector returns results after a build, its output replaces the entire registry. This ensures the editor always reflects the latest source edits without waiting for a build, while also capturing anything only visible after compilation.
 
 **Error parity between the two paths**: `ProjectBinding.Error` is the single field every diagnostics consumer reads ([F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)'s `.cs` squiggles, [F3](LSP-IDE-Support-Feature-Designs.md#f3--gherkin-file-diagnostics)'s `.feature` near-miss enrichment), so both discovery paths must populate it the same way for the same failure. `BindingImporter.GetBindingError` (connector path) has always combined a binding-level import error with the binding's `Scope.Error` into one `ProjectBinding.Error`; `StepDefinitionFileParser`'s equivalent (`CombineErrors`, Roslyn path) folds in the same scope error plus a malformed step-expression's exception message (from the real `Cucumber.CucumberExpressions`/`Cucumber.TagExpressions` libraries, which were already being invoked — only their failures were previously discarded) alongside the structural-validation error.
+
+**Scope parity between the two paths** (issues [#953](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/953), [#1133](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/1133)): a binding's `[Scope]`s decide which scenarios it applies to, and the Roslyn and Connector paths must give the same answer for the same source. Because Roslyn results replace a file's Connector results on every edit, any difference in the *shape* of a binding (not only in what it matches) would show up as a change nobody made.
+
+Reqnroll's runtime (`BindingSourceProcessor.ProcessMethod`/`ProcessHookAttribute`) registers **one binding per scope** over the union of the class-level `[Scope]`s, the method-level `[Scope]`s and, for a hook, each tag on the hook attribute. Those scopes are **alternatives (OR)**: the binding is in scope when any one matches. Inside one scope, `Tag`, `Feature` and `Scenario` must **all** match (AND). The Connector sees the runtime registry, so it receives one wire entry per scope; Roslyn rebuilds the same union from syntax.
+
+```mermaid
+flowchart LR
+    SRC["C# source<br/>[Scope] on class and method, hook tags"]
+    RT["Reqnroll runtime registry<br/>one entry per scope"]
+    CON["Connector import<br/>BindingImporter.GroupByAttribute"]
+    ROS["StepDefinitionFileParser<br/>class + method + hook-tag scopes unioned"]
+    NRM["ScopeNormalizer<br/>(LSP.Core/Bindings)"]
+    BIN["One step-definition or hook binding per attribute<br/>Scope = null, one scope, or Alternatives"]
+    USE["Consumers: step matching, usage counts,<br/>hook match-count CodeLens, Go to matching scenarios, rename"]
+    SRC --> RT --> CON --> NRM
+    SRC --> ROS --> NRM
+    NRM --> BIN --> USE
+```
+
+`ScopeNormalizer` (`LSP.Core/Bindings/ScopeNormalizer.cs`) is the single place that reduces a binding attribute's scopes, using only rewrites that cannot change which scenarios match:
+
+| Rule | Why it is exact |
+| --- | --- |
+| No scope, or any scope that restricts nothing (a bare `[Scope]`), makes the binding unrestricted (`Scope == null`). | `X OR everything = everything`. The hook match-count CodeLens then shows its static "all scenarios" label. |
+| Scopes with the same feature and scenario title merge, OR-ing their tags (`@a` + `@b` becomes `(@a) or (@b)`). Each OR-ed member is parenthesized, so a scope tag that is a full tag expression (`@a and @b`, `not @c`) stays a self-contained group in the combined expression; a lone member is left as written. | `(t1 AND F) OR (t2 AND F) = (t1 OR t2) AND F` |
+| A scope with that title and no tag absorbs the tagged ones. | `F OR (t AND F) = F` |
+| Duplicates collapse, bare tag names get their `@`, and groups and tags are sorted ordinally. | The reflection API does not promise attribute order, so the result must not depend on it. |
+| A scope that arrived with an error is never merged or absorbed. | Its error must stay visible on the binding. |
+
+What remains is **one scope** (an ordinary `BindingScope`: the common case, including every tag-only binding) or, when the scopes restrict different things, **`BindingScope.Alternatives`**, which `ProjectBinding.MatchScope` evaluates as "any alternative matches". Examples:
+
+| Source | Runtime entries | Resulting `Scope` |
+| --- | --- | --- |
+| `[Scope(Tag="@a")] [Scope(Tag="@b")]` | `@a`, `@b` | one scope, tag `(@a) or (@b)` |
+| `[Scope(Tag="@web")] [Scope(Feature="Checkout")]` | `@web`, `Feature=Checkout` | alternatives: `(@web) or (Feature='Checkout')` |
+| class `[Scope(Tag="@ui")]`, method `[Scope(Feature="Checkout")]` | `@ui`, `Feature=Checkout` | alternatives (class and method scopes are OR-ed, not AND-ed) |
+| `[Scope(Feature="Checkout")] [BeforeScenario("web","smoke")]` | `Feature=Checkout`, `@web`, `@smoke` | alternatives: `(@smoke) or (@web)` and `Feature=Checkout` |
+| `[Scope] [Scope(Tag="@web")]` | one unrestricted, `@web` | `null` (matches everything) |
+| `[Scope(Tag="@web", Feature="Checkout")]` | one entry | one scope, both required |
+
+**One binding per attribute is a contract, not a convenience.** The CodeLens handlers (`StepCodeLensHandler`, `HookMatchCountCodeLensHandler`), `FindMatchingScenariosHandler` and the rename picker each identify a binding by the location of its attribute and keep the first binding found there. With one binding per scope, a hook with two scopes would be counted against its first scope only, and the rename picker would list the same attribute twice. `BindingImporter.GroupByAttribute` therefore groups the wire entries that are identical but for their scope (same type, expression, method, source location, error and, for hooks, order) before import. The wire format carries no attribute ordinal, so two textually identical attributes on one method form one group; they already share one `BindingId`, which does not include the scope. `ScopeParityTests` pins the parity: each case pairs C# source with the entries the runtime registers for it and asserts that both paths give the same `Scope.ToString()` and the same match result across a set of scenario tag combinations, in either entry order.
+
+Known difference not addressed here: the runtime compares feature and scenario titles case-insensitively (`BindingScope.Match`), while `ProjectBinding.MatchScope` compares them case-sensitively. That predates scope normalization and is independent of it.
 
 The Connector code is ported from `Reqnroll.VisualStudio.ReqnrollConnector.Generic` in the legacy VS extension — the team already understands its assembly-loading and discovery logic. One addition beyond the ported code: the Connector also ships .NET Framework TFM variants (net462/net472/net481) that use `AppDomain` isolation to analyze .NET Framework test projects, since the cross-platform LSP server cannot load a .NET Framework assembly into an `AssemblyLoadContext` directly. The LSP server selects the appropriate connector variant based on the target project's TFM.
 
@@ -902,7 +944,9 @@ host owns the concrete transmitter — `TelemetryTransmitter` in VS's `VSSDKInte
 `TelemetryReporter` in VS Code, and `RiderTelemetryTransmitter` in the Rider plugin (a direct POST
 to the Application Insights ingestion REST endpoint via the JDK's `java.net.http.HttpClient`, since
 pulling in the Java Application Insights SDK wasn't justified for one event type) — all three
-pointed at the same Application Insights resource, each forwarding via a `telemetry/event`
+pointed at the same Application Insights resource (the prod resource in a release build, the dev
+resource in every other build; selected at build time via `REQNROLL_TELEMETRY_ENV`, issue #1160 — see
+`Telemetry-Events-Inventory.md` §1), each forwarding via a `telemetry/event`
 interceptor registered on that IDE's LSP client (`TelemetryEventInterceptor.cs` for VS,
 `registerTelemetry` in `telemetry.ts` for VS Code, `ReqnrollTelemetryEventInterceptor.kt` for
 Rider). Rider had no such interceptor until issue #255 — every event below was reaching VS and VS

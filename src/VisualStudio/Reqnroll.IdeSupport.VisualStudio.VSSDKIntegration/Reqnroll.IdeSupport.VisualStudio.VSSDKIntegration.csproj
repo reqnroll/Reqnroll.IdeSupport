@@ -19,6 +19,20 @@
     <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- Which Application Insights resource this build reports to (#1160): Dev (default) or Prod.
+         Set -p:TelemetryEnvironment=Prod, or the REQNROLL_TELEMETRY_ENV environment variable that the
+         VS Code and Rider builds also read, for a release build. A Debug build is always Dev, whatever
+         is requested (TelemetryEffectiveEnvironment), so a stray REQNROLL_TELEMETRY_ENV=prod in a
+         developer's shell cannot send F5 sessions to the prod resource. Telemetry\InstrumentationKey.<env>.txt
+         for the effective environment is embedded as InstrumentationKey.txt. -->
+    <TelemetryEnvironment Condition="'$(TelemetryEnvironment)' == ''">$(REQNROLL_TELEMETRY_ENV)</TelemetryEnvironment>
+    <TelemetryEnvironment Condition="'$(TelemetryEnvironment)' == ''">Dev</TelemetryEnvironment>
+    <TelemetryEffectiveEnvironment>$(TelemetryEnvironment)</TelemetryEffectiveEnvironment>
+    <TelemetryEffectiveEnvironment Condition="'$(Configuration)' == 'Debug'">Dev</TelemetryEffectiveEnvironment>
+    <TelemetryConnectionFile>Telemetry\InstrumentationKey.$(TelemetryEffectiveEnvironment).txt</TelemetryConnectionFile>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40265" />
     <!-- Classic (non-Roslyn) CodeLens API — IAsyncCodeLensDataPointProvider/ICodeLensTag — used by
@@ -75,7 +89,7 @@
     <!-- Instrumentation key for the Application Insights TelemetryClient. Lives here (not in
          Common) because this is the only .NET component that transmits telemetry; the
          cross-platform LSP server must not carry an AppInsights dependency. -->
-    <EmbeddedResource Include="Telemetry\InstrumentationKey.txt" />
+    <EmbeddedResource Include="$(TelemetryConnectionFile)" LogicalName="InstrumentationKey.txt" />
     <!-- Expose the internal test-seam constructor on TelemetryTransmitter to the VS test assembly. -->
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>Reqnroll.IdeSupport.VisualStudio.Tests, PublicKey=002400000480000094000000060200000024000052534131000400000100010059bb085601a8b65a8a7b00f34e6d85df230f1e4913d3c0eaadcd13c1fd9cd15c3f01567c49d5f41f617dbda6f544ea3e2d5b5a042f307a7c8d21a079254509ba543efaefce96fac977abd0a76206b721abc33f84ee45ae5383cf50eeb8e234595656fd4af916e1dcde644ce20bb9a68bd72bc7957b759560524c63ca294585ca</_Parameter1>
@@ -85,5 +99,14 @@
   <ItemGroup>
     <Compile Include="..\..\..\build\IsExternalInit.cs" Link="IsExternalInit.cs" />
   </ItemGroup>
+
+  <!-- Fail fast on an unusable telemetry configuration (#1160). A Prod build must never ship the
+       placeholder connection string, which would silently drop every event. -->
+  <Target Name="ValidateTelemetryConnection" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(TelemetryEnvironment)' != 'Dev' And '$(TelemetryEnvironment)' != 'Prod'"
+           Text="TelemetryEnvironment must be 'Dev' or 'Prod' (was '$(TelemetryEnvironment)')." />
+    <Error Condition="'$(TelemetryEffectiveEnvironment)' == 'Prod' And $([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\$(TelemetryConnectionFile)').Contains('TODO'))"
+           Text="$(TelemetryConnectionFile) still contains a TODO placeholder; paste the real Application Insights connection string before a Prod build." />
+  </Target>
 
 </Project>

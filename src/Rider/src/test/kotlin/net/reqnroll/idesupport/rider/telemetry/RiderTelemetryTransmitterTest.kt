@@ -20,11 +20,11 @@ class RiderTelemetryTransmitterTest {
     }
 
     @Test
-    fun `isBuiltInBlocked blocks only the dev sandbox without a usable override`() {
-        assertTrue(RiderTelemetryTransmitter.isBuiltInBlocked(true, null))
-        assertTrue(RiderTelemetryTransmitter.isBuiltInBlocked(true, "nonsense"))
-        assertFalse(RiderTelemetryTransmitter.isBuiltInBlocked(true, "InstrumentationKey=abc"))
-        assertFalse(RiderTelemetryTransmitter.isBuiltInBlocked(false, null))
+    fun `effectiveEnvironment is always dev in the dev sandbox`() {
+        assertEquals("dev", RiderTelemetryTransmitter.effectiveEnvironment("prod", true))
+        assertEquals("dev", RiderTelemetryTransmitter.effectiveEnvironment("dev", true))
+        assertEquals("prod", RiderTelemetryTransmitter.effectiveEnvironment("prod", false))
+        assertEquals("dev", RiderTelemetryTransmitter.effectiveEnvironment("dev", false))
     }
 
     @Test
@@ -70,10 +70,11 @@ class RiderTelemetryTransmitterTest {
             userId = "user-123",
             properties = mapOf("Ide" to "JetBrains Rider", "IdeVersion" to "2024.3.5"),
             timestamp = timestamp,
+            instrumentationKey = "test-ikey",
         )
 
         assertTrue(json.contains("\"name\":\"Microsoft.ApplicationInsights.Event\""))
-        assertTrue(json.contains("\"iKey\":\"3fd018ff-819d-4685-a6e1-6f09bc98d20b\""))
+        assertTrue(json.contains("\"iKey\":\"test-ikey\""))
         assertTrue(json.contains("\"ai.user.id\":\"user-123\""))
         assertTrue(json.contains("\"name\":\"GoToStepDefinition command executed\""))
         assertTrue(json.contains("\"Ide\":\"JetBrains Rider\""))
