@@ -107,6 +107,15 @@ Client rule: **`-32803` ⇒ show `message` to the user** (modal dialog, per #113
 code ⇒ unexpected failure** — log it and show at most a generic message. `ContentModified`
 (`-32801`) is a routine, retryable cancellation and is never a rejection.
 
+**Implicit triggers never get the modal.** A rejection that arrives from an automatic format —
+format on save, format on type, format on paste — must only be logged: the user did not ask for the
+edit, and a half-typed file (no `Feature:` line yet) would otherwise raise a dialog on every save or
+keystroke. Only an explicit, user-invoked command (Format Document/Selection, Rename Step,
+Comment/Uncomment) shows it. On-type formatting never rejects on the server side. How each client
+tells the two apart: VS Code tracks the save window (`onWillSaveTextDocument` fires before the
+format-on-save provider, `onDidSaveTextDocument` after); Visual Studio and Rider as documented in
+their own sections of the client guides.
+
 An edit request that has nothing to change is **not** a rejection: "already formatted", an empty or
 whitespace-only document, and any non-`.feature` document return an empty/no-op edit result with no
 error. On-type formatting never rejects (it fires while the user types). The server deliberately does
