@@ -12,8 +12,7 @@ import com.intellij.ui.content.ContentFactory
  * (Find Step Usages, Find Unused Step Definitions, Go To Hooks, Rename Step, Run, etc.), not the
  * raw per-server LSP wire traffic the platform's own "Language Servers" tool window already shows
  * for every running server. See [ReqnrollConsolePanel]'s doc comment for what does/doesn't reach
- * it. Mirrors [net.reqnroll.idesupport.rider.structureview.ReqnrollStructureToolWindowFactory]'s
- * dedicated-`ToolWindowFactory` shape (issue #163 prior art).
+ * it. Uses a dedicated `ToolWindowFactory`.
  */
 class ReqnrollConsoleToolWindowFactory : ToolWindowFactory {
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {

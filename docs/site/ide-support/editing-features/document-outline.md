@@ -6,8 +6,9 @@ Step — and clicking a node jumps to that location. Useful for navigating a
 large feature file without scrolling.
 
 * **VS Code**: shown in the native Outline panel.
-* **Rider**: shown in a dedicated **Reqnroll Structure View** tool window
-  (default shortcut `Alt+7`).
+* **Rider**: shown in Rider's native Structure view, which renders the
+  language server's `textDocument/documentSymbol` response. Older Rider
+  versions that don't support this don't show a Gherkin outline.
 
 :::{tab-set}
 
@@ -33,14 +34,4 @@ files — this is a known VS limitation (its outline is built on an older
 COM-based mechanism this extension's language server support doesn't route
 through), not a bug in this extension. Outline navigation is available in
 VS Code and Rider, as described above.
-```
-
-```{admonition} Why Rider gets a dedicated tool window, not its native Structure View
-:class: note
-
-Rider's own platform Structure View extension point isn't wired up for this
-either, so this feature ships as its own **Reqnroll Structure View** tool
-window instead of appearing in Rider's generic Structure View panel. This
-is a deliberate design choice, not a bug — it's why the window looks
-different from VS Code's native Outline.
 ```

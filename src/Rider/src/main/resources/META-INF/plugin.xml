@@ -27,7 +27,7 @@ separate legacy extensions. It is in a preview period and we would like to hear 
   <li>Keyword, step and tag completion</li>
   <li>Document and table formatting</li>
   <li>Comment / uncomment</li>
-  <li>Code folding and document structure view</li>
+  <li>Code folding</li>
   <li>Go to step definition and hook navigation</li>
   <li>Step definition usages and unused step definitions</li>
   <li>Define missing steps from a quick fix</li>
@@ -123,15 +123,6 @@ for what is available in each IDE.</p>
          characters only), so tag and step completion would otherwise wait for the first letter
          (issue #902). -->
     <typedHandler implementation="net.reqnroll.idesupport.rider.completion.ReqnrollFeatureCompletionAutoPopupHandler" />
-
-    <!-- Not com.intellij.structureViewBuilder (FileType-keyed StructureViewBuilderProvider): that
-         EP resolves through a JDK dynamic proxy that throws a ClassCastException casting our
-         provider instance to StructureViewBuilder on Rider 243.24978.27 (confirmed via idea.log
-         and decompiling the platform's own KeyedExtensionFactory — see
-         ReqnrollStructureToolWindowFactory's doc comment, issue #163). A dedicated tool window
-         sidesteps that EP — and its proxy — entirely. -->
-    <toolWindow id="Reqnroll Structure" anchor="right" secondary="true"
-        factoryClass="net.reqnroll.idesupport.rider.structureview.ReqnrollStructureToolWindowFactory" />
 
     <!-- Curated, app-level-only console (issue #662) — plugin/LSP-client lifecycle and
          user-invoked-command outcomes, fed by ReqnrollDebugLogger's Info-and-above entries (its

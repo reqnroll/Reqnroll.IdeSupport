@@ -20,7 +20,6 @@ import com.intellij.util.Alarm
 import com.intellij.xml.breadcrumbs.NavigatableCrumb
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender
-import net.reqnroll.idesupport.rider.structureview.ReqnrollSymbolTreeElement
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.Position
 import java.util.concurrent.ConcurrentHashMap
@@ -34,8 +33,7 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
  * `.feature` files have no `ParserDefinition` (see `ReqnrollFeatureInlayHintsController`'s doc
  * comment). `FileBreadcrumbsCollector` (`com.intellij.fileBreadcrumbsCollector`) is a
  * `VirtualFile`/`Document`/offset-scoped EP instead — no PSI required — matching the same "operate
- * directly on the document" pattern already used for folding, inlay hints, and the Structure View
- * tool window (issue #163).
+ * directly on the document" pattern already used for folding and inlay hints.
  *
  * [requiresProvider] must return `false`: confirmed via decompiling
  * `BreadcrumbsInitializingActivityKt.isSuitable` that a collector whose [requiresProvider] is
@@ -195,7 +193,7 @@ private class ReqnrollBreadcrumb(
     private val highlightRange = TextRange(document.offsetOf(symbol.range.start), document.offsetOf(symbol.range.end))
     private val anchorOffset = document.offsetOf(symbol.selectionRange.start)
 
-    override fun getIcon(): Icon = ReqnrollSymbolTreeElement.iconFor(symbol.kind)
+    override fun getIcon(): Icon = ReqnrollSymbolIcons.iconFor(symbol.kind)
 
     override fun getText(): String = symbol.name
 
