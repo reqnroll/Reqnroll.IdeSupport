@@ -1,0 +1,1 @@
+InstrumentationKey=515d6796-e169-41ba-81e1-a52564258c25;IngestionEndpoint=https://eastus-8.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus.livediagnostics.monitor.azure.com/;ApplicationId=e579b405-7f07-4af3-af5a-91d12a6d2ec0

@@ -52,6 +52,14 @@ This **also republishes the LSP server** self-contained (win-x64, net10.0) into 
 project to pick it up before testing in VS — a stale bundled server is a common source of "my fix
 doesn't seem to be running" confusion.
 
+### Telemetry resource (dev vs prod)
+
+The extension embeds one of `Telemetry/InstrumentationKey.Dev.txt` / `InstrumentationKey.Prod.txt`
+(from `Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration`) as the built-in Application Insights
+connection string. The default is **Dev**; for a release build pass `-p:TelemetryEnvironment=Prod`
+or set `REQNROLL_TELEMETRY_ENV=prod`; a **Debug** build is always Dev regardless. A Prod build fails while the Prod file still contains a
+`TODO` placeholder. See the root [CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
+
 ## Local install of a dev build
 
 The F5/experimental-instance workflow above is for day-to-day development. To try a build in

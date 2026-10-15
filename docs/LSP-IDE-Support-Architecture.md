@@ -945,7 +945,9 @@ host owns the concrete transmitter — `TelemetryTransmitter` in VS's `VSSDKInte
 `TelemetryReporter` in VS Code, and `RiderTelemetryTransmitter` in the Rider plugin (a direct POST
 to the Application Insights ingestion REST endpoint via the JDK's `java.net.http.HttpClient`, since
 pulling in the Java Application Insights SDK wasn't justified for one event type) — all three
-pointed at the same Application Insights resource, each forwarding via a `telemetry/event`
+pointed at the same Application Insights resource (the prod resource in a release build, the dev
+resource in every other build; selected at build time via `REQNROLL_TELEMETRY_ENV`, issue #1160 — see
+`Telemetry-Events-Inventory.md` §1), each forwarding via a `telemetry/event`
 interceptor registered on that IDE's LSP client (`TelemetryEventInterceptor.cs` for VS,
 `registerTelemetry` in `telemetry.ts` for VS Code, `ReqnrollTelemetryEventInterceptor.kt` for
 Rider). Rider had no such interceptor until issue #255 — every event below was reaching VS and VS
