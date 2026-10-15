@@ -32,11 +32,10 @@ import java.util.concurrent.TimeUnit
  */
 object RiderTelemetryTransmitter {
     // Same Application Insights resource VS's TelemetryTransmitter.cs and VS Code's telemetry.ts
-    // use (see src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt),
-    // so usage events from every Reqnroll IDE client land in the same place.
-    // TODO(#1160): paste the PROD instrumentation key and IngestionEndpoint (reqnroll-ide-appinsights-prod).
-    private const val INSTRUMENTATION_KEY = "00000000-0000-0000-0000-000000000000"
-    private const val INGESTION_ENDPOINT = "https://TODO-region.in.applicationinsights.azure.com/v2/track"
+    // use (see TelemetryConnections.kt), so usage events from every Reqnroll IDE client land in the
+    // same place. Which resource (dev or prod) is fixed at build time (issue #1160).
+    private val INSTRUMENTATION_KEY = TelemetryConnections.instrumentationKey(TelemetryBuildConfig.ENVIRONMENT)
+    private val INGESTION_ENDPOINT = TelemetryConnections.ingestionEndpoint(TelemetryBuildConfig.ENVIRONMENT)
 
     /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
     internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING"

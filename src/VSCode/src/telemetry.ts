@@ -4,13 +4,14 @@ import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { createTelemetryDebugLogFromEnvironment } from './logging/telemetryDebugLog';
 import { logInfo } from './logging/appNotify';
 import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
+import { builtInConnectionString } from './telemetryConnections';
+import { TELEMETRY_ENVIRONMENT } from './generated/telemetryEnvironment';
 
-// Same Application Insights resource VS's AnalyticsTransmitter uses (see
-// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt)
-// so usage events from every Reqnroll IDE client land in the same place.
-// TODO(#1160): paste the PROD connection string (reqnroll-ide-appinsights-prod).
-const CONNECTION_STRING =
-  'InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://TODO-region.in.applicationinsights.azure.com/;LiveEndpoint=https://TODO-region.livediagnostics.monitor.azure.com/;ApplicationId=00000000-0000-0000-0000-000000000000';
+// Same Application Insights resource VS's TelemetryTransmitter uses (see
+// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.*.txt)
+// so usage events from every Reqnroll IDE client land in the same place. Which resource (dev or
+// prod) is fixed at build time; see telemetryConnections.ts.
+const CONNECTION_STRING = builtInConnectionString(TELEMETRY_ENVIRONMENT);
 
 /**
  * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,

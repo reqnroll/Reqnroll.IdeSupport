@@ -13,8 +13,18 @@
 
 ## 1. How telemetry flows
 
-There is **one** Application Insights resource (`InstrumentationKey 3fd018ff-819d-4685-a6e1-6f09bc98d20b`)
-shared by every Reqnroll IDE client, so event names form one flat namespace regardless of emitter.
+There are two Application Insights resources, `reqnroll-ide-appinsights-prod` (released builds) and
+`reqnroll-ide-appinsights-dev` (everything else), each shared by every Reqnroll IDE client, so
+within a resource event names form one flat namespace regardless of emitter. Which of the two a
+build reports to is fixed at **build time** (issue #1160): `REQNROLL_TELEMETRY_ENV=prod|dev`
+(default `dev`), read by the VS project (`TelemetryEnvironment` MSBuild property, embedding
+`InstrumentationKey.{Dev,Prod}.txt`), by VS Code's `precompile` script (generating the git-ignored
+`src/generated/telemetryEnvironment.ts`) and by Rider's `generateTelemetryBuildConfig` Gradle task
+(generating `TelemetryBuildConfig`). The connection strings are committed: VS
+`Telemetry/InstrumentationKey.{Dev,Prod}.txt`, VS Code `src/telemetryConnections.ts`, Rider
+`TelemetryConnections.kt`. A `prod` build fails while a prod string is still a `TODO` placeholder,
+and CI builds are `dev` unless the workflow is dispatched with `telemetry_env = prod`. Query the prod
+resource for real usage; the dev resource holds CI/pre-release and developer-override traffic.
 
 Two emission paths exist:
 
