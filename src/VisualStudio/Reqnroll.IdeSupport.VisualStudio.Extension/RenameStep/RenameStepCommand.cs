@@ -187,6 +187,16 @@ internal sealed class RenameStepCommand : Command
             _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
             await VsUtils.ShowStatusBarMessageAsync("Reqnroll: Step renamed successfully.");
         }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("RenameStepCommand: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1019: the target lookup failed - say so rather than "no step definition found".
+            _logger.LogWarning("RenameStepCommand: request failed: {Reason}", reason);
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Rename Step failed - {reason}.");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "RenameStepCommand: failed.");
