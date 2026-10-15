@@ -18,6 +18,39 @@ below).
 * **VS Code** — Rename doesn't yet support disambiguating a step bound to
   more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
   for the workaround (Rider and Visual Studio both handle this case).
+* **All IDEs** — a project that targets more than one framework
+  (`<TargetFrameworks>`) is analysed for a single target framework only. See
+  [Multi-targeted projects](#multi-targeted-projects-use-a-single-target-framework).
+
+## Multi-targeted projects use a single target framework
+
+If a test project declares more than one target framework (for example
+`<TargetFrameworks>net8.0;net481</TargetFrameworks>`), Reqnroll IDE Support analyses it for
+**one** of those frameworks. It reads step definitions and hooks from that framework's compiled
+output assembly and does not combine or compare results across frameworks.
+
+The IDE decides which framework that is, so it can differ between IDEs for the same project:
+
+* **Visual Studio** — the target framework Visual Studio reports for the project.
+* **VS Code** — the first framework listed in `TargetFrameworks`.
+* **Rider** — the first build output Rider lists for the project.
+
+There is no setting to choose the framework. In practice:
+
+* **Bindings that exist for only one framework.** A step definition or hook compiled only for a
+  framework other than the one in use is not discovered, so its steps can show as undefined and
+  it is not counted by CodeLens or Find Usages. No warning is shown.
+* **Bindings inside `#if` blocks.** Features that read `.cs` source while you edit (rather than
+  the compiled assembly) do not evaluate conditions such as `#if NET481`. If the same binding is
+  declared under more than one `#if` branch, it can be reported as a duplicate binding.
+* **Different results in different IDEs.** If the IDEs pick different frameworks, the same
+  project can show different binding results in each.
+
+If your step definitions don't depend on the framework, none of this affects you. In VS Code,
+listing the framework you want analysed first in `TargetFrameworks` selects it.
+
+Full support for multi-targeted projects is not planned for the Beta; the reasoning is recorded
+in [issue #1177](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/1177).
 
 ## Can I have both extensions installed at once?
 
