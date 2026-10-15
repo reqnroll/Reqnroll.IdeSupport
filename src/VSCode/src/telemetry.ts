@@ -8,7 +8,9 @@ import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
 // Same Application Insights resource VS's AnalyticsTransmitter uses (see
 // src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt)
 // so usage events from every Reqnroll IDE client land in the same place.
-const CONNECTION_STRING = 'InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d20b';
+// TODO(#1160): paste the PROD connection string (reqnroll-ide-appinsights-prod).
+const CONNECTION_STRING =
+  'InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://TODO-region.in.applicationinsights.azure.com/;LiveEndpoint=https://TODO-region.livediagnostics.monitor.azure.com/;ApplicationId=00000000-0000-0000-0000-000000000000';
 
 /**
  * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,

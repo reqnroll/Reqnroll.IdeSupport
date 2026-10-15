@@ -1,1 +1,1 @@
-InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d20b
+InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://TODO-region.in.applicationinsights.azure.com/;LiveEndpoint=https://TODO-region.livediagnostics.monitor.azure.com/;ApplicationId=00000000-0000-0000-0000-000000000000
