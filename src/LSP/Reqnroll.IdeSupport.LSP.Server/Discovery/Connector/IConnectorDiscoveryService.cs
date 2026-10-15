@@ -24,11 +24,14 @@ public interface IConnectorDiscoveryService
     /// Runs discovery for <paramref name="scope"/>.
     /// </summary>
     /// <returns>
-    /// A new <see cref="ProjectBindingRegistry"/> and its content hash when discovery
-    /// succeeds.  Returns (<paramref name="lastGood"/>, <paramref name="lastHash"/>) unchanged
-    /// when the assembly is missing, unchanged, or the connector fails.
+    /// <see cref="ConnectorDiscoveryStatus.Discovered"/> with a new <see cref="ProjectBindingRegistry"/>
+    /// and its content hash when discovery succeeds. Otherwise <paramref name="lastGood"/> and
+    /// <paramref name="lastHash"/> unchanged, with a status saying why:
+    /// <see cref="ConnectorDiscoveryStatus.Unchanged"/> (assembly hash match),
+    /// <see cref="ConnectorDiscoveryStatus.Failed"/> (the connector threw or reported failure) or
+    /// <see cref="ConnectorDiscoveryStatus.Skipped"/> (no output assembly, or not a Reqnroll test project).
     /// </returns>
-    (ProjectBindingRegistry Registry, string Hash) RunDiscovery(
+    ConnectorDiscoveryOutcome RunDiscovery(
         IProjectScope scope,
         ProjectBindingRegistry lastGood,
         string lastHash,
