@@ -11,6 +11,7 @@ import './lsp/lspInspectorLogger.test';
 import './lsp/lspInspectorFormatConformance.test';
 import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
+import './lsp/editRejection.test';
 import './lsp/manualDocumentSync.test';
 import './lsp/serverLifecycleTelemetry.test';
 // Must precede `commands/stepCodeLens.test` and `commands/hookCodeLens.test` below (and, for the
