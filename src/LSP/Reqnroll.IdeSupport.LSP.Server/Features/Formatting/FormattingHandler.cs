@@ -72,7 +72,7 @@ public sealed class FormattingHandler
         var filePath = request.TextDocument.Uri.GetFileSystemPath();
         _logger.LogInfo($"Document auto-formatting textDocument/formatting: {request.TextDocument.Uri}");
         var (result, editCount, lineCount) = await FormatDocumentAsync(request.TextDocument.Uri, filePath, request.Options,
-            startLine: null, endLine: null).ConfigureAwait(false);
+            startLine: null, endLine: null, isSelection: false).ConfigureAwait(false);
 
         // Telemetry
         _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, new()
@@ -101,7 +101,8 @@ public sealed class FormattingHandler
         var (formatted, editCount, lineCount) = await FormatDocumentAsync(
             request.TextDocument.Uri, filePath, request.Options,
             startLine: (int)request.Range.Start.Line,
-            endLine: (int)request.Range.End.Line).ConfigureAwait(false);
+            endLine: (int)request.Range.End.Line,
+            isSelection: true).ConfigureAwait(false);
         var result = formatted ?? new TextEditContainer();
 
         // Telemetry
@@ -208,13 +209,15 @@ public sealed class FormattingHandler
         string? filePath,
         FormattingOptions lspOptions,
         int? startLine,
-        int? endLine)
+        int? endLine,
+        bool isSelection)
     {
         if (!_documentBufferService.TryGet(uri, out var buffer) || buffer is null)
         {
             _logger.LogWarning($"Formatting requested for unknown document: {uri}");
             if (!IsFeatureFile(uri))
                 return Task.FromResult<(TextEditContainer?, int, int)>((new TextEditContainer(), 0, 0));
+            SendRejectedTelemetry(isSelection, "DocumentUnknown", lineCount: null);
             throw EditRejected.Error("The document is not open in the Reqnroll language server, so it cannot be formatted.", "document");
         }
 
@@ -245,6 +248,7 @@ public sealed class FormattingHandler
             // unparsable Feature header), so it is a rejection rather than a silent empty edit
             // (issue #1132).
             _logger.LogInfo($"Formatting rejected for {uri}: no Feature could be parsed.");
+            SendRejectedTelemetry(isSelection, "NoFeatureParsed", allLines.Length);
             throw EditRejected.Error("The document cannot be formatted because no Feature could be parsed. Check the file for syntax errors.", "document");
         }
 
@@ -285,6 +289,23 @@ public sealed class FormattingHandler
         var parser = new IdeSupportGherkinParser(dialectProvider, NullLspTelemetryService.Instance);
         parser.ParseAndCollectErrors(text, _logger, out var gherkinDocument, out _);
         return gherkinDocument;
+    }
+
+    // A rejected format still counts as a use of the command (issue #1132), flagged like a rejected
+    // rename: Erroneous + Reason. EditCount is omitted (nothing was computed); the line bucket is only
+    // sent when the document is known.
+    private void SendRejectedTelemetry(bool isSelection, string reason, int? lineCount)
+    {
+        var properties = new Dictionary<string, object?>
+        {
+            ["IsSelectionFormatting"] = isSelection,
+            ["Erroneous"] = true,
+            ["Reason"] = reason,
+        };
+        if (lineCount != null)
+            properties[TelemetryProperties.DocumentLineBucket] = TelemetryBuckets.LineCount(lineCount.Value);
+
+        _telemetryService?.SendEvent(TelemetryEvents.AutoFormatDocumentCommandExecuted, properties);
     }
 
     private static bool IsFeatureFile(OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri uri) =>

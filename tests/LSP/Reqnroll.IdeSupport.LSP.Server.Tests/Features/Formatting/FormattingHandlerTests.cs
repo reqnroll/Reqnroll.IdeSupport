@@ -63,6 +63,15 @@ public class FormattingHandlerTests
         var exception = await act.Should().ThrowAsync<RpcErrorException>();
         exception.Which.Code.Should().Be(EditRejected.Code);
         exception.Which.Message.Should().Contain("not open");
+
+        _telemetryService.Received(1).SendEvent(
+            "AutoFormatDocument command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (bool)p["IsSelectionFormatting"]! == false
+                && (bool)p["Erroneous"]! == true
+                && (string)p["Reason"]! == "DocumentUnknown"
+                && !p.ContainsKey("EditCount")
+                && !p.ContainsKey("DocumentLineBucket")));
     }
 
     [Fact]
@@ -76,6 +85,15 @@ public class FormattingHandlerTests
         var exception = await act.Should().ThrowAsync<RpcErrorException>();
         exception.Which.Code.Should().Be(EditRejected.Code);
         exception.Which.Message.Should().Contain("no Feature could be parsed");
+
+        _telemetryService.Received(1).SendEvent(
+            "AutoFormatDocument command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (bool)p["IsSelectionFormatting"]! == false
+                && (bool)p["Erroneous"]! == true
+                && (string)p["Reason"]! == "NoFeatureParsed"
+                && !p.ContainsKey("EditCount")
+                && (string)p["DocumentLineBucket"]! == "2-10"));
     }
 
     [Fact]
@@ -93,6 +111,13 @@ public class FormattingHandlerTests
 
         var exception = await act.Should().ThrowAsync<RpcErrorException>();
         exception.Which.Code.Should().Be(EditRejected.Code);
+
+        _telemetryService.Received(1).SendEvent(
+            "AutoFormatDocument command executed",
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (bool)p["IsSelectionFormatting"]! == true
+                && (bool)p["Erroneous"]! == true
+                && (string)p["Reason"]! == "NoFeatureParsed"));
     }
 
     [Theory]
