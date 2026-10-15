@@ -67,16 +67,6 @@ for what is available in each IDE.</p>
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.lsp.ReqnrollServerLifecycleListener" />
     <postStartupActivity implementation="net.reqnroll.idesupport.rider.telemetry.ReqnrollExtensionLifecycleActivity" />
 
-    <!-- The built-in CommentByLineComment action (Ctrl+/) is a MultiCaretCodeInsightAction that
-         hardcodes its own handler and gates on LanguageCommenters.forLanguage finding a Commenter
-         for the file — .feature has neither a PSI language nor a registered Commenter, so it's a
-         no-op there. ReqnrollToggleCommentAction (in the <actions> block below) is bound to the
-         same default keystroke; this promoter suppresses the built-in action from that keystroke's
-         candidate list specifically for .feature files so ours fires instead. See
-         ReqnrollToggleCommentAction's doc comment for why decorating an EditorActionHandler (the
-         first approach tried) doesn't work for this particular built-in action. -->
-    <actionPromoter implementation="net.reqnroll.idesupport.rider.commenting.ReqnrollCommentTogglePromoter" />
-
     <!-- Rider 2026.2 routes the Go to Declaration shortcuts (F12, Ctrl+B, Ctrl+click) through its
          ReSharper backend first, which knows nothing about Gherkin; ReqnrollGoToDefinitionAction runs
          the frontend action directly for .feature files instead (issue #909). -->
@@ -196,15 +186,17 @@ for what is available in each IDE.</p>
         text="Reqnroll: Find Hooks"
         description="Navigates to the hook bindings applicable at the caret position in a feature file" />
 
-    <!-- Bound to the platform's own default Ctrl+/ keystroke — ReqnrollCommentTogglePromoter
-         (registered under <extensions> above) suppresses the built-in CommentByLineComment
-         action from that keystroke for .feature files, so this one fires instead. -->
-    <action id="Reqnroll.ToggleComment"
-        class="net.reqnroll.idesupport.rider.commenting.ReqnrollToggleCommentAction"
-        text="Reqnroll: Comment/Uncomment"
-        description="Toggles # comments on the selected line(s) of a feature file">
-      <keyboard-shortcut keymap="$default" first-keystroke="ctrl SLASH" />
-    </action>
+    <!-- Comment/Uncomment for .feature files (issues #159, #1151). Intercepts the *command*, not a
+         keystroke: every keymap binds its comment shortcuts (Ctrl+/ in the default keymap, Ctrl+K,C
+         and Ctrl+K,U in the Visual Studio ones, whatever the user rebinds them to) to the platform's
+         CommentByLineComment action ID, so replacing that action by ID reaches them all with no
+         keymap named here. The class extends the platform action and defers to it outside .feature
+         files. The text matches the platform's, which `overrides` would otherwise drop. -->
+    <action id="CommentByLineComment"
+        class="net.reqnroll.idesupport.rider.commenting.ReqnrollCommentByLineCommentAction"
+        overrides="true"
+        text="Comment with Line Comment"
+        description="Comments or uncomments the selected line(s); in feature files this is done by the Reqnroll language server" />
 
     <action id="Reqnroll.GoToDefinition"
         class="net.reqnroll.idesupport.rider.navigation.ReqnrollGoToDefinitionAction"
