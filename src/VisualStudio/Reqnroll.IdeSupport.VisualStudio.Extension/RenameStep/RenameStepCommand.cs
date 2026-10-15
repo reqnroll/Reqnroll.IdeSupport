@@ -1,5 +1,6 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -182,6 +183,16 @@ internal sealed class RenameStepCommand : Command
             // message is shown.
             _logger.LogInformation("RenameStepCommand: rename accepted by server; edit arrives via workspace/applyEdit.");
             VsUtils.ShowStatusBarMessage("Reqnroll: Step renamed successfully.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("RenameStepCommand: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1019: the target lookup failed - say so rather than "no step definition found".
+            _logger.LogWarning("RenameStepCommand: request failed: {Reason}", reason);
+            VsUtils.ShowStatusBarMessage($"Reqnroll: Rename Step failed - {reason}.");
         }
         catch (Exception ex)
         {
