@@ -128,6 +128,7 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
             {
                 var wpfTextView = _wpfTextView;
                 var fileUri     = GetTextBufferFileUri(wpfTextView);
+                var savePath    = GetTextBufferFilePath(wpfTextView);
                 var isSelection = commandId == CmdIdFormatSelection;
 
                 var selection         = wpfTextView.Selection;
@@ -185,6 +186,17 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
                         // The server refused to format this document for a reason the user can fix
                         // (issue #1132). An empty edit list is "already formatted" and never reaches here.
                         _logger.LogInfo($"FormatDocumentCommandFilter: format rejected by server: {ex.Message}");
+
+                        // A format fired from the save sequence (a format-on-save extension, Code Cleanup
+                        // on save) is automatic: the user did not ask for it, and a half-typed file would
+                        // otherwise raise a dialog on every save. Log it, show nothing.
+                        if (RecentSaveTracker.Instance.SavedRecently(savePath))
+                        {
+                            _logger.LogInfo(
+                                "FormatDocumentCommandFilter: rejection not shown — a save of this file began moments ago (automatic format).");
+                            return;
+                        }
+
                         await VsUtils.ShowEditRejectedAsync(ex.Message, ct).ConfigureAwait(true);
                     }
                     finally
@@ -278,6 +290,15 @@ public sealed class FormatDocumentCommandFilter : IOleCommandTarget
 
         edit.Apply();
     }
+
+    /// <summary>
+    /// The buffer's file path as the RDT reports it (what <see cref="RecentSaveTracker"/> is keyed by),
+    /// or an empty string when the buffer has no backing file.
+    /// </summary>
+    internal static string GetTextBufferFilePath(IWpfTextView wpfTextView) =>
+        wpfTextView.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out ITextDocument doc)
+            ? doc.FilePath ?? string.Empty
+            : string.Empty;
 
     internal string GetTextBufferFileUri(IWpfTextView wpfTextView)
     {
