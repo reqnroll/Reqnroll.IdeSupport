@@ -68,7 +68,7 @@ Read in this order if you are new:
 | [Test-Outcomes-Pipeline.md](Test-Outcomes-Pipeline.md) | How results of real test runs reach the Run CodeLens |
 | [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md) | Mapping scenarios to generated test methods; Run/Debug per IDE |
 | [Telemetry-Events-Inventory.md](Telemetry-Events-Inventory.md) | Every telemetry event and its schema |
-| [LSP-IDE-Support-Open-Questions.md](LSP-IDE-Support-Open-Questions.md) | Unresolved decisions and risks. Check before assuming something is settled |
+| [LSP-IDE-Support-Open-Questions.md](LSP-IDE-Support-Open-Questions.md) | Open questions, accepted limitations and settled decisions. Check before assuming something is decided or re-opening it |
 | [VS-LSP-Activation.md](VS-LSP-Activation.md) | How the Visual Studio client gets the language server and Gherkin editor features attached to restored `.feature` tabs |
 | [Onboarding-And-Scaffolding.md](Onboarding-And-Scaffolding.md) | First-run experience, New Project/Item wizards, and the VS Code parity proposal |
 | [LSP-Spec-Gap-Analysis.md](LSP-Spec-Gap-Analysis.md) | LSP capabilities deliberately not implemented |
@@ -85,6 +85,7 @@ Several of these documents predate the conventions below and are being brought i
 |---|---|
 | Conforms | Follows the conventions below |
 | Reference | A catalogue or measurement; the code wins if they disagree |
+| Register | A maintained list (open questions, limitations, decisions) rather than a design; exempt from the design-document template |
 | Needs rework | Still contains phase history, issue references or chronological narrative, or is too large to read in one pass |
 
 | Document | Status |
@@ -92,7 +93,8 @@ Several of these documents predate the conventions below and are being brought i
 | Test-Outcomes-Pipeline.md, Test-Runner-Integration-Design.md, VS-LSP-Activation.md, Onboarding-And-Scaffolding.md | Conforms |
 | LSP-Protocol-Extensions.md, Telemetry-Events-Inventory.md | Reference |
 | LSP-Spec-Gap-Analysis.md, architecture/complexity-hotspots.md | Reference (point-in-time analyses) |
-| Overview, Architecture, Feature Designs, Open Questions | Needs rework (Architecture and Feature Designs also need splitting) |
+| LSP-IDE-Support-Open-Questions.md | Register (open questions, accepted limitations, settled decisions) |
+| Overview, Architecture, Feature Designs | Needs rework (Architecture and Feature Designs also need splitting) |
 
 ## Writing and maintaining these documents
 
