@@ -71,7 +71,7 @@ read by all three clients:
 `REQNROLL_TELEMETRY_ENV` says, so a stray `prod` in your shell can't send a debugging session to prod.
 
 A `prod` build fails fast while a prod connection string is still a `TODO` placeholder. CI runs
-are `dev` unless the workflow is started manually with `telemetry_env = prod`. The
+are `dev` unless the workflow is started manually with `telemetry_env = prod`. Every CI workflow also sets `REQNROLL_TELEMETRY_ENABLED=0`, so test runs never send events to either resource. The
 connection strings are not secrets (they ship inside every client), so they are committed.
 
 Whether telemetry is sent is controlled only by `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on,
