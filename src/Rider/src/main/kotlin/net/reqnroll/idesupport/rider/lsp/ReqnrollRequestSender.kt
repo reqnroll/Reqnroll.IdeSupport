@@ -508,7 +508,7 @@ object ReqnrollRequestSender {
 
     /**
      * Runs `reqnroll/resolveTestTargets` for the range [(startLine, startChar), (endLine, endChar)]
-     * in a `.feature` file (design doc §3/§4, issue #262) — resolves the generated test method(s)
+     * in a `.feature` file (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — resolves the generated test method(s)
      * the scenario/Outline/example row at that range corresponds to. Returns null if no Reqnroll
      * LSP server is running, or on failure.
      */

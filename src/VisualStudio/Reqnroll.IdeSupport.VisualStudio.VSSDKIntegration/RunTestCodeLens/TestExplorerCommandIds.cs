@@ -28,7 +28,7 @@ internal static class TestExplorerCommandIds
     /// <c>SyncTestCommand</c>, issue #504 follow-up). Lets a user jump straight to the native
     /// pass/fail glyph, run history, and output VS's own <c>TestStatusProvider</c> CodeLens already
     /// shows on the generated <c>.feature.cs</c> method, without us needing the internal
-    /// <c>ICodeLensTestInformationService</c> ourselves (design doc §6 — that path was rejected as an
+    /// <c>ICodeLensTestInformationService</c> ourselves (Test-Runner-Integration-Design, pitfall 8 — that path was rejected as an
     /// unsupported internal API).
     /// </summary>
     internal const int SyncCommandId = 904;

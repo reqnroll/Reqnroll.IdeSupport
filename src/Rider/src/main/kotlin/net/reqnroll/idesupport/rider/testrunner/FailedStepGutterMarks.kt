@@ -30,7 +30,7 @@ internal data class FailedStepMark(val line: Int, val tooltip: String)
  * Failed-step gutter marks in `.feature` editors (issue #451): after a Run lens run, a red
  * test-failed icon next to the step that failed, with a hover tooltip carrying the traced step and
  * error text - the low-noise gutter-icon-plus-tooltip presentation the legacy Reqnroll.Rider plugin
- * used (design doc section 6, "Presentation target"), not a squiggle or a line background.
+ * used (Test-Runner-Integration-Design, "Rider" under "Run and Debug per IDE"), not a squiggle or a line background.
  *
  * `.feature` has no PSI in this plugin (see [net.reqnroll.idesupport.rider.ReqnrollFeatureLanguage]), so
  * `LineMarkerProvider`/annotators are unavailable; the mark is a [RangeHighlighter] with a
