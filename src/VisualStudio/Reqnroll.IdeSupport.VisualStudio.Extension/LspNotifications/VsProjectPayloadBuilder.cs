@@ -20,7 +20,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 /// Extracted from <see cref="VsProjectEventMonitor"/> so the same payload-construction logic is
 /// reusable by <see cref="LspProjectPreloadPusher"/>, which pushes the initial project state to
 /// the server's <c>ProjectPreloadListener</c> side channel before the real LSP connection exists
-/// (see docs/LSP-IDE-Support-Architecture.md's As-built note on eager server startup). Must be
+/// (see docs/architecture/client-visualstudio.md, eager start and preload). Must be
 /// called on the UI thread — all members read DTE/COM state.
 /// </remarks>
 internal static class VsProjectPayloadBuilder

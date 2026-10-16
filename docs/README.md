@@ -33,7 +33,7 @@ flowchart LR
 
 ## Scope
 
-**Provided** (see [Feature Designs](LSP-IDE-Support-Feature-Designs.md) for the full list):
+**Provided** (see [feature designs](features/README.md) for the full list):
 Gherkin syntax highlighting and parse/binding diagnostics; step completion and keyword completion;
 go to step definition, find step usages, find unused step definitions, hook navigation; define-steps
 scaffolding; step rename across `.feature` and C# files; document outline, folding, formatting and
@@ -62,8 +62,9 @@ Read in this order if you are new:
 | Document | Read it to learn |
 |---|---|
 | [LSP-IDE-Support-Overview.md](LSP-IDE-Support-Overview.md) | Goals, non-goals and the high-level architecture |
-| [LSP-IDE-Support-Architecture.md](LSP-IDE-Support-Architecture.md) | Module design, server internals, how each IDE client is built, cross-cutting concerns |
-| [LSP-IDE-Support-Feature-Designs.md](LSP-IDE-Support-Feature-Designs.md) | How each feature works end to end |
+| [LSP-IDE-Support-Architecture.md](LSP-IDE-Support-Architecture.md) | The module map, repository layout and where code goes; index of the architecture documents |
+| [architecture/](architecture/) | Detail: [server-protocol](architecture/server-protocol.md), [server-pipeline](architecture/server-pipeline.md), [workspace-and-membership](architecture/workspace-and-membership.md), [binding-discovery](architecture/binding-discovery.md), [ide-clients](architecture/ide-clients.md) and the three client documents, [telemetry](architecture/telemetry.md), [performance](architecture/performance.md), [operations](architecture/operations.md), [testing-strategy](architecture/testing-strategy.md), [design-decisions](architecture/design-decisions.md) |
+| [features/](features/README.md) | One design document per feature area: how each feature works end to end |
 | [LSP-Protocol-Extensions.md](LSP-Protocol-Extensions.md) | Every custom `reqnroll/*` LSP method and its payloads |
 | [Test-Outcomes-Pipeline.md](Test-Outcomes-Pipeline.md) | How results of real test runs reach the Run CodeLens |
 | [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md) | Mapping scenarios to generated test methods; Run/Debug per IDE |
@@ -76,8 +77,7 @@ Read in this order if you are new:
 | [Archive/](Archive/) | Historical plans and designs. Not maintained, so do not rely on them |
 | [site/](site/README.md) | End-user documentation (Sphinx) |
 
-Several of these documents predate the conventions below and are being brought into line; the
-[status table](#document-status) shows which.
+The [status table](#document-status) shows how each document relates to the conventions below.
 
 ## Document status
 
@@ -86,16 +86,15 @@ Several of these documents predate the conventions below and are being brought i
 | Conforms | Follows the conventions below |
 | Reference | A catalogue or measurement; the code wins if they disagree |
 | Register | A maintained list (open questions, limitations, decisions) rather than a design; exempt from the design-document template |
-| Needs rework | Still contains phase history, issue references or chronological narrative, or is too large to read in one pass |
+| Needs rework | Still contains phase history, issue references or chronological narrative, or is too large to read in one pass (none at present) |
 
 | Document | Status |
 |---|---|
 | Test-Outcomes-Pipeline.md, Test-Runner-Integration-Design.md, VS-LSP-Activation.md, Onboarding-And-Scaffolding.md | Conforms |
 | LSP-Protocol-Extensions.md, Telemetry-Events-Inventory.md | Reference |
 | LSP-Spec-Gap-Analysis.md, architecture/complexity-hotspots.md | Reference (point-in-time analyses) |
-| LSP-IDE-Support-Overview.md | Conforms |
+| LSP-IDE-Support-Overview.md, LSP-IDE-Support-Architecture.md (hub), architecture/* (except complexity-hotspots.md), features/* | Conforms (architecture/design-decisions.md is a register) |
 | LSP-IDE-Support-Open-Questions.md | Register (open questions, accepted limitations, settled decisions) |
-| Architecture, Feature Designs | Needs rework (both also need splitting) |
 
 ## Writing and maintaining these documents
 

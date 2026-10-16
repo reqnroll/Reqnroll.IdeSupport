@@ -24,8 +24,8 @@ significantly between the .NET server/VS pieces and the TypeScript VS Code piece
   something that might already be in flight.
 - For anything non-trivial, a short design note (even a few sentences in the issue) before writing
   code saves rework — this project has a habit of discovering that the "obvious" approach doesn't
-  actually work the way it looks (see the eager-startup as-built note in the Architecture doc for
-  an example of two rounds of exactly that).
+  actually work the way it looks (see the eager-startup and preload notes in
+  [docs/architecture/client-visualstudio.md](docs/architecture/client-visualstudio.md) for an example of two rounds of exactly that).
 
 ## General workflow
 

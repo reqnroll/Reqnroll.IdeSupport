@@ -59,7 +59,7 @@ everything fits together.
 |---|---|
 | [Overview](docs/LSP-IDE-Support-Overview.md) | Scope, goals/non-goals, high-level architecture, feature index, distribution and the legacy extension |
 | [Architecture & Implementation Reference](docs/LSP-IDE-Support-Architecture.md) | Module design, server internals (workspace model, membership index, pipeline), per-IDE client details, cross-cutting concerns |
-| [Feature Designs](docs/LSP-IDE-Support-Feature-Designs.md) | Per-feature (F1–F20) design, sequence diagrams, as-built notes |
+| [Feature Designs](docs/features/README.md) | One design document per feature area, each with flows, glossary, key classes and pitfalls |
 | [Open Questions register](docs/LSP-IDE-Support-Open-Questions.md) | Open questions, accepted limitations and settled decisions — check here before assuming something is decided |
 
 `docs/Archive/` holds superseded or fully-implemented design/plan documents kept for historical

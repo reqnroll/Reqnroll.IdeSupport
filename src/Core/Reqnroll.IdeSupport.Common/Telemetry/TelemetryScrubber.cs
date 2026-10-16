@@ -17,8 +17,8 @@ public static class TelemetryScrubber
     public const int MaxMessageLength = 128;
 
     // Path- and URL-shaped substrings, redacted in this order (most to least specific). Deliberately broad
-    // (over-redacting is safe; under-redacting leaks a path) — see docs/LSP-IDE-Support-Architecture.md's
-    // Privacy Considerations: "The Error event must scrub exception messages for file paths and
+    // (over-redacting is safe; under-redacting leaks a path) — see docs/architecture/telemetry.md's
+    // privacy rules: "The Error event must scrub exception messages for file paths and
     // user-identifiable strings before transmission." Mirrored by the VS Code and Rider clients'
     // exception scrubbers (issue #621).
     // A directory segment may contain interior spaces ("C:\Users\John Smith\x") but never starts or ends

@@ -15,7 +15,7 @@ delivered through a generic LSP capability it is; where an IDE needs plugin code
 - Parity with the legacy extensions (`Reqnroll.VisualStudio` and the legacy Rider plugin, `Reqnroll.Rider`),
   in all three IDEs.
 - Every feature backed by automated tests, including measured latency against defined targets (see the
-  performance verification section of the [Architecture reference](LSP-IDE-Support-Architecture.md#performance-verification)).
+  performance verification section of the [Performance](architecture/performance.md)).
 - A "Preview" release alongside the legacy extension during the transition.
 
 **Non-goals**
@@ -143,24 +143,24 @@ sequenceDiagram
 
 ## 6. Features
 
-Each feature has a design in [Feature Designs](LSP-IDE-Support-Feature-Designs.md).
+Each feature has a design in [Feature Designs](features/README.md).
 
 | ID | Feature | ID | Feature |
 |---|---|---|---|
-| F1 | [Syntax highlighting](LSP-IDE-Support-Feature-Designs.md#f1--gherkin-syntax-highlighting) | F15 | [Find unused step definitions](LSP-IDE-Support-Feature-Designs.md#f15--find-unused-step-definitions) |
-| F2 | [Binding discovery](LSP-IDE-Support-Feature-Designs.md#f2--binding-discovery) | F16 | [Step rename](LSP-IDE-Support-Feature-Designs.md#f16--step-rename-refactoring) |
-| F3 | [File diagnostics](LSP-IDE-Support-Feature-Designs.md#f3--gherkin-file-diagnostics) | F17 | [Hook navigation](LSP-IDE-Support-Feature-Designs.md#f17--hook-navigation) |
-| F4 | [Parse error display](LSP-IDE-Support-Feature-Designs.md#f4--gherkin-parse-error-display) | F18 | [CodeLens: step usage counts](LSP-IDE-Support-Feature-Designs.md#f18--code-lens-step-usage-counts) |
-| F5 | [Go to step definition](LSP-IDE-Support-Feature-Designs.md#f5--go-to-step-definition) | F19 | [New project / item wizards](LSP-IDE-Support-Feature-Designs.md#f19--new-project--item-wizards) |
-| F6 | [Define steps (scaffolding)](LSP-IDE-Support-Feature-Designs.md#f6--define-steps-scaffolding) | F20 | [Installation and upgrade](LSP-IDE-Support-Feature-Designs.md#f20--installation--upgrade-experience) |
-| F7 | [Keyword completion](LSP-IDE-Support-Feature-Designs.md#f7--keyword-completion) | F23 | [Inlay hints](LSP-IDE-Support-Feature-Designs.md#f23--inlay-hints-step-binding-info) |
-| F8 | [Step completion](LSP-IDE-Support-Feature-Designs.md#f8--step-completion) | F24 | [Hook match CodeLens](LSP-IDE-Support-Feature-Designs.md#f24--hook-match-codelens-featurescenariostep) |
-| F9 | [Document outline](LSP-IDE-Support-Feature-Designs.md#f9--document-outline) | F25 | [Hook match count CodeLens](LSP-IDE-Support-Feature-Designs.md#f25--hook-match-count-codelens-hook-bindings) |
-| F10 | [Code folding](LSP-IDE-Support-Feature-Designs.md#f10--code-folding) | F26 | [Test runner integration](LSP-IDE-Support-Feature-Designs.md#f26--test-runner-integration-rundebug--failed-step-highlight) |
-| F11 | [Document formatting](LSP-IDE-Support-Feature-Designs.md#f11--document-auto-formatting) | F27 | [C# binding validation diagnostics](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics) |
-| F12 | [Table formatting](LSP-IDE-Support-Feature-Designs.md#f12--table-auto-formatting) | F28 | [Clickable tags](LSP-IDE-Support-Feature-Designs.md#f28--clickable-tags-traceability-links) |
-| F13 | [Comment / uncomment](LSP-IDE-Support-Feature-Designs.md#f13--comment--uncomment) | | |
-| F14 | [Find step usages](LSP-IDE-Support-Feature-Designs.md#f14--find-step-definition-usages) | | |
+| F1 | [Syntax highlighting](features/syntax-highlighting.md) | F15 | [Find unused step definitions](features/step-navigation.md) |
+| F2 | [Binding discovery](architecture/binding-discovery.md) | F16 | [Step rename](features/rename.md) |
+| F3 | [File diagnostics](features/diagnostics.md) | F17 | [Hook navigation](features/hooks-and-lenses.md) |
+| F4 | [Parse error display](features/diagnostics.md) | F18 | [CodeLens: step usage counts](features/hooks-and-lenses.md) |
+| F5 | [Go to step definition](features/step-navigation.md) | F19 | [New project / item wizards](Onboarding-And-Scaffolding.md) |
+| F6 | [Define steps (scaffolding)](features/define-steps.md) | F20 | [Installation and upgrade](Onboarding-And-Scaffolding.md) |
+| F7 | [Keyword completion](features/completion.md) | F23 | [Inlay hints](features/inlay-hints.md) |
+| F8 | [Step completion](features/completion.md) | F24 | [Hook match CodeLens](features/hooks-and-lenses.md) |
+| F9 | [Document outline](features/outline-and-folding.md) | F25 | [Hook match count CodeLens](features/hooks-and-lenses.md) |
+| F10 | [Code folding](features/outline-and-folding.md) | F26 | [Test runner integration](Test-Runner-Integration-Design.md) |
+| F11 | [Document formatting](features/formatting-and-comments.md) | F27 | [C# binding validation diagnostics](features/diagnostics.md) |
+| F12 | [Table formatting](features/formatting-and-comments.md) | F28 | [Clickable tags](features/clickable-tags.md) |
+| F13 | [Comment / uncomment](features/formatting-and-comments.md) | | |
+| F14 | [Find step usages](features/step-navigation.md) | | |
 
 F21 and F22 are not used. Test-runner and outcome flows are detailed in
 [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md) and
@@ -200,6 +200,6 @@ unchanged to Rider is part of O9.
 | To learn about | Read |
 |---|---|
 | Module design, server internals, each IDE client, cross-cutting concerns | [Architecture & Implementation Reference](LSP-IDE-Support-Architecture.md) |
-| How a specific feature works | [Feature Designs](LSP-IDE-Support-Feature-Designs.md) |
+| How a specific feature works | [Feature Designs](features/README.md) |
 | Custom `reqnroll/*` methods | [LSP-Protocol-Extensions.md](LSP-Protocol-Extensions.md) |
 | What is open, accepted or settled | [Open Questions register](LSP-IDE-Support-Open-Questions.md) |

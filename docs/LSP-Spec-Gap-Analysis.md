@@ -28,7 +28,7 @@ are not yet implemented but could add value for Gherkin / Reqnroll users.
 |---|---|
 | All | **Deferred** — issue #128 closed 2026-09-25; nothing scheduled. |
 | 5. `workspace/executeCommand` | ⚠️ **Partial.** The server now handles `workspace/executeCommand` for one command, `reqnroll.toggleComment` (`CommentToggleHandler`). The other operations listed below are still custom `reqnroll/*` requests only. |
-| 6. `textDocument/documentLink` | Implemented for clickable tags (issue [#755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755), `DocumentLinkHandler`, see [F28](LSP-IDE-Support-Feature-Designs.md#f28--clickable-tags-traceability-links)). Step-to-binding links remain unimplemented (see Q21). |
+| 6. `textDocument/documentLink` | Implemented for clickable tags (issue [#755](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/755), `DocumentLinkHandler`, see [F28](features/clickable-tags.md)). Step-to-binding links remain unimplemented (see Q21). |
 | 9. Pull diagnostics | **Abandoned**, not just deferred — `OmniSharp.Extensions.LanguageServer` 0.19.9's server-side JSON converters for the pull-diagnostics report types are `NotImplementedException` stubs. See limitation L5 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#2-accepted-limitations-and-standing-risks) and the archived [PullDiagnostics-Implementation-Plan.md](Archive/PullDiagnostics-Implementation-Plan.md). |
 | Protocol ceiling | Any future work here is bounded by OmniSharp 0.19.9's LSP 3.17 ceiling — see the "Protocol version ceiling" note in [LSP-IDE-Support-Architecture.md](LSP-IDE-Support-Architecture.md). |
 

@@ -24,8 +24,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 /// </summary>
 /// <remarks>
 /// This is what lets binding discovery start running while the server is still sitting idle
-/// waiting for VS's real <c>initialize</c> handshake (see docs/LSP-IDE-Support-Architecture.md's
-/// As-built note on eager server startup). The real <see cref="VsProjectEventMonitor"/>, created
+/// waiting for VS's real <c>initialize</c> handshake (see docs/architecture/client-visualstudio.md,
+/// eager start and preload). The real <see cref="VsProjectEventMonitor"/>, created
 /// later in <c>ReqnrollLanguageClient.OnServerInitializationResultAsync</c>, re-sends the same
 /// baseline over the normal LSP channel — <c>ILspWorkspaceScopeManager.HandleProjectLoadedAsync</c>/
 /// <c>HandleProjectFilesAsync</c> treat a repeat baseline for an already-loaded project as an

@@ -31,7 +31,7 @@ src/LSP/
     Telemetry/, Performance/       ← telemetry sinks and session events, FeatureUsage/ counters; Performance/ = perf sampling
 
   Where a new type goes (Core vs Server): see "Where code goes" in
-  docs/LSP-IDE-Support-Architecture.md §4 — Core takes whatever implements Reqnroll LSP
+  docs/LSP-IDE-Support-Architecture.md ("Where code goes") — Core takes whatever implements Reqnroll LSP
   functionality regardless of plumbing; Server takes the plumbing and the timing/scheduling semantics.
   Reqnroll.IdeSupport.LSP.Connector ← out-of-process reflection-based binding discovery, one variant per TFM
                                       (Reqnroll-Generic-net8.0, -net481, …); invoked as a short-lived child
@@ -42,7 +42,7 @@ src/Core/Reqnroll.IdeSupport.Common ← shared config/logging/analytics contract
 
 Start with [docs/LSP-IDE-Support-Architecture.md](../../docs/LSP-IDE-Support-Architecture.md) — it's
 the canonical map of the server's internals (workspace model, membership index, discovery pipeline,
-event flow). [docs/LSP-IDE-Support-Feature-Designs.md](../../docs/LSP-IDE-Support-Feature-Designs.md)
+event flow). [docs/features/README.md](../../docs/features/README.md)
 has the per-feature (F1–F20) design and as-built notes for whatever handler you're touching.
 
 ## Building
@@ -80,7 +80,7 @@ the server), you need one of the IDE clients — see
 ## Performance benchmarking
 
 The server ships with a dedicated benchmarking tool implementing
-[Performance Verification Layer 2](../../docs/LSP-IDE-Support-Architecture.md#performance-verification)
+[Performance Verification Layer 2](../../docs/architecture/performance.md)
 (reproducible end-to-end protocol benchmarks against a pinned corpus) — separate from
 `dotnet test` because it's a measurement *tool* run on demand, not an assertion suite you want in
 the normal test sweep.
