@@ -108,6 +108,10 @@ permissions:
 env:
   DOTNET_VERSION: '10.0.x'
   CONFIGURATION: Release
+  # Telemetry is off for every CI run (#1194): the cross-IDE kill switch (CONTRIBUTING.md > Telemetry)
+  # keeps tests, builds and any launched VS Code host from sending events to the dev or prod
+  # Application Insights resources. Tests that exercise telemetry set the variable themselves.
+  REQNROLL_TELEMETRY_ENABLED: '0'
   # Selects the built-in Application Insights resource in every client build (#1160): read by the VS
   # project (MSBuild picks up the environment variable), VS Code's precompile script and Rider's
   # Gradle build. Every automatic run (push, PR) is dev; only a manual run can opt into prod.
