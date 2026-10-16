@@ -72,7 +72,7 @@ sequenceDiagram
     R->>C: get syntax tree of .feature.cs
     C->>F: read if last-write time changed
     C-->>R: tree
-    R->>R: find exact-name method, or name-prefix methods; count row attributes
+    R->>R: find exact-name method, or name-prefix methods, count row attributes
     R-->>H: ScenarioTestTarget[]
     H-->>LENS: targets (empty if not yet built)
 ```

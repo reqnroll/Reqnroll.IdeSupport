@@ -51,7 +51,7 @@ sequenceDiagram
     Note over C,P: A step-definition file is edited
     C->>S: didOpen / didChange (.cs)
     S->>R: discover bindings in that file
-    R->>W: ResolveOwners(uri)  (index first; folder-prefix only before a baseline)
+    R->>W: ResolveOwners(uri)  (index first, folder-prefix only before a baseline)
     loop each owning project
         R->>P: ApplyRoslynFileUpdateAsync (replace that file's bindings)
     end

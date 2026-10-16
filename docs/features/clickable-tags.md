@@ -45,7 +45,7 @@ sequenceDiagram
         H->>C: ResolveTagLink(tag name)
     end
     H-->>IDE: DocumentLink[] (range = whole tag incl. '@', target = URL)
-    IDE-->>IDE: render hyperlinks; on click open the target
+    IDE-->>IDE: render hyperlinks, on click open the target
 ```
 
 ## 4. Glossary

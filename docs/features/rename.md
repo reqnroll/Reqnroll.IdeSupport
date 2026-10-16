@@ -95,7 +95,7 @@ sequenceDiagram
     T-->>IDE: ok (pending session, 30 s)
     U->>IDE: new expression
     IDE->>R: textDocument/rename (uri, position, newName)
-    Note over R: position plus pending session identify the binding; the attribute span is re-parsed
+    Note over R: position plus pending session identify the binding, the attribute span is re-parsed
     R-->>IDE: WorkspaceEdit
 ```
 

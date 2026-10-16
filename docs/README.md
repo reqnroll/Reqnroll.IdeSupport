@@ -131,4 +131,5 @@ Each design document (one per feature or area) should contain, in this order:
 8. **Known limitations** and **Testing**.
 
 Prefer several small, topic-focused files that fit in a single read over one very large document.
-Use Mermaid for all diagrams, not ASCII art, so they stay diffable and readable by tools.
+Use Mermaid for all diagrams, not ASCII art, so they stay diffable and readable by tools. Avoid `;` inside sequence-diagram
+messages and notes (it ends the statement and breaks the parse); use a comma or a dash.

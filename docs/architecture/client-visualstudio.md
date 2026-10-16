@@ -70,7 +70,7 @@ sequenceDiagram
     LC->>CS: GetConnectionAsync
     CS-->>LC: fresh local pipe pair, same server process
     LC->>SRV: real initialize / initialized
-    Note over LC,SRV: VsProjectEventMonitor re-sends the same notifications; a repeat baseline is an update
+    Note over LC,SRV: VsProjectEventMonitor re-sends the same notifications, a repeat baseline is an update
 ```
 
 ### 3.2 Pass-through and interception
