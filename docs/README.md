@@ -69,8 +69,8 @@ Read in this order if you are new:
 | [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md) | Mapping scenarios to generated test methods; Run/Debug per IDE |
 | [Telemetry-Events-Inventory.md](Telemetry-Events-Inventory.md) | Every telemetry event and its schema |
 | [LSP-IDE-Support-Open-Questions.md](LSP-IDE-Support-Open-Questions.md) | Unresolved decisions and risks. Check before assuming something is settled |
-| [VS-LSP-Eager-Activation-Research.md](VS-LSP-Eager-Activation-Research.md) | Getting the Visual Studio LSP client to start early |
-| [VSCode-Onboarding-And-Wizards-Implementation-Plan.md](VSCode-Onboarding-And-Wizards-Implementation-Plan.md) | VS Code onboarding, wizards and templates |
+| [VS-LSP-Activation.md](VS-LSP-Activation.md) | How the Visual Studio client gets the language server and Gherkin editor features attached to restored `.feature` tabs |
+| [Onboarding-And-Scaffolding.md](Onboarding-And-Scaffolding.md) | First-run experience, New Project/Item wizards, and the VS Code parity proposal |
 | [LSP-Spec-Gap-Analysis.md](LSP-Spec-Gap-Analysis.md) | LSP capabilities deliberately not implemented |
 | [architecture/complexity-hotspots.md](architecture/complexity-hotspots.md) | Measured complexity hot spots in the code |
 | [Archive/](Archive/) | Historical plans and designs. Not maintained, so do not rely on them |
@@ -89,11 +89,10 @@ Several of these documents predate the conventions below and are being brought i
 
 | Document | Status |
 |---|---|
-| Test-Outcomes-Pipeline.md | Conforms |
+| Test-Outcomes-Pipeline.md, Test-Runner-Integration-Design.md, VS-LSP-Activation.md, Onboarding-And-Scaffolding.md | Conforms |
 | LSP-Protocol-Extensions.md, Telemetry-Events-Inventory.md | Reference |
 | LSP-Spec-Gap-Analysis.md, architecture/complexity-hotspots.md | Reference (point-in-time analyses) |
 | Overview, Architecture, Feature Designs, Open Questions | Needs rework (Architecture and Feature Designs also need splitting) |
-| Test-Runner-Integration-Design, VS-LSP-Eager-Activation-Research, VSCode-Onboarding-And-Wizards-Implementation-Plan | Needs rework |
 
 ## Writing and maintaining these documents
 
