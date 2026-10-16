@@ -7,9 +7,9 @@
 
 | Document | Contents |
 |----------|----------|
-| [Overview](LSP-IDE-Support-Overview.md) | Scope, goals, high-level architecture, roadmap (F-number → feature name index), release strategy |
+| [Overview](LSP-IDE-Support-Overview.md) | Scope, goals, high-level architecture, feature index (F-number → name), distribution |
 | [Feature Designs](LSP-IDE-Support-Feature-Designs.md) | Per-feature design, sequence diagrams, as-built notes (Appendix A / B) |
-| [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md) | Active open questions, risk register |
+| [Open Questions register](LSP-IDE-Support-Open-Questions.md) | Open questions, accepted limitations, settled decisions |
 
 ---
 
@@ -74,7 +74,7 @@ Several aspects of this implementation deviate from what a textbook LSP server d
 
 ### Semantic token delivery for Visual Studio: server push + client classifier
 
-A standard LSP client *pulls* semantic tokens by sending `textDocument/semanticTokens/full` to the server and rendering the response. Visual Studio breaks this in two independent ways (both confirmed empirically — see R1/R1a in the [Risk Register](LSP-IDE-Support-Open-Questions.md#risk-register)):
+A standard LSP client *pulls* semantic tokens by sending `textDocument/semanticTokens/full` to the server and rendering the response. Visual Studio breaks this in two independent ways (both confirmed empirically — see decision D13 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions)):
 
 1. VS's built-in semantic-token colorizer maps token-type names through a fixed internal `switch` that recognises only standard LSP types and a small set of C++/Roslyn/Razor names. Every unrecognised name — including all `reqnroll.*` names — falls through to plain `"text"`. Registering same-named `ClassificationTypeDefinition` entries in the MEF registry is **not** consulted; the mapping is hardcoded.
 2. VS pulls `semanticTokens/full` lazily and inconsistently via its own tagger lifecycle; in practice it sometimes never requests tokens for an open document.
@@ -226,7 +226,7 @@ All subsequent requests for a document (semantic tokens, outline, folding, diagn
 Binding information enters the registry from two sources:
 
 - **Roslyn Discovery** (in-process, in `LSP.Server/Discovery/Roslyn/`; the binding data itself lives in `LSP.Core/Bindings/`): when a `.cs` file changes, Roslyn re-analyzes the changed file and replaces its bindings in the registry. No build is required; feedback is immediate. `StepDefinitionFileParser` (`LSP.Core/Parsing/CSharp/`, behind `IStepDefinitionFileParser`) also runs the structural validation checks ported from Reqnroll's own `BindingSourceProcessor` (binding type must be a class and not generic; a method on an abstract type must be static; a method must not be async void; the four non-scenario-scoped hook types must be static — [F27](LSP-IDE-Support-Feature-Designs.md#f27--c-binding-validation-diagnostics)) and sets `Error` on any binding that fails one, using the same field the Connector already populates for its own import failures. It also builds each binding's scope from the union of the class-level `[Scope]`s, method-level `[Scope]`s and hook tags, reduced by the same `ScopeNormalizer` the Connector import uses (see [§7, Scope parity](#7-binding-connector)).
-- **Reflection Discovery** (out-of-process Connector): when a build is detected (see [Q9](LSP-IDE-Support-Open-Questions.md) for per-IDE detection reliability), the Connector scans the compiled assembly and replaces the full registry.
+- **Reflection Discovery** (out-of-process Connector): when a build is detected (see D6 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions) for per-IDE detection reliability), the Connector scans the compiled assembly and replaces the full registry.
 
 **3 · Binding Match Service**
 
@@ -338,7 +338,7 @@ Practical checks before placing a new type:
 
 Because Core's internals are not visible to Server, a Core type that Server consumes must be `public`. Tests follow their subject: Core types are tested in `LSP.Core.Tests`, handlers and wiring in `LSP.Server.Tests`.
 
-There is no `src/clients/` grouping folder today — `VisualStudio/`, `VSCode/`, and `Rider/` are top-level siblings of `Core/` and `LSP/`. Whether to nest them under a `clients/` folder is still an open question ([Q10](LSP-IDE-Support-Open-Questions.md)).
+There is no `src/clients/` grouping folder today — `VisualStudio/`, `VSCode/`, and `Rider/` are top-level siblings of `Core/` and `LSP/`. They stay top-level (decision D16 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions)).
 
 > **Convention**: projects named `*.Tests` are unit tests; projects named `*.Specs` are integration/BDD tests. Client-side unit and integration tests should be considered for each IDE client as the clients mature (see [Q8](LSP-IDE-Support-Open-Questions.md)).
 
@@ -818,7 +818,7 @@ Known difference not addressed here: the runtime compares feature and scenario t
 
 The Connector code is ported from `Reqnroll.VisualStudio.ReqnrollConnector.Generic` in the legacy VS extension — the team already understands its assembly-loading and discovery logic. One addition beyond the ported code: the Connector also ships .NET Framework TFM variants (net462/net472/net481) that use `AppDomain` isolation to analyze .NET Framework test projects, since the cross-platform LSP server cannot load a .NET Framework assembly into an `AssemblyLoadContext` directly. The LSP server selects the appropriate connector variant based on the target project's TFM.
 
-**Resolved (Q15)**: the IPC mechanism is (a) **stdin/stdout** — `ProcessHelper.RunProcess` launches the Connector executable and captures stdout, with no persistent pipe or port. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+**Resolved (decision D4)**: the IPC mechanism is (a) **stdin/stdout** — `ProcessHelper.RunProcess` launches the Connector executable and captures stdout, with no persistent pipe or port. See D4 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions).
 
 ---
 
@@ -834,7 +834,7 @@ The test project naming convention is defined in §4. The following describes th
 
 **End-to-end specs (`*.Specs`)**: Full round-trip tests against real IDE instances (VS, VS Code, Rider) using automation frameworks. Optional in early phases; mandatory before lifting the Preview designation.
 
-**Per-phase coverage gates** (informing the [Phased Roadmap](LSP-IDE-Support-Overview.md#4-phased-roadmap)):
+**Coverage gates:**
 
 | Phase | Minimum gate |
 |---|---|
@@ -946,8 +946,8 @@ resource in every other build; selected at build time via `REQNROLL_TELEMETRY_EN
 interceptor registered on that IDE's LSP client (`TelemetryEventInterceptor.cs` for VS,
 `registerTelemetry` in `telemetry.ts` for VS Code, `ReqnrollTelemetryEventInterceptor.kt` for
 Rider). Rider had no such interceptor until issue #255 — every event below was reaching VS and VS
-Code but producing zero telemetry for Rider users. This resolved [Q11](LSP-IDE-Support-Open-Questions.md)
-in favor of option (c); see the archived `docs/Archive/build-plan-telemetry-capture.md` and
+Code but producing zero telemetry for Rider users. The choice of relaying through the client is decision D7 in the
+[Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions); see the archived `docs/Archive/build-plan-telemetry-capture.md` and
 `docs/Archive/plan-refactor-analytics-appinsights.md` for the full design detail. Every event
 name is defined in one catalog — `TelemetryEvents` in `Reqnroll.IdeSupport.Common.Telemetry` —
 and the per-event schema, emitter, trigger, and Analytics use are documented in
@@ -1025,7 +1025,7 @@ by the host-stamped `Ide`/`IdeVersion`/`ExtensionVersion` (VS, Rider and VS Code
 - The Rider plugin `.zip` is published via the JetBrains Marketplace API using an authenticated token stored as a CI secret.
 - The bundled LSP server executable inherits signing from its containing package.
 
-**IPC channel security**: The LSP server connects to the Binding Connector via stdin/stdout of a directly-launched child process (see [Q15](LSP-IDE-Support-Open-Questions.md)), which is inherently restricted to the local machine and accessible only to the launching process — there is no network-exposed channel to secure.
+**IPC channel security**: The LSP server connects to the Binding Connector via stdin/stdout of a directly-launched child process (see D4 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions)), which is inherently restricted to the local machine and accessible only to the launching process — there is no network-exposed channel to secure.
 
 **Telemetry and privacy**
 - The `OpenProject` event must not transmit absolute file paths, project names, or any content that identifies the user's codebase. Only aggregate counts (feature file count, step definition count) are transmitted.

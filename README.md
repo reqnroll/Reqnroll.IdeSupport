@@ -9,10 +9,10 @@ extension with a design that works the same way in Visual Studio, VS Code, and R
 > **Status:** Preview / active development. The Visual Studio, VS Code, and Rider clients are all
 > functional and cover most of the planned feature set; none are yet published to their
 > respective marketplaces. See
-> [Open Questions & Risk Register](docs/LSP-IDE-Support-Open-Questions.md) for what's still
+> [Open Questions register](docs/LSP-IDE-Support-Open-Questions.md) for what's still
 > unresolved and the [Issues](../../issues) tab for tracked defects and to-dos. Not yet promoted
 > as the recommended replacement for the legacy extension — see
-> [Overview §5](docs/LSP-IDE-Support-Overview.md#5-release-strategy-and-migration-plan) for the
+> [Overview §7](docs/LSP-IDE-Support-Overview.md#7-distribution-and-the-legacy-extension) for the
 > promotion criteria.
 
 ## Why this exists
@@ -56,10 +56,10 @@ everything fits together.
 
 | Document | Read it for… |
 |---|---|
-| [Overview](docs/LSP-IDE-Support-Overview.md) | Scope, goals/non-goals, high-level architecture diagram, phased roadmap, release/migration strategy |
+| [Overview](docs/LSP-IDE-Support-Overview.md) | Scope, goals/non-goals, high-level architecture, feature index, distribution and the legacy extension |
 | [Architecture & Implementation Reference](docs/LSP-IDE-Support-Architecture.md) | Module design, server internals (workspace model, membership index, pipeline), per-IDE client details, cross-cutting concerns |
 | [Feature Designs](docs/LSP-IDE-Support-Feature-Designs.md) | Per-feature (F1–F20) design, sequence diagrams, as-built notes |
-| [Open Questions & Risk Register](docs/LSP-IDE-Support-Open-Questions.md) | Active open questions and risks — check here before assuming something is decided |
+| [Open Questions register](docs/LSP-IDE-Support-Open-Questions.md) | Open questions, accepted limitations and settled decisions — check here before assuming something is decided |
 
 `docs/Archive/` holds superseded or fully-implemented design/plan documents kept for historical
 reference — each doc's own status banner says whether it's active or archived-and-why.

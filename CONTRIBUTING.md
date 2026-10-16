@@ -18,7 +18,7 @@ significantly between the .NET server/VS pieces and the TypeScript VS Code piece
 
 - Skim [docs/LSP-IDE-Support-Overview.md](docs/LSP-IDE-Support-Overview.md) for scope and
   non-goals, and [docs/LSP-IDE-Support-Open-Questions.md](docs/LSP-IDE-Support-Open-Questions.md)
-  for known-open questions and risks — a good fraction of "is X supposed to work like this?"
+  for open questions, accepted limitations and settled decisions — a good fraction of "is X supposed to work like this?"
   questions are already answered (or explicitly marked unresolved) there.
 - Check the [Issues](../../issues) tab for existing tracked defects/to-dos before starting
   something that might already be in flight.

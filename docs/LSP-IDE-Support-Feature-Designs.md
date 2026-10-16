@@ -7,9 +7,9 @@
 
 | Document | Contents |
 |----------|----------|
-| [Overview](LSP-IDE-Support-Overview.md) | Scope, goals, high-level architecture, roadmap, release strategy |
+| [Overview](LSP-IDE-Support-Overview.md) | Scope, goals, high-level architecture, feature index, distribution |
 | [Architecture & Implementation Reference](LSP-IDE-Support-Architecture.md) | Module design, component inventory, server internals, IDE clients, cross-cutting concerns |
-| [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md) | Active open questions, risk register |
+| [Open Questions register](LSP-IDE-Support-Open-Questions.md) | Open questions, accepted limitations, settled decisions |
 
 ---
 
@@ -183,7 +183,7 @@ The LSP `legend` only names the token types; it is the responsibility of **each 
 > 1. Visual Studio's built-in LSP semantic-token colorizer (`Microsoft.VisualStudio.LanguageServer.Client.SemanticTokensTaggerBase.ClassificationTypeNameForTokenType`) maps token-type names to classifications through a **fixed internal `switch`** that only recognizes the standard LSP token types (plus C++/Roslyn/Razor sets); every unrecognized name — including all `reqnroll.*` names — falls through to plain `"text"`. It never consults the classification registry by the raw legend name, so registering same-named classifications is **not sufficient** in VS (unlike VS Code / Rider).
 > 2. VS only **pulls** `textDocument/semanticTokens/full` lazily and inconsistently (driven by its own tagger lifecycle); in practice it sometimes never requests tokens for an open document at all.
 >
-> Both were confirmed empirically (decompiling the shipped client; LSP trace logs) and are the R1/R1a risks in the [Risk Register](LSP-IDE-Support-Open-Questions.md#risk-register).
+> Both were confirmed empirically (decompiling the shipped client; LSP trace logs) and are recorded as decision D13 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions).
 
 To restore the custom colors reliably, VS uses a **server-push + client-classifier** path that does not depend on VS's native semantic-token pull or its token-type mapping:
 - **Server push** — when launched with `--ide visualstudio`, the server's `SemanticTokensPushHandler` reacts to each `MatchCacheChangedNotification` by encoding the file's tokens and pushing them to the client via a custom `reqnroll/semanticTokens` notification (`{ uri, version, data[] }`). Every other client ignores this notification and uses the standard pull flow. (This is the one place the retained `--ide` flag changes server behaviour.)
@@ -268,7 +268,7 @@ Both discovery paths are managed by the LSP server, so no IDE-specific code is r
 | Server (internal) | IPC to Connector | Launch reflection discovery, receive `BindingDiscoveryResult` |
 | Server → Client | `textDocument/publishDiagnostics` | Push updated diagnostics after registry change |
 
-> **Resolved (Q9)**: watching the output assembly path via `workspace/didChangeWatchedFiles` is confirmed reliable per-IDE using each client's standard dynamic-registration handling — no IDE-specific client code is needed. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md) (Q9) for the verification details and the one confirmed caveat (`files.watcherExclude` covering `bin/`).
+> **Resolved (decision D6)**: watching the output assembly path via `workspace/didChangeWatchedFiles` is confirmed reliable per-IDE using each client's standard dynamic-registration handling — no IDE-specific client code is needed. See D6 and L4 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions) for the verification and the one confirmed caveat (`files.watcherExclude` covering `bin/`).
 
 #### Sequence diagram
 
@@ -329,7 +329,7 @@ We are **not** addressing this at this time. Closing the gap would mean feeding 
 
 **Phase 2** — covers both missing step warnings and parse errors
 
-**Resolved — abandoned (Q19)**: diagnostic pull (`textDocument/diagnostic` request, LSP 3.17+) was investigated in addition to the push model described here, but abandoned — OmniSharp.Extensions.LanguageServer 0.19.9's server-side (write) JSON converters for the pull-diagnostics report types are `NotImplementedException` stubs. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+**Resolved — abandoned (limitation L5)**: diagnostic pull (`textDocument/diagnostic` request, LSP 3.17+) was investigated in addition to the push model described here, but abandoned — OmniSharp.Extensions.LanguageServer 0.19.9's server-side (write) JSON converters for the pull-diagnostics report types are `NotImplementedException` stubs. See L5 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#2-accepted-limitations-and-standing-risks).
 
 #### End-user experience
 
@@ -462,9 +462,9 @@ Parse errors are produced by `IdeSupportTagParser` whenever a `.feature` file is
 
 Pressing **Go to Definition** (F12 / Ctrl+Click) on a step in a `.feature` file navigates to the matching `[Given]` / `[When]` / `[Then]` method in the C# binding class. If multiple bindings match (ambiguous), a picker is shown.
 
-**Resolved (Q20)**: `textDocument/definition`, via `DefinitionHandler`. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md).
+**Resolved (decision D9)**: `textDocument/definition`, via `DefinitionHandler`. See D9 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions).
 
-> **Open question (Q21)**: Should the server also support `textDocument/documentLink`? This would annotate step lines as Ctrl+hover hyperlinks — a complementary navigation path that requires no keystroke. See [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md). (`documentLink` is now used for clickable tags, see [F28](#f28--clickable-tags-traceability-links), but not for step navigation.)
+> **Open question (O5)**: Should the server also support `textDocument/documentLink`? This would annotate step lines as Ctrl+hover hyperlinks — a complementary navigation path that requires no keystroke. See O5 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#1-open-questions). (`documentLink` is now used for clickable tags, see [F28](#f28--clickable-tags-traceability-links), but not for step navigation.)
 
 #### IDE support matrix
 
@@ -678,7 +678,7 @@ sequenceDiagram
 
 When typing a step line after a keyword (`Given`, `When`, `Then`, etc.), the IDE offers completions matching existing step binding patterns. Completions include parameter placeholders styled appropriately and insert the full step text on selection.
 
-> **Q14 resolved**: Client-side matching used (see [Open Questions](LSP-IDE-Support-Open-Questions.md#q14)).
+> **Resolved (decision D10)**: client-side matching used (see [Open Questions register](LSP-IDE-Support-Open-Questions.md#3-settled-decisions)).
 
 #### IDE support matrix
 
@@ -737,7 +737,7 @@ The IDE's "Outline" or "Structure" panel shows the hierarchy of the feature file
 
 VS _does_ consume `textDocument/documentSymbol` for other surfaces (Navigation Bar dropdowns, Go to Member), but these require VS content-type plumbing to hook up for `.feature` files.
 
-See [Q22](LSP-IDE-Support-Open-Questions.md#open-questions) for the options and decision.
+See O2 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#1-open-questions) for the options and current position.
 
 #### LSP messages
 
@@ -1036,7 +1036,7 @@ The plugin (issues #159, #1151) instead intercepts the command: `ReqnrollComment
 |---------|---------------|-------|
 | 🔧 Plugin | 🔧 Plugin | 🔧 Plugin |
 
-**Dispatch ambiguity note (resolved — Q13)**: dispatch based on caret position within a `.cs` file that has multiple registered servers is unreliable on all three IDEs, so every client ships the same custom `reqnroll/findStepUsages` message rather than relying on generic `textDocument/references` dispatch (see [implementation status](#f14--find-step-definition-usages) below and [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md)).
+**Dispatch ambiguity note (resolved — decision D8)**: dispatch based on caret position within a `.cs` file that has multiple registered servers is unreliable on all three IDEs, so every client ships the same custom `reqnroll/findStepUsages` message rather than relying on generic `textDocument/references` dispatch (see [implementation status](#f14--find-step-definition-usages) below and [Open Questions & Risk Register](LSP-IDE-Support-Open-Questions.md)).
 
 #### LSP messages
 
@@ -1360,7 +1360,7 @@ An open PR ([#27](https://github.com/reqnroll/Reqnroll.IdeSupport/pull/27), bran
 - **`NeedsConfirmation`.** The `feature` annotation's `NeedsConfirmation = featureFileCount > 1` unconditionally — any rename touching more than one `.feature` file asks a supporting client to confirm before applying, with no separate opt-in setting. The `binding` annotation stays `NeedsConfirmation = false`.
 - **VS needs a genuine push.** VS's Rename Step command routes `textDocument/rename` through a custom interception pipe that swallows the handler's return value before VS's built-in LSP client ever sees it (the same constraint documented for [F14](#f14--find-step-definition-usages) and the Comment/Uncomment toggle). `RenamePostApplyCoordinator.PushEditIfVisualStudioAsync` (`Features/Rename/RenamePostApplyCoordinator.cs`) sends the edit via `workspace/applyEdit` for VS only — an unannotated `DocumentChanges` shape, since VS never advertises annotation support — and is a no-op for every other client (which apply the handler's returned `WorkspaceEdit` natively; pushing to them too would double-apply the edit). Only when VS's `ApplyWorkspaceEditResponse.Applied` comes back `true` does the coordinator let server-side cache invalidation proceed; a VS-reported failure (locked file, unsaved conflicting changes) short-circuits the rename before any cache is touched.
 - **Closed-file match-cache invalidation.** `RenamePostApplyCoordinator.InvalidateClosedFeatureCaches` explicitly invalidates the match cache for any touched `.feature` file that is not open in the Document Buffer — open files get this for free from the `didChange` their edit triggers, but a closed file never fires one, and invalidating it *before* the open-file race would drop the rebuild entirely (observed live as inlay hints silently vanishing for the whole file post-rename).
-- **RA-1 (undo granularity) still open.** Whether VS applies the pushed multi-file `workspace/applyEdit` as one undo transaction or several has not been verified in a live VS session; see [Q23](LSP-IDE-Support-Open-Questions.md) in the Open Questions register.
+- **RA-1 (undo granularity) still open.** Whether VS applies the pushed multi-file `workspace/applyEdit` as one undo transaction or several has not been verified in a live VS session; see O3 in the [Open Questions register](LSP-IDE-Support-Open-Questions.md#1-open-questions).
 
 ##### Known limitations
 
