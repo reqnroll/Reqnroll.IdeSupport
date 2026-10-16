@@ -83,7 +83,8 @@ Two workflows carry the build: `ci.yml` (push to `main`, PRs, manual dispatch; p
 a `changes` job gates the per-client jobs) and the reusable `test-lsp.yml` (builds the server self-contained for all six
 RIDs and runs `LSP.Core.Tests`, `LSP.Server.Tests`, `LSP.Server.Specs`). The per-client jobs are inside `ci.yml`, not
 separate workflows. `publish-vsix` and `publish-rider-plugin` upload the package as a CI artifact; **marketplace
-publication is not automated today.** Testing the server on Linux in CI is a concrete benefit of the LSP separation.
+publication is not automated today.** The server tests run on Windows runners and the six server builds are cross-published from a Linux runner, which the
+LSP separation from IDE-specific code makes possible.
 The VS Code job downloads all six server artifacts and runs `vsce package`; the Rider job takes them through
 `-PlspServerBuildDir`.
 
