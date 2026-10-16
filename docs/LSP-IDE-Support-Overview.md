@@ -12,7 +12,8 @@ delivered through a generic LSP capability it is; where an IDE needs plugin code
 
 **Goals**
 
-- Parity with the legacy `Reqnroll.VisualStudio` extension, in all three IDEs.
+- Parity with the legacy extensions (`Reqnroll.VisualStudio` and the legacy Rider plugin, `Reqnroll.Rider`),
+  in all three IDEs.
 - Every feature backed by automated tests, including measured latency against defined targets (see the
   performance verification section of the [Architecture reference](LSP-IDE-Support-Architecture.md#performance-verification)).
 - A "Preview" release alongside the legacy extension during the transition.
@@ -21,7 +22,7 @@ delivered through a generic LSP capability it is; where an IDE needs plugin code
 
 - SpecFlow or plain Cucumber compatibility.
 - Step definitions written in F#; VB.NET templates.
-- Migrating the legacy VSIX (it continues unchanged until the new one reaches parity).
+- Migrating the legacy extensions (each continues unchanged until its replacement reaches parity).
 
 ## 2. Architecture at a glance
 
@@ -126,7 +127,7 @@ sequenceDiagram
 | **Project membership index** | `path → {projects}` map that decides which project's registry a file belongs to, including linked and excluded files. |
 | **`reqnroll/*` methods** | Custom LSP requests and notifications for things LSP has no vocabulary for (project information, test targets, outcomes). |
 | **`--ide` flag** | Server argument naming the client; drives static versus dynamic capability registration. |
-| **Preview** | The release designation of the new extensions while they coexist with the legacy one. |
+| **Preview** | The release designation of the new extensions while the legacy ones remain current. |
 
 ## 5. Key components
 
@@ -165,23 +166,26 @@ F21 and F22 are not used. Test-runner and outcome flows are detailed in
 [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md) and
 [Test-Outcomes-Pipeline.md](Test-Outcomes-Pipeline.md).
 
-## 7. Distribution and the legacy extension
+## 7. Distribution and the legacy extensions
 
 **Naming.** The extensions are published as "Reqnroll Extension for {IDE} (Preview)" on the Visual Studio,
 VS Code and JetBrains marketplaces, each under its own identifier.
 
-**Coexistence.** The legacy `Reqnroll.VisualStudio` extension continues unchanged throughout Preview. Both can
-be installed in Visual Studio at once (different GUIDs, no shared in-process components). There is no automatic
-migration. VS Code and Rider have no earlier Reqnroll extension to replace.
+**Coexistence.** The legacy `Reqnroll.VisualStudio` extension and the legacy Rider plugin (`Reqnroll.Rider`) each
+continue unchanged throughout Preview, and the new Visual Studio extension and the new Rider plugin will each
+eventually replace them. In Visual Studio both can be installed at once (different GUIDs, no shared in-process
+components). There is no automatic migration. VS Code has no earlier Reqnroll extension to replace. How the two
+Rider plugins coexist is not yet documented (see open question O9).
 
 **Settings.** Existing `reqnroll.json` files work unchanged. Settings specific to the legacy extension are not
 migrated; users reconfigure through the IDE's own settings.
 
-**Promotion criteria.** The Preview label is lifted, and the new extension recommended over the legacy one,
+**Promotion criteria.** The Preview label is lifted, and a new extension recommended over its legacy counterpart,
 when: feature parity with the legacy extension is reached (F1–F20 plus inlay hints); the end-to-end suite passes
 on the supported IDE versions; and the core team has used it for at least one release cycle. After promotion the
 legacy extension is marked deprecated, points users at the new one, receives critical fixes for one more release
-cycle, then goes to maintenance only.
+cycle, then goes to maintenance only. These criteria were written with Visual Studio in mind; whether they apply
+unchanged to Rider is part of O9.
 
 **Client differences to be aware of.** Some features are richer in some clients:
 

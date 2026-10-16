@@ -20,6 +20,7 @@ design lives in the documents linked from each row.
 | O6 | Should **debugging** of feature files (breakpoints, step-into) be supported? | [Test-Runner-Integration-Design.md](Test-Runner-Integration-Design.md) | Not built. The generated `#line` pragmas already put `.feature`-relative sequence points in the PDB, so this may be a narrow per-IDE path-mapping problem rather than a full debug adapter. |
 | O7 | If **parameter-type inlay hints** are ever built, how should regex capture-group offsets map onto the visible step text when they diverge (for example an outline placeholder `<amount>` versus its expanded example value)? | Inlay hints (F23) | Not applicable yet: only the binding-target hint kind exists. |
 | O8 | Will VisualStudio.Extensibility offer CodeLens support that could replace the classic-API bridge used for `.feature` CodeLens? | Run and hook-match lenses on `.feature` files | The bridge is in place and works. Monitor the Visual Studio roadmap. |
+| O9 | How does the new Rider plugin **coexist with and replace the legacy `Reqnroll.Rider` plugin**: can both be installed at once, what is the marketplace identifier and deprecation path, and do the Visual Studio promotion criteria apply unchanged? | [Overview §7](LSP-IDE-Support-Overview.md#7-distribution-and-the-legacy-extensions) | Not yet decided or documented. The new plugin is intended to replace the legacy one. |
 
 ## 2. Accepted limitations and standing risks
 

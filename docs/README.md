@@ -9,7 +9,7 @@ Reqnroll IDE Support gives developers editing [Reqnroll](https://reqnroll.net/) 
 projects the same editing experience in **Visual Studio**, **VS Code** and **JetBrains Rider**. The
 language intelligence lives in one shared [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 (LSP) server. Each IDE has a thin client that starts the server, forwards editor events, and renders the
-results. It replaces the legacy Visual Studio-only extension.
+results. It is intended to replace the legacy Visual Studio extension and the legacy Rider plugin.
 
 ```mermaid
 flowchart LR
