@@ -1,0 +1,46 @@
+// Server operation latency by Operation and IdeClient: sample count, P50, P95 and max milliseconds.
+//
+// Table: AppEvents (workspace-based Application Insights). For a classic
+// "customEvents" view, swap AppEvents -> customEvents, TimeGenerated -> timestamp,
+// Properties -> customDimensions, Name -> name.
+//
+// Status: verified 2026-10-16 in the dev resource using the classic names (customEvents) with
+// REQNROLL_PERF_TELEMETRY_SAMPLE=1, Rider and Visual Studio: 43 rows, Category assigned as described, ingestRun
+// excluded. The AppEvents form below has not been run yet. VS Code not yet seen.
+// Known quirk: textDocument/publishDiagnostics is server-pushed, not a client request, but lands in "Request".
+//
+// Source: PerfSample events from OperationDurationRecorder. Properties: Operation, DurationMs (whole ms, so
+// sub-millisecond work reads as 0), DurationBucket.
+//
+// Reading the numbers
+// - PerfSample is SAMPLED: ~5% by default (REQNROLL_PERF_TELEMETRY_SAMPLE overrides; dev runs use 1). Samples is a
+//   confidence measure for the percentiles, NOT a usage count. For usage use the "* command executed" events and
+//   FeatureUsageSummary. With few samples P95 equals the max, so raise minSamples in production.
+// - Category is derived from the operation name, for grouping tiles:
+//     DocumentSync  textDocument/did*, workspace/did*  (the cost of the server ingesting an edit/open)
+//     Internal      internal/*                        (reconcile / apply work, not a client request)
+//     TestOutcomes  reqnroll/testOutcomes/*           (high-volume Run CodeLens lookups)
+//     Request       everything else                   (completion, hover, definition, rename, CodeLens, ...)
+// - reqnroll/testOutcomes/ingestRun is excluded: it records the duration of a whole test run, not server latency.
+let lookback = 7d;
+let minSamples = 1;
+AppEvents
+| where TimeGenerated > ago(lookback)
+| where Name == "PerfSample"
+| extend Operation = tostring(Properties.Operation),
+         IdeClient = tostring(Properties.IdeClient),
+         DurationMs = todouble(Properties.DurationMs)
+| where isnotempty(Operation) and isnotnull(DurationMs)
+| where Operation != "reqnroll/testOutcomes/ingestRun"
+| extend Category = case(
+            Operation startswith "internal/", "Internal",
+            Operation startswith "reqnroll/testOutcomes/", "TestOutcomes",
+            Operation matches regex @"^(textDocument|workspace)/did", "DocumentSync",
+            "Request")
+| summarize Samples = count(),
+            P50Ms = percentile(DurationMs, 50),
+            P95Ms = percentile(DurationMs, 95),
+            MaxMs = max(DurationMs)
+        by Category, Operation, IdeClient
+| where Samples >= minSamples
+| order by P95Ms desc, Samples desc
