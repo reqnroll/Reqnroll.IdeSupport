@@ -93,8 +93,9 @@ Several of these documents predate the conventions below and are being brought i
 | Test-Outcomes-Pipeline.md, Test-Runner-Integration-Design.md, VS-LSP-Activation.md, Onboarding-And-Scaffolding.md | Conforms |
 | LSP-Protocol-Extensions.md, Telemetry-Events-Inventory.md | Reference |
 | LSP-Spec-Gap-Analysis.md, architecture/complexity-hotspots.md | Reference (point-in-time analyses) |
+| LSP-IDE-Support-Overview.md | Conforms |
 | LSP-IDE-Support-Open-Questions.md | Register (open questions, accepted limitations, settled decisions) |
-| Overview, Architecture, Feature Designs | Needs rework (Architecture and Feature Designs also need splitting) |
+| Architecture, Feature Designs | Needs rework (both also need splitting) |
 
 ## Writing and maintaining these documents
 
