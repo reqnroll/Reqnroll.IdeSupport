@@ -24,11 +24,6 @@ Reqnroll IDE Support for Visual Studio supports **Visual Studio 2022** and
 2. Search for **"Reqnroll Extension for Visual Studio (Preview)"**.
 3. Install, then restart Visual Studio when prompted.
 
-TODO(media): 📷 screenshot of the Marketplace/"Manage Extensions" search
-results panel, with the Preview extension's listing visibly distinct from
-the existing "Reqnroll.VisualStudio" entry.
-**Target:** `index/index-vs-marketplace.png`
-
 ```{admonition} Don't confuse the two extensions
 :class: warning
 
@@ -57,10 +52,6 @@ for more.
 1. Open the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`).
 2. Search for **"Reqnroll"** and install the Reqnroll extension.
 
-TODO(media): 📷 screenshot of the extension listing in the VS Code
-Marketplace panel.
-**Target:** `index/index-vscode-marketplace.png`
-
 ```{admonition} Replaces the "Cucumber" extension recommendation
 :class: note
 
@@ -87,12 +78,17 @@ work as expected with the Reqnroll extension active.
 :sync: rider
 
 1. In Rider, go to **Settings → Plugins → Marketplace**.
-2. Search for **"Reqnroll"** and install the plugin.
+2. Search for **"Reqnroll Extension (Preview)"** and install the plugin.
 3. Restart Rider when prompted.
 
-TODO(media): 📷 screenshot of the Marketplace search results panel showing
-the Reqnroll plugin listing.
-**Target:** `index/index-rider-marketplace.png`
+```{admonition} Don't confuse the two plugins
+:class: warning
+
+The Marketplace search for "Reqnroll" will also surface the existing, non-preview
+**Reqnroll** plugin for Rider. They are separate listings — install
+the one explicitly labeled **(Preview)** to get the LSP-based plugin
+described in these docs.
+```
 
 ```{admonition} Supported Rider version
 :class: note
