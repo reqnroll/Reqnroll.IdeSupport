@@ -12,9 +12,7 @@ welcome content on every update.
   is shown.
 * **Rider** — the plugin's own change-notes panel is shown.
 
-TODO(media): 🎬 gif of the Visual Studio "What's New" panel appearing after
-an upgrade — short, since it's a one-time UI moment users won't otherwise see.
-**Target:** `upgrading/upgrading-vs.gif`
+![The "What's New" panel Visual Studio shows after an upgrade](upgrading/upgrading-vs.png)
 
 ## Release notes
 

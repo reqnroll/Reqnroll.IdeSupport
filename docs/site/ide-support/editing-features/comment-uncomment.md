@@ -6,7 +6,7 @@ Windows/Linux, `Cmd+/` on macOS). If nothing is selected, the line with the
 cursor is used.
 
 Visual Studio also supports its separate Comment Selection and Uncomment
-Selection commands. VS Code and Rider have a menu command as well:
+Selection commands. VS Code also has a Command Palette command; Rider follows its keymap:
 
 :::{tab-set}
 
@@ -27,7 +27,6 @@ There is no Reqnroll-specific Comment/Uncomment command in the context menu.
 If you changed the shortcut, use **Tools → Options → Environment → Keyboard**
 and set it on the `Edit.*` commands above.
 
-![](comment-uncomment/comment-uncomment-vs.gif)
 ```
 
 ```{tab-item} VS Code
@@ -37,16 +36,20 @@ and set it on the `Edit.*` commands above.
 **Reqnroll: Comment/Uncomment** from the Command Palette. There is no
 context-menu entry for this command.
 
-![](comment-uncomment/comment-uncomment-vscode.gif)
+
 ```
 
 ```{tab-item} Rider
 :sync: rider
 
-`Ctrl+/` works directly, or use **Reqnroll: Comment/Uncomment** from
-Find Action (Ctrl+Shift+A). There is no context-menu entry for this command.
+Reqnroll hooks into Rider's own **Comment with Line Comment** command, so
+whatever your keymap binds to it works in a `.feature` file — `Ctrl+/` in the default keymap,
+`Ctrl+K, Ctrl+C` / `Ctrl+K, Ctrl+U` in the Visual Studio keymaps — including keys you rebind.
+There is no separate Reqnroll comment command and no context-menu entry.
+In the Visual Studio keymaps `Ctrl+/` does not comment in a `.feature` file; it does
+what that keymap says it does in C#.
 
-![](comment-uncomment/comment-uncomment-rider.gif)
+
 ```
 
 :::

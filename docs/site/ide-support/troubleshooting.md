@@ -15,12 +15,19 @@ below).
 * **Visual Studio** — native "Find All References" (Shift+F12) does not
   route to Reqnroll step bindings; use the dedicated entry point instead.
   See [Find Step Definition Usages](navigation-features/find-usages.md).
-* **VS Code** — Rename doesn't yet support disambiguating a step bound to
-  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
-  for the workaround (Rider and Visual Studio both handle this case).
 * **All IDEs** — a project that targets more than one framework
   (`<TargetFrameworks>`) is analysed for a single target framework only. See
   [Multi-targeted projects](#multi-targeted-projects-use-a-single-target-framework).
+
+## A dialog explains why a rename, format or comment did nothing
+
+When the language server rejects an edit for a reason you can fix, the IDE shows the reason in a
+modal dialog. Typical cases are a Rename Step that changes a parameter count, a Format Document on
+a file with no `Feature:` line yet, and a Comment/Uncomment on a document the server does not have
+open. Fix the cause and run the command again. A rejection that happens automatically (format on
+save, on paste, Code Cleanup on save) is only written to the log, never shown. An already-formatted
+document stays silent. In Rider, an explicit **Reformat Code** shows the reason; the platform's own
+formatter does not.
 
 ## Multi-targeted projects use a single target framework
 
@@ -301,8 +308,10 @@ The extension sends anonymous usage and diagnostic telemetry to help the
 maintainers locate bugs and performance problems. It consists of event names,
 counts, flags, durations and coarse duration buckets, plus the IDE kind and
 extension/server versions. It never includes file paths, step text, test
-names or source content (exception messages are scrubbed of paths). This
-includes a sampled `PerfSample` event (operation label, duration and duration
+names or source content. Exception messages are scrubbed of paths, URLs and quoted text, and
+the stack trace sent with an error keeps only frames from Reqnroll IDE Support itself: any other
+type, including your own, is replaced by `[external]`. The exception's own type name is sent as it is.
+The telemetry includes a sampled `PerfSample` event (operation label, duration and duration
 bucket) sent for about 5% of operations by default. The full list of events
 and properties is in the
 [telemetry events inventory](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/Telemetry-Events-Inventory.md).

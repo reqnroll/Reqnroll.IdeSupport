@@ -49,5 +49,5 @@ html_title = '%s Documentation (Preview)' % project
 # _static/lightbox.{css,js}). Plain static assets, not a Sphinx extension,
 # so nothing new needs adding to requirements.txt when this syncs into
 # reqnroll/Reqnroll.
-html_css_files = ['lightbox.css']
+html_css_files = ['lightbox.css', 'tables.css']
 html_js_files = ['lightbox.js']

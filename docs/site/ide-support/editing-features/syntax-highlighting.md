@@ -5,7 +5,7 @@ step text, bound step argument text, tags (`@tag`), doc strings, data table
 headers, data table cell content, and comments each render in distinct
 colors, matching your IDE's color theme. Colors update as you type — no
 save required. Steps with no matching binding render in a distinct
-"undefined step" color once a binding registry is available.
+"undefined step" color.
 
 :::{tab-set}
 
