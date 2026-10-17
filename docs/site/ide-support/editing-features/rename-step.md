@@ -44,10 +44,7 @@ Command Palette in either file type.
 
 **Renaming from the binding expression**
 
-TODO(media): 🎬 gif — cursor in the attribute string in a `.cs` file,
-invoking rename (F2), typing a new expression, and watching every matching
-`.feature` step update.
-**Target:** `rename-step/rename-step-vscode-cs.gif`
+![](rename-step/rename-step-vscode-cs.gif)
 
 **Renaming an ambiguously bound step**
 
@@ -81,11 +78,7 @@ than one candidate attribute.
 
 **Renaming an ambiguously bound step**
 
-TODO(media): 🎬 gif — invoking rename on a step/method with more than one
-candidate binding attribute, showing Rider's disambiguation picker and
-selecting a candidate to rename — not just a port of the VS capture, since
-Rider's picker UI differs visually.
-**Target:** `rename-step/rename-step-rider-picker.gif`
+![](rename-step/rename-step-rider-picker.gif)
 ```
 
 ::::
