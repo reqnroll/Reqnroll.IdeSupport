@@ -103,9 +103,7 @@ VS Code's Problems panel/hover.
 ```{tab-item} Rider
 :sync: rider
 
-TODO(media): 📷 screenshot — same capture as the Visual Studio tab, for
-Rider's Problems pane/tooltip.
-**Target:** `diagnostics/diagnostics-rider-csharp-squiggle.png`
+![An async void step binding method underlined in Rider, with the hover message "Binding method must not be async void"](diagnostics/diagnostics-rider-csharp-squiggle.png)
 ```
 
 :::
