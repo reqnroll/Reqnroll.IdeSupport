@@ -20,7 +20,7 @@ to its feature page for details.
 | [Format Document](editing-features/formatting.md) | Ctrl+K, Ctrl+D *(native VS default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Assign a shortcut to Find Step Usages (Tools → Options → Keyboard) |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Find Unused Step Definitions in Projects |
-| [Hook Navigation](navigation-features/hook-navigation.md) | — | Click the hook-match Code Lens (no command) |
+| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Find Hooks |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (lightbulb) *(native VS default)* | — |
 ````
 
@@ -35,7 +35,7 @@ to its feature page for details.
 | [Format Document](editing-features/formatting.md) | Shift+Alt+F (⇧⌥F on macOS) *(native VS Code default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Command Palette → Reqnroll: Find Step Usages, or the CodeLens |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Reqnroll: Find Unused Step Definitions in Projects, or Command Palette |
-| [Hook Navigation](navigation-features/hook-navigation.md) | — | Click the hook-match CodeLens, or Command Palette → Reqnroll: Find Hooks |
+| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Find Hooks, or Command Palette |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | Command Palette → Reqnroll: Define Steps |
 | [Toggle inlay hints](editing-features/inlay-hints.md) | Hold Ctrl-Alt (⌥ on macOS) *(only in an `...UnlessPressed` mode)* | — |
 | [Show the Reqnroll log](troubleshooting.md#where-are-the-logs-and-how-do-i-change-the-log-level) | — | Command Palette → Reqnroll: Show Output Channel |
@@ -53,7 +53,7 @@ to its feature page for details.
 | [Format Document](editing-features/formatting.md) | Ctrl+Alt+L (⌘⌥L on macOS) *(native Rider "Reformat Code" default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Find Action → Reqnroll: Find Step Usages, or the CodeLens |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Reqnroll: Find Unused Step Definitions in Projects, or Find Action |
-| [Hook Navigation](navigation-features/hook-navigation.md) | — | Click the hook-match Code Vision lens, or Find Action → Reqnroll: Find Hooks |
+| [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Find Hooks |
 | [Toggle inlay hints](editing-features/inlay-hints.md) | — | Find Action → Reqnroll: Show Feature Inlay Hints |
 ````
 

@@ -1,27 +1,23 @@
 # Hook Navigation
 
-**Find Hooks** lists the hook bindings that apply to a `.feature` file location,
-filtered by the tags and `[Scope]` expressions that apply there:
+**Find Hooks**, invoked from a `.feature` file, lists the hook bindings in
+scope at the cursor position, filtered by the tags and `[Scope]`
+expressions that apply there:
 
-* For a `Feature:` or `Scenario:` line: `[BeforeFeature]`/`[AfterFeature]`
+* From a `Feature:` or `Scenario:` line: shows `[BeforeFeature]`/`[AfterFeature]`
   or `[BeforeScenario]`/`[AfterScenario]` hooks that apply.
-* For a step: additionally `[BeforeStep]`/`[AfterStep]` and
+* From a step line: additionally shows `[BeforeStep]`/`[AfterStep]` and
   `[BeforeStepBlock]`/`[AfterStepBlock]` hooks.
 
 Selecting an entry navigates to the C# hook method.
-
-There is no menu entry for this command. Open it by clicking a hook-match
-[Code Lens](../editing-features/code-lens.md); in VS Code and Rider you can also run the
-command by name.
 
 :::{tab-set}
 
 ```{tab-item} Visual Studio
 :sync: vs
 
-Click a hook-match Code Lens above a `Feature:` or `Scenario:` line in a
-`.feature` file. A popup lists the matching hook methods; double-click an entry to go to it.
-Visual Studio has no command for this.
+Place the cursor in a `.feature` file, then right-click → **Find Hooks**
+(in the Reqnroll group of the code editor context menu).
 
 ![](hook-navigation/hook-navigation-vs.gif)
 ```
@@ -29,10 +25,10 @@ Visual Studio has no command for this.
 ```{tab-item} VS Code
 :sync: vscode
 
-Either:
+Place the cursor in a `.feature` file, then either:
 
-- click a hook-match CodeLens above a `Feature:` or `Scenario:` line, or
-- with the cursor in a `.feature` file, run **Reqnroll: Find Hooks** from the Command Palette.
+- Right-click → **Reqnroll: Find Hooks**, or
+- find **Reqnroll: Find Hooks** in the Command Palette.
 
 No default keybinding.
 
@@ -42,10 +38,7 @@ No default keybinding.
 ```{tab-item} Rider
 :sync: rider
 
-Either:
-
-- click a hook-match Code Vision lens above a `Feature:` or `Scenario:` line, or
-- with the caret in a `.feature` file, run **Reqnroll: Find Hooks** from Find Action (Ctrl+Shift+A).
+Place the cursor in a `.feature` file, then right-click → **Reqnroll: Find Hooks**.
 
 No default keybinding.
 
@@ -55,10 +48,10 @@ No default keybinding.
 :::
 
 ```{tip}
-[Code Lens](../editing-features/code-lens.md) shows hook-match counts inline above
-`Feature:`/`Scenario:` lines while you're reading the code. Clicking one opens
-the picker filtered to that lens's own hook set, so you can see the count and the
-hooks in one place.
+You don't always need to invoke this explicitly — [Code Lens](../editing-features/code-lens.md)
+shows hook-match counts inline above `Feature:`/`Scenario:` lines while
+you're reading the code, and clicking one opens the same picker filtered
+to that lens's own hook set.
 ```
 
 ```{note}
