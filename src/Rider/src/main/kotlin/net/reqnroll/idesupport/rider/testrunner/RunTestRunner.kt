@@ -24,7 +24,7 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
 /**
- * Implements the "▶ Run" lens click (design doc §5/§6, issue #262) — Rider's own execution of
+ * Implements the "▶ Run" lens click (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — Rider's own execution of
  * `dotnet test --filter`, mirroring VS Code's already-shipped "Option 2" for this same issue
  * (this plugin has no native `com.intellij.execution`/Test Runner integration to delegate to
  * instead — see [RunTestCodeVisionProvider]'s doc comment).

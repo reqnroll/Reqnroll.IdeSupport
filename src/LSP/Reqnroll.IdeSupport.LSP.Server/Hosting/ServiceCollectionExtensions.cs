@@ -165,7 +165,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IFeatureTagIndex, FeatureTagIndex>()
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
-            // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).
+            // Scenario -> generated-test-method mapping layer (Test-Runner-Integration-Design ("Mapping layer"), issue #262).
             .AddSingleton<IScenarioTestTargetResolver, ScenarioTestTargetResolver>()
             .AddSingleton<IIdeSupportTagParser, IdeSupportTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch

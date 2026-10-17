@@ -36,9 +36,9 @@ src/VisualStudio/
   Reqnroll.IdeSupport.VisualStudio.ProjectTemplate  ← VSIX template packaging
 ```
 
-Start with [docs/LSP-IDE-Support-Architecture.md §6.2](../../docs/LSP-IDE-Support-Architecture.md#62-visual-studio)
+Start with [docs/architecture/client-visualstudio.md](../../docs/architecture/client-visualstudio.md)
 for the as-built mechanism (extension activation, eager server startup, the LspInterceptingPipe
-send/receive pipelines). [docs/LSP-IDE-Support-Feature-Designs.md](../../docs/LSP-IDE-Support-Feature-Designs.md)
+send/receive pipelines). [docs/features/README.md](../../docs/features/README.md)
 covers each feature's VS-specific surfacing.
 
 ## Building
@@ -225,7 +225,7 @@ those scenarios test behavior that now lives server-side and is already covered 
 - **`LspServerConnectionService` starts the server process eagerly**, resolved from
   `ExtensionEntrypoint.OnInitializedAsync` rather than from `ReqnrollLanguageClient`'s constructor
   — the latter is only constructed when VS actually activates the `LanguageServerProvider` (i.e.
-  on `.feature`-file open), which turned out not to be early enough. See the as-built note in the
-  Architecture doc before changing this — the current design was arrived at after two rounds of
+  on `.feature`-file open), which turned out not to be early enough. See
+  docs/architecture/client-visualstudio.md before changing this — the current design was arrived at after two rounds of
   the "obvious" approach turning out not to actually be eager, verified against real VS session
   logs both times.

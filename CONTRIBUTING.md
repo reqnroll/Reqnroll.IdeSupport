@@ -18,14 +18,14 @@ significantly between the .NET server/VS pieces and the TypeScript VS Code piece
 
 - Skim [docs/LSP-IDE-Support-Overview.md](docs/LSP-IDE-Support-Overview.md) for scope and
   non-goals, and [docs/LSP-IDE-Support-Open-Questions.md](docs/LSP-IDE-Support-Open-Questions.md)
-  for known-open questions and risks — a good fraction of "is X supposed to work like this?"
+  for open questions, accepted limitations and settled decisions — a good fraction of "is X supposed to work like this?"
   questions are already answered (or explicitly marked unresolved) there.
 - Check the [Issues](../../issues) tab for existing tracked defects/to-dos before starting
   something that might already be in flight.
 - For anything non-trivial, a short design note (even a few sentences in the issue) before writing
   code saves rework — this project has a habit of discovering that the "obvious" approach doesn't
-  actually work the way it looks (see the eager-startup as-built note in the Architecture doc for
-  an example of two rounds of exactly that).
+  actually work the way it looks (see the eager-startup and preload notes in
+  [docs/architecture/client-visualstudio.md](docs/architecture/client-visualstudio.md) for an example of two rounds of exactly that).
 
 ## General workflow
 

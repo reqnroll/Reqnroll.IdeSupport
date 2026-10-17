@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 
 /// <summary>
 /// Sends the custom <c>reqnroll/resolveTestTargets</c> request to the LSP server and maps the
-/// result to <see cref="ScenarioTestTarget"/>s (design doc §3/§4, issue #262) — the VS-side
+/// result to <see cref="ScenarioTestTarget"/>s (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — the VS-side
 /// counterpart to <c>ResolveTestTargetsHandler</c>. Consumed by <c>RunTestCodeLensService</c> to
 /// build the classic Run CodeLens bridge's data.
 /// </summary>
