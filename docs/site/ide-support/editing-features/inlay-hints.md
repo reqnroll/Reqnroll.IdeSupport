@@ -1,4 +1,4 @@
-# Inlay Hints — Bound Step Info
+# Inlay Hints — Bound Step Information
 
 Each step in a `.feature` file shows an inline hint after the step text
 indicating what it's bound to:
