@@ -38,13 +38,14 @@ also be re-aligned by running Format Document. A row missing its trailing
 
 :::
 
-```{admonition} Visual Studio 2022 — built-in Gherkin formatter conflict
+```{admonition} Visual Studio — on-type table alignment can lag
 :class: warning
 
-VS 2022 ships its own built-in Gherkin formatting service, which can
-override this extension's on-type table formatting. If table alignment
-doesn't seem to be happening as you type, check whether the built-in
-service is intercepting the on-type formatting request.
+In Visual Studio, something other than this extension can insert a space
+after a table row a fraction of a second after the extension has aligned it.
+Visual Studio then treats the extension's edit as out of date, so on-type
+table alignment can lag or appear not to happen. If a table isn't aligned as
+you type, run Format Document to re-align it.
 ```
 
 ```{admonition} Rider table formatting

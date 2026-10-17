@@ -67,10 +67,10 @@ the faster path since you don't have to invoke anything.
 
 ---
 
-¹ Visual Studio ships its own built-in Gherkin formatting service, which
-can override on-type table formatting. If table alignment doesn't seem to
-be happening as you type, see
-[Document & Table Formatting](editing-features/formatting.md) for the fix.
+¹ In Visual Studio, something other than this extension can insert a space
+after a table row just after the extension aligns it, so on-type table alignment
+can lag or be undone. Running Format Document re-aligns the table; see
+[Document & Table Formatting](editing-features/formatting.md).
 
 ² Visual Studio's native Document Outline window doesn't support
 `.feature` files at all — a VS platform limitation, not something we can
