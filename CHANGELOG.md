@@ -90,6 +90,7 @@
 * Gherkin tags matching a configured `Traceability.TagLinks` pattern (including links auto-generated from `specsync.json`) are now clickable in feature files, opening the tracker URL, via `textDocument/documentLink` (LSP server; Visual Studio and Rider request the links themselves; VS Code re-targets them through `reqnroll.openTagLink`; all open the target on Ctrl/Cmd+Click and send the property-less `TagLink command executed` telemetry event) - see #755, #888
 
 ## Bug fixes:
+* In Rider, Reformat Code on a `.feature` file no longer fails silently with an "Access is allowed from Event Dispatch Thread (EDT) only" error: the language server's formatting edits are now applied to the text directly instead of through a platform helper that must run on the UI thread (Rider) - see #1200, @clrudolphi
 * After the language client restarts a crashed LSP server, the extension now re-sends `textDocument/didOpen` for the C# files that are still open, which previously reached the new server as `didChange` for documents it did not know; a document notification sent while the client is stopped or restarting is now logged instead of surfacing as an unhandled rejection (VS Code) - see #1005
 
 * Projects that declare `<TargetFrameworks>` (plural, even with a single entry) instead of `<TargetFramework>` are now evaluated for their first listed target framework, so they get an output assembly, target framework, package references and a file baseline instead of falling back to folder-prefix behaviour with no project data (VS Code) - see #999
