@@ -85,7 +85,7 @@ work as expected with the Reqnroll extension active.
 :class: warning
 
 The Marketplace search for "Reqnroll" will also surface the existing, non-preview
-**Reqnroll** plugin for Rider. They are separate listings — install
+**Reqnroll for Rider** plugin. They are separate listings — install
 the one explicitly labeled **(Preview)** to get the LSP-based plugin
 described in these docs.
 ```
