@@ -56,8 +56,7 @@ Scenario/Scenario Outline the block contains (including a Feature's Rule-nested 
 single batched Test Explorer run — the same Details popup and pass/fail tracking as a single
 scenario's lens, just over the whole container. `Background:` steps are never run on their own.
 
-TODO(media): 🎬 gif — clicking the `▶ Run Scenario` lens above a scenario, choosing Run from the Details popup, and the pass/fail glyph appearing.
-**Target:** `running-scenarios/running-scenarios-vs.gif`
+![Run Scenarios lenses above the Feature, Rule and Scenario lines in Visual Studio, with pass/fail glyphs](running-scenarios/running-scenarios-vs.png)
 
 ```{admonition} MSTest runs using Microsoft.Testing.Platform
 :class: note
