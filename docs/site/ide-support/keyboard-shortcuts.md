@@ -20,9 +20,6 @@ Find Action) — see the linked feature page for the full how-to.
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Find Unused Step Definitions in Projects |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Find Hooks |
 | [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (lightbulb) *(native VS default)* | — |
-
-
-![](keyboard-shortcuts/keyboard-shortcuts-vs-menu.png)
 ````
 
 ````{tab-item} VS Code
