@@ -56,7 +56,7 @@ Scenario/Scenario Outline the block contains (including a Feature's Rule-nested 
 single batched Test Explorer run — the same Details popup and pass/fail tracking as a single
 scenario's lens, just over the whole container. `Background:` steps are never run on their own.
 
-![Run Scenarios lenses above the Feature, Rule and Scenario lines in Visual Studio, with pass/fail glyphs](running-scenarios/running-scenarios-vs.png)
+![Run Scenarios lenses above the Feature, Rule and Scenario lines in Visual Studio, with pass/fail glyphs](running-scenarios/running-scenarios-vs.gif)
 
 ```{admonition} MSTest runs using Microsoft.Testing.Platform
 :class: note
@@ -144,8 +144,7 @@ Scenario/Scenario Outline the block contains (including a Feature's Rule-nested 
 single batched `dotnet test` run — the same outcome glyph and per-row tracking as a single
 scenario's lens, just over the whole container. `Background:` steps are never run on their own.
 
-TODO(media): 🎬 gif — clicking the `▶ Run` lens above a scenario and the lens changing to `✓ Run` or `✗ Run`, including the failed-step gutter icon on a failure.
-**Target:** `running-scenarios/running-scenarios-rider.gif`
+![Run Scenarios lenses above the Feature, Rule and Scenario lines in Rider, with pass/fail glyphs](running-scenarios/running-scenarios-rider.gif)
 
 After a run, the step that failed gets a red failed-test icon in the editor gutter. Hovering it
 shows the traced step and the error text. The icon is located from Reqnroll's step trace, not the
