@@ -49,7 +49,7 @@ the faster path since you don't have to invoke anything.
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | ✅ | ✅ | ✅ |
-| [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️⁴ | ✅ |
+| [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️³ | ✅ |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | ✅ | ✅ | ✅ |
 | [Hook Navigation ("Find Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
 
@@ -57,13 +57,13 @@ the faster path since you don't have to invoke anything.
 
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
-| [Running Scenarios](running-scenarios.md) | ❌⁶ | ✅ | ⚠️⁷ |
+| [Running Scenarios](running-scenarios.md) | ❌⁵ | ✅ | ⚠️⁶ |
 
 ## Project Setup
 
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
-| [New Project / Item Templates](new-project-templates.md) | ❌⁵ | ✅ | ❌⁵ |
+| [New Project / Item Templates](new-project-templates.md) | ❌⁴ | ✅ | ❌⁴ |
 
 ---
 
@@ -76,20 +76,20 @@ be happening as you type, see
 `.feature` files at all — a VS platform limitation, not something we can
 configure around. See [Document Outline](editing-features/document-outline.md).
 
-⁴ Visual Studio's native **Find All References** (Shift+F12) does not
-route to Reqnroll bindings — use the dedicated **Find Step Usages** command
-instead. See [Find Step Definition Usages](navigation-features/find-usages.md)
-for exactly where to find it.
+³ Visual Studio's native **Find All References** (Shift+F12) does not
+route to Reqnroll bindings — use the **N step usages** CodeLens above the
+binding, or assign a keyboard shortcut to the **Find Step Usages** command (it
+has no menu entry). See [Find Step Definition Usages](navigation-features/find-usages.md).
 
-⁵ VS Code and Rider don't have an equivalent project wizard or file templates; create files with
+⁴ VS Code and Rider don't have an equivalent project wizard or file templates; create files with
 the IDE's normal New File command and use the *Define missing step* quick fix to scaffold bindings
 — see [New Project / Item Templates](new-project-templates.md).
 
-⁶ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
+⁵ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
 extension and use its own Test Explorer/CodeLens instead — see
 [Running Scenarios](running-scenarios.md).
 
-⁷ Rider's lens can only run a scenario, not debug it, and doesn't appear in
+⁶ Rider's lens can only run a scenario, not debug it, and doesn't appear in
 Rider's native Unit Tests tool window. See
 [Running Scenarios](running-scenarios.md) for the details and the
 workaround for debugging.
