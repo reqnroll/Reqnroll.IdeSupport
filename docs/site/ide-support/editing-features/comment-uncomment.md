@@ -27,7 +27,6 @@ There is no Reqnroll-specific Comment/Uncomment command in the context menu.
 If you changed the shortcut, use **Tools → Options → Environment → Keyboard**
 and set it on the `Edit.*` commands above.
 
-![](comment-uncomment/comment-uncomment-vs.gif)
 ```
 
 ```{tab-item} VS Code
@@ -37,7 +36,7 @@ and set it on the `Edit.*` commands above.
 **Reqnroll: Comment/Uncomment** from the Command Palette. There is no
 context-menu entry for this command.
 
-![](comment-uncomment/comment-uncomment-vscode.gif)
+
 ```
 
 ```{tab-item} Rider
@@ -50,7 +49,7 @@ There is no separate Reqnroll comment command and no context-menu entry.
 In the Visual Studio keymaps `Ctrl+/` does not comment in a `.feature` file; it does
 what that keymap says it does in C#.
 
-![](comment-uncomment/comment-uncomment-rider.gif)
+
 ```
 
 :::

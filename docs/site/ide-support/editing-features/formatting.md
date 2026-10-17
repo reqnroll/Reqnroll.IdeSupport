@@ -3,7 +3,7 @@
 ## Format Document
 
 Formatting the whole document (Shift+Alt+F, or your IDE's equivalent
-shortcut) re-indents the entire `.feature` file: consistent indentation per
+shortcut) re-indents the entire `.feature` file, providing consistent indentation per
 nesting level, normalized spacing around keywords, and blank lines between
 scenarios. Formatting rules are read from `.editorconfig` — see
 [Gherkin Formatting with EditorConfig](../editorconfig.md) for the full
@@ -38,14 +38,4 @@ also be re-aligned by running Format Document. A row missing its trailing
 
 :::
 
-```{admonition} Rider table formatting
-:class: note
 
-Both whole-document Format and on-type `|` table-column realignment are
-implemented in Rider — Format Document works through the platform's
-built-in formatting service, and on-type table realignment through
-dedicated plugin code, matching the behavior described above. Live
-cross-IDE confirmation (including whether Rider's Enter/Tab-triggered
-realignment works, not just `|`) is tracked in
-[#415](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/415).
-```
