@@ -308,8 +308,10 @@ The extension sends anonymous usage and diagnostic telemetry to help the
 maintainers locate bugs and performance problems. It consists of event names,
 counts, flags, durations and coarse duration buckets, plus the IDE kind and
 extension/server versions. It never includes file paths, step text, test
-names or source content (exception messages are scrubbed of paths). This
-includes a sampled `PerfSample` event (operation label, duration and duration
+names or source content. Exception messages are scrubbed of paths, URLs and quoted text, and
+the stack trace sent with an error keeps only frames from Reqnroll IDE Support itself: any other
+type, including your own, is replaced by `[external]`. The exception's own type name is sent as it is.
+The telemetry includes a sampled `PerfSample` event (operation label, duration and duration
 bucket) sent for about 5% of operations by default. The full list of events
 and properties is in the
 [telemetry events inventory](https://github.com/reqnroll/Reqnroll.IdeSupport/blob/main/docs/Telemetry-Events-Inventory.md).
