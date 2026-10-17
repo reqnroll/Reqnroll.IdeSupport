@@ -1,9 +1,11 @@
 # Keyboard Shortcuts
 
-A single reference for every Reqnroll command's shortcut or menu location,
-one table per IDE. Reqnroll adds no top-level menu in any IDE: commands with no default shortcut live in the
-editor's right-click menu (one Reqnroll group) or the IDE's command search (Command Palette /
-Find Action) — see the linked feature page for the full how-to.
+Every Reqnroll command's keyboard shortcut or menu location, with one table per IDE.
+
+Reqnroll adds no menu of its own to the IDE's menu bar. Commands that have no default shortcut
+are in the editor's right-click menu, where they appear as a single Reqnroll group, or in the
+IDE's command search (the Command Palette in VS Code, Find Action in Rider). Each command links
+to its feature page for details.
 
 :::{tab-set}
 
