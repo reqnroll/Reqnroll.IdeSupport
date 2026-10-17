@@ -18,10 +18,6 @@ step turn green once you add the matching binding.
 
 ![](diagnostics/diagnostics-vs-squiggle.png)
 
-TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
-matching binding is added. Nice to have; the screenshot above already
-conveys the static state on its own.
-**Target:** `diagnostics/diagnostics-vs-fix.gif`
 ```
 
 ```{tab-item} VS Code
@@ -29,10 +25,6 @@ conveys the static state on its own.
 
 ![](diagnostics/diagnostics-vscode-squiggle.png)
 
-TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
-matching binding is added. Nice to have; the screenshot above already
-conveys the static state on its own.
-**Target:** `diagnostics/diagnostics-vscode-fix.gif`
 ```
 
 ```{tab-item} Rider
@@ -40,17 +32,13 @@ conveys the static state on its own.
 
 ![](diagnostics/diagnostics-rider-squiggle.png)
 
-TODO(media): 🎬 gif (optional) — the squiggle disappearing live as a
-matching binding is added. Nice to have; the screenshot above already
-conveys the static state on its own.
-**Target:** `diagnostics/diagnostics-rider-fix.gif`
 ```
 
 :::
 
 ## Quick fix for syntax errors
 
-For a Gherkin syntax error, the lightbulb (Alt+Enter in Rider) offers **Insert '<keyword>'**
+For a Gherkin syntax error, the lightbulb (Alt+Enter in Rider) offers **Insert '\<keyword\>'**
 built from the keywords valid at that point in the active dialect. The fix is attached to the
 specific squiggle it resolves.
 
@@ -101,10 +89,7 @@ server's job, never this extension's.
 ```{tab-item} Visual Studio
 :sync: vs
 
-TODO(media): 📷 screenshot — a `[Given]`/hook method with an invalid
-`static`/`async void`/expression/scope problem, squiggled, with the hover
-tooltip showing the specific message.
-**Target:** `diagnostics/diagnostics-vs-csharp-squiggle.png`
+![An async void step binding method underlined in Visual Studio, with the hover message "Binding method must not be async void"](diagnostics/diagnostics-vs-csharp-squiggle.png)
 ```
 
 ```{tab-item} VS Code
