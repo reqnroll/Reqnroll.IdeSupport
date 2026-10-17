@@ -95,9 +95,7 @@ server's job, never this extension's.
 ```{tab-item} VS Code
 :sync: vscode
 
-TODO(media): 📷 screenshot — same capture as the Visual Studio tab, for
-VS Code's Problems panel/hover.
-**Target:** `diagnostics/diagnostics-vscode-csharp-squiggle.png`
+![An async void step binding method underlined in VS Code, with the hover message "Binding method must not be async void"](diagnostics/diagnostics-vscode-csharp-squiggle.png)
 ```
 
 ```{tab-item} Rider
