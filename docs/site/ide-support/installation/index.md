@@ -96,7 +96,7 @@ described in these docs.
 The plugin declares compatibility with Rider 2024.3 through 2026.2 and is built against 2024.3.5.
 Some features depend on the Rider version: the Gherkin outline and breadcrumbs need a Rider whose
 native Structure view renders language-server outlines, and on Rider 2026.2 the inlay hints cannot
-be switched off (see [Inlay Hints](editing-features/inlay-hints.md)). The IntelliJ Platform LSP APIs this plugin
+be switched off (see [Inlay Hints](../editing-features/inlay-hints.md)). The IntelliJ Platform LSP APIs this plugin
 depends on are still marked `@Experimental` upstream, so behavior can shift
 on Rider SDK updates.
 ```
@@ -105,9 +105,7 @@ on Rider SDK updates.
 and check the Language Servers status widget for a **"Reqnroll"** entry
 confirming the server started.
 
-TODO(media): 📷 screenshot of the Rider Language Servers status widget
-showing the Reqnroll entry.
-**Target:** `index/index-rider-status-widget.png`
+![The Rider status bar widget listing Reqnroll under Language Services](index/index-rider-status-widget.png)
 ````
 
 :::
