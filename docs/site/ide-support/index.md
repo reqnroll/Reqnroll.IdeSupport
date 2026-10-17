@@ -261,7 +261,7 @@ published here once finalized.
 * [Installation](installation/index.md) — install the extension for your IDE
 * [Upgrading](upgrading.md) — what happens on first install vs. an upgrade
 * [Feature Overview](feature-overview.md) — every feature, with a per-IDE support matrix
-* [Editing Features](editing-features/index.md) — syntax highlighting, diagnostics, completion, formatting
+* [Editing Features](editing-features/index.md) — syntax highlighting, diagnostics, completion, formatting, clickable tags
 * [Navigation Features](navigation-features/index.md) — jump between steps, bindings, and hooks
 * [Running Scenarios](running-scenarios.md) — run/debug a scenario's generated test from the `.feature` file
 * [New Project / Item Templates](new-project-templates.md) — Visual Studio project/item wizards

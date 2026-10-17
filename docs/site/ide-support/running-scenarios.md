@@ -146,6 +146,10 @@ scenario's lens, just over the whole container. `Background:` steps are never ru
 
 ![](running-scenarios/running-scenarios-rider.gif)
 
+After a run, the step that failed gets a red failed-test icon in the editor gutter. Hovering it
+shows the traced step and the error text. The icon is located from Reqnroll's step trace, not the
+stack trace, so it points at the right step rather than the scenario's last one.
+
 ```{admonition} Run only — no Debug, no Test Runner tool window presence
 :class: warning
 
@@ -156,20 +160,14 @@ can currently plug into for that. Treat it as a quick way to check one scenario 
 against the generated test project directly.
 ```
 
-```{admonition} Microsoft.Testing.Platform projects: the Run lens can misreport a failure
-:class: warning
+```{admonition} Microsoft.Testing.Platform projects
+:class: note
 
-Two different things can prevent the per-row breakdown, and they don't behave the same way. If the
-LSP server is simply unreachable for that run, the lens falls back cleanly to a plain aggregate
-pass/fail, exactly as it always has — no problem. But a project running under
-[Microsoft.Testing.Platform](https://learn.microsoft.com/dotnet/core/testing/microsoft-testing-platform-intro)
-instead of VSTest (for example, `TestingPlatformDotnetTestSupport=true`) is a different case: both
-the bundled outcome logger *and* the plain TRX logger this lens has always used to detect a
-completed run are VSTest concepts that Microsoft.Testing.Platform silently ignores. No TRX file is
-produced, so the lens currently reports **"dotnet test failed to run"** even when the tests
-actually ran and passed. If you see that message on a Microsoft.Testing.Platform project, treat it
-as a known limitation rather than a real failure, and use Rider's own Test Runner against the
-generated test project to see accurate results in the meantime.
+Projects running under [Microsoft.Testing.Platform](https://learn.microsoft.com/dotnet/core/testing/microsoft-testing-platform-intro)
+instead of VSTest produce no TRX file. The lens takes the pass/fail result from the test process's
+exit code, so you get an aggregate glyph for the scenario. The per-`Examples:`-row breakdown and
+failed-step detail also need the language server's outcome pipeline to be reachable; if it is not,
+the aggregate result is still shown.
 ```
 ````
 
@@ -228,13 +226,6 @@ process environment on every test run, but a process's environment is fixed at l
 a user/system environment variable, or in the shell used to start `devenv.exe`, *before* opening
 Visual Studio. Setting them while Visual Studio is already running has no effect until it's closed
 and reopened from an environment where the variable is set.
-
-**Rider: "dotnet test failed to run" even though the tests actually passed.** This happens
-specifically for projects running under Microsoft.Testing.Platform instead of VSTest (see the
-admonition on the Rider tab above) — both the outcome pipeline's logger and the lens's plain TRX
-logger are silently ignored by Microsoft.Testing.Platform, so no result file is ever produced. It
-is a known limitation, not a real failure; use Rider's own Test Runner against the generated test
-project to confirm the actual result.
 
 **VS Code: the outcome CodeLens never appears for a particular project, even after a successful
 run.** Confirm the project isn't running under Microsoft.Testing.Platform instead of VSTest — this

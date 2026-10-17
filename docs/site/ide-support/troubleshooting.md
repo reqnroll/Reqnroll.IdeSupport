@@ -15,12 +15,19 @@ below).
 * **Visual Studio** — native "Find All References" (Shift+F12) does not
   route to Reqnroll step bindings; use the dedicated entry point instead.
   See [Find Step Definition Usages](navigation-features/find-usages.md).
-* **VS Code** — Rename doesn't yet support disambiguating a step bound to
-  more than one candidate binding. See [Rename Step](editing-features/rename-step.md)
-  for the workaround (Rider and Visual Studio both handle this case).
 * **All IDEs** — a project that targets more than one framework
   (`<TargetFrameworks>`) is analysed for a single target framework only. See
   [Multi-targeted projects](#multi-targeted-projects-use-a-single-target-framework).
+
+## A dialog explains why a rename, format or comment did nothing
+
+When the language server rejects an edit for a reason you can fix, the IDE shows the reason in a
+modal dialog. Typical cases are a Rename Step that changes a parameter count, a Format Document on
+a file with no `Feature:` line yet, and a Comment/Uncomment on a document the server does not have
+open. Fix the cause and run the command again. A rejection that happens automatically (format on
+save, on paste, Code Cleanup on save) is only written to the log, never shown. An already-formatted
+document stays silent. In Rider, an explicit **Reformat Code** shows the reason; the platform's own
+formatter does not.
 
 ## Multi-targeted projects use a single target framework
 

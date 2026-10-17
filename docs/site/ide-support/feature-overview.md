@@ -25,10 +25,11 @@ what to expect and what to do about it.
 | [Code Folding](editing-features/code-folding.md) | ✅ | ✅ | ✅ |
 | [Document Outline](editing-features/document-outline.md) | ✅ | ❌² | ✅ |
 | [Defining Steps](editing-features/defining-steps.md) | ✅ | ✅ | ✅ |
-| [Rename Step](editing-features/rename-step.md) | ⚠️³ | ✅ | ✅ |
+| [Rename Step](editing-features/rename-step.md) | ✅ | ✅ | ✅ |
 | [Code Lens — Step Usage Counts](editing-features/code-lens.md) | ✅ | ✅ | ✅ |
 | [Code Lens — Hook Matches](editing-features/code-lens.md) | ✅ | ✅ | ✅ |
 | [Inlay Hints — Bound Step Info](editing-features/inlay-hints.md) | ✅ | ✅ | ✅ |
+| [Clickable Tags](editing-features/clickable-tags.md) | ✅ | ✅ | ✅ |
 
 ## Navigation Features
 
@@ -75,19 +76,14 @@ be happening as you type, see
 `.feature` files at all — a VS platform limitation, not something we can
 configure around. See [Document Outline](editing-features/document-outline.md).
 
-³ VS Code's rename doesn't yet support disambiguating a step bound to more
-than one candidate binding. See [Rename Step](editing-features/rename-step.md)
-for the workaround. Rider and Visual Studio both handle disambiguation
-directly.
-
 ⁴ Visual Studio's native **Find All References** (Shift+F12) does not
 route to Reqnroll bindings — use the dedicated **Find Step Usages** command
 instead. See [Find Step Definition Usages](navigation-features/find-usages.md)
 for exactly where to find it.
 
-⁵ VS Code and Rider don't have an equivalent project wizard; use snippets
-(VS Code) or live templates (Rider) instead — see
-[New Project / Item Templates](new-project-templates.md).
+⁵ VS Code and Rider don't have an equivalent project wizard or file templates; create files with
+the IDE's normal New File command and use the *Define missing step* quick fix to scaffold bindings
+— see [New Project / Item Templates](new-project-templates.md).
 
 ⁶ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
 extension and use its own Test Explorer/CodeLens instead — see

@@ -1,5 +1,15 @@
 # Installation
 
+```{admonition} Upgrading from an earlier preview build
+:class: warning
+
+The extensions now have consolidated package identities, so Visual Studio, VS Code and Rider
+treat them as new packages rather than upgrades. **Uninstall any earlier preview build first.**
+The identities are `Reqnroll.IdeSupport.VisualStudio` (Visual Studio),
+`Reqnroll.reqnroll-ide-support` (VS Code, publisher `Reqnroll`) and `net.reqnroll.idesupport`
+(Rider).
+```
+
 :::{tab-set}
 
 ````{tab-item} Visual Studio
@@ -87,7 +97,10 @@ the Reqnroll plugin listing.
 ```{admonition} Supported Rider version
 :class: note
 
-Verified against Rider 2024.3.5. The IntelliJ Platform LSP APIs this plugin
+The plugin declares compatibility with Rider 2024.3 through 2026.2 and is built against 2024.3.5.
+Some features depend on the Rider version: the Gherkin outline and breadcrumbs need a Rider whose
+native Structure view renders language-server outlines, and on Rider 2026.2 the inlay hints cannot
+be switched off (see [Inlay Hints](editing-features/inlay-hints.md)). The IntelliJ Platform LSP APIs this plugin
 depends on are still marked `@Experimental` upstream, so behavior can shift
 on Rider SDK updates.
 ```

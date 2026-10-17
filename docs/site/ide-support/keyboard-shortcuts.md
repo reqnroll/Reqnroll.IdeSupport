@@ -1,8 +1,9 @@
 # Keyboard Shortcuts
 
 A single reference for every Reqnroll command's shortcut or menu location,
-one table per IDE. Commands with no default shortcut are reached through a
-menu instead — see the linked feature page for the full how-to.
+one table per IDE. Reqnroll adds no top-level menu in any IDE: commands with no default shortcut live in the
+editor's right-click menu (one Reqnroll group) or the IDE's command search (Command Palette /
+Find Action) — see the linked feature page for the full how-to.
 
 :::{tab-set}
 
@@ -30,14 +31,15 @@ menu instead — see the linked feature page for the full how-to.
 | Command | Shortcut | Menu |
 |---|---|---|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | F12, or Ctrl+Click / Cmd+Click | — |
-| [Rename Step](editing-features/rename-step.md) | F2 | Right-click → Reqnroll: Rename Step... |
+| [Rename Step](editing-features/rename-step.md) | F2 (in a `.feature` file or a C# step binding) | Right-click → Reqnroll: Rename Step..., or Command Palette |
 | [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ (Cmd+/ on macOS) | Command Palette → Reqnroll: Comment/Uncomment |
 | [Format Document](editing-features/formatting.md) | Shift+Alt+F (⇧⌥F on macOS) *(native VS Code default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Command Palette → Reqnroll: Find Step Usages, or the CodeLens |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Reqnroll: Find Unused Step Definitions in Projects, or Command Palette |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Find Hooks, or Command Palette |
-| [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | — |
+| [Define Missing Steps](editing-features/defining-steps.md) (quick-fix) | Ctrl+. (Cmd+. on macOS) *(native VS Code default)* | Command Palette → Reqnroll: Define Steps |
 | [Toggle inlay hints](editing-features/inlay-hints.md) | Hold Ctrl-Alt (⌥ on macOS) *(only in an `...UnlessPressed` mode)* | — |
+| [Show the Reqnroll log](troubleshooting.md#where-are-the-logs-and-how-do-i-change-the-log-level) | — | Command Palette → Reqnroll: Show Output Channel |
 ````
 
 ````{tab-item} Rider
@@ -45,14 +47,15 @@ menu instead — see the linked feature page for the full how-to.
 
 | Command | Shortcut | Menu |
 |---|---|---|
-| [Go to Step Definition](navigation-features/go-to-definition.md) | Ctrl+B / Cmd+B, or Ctrl+Click *(native Rider "Go to Declaration" default)* | — |
+| [Go to Step Definition](navigation-features/go-to-definition.md) | Ctrl+B / Cmd+B, or Ctrl+Click (F12 / Ctrl+Click in the Visual Studio keymaps) *(native Rider "Go to Declaration" default)* | — |
 | [Rename Step](editing-features/rename-step.md) — `.feature` side | Shift+F6 | Right-click → Reqnroll: Rename Step... |
 | [Rename Step](editing-features/rename-step.md) — C# side | — *(native Rider Shift+F6 stays bound to ordinary C# rename)* | Right-click → Reqnroll: Rename Step... |
-| [Comment / Uncomment](editing-features/comment-uncomment.md) | Ctrl+/ | Find Action → Reqnroll: Comment/Uncomment |
+| [Comment / Uncomment](editing-features/comment-uncomment.md) | Whatever your keymap binds to *Comment with Line Comment* (Ctrl+/ in the default keymap; Ctrl+K, Ctrl+C / Ctrl+K, Ctrl+U in the Visual Studio keymaps) *(native)* | — |
 | [Format Document](editing-features/formatting.md) | Ctrl+Alt+L (⌘⌥L on macOS) *(native Rider "Reformat Code" default)* | — |
 | [Find Step Definition Usages](navigation-features/find-usages.md) | — | Find Action → Reqnroll: Find Step Usages, or the CodeLens |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | — | Right-click in a C# file → Reqnroll: Find Unused Step Definitions in Projects, or Find Action |
 | [Hook Navigation](navigation-features/hook-navigation.md) | — | Right-click → Reqnroll: Find Hooks |
+| [Toggle inlay hints](editing-features/inlay-hints.md) | — | Find Action → Reqnroll: Show Feature Inlay Hints |
 ````
 
 :::

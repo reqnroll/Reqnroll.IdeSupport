@@ -48,6 +48,12 @@ conveys the static state on its own.
 
 :::
 
+## Quick fix for syntax errors
+
+For a Gherkin syntax error, the lightbulb (Alt+Enter in Rider) offers **Insert '<keyword>'**
+built from the keywords valid at that point in the active dialect. The fix is attached to the
+specific squiggle it resolves.
+
 ## C# binding validation
 
 A `[Given]`/`[When]`/`[Then]` or hook (`[BeforeScenario]`/`[AfterScenario]`/etc.) method that fails
