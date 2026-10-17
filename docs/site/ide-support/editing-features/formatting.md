@@ -38,16 +38,6 @@ also be re-aligned by running Format Document. A row missing its trailing
 
 :::
 
-```{admonition} Visual Studio — on-type table alignment can lag
-:class: warning
-
-In Visual Studio, something other than this extension can insert a space
-after a table row a fraction of a second after the extension has aligned it.
-Visual Studio then treats the extension's edit as out of date, so on-type
-table alignment can lag or appear not to happen. If a table isn't aligned as
-you type, run Format Document to re-align it.
-```
-
 ```{admonition} Rider table formatting
 :class: note
 

@@ -20,10 +20,10 @@ what to expect and what to do about it.
 | [Syntax Highlighting](editing-features/syntax-highlighting.md) | ✅ | ✅ | ✅ |
 | [Diagnostics — Errors & Warnings](editing-features/diagnostics.md) | ✅ | ✅ | ✅ |
 | [Keyword & Step Completion](editing-features/completion.md) | ✅ | ✅ | ✅ |
-| [Document & Table Formatting](editing-features/formatting.md) | ✅ | ⚠️¹ | ✅ |
+| [Document & Table Formatting](editing-features/formatting.md) | ✅ | ✅ | ✅ |
 | [Comment / Uncomment](editing-features/comment-uncomment.md) | ✅ | ✅ | ✅ |
 | [Code Folding](editing-features/code-folding.md) | ✅ | ✅ | ✅ |
-| [Document Outline](editing-features/document-outline.md) | ✅ | ❌² | ✅ |
+| [Document Outline](editing-features/document-outline.md) | ✅ | ❌¹ | ✅ |
 | [Defining Steps](editing-features/defining-steps.md) | ✅ | ✅ | ✅ |
 | [Rename Step](editing-features/rename-step.md) | ✅ | ✅ | ✅ |
 | [Code Lens — Step Usage Counts](editing-features/code-lens.md) | ✅ | ✅ | ✅ |
@@ -49,7 +49,7 @@ the faster path since you don't have to invoke anything.
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | ✅ | ✅ | ✅ |
-| [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️³ | ✅ |
+| [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️² | ✅ |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | ✅ | ✅ | ✅ |
 | [Hook Navigation ("Find Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
 
@@ -57,39 +57,34 @@ the faster path since you don't have to invoke anything.
 
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
-| [Running Scenarios](running-scenarios.md) | ❌⁵ | ✅ | ⚠️⁶ |
+| [Running Scenarios](running-scenarios.md) | ❌⁴ | ✅ | ⚠️⁵ |
 
 ## Project Setup
 
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
-| [New Project / Item Templates](new-project-templates.md) | ❌⁴ | ✅ | ❌⁴ |
+| [New Project / Item Templates](new-project-templates.md) | ❌³ | ✅ | ❌³ |
 
 ---
 
-¹ In Visual Studio, something other than this extension can insert a space
-after a table row just after the extension aligns it, so on-type table alignment
-can lag or be undone. Running Format Document re-aligns the table; see
-[Document & Table Formatting](editing-features/formatting.md).
-
-² Visual Studio's native Document Outline window doesn't support
+¹ Visual Studio's native Document Outline window doesn't support
 `.feature` files at all — a VS platform limitation, not something we can
 configure around. See [Document Outline](editing-features/document-outline.md).
 
-³ Visual Studio's native **Find All References** (Shift+F12) does not
+² Visual Studio's native **Find All References** (Shift+F12) does not
 route to Reqnroll bindings — use the **N step usages** CodeLens above the
 binding, or assign a keyboard shortcut to the **Find Step Usages** command (it
 has no menu entry). See [Find Step Definition Usages](navigation-features/find-usages.md).
 
-⁴ VS Code and Rider don't have an equivalent project wizard or file templates; create files with
+³ VS Code and Rider don't have an equivalent project wizard or file templates; create files with
 the IDE's normal New File command and use the *Define missing step* quick fix to scaffold bindings
 — see [New Project / Item Templates](new-project-templates.md).
 
-⁵ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
+⁴ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
 extension and use its own Test Explorer/CodeLens instead — see
 [Running Scenarios](running-scenarios.md).
 
-⁶ Rider's lens can only run a scenario, not debug it, and doesn't appear in
+⁵ Rider's lens can only run a scenario, not debug it, and doesn't appear in
 Rider's native Unit Tests tool window. See
 [Running Scenarios](running-scenarios.md) for the details and the
 workaround for debugging.
