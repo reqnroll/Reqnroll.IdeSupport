@@ -63,6 +63,10 @@ public class Program
         // capability registration decisions).
         var ideId = ParseArg(args, "--ide");
 
+        // Each client also passes --client-session-id <guid>: its own per-IDE-session id (issue #1199), stamped
+        // as ClientSessionId on every server event so client-originated exceptions join to ServerSessionStarted.
+        var clientSessionId = ClientIdeContext.NormalizeClientSessionId(ParseArg(args, "--client-session-id"));
+
         // Each IDE's glue component may pass --log-level <level> (Off/Error/Warning/Info/Verbose)
         // when spawning the server. Defaults to Warning when absent so a normal session doesn't
         // write maximum-verbosity logs indefinitely; pass --log-level Verbose for full tracing.
@@ -96,7 +100,7 @@ public class Program
                 // Production transport: the IDE talks to the server over stdio.
                 options.WithInput(Console.OpenStandardInput())
                        .WithOutput(Console.OpenStandardOutput());
-                ConfigureServer(options, ideId, logLevel, initialTrace, protocolLogLevel);
+                ConfigureServer(options, ideId, logLevel, initialTrace, protocolLogLevel, clientSessionId);
             });
 
             using var preloadCts = new CancellationTokenSource();
@@ -209,9 +213,10 @@ public class Program
     /// client's Output panel is never inspected). Independent of <paramref name="logLevel"/> —
     /// see that parameter's remarks.
     /// </param>
+    /// <param name="clientSessionId">The client's own per-IDE-session id from <c>--client-session-id</c> (issue #1199), or <see langword="null"/>.</param>
     internal static void ConfigureServer(LanguageServerOptions options, string? clientIde = null,
         TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off,
-        TraceLevel protocolLogLevel = TraceLevel.Warning)
+        TraceLevel protocolLogLevel = TraceLevel.Warning, string? clientSessionId = null)
     {
         options.ConfigureLogging(logging =>
         {
@@ -262,7 +267,7 @@ public class Program
             // it, with the casualties decided by assembly-scan order (issue #575). Must stay
             // AFTER AddMediatR; registered before it, AddMediatR's own registration would win.
             .AddTransient<IMediator, ResilientMediator>()
-            .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace)
+            .AddReqnrollLspCoreServices(clientIde, logLevel, initialTrace, clientSessionId)
             .AddReqnrollProjectSystem()
             .AddReqnrollEditorServices()
             .AddReqnrollLspHandlers();

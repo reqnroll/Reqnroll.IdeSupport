@@ -289,6 +289,7 @@ object RiderTelemetryTransmitter {
         properties["Ide"] = "JetBrains Rider"
         properties["IdeVersion"] = ideVersion
         properties["ExtensionVersion"] = extensionVersion
+        properties.putIfAbsent(ClientSession.PROPERTY_NAME, ClientSession.id) // issue #1199
     }
 
     private fun userId(): String {

@@ -6,6 +6,7 @@ import { logInfo } from './logging/appNotify';
 import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
 import { builtInConnectionString, TelemetryEnvironment } from './telemetryConnections';
 import { TELEMETRY_ENVIRONMENT } from './generated/telemetryEnvironment';
+import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_PROPERTY } from './clientSession';
 
 // Same Application Insights resource VS's TelemetryTransmitter uses (see
 // src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.*.txt)
@@ -206,7 +207,7 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
 /**
  * Stringifies `properties` (dropping null/undefined) and stamps the host's client identity (issue
  * #844), matching what VS's `TelemetryTransmitter` and Rider's `RiderTelemetryTransmitter` stamp:
- * `Ide`/`IdeVersion`/`ExtensionVersion`, plus the canonical `IdeClient` (same vocabulary the LSP
+ * `Ide`/`IdeVersion`/`ExtensionVersion` and `ClientSessionId` (issue #1199), plus the canonical `IdeClient` (same vocabulary the LSP
  * server stamps on server-originated events). `IdeClient` is only added when absent so a
  * server-stamped value is never overridden. Exported for tests.
  */
@@ -218,6 +219,7 @@ export function withClientIdentity(
     if (value !== undefined && value !== null) stringProps[key] = String(value);
   }
   stringProps.IdeClient ??= 'vscode';
+  stringProps[CLIENT_SESSION_ID_PROPERTY] ??= CLIENT_SESSION_ID; // issue #1199
   stringProps.Ide = 'Visual Studio Code';
   stringProps.IdeVersion = vscode.version;
   stringProps.ExtensionVersion = extensionVersion();

@@ -4,6 +4,7 @@ using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
@@ -102,7 +103,8 @@ public class TelemetryTransmitterTests
         properties.Should().Contain("IdeClient", "visualstudio")
             .And.Contain("Ide", "Microsoft Visual Studio")
             .And.Contain("IdeVersion", "17.14")
-            .And.Contain("ExtensionVersion", "1.2.3");
+            .And.Contain("ExtensionVersion", "1.2.3")
+            .And.Contain("ClientSessionId", ClientSession.Id);
     }
 
     [Fact]

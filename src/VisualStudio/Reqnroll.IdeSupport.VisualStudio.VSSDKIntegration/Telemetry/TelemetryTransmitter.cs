@@ -135,6 +135,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         properties["Ide"] = "Microsoft Visual Studio";
         properties["IdeVersion"] = versionProvider.GetVsVersion();
         properties["ExtensionVersion"] = versionProvider.GetExtensionVersion();
+        properties[ClientSession.PropertyName] = ClientSession.Id; // issue #1199: joins host events to the server's ServerSessionStarted
     }
 
     /// <summary>

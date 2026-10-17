@@ -24,6 +24,7 @@ import org.eclipse.lsp4j.RangeFormattingCapabilities
 import org.eclipse.lsp4j.TextDocumentClientCapabilities
 import org.eclipse.lsp4j.WorkspaceClientCapabilities
 import org.eclipse.lsp4j.services.LanguageServer
+import net.reqnroll.idesupport.rider.telemetry.ClientSession
 
 /**
  * Central configuration point for the Reqnroll LSP server as far as Rider's generic
@@ -145,9 +146,10 @@ class ReqnrollLspServerDescriptor(project: Project) :
         val logLevel = resolveLogLevel(System.getProperty("reqnroll.devSandbox") == "true")
 
         ReqnrollDebugLogger.info(
-            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel")
+            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel " +
+                "${ClientSession.SERVER_ARGUMENT_NAME} ${ClientSession.id}")
         return GeneralCommandLine(serverPath.toString())
-            .withParameters("--ide", "rider", "--log-level", logLevel)
+            .withParameters("--ide", "rider", "--log-level", logLevel, ClientSession.SERVER_ARGUMENT_NAME, ClientSession.id)
     }
 
     companion object {

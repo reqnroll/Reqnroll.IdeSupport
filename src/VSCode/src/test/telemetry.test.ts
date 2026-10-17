@@ -143,6 +143,13 @@ suite('telemetry', () => {
       assert.ok(props.ExtensionVersion.length > 0);
     });
 
+    test('withClientIdentity stamps a stable ClientSessionId without overriding a server-stamped one (#1199)', () => {
+      const first = withClientIdentity({}).ClientSessionId;
+      assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      assert.strictEqual(withClientIdentity({}).ClientSessionId, first);
+      assert.strictEqual(withClientIdentity({ ClientSessionId: 'x' }).ClientSessionId, 'x');
+    });
+
     test('withClientIdentity does not override a server-stamped IdeClient', () => {
       assert.strictEqual(withClientIdentity({ IdeClient: 'explicit' }).IdeClient, 'explicit');
     });
