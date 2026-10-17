@@ -52,7 +52,8 @@ suite('clientExceptionTelemetry (#621)', () => {
 
         assert.strictEqual(props.StackFrames, 'doIt:42');
         for (const [key, value] of Object.entries(props)) {
-          if (key !== 'StackFrames') assert.ok(!value.includes('at '), `unexpected stack-like text: ${value}`);
+          if (key !== 'StackFrames')
+            assert.ok(!value.includes('at '), `unexpected stack-like text: ${value}`);
         }
       } finally {
         setExtensionRoot(undefined);

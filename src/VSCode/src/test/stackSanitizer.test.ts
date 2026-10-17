@@ -1,10 +1,5 @@
 import * as assert from 'assert';
-import {
-  EXTERNAL_PLACEHOLDER,
-  MAX_FRAMES,
-  MAX_LENGTH,
-  sanitizeStack,
-} from '../stackSanitizer';
+import { EXTERNAL_PLACEHOLDER, MAX_FRAMES, MAX_LENGTH, sanitizeStack } from '../stackSanitizer';
 
 const ROOT = 'C:\\Users\\John Smith\\.vscode\\extensions\\reqnroll.reqnroll-ide-support-1.2.3';
 const OWN = `${ROOT}\\dist\\extension.js`;
@@ -30,7 +25,16 @@ suite('stackSanitizer (#1199)', () => {
 
     const result = sanitizeStack(stack, ROOT)!;
 
-    for (const leak of ['John', 'Smith', 'secret', 'a.feature', 'extension.js', ':9', 'failed', 'C:']) {
+    for (const leak of [
+      'John',
+      'Smith',
+      'secret',
+      'a.feature',
+      'extension.js',
+      ':9',
+      'failed',
+      'C:',
+    ]) {
       assert.ok(!result.includes(leak), `leaked ${leak}: ${result}`);
     }
   });
