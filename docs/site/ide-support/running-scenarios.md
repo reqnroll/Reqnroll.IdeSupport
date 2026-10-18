@@ -187,6 +187,20 @@ none of those resolve — most commonly a GUI-launched IDE process with a minima
 error message says so explicitly; make sure the .NET SDK is installed and reachable from the
 environment your IDE was launched in.
 
+**Rider: a run stops with "dotnet test … did not finish within 120 seconds".** The Rider Run lens
+gives each `dotnet test` run 120 seconds in total, and that budget includes the build `dotnet test`
+performs first, so a large solution that has to rebuild can use it up before any test starts. When
+the limit is hit the run is stopped (along with the MSBuild and test-host processes it started)
+rather than left running in the background. To raise it, choose **Help | Edit Custom VM Options…**
+in Rider, add the line below (the value is in seconds; anything that is not a positive whole number
+is ignored and the default of 120 is used), and restart Rider:
+
+```text
+-Dreqnroll.rider.dotnetTestTimeoutSeconds=300
+```
+
+Pressing the cancel button on a running lens stops the run the same way, immediately.
+
 **A pass/fail glyph disappeared after I rebuilt, even though I haven't re-run the scenario.** This
 is expected, not a bug — a result is only trusted for the exact build that produced it. As soon as
 the project is rebuilt, the previous outcome is treated as describing code that no longer exists
