@@ -29,6 +29,8 @@ internal sealed class FindUnusedStepDefinitionsService
     }
 
     /// <summary>Queries the LSP server for the workspace-wide set of unused step definitions.</summary>
+    /// <exception cref="LspRequestFailedException">The request failed (server error, timeout, no server).</exception>
+    /// <exception cref="Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException">The server answered ContentModified.</exception>
     public async Task<UnusedStepDefinitionsResult> FindUnusedAsync(CancellationToken cancellationToken)
     {
         _logger.LogDebug("FindUnusedStepDefinitionsService: sending {RequestMethod}", CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions);
@@ -36,12 +38,15 @@ internal sealed class FindUnusedStepDefinitionsService
         // Empty params object — the server ignores the body.
         const string emptyParams = "{}";
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, emptyParams, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, emptyParams, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogTrace(
-            "FindUnusedStepDefinitionsService: raw result = {Result}", result is null ? "<null>" : result.ToString());
+        // Issue #1020: a failed request throws (LspRequestFailedException / LspContentModifiedException)
+        // rather than reading as "0 unused step definitions".
+        var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindUnusedStepDefinitions, "workspace", cancellationToken);
+
+        _logger.LogTrace("FindUnusedStepDefinitionsService: raw result = {Result}", result.ToString());
 
         var mapped = MapResult(result);
         _logger.LogDebug(

@@ -1,0 +1,51 @@
+// Daily usage by IdeClient, OperatingSystem and RID: active users, sessions started, sessions per user.
+//
+// Table: AppEvents (workspace-based Application Insights). For a classic
+// "customEvents" view, swap AppEvents -> customEvents, TimeGenerated -> timestamp,
+// Properties -> customDimensions, UserId -> user_Id, Name -> name.
+//
+// Status: verified 2026-10-15 in the dev resource using the classic names: rows came back for
+// IdeClient = rider / visualstudio, OperatingSystem = Windows, Rid = win-x64, with Sessions and
+// SessionsPerUser populated. The AppEvents form below has not been run yet. VS Code not yet seen.
+//
+// Definitions
+// - DailyActiveUsers: distinct UserId with any lifecycle event that day. ServerSessionStarted fires once per
+//   server process, so an IDE left open across days would drop out of a start-only count; FeatureUsageSummary
+//   is flushed periodically during a session, so it keeps that user active.
+// - Sessions: distinct server sessions that STARTED that day (ServerSessionStarted). A session running past
+//   midnight is counted in Sessions only on its start day but its user stays in DailyActiveUsers.
+// - SessionsPerUser: Sessions / DailyActiveUsers. Above 1 means several IDE/solution launches or restarts per
+//   user; compare with ServerStartFailed / ServerExitedUnexpectedly before reading a rise as heavier use.
+//
+// IdeClient/OperatingSystem/Architecture are only on ServerSessionStarted, so they are looked up per SessionId.
+// RID is derived (<os>-<arch>, e.g. win-x64, osx-arm64, linux-x64); the client never sends a RID and it has
+// no distro/libc detail (no linux-musl-x64).
+//
+// Known gap: a session that started before the lookback window has no ServerSessionStarted row in range, so
+// its later activity is dropped.
+let lookback = 30d;
+let sessions = AppEvents
+    | where TimeGenerated > ago(lookback)
+    | where Name == "ServerSessionStarted"
+    | extend SessionId = tostring(Properties.SessionId),
+             IdeClient = tostring(Properties.IdeClient),
+             OperatingSystem = tostring(Properties.OperatingSystem),
+             Architecture = tolower(tostring(Properties.Architecture))
+    | extend OsPrefix = case(
+                OperatingSystem == "Windows", "win",
+                OperatingSystem == "macOS", "osx",
+                OperatingSystem == "Linux", "linux",
+                "other")
+    | extend Rid = strcat(OsPrefix, "-", Architecture)
+    | summarize take_any(IdeClient, OperatingSystem, Rid) by SessionId;
+AppEvents
+| where TimeGenerated > ago(lookback)
+| where Name in ("ServerSessionStarted", "FeatureUsageSummary", "ServerSessionEnded")
+| extend SessionId = tostring(Properties.SessionId)
+| where isnotempty(SessionId) and isnotempty(UserId)
+| join kind=inner sessions on SessionId
+| summarize DailyActiveUsers = dcount(UserId),
+            Sessions = dcountif(SessionId, Name == "ServerSessionStarted")
+        by Day = bin(TimeGenerated, 1d), IdeClient, OperatingSystem, Rid
+| extend SessionsPerUser = round(todouble(Sessions) / DailyActiveUsers, 2)
+| order by Day asc, IdeClient asc, OperatingSystem asc, Rid asc

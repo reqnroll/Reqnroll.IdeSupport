@@ -15,6 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.Common.Telemetry;
@@ -349,18 +350,27 @@ public sealed class RenameHandler
         var expression = binding.Expression ?? string.Empty;
 
         // ── 2. Resolve feature step locations ──────────────────────────────────
-        var owners = _scopeManager.ResolveOwners(uri);
-        var projectFilter = owners.Count > 0
-            ? owners.Select(p => new ProjectOwner(p.ProjectFullName, p.TargetFrameworkMoniker)).ToArray()
-            : null;
-
+        // Same widened scope as CodeLens / Find Step Usages / References (issue #936): a .cs binding
+        // is also used by feature files in projects that reference the binding's project.
+        var projectFilter = _registryLookup.ResolveUsageSearchScope(uri);
         var usages = _matchService.FindUsages(bindingLocation, projectFilter);
 
         // Resolve the live source expression once (preserves the original parameter syntax).
         // For a .cs-invoked rename this is the attribute string literal; otherwise it falls back
         // to the registry expression. It anchors both the feature edits (static-segment
         // substitution) and the C# attribute edit.
-        var sourceLiteral = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
+        var literalResolution = await _attributeLiteralResolver.ResolveAttributeLiteralAsync(uri, binding);
+        if (literalResolution.IsAmbiguous)
+        {
+            // Issue #940: the method carries several same-type attributes and none can be
+            // identified as this binding's - refuse rather than rewrite one that may not be it.
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "AttributeLiteralAmbiguous");
+            throw RenameFailedError(
+                "Could not tell which of the several step definition attributes on this method belongs to this step — save the file or rebuild the project so the step definitions are up to date, then rename again",
+                "rename");
+        }
+
+        var sourceLiteral = literalResolution.Literal;
         var sourceExpression = sourceLiteral?.Token.ValueText ?? expression;
 
         // Reconciles concrete step text (VS Code's native F2) against the binding's abstract
@@ -482,19 +492,9 @@ public sealed class RenameHandler
         _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, properties);
     }
 
-    /// <summary>
-    /// Builds the <see cref="RpcErrorException"/> a <c>textDocument/rename</c> failure throws
-    /// (issue #650) so it reaches the client as a proper LSP <c>ResponseError</c> — code
-    /// <see cref="ErrorCodes.RequestFailed"/> ("the request was syntactically valid but could
-    /// not complete"), the human-readable reason as the error message, and
-    /// <paramref name="scope"/> (matching <see cref="ValidationError.Scope"/> where the failure
-    /// came from <see cref="StepRenameValidator"/>) as the error's <c>data</c> payload.
-    /// </summary>
+    // Rejections go through the shared EditRejected contract (issue #1132); see its remarks.
     private static RpcErrorException RenameFailedError(string message, string? scope = null) =>
-        // RpcErrorException's `error` parameter isn't nullable-annotated (it predates this
-        // codebase's NRT adoption), but a null `data` is handled fine at the wire level —
-        // ErrorMessage.Data is [JsonProperty(NullValueHandling = NullValueHandling.Ignore)].
-        new(ErrorCodes.RequestFailed, scope!, message);
+        EditRejected.Error(message, scope);
 
     /// <summary>
     /// Resolves the source location to search for feature-step usages of <paramref name="binding"/>:
@@ -581,20 +581,36 @@ public sealed class RenameHandler
         WorkspaceEditBuilder builder, IReadOnlyList<StepBindingMatch> usages,
         string effectiveNewName, string sourceExpression, ProjectStepDefinitionBinding binding)
     {
+        // A feature owned by several projects (or linked into several) can report the same step
+        // range once per owner. Emit one edit per (uri, range): overlapping duplicate TextEdits are
+        // rejected or double-applied by clients.
+        var editedRanges = new Dictionary<(string Uri, int StartLine, int StartCharacter, int EndLine, int EndCharacter), string>();
+
         foreach (var usage in usages)
         {
             var featureUri = DocumentUri.Parse(usage.FeatureDocumentId);
+            var stepRange = usage.Range.ToLspRange();
 
             // Read the feature step text to preserve parameter values / placeholders
-            string? stepText = null;
-            if (usage.Range != null)
-            {
-                var stepRange = usage.Range.ToLspRange();
-                stepText = ReadStepText(featureUri, stepRange);
-            }
+            var stepText = ReadStepText(featureUri, stepRange);
 
             var featureNewText = FeatureStepTextBuilder.Build(effectiveNewName, sourceExpression, binding.Regex, stepText);
-            builder.Add(featureUri, usage.Range!.ToLspRange(), featureNewText, RenameChangeAnnotations.Feature);
+
+            var key = (usage.FeatureDocumentId, stepRange.Start.Line, stepRange.Start.Character,
+                stepRange.End.Line, stepRange.End.Character);
+            if (editedRanges.TryGetValue(key, out var existingNewText))
+            {
+                if (existingNewText != featureNewText)
+                {
+                    _logger.LogWarning(
+                        $"RenameHandler: dropped conflicting edit for '{usage.FeatureDocumentId}' at " +
+                        $"{stepRange.Start.Line}:{stepRange.Start.Character}: '{featureNewText}' vs kept '{existingNewText}'");
+                }
+                continue;
+            }
+
+            editedRanges[key] = featureNewText;
+            builder.Add(featureUri, stepRange, featureNewText, RenameChangeAnnotations.Feature);
         }
     }
 

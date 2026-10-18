@@ -20,6 +20,6 @@ internal static class ShellMenuIds
     /// <summary><c>guidSHLMainMenu</c> (<c>vsshlids.h</c>): the VS shell's built-in command set.</summary>
     internal static readonly Guid GuidSHLMainMenu = new("{D309F791-903F-11D0-9EFC-00A0C911004F}");
 
-    /// <summary>See <see cref="VsWellKnownIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION"/>.</summary>
-    internal const int IDG_VS_CODEWIN_NAVIGATETOLOCATION = VsWellKnownIds.IDG_VS_CODEWIN_NAVIGATETOLOCATION;
+    /// <summary>See <see cref="VsWellKnownIds.IDM_VS_CTXT_CODEWIN"/>.</summary>
+    internal const int IDM_VS_CTXT_CODEWIN = VsWellKnownIds.IDM_VS_CTXT_CODEWIN;
 }

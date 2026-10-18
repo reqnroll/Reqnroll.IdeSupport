@@ -1,4 +1,4 @@
-# Inlay Hints — Bound Step Info
+# Inlay Hints — Bound Step Information
 
 Each step in a `.feature` file shows an inline hint after the step text
 indicating what it's bound to:
@@ -48,4 +48,4 @@ showing/hiding is entirely each IDE's own native inlay-hints mechanism:
 |---|---|
 | **Visual Studio** | Tools → Options → Text Editor → Advanced, or the equivalent inline-hints display toggle (Alt-F1) — the same generic setting used for any inlay hint, not Reqnroll-specific. |
 | **VS Code** | Native `editor.inlayHints.enabled` setting (`on` / `off` / `offUnlessPressed` / `onUnlessPressed`). In an `...UnlessPressed` mode, holding the default modifier key (Ctrl-Alt on Windows/Linux, ⌥ on Mac) temporarily shows/hides hints. |
-| **Rider** | Tools → Reqnroll → Show Feature Inlay Hints  |
+| **Rider** | Rider has no inlay-hints Settings page for `.feature` files, so use the **Reqnroll: Show Feature Inlay Hints** action from Find Action (Ctrl+Shift+A); it toggles binding-info hints in `.feature` editors. On Rider 2026.2 the platform ignores that switch, so the hints cannot be turned off there. |

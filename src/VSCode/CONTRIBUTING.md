@@ -74,6 +74,19 @@ Only needed if you're working on `src/testOutcomes/` or testing `reqnroll.testOu
 for why: it merges into the shared `dotnet.unitTests.runSettingsPath` setting C# Dev Kit reads,
 not something namespaced under `reqnroll.*`). Skippable for everything else.
 
+**Dependency on C# Dev Kit / the C# extension.** There is no hard dependency: `package.json` declares no
+`extensionDependencies`, and no code calls the C# Dev Kit API or its `vscode.tests` controller. The one coupling
+is this feature's use of the `dotnet.unitTests.runSettingsPath` configuration key, which `ms-dotnettools.csharp`
+contributes (C# Dev Kit builds on that extension and reads the same key). Consequences worth knowing about:
+
+* If the key is renamed, or the test run stops honouring it, outcomes silently stop arriving; nothing errors.
+* Where the key isn't registered at all (C# extension disabled), `update()` throws "not a registered
+  configuration"; the feature catches that and carries on without server-sourced outcomes.
+* `mtpProjectDetection.ts` assumes Dev Kit drives Microsoft.Testing.Platform projects through its own testing-platform
+  pipeline; if that changes, the symptom is the wrong logger path for MTP projects.
+* Only unit tests (with the setting stubbed) cover this; no CI job exercises a real Dev Kit, so a Dev Kit change
+  is not caught automatically. Re-check this section against the live setting when updating the Dev Kit version you test with.
+
 ```sh
 cd src/VSCode
 npm run build:testlogger
@@ -168,6 +181,15 @@ The bundled LSP server is published `Release` by default (`publish-server.sh`'s 
 argument defaults to `Release`) — quiet logging unless `reqnroll.trace.server` is raised, as
 described below.
 
+### Telemetry resource (dev vs prod)
+
+`npm run compile` (and so `npm run build:vsix`, via `vscode:prepublish`) first runs
+`scripts/generate-telemetry-environment.mjs`, which writes the git-ignored
+`src/generated/telemetryEnvironment.ts`. The default is `dev`; for a release build set
+`REQNROLL_TELEMETRY_ENV=prod` (e.g. `REQNROLL_TELEMETRY_ENV=prod npm run build:vsix`); the F5 Extension Development Host is always dev regardless. The
+connection strings themselves are in `src/telemetryConnections.ts`; a prod build fails while the
+prod string is a `TODO` placeholder. See the root [CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
+
 ## Local install of a dev build
 
 The `.vsix` from either packaging step above installs the same way a Marketplace release would,
@@ -176,7 +198,7 @@ just without publishing it:
 ```sh
 cd src/VSCode
 npm run build:vsix           # or: bash scripts/build-vsix.sh <rid>, for a non-host RID
-code --install-extension reqnroll-ide-support-<version>.vsix
+code --install-extension Reqnroll.IdeSupport.VSCode.<version>.vsix
 ```
 
 (`<version>` comes from `package.json`.) Or, from VS Code's UI: Extensions view → **...** menu →

@@ -7,13 +7,20 @@ import {
   DidCloseTextDocumentNotification,
   DidSaveTextDocumentNotification,
 } from 'vscode-languageclient/node';
+import { logWarn } from '../logging/appNotify';
+import { onServerRestarted } from './serverRestart';
 
 /** A predicate selecting which text documents a sync path is responsible for. */
 export type DocumentPredicate = (document: vscode.TextDocument) => boolean;
 
-/** True when `document` is a C# source file (matched by its `.cs` file extension). */
+/**
+ * True when `document` is a real on-disk C# source file: both the `file` URI scheme and the `.cs`
+ * extension must match. The scheme check (issue #1006) keeps virtual documents -- `git:` diff/HEAD
+ * views, `untitled:` scratch buffers, etc. -- out of the sync, since the server keys documents by
+ * path alone and a HEAD-version document could otherwise override the working file's live text.
+ */
 export function isCSharpDocument(document: vscode.TextDocument): boolean {
-  return document.uri.path.toLowerCase().endsWith('.cs');
+  return document.uri.scheme === 'file' && document.uri.path.toLowerCase().endsWith('.cs');
 }
 
 /**
@@ -68,6 +75,9 @@ export class ManualDocumentSync implements vscode.Disposable {
     }
 
     this.subscriptions = [
+      // A restarted server starts with no open documents; replay didOpen for every owned document
+      // still open, otherwise it would receive didChange for documents it has never seen (issue #1005).
+      onServerRestarted(this.client, () => this.resyncAfterRestart()),
       vscode.workspace.onDidOpenTextDocument((document) => {
         if (this.owns(document) && !this.openUris.has(document.uri.toString())) {
           this.sendDidOpen(document);
@@ -94,39 +104,68 @@ export class ManualDocumentSync implements vscode.Disposable {
     this.openUris.clear();
   }
 
+  private resyncAfterRestart(): void {
+    this.openUris.clear();
+    for (const document of vscode.workspace.textDocuments) {
+      if (this.owns(document)) this.sendDidOpen(document);
+    }
+  }
+
+  /**
+   * Sends fire-and-forget; a rejection (client stopped or restarting) is logged instead of left as an
+   * unhandled rejection. A dropped didOpen/didChange is recovered by the replay on restart.
+   */
+  private send(method: string, delivery: Promise<void>): void {
+    delivery.catch((err: unknown) => {
+      logWarn(`Could not send ${method} to the language server: ${String(err)}`);
+    });
+  }
+
   private sendDidOpen(document: vscode.TextDocument): void {
     const uri = document.uri.toString();
     this.openUris.add(uri);
-    void this.client.sendNotification(DidOpenTextDocumentNotification.type, {
-      textDocument: {
-        uri,
-        languageId: document.languageId,
-        version: document.version,
-        text: document.getText(),
-      },
-    });
+    this.send(
+      DidOpenTextDocumentNotification.type.method,
+      this.client.sendNotification(DidOpenTextDocumentNotification.type, {
+        textDocument: {
+          uri,
+          languageId: document.languageId,
+          version: document.version,
+          text: document.getText(),
+        },
+      }),
+    );
   }
 
   private sendDidChange(document: vscode.TextDocument): void {
     // Server registers TextDocumentSyncKind.Full for .cs, so a single full-text change
     // entry per notification matches what it expects (see TextDocumentSyncHandler.cs).
-    void this.client.sendNotification(DidChangeTextDocumentNotification.type, {
-      textDocument: { uri: document.uri.toString(), version: document.version },
-      contentChanges: [{ text: document.getText() }],
-    });
+    this.send(
+      DidChangeTextDocumentNotification.type.method,
+      this.client.sendNotification(DidChangeTextDocumentNotification.type, {
+        textDocument: { uri: document.uri.toString(), version: document.version },
+        contentChanges: [{ text: document.getText() }],
+      }),
+    );
   }
 
   private sendDidSave(document: vscode.TextDocument): void {
-    void this.client.sendNotification(DidSaveTextDocumentNotification.type, {
-      textDocument: { uri: document.uri.toString() },
-    });
+    this.send(
+      DidSaveTextDocumentNotification.type.method,
+      this.client.sendNotification(DidSaveTextDocumentNotification.type, {
+        textDocument: { uri: document.uri.toString() },
+      }),
+    );
   }
 
   private sendDidClose(document: vscode.TextDocument): void {
     const uri = document.uri.toString();
     this.openUris.delete(uri);
-    void this.client.sendNotification(DidCloseTextDocumentNotification.type, {
-      textDocument: { uri },
-    });
+    this.send(
+      DidCloseTextDocumentNotification.type.method,
+      this.client.sendNotification(DidCloseTextDocumentNotification.type, {
+        textDocument: { uri },
+      }),
+    );
   }
 }

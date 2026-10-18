@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 /// A classifier rather than a <c>UrlTag</c> tagger on purpose: the editor's Go To Definition mouse handler stands
 /// down wherever a <c>UrlTag</c> exists (decompiled from <c>Microsoft.VisualStudio.Platform.VSEditor.dll</c>,
 /// <c>ExistsUrlTagAt</c>), which would bypass <see cref="TagLinkNavigableSymbolProvider"/> - the Ctrl+click that opens
-/// the link, applies the http(s)-only rule and reports the telemetry event.
+/// the link, applies the blocked-scheme rule and reports the telemetry event.
 /// </remarks>
 [Export(typeof(IClassifierProvider))]
 [Name("Reqnroll TagLinkClassifierProvider")]

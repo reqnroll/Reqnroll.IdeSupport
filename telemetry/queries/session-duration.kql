@@ -1,0 +1,42 @@
+// Session length by day and IdeClient: median and P90 session seconds, plus sessions with no end event.
+//
+// Table: AppEvents (workspace-based Application Insights). For a classic
+// "customEvents" view, swap AppEvents -> customEvents, TimeGenerated -> timestamp,
+// Properties -> customDimensions, Name -> name.
+//
+// Status: verified 2026-10-15 in the dev resource using the classic names (customEvents): all dev sessions
+// had ended normally (NoEndSessions = 0), with median/P90 populated. The NoEndSessions > 0 path (a crashed or
+// force-quit session) and the AppEvents form below have not been run yet. Needs sessions closed normally to
+// return median/P90 data.
+//
+// Definitions
+// - A session is attributed to the day its ServerSessionStarted arrived.
+// - SessionSeconds comes from ServerSessionEnded, which is sent best-effort at graceful shutdown, so the
+//   median and P90 cover only sessions that ended normally.
+// - NoEndSessions = started sessions with no ServerSessionEnded: a crash, force-quit or machine
+//   shutdown, but also a session that is still running, so recent days (today in particular)
+//   overstate it. Read it as a crash proxy for days at least a day old.
+let lookback = 30d;
+let started = AppEvents
+    | where TimeGenerated > ago(lookback)
+    | where Name == "ServerSessionStarted"
+    | extend SessionId = tostring(Properties.SessionId),
+             IdeClient = tostring(Properties.IdeClient)
+    | where isnotempty(SessionId)
+    | summarize Day = bin(min(TimeGenerated), 1d), take_any(IdeClient) by SessionId;
+let ended = AppEvents
+    | where TimeGenerated > ago(lookback)
+    | where Name == "ServerSessionEnded"
+    | extend SessionId = tostring(Properties.SessionId),
+             SessionSeconds = todouble(Properties.SessionSeconds)
+    | where isnotempty(SessionId)
+    | summarize SessionSeconds = max(SessionSeconds) by SessionId;
+started
+| join kind=leftouter ended on SessionId
+| summarize StartedSessions = count(),
+            EndedSessions = countif(isnotnull(SessionSeconds)),
+            MedianSessionSeconds = percentile(SessionSeconds, 50),
+            P90SessionSeconds = percentile(SessionSeconds, 90)
+        by Day, IdeClient
+| extend NoEndSessions = StartedSessions - EndedSessions
+| order by Day asc, IdeClient asc

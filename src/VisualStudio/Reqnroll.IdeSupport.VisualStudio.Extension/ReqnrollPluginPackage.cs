@@ -57,6 +57,7 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
     private ITelemetryTransmitter? _telemetryTransmitter;
     private IOleCommandTarget? _nextCommandTarget;
     private DocumentInitializationMonitor? _documentInitializationMonitor;
+    private SaveTrackingRdtListener? _saveTrackingListener;
     private FeatureBufferContentTypeGuard? _featureBufferContentTypeGuard;
     private MtpProjectStubSolutionListener? _mtpProjectStubListener;
 
@@ -328,6 +329,10 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
 
             var rdt = await GetServiceAsync(typeof(SVsRunningDocumentTable)) as IVsRunningDocumentTable;
             _documentInitializationMonitor = DocumentInitializationMonitor.TryAdvise(rdt, _logger);
+
+            // Lets the Format Document filter tell a format fired from the save sequence from an explicit
+            // one, so a rejection of the former is never shown in a dialog (issue #1132).
+            _saveTrackingListener = SaveTrackingRdtListener.TryAdvise(rdt, _logger);
         }
         catch (OperationCanceledException)
         {
@@ -426,6 +431,9 @@ public sealed class ReqnrollPluginPackage : AsyncPackage, IOleCommandTarget
         {
             _documentInitializationMonitor?.Dispose();
             _documentInitializationMonitor = null;
+
+            _saveTrackingListener?.Dispose();
+            _saveTrackingListener = null;
 
             _featureBufferContentTypeGuard?.Dispose();
             _featureBufferContentTypeGuard = null;
