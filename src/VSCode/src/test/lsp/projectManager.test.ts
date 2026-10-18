@@ -68,6 +68,132 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
 }
 
+interface RecordedNotification {
+  method: unknown;
+  params: Record<string, unknown>;
+}
+
+function fakeClient(): { client: LanguageClient; notifications: RecordedNotification[] } {
+  const notifications: RecordedNotification[] = [];
+  const client = {
+    state: State.Running,
+    onDidChangeState: () => ({ dispose: () => undefined }),
+    sendNotification: (method: unknown, params: unknown) => {
+      notifications.push({ method, params: params as Record<string, unknown> });
+      return Promise.resolve();
+    },
+  } as unknown as LanguageClient;
+  return { client, notifications };
+}
+
+function countNotifications(
+  notifications: RecordedNotification[],
+  method: unknown,
+  projectFile: string,
+): number {
+  return notifications.filter((n) => n.method === method && n.params.projectFile === projectFile)
+    .length;
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) throw new Error('timed out waiting for condition');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+type UriListener = (uri: vscode.Uri) => unknown;
+interface WatcherListeners {
+  create?: UriListener;
+  change?: UriListener;
+  delete?: UriListener;
+}
+
+const STUBBED_WORKSPACE_MEMBERS = [
+  'createFileSystemWatcher',
+  'findFiles',
+  'onDidChangeWorkspaceFolders',
+] as const;
+
+/**
+ * Replaces the slice of `vscode.workspace` ProjectManager touches at construction time with
+ * deterministic stand-ins, so a ProjectManager (built with {@link stubDeps}, which keeps MSBuild
+ * out of the loop) can be driven with synthetic watcher events without a real file system, a real
+ * `dotnet msbuild` run, or workspace folders. Mirrors the save/restore-via-Object.defineProperty
+ * technique used by manualDocumentSync.test.ts for vscode.workspace's event emitters.
+ */
+async function withStubbedProjectEnvironment(
+  fn: (env: {
+    fireCreate: (uri: vscode.Uri) => void;
+    fireChange: (uri: vscode.Uri) => void;
+    fireDelete: (uri: vscode.Uri) => void;
+  }) => Promise<void>,
+): Promise<void> {
+  const originalMembers = STUBBED_WORKSPACE_MEMBERS.map(
+    (name) => [name, Object.getOwnPropertyDescriptor(vscode.workspace, name)!] as const,
+  );
+
+  const projectWatcherListeners: WatcherListeners = {};
+
+  const makeWatcher = (pattern: vscode.GlobPattern): vscode.FileSystemWatcher => {
+    // ProjectManager arms two watchers: the project/solution one (*.csproj) this test drives,
+    // and a *.cs/*.feature one whose events it does not need to fire.
+    const listeners: WatcherListeners =
+      typeof pattern === 'string' && pattern.includes('csproj') ? projectWatcherListeners : {};
+    return {
+      onDidCreate: (listener: UriListener) => {
+        listeners.create = listener;
+        return { dispose: () => undefined };
+      },
+      onDidChange: (listener: UriListener) => {
+        listeners.change = listener;
+        return { dispose: () => undefined };
+      },
+      onDidDelete: (listener: UriListener) => {
+        listeners.delete = listener;
+        return { dispose: () => undefined };
+      },
+      dispose: () => undefined,
+    } as unknown as vscode.FileSystemWatcher;
+  };
+
+  Object.defineProperty(vscode.workspace, 'createFileSystemWatcher', {
+    configurable: true,
+    value: makeWatcher,
+  });
+  Object.defineProperty(vscode.workspace, 'findFiles', {
+    configurable: true,
+    value: () => Promise.resolve([] as vscode.Uri[]),
+  });
+  Object.defineProperty(vscode.workspace, 'onDidChangeWorkspaceFolders', {
+    configurable: true,
+    value: () => ({ dispose: () => undefined }),
+  });
+
+  try {
+    await fn({
+      fireCreate: (uri) => projectWatcherListeners.create?.(uri),
+      fireChange: (uri) => projectWatcherListeners.change?.(uri),
+      fireDelete: (uri) => projectWatcherListeners.delete?.(uri),
+    });
+  } finally {
+    for (const [name, descriptor] of originalMembers) {
+      Object.defineProperty(vscode.workspace, name, descriptor);
+    }
+  }
+}
+
+/** Injected ProjectManager deps: no workspace scan and a fast null-returning MSBuild evaluation. */
+const stubDeps = {
+  findProjectFiles: () => Promise.resolve([] as vscode.Uri[]),
+  evaluateProject: () => Promise.resolve(null),
+};
+
+function fakeProjectUri(projectFile: string): vscode.Uri {
+  return { fsPath: projectFile, toString: () => `file://${projectFile}` } as vscode.Uri;
+}
+
 suite('ProjectManager', () => {
   test('ReqnrollMethods defines the LSP method names ProjectManager sends', () => {
     // Exercises the real constants module, not a local copy — a rename in lspMethods.ts
@@ -218,6 +344,76 @@ suite('ProjectManager', () => {
       const dll = path.join('C:', 'work', 'bin', 'Debug', 'net8.0', 'App.dll');
 
       assert.strictEqual(findOwningProjectFile(dll, known), csproj);
+    });
+  });
+
+  suite('project/solution file watcher (issue #1009)', () => {
+    test('re-evaluates the owning project when a .csproj is edited', async function () {
+      this.timeout(15000);
+
+      await withStubbedProjectEnvironment(async ({ fireCreate, fireChange }) => {
+        const { client, notifications } = fakeClient();
+        const projectFile = path.join('C:', 'work', 'App.csproj');
+        const uri = fakeProjectUri(projectFile);
+
+        const manager = new ProjectManager(client, stubDeps);
+        try {
+          fireCreate(uri);
+          await waitFor(
+            () =>
+              countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) === 1,
+          );
+
+          // The bug (issue #1009): no onDidChange handler is wired for project/solution files,
+          // so editing the .csproj sends nothing and the server's membership/binding data for
+          // this project stays stale until some other event or a window reload.
+          fireChange(uri);
+          await waitFor(
+            () =>
+              countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) === 2,
+          );
+
+          assert.strictEqual(
+            countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile),
+            2,
+            'editing a .csproj should resend reqnroll/projectLoaded for its owning project',
+          );
+        } finally {
+          manager.dispose();
+        }
+      });
+    });
+
+    test('still registers on create and unregisters on delete', async function () {
+      this.timeout(15000);
+
+      await withStubbedProjectEnvironment(async ({ fireCreate, fireDelete }) => {
+        const { client, notifications } = fakeClient();
+        const projectFile = path.join('C:', 'work', 'Added.csproj');
+        const uri = fakeProjectUri(projectFile);
+
+        const manager = new ProjectManager(client, stubDeps);
+        try {
+          fireCreate(uri);
+          await waitFor(
+            () =>
+              countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) === 1,
+          );
+
+          fireDelete(uri);
+          await waitFor(
+            () =>
+              countNotifications(notifications, ReqnrollMethods.projectUnloaded, projectFile) === 1,
+          );
+
+          assert.strictEqual(
+            countNotifications(notifications, ReqnrollMethods.projectUnloaded, projectFile),
+            1,
+          );
+        } finally {
+          manager.dispose();
+        }
+      });
     });
   });
 
