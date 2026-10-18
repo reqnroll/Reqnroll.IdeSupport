@@ -68,8 +68,6 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
 }
 
-const MSBUILD_EVALUATOR_PATH = require.resolve('../../lsp/msbuildEvaluator');
-
 interface RecordedNotification {
   method: unknown;
   params: Record<string, unknown>;
@@ -120,8 +118,8 @@ const STUBBED_WORKSPACE_MEMBERS = [
 
 /**
  * Replaces the slice of `vscode.workspace` ProjectManager touches at construction time with
- * deterministic stand-ins, and swaps the MSBuild evaluator for a fast null-returning stub, so a
- * ProjectManager can be driven with synthetic watcher events without a real file system, a real
+ * deterministic stand-ins, so a ProjectManager (built with {@link stubDeps}, which keeps MSBuild
+ * out of the loop) can be driven with synthetic watcher events without a real file system, a real
  * `dotnet msbuild` run, or workspace folders. Mirrors the save/restore-via-Object.defineProperty
  * technique used by manualDocumentSync.test.ts for vscode.workspace's event emitters.
  */
@@ -173,13 +171,6 @@ async function withStubbedProjectEnvironment(
     value: () => ({ dispose: () => undefined }),
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- reach the live module object so the swapped export is what projectManager.ts's compiled call site reads
-  const msbuildEvaluator = require(MSBUILD_EVALUATOR_PATH) as {
-    evaluateProject: (projectFile: string) => Promise<unknown>;
-  };
-  const originalEvaluate = msbuildEvaluator.evaluateProject;
-  msbuildEvaluator.evaluateProject = () => Promise.resolve(null);
-
   try {
     await fn({
       fireCreate: (uri) => projectWatcherListeners.create?.(uri),
@@ -187,12 +178,17 @@ async function withStubbedProjectEnvironment(
       fireDelete: (uri) => projectWatcherListeners.delete?.(uri),
     });
   } finally {
-    msbuildEvaluator.evaluateProject = originalEvaluate;
     for (const [name, descriptor] of originalMembers) {
       Object.defineProperty(vscode.workspace, name, descriptor);
     }
   }
 }
+
+/** Injected ProjectManager deps: no workspace scan and a fast null-returning MSBuild evaluation. */
+const stubDeps = {
+  findProjectFiles: () => Promise.resolve([] as vscode.Uri[]),
+  evaluateProject: () => Promise.resolve(null),
+};
 
 function fakeProjectUri(projectFile: string): vscode.Uri {
   return { fsPath: projectFile, toString: () => `file://${projectFile}` } as vscode.Uri;
@@ -360,7 +356,7 @@ suite('ProjectManager', () => {
         const projectFile = path.join('C:', 'work', 'App.csproj');
         const uri = fakeProjectUri(projectFile);
 
-        const manager = new ProjectManager(client);
+        const manager = new ProjectManager(client, stubDeps);
         try {
           fireCreate(uri);
           await waitFor(
@@ -396,7 +392,7 @@ suite('ProjectManager', () => {
         const projectFile = path.join('C:', 'work', 'Added.csproj');
         const uri = fakeProjectUri(projectFile);
 
-        const manager = new ProjectManager(client);
+        const manager = new ProjectManager(client, stubDeps);
         try {
           fireCreate(uri);
           await waitFor(
