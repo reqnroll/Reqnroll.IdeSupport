@@ -45,6 +45,15 @@ Rider-specific plugin code needed. Confirmed live; see
 [#414](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/414).
 ```
 
+## Tag completion
+
+Typing `@` at a tag position offers the tags already used across the project, most-used first,
+plus the built-in `@ignore` tag. Tags in other open `.feature` files are picked up as you type;
+tags in closed files are read from disk. Completion is offered at every tag position, including a
+second or third tag after a completed one, and a tag already typed on the line is not offered
+again. A space also opens the list (after the space between two tags, or after a space typed on a
+blank line before a tag). Accepting a suggestion replaces only the tag being typed.
+
 ## Non-English (dialect) keywords
 
 Completions are sourced from the active Gherkin dialect in the project's

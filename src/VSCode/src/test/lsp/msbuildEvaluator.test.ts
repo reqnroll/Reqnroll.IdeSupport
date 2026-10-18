@@ -4,8 +4,9 @@ import * as vscode from 'vscode';
 import { setAppLogChannel } from '../../logging/appNotify';
 import {
   buildOutputPath,
+  evaluateProject,
   findTargetKey,
-  getMsbuildEvaluation,
+  runDotnetMsbuild,
   readPackageReferences,
   tfmToShort,
   toProjectFileItems,
@@ -149,6 +150,125 @@ suite('msbuildEvaluator', () => {
     });
   });
 
+  suite('evaluateProject', () => {
+    const projectFile = path.resolve('repo', 'Multi', 'Multi.csproj');
+
+    // Shapes mirror real `dotnet msbuild -getProperty/-getItem` output (SDK 10.0.401) for a
+    // project with <TargetFrameworks>net8.0;net10.0</TargetFrameworks>: the outer (no
+    // TargetFramework) evaluation has an empty TargetFrameworkMoniker/ProjectAssetsFile, a
+    // TFM-less OutputPath and an empty Compile list; the inner evaluation has all of them.
+    const innerEvaluation = (tfm: string, moniker: string) =>
+      JSON.stringify({
+        Properties: {
+          TargetFrameworkMoniker: moniker,
+          OutputPath: `bin\\Debug\\${tfm}\\`,
+          AssemblyName: 'Multi',
+          RootNamespace: 'Multi',
+          ProjectAssetsFile: '',
+          TargetFramework: tfm,
+          TargetFrameworks: 'net8.0;net10.0',
+        },
+        Items: { Compile: [{ Identity: 'Steps.cs', FullPath: 'C:\\repo\\Multi\\Steps.cs' }] },
+      });
+
+    const outerEvaluation = (targetFrameworks: string) =>
+      JSON.stringify({
+        Properties: {
+          TargetFrameworkMoniker: '',
+          OutputPath: 'bin\\Debug\\',
+          AssemblyName: 'Multi',
+          RootNamespace: 'Multi',
+          ProjectAssetsFile: '',
+          TargetFramework: '',
+          TargetFrameworks: targetFrameworks,
+        },
+        Items: { Compile: [] },
+      });
+
+    /** Records each invocation's args and answers outer/inner evaluations like real MSBuild. */
+    const stubRunner = (targetFrameworks: string) => {
+      const calls: string[][] = [];
+      const run = (args: readonly string[]): Promise<string | null> => {
+        calls.push([...args]);
+        const tfArg = args.find((a) => a.startsWith('-p:TargetFramework='));
+        if (!tfArg) return Promise.resolve(outerEvaluation(targetFrameworks));
+        const tfm = tfArg.slice('-p:TargetFramework='.length);
+        return Promise.resolve(
+          innerEvaluation(
+            tfm,
+            tfm === 'net8.0' ? '.NETCoreApp,Version=v8.0' : '.NETCoreApp,Version=v10.0',
+          ),
+        );
+      };
+      return { calls, run };
+    };
+
+    test('single-targeted project is evaluated once, without a TargetFramework override', async () => {
+      const calls: string[][] = [];
+      const run = (args: readonly string[]): Promise<string | null> => {
+        calls.push([...args]);
+        return Promise.resolve(innerEvaluation('net8.0', '.NETCoreApp,Version=v8.0'));
+      };
+
+      const result = await evaluateProject(projectFile, run);
+
+      assert.ok(result, 'expected a result for a single-targeted project');
+      assert.strictEqual(result.targetFrameworkMoniker, '.NETCoreApp,Version=v8.0');
+      assert.strictEqual(
+        result.outputAssemblyPath,
+        path.resolve('repo', 'Multi', 'bin', 'Debug', 'net8.0', 'Multi.dll'),
+      );
+      assert.strictEqual(calls.length, 1);
+      assert.ok(!calls[0].some((a) => a.startsWith('-p:TargetFramework=')));
+    });
+
+    test('multi-targeted project is re-evaluated for the first listed TargetFramework', async () => {
+      const { calls, run } = stubRunner('net8.0;net10.0');
+
+      const result = await evaluateProject(projectFile, run);
+
+      assert.ok(result, 'expected a result for a multi-targeted project');
+      assert.strictEqual(result.targetFrameworkMoniker, '.NETCoreApp,Version=v8.0');
+      assert.strictEqual(
+        result.outputAssemblyPath,
+        path.resolve('repo', 'Multi', 'bin', 'Debug', 'net8.0', 'Multi.dll'),
+      );
+      assert.deepStrictEqual(result.files, [
+        { path: 'C:\\repo\\Multi\\Steps.cs', role: 'binding' },
+      ]);
+      assert.strictEqual(calls.length, 2);
+      assert.ok(calls[1].includes('-p:TargetFramework=net8.0'));
+    });
+
+    test('multi-target TFM choice ignores whitespace and empty entries in TargetFrameworks', async () => {
+      const { calls, run } = stubRunner(' ; net10.0 ;net8.0;');
+
+      const result = await evaluateProject(projectFile, run);
+
+      assert.strictEqual(result?.targetFrameworkMoniker, '.NETCoreApp,Version=v10.0');
+      assert.ok(calls[1].includes('-p:TargetFramework=net10.0'));
+    });
+
+    test('project with no TargetFramework information still evaluates to null', async () => {
+      const { calls, run } = stubRunner('');
+
+      assert.strictEqual(await evaluateProject(projectFile, run), null);
+      assert.strictEqual(calls.length, 1);
+    });
+
+    test('returns null when the inner evaluation of a multi-targeted project fails', async () => {
+      let call = 0;
+      const run = () => Promise.resolve(call++ === 0 ? outerEvaluation('net8.0;net10.0') : null);
+
+      assert.strictEqual(await evaluateProject(projectFile, run), null);
+      assert.strictEqual(call, 2);
+    });
+
+    test('returns null when dotnet msbuild fails', async () => {
+      assert.strictEqual(await evaluateProject(projectFile, () => Promise.resolve(null)), null);
+    });
+  });
+
   suite('buildOutputPath', () => {
     test('resolves OutputPath relative to the project directory and appends AssemblyName.dll', () => {
       // OutputPath always comes back backslash-delimited from MSBuild, even when evaluated on
@@ -166,6 +286,62 @@ suite('msbuildEvaluator', () => {
 
       const expected = path.resolve('repo', 'MyProject', 'bin', 'Debug', 'net8.0', 'MyProject.dll');
       assert.strictEqual(result, expected);
+    });
+
+    test('keeps an absolute OutputPath absolute instead of re-rooting it under the project dir', () => {
+      // ArtifactsPath / UseArtifactsOutput, or a hand-set absolute OutputPath, make MSBuild emit
+      // an absolute OutputPath (e.g. /home/x/out/ or C:\out\). Splitting it into segments and
+      // resolving against the project directory silently drops its root, pointing the membership
+      // index at a path under the project dir that does not exist.
+      const absoluteOut = path.resolve(path.sep + path.join('abs', 'out')) + path.sep;
+      const props = {
+        TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+        OutputPath: absoluteOut,
+        AssemblyName: 'MyProject',
+        RootNamespace: 'MyProject',
+        ProjectAssetsFile: '',
+      };
+
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
+
+      assert.ok(path.isAbsolute(result), `expected an absolute result, got ${result}`);
+      assert.strictEqual(result, path.join(absoluteOut, 'MyProject.dll'));
+    });
+
+    test('keeps the /home/x/out/ root of a forward-slash absolute OutputPath (issue #1007 example)', () => {
+      const props = {
+        TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+        OutputPath: '/home/x/out/',
+        AssemblyName: 'MyProject',
+        RootNamespace: 'MyProject',
+        ProjectAssetsFile: '',
+      };
+
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
+
+      assert.strictEqual(result, path.resolve('/home/x/out', 'MyProject.dll'));
+    });
+
+    test('keeps a Windows drive-absolute OutputPath absolute', () => {
+      if (process.platform !== 'win32') {
+        // path.isAbsolute('C:\out\') is false on POSIX hosts, so a drive path is only meaningful
+        // where the host path module treats a drive letter plus separator as rooted.
+        return;
+      }
+      const props = {
+        TargetFrameworkMoniker: '.NETCoreApp,Version=v8.0',
+        OutputPath: 'C:\\out\\',
+        AssemblyName: 'MyProject',
+        RootNamespace: 'MyProject',
+        ProjectAssetsFile: '',
+      };
+
+      const projectFile = path.join('repo', 'MyProject', 'MyProject.csproj');
+      const result = buildOutputPath(projectFile, props);
+
+      assert.strictEqual(result, path.resolve('C:\\out', 'MyProject.dll'));
     });
   });
 
@@ -186,7 +362,7 @@ suite('msbuildEvaluator', () => {
         error: () => undefined,
       } as unknown as vscode.LogOutputChannel);
 
-      const result = await getMsbuildEvaluation('C:\\proj\\Big.csproj', () =>
+      const result = await runDotnetMsbuild([], 'C:\\proj\\Big.csproj', () =>
         Promise.resolve({ stdout: '', error: overflowError() }),
       );
 

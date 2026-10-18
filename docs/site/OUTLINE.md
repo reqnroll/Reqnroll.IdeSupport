@@ -78,7 +78,7 @@ ide-support/
 ## Status of the drafting pass
 
 Every page above has real prose drafted from
-`docs/LSP-IDE-Support-Feature-Designs.md`'s end-user-experience sections
+the `docs/features/` documents' purpose sections
 and IDE support matrices, plus `TODO(media)` markers at each point a
 screenshot or gif still needs to be captured against a live IDE session
 (see the media-need summary in the original issue #63 comment). Nothing

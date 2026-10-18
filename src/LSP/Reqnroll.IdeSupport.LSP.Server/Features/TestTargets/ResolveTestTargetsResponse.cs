@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 
-/// <summary>Response DTO for the custom <c>reqnroll/resolveTestTargets</c> request (design doc §4).</summary>
+/// <summary>Response DTO for the custom <c>reqnroll/resolveTestTargets</c> request (Test-Runner-Integration-Design ("LSP messages")).</summary>
 public sealed class ResolveTestTargetsResponse
 {
     /// <summary>Gets or sets the resolved test target(s).</summary>
@@ -13,7 +13,7 @@ public sealed class ResolveTestTargetsResponse
     public List<ScenarioTestTargetDto> Targets { get; set; } = new();
 }
 
-/// <summary>One generated test method (or one row of a row-tests-parameterized method) a scenario/row resolves to. See design doc §3.</summary>
+/// <summary>One generated test method (or one row of a row-tests-parameterized method) a scenario/row resolves to. See Test-Runner-Integration-Design ("Mapping layer").</summary>
 public sealed class ScenarioTestTargetDto
 {
     /// <summary>The generated test class's full name, e.g. <c>Discovery_PlatformCompatibilityFeature</c>.</summary>

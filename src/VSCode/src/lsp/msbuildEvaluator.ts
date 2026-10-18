@@ -38,9 +38,12 @@ export interface ProjectFileItem {
  * Returns `null` when `dotnet` is unavailable or evaluation fails
  * (caller falls back to v1 folder-prefix behaviour).
  */
-export async function evaluateProject(projectFile: string): Promise<ProjectProperties | null> {
+export async function evaluateProject(
+  projectFile: string,
+  runMsbuild: MsbuildRunner = runDotnetMsbuild,
+): Promise<ProjectProperties | null> {
   try {
-    const evaluation = await getMsbuildEvaluation(projectFile);
+    const evaluation = await getMsbuildEvaluation(projectFile, runMsbuild);
     if (!evaluation) return null;
     const { properties: props, items } = evaluation;
 
@@ -72,6 +75,9 @@ interface MsbuildProperties {
   AssemblyName: string;
   RootNamespace: string;
   ProjectAssetsFile: string;
+  // Used only to detect a multi-targeted project's outer evaluation.
+  TargetFramework?: string;
+  TargetFrameworks?: string;
 }
 
 /** One entry from `-getItem:Compile;None;Content;ReqnrollFeatureFiles` (only the metadata we asked MSBuild to resolve). */
@@ -88,16 +94,87 @@ interface MsbuildEvaluation {
   items: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
 }
 
-export async function getMsbuildEvaluation(
+/**
+ * Runs `dotnet <args>` and resolves with its stdout, or `null` when the process fails.
+ * Injectable so the evaluation logic can be tested without a .NET SDK.
+ */
+export type MsbuildRunner = (
+  args: readonly string[],
   projectFile: string,
-  exec: MsbuildExec = execDotnetMsbuild,
+) => Promise<string | null>;
+
+async function getMsbuildEvaluation(
+  projectFile: string,
+  runMsbuild: MsbuildRunner,
 ): Promise<MsbuildEvaluation | null> {
-  const args = [
+  let parsed = await runMsbuildEvaluation(projectFile, runMsbuild);
+  if (!parsed) return null;
+
+  // A multi-targeted project (<TargetFrameworks>, no single <TargetFramework>) only yields a
+  // TargetFrameworkMoniker, a TFM-specific OutputPath, a ProjectAssetsFile and its Compile items
+  // from an inner (per-TFM) evaluation. The server tracks one project (and one TFM) per project
+  // file, so re-evaluate for a single deterministic TFM: the first one listed, which is also the
+  // one Visual Studio treats as the active target framework by default.
+  const outer = parsed.Properties;
+  if (!outer.TargetFrameworkMoniker && !outer.TargetFramework) {
+    const targetFramework = firstTargetFramework(outer.TargetFrameworks);
+    if (targetFramework) {
+      parsed = await runMsbuildEvaluation(projectFile, runMsbuild, targetFramework);
+      if (!parsed) return null;
+    }
+  }
+
+  const p = parsed.Properties;
+  if (!p.TargetFrameworkMoniker || !p.OutputPath || !p.AssemblyName) {
+    console.error(`MsbuildEvaluator: missing required properties for ${projectFile}`);
+    return null;
+  }
+
+  return { properties: p, items: parsed.Items ?? {} };
+}
+
+interface MsbuildOutput {
+  Properties: MsbuildProperties;
+  Items?: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
+}
+
+/** The first non-empty entry of a `;`-separated `TargetFrameworks` value, if any. */
+function firstTargetFramework(targetFrameworks: string | undefined): string | undefined {
+  return (targetFrameworks ?? '')
+    .split(';')
+    .map((tfm) => tfm.trim())
+    .find(Boolean);
+}
+
+async function runMsbuildEvaluation(
+  projectFile: string,
+  runMsbuild: MsbuildRunner,
+  targetFramework?: string,
+): Promise<MsbuildOutput | null> {
+  const stdout = await runMsbuild(buildMsbuildArgs(projectFile, targetFramework), projectFile);
+  if (stdout === null) return null;
+  return parseMsbuildOutput(projectFile, stdout);
+}
+
+function parseMsbuildOutput(projectFile: string, stdout: string): MsbuildOutput | null {
+  try {
+    return JSON.parse(stdout) as MsbuildOutput;
+  } catch {
+    console.error(
+      `MsbuildEvaluator: failed to parse msbuild output for ${projectFile}: ${stdout.slice(0, 300)}`,
+    );
+    return null;
+  }
+}
+
+function buildMsbuildArgs(projectFile: string, targetFramework?: string): string[] {
+  return [
     'msbuild',
     projectFile,
     '-p:DesignTimeBuild=true',
+    ...(targetFramework ? [`-p:TargetFramework=${targetFramework}`] : []),
     '-nologo',
-    '-getProperty:TargetFrameworkMoniker;OutputPath;AssemblyName;RootNamespace;ProjectAssetsFile',
+    '-getProperty:TargetFrameworkMoniker;OutputPath;AssemblyName;RootNamespace;ProjectAssetsFile;TargetFramework;TargetFrameworks',
     // Compile (.cs bindings) + None/Content (.feature files, for projects that don't use
     // Reqnroll's own MSBuild generation tooling) + ReqnrollFeatureFiles. Reqnroll.Tools.MsBuild.
     // Generation.props (pulled in transitively by Reqnroll.MsTest/Reqnroll.xUnit/etc.) appends
@@ -113,45 +190,30 @@ export async function getMsbuildEvaluation(
     // doesn't reference the package) is safe — MSBuild just returns an empty array for it.
     '-getItem:Compile;None;Content;ReqnrollFeatureFiles',
   ];
+}
 
+export async function runDotnetMsbuild(
+  args: readonly string[],
+  projectFile: string,
+  exec: MsbuildExec = execDotnetMsbuild,
+): Promise<string | null> {
   const { stdout, error } = await exec(args, {
     timeoutMs: 30_000,
     env: { ...process.env, MSYS_NO_PATHCONV: '1' },
   });
+  if (!error) return stdout;
 
-  if (error) {
-    // A large project's item JSON can exceed the buffer limit: warn loudly (issue #1008) rather
-    // than dropping the evaluation with no log at all.
-    if (isMaxBufferOverflowError(error)) {
-      // The curated "Reqnroll" output channel, not console.warn: that only reaches the Extension Host log.
-      logWarn(
-        `MsbuildEvaluator: msbuild output for ${projectFile} exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; evaluation dropped`,
-      );
-    } else {
-      console.error(`MsbuildEvaluator: dotnet msbuild failed for ${projectFile}: ${error.message}`);
-    }
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(stdout) as {
-      Properties: MsbuildProperties;
-      Items?: Partial<Record<MsbuildItemType, MsbuildItem[]>>;
-    };
-    const p = parsed.Properties;
-
-    if (!p.TargetFrameworkMoniker || !p.OutputPath || !p.AssemblyName) {
-      console.error(`MsbuildEvaluator: missing required properties for ${projectFile}`);
-      return null;
-    }
-
-    return { properties: p, items: parsed.Items ?? {} };
-  } catch {
-    console.error(
-      `MsbuildEvaluator: failed to parse msbuild output for ${projectFile}: ${stdout.slice(0, 300)}`,
+  // A large project's item JSON can exceed the buffer limit: warn loudly (issue #1008) rather
+  // than dropping the evaluation with no log at all.
+  if (isMaxBufferOverflowError(error)) {
+    // The curated "Reqnroll" output channel, not console.warn: that only reaches the Extension Host log.
+    logWarn(
+      `MsbuildEvaluator: msbuild output for ${projectFile} exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; evaluation dropped`,
     );
-    return null;
+  } else {
+    console.error(`MsbuildEvaluator: dotnet msbuild failed for ${projectFile}: ${error.message}`);
   }
+  return null;
 }
 
 /**
@@ -189,13 +251,25 @@ export function toProjectFileItems(
 // ── Output assembly path ─────────────────────────────────────────────────
 
 export function buildOutputPath(projectFile: string, props: MsbuildProperties): string {
-  // OutputPath is relative to the project directory (e.g. bin\Debug\net10.0\). MSBuild's
-  // built-in targets emit this with literal backslashes regardless of host OS, so it must be
-  // split into segments rather than handed to `path` as a single (possibly POSIX) path piece.
   // AssemblyName is the file name without extension.
+  const fileName = `${props.AssemblyName}.dll`;
+
+  // OutputPath is normally relative to the project directory (e.g. bin\Debug\net10.0\), but it
+  // can be absolute — e.g. a project that sets an absolute OutputPath, or the SDK's ArtifactsPath /
+  // UseArtifactsOutput feature redirecting output to a repo-root artifacts folder. Re-rooting an
+  // absolute value under the project directory silently drops its root, so an absolute OutputPath
+  // must keep its own root. MSBuild's built-in targets emit the value with literal backslashes
+  // regardless of host OS, so normalize separators before handing it to `path.resolve` (a raw
+  // Windows-style path given to a POSIX `path` would otherwise be treated as a single segment).
+  if (path.isAbsolute(props.OutputPath)) {
+    return path.resolve(props.OutputPath.replace(/[\\/]/g, path.sep), fileName);
+  }
+
+  // Relative OutputPath: split into segments rather than handing the raw backslash-delimited value
+  // to `path` as a single (possibly POSIX) piece.
   const projectDir = path.dirname(projectFile);
   const relativeSegments = props.OutputPath.split(/[\\/]/).filter(Boolean);
-  return path.resolve(projectDir, ...relativeSegments, `${props.AssemblyName}.dll`);
+  return path.resolve(projectDir, ...relativeSegments, fileName);
 }
 
 // ── Package references from project.assets.json ──────────────────────────
