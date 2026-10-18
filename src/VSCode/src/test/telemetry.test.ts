@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
+import { CLIENT_SESSION_ID } from '../clientSession';
 import { setAppLogChannel } from '../logging/appNotify';
 import { TELEMETRY_UNAVAILABLE_NOTICE, TelemetryCircuitBreaker } from '../telemetryCircuitBreaker';
 import {
@@ -467,7 +468,10 @@ suite('telemetry', () => {
         assert.strictEqual(records.length, 1);
         assert.strictEqual(records[0].enabled, true);
         assert.strictEqual(records[0].transmitted, true);
-        assert.strictEqual(records[0].props?.count, 3);
+        assert.strictEqual(records[0].props?.count, '3');
+        // The mirror shows what is transmitted, identity included (#1199).
+        assert.strictEqual(records[0].props?.IdeClient, 'vscode');
+        assert.strictEqual(records[0].props?.ClientSessionId, CLIENT_SESSION_ID);
       });
     });
 

@@ -253,19 +253,19 @@ export function sendTelemetryEvent(
 ): void {
   const enabled = isTelemetryEnabledByEnv();
   const debugLog = createTelemetryDebugLogFromEnvironment();
+  // The mirror records what would be transmitted, identity keys (IdeClient, ClientSessionId, ...) included.
+  const stringProps = withClientIdentity(properties);
 
   if (!reporter) {
-    debugLog.record('host', eventName, properties, enabled, false);
+    debugLog.record('host', eventName, stringProps, enabled, false);
     return;
   }
-
-  const stringProps = withClientIdentity(properties);
 
   if (breaker.isOpen) {
     debugLog.record(
       'host',
       eventName,
-      properties,
+      stringProps,
       enabled,
       false,
       'telemetry endpoint unreachable',
@@ -279,8 +279,8 @@ export function sendTelemetryEvent(
     // Telemetry must never surface to the user (#859): record it, open the breaker, carry on.
     const message = err instanceof Error ? err.message : String(err);
     breaker.recordFailure(message);
-    debugLog.record('host', eventName, properties, enabled, false, message);
+    debugLog.record('host', eventName, stringProps, enabled, false, message);
     return;
   }
-  debugLog.record('host', eventName, properties, enabled, true);
+  debugLog.record('host', eventName, stringProps, enabled, true);
 }
