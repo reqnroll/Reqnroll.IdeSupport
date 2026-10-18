@@ -17,7 +17,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
-/// A single Run CodeLens data point (design doc §5/§6, issue #262): resolves the "Run" label and,
+/// A single Run CodeLens data point (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262): resolves the "Run" label and,
 /// on request, wires the Details popup's Run/Debug actions to VS's own internal Test Explorer
 /// commands via <see cref="TestExplorerCommandIds"/> — no VS-specific run/debug invocation logic is
 /// needed, Test Explorer does the actual work once handed the right <see cref="TestMethodIdentifier"/>.
@@ -95,9 +95,9 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
 
         // Row-tests targets share one method — collapsing to distinct (assembly, type, method)
         // tuples means "run this scenario" and "run all examples" (row-tests mode) are the same
-        // single-element list, matching design doc §5's "free" case. For individual-methods mode
+        // single-element list, matching Test-Runner-Integration-Design ("Scenario Outlines", the "free" case). For individual-methods mode
         // (allowRowTests = false) this naturally becomes a multi-element array, the same shape the
-        // Feature/Rule container lens already sends (design doc §5/§7 item 7); the server resolver
+        // Feature/Rule container lens already sends (Test-Runner-Integration-Design, "Scenario Outlines"); the server resolver
         // supplies every variant method (issue #454). Live confirmation that Test Explorer runs every
         // element for an individual-methods Outline is still outstanding.
         _cachedMethods = onThisLine

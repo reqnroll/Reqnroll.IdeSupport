@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Commenting;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Server.Features.Commenting;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 
 using Reqnroll.IdeSupport.LSP.Server.Documents;
@@ -81,17 +82,48 @@ public class CommentToggleHandlerTests
     }
 
     [Fact]
-    public async Task Buffer_not_found_does_nothing_Async()
+    public async Task Buffer_not_found_is_rejected_with_an_EditRejected_error_Async()
     {
         DocumentBuffer? ignored;
         _bufferService.TryGet(FeatureUri, out ignored).Returns(false);
+        var telemetry = Substitute.For<ILspTelemetryService>();
 
-        await CreateSut().Handle(
+        var act = () => CreateSutWithTelemetry(telemetry).Handle(
             MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 0, 0),
             CancellationToken.None);
 
+        var exception = await act.Should().ThrowAsync<RpcErrorException>();
+        exception.Which.Code.Should().Be(EditRejected.Code);
+        exception.Which.Message.Should().Contain("not open");
         _languageServer.DidNotReceive().SendRequest(
             Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>());
+        telemetry.Received(1).SendEvent(
+            Arg.Any<string>(),
+            Arg.Is<Dictionary<string, object?>>(p =>
+                (bool)p["Erroneous"]! == true && (string)p["Reason"]! == "DocumentUnknown"));
+    }
+
+    [Fact]
+    public async Task A_declined_applyEdit_is_logged_not_thrown_Async()
+    {
+        SetupBuffer(FeatureUri, "Feature: F\n  Scenario: S\n    Given a step\n");
+        _toggleService.ToggleComment(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
+            .Returns(new GherkinCommentToggleResult(
+                new[] { new GherkinCommentEdit(2, 2, "#    Given a step") }, Uncommented: false));
+        var fakeReturns = Substitute.For<IResponseRouterReturns>();
+        fakeReturns.Returning<ApplyWorkspaceEditResponse>(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ApplyWorkspaceEditResponse { Applied = false, FailureReason = "read-only" }));
+        _languageServer.SendRequest(Arg.Any<string>(), Arg.Any<ApplyWorkspaceEditParams>())
+            .Returns(fakeReturns);
+
+        await CreateSut().Handle(
+            MakeParams("reqnroll.toggleComment", FeatureUri.ToString(), 2, 2),
+            CancellationToken.None);
+
+        // LogWarning is an extension over IIdeSupportLogger.Log(LogMessage).
+        _logger.Received(1).Log(Arg.Is<LogMessage>(m =>
+            m.Level == System.Diagnostics.TraceLevel.Warning
+            && m.Message.Contains("did not apply") && m.Message.Contains("read-only")));
     }
 
     // ── Happy path ────────────────────────────────────────────────────────

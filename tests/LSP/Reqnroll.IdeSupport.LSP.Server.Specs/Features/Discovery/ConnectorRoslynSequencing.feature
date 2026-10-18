@@ -3,7 +3,7 @@ Feature: Connector and Roslyn discovery sequencing
 
 The server has two sources of bindings: the out-of-process connector, which reflects over a
 built assembly, and the Roslyn live path, which parses an open .cs on every edit. The
-Architecture doc states the merge rule -- Roslyn-derived bindings for a file replace previous
+binding-discovery architecture doc states the merge rule -- Roslyn-derived bindings for a file replace previous
 entries for that file, while connector output replaces the entire registry -- but until now no
 test ran both against one server, so the rule was only ever exercised one source at a time.
 

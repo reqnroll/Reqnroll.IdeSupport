@@ -1,6 +1,7 @@
 #nullable enable
 #pragma warning disable VSEXTPREVIEW_CODELENS
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System;
 using System.Linq;
 using System.Threading;
@@ -10,6 +11,7 @@ using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio.Extension.FindStepUsages;
 using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
@@ -180,6 +182,14 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
             // own, so this isn't a failure worth surfacing to the output pane.
             return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
         }
+        catch (LspContentModifiedException)
+        {
+            // The server's state changed under the fetch even after the cache's bounded restarts
+            // (issue #1017). Routine during a refresh storm, so not a Warning with a stack trace.
+            _logger.LogDebug(
+                "StepCodeLens.GetLabelAsync: ContentModified for {FileUri}:{MethodStartLine}", _fileUri, _methodStartLine);
+            return new CodeLensLabel { Text = string.Empty, Tooltip = string.Empty };
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
@@ -245,6 +255,16 @@ internal sealed class StepCodeLens : InvokableCodeLens, IInvalidatableLens
                 : $"{count} usage{(count == 1 ? "" : "s")} of step definition";
 
             await renderer.RenderAsync(label, result, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("StepCodeLens.ExecuteAsync: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            _logger.LogWarning("StepCodeLens.ExecuteAsync: request failed: {Reason}", reason);
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Step Usages failed - {reason}.");
         }
         catch (Exception ex)
         {

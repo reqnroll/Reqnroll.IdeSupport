@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.Common.Tests.TestOutcomes;
 /// <see cref="StepTraceParser"/> against real captured stdout (the MsTestReqnroll fixture run through
 /// the bundled logger on 2026-09-16, MSTest's <c>TestContext Messages:</c> header and Reqnroll's
 /// plugin-loading tool output included) plus synthetic samples for the outcomes the fixture doesn't
-/// exercise — the seven-outcome vocabulary is Test-Runner-Integration-Design §6's table, decompiled from
+/// exercise — the seven-outcome vocabulary is Test-Runner-Integration-Design's "Recognising a failed step" table, decompiled from
 /// <c>Reqnroll.Tracing.TestTracer</c>.
 /// </summary>
 public class StepTraceParserTests

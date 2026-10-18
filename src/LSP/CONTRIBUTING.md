@@ -31,7 +31,7 @@ src/LSP/
     Telemetry/, Performance/       ← telemetry sinks and session events, FeatureUsage/ counters; Performance/ = perf sampling
 
   Where a new type goes (Core vs Server): see "Where code goes" in
-  docs/LSP-IDE-Support-Architecture.md §4 — Core takes whatever implements Reqnroll LSP
+  docs/LSP-IDE-Support-Architecture.md ("Where code goes") — Core takes whatever implements Reqnroll LSP
   functionality regardless of plumbing; Server takes the plumbing and the timing/scheduling semantics.
   Reqnroll.IdeSupport.LSP.Connector ← out-of-process reflection-based binding discovery, one variant per TFM
                                       (Reqnroll-Generic-net8.0, -net481, …); invoked as a short-lived child
@@ -42,7 +42,7 @@ src/Core/Reqnroll.IdeSupport.Common ← shared config/logging/analytics contract
 
 Start with [docs/LSP-IDE-Support-Architecture.md](../../docs/LSP-IDE-Support-Architecture.md) — it's
 the canonical map of the server's internals (workspace model, membership index, discovery pipeline,
-event flow). [docs/LSP-IDE-Support-Feature-Designs.md](../../docs/LSP-IDE-Support-Feature-Designs.md)
+event flow). [docs/features/README.md](../../docs/features/README.md)
 has the per-feature (F1–F20) design and as-built notes for whatever handler you're touching.
 
 ## Building
@@ -80,7 +80,7 @@ the server), you need one of the IDE clients — see
 ## Performance benchmarking
 
 The server ships with a dedicated benchmarking tool implementing
-[Performance Verification Layer 2](../../docs/LSP-IDE-Support-Architecture.md#performance-verification)
+[Performance Verification Layer 2](../../docs/architecture/performance.md)
 (reproducible end-to-end protocol benchmarks against a pinned corpus) — separate from
 `dotnet test` because it's a measurement *tool* run on demand, not an assertion suite you want in
 the normal test sweep.
@@ -327,11 +327,14 @@ in `devenv.exe` and `CodeLensHostLogger.Instance` in the CodeLens ServiceHub hos
   `FileLoggingLspTelemetryService.cs`, `telemetryDebugLog.ts`
   (`src/VSCode/src/logging/telemetryDebugLog.ts`) and `RiderTelemetryDebugLog.kt`
   (`src/Rider/src/main/kotlin/com/reqnroll/ide/rider/telemetry/RiderTelemetryDebugLog.kt`).
-- **Sending telemetry from a dev build.** Development builds (VS `DEBUG`, VS Code Development host,
-  Rider `runIde`) never send to the production Application Insights resource. To send to your own
-  resource instead, set `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` to its connection string before
-  launching the IDE (the Rider dev container forwards it from the host). Without it, dev builds send
-  nothing. See `docs/Telemetry-Events-Inventory.md`.
+- **Sending telemetry from a dev build.** Nothing extra is needed: development builds (VS `DEBUG`,
+  VS Code Development host, Rider `runIde`) always send to the dev Application Insights resource
+  (`REQNROLL_TELEMETRY_ENV` defaults to `dev`, and a development build ignores `prod`; see the root
+  `CONTRIBUTING.md`) unless
+  `REQNROLL_TELEMETRY_ENABLED` turns telemetry off. To send to your own resource instead, set
+  `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` to its connection string before launching the IDE
+  (the Rider dev container forwards it from the host); it replaces the embedded one. See
+  `docs/Telemetry-Events-Inventory.md`.
 
 When a bug report only makes sense with more than one of these, ask for them together rather than
 guessing from one side.
