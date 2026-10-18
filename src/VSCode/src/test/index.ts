@@ -15,6 +15,20 @@ export function run(): Promise<void> {
   const mocha = new Mocha({ ui: 'tdd', color: true, timeout: 10000 });
   const testsRoot = path.resolve(__dirname);
 
+  // CI runs with REQNROLL_TELEMETRY_ENABLED=0 (#1194) so the real extension never reports to Application
+  // Insights, but the telemetry suites assert that events *are* forwarded to their stubbed reporter.
+  // Pin the kill switch to enabled around every test so they do not depend on the ambient value;
+  // a test that needs another value sets it itself and the original is restored afterwards.
+  let originalTelemetryEnabled: string | undefined;
+  mocha.suite.beforeEach(() => {
+    originalTelemetryEnabled = process.env.REQNROLL_TELEMETRY_ENABLED;
+    process.env.REQNROLL_TELEMETRY_ENABLED = '1';
+  });
+  mocha.suite.afterEach(() => {
+    if (originalTelemetryEnabled === undefined) delete process.env.REQNROLL_TELEMETRY_ENABLED;
+    else process.env.REQNROLL_TELEMETRY_ENABLED = originalTelemetryEnabled;
+  });
+
   // extension.test.js pulls in the other suites (projectManager.test, lspInspectorLogger.test)
   // via its own imports, so registering just the entry point is enough.
   mocha.addFile(path.resolve(testsRoot, 'extension.test.js'));

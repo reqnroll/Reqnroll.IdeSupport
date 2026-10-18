@@ -10,6 +10,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 using Reqnroll.IdeSupport.LSP.Core.Commenting;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 using Reqnroll.IdeSupport.Common.Lsp;
@@ -102,8 +103,18 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
 
         if (!_documentBufferService.TryGet(uri, out var buffer) || buffer is null)
         {
-            _logger.LogVerbose($"CommentToggleHandler: buffer not found for {uri}");
-            return Unit.Value;
+            // Unlike the malformed-argument cases above (client bugs), this is reachable from a
+            // well-behaved client — the document is simply not open in the server — and the user
+            // otherwise sees the shortcut do nothing, so it is a rejection (issue #1132).
+            _logger.LogWarning($"CommentToggleHandler: buffer not found for {uri}");
+            _telemetryService?.SendEvent(TelemetryEvents.CommentUncommentCommandExecuted, new()
+            {
+                [TelemetryProperties.Mode] = mode.ToString(),
+                ["Erroneous"] = true,
+                ["Reason"] = "DocumentUnknown",
+            });
+            throw EditRejected.Error(
+                "The document is not open in the Reqnroll language server, so comments cannot be toggled.", "document");
         }
 
         var text   = buffer.Text;
@@ -125,8 +136,13 @@ public sealed class CommentToggleHandler : IExecuteCommandHandler
         if (result.Edits.Count == 0)
             return Unit.Value;
 
-        await _languageServer.SendRequest(LspStandardMethodNames.WorkspaceApplyEdit, edit)
+        var response = await _languageServer.SendRequest(LspStandardMethodNames.WorkspaceApplyEdit, edit)
             .Returning<ApplyWorkspaceEditResponse>(cancellationToken);
+
+        // The client owns presenting a failed apply; the server only records that its edit was declined
+        // so a "the shortcut did nothing" report can be traced.
+        if (response is { Applied: false })
+            _logger.LogWarning($"CommentToggleHandler: client did not apply the edit for {uri}: {response.FailureReason ?? "no reason given"}");
 
         return Unit.Value;
     }

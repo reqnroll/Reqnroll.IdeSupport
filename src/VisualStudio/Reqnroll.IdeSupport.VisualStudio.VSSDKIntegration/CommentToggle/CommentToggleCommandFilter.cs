@@ -137,7 +137,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                 var endPos    = selection.End.Position;
                 var endContainingLine = endPos.GetContainingLine();
                 var startLine = selection.Start.Position.GetContainingLine().LineNumber;
-                var endLine   = CommentToggleLineRange.AdjustEndLineForWholeLineSelection(
+                var endLine   = SelectionLineRange.AdjustEndLineForWholeLineSelection(
                     startLine, endContainingLine.LineNumber, endPos == endContainingLine.Start);
 
                 _logger.LogVerbose(
@@ -163,6 +163,13 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                     {
                         _logger.LogVerbose(
                             "CommentToggleCommandFilter: comment toggle superseded by a newer request or VS shutdown.");
+                    }
+                    catch (EditRejectedException ex)
+                    {
+                        // The server could not toggle comments for a reason the user can act on
+                        // (issue #1132) — previously the shortcut just did nothing.
+                        _logger.LogInfo($"CommentToggleCommandFilter: comment toggle rejected by server: {ex.Message}");
+                        await VsUtils.ShowEditRejectedAsync(ex.Message, ct).ConfigureAwait(false);
                     }
                     finally
                     {

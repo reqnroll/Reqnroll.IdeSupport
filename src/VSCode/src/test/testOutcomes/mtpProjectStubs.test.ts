@@ -1,8 +1,11 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
+import nodeFs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import {
+  activateMtpProjectStubs,
   buildStubXml,
   enumerateProjectFiles,
   detectReqnrollUsage,
@@ -10,9 +13,30 @@ import {
   removeStub,
   resolveProjectExtensionsDirectory,
   syncStub,
+  syncStubsForProjects,
   syncStubsForWorkspace,
   writeStub,
 } from '../../testOutcomes/mtpProjectStubs';
+
+/**
+ * Records every `fs.readdirSync` call (still delegating to the real one) until `restore` — the
+ * blocking call issue #998 keeps off the extension host's event loop during activation.
+ */
+function recordSyncReaddirs(): { calls: string[]; restore: () => void } {
+  const target = nodeFs as unknown as { readdirSync: (...args: unknown[]) => unknown };
+  const original = target.readdirSync;
+  const calls: string[] = [];
+  target.readdirSync = (...args: unknown[]) => {
+    calls.push(String(args[0]));
+    return original(...args);
+  };
+  return {
+    calls,
+    restore: () => {
+      target.readdirSync = original;
+    },
+  };
+}
 
 /**
  * Where and when VS Code writes the issue #741 project-local `obj/<Project>.csproj.reqnroll-ide.targets`
@@ -51,28 +75,79 @@ suite('mtpProjectStubs', () => {
   // ── enumerateProjectFiles ──────────────────────────────────────────────
 
   suite('enumerateProjectFiles', () => {
-    test('finds .csproj files at any depth', () => {
+    test('finds .csproj files at any depth', async () => {
       project('Root.csproj');
       project(path.join('src', 'Nested', 'Nested.csproj'));
 
-      const found = enumerateProjectFiles(dir)
-        .map((f) => path.basename(f))
-        .sort();
+      const found = (await enumerateProjectFiles(dir)).map((f) => path.basename(f)).sort();
 
       assert.deepStrictEqual(found, ['Nested.csproj', 'Root.csproj']);
     });
 
     for (const excluded of ['bin', 'obj', '.git', '.vs', '.vscode', 'node_modules']) {
-      test(`prunes the excluded directory '${excluded}'`, () => {
+      test(`prunes the excluded directory '${excluded}'`, async () => {
         project(path.join(excluded, 'Inside.csproj'));
         project('Root.csproj');
 
         assert.deepStrictEqual(
-          enumerateProjectFiles(dir).map((f) => path.basename(f)),
+          (await enumerateProjectFiles(dir)).map((f) => path.basename(f)),
           ['Root.csproj'],
         );
       });
     }
+
+    test('walks the tree without a blocking readdirSync (issue #998)', async () => {
+      project('Root.csproj');
+      project(path.join('src', 'Nested', 'Nested.csproj'));
+
+      const recorder = recordSyncReaddirs();
+      let found: string[];
+      try {
+        found = await enumerateProjectFiles(dir);
+      } finally {
+        recorder.restore();
+      }
+
+      assert.deepStrictEqual(found.map((f) => path.basename(f)).sort(), [
+        'Nested.csproj',
+        'Root.csproj',
+      ]);
+      assert.deepStrictEqual(recorder.calls, [], 'the workspace walk must be asynchronous');
+    });
+  });
+
+  // ── activateMtpProjectStubs ─────────────────────────────────────────────
+
+  test('activation with the feature disabled returns before walking the workspace (issue #998)', async () => {
+    assert.ok(
+      (vscode.workspace.workspaceFolders ?? []).length > 0,
+      'the test host opens a workspace folder',
+    );
+    assert.strictEqual(
+      vscode.workspace.getConfiguration('reqnroll').get<boolean>('testOutcomes.enabled', false),
+      false,
+      'the feature is off by default',
+    );
+    const context = {
+      extensionMode: vscode.ExtensionMode.Test,
+      extensionPath: dir,
+      subscriptions: [],
+    };
+
+    const recorder = recordSyncReaddirs();
+    let pending: Promise<void>;
+    try {
+      pending = activateMtpProjectStubs(context);
+    } finally {
+      recorder.restore();
+    }
+
+    assert.deepStrictEqual(
+      recorder.calls,
+      [],
+      'no synchronous directory read may run on the activation path',
+    );
+    await pending;
   });
 
   // ── buildStubXml ────────────────────────────────────────────────────────
@@ -327,6 +402,32 @@ suite('mtpProjectStubs', () => {
       assert.strictEqual(fs.existsSync(stubOf(specs)), true);
       assert.strictEqual(fs.existsSync(stubOf(unitTests)), false, 'MTP-capable, but no Reqnroll');
       assert.strictEqual(fs.existsSync(stubOf(lib)), false, 'uses Reqnroll, but not MTP-capable');
+    });
+
+    test('bounds how many projects are synced (and may spawn dotnet msbuild) at once (issue #998)', async () => {
+      const bundle = path.join(dir, 'bundle', 'Reqnroll.IdeSupport.TestReporter.MTP.targets');
+      fs.mkdirSync(path.dirname(bundle), { recursive: true });
+      fs.writeFileSync(bundle, '<Project />');
+      const projects = Array.from({ length: 12 }, (_, i) =>
+        restoredProject(path.join(`Specs${i}`, `Specs${i}.csproj`), 'Reqnroll.xunit.v3/3.3.3'),
+      );
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const checked: string[] = [];
+      const count = await syncStubsForProjects(projects, bundle, async (p) => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        inFlight--;
+        checked.push(p);
+        return true;
+      });
+
+      assert.strictEqual(count, 12, 'every project is still synced');
+      assert.deepStrictEqual(checked.sort(), [...projects].sort());
+      assert.ok(maxInFlight > 1, `projects are still synced in parallel (max ${maxInFlight})`);
+      assert.ok(maxInFlight <= 4, `at most 4 projects in flight, saw ${maxInFlight}`);
     });
 
     test('writes nothing when the bundle is missing', async () => {

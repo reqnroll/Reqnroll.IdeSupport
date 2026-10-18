@@ -107,6 +107,19 @@ public class DefineStepsActionBuilderTests : IDisposable
     }
 
     [Fact]
+    public void Build_skips_an_unreadable_append_candidate_and_still_offers_the_new_file_action()
+    {
+        // Ranked earlier, deleted (or locked) before the read: must not fail the whole request.
+        var vanished = Path.Combine(_projectFolder, "Vanished.cs");
+        var target = MakeTarget(Path.Combine(_projectFolder, "MySteps.cs"), vanished);
+
+        var actions = CreateSut().Build(target, "Define missing step", new[] { UndefinedMatch("I press add") });
+
+        actions.Should().ContainSingle();
+        actions[0].CodeAction!.Title.Should().Be("Define missing step");
+    }
+
+    [Fact]
     public void Build_suffixes_titles_and_marks_only_the_append_action_preferred_when_a_candidate_succeeds()
     {
         var candidatePath = Path.Combine(_projectFolder, "ExistingSteps.cs");

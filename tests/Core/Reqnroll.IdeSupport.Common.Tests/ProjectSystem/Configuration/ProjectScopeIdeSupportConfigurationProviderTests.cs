@@ -1,4 +1,4 @@
-using Reqnroll.IdeSupport.Common.Tests.TestHelpers;
+﻿using Reqnroll.IdeSupport.Common.Tests.TestHelpers;
 
 namespace Reqnroll.IdeSupport.Common.Tests.ProjectSystem.Configuration;
 
@@ -47,13 +47,12 @@ public class ProjectScopeIdeSupportConfigurationProviderTests
     }
 
     [Fact]
-    public void A_specsync_source_with_an_invalid_tag_pattern_does_not_discard_settings_from_reqnroll_json()
+    public void A_malformed_specsync_source_does_not_discard_settings_from_reqnroll_json()
     {
+        // SpecSync tag prefixes are escaped (#966), so a bad prefix can no longer yield an invalid tag pattern;
+        // an unparseable file is the remaining way for this source to fail.
         AddFile("reqnroll.json", """{ "language": { "feature": "fr-FR" } }""");
-        AddFile("specsync.json", """
-            { "remote": { "projectUrl": "https://example.test/proj" },
-              "synchronization": { "testCaseTagPrefix": "[" } }
-            """);
+        AddFile("specsync.json", "{ this is not json");
 
         var config = Load();
 

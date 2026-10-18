@@ -37,11 +37,10 @@ public static class VsWellKnownIds
     public const string GherkinContentType = "Gherkin";
 
     /// <summary>
-    /// <c>IDG_VS_CODEWIN_NAVIGATETOLOCATION</c> (<c>vsshlids.h</c>): the group in the code-editor
-    /// context menu that hosts "Go To Definition" / "Find All References". Its parent command set is
-    /// <c>VsMenus.guidSHLMainMenu</c>. Header-checked.
+    /// <c>IDM_VS_CTXT_CODEWIN</c> (<c>vsshlids.h</c>): the code-editor context menu itself. Its parent
+    /// command set is <c>VsMenus.guidSHLMainMenu</c>. Header-checked.
     /// </summary>
-    public const int IDG_VS_CODEWIN_NAVIGATETOLOCATION = 0x02B1;
+    public const int IDM_VS_CTXT_CODEWIN = 0x040D;
 
     /// <summary>
     /// The core editor's own command set. <c>Edit.ToggleLineComment</c> is not in VSStd2K and has no
