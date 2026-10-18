@@ -22,6 +22,8 @@ permissions:
 
 env:
   DOTNET_VERSION: '10.0.x'
+  # Telemetry is off for every CI run (#1194).
+  REQNROLL_TELEMETRY_ENABLED: '0'
   MTP_REPORTER_TESTS_PROJECT: tests/Core/Reqnroll.IdeSupport.TestReporter.MTP.Tests/Reqnroll.IdeSupport.TestReporter.MTP.Tests.csproj
 
 jobs:

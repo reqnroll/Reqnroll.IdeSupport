@@ -5,16 +5,17 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { LanguageClient } from 'vscode-languageclient/node';
 import { TelemetryReporter } from '@vscode/extension-telemetry';
+import { CLIENT_SESSION_ID } from '../clientSession';
 import { setAppLogChannel } from '../logging/appNotify';
 import { TELEMETRY_UNAVAILABLE_NOTICE, TelemetryCircuitBreaker } from '../telemetryCircuitBreaker';
 import {
   deferTelemetryTeardownUntil,
   drainTelemetryTeardown,
   ensureTelemetryReporter,
-  isBuiltInConnectionBlocked,
   registerTelemetry,
   resetTelemetryReporterForTests,
   resolveConnectionString,
+  effectiveTelemetryEnvironment,
   sendTelemetryEvent,
   withClientIdentity,
 } from '../telemetry';
@@ -68,7 +69,7 @@ async function withStubbedSendTelemetryEvent(
   }
 }
 
-const IDENTITY_KEYS = ['IdeClient', 'Ide', 'IdeVersion', 'ExtensionVersion'];
+const IDENTITY_KEYS = ['IdeClient', 'Ide', 'IdeVersion', 'ExtensionVersion', 'ClientSessionId'];
 
 function withoutIdentity(properties?: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
@@ -77,17 +78,18 @@ function withoutIdentity(properties?: Record<string, string>): Record<string, st
 }
 
 suite('telemetry', () => {
-  suite('isBuiltInConnectionBlocked (#889)', () => {
-    test('blocks the built-in connection only in Development mode without a usable override', () => {
+  suite('effectiveTelemetryEnvironment (#1160)', () => {
+    test('a development host is always dev, whatever the build asked for', () => {
       const dev = vscode.ExtensionMode.Development;
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, undefined), true);
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, 'nonsense'), true);
-      assert.strictEqual(isBuiltInConnectionBlocked(dev, 'InstrumentationKey=abc'), false);
-      assert.strictEqual(
-        isBuiltInConnectionBlocked(vscode.ExtensionMode.Production, undefined),
-        false,
-      );
-      assert.strictEqual(isBuiltInConnectionBlocked(vscode.ExtensionMode.Test, undefined), false);
+      assert.strictEqual(effectiveTelemetryEnvironment('prod', dev), 'dev');
+      assert.strictEqual(effectiveTelemetryEnvironment('dev', dev), 'dev');
+    });
+
+    test('other modes use the build-time environment', () => {
+      for (const mode of [vscode.ExtensionMode.Production, vscode.ExtensionMode.Test]) {
+        assert.strictEqual(effectiveTelemetryEnvironment('prod', mode), 'prod');
+        assert.strictEqual(effectiveTelemetryEnvironment('dev', mode), 'dev');
+      }
     });
   });
 
@@ -140,6 +142,13 @@ suite('telemetry', () => {
       assert.strictEqual(props.Ide, 'Visual Studio Code');
       assert.strictEqual(props.IdeVersion, vscode.version);
       assert.ok(props.ExtensionVersion.length > 0);
+    });
+
+    test('withClientIdentity stamps a stable ClientSessionId without overriding a server-stamped one (#1199)', () => {
+      const first = withClientIdentity({}).ClientSessionId;
+      assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      assert.strictEqual(withClientIdentity({}).ClientSessionId, first);
+      assert.strictEqual(withClientIdentity({ ClientSessionId: 'x' }).ClientSessionId, 'x');
     });
 
     test('withClientIdentity does not override a server-stamped IdeClient', () => {
@@ -459,7 +468,10 @@ suite('telemetry', () => {
         assert.strictEqual(records.length, 1);
         assert.strictEqual(records[0].enabled, true);
         assert.strictEqual(records[0].transmitted, true);
-        assert.strictEqual(records[0].props?.count, 3);
+        assert.strictEqual(records[0].props?.count, '3');
+        // The mirror shows what is transmitted, identity included (#1199).
+        assert.strictEqual(records[0].props?.IdeClient, 'vscode');
+        assert.strictEqual(records[0].props?.ClientSessionId, CLIENT_SESSION_ID);
       });
     });
 

@@ -11,7 +11,7 @@
 > (custom `reqnroll/*` names) and [`LspStandardMethodNames.cs`](../src/Core/Reqnroll.IdeSupport.Common/Lsp/LspStandardMethodNames.cs)
 > (standard names) in `Reqnroll.IdeSupport.Common`, shared by the LSP server and the Visual Studio
 > extension; [`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts) (VS Code) and
-> [`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/protocol/ReqnrollLanguageServer.kt)
+> [`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/lsp/protocol/ReqnrollLanguageServer.kt)
 > (Rider) on the clients. This doc summarizes those; when they disagree, they win.
 
 ## 1. Custom `reqnroll/*` messages
@@ -57,7 +57,7 @@ these DTOs don't implement OmniSharp's `IRequest` marker interfaces).
 - **VS Code** ([`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts)) declares 10 of the 15:
   everything except `resolveTestTargets`, `refreshCodeLens`, `semanticTokens`,
   `documentSymbolHierarchical`, `documentActivated`.
-- **Rider** ([`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/protocol/ReqnrollLanguageServer.kt))
+- **Rider** ([`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/lsp/protocol/ReqnrollLanguageServer.kt))
   declares 12 of the 15: everything except the three VS-only ones
   (`refreshCodeLens`, `semanticTokens`, `documentSymbolHierarchical`).
 - **Visual Studio** has no typed protocol interface; it goes through the raw
@@ -89,6 +89,53 @@ the protocol's own designated extensible slots:
 | `textDocument/rename` (result) | `WorkspaceEdit.changeAnnotations` | Annotation ids `reqnroll.rename.feature` / `reqnroll.rename.binding` — standard LSP 3.16 mechanism, custom ids; only populated when the client advertises `changeAnnotationSupport` |
 | `textDocument/publishDiagnostics` | `Diagnostic.source` | `reqnroll.binding` for .cs binding diagnostics — see [`CSharpDiagnosticsPublisher.cs:18`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Pipeline/CSharpDiagnosticsPublisher.cs) |
 | `telemetry/event` | params (spec: `any`) | `{eventName, properties}` shape — see [`LspTelemetryService.cs:26`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Telemetry/LspTelemetryService.cs) |
+
+### Rejected edits (issue #1132)
+
+An edit-producing request the server refuses because the *user* can correct something
+(`textDocument/rename` today; `textDocument/formatting` and `textDocument/rangeFormatting` of a
+`.feature` file that is unknown to the server or has no parsable Feature) answers with a JSON-RPC
+**error response** built by [`EditRejected.Error`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Protocol/EditRejected.cs):
+
+| Part | Value |
+|---|---|
+| `code` | `-32803` (LSP `RequestFailed`), exposed as `EditRejected.Code` |
+| `message` | Short, actionable reason, safe to show to the user verbatim |
+| `data` | Optional string naming what was rejected (e.g. the rename validation scope: `position`, `rename`, `project`, …) |
+
+Client rule: **`-32803` ⇒ show `message` to the user** (modal dialog, per #1132); **any other error
+code ⇒ unexpected failure** — log it and show at most a generic message. `ContentModified`
+(`-32801`) is a routine, retryable cancellation and is never a rejection.
+
+**Implicit triggers never get the modal.** A rejection that arrives from an automatic format —
+format on save, format on type, format on paste — must only be logged: the user did not ask for the
+edit, and a half-typed file (no `Feature:` line yet) would otherwise raise a dialog on every save or
+keystroke. Only an explicit, user-invoked command (Format Document/Selection, Rename Step,
+Comment/Uncomment) shows it. On-type formatting never rejects on the server side. How each client
+tells the two apart: VS Code tracks the save window (`onWillSaveTextDocument` fires before the
+format-on-save provider, `onDidSaveTextDocument` after); Visual Studio and Rider as documented in
+their own sections of the client guides.
+
+An edit request that has nothing to change is **not** a rejection: "already formatted", an empty or
+whitespace-only document, and any non-`.feature` document return an empty/no-op edit result with no
+error. On-type formatting never rejects (it fires while the user types). The server deliberately does
+not use `window/showMessage` / `window/showMessageRequest` for this: the request already has a reply
+channel, and the presentation (modal vs. toast) is a client decision.
+
+Which edit-producing requests can reject (audit of every server edit surface, issue #1132):
+
+| Request | Rejects when | Otherwise |
+|---|---|---|
+| `textDocument/rename` | validation / resolution failures (several `scope`s) | edit |
+| `textDocument/formatting`, `rangeFormatting` | `.feature` document unknown to the server, or no parsable Feature | empty/no-op edit |
+| `workspace/executeCommand` `reqnroll.toggleComment` | document not open in the server | edits pushed via `workspace/applyEdit`; none needed ⇒ no-op |
+| `textDocument/codeAction` (define step, insert keyword) | never — an action that cannot be built is simply not offered; the client applies the edit | — |
+| `textDocument/completion`, `onTypeFormatting` | never (completion has no rejection concept; on-type fires while typing) | empty list/edits |
+
+For `reqnroll.toggleComment` the server also logs (Warning) when the client answers
+`workspace/applyEdit` with `applied: false`; presenting a failed apply is the client's job. Malformed
+`executeCommand` arguments (unknown command/mode, missing or null arguments) are client bugs and stay
+silent, logged at Verbose.
 
 Two adjacent things that are **not** protocol extensions, despite looking like candidates:
 
@@ -132,9 +179,9 @@ client adds any wire-level customization beyond what's listed above.
 - Only the 12 `@JsonRequest`/`@JsonNotification` methods in `ReqnrollLanguageServer.kt`; every
   standard method goes through lsp4j's `textDocumentService`/`workspaceService` with stock
   parameter types (see
-  [`ReqnrollRequestSender.kt`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/ReqnrollRequestSender.kt)).
+  [`ReqnrollRequestSender.kt`](../src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/lsp/ReqnrollRequestSender.kt)).
 - No `initializationOptions`. The only `initialize`-time customization is
-  [`ReqnrollLspServerDescriptor.clientCapabilities`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/ReqnrollLspServerDescriptor.kt)
+  [`ReqnrollLspServerDescriptor.clientCapabilities`](../src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/lsp/ReqnrollLspServerDescriptor.kt)
   (line 125), which flips on **standard** capability flags Rider's generic LSP client doesn't
   advertise by default: `workspace.inlayHint.refreshSupport`, `workspace.codeLens.refreshSupport`,
   and `textDocument.{formatting,rangeFormatting,onTypeFormatting}.dynamicRegistration`. These are
@@ -150,7 +197,7 @@ dispatcher, per the server DTO's own doc comment
 ([`RenameTargetsParams.cs:13`](../src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/Rename/RenameTargetsParams.cs)):
 it stops an ordinary C# "rename symbol" invoked via F2 from being hijacked into a loose Reqnroll
 step rename. Rider sends plain `TextDocumentPositionParams` for this request
-([`ReqnrollLanguageServer.kt:76`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/protocol/ReqnrollLanguageServer.kt)),
+([`ReqnrollLanguageServer.kt:76`](../src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/lsp/protocol/ReqnrollLanguageServer.kt)),
 so the flag is always unset (`false`) there — intentional, since Rider has no equivalent
 F2-hijacking concern, but it means "extends `TextDocumentPositionParams` with
 `requireAttributeLine`" in §1's table is VS Code's usage, not a universal client contract.
@@ -169,7 +216,7 @@ When adding a `reqnroll/*` method:
    [`lspMethods.ts`](../src/VSCode/src/lsp/lspMethods.ts) — its own doc comment says to keep the
    two lists in sync.
 4. Add the matching `@JsonRequest`/`@JsonNotification` method to Rider's
-   [`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/com/reqnroll/ide/rider/lsp/protocol/ReqnrollLanguageServer.kt).
+   [`ReqnrollLanguageServer.kt`](../src/Rider/src/main/kotlin/net/reqnroll/idesupport/rider/lsp/protocol/ReqnrollLanguageServer.kt).
 5. If VS needs it, add the string literal at the relevant VS extension call site (VS has no
    generated/typed protocol interface — see §1's client-coverage note).
 6. Update this doc's tables.

@@ -12,6 +12,7 @@ import {
   executeForeignCommand,
   reportClientException,
   scrubMessage,
+  setExtensionRoot,
   wrapErrorHandler,
 } from '../clientExceptionTelemetry';
 import { ensureTelemetryReporter, resetTelemetryReporterForTests } from '../telemetry';
@@ -32,6 +33,7 @@ function recordingReporter(): { reporter: ClientExceptionReporter; sent: Sent[] 
 suite('clientExceptionTelemetry (#621)', () => {
   suite('payload', () => {
     test('uses the server UnhandledException schema plus ExceptionOrigin=Client and a closed Source', () => {
+      setExtensionRoot(undefined); // activation in the test host sets it; the schema is asserted without a stack
       const props = buildExceptionProperties('Activation', new TypeError('boom'));
 
       assert.deepStrictEqual(props, {
@@ -42,7 +44,24 @@ suite('clientExceptionTelemetry (#621)', () => {
       });
     });
 
-    test('never carries a stack trace', () => {
+    test('carries only a sanitized StackFrames, never raw stack text (#1199)', () => {
+      setExtensionRoot('C:\\ext\\reqnroll');
+      try {
+        const error = new Error('x');
+        error.stack = 'Error: x\n    at doIt (C:\\ext\\reqnroll\\dist\\extension.js:42:7)';
+        const props = buildExceptionProperties('Activation', error);
+
+        assert.strictEqual(props.StackFrames, 'doIt:42');
+        for (const [key, value] of Object.entries(props)) {
+          if (key !== 'StackFrames')
+            assert.ok(!value.includes('at '), `unexpected stack-like text: ${value}`);
+        }
+      } finally {
+        setExtensionRoot(undefined);
+      }
+    });
+
+    test('has no StackFrames when the extension root is unknown', () => {
       const error = new Error('x');
       const props = buildExceptionProperties('Activation', error);
 

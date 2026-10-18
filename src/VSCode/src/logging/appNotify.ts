@@ -35,6 +35,16 @@ export function showWarn(message: string, ...items: string[]): Thenable<string |
   return vscode.window.showWarningMessage(message, ...items);
 }
 
+/**
+ * Shows the language server's reason for rejecting an edit (rename, format, comment toggle, …) in a
+ * **modal** dialog, so it cannot be missed the way a transient toast can (issue #1132), and mirrors
+ * it to the curated "Reqnroll" output channel. The single place edit rejections are presented.
+ */
+export function showEditRejected(message: string): Thenable<string | undefined> {
+  appLogChannel?.warn(message);
+  return vscode.window.showErrorMessage(message, { modal: true });
+}
+
 /** Shows an error message popup and mirrors it to the curated "Reqnroll" output channel. */
 export function showError(message: string, ...items: string[]): Thenable<string | undefined> {
   appLogChannel?.error(message);

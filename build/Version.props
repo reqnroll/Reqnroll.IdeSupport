@@ -1,16 +1,16 @@
 <Project>
   <PropertyGroup>
-	<!-- Main version: hand-bumped for meaningful milestones. -->
-	<ReqnrollMainVersion>0.1</ReqnrollMainVersion>
-	<!-- Build number: CI overrides this with the run number (-p:ReqnrollBuildNumber=...);
+	<!-- Main version shared by every asset built in this repo (LSP server, Visual Studio, VS Code, Rider): hand-bumped for meaningful milestones. -->
+	<ReqnrollIdeSupportMainVersion>2026.1</ReqnrollIdeSupportMainVersion>
+	<!-- Build number: CI overrides this with the run number (-p:ReqnrollIdeSupportBuildNumber=...);
 	     locally it defaults high so a local build always sorts newer than any CI build. -->
-	<ReqnrollBuildNumber Condition="'$(ReqnrollBuildNumber)' == ''">99999</ReqnrollBuildNumber>
-	<VersionPrefix>$(ReqnrollMainVersion).$(ReqnrollBuildNumber)</VersionPrefix>
+	<ReqnrollIdeSupportBuildNumber Condition="'$(ReqnrollIdeSupportBuildNumber)' == ''">99999</ReqnrollIdeSupportBuildNumber>
+	<VersionPrefix>$(ReqnrollIdeSupportMainVersion).$(ReqnrollIdeSupportBuildNumber)</VersionPrefix>
 	<VersionSuffix>alpha</VersionSuffix>
 	<!-- AssemblyVersion/AssemblyFileVersion each require components <= ushort.MaxValue, which
-	     ReqnrollBuildNumber (a CI run number) can exceed. Pin them to the main version only, same
+	     ReqnrollIdeSupportBuildNumber (a CI run number) can exceed. Pin them to the main version only, same
 	     as Reqnroll.VisualStudio's Directory.Build.props — the build number still flows into
 	     AssemblyInformationalVersion (a free-form string) via VersionPrefix/VersionSuffix above. -->
-	<AssemblyVersion>$(ReqnrollMainVersion).0.0</AssemblyVersion>
+	<AssemblyVersion>$(ReqnrollIdeSupportMainVersion).0.0</AssemblyVersion>
   </PropertyGroup>
 </Project>

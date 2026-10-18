@@ -35,7 +35,7 @@ public class ProjectLoadedDiscoveryTriggerTests : IDisposable
         _discovery.RunDiscovery(
                 Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(),
                 Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((ProjectBindingRegistry.Invalid, string.Empty));
+            .Returns(ConnectorDiscoveryOutcome.Unchanged(ProjectBindingRegistry.Invalid, string.Empty));
     }
 
     public void Dispose()

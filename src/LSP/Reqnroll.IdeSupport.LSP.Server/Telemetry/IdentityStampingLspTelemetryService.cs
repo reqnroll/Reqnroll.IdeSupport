@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 /// canonical client identity, regardless of which IDE forwards it (issue #844). Stamping here, in
 /// the server, keeps the three host forwarders dumb and guarantees identical behavior across them.
 /// <para>
-/// Stamped keys (<c>IdeClient</c>, <c>ServerVersion</c>, <c>SessionId</c>)
+/// Stamped keys (<c>IdeClient</c>, <c>ServerVersion</c>, <c>SessionId</c>, <c>ClientSessionId</c>)
 /// are added only when the caller has not already supplied the same key, and the caller's
 /// dictionary is never mutated — a copy is forwarded. Null identity values (client not yet
 /// initialized) are omitted rather than sent as empty strings.
@@ -28,6 +28,9 @@ public sealed class IdentityStampingLspTelemetryService : ILspTelemetryService
 
     /// <summary>Random per-server-process identifier; not user-identifying.</summary>
     public const string SessionIdKey = "SessionId";
+
+    /// <summary>The client's own per-IDE-session id (issue #1199); clients stamp the same property on their own events.</summary>
+    public const string ClientSessionIdKey = "ClientSessionId";
 
     private readonly ILspTelemetryService _inner;
     private readonly ClientIdeContext _ide;
@@ -57,6 +60,7 @@ public sealed class IdentityStampingLspTelemetryService : ILspTelemetryService
         TryStamp(stamped, IdeClientKey, _ide.Ide);
         TryStamp(stamped, ServerVersionKey, _serverVersion);
         TryStamp(stamped, SessionIdKey, _sessionId);
+        TryStamp(stamped, ClientSessionIdKey, _ide.ClientSessionId);
         _inner.SendEvent(eventName, stamped);
     }
 
