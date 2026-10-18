@@ -21,9 +21,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Nerdbank.Streams" Version="2.11.79" />
-    <PackageReference Include="OmniSharp.Extensions.LanguageClient" Version="0.19.9" />
-    <PackageReference Include="OmniSharp.Extensions.LanguageServer" Version="0.19.9" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,3 +5,4 @@ server/
 testlogger/
 mtpreporter/
 *.vsix
+src/generated/

@@ -270,12 +270,73 @@ public class IdeSupportTagParser : IIdeSupportTagParser
                 match.GetErrorMessage()));
     }
 
+    /// <summary>
+    /// Tags every cell of a table's header row, each with the span of its own text in the document.
+    /// </summary>
     private void TagRowCells(IGherkinTextSnapshot fileSnapshot, TableRow row, IdeSupportTag parentTag, string tagType)
     {
         foreach (var cell in row.Cells)
             parentTag.AddChild(new IdeSupportTag(tagType,
-                GetSpan(fileSnapshot, cell.Location, cell.Value.Length),
+                GetCellSpan(fileSnapshot, cell),
                 cell));
+    }
+
+    /// <summary>
+    /// Returns the span of a table cell's text as it appears in the document.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The parser hands back the <b>unescaped</b> cell value (Gherkin decodes <c>\|</c>, <c>\\</c>
+    /// and <c>\n</c>), so a cell containing an escape sequence is longer in the document than
+    /// <see cref="TableCell.Value"/> is: sizing the span from the value left the cell's last
+    /// character unclassified for every escape it contained (issue #1014). The span is therefore
+    /// measured against the snapshot text instead — from the cell's own start (the parser points
+    /// past the padding that follows the opening <c>|</c>) up to the next <b>unescaped</b> <c>|</c>
+    /// or the end of the line, with the padding before that separator trimmed off, mirroring the
+    /// trimming the parser applies to the value.
+    /// </para>
+    /// <para>
+    /// The length can never come out negative (the scan only ever moves forward from the cell's own
+    /// start) but is clamped anyway: an out-of-range value would throw out of
+    /// <see cref="GherkinRange.FromPoint"/>, and the caller would then drop every tag in the
+    /// document rather than one cell's span.
+    /// </para>
+    /// </remarks>
+    private GherkinRange GetCellSpan(IGherkinTextSnapshot snapshot, TableCell cell)
+    {
+        var line = GetSnapshotLine(cell.Location, snapshot);
+        var lineText = line.GetText();
+        var start = GetSnapshotColumn(cell.Location);
+        var end = start;
+
+        while (end < lineText.Length && !IsColumnSeparator(lineText, end))
+            end++;
+
+        while (end > start && char.IsWhiteSpace(lineText[end - 1]))
+            end--;
+
+        return GherkinRange.FromPoint(snapshot, line.Start + start, Math.Max(0, end - start));
+    }
+
+    /// <summary>
+    /// True when the <c>|</c> at <paramref name="index"/> separates two table columns.
+    /// </summary>
+    /// <remarks>
+    /// Gherkin (following CSV/Cucumber conventions) escapes a literal backslash as <c>\\</c> and a
+    /// literal pipe as <c>\|</c>, so a <c>|</c> is a separator exactly when an even number of
+    /// backslashes immediately precede it. Counting the whole run, rather than only the preceding
+    /// character, is what makes <c>a \\| b</c> split on the pipe while <c>a \| b</c> does not.
+    /// </remarks>
+    private static bool IsColumnSeparator(string lineText, int index) =>
+        lineText[index] == '|' && !IsEscaped(lineText, index);
+
+    private static bool IsEscaped(string lineText, int index)
+    {
+        var backslashes = 0;
+        for (var i = index - 1; i >= 0 && lineText[i] == '\\'; i--)
+            backslashes++;
+
+        return backslashes % 2 == 1;
     }
 
     private void AddParameterTags(IGherkinTextSnapshot fileSnapshot, ParameterMatch parameterMatch, IdeSupportTag stepTag,

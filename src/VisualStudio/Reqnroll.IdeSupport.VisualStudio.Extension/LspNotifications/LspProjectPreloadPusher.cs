@@ -24,8 +24,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.LspNotifications;
 /// </summary>
 /// <remarks>
 /// This is what lets binding discovery start running while the server is still sitting idle
-/// waiting for VS's real <c>initialize</c> handshake (see docs/LSP-IDE-Support-Architecture.md's
-/// As-built note on eager server startup). The real <see cref="VsProjectEventMonitor"/>, created
+/// waiting for VS's real <c>initialize</c> handshake (see docs/architecture/client-visualstudio.md,
+/// eager start and preload). The real <see cref="VsProjectEventMonitor"/>, created
 /// later in <c>ReqnrollLanguageClient.OnServerInitializationResultAsync</c>, re-sends the same
 /// baseline over the normal LSP channel — <c>ILspWorkspaceScopeManager.HandleProjectLoadedAsync</c>/
 /// <c>HandleProjectFilesAsync</c> treat a repeat baseline for an already-loaded project as an
@@ -71,8 +71,10 @@ internal static class LspProjectPreloadPusher
                 // push is a best-effort head start (see class remarks), always superseded by
                 // VsProjectEventMonitor.SendInitialProjectsAsync's own baseline once the real LSP
                 // connection exists — that path is what subscribes for a NuGet-restore-finished resend.
-                var loadedPayload = VsProjectPayloadBuilder.BuildProjectLoadedParamsJson(
-                    project, GetSolutionFolder(solution), serviceProvider, logger);
+                var loadedPayload = await VsProjectPayloadBuilder.BuildProjectLoadedParamsJsonAsync(
+                    project, GetSolutionFolder(solution), serviceProvider, logger, cancellationToken);
+                // The NuGet query above yields while it waits; BuildProjectFilesParamsJson reads DTE.
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
                 var filesJson = VsProjectPayloadBuilder.BuildProjectFilesParamsJson(project, logger);
 
                 await WriteEnvelopeAsync(pipe, CustomLspMethodNames.ReqnrollProjectLoaded, loadedPayload.Json, cancellationToken)

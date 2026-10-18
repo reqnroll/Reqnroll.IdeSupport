@@ -273,7 +273,7 @@ internal class ReqnrollLanguageClient : LanguageServerProvider
                 var serviceProvider = ServiceProvider.GlobalProvider;
                 _connectionService.TelemetryTransmitter ??= ResolveMefService<ITelemetryTransmitter>(serviceProvider);
 
-                // Run CodeLens bridge (design doc §5/§6, issue #262) — needs a DTE-resolvable
+                // Run CodeLens bridge (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — needs a DTE-resolvable
                 // IServiceProvider for the owning project's output assembly path, so it's
                 // constructed here rather than alongside the other services above.
                 _runTestCodeLensService = new RunTestCodeLensService(

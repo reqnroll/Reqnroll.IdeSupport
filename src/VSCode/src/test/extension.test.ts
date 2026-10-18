@@ -11,8 +11,11 @@ import './lsp/lspInspectorLogger.test';
 import './lsp/lspInspectorFormatConformance.test';
 import './lsp/msbuildEvaluator.test';
 import './lsp/executeCommandDedupe.test';
+import './lsp/editRejection.test';
+import './lsp/saveTracker.test';
 import './lsp/manualDocumentSync.test';
 import './lsp/serverLifecycleTelemetry.test';
+import './lsp/serverRestart.test';
 // Must precede `commands/stepCodeLens.test` and `commands/hookCodeLens.test` below (and, for the
 // same reason, everything else that could reach a real `activate()`): `getCodeLensRefreshEvent`
 // guards a module-level singleton that only its first caller in the whole process actually wires
@@ -38,6 +41,7 @@ import './util/selectionUtils.test';
 import './util/navigationUtils.test';
 import './util/stepDefinitionItems.test';
 import './grammar.test';
+import './languageConfiguration.test';
 import './logging/logPaths.test';
 import './logging/generalFileLog.test';
 import './logging/appNotify.test';
@@ -80,14 +84,14 @@ async function waitForClientRunning(client: LanguageClient, timeoutMs = 10_000):
 }
 
 suite('Reqnroll Extension Tests', () => {
-  const extensionId = 'reqnroll.reqnroll-ide-support';
+  const extensionId = 'Reqnroll.reqnroll-ide-support';
 
   test('Extension should be present', () => {
     const ext = vscode.extensions.getExtension(extensionId);
     assert.ok(ext, `Extension ${extensionId} is not installed`);
   });
 
-  test('Extension should activate on gherkin language', async () => {
+  test('Extension should activate on reqnroll language', async () => {
     const ext = vscode.extensions.getExtension(extensionId)!;
     await ext.activate();
     assert.ok(ext.isActive, 'Extension did not activate');
@@ -105,11 +109,11 @@ suite('Reqnroll Extension Tests', () => {
     assert.strictEqual(client.state, State.Running, 'Language client should be running');
   });
 
-  test('Gherkin language should be registered', async () => {
+  test('Reqnroll language should be registered', async () => {
     const languages = await vscode.languages.getLanguages();
     assert.ok(
-      languages.includes('gherkin'),
-      `gherkin language not registered. Available: ${languages.join(', ')}`,
+      languages.includes('reqnroll'),
+      `reqnroll language not registered. Available: ${languages.join(', ')}`,
     );
   });
 });

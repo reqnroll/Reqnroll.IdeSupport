@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Tests.Workspace;
 
 /// <summary>
 /// <see cref="ProjectPreloadListener"/> is the server-side end of the eager-startup preload
-/// channel (see docs/LSP-IDE-Support-Architecture.md's As-built note): it must dispatch
+/// channel (see docs/architecture/client-visualstudio.md, eager start and preload): it must dispatch
 /// <c>reqnroll/projectLoaded</c> / <c>reqnroll/projectFiles</c> payloads arriving on its named
 /// pipe to <see cref="ILspWorkspaceScopeManager"/> exactly as the real LSP notification handlers
 /// would (see <see cref="LspWorkspaceScopeManagerTests"/> for the handler-level coverage) — this
