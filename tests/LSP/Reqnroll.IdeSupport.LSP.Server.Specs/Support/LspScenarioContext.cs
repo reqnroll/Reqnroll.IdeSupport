@@ -50,6 +50,12 @@ public sealed class LspScenarioContext
     public CodeLens[]? LastCodeLens { get; set; }
     public CompletionList? LastCompletions { get; set; }
     public TextEdit[]? LastFormattingEdits { get; set; }
+
+    /// <summary>
+    /// The exception a rejected formatting request threw client-side (issue #1132): the server's
+    /// <c>EditRejected</c> error response, surfaced by OmniSharp's client as an exception.
+    /// </summary>
+    public Exception? LastFormattingError { get; set; }
     public SymbolInformationOrDocumentSymbolContainer? LastDocumentSymbols { get; set; }
     public Container<FoldingRange>? LastFoldingRanges { get; set; }
     public ApplyWorkspaceEditParams? LastToggleEdit { get; set; }

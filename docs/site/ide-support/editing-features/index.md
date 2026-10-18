@@ -11,6 +11,7 @@
 * [Rename Step](rename-step.md)
 * [Code Lens — Step & Hook Usage Counts](code-lens.md)
 * [Inlay Hints — Bound Step Info](inlay-hints.md)
+* [Clickable Tags](clickable-tags.md)
 
 ```{toctree}
 :hidden:
@@ -26,4 +27,5 @@ defining-steps
 rename-step
 code-lens
 inlay-hints
+clickable-tags
 ```

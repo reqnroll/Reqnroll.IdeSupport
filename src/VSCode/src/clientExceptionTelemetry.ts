@@ -7,6 +7,7 @@ import {
 } from 'vscode-languageclient';
 import { sendTelemetryEvent } from './telemetry';
 import { TelemetryEvents } from './telemetryEvents';
+import { sanitizeStack } from './stackSanitizer';
 
 /**
  * Client-side exception telemetry (issue #621): reports exceptions thrown in the VS Code
@@ -17,12 +18,22 @@ import { TelemetryEvents } from './telemetryEvents';
  * `IdeClient` (stamped by `sendTelemetryEvent`) says which IDE.
  *
  * Privacy contract (same bar as the server's `UnhandledException`, issues #620/#843): only the
- * exception type name, a scrubbed (quoted text, URLs and paths removed) and 128-character-capped message, and a closed `Source` are sent.
- * No stack trace is ever sent (issue #620 is open; assume not).
+ * exception type name, a scrubbed (quoted text, URLs and paths removed) and 128-character-capped message, a closed `Source`
+ * and a sanitized `StackFrames` are sent. `StackFrames` (issue #1199) names only this extension's own functions with
+ * their bundle line numbers, no paths or file names (see `stackSanitizer.ts`); it rides on each event that is sent, and
+ * the dedupe and {@link MAX_EVENTS_PER_SESSION} cap below bound how many distinct stacks that can be.
+ * `ClientSessionId` is added to every event by `sendTelemetryEvent` (see `clientSession.ts`).
  *
  * Reporting must never throw into, or slow, the code it observes: every entry point swallows its own
  * failures, and a per-session dedupe + cap bounds volume.
  */
+
+let extensionRoot: string | undefined;
+
+/** Records the extension's install directory, which is how `sanitizeStack` recognises its own frames. */
+export function setExtensionRoot(root: string | undefined): void {
+  extensionRoot = root;
+}
 
 /** Value of the `ExceptionOrigin` property on every event this module sends. */
 export const EXCEPTION_ORIGIN_CLIENT = 'Client';
@@ -87,12 +98,16 @@ export function buildExceptionProperties(source: string, error: unknown): Record
   // Cap before and after scrubbing: the raw text is bounded first so a huge message cannot make the scrub slow.
   let message = scrubMessage((rawMessage ?? '').slice(0, 4 * MAX_MESSAGE_LENGTH));
   if (message.length > MAX_MESSAGE_LENGTH) message = message.slice(0, MAX_MESSAGE_LENGTH);
-  return {
+  const properties: Record<string, string> = {
     ExceptionType: type,
     Message: message,
     Source: source,
     ExceptionOrigin: EXCEPTION_ORIGIN_CLIENT,
   };
+  const stackFrames =
+    error instanceof Error ? sanitizeStack(error.stack, extensionRoot) : undefined;
+  if (stackFrames) properties.StackFrames = stackFrames;
+  return properties;
 }
 
 /**

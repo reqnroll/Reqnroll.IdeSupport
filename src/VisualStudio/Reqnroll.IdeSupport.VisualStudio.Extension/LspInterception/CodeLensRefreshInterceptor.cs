@@ -123,7 +123,7 @@ internal sealed class CodeLensRefreshInterceptor : ILspMessageInterceptor, IDisp
                 HookCodeLensRedirect.InvalidateAll();
 
                 // Same reasoning as above, for the Run CodeLens on .feature scenario lines (design
-                // doc §5/§6, issue #262) — a rebuilt .feature.cs (new/changed generated methods)
+                // Test-Runner-Integration-Design, issue #262) — a rebuilt .feature.cs (new/changed generated methods)
                 // means previously-resolved reqnroll/resolveTestTargets results may be stale.
                 RunTestCodeLensRedirect.InvalidateAll();
 

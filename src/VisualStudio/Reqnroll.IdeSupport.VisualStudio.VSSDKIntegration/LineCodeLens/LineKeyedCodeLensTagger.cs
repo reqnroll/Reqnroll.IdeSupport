@@ -2,12 +2,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Language.CodeLens;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Tagging;
+using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.VisualStudio.Logging;
 
 namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
@@ -37,8 +40,17 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// would make it treat every call as "new tags" and needlessly tear down/recreate data points on
 /// every scroll.
 /// </para>
+/// <para>
+/// Deliberately not <see cref="IDisposable"/> (issue #1028). The tagger providers hand every consumer
+/// of a buffer the same instance (a singleton in <see cref="ITextBuffer.Properties"/>), and VS's tag
+/// aggregator disposes each <see cref="IDisposable"/> tagger it got from a provider when that
+/// aggregator goes away (its view closes) or the buffer's content type changes, regardless of who
+/// else still uses it — so one view closing would have frozen the lenses in every other view on the
+/// same buffer. The instance lives exactly as long as its buffer's property bag, and
+/// <see cref="WeakTaggerRegistry{TTagger}"/> only holds it weakly, so it needs no explicit teardown.
+/// </para>
 /// </remarks>
-internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, IDisposable
+internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
 {
     private readonly ITextBuffer _buffer;
     private readonly string _filePath;
@@ -46,12 +58,10 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<TEntry>?>> _fetch;
     private readonly Func<TEntry, int> _lineSelector;
     private readonly Func<int, IEnumerable<TEntry>, string> _elementDescriptionEncoder;
-    private readonly WeakTaggerRegistry<LineKeyedCodeLensTagger<TEntry>> _registry;
 
     private volatile IReadOnlyDictionary<int, LineCodeLensTag> _tagsByLine = EmptyTags;
     private int _refreshInFlight;
     private int _refreshPending;
-    private bool _disposed;
 
     private static readonly IReadOnlyDictionary<int, LineCodeLensTag> EmptyTags = new Dictionary<int, LineCodeLensTag>();
 
@@ -72,8 +82,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
         _fetch = fetch;
         _lineSelector = lineSelector;
         _elementDescriptionEncoder = elementDescriptionEncoder;
-        _registry = registry;
-        _registry.RegisterTagger(this, fileUri);
+        registry.RegisterTagger(this, fileUri);
         RequestRefresh();
     }
 
@@ -105,20 +114,48 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
     }
 
     /// <summary>
+    /// Test seam (issue #1032): invoked by <see cref="RequestRefresh"/> on the calling thread right after
+    /// it finds another refresh already in flight, before it returns. Lets a test complete that in-flight
+    /// refresh at exactly this point to drive the lost-wakeup interleaving deterministically. Always
+    /// <see langword="null"/> in production.
+    /// </summary>
+    internal Action? RefreshInFlightObserved { get; set; }
+
+    /// <summary>
+    /// Where a failed refresh is reported. <see langword="null"/> (the production default) means
+    /// <see cref="ExtensionHostLogger.Instance"/>; settable so tests can observe the report.
+    /// </summary>
+    internal IIdeSupportLogger? Logger { get; set; }
+
+    /// <summary>
     /// Kicks off an async re-pull of entry data for this buffer's file, coalescing concurrent
     /// requests. Safe to call from any thread. A request that arrives while one is already in flight
     /// is not dropped — it is recorded and re-run once the in-flight one finishes (fresh-eyes review
     /// finding: the previous version discarded it outright, so a request landing between two other
     /// refreshes could be lost until some unrelated later refresh happened to occur).
     /// </summary>
+    /// <remarks>
+    /// The request is recorded in <c>_refreshPending</c> <em>before</em> trying to claim
+    /// <c>_refreshInFlight</c> (issue #1032). Recording it only after a failed claim left a window in
+    /// which the in-flight refresh could clear <c>_refreshInFlight</c>, find nothing pending and stop,
+    /// and only then would the pending flag be set, with no one left to act on it. Now a failed claim
+    /// means the owner had not yet cleared <c>_refreshInFlight</c>, so its later read of
+    /// <c>_refreshPending</c> (all accesses are interlocked, so fully ordered) is bound to see this
+    /// request. The caller that does claim the slot clears the flag before fetching: its fetch starts
+    /// after every request recorded so far, so it covers them, and leaving the flag set would make
+    /// every refresh immediately schedule another.
+    /// </remarks>
     internal void RequestRefresh()
     {
+        Interlocked.Exchange(ref _refreshPending, 1);
+
         if (Interlocked.CompareExchange(ref _refreshInFlight, 1, 0) != 0)
         {
-            Volatile.Write(ref _refreshPending, 1);
-            return;
+            RefreshInFlightObserved?.Invoke();
+            return; // the in-flight refresh's finally block will see _refreshPending and run again
         }
 
+        Interlocked.Exchange(ref _refreshPending, 0);
         _ = RefreshAsync();
     }
 
@@ -127,7 +164,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
         try
         {
             var entries = await _fetch(_fileUri, CancellationToken.None).ConfigureAwait(false);
-            if (entries is null || _disposed)
+            if (entries is null)
                 return;
 
             var snapshot = _buffer.CurrentSnapshot;
@@ -169,10 +206,14 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
 
             TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(new SnapshotSpan(snapshot, 0, snapshot.Length)));
         }
-        catch
+        catch (Exception ex)
         {
             // Best-effort background refresh — a failed pull just leaves the previous (possibly
-            // empty) entry set in place until the next successful refresh.
+            // empty) entry set in place until the next successful refresh. Info rather than Warning:
+            // a Warning would bring the Output window to the front for a background lens refresh.
+            (Logger ?? ExtensionHostLogger.Instance).Log(new LogMessage(TraceLevel.Info,
+                $"CodeLens refresh for {_fileUri} failed; keeping the previous lenses until the next refresh",
+                nameof(RefreshAsync), ex, nameof(LineKeyedCodeLensTagger<TEntry>)));
         }
         finally
         {
@@ -180,14 +221,8 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>, I
             // A RequestRefresh arrived while the above was in flight — its caller was told "you're
             // covered", but the fetch above may have started before that request's reason for asking
             // even existed, so honour it with one more refresh instead of treating this one as good enough.
-            if (!_disposed && Interlocked.Exchange(ref _refreshPending, 0) == 1)
+            if (Interlocked.Exchange(ref _refreshPending, 0) == 1)
                 RequestRefresh();
         }
-    }
-
-    public void Dispose()
-    {
-        _disposed = true;
-        _registry.UnregisterTagger(this, _fileUri);
     }
 }

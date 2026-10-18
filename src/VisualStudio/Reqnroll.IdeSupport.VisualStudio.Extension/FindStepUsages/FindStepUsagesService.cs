@@ -43,6 +43,8 @@ internal sealed class FindStepUsagesService
     /// Queries the LSP server for step usages at <paramref name="line0"/> / <paramref name="char0"/>
     /// in <paramref name="fileUri"/> (all 0-based).
     /// </summary>
+    /// <exception cref="LspRequestFailedException">The request failed (server error, timeout, no server).</exception>
+    /// <exception cref="Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException">The server answered ContentModified.</exception>
     public async Task<StepUsagesResult> FindUsagesAsync(
         string            fileUri,
         int               line0,
@@ -57,15 +59,19 @@ internal sealed class FindStepUsagesService
         _logger.LogTrace(
             "FindStepUsagesService: sending {RequestMethod} params={ParamsJson}", CustomLspMethodNames.ReqnrollFindStepUsages, paramsJson);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindStepUsages, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(CustomLspMethodNames.ReqnrollFindStepUsages, paramsJson, cancellationToken)
             .ConfigureAwait(false);
+
+        // Issue #1020: a failed request throws rather than reading as NotABinding. Only a server that
+        // actually answered (JSON null, isBinding:false, or locations) reaches MapResult.
+        var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindStepUsages, fileUri, cancellationToken);
 
         // NOTE: use the parameterless JToken.ToString() — the overload that takes
         // Newtonsoft.Json.Formatting throws MissingMethodException against the Newtonsoft version
         // that VS loads at runtime.
         _logger.LogTrace(
-            "FindStepUsagesService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
+            "FindStepUsagesService: raw server result = {Result}", result.ToString());
 
         // Map transport result → three-state StepUsagesResult. The mapping is a pure function
         // (MapResult) so it can be unit-tested without a live pipe.

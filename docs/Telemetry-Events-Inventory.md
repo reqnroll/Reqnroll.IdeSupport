@@ -13,8 +13,18 @@
 
 ## 1. How telemetry flows
 
-There is **one** Application Insights resource (`InstrumentationKey 3fd018ff-819d-4685-a6e1-6f09bc98d20b`)
-shared by every Reqnroll IDE client, so event names form one flat namespace regardless of emitter.
+There are two Application Insights resources, `reqnroll-ide-appinsights-prod` (released builds) and
+`reqnroll-ide-appinsights-dev` (everything else), each shared by every Reqnroll IDE client, so
+within a resource event names form one flat namespace regardless of emitter. Which of the two a
+build reports to is fixed at **build time** (issue #1160): `REQNROLL_TELEMETRY_ENV=prod|dev`
+(default `dev`), read by the VS project (`TelemetryEnvironment` MSBuild property, embedding
+`InstrumentationKey.{Dev,Prod}.txt`), by VS Code's `precompile` script (generating the git-ignored
+`src/generated/telemetryEnvironment.ts`) and by Rider's `generateTelemetryBuildConfig` Gradle task
+(generating `TelemetryBuildConfig`). The connection strings are committed: VS
+`Telemetry/InstrumentationKey.{Dev,Prod}.txt`, VS Code `src/telemetryConnections.ts`, Rider
+`TelemetryConnections.kt`. A `prod` build fails while a prod string is still a `TODO` placeholder,
+and CI builds are `dev` unless the workflow is dispatched with `telemetry_env = prod`. Query the prod
+resource for real usage; the dev resource holds CI/pre-release and developer-override traffic.
 
 Two emission paths exist:
 
@@ -41,12 +51,16 @@ resource. Unset uses the built-in connection; a value with no `InstrumentationKe
 ignored. `REQNROLL_TELEMETRY_ENABLED` still takes precedence. The LSP server never transmits, so it
 needs no change.
 
-Development-build guard (issue #889): a development build with no usable override sends **nothing**
-rather than falling back to the production resource: a Debug build of the VS extension
-(`#if DEBUG`, `TelemetryTransmitter.ApplyDebugBuildGuard`), VS Code running from source
-(`ExtensionMode.Development`, i.e. F5), and Rider's `runIde` sandbox (`reqnroll.devSandbox`). The
-event is still mirrored to the local debug log as not transmitted, and a released build is never
-affected. To exercise telemetry from a dev build, set `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING`.
+Development builds (#1160, replacing the #889 "development-build guard"): there is no longer a
+guard that silences a Debug build (VS), the VS Code F5 host or Rider's `runIde` sandbox. They send
+to whichever resource they were built for — the **dev** resource by default, since `dev` is the
+default `REQNROLL_TELEMETRY_ENV` — so `REQNROLL_TELEMETRY_ENABLED` is the only switch needed to
+turn sending on or off. The `prod` selection is tied to the build kind: a VS `Debug` build
+(`TelemetryEffectiveEnvironment`), the VS Code Extension Development host
+(`effectiveTelemetryEnvironment`, `ExtensionMode.Development`) and Rider's `runIde` sandbox
+(`effectiveEnvironment`, `reqnroll.devSandbox`) are **always dev**, whatever `REQNROLL_TELEMETRY_ENV`
+requests; only a Release/packaged build can report to prod. `REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING` is purely an optional
+redirect to your own resource.
 
 Gate: `REQNROLL_TELEMETRY_ENABLED` (unset or `1` = on, anything else = off) is the cross-IDE
 kill switch, honored by all three hosts (VS via `EnableTelemetryChecker`, Rider in
@@ -94,6 +108,7 @@ cross-IDE queries (`where customDimensions.IdeClient == "vscode"`) work uniforml
 | `IdeClient` | **canonical.** Server (`IdentityStampingLspTelemetryService`, outermost decorator, so the debug-log mirror sees it) on every server-originated event; each host also stamps it on every event it transmits (covers host-originated events) | `visualstudio` \| `vscode` \| `rider` (the `--ide` vocabulary) |
 | `ServerVersion` | Server | assembly informational version |
 | `SessionId` | Server | random GUID per server process (not user-identifying; links an event stream to one server run) |
+| `ClientSessionId` | Each client generates one random GUID per IDE process (`ClientSession` in Common, `clientSession.ts`, Rider's `ClientSession`), stamps it on every event it transmits, and passes it to the server as `--client-session-id <guid>`; the server (`IdentityStampingLspTelemetryService`) stamps it on every server event, ignoring a value that is not a GUID (#1199) | not user-identifying. Unlike `SessionId` it exists before the server does and survives a server restart, so one `ClientSessionId` can span several `SessionId`s; join a client-origin `UnhandledException` to `ServerSessionStarted` on it for the IDE, OS and versions |
 | `Ide` / `IdeVersion` / `ExtensionVersion` | Each host, on every event it transmits (VS, Rider, and — since #844 — VS Code) | human-readable IDE product name, IDE product version (**the single source of the IDE version**), extension version |
 
 Stamping never overrides a key the caller already set, and server-side stamping copies the property
@@ -120,12 +135,12 @@ back-renamed, so a rename splits the metric series. Treat `ReqnrollDiscoveryExec
 
 **Privacy.** No file paths, test names, step text, source content, or user-identifiable strings
 are transmitted. Every exception-derived string — the `UnhandledException` `Message` and the
-`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed for filesystem paths (`<path>`) at the
-last server hop before the event goes to the client (`LspTelemetryService` →
-`TelemetryScrubber.ScrubProperties`, #843), so emit sites and the local debug-log mirror keep the raw text for
-debugging. Other string properties are fixed literals
-(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs. `AffectedFile` on the Roslyn discovery event carries the file
-*name* only. Discovery and command events carry counts and flags. (The local `PERF` log line may
+`ReqnrollDiscoveryExecuted` `ErrorMessage` — is scrubbed at the last server hop before the event goes to the
+client (`LspTelemetryService` → `TelemetryScrubber.ScrubProperties`, #843, #1139): quoted spans (which routinely hold class
+names, step expressions, feature text, tags or config values) become `<text>`, URLs `<url>` and filesystem paths `<path>`, and the
+result is capped at 128 characters, so emit sites and the local debug-log mirror keep the raw text for debugging. Exceptions raised in the Visual Studio host take the same shape: they are sent as the sanitised `UnhandledException` event (scrubbed `Message`, product-only `StackFrames`), never as a raw Application Insights exception record with the full message, stack and inner exceptions (#1140). Other string properties are fixed literals
+(`Reason`, `TriggerContext`, `DiscoverySource`) or TFMs.
+Discovery and command events carry counts and flags. (The local `PERF` log line may
 include URIs; the `PerfSample` telemetry payload never does.)
 
 ---
@@ -138,7 +153,7 @@ include URIs; the `PerfSample` telemetry payload never does.)
 |---|---|
 | **Constant** | `TelemetryEvents.ReqnrollDiscoveryExecuted` |
 | **Emitters** | LSP server: `CSharpBindingDiscoveryService` (Roslyn, in-proc source parse) and `ConnectorBindingRegistryProvider` (out-of-proc connector reflection), discriminated by `DiscoverySource` |
-| **When** | Each completed binding-discovery run: Roslyn on a `.cs` binding file open/`csEdit` per owning project; Connector on the first `projectLoad` after a project registers, then on every post-build refresh (debounced) |
+| **When** | Each completed binding-discovery run: Roslyn on a `.cs` binding file open/`csEdit` per owning project; Connector on the first `projectLoad` after a project registers, then on every post-build refresh (debounced). A connector refresh that cannot start (no output assembly yet, or not a Reqnroll test project) sends nothing and does not use up `projectLoad` (issue #939) |
 
 **Properties**
 
@@ -146,17 +161,16 @@ include URIs; the `PerfSample` telemetry payload never does.)
 |---|---|---|
 | `DiscoverySource` | `"Connector"` \| `"Roslyn"` | Which discovery path ran |
 | `TriggerContext` | Connector: `"projectLoad"` \| `"build"`; Roslyn: `"csOpen"` \| `"csEdit"` | What triggered the run |
-| `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure) |
+| `IsFailed` | bool | false (success, or the connector hash-noop) or true (failure: an unexpected exception, or the connector threw or reported failure) |
 | `HashMatched` | bool | Connector-only: true when the assembly hash was unchanged and the registry was kept (no-op run) |
 | `StepDefinitionCount` / `HookCount` | int | Connector success: counts in the swapped-in registry. Roslyn (issue #845): counts in the first owning project's registry after the patch, so every variant that changes bindings carries them. (Step Argument Transformations are surfaced by the connector but not modeled by `ProjectBindingRegistry`, so deliberately not reported.) |
-| `ErrorMessage` | string | Connector failure: the exception message, filesystem-path-scrubbed (`<path>`) |
-| `AffectedFile` | string | Roslyn: the file *name* (no path) that triggered re-discovery |
+| `ErrorMessage` | string | Connector failure from an unexpected exception: the exception message, scrubbed (quoted spans `<text>`, URLs `<url>`, paths `<path>`, capped at 128 characters). Not sent when the connector itself threw or reported failure (its raw error text is never forwarded) |
 | `ProjectCount` | int | Roslyn: how many owning projects the file was applied to |
 | `ProjectTargetFramework` | string? | Roslyn: first owner's TFM; Connector (all three outcomes): the project's TFM |
 | `DurationMs` / `DurationBucket` | long / string | Connector (all three outcomes): wall time of the discovery run (excluding the debounce), and the same coarse bucket `PerfSample` uses (`<=10` … `>5000`) |
-| `ReqnrollVersion` | string | Connector success only: the project's Reqnroll version reduced to `major.minor`; omitted when unknown |
-| `ConnectorType` | string | Connector success only: which connector flavour ran |
-| `ConnectorExitCode` | int | Connector success only: the connector process exit code |
+| `ReqnrollVersion` | string | Connector success, or a failure the connector reported: the project's Reqnroll version reduced to `major.minor`; omitted when unknown |
+| `ConnectorType` | string | Connector success, or a failure the connector reported: which connector flavour ran |
+| `ConnectorExitCode` | int | Connector success, or a failure the connector reported: the connector process exit code |
 
 The last four come from the connector's `DiscoveryResult.TelemetryProperties` through an explicit
 whitelist (`ConnectorRunTelemetry`, issue #846). The connector's `ConnectorArguments` (command
@@ -262,7 +276,7 @@ VS and Rider may request code actions on every caret move, so this is not a coun
 |---|---|
 | **Emitter** | `FindUnusedStepDefinitionsHandler` |
 | **When** | After a Find Unused Step Definitions request completes |
-| **Properties** | `UnusedStepDefinitions` (int), `ScannedFeatureFiles` (int — in practice the number of project registries scanned), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
+| **Properties** | `UnusedStepDefinitions` (int), `ScannedProjects` (int — project registries scanned; renamed from the mislabelled `ScannedFeatureFiles`, which reported this same count, issue #942), `IsCancellationRequested` (bool), `TotalStepDefinitions` (int — distinct valid step definitions scanned, counted the way the unused count is, so a binding reported by several projects counts once), `DurationBucket` (string, see "Bucket schemes" below) |
 
 **Analytics use.** Feature hygiene: unused-step counts, the unused *ratio*
 (`UnusedStepDefinitions / TotalStepDefinitions`) and scan cost (duration bucket); the
@@ -297,7 +311,7 @@ visible; `DurationBucket` the search cost.
 |---|---|
 | **Emitter** | `CommentToggleHandler` |
 | **When** | After a comment/uncomment `workspace/executeCommand` round trip |
-| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*), `ResolvedMode` (`"Comment"` \| `"Uncomment"` — the direction the request actually took, issue #861; equals `Mode` unless `Mode` is `Toggle`, where it records whether the toggle added or removed comments. It is the service's decision (`GherkinCommentToggleResult.Uncommented`), reported even when no edit was needed, e.g. an `Uncomment` over uncommented lines), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below) |
+| **Properties** | `Mode` (`"Toggle"` \| `"Comment"` \| `"Uncomment"` — the mode the client *requested*), `ResolvedMode` (`"Comment"` \| `"Uncomment"` — the direction the request actually took, issue #861; equals `Mode` unless `Mode` is `Toggle`, where it records whether the toggle added or removed comments. It is the service's decision (`GherkinCommentToggleResult.Uncommented`), reported even when no edit was needed, e.g. an `Uncomment` over uncommented lines), `LineCountBucket` (string — lines the command covered; see "Bucket schemes" below). A request the server **rejects** because the document is not open in it (issue #1132: `-32803` error response) still sends the event, with `Mode`, `Erroneous` = `true` and `Reason` = `"DocumentUnknown"` instead of `ResolvedMode`/`LineCountBucket`. Successful events carry no `Erroneous` property. |
 
 **Analytics use.** Comment-toggle usage (a proxy for "users authoring Gherkin interactively"),
 which command flavor is used, and whether it is applied to single lines or blocks.
@@ -307,10 +321,10 @@ which command flavor is used, and whether it is applied to single lines or block
 |---|---|
 | **Emitter** | `FormattingHandler` |
 | **When** | After `textDocument/formatting` (whole document) or `textDocument/rangeFormatting` (selection) |
-| **Properties** | `IsSelectionFormatting` (bool), `EditCount` (int — edits returned that change the text; the handler returns one whole-range replacement, so this is 0 or 1, and 0 = already formatted), `DocumentLineBucket` (string — document length in lines; see "Bucket schemes" below) |
+| **Properties** | `IsSelectionFormatting` (bool), `EditCount` (int — edits returned that change the text; the handler returns one whole-range replacement, so this is 0 or 1, and 0 = already formatted), `DocumentLineBucket` (string — document length in lines; see "Bucket schemes" below). A request the server **rejects** (issue #1132: `-32803` error response) still sends the event, with `Erroneous` = `true` and `Reason` (`"DocumentUnknown"` — document not open in the server; `"NoFeatureParsed"` — no Feature could be parsed) instead of `EditCount`; `DocumentLineBucket` is omitted for `DocumentUnknown`. Successful events carry no `Erroneous` property. |
 
 **Analytics use.** Format-on-demand usage, whole-document vs selection split, how often the
-command is a no-op (`EditCount = 0`), and the document sizes it runs on. (On-type table
+command is a no-op (`EditCount = 0`) or rejected (`Erroneous = true`, by `Reason`), and the document sizes it runs on. (On-type table
 formatting is deliberately *not* telemetried — see the retired-event table below.)
 
 ### `GoToMatchingScenariosCommandExecuted`
@@ -460,7 +474,7 @@ IDEs expose the same install -> upgrade funnel and daily-use retention signal di
 
 Client state: VS Code keeps `{ installedVersion, lastUsedDate, usageDays }` under the `globalState` key
 `reqnroll.telemetry.lifecycle` (`src/VSCode/src/extensionLifecycleTelemetry.ts`); Rider keeps the same
-three values in the application-level `PropertiesComponent` under `com.reqnroll.idesupport.telemetry.*`
+three values in the application-level `PropertiesComponent` under `net.reqnroll.idesupport.telemetry.*`
 (`ExtensionLifecycleTelemetry.kt`). The decision logic is a pure function/class per IDE, ported from VS's
 `WelcomeService`, and unit-tested. Because state is new, installs that predate this release report
 `Extension installed` once on first activation after upgrading to it; filter by `ExtensionVersion` when
@@ -529,7 +543,7 @@ killed outright, cannot be reported by anything and shows up only as a `ServerSe
 | | |
 |---|---|
 | **Emitter** | VS `TagLinkNavigableSymbolProvider` (via `TagLinkRedirect.LinkOpened`, wired in `ReqnrollLanguageClient`); VS Code `openTagLink` (`src/VSCode/src/lsp/tagLinks.ts`); Rider `ReqnrollFeatureTagLinkController` - three client copies of the same constant, per the catalog's mirror rule |
-| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the browser. Only http(s) targets are opened, so a refused target emits nothing |
+| **When** | The user follows a clickable Gherkin tag's link (Ctrl/Cmd+click) and the URL is handed to the operating system. Any scheme except `javascript:`, `vbscript:`, `data:` and `command:` is opened, so a refused target emits nothing |
 | **Properties** | none - the target URL and tag text come from repository configuration and are never sent |
 
 The server only answers `textDocument/documentLink` (counted in `PassiveCounts` as `DocumentLink`), and
@@ -550,16 +564,16 @@ each inlay-hint refresh.
 |---|---|
 | **Emitter** | `LspErrorTelemetryService.MonitorError` — the LSP server's `ITelemetryService` implementation; every other `Monitor*` member is a no-op there |
 | **When** | Any exception reported through `IErrorTelemetryService` (e.g. `IdeSupportGherkinParser`, `IdeSupportTagParser`, `CompletionContextResolver`, `WatchedFilesHandler` config loads), driven by `IdeSupportLoggerExtensions.LogException` |
-| **Properties** | `ExceptionType` (full type name), `Message` (filesystem-path-scrubbed → `<path>`), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is not sent under this property), `StackFrames` (string, **proposed in #620, awaiting maintainer decision**; omitted when unknown — up to 8 newline-separated, innermost-first entries of `Namespace.Type.Method:line` for product frames only (`:line` is the integer source line from the shipped PDB, omitted when none resolves) (declaring type's namespace **and** assembly are both `Reqnroll.IdeSupport` or `Reqnroll.IdeSupport.*`; a foreign assembly reusing the namespace, or `Reqnroll.IdeSupportLookalike`, does not qualify; assembly names are never emitted); runs of frames from any other assembly collapse to `[external]`; no file paths, column numbers, parameter lists or generic arguments; compiler-generated lambda/async/local members normalised to `Method{lambda}`/`Method`/`Method{local}`; ≤1024 chars; sanitized by `ExceptionStackSanitizer`, also passed through `TelemetryScrubber`; attached only to the first occurrence of each distinct exception-type+stack per server session and to at most 25 distinct stacks per session — the event itself is still sent every time; the cap is exact under concurrency). Caveats: frames the JIT inlined are absent, and the `[external]` collapse plus the 8-entry cap can push deeper product frames out. Only the exception's own stack is read — never inner exceptions or the exception type name beyond the unchanged `ExceptionType` property. The surrounding event (`ExceptionType`, path-scrubbed `Message`, `IsFatal`, `Source`) is unchanged |
+| **Properties** | `ExceptionType` (full type name), `Message` (scrubbed by `TelemetryScrubber.ScrubMessage`: quoted spans → `<text>`, URLs → `<url>`, paths → `<path>`, capped at 128 characters), `IsFatal` (bool, only when the caller classified it), `Source` (string, omitted when unknown — simple class name, no namespace, of the topmost stack frame inside a `Reqnroll.IdeSupport*` type, async/lambda helper types folded into their declaring class; the stack itself is not sent under this property), `StackFrames` (string, **proposed in #620, awaiting maintainer decision**; omitted when unknown — up to 8 newline-separated, innermost-first entries of `Namespace.Type.Method:line` for product frames only (`:line` is the integer source line from the shipped PDB, omitted when none resolves) (declaring type's namespace **and** assembly are both `Reqnroll.IdeSupport` or `Reqnroll.IdeSupport.*`; a foreign assembly reusing the namespace, or `Reqnroll.IdeSupportLookalike`, does not qualify; assembly names are never emitted); runs of frames from any other assembly collapse to `[external]`; no file paths, column numbers, parameter lists or generic arguments; compiler-generated lambda/async/local members normalised to `Method{lambda}`/`Method`/`Method{local}`; ≤1024 chars; sanitized by `ExceptionStackSanitizer`, also passed through `TelemetryScrubber`; attached only to the first occurrence of each distinct exception-type+stack per server session and to at most 25 distinct stacks per session — the event itself is still sent every time; the cap is exact under concurrency). Caveats: frames the JIT inlined are absent, and the `[external]` collapse plus the 8-entry cap can push deeper product frames out. Only the exception's own stack is read — never inner exceptions or the exception type name beyond the unchanged `ExceptionType` property. The surrounding event (`ExceptionType`, path-scrubbed `Message`, `IsFatal`, `Source`) is unchanged |
 
 ### `UnhandledException` (VS Code and Rider client code, #621)
 | | |
 |---|---|
 | **Emitters** | VS Code: `clientExceptionTelemetry.ts` (`reportClientException`, `guardCommand`, `createReportingErrorHandler`); Rider: `ClientExceptionTelemetry.report`, called from `ReqnrollDebugLogger.warn`/`error` whenever they are given a throwable |
 | **When** | VS Code: an exception escapes `activate` (`Source = Activation`), a Reqnroll command handler throws or rejects (`Source = Command:<commandId>`, e.g. `Command:reqnroll.goToHooks`; rethrown unchanged afterwards), or the language client's transport error callback fires (`Source = LanguageClientErrorHandler`; the client's default handler still decides continue/stop). Rider: every exception the plugin catches and logs at Warning or Error (LSP request failures in `ReqnrollRequestSender`, test-runner and MTP-stub failures, server-path resolution, gutter marks) |
-| **Properties** | The server's schema, reused so one query covers every origin: `ExceptionType` (VS Code: JS error `name`/class name when it is a plain identifier, else `Error`, `NonError` for a thrown non-Error; Rider: full JVM class name), `Message` (scrubbed harder than the server's, see **Client message scrub** below, and capped at 128 chars), `Source` (VS Code: the closed set above; Rider: simple name of the topmost plugin class on the stack, nested/lambda types folded, omitted when none), plus **`ExceptionOrigin = "Client"`**, which server-originated events do not carry. `IdeClient` (`vscode`/`rider`) and the `Ide*`/`ExtensionVersion` identity keys are stamped by each host's transmitter like on every event (#844). `IsFatal` is never sent. `SuppressedCount` (plain integer, only when > 0) is the number of events dropped as duplicates or by the session cap since the last one sent; it rides on the next event that is sent, so events dropped after the cap is reached are not visible |
+| **Properties** | The server's schema, reused so one query covers every origin: `ExceptionType` (VS Code: JS error `name`/class name when it is a plain identifier, else `Error`, `NonError` for a thrown non-Error; Rider: full JVM class name), `Message` (scrubbed harder than the server's, see **Client message scrub** below, and capped at 128 chars), `Source` (VS Code: the closed set above; Rider: simple name of the topmost plugin class on the stack, nested/lambda types folded, omitted when none), plus **`ExceptionOrigin = "Client"`**, which server-originated events do not carry, and **`StackFrames`** (#1199; omitted when no frame of the client's own code is on the stack) in the server's contract: up to 8 newline-separated, innermost-first entries, ≤1024 chars, runs of foreign frames collapsed to `[external]`, no paths, file names or columns. VS Code: `<function>:<line>` for frames under the extension's install directory (`stackSanitizer.ts`; the line is in the shipped bundle). Rider: `package.Class.method:line` for `net.reqnroll.idesupport.rider.` frames, lambda/inner classes folded into the declaring member (`ClientStackSanitizer`). It rides on every event that is sent, so the existing dedupe and 20-event session cap are its distinct-stack bound. `IdeClient` (`vscode`/`rider`) and the `Ide*`/`ExtensionVersion` identity keys are stamped by each host's transmitter like on every event (#844). `IsFatal` is never sent. `SuppressedCount` (plain integer, only when > 0) is the number of events dropped as duplicates or by the session cap since the last one sent; it rides on the next event that is sent, so events dropped after the cap is reached are not visible |
 | **Limits** | Per session: each distinct (source, type, message) is sent once, at most 20 events in total (Rider also guards against re-entrancy); cancellation exceptions are never reported (this includes Rider's request-timeout cancellations, e.g. a rename timeout: a timeout is not a plugin failure); an LSP error response (`ResponseError` in VS Code, `ResponseErrorException` in Rider, also as a cause) is never reported, because the server already reports its own failures and the text can embed step or expression text; in VS Code an error raised by the `editor.action.rename` command that the F2/rename commands fall through to is rethrown but not reported (it is VS Code's, not ours); every reporting step is wrapped so telemetry cannot throw into, or block, the code it observes (Rider hands the send to a pooled thread). Gating: `REQNROLL_TELEMETRY_ENABLED` in both clients, plus VS Code's own `telemetry.telemetryLevel`; **Rider (like VS) has no IDE-level telemetry opt-out**, only the env var |
-| **Not sent** | Stack traces (#620 is open: only the `Source` attribution derived from the stack is sent), paths, and anything beyond the scrubbed message |
+| **Not sent** | Raw stack traces (only the sanitized `StackFrames` above), file paths and names, and anything beyond the scrubbed message |
 
 **Client message scrub.** Client exception text is arbitrary (Node, VS Code and JVM errors quote file names, user directories,
 URLs with tokens and parser snippets), so `Message` is scrubbed more strictly than the server's: every double-quoted span (first to last quote
@@ -567,8 +581,8 @@ on the line, because V8 embeds JSON snippets unescaped) and every backtick or mu
 `<text>`, so a `JSON.parse` snippet cannot leak; URLs become `<url>` (query string and fragment included); absolute drive-letter, UNC and POSIX
 paths (directory names may contain interior spaces, so `C:\Users\John Smith\x` is one path), `~`/`%VAR%`/`$VAR` paths, `./` and `../` paths and bare file
 names or relative paths ending in a source/config extension (`.feature`, `.cs`, `.csproj`, `.json`, `.md`, ...) become `<path>`; and the result is capped at
-128 characters, which also bounds anything the rules miss. The server's `TelemetryScrubber.RedactPaths` got the same URL/path hardening (not
-the quote drop or cap, which would change its `ErrorMessage` semantics). Known limits: a file name with spaces and no
+128 characters, which also bounds anything the rules miss. The shared `TelemetryScrubber` (now in `Reqnroll.IdeSupport.Common`) applies the same URL/path hardening and,
+since #1139, the same quote drop and cap to the server's `Message` and `ErrorMessage` (before #1139 it redacted paths only). Known limits: a file name with spaces and no
 directory (`My File.feature`) keeps its first word; a bare name with an extension outside the list is not recognized.
 
 **Decision: reuse the `UnhandledException` event rather than add one.** The property schema is identical, so
@@ -692,7 +706,7 @@ abrupt process death is accepted but detectable via `Sequence`.
   #621/#845; `ExceptionStackSanitizer` (Common, netstandard2.0) is reusable for that.
 - **#621 — client-side exception path for VS Code/Rider** is built (see `UnhandledException` (VS Code and
   Rider client code) in §6): activation, commands and the language-client error callback in VS Code, caught-and-logged
-  exceptions in Rider. Stack traces stay out of the client events until #620 is decided (its `StackFrames` proposal currently covers the server path only).
+  exceptions in Rider. Client events carry the same sanitized `StackFrames` as the server and a `ClientSessionId` (#1199).
 - **#258 — `ProjectCharacteristics` event** — implemented in #845 (step/hook/binding-class/feature-file
   counts, hooks per type). Transformation counts and reuse ratios remain excluded (see its section).
 - **`UnitTestFramework` / `TestPlatform`** (MSTest/xUnit/NUnit/TUnit, VSTest vs MTP) — implemented in #874 on
