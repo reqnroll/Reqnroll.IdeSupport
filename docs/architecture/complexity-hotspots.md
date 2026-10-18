@@ -1,252 +1,300 @@
 # Complexity Hot Spots — Reqnroll.IdeSupport
 
-**Date:** 2026-09-03
-**Scope:** all C# under `src/` — `LSP.Core`, `LSP.Server`, `LSP.Connector`, `Core.Common`, and the
-Visual Studio extension/VSSDK integration assemblies.
-**Status:** Analysis only. No code changed. Action items filed as issues; see §7.
+**Status:** Reference (point-in-time measurement, 2026-10-18). The code wins if it disagrees.
+**Scope:** C# under `src/LSP`, `src/Core` and `src/VisualStudio`; TypeScript under `src/VSCode/src`
+(excluding `src/VSCode/src/test`); Kotlin under `src/Rider/src/main`. Generated files (`obj/`, `bin/`,
+`*.Designer.cs`, `*.g.cs`, `*.d.ts`) are excluded.
+
+**Previous action items are done.** Every Tier 1/Tier 2 item from the 2026-09-03 measurement
+(#586–#593) and the notification split it depended on (#577) is closed. §3 shows where each one ended up.
 
 ---
 
 ## 1. Method
 
-Complexity was **measured, not estimated**. Three passes over every `.cs` file under `src/`
-(excluding `obj/`, `bin/`, `node_modules/`, `.vscode-test/`):
+Complexity is **measured, not estimated**. Five passes run over every file in scope:
 
-1. **File size** — lines per file.
-2. **Per-method cyclomatic complexity and length** — a decision-point proxy (`if`, `while`, `for`,
-   `foreach`, `case`, `catch`, `&&`, `||`, `??`) counted per method, with comments and string
-   literals stripped first so branching inside doc comments or message strings isn't counted.
-3. **Coupling** — constructor parameter count per class, as a proxy for "how many reasons this
-   class has to change."
+1. **File size**: lines per file.
+2. **Per-method cyclomatic proxy and length**: decision points are counted per method after comments
+   and string literals are stripped. A method runs from its declaration to the start of the next
+   declaration. The proxy is 1 plus the count of:
+   - C#: `if` `while` `for` `foreach` `case` `catch` `&&` `||` `??`
+   - TypeScript: `if` `while` `for` `case` `catch` `&&` `||` `??`
+   - Kotlin: `if` `while` `for` `catch` `&&` `||` `?:`, plus one per non-`else` `when` branch arrow
+3. **Coupling**: the number of constructor parameters per class (Kotlin and C# primary constructors
+   included). Records and Kotlin `data class`es are left out because they are value carriers, not
+   collaborators.
+4. **Comment hygiene** *(new)*: per file, the number of issue/PR references (`#123`, `issue 123`,
+   `PR 123`) inside comments, plus a phrase heuristic for history narrative ("previously",
+   "originally", "no longer", "used to", "regression", "root cause", "the fix" and similar).
+5. **Per-IDE gating in the server** *(new)*: where the server compares IDE identity or reads an
+   `IdeBehaviours` flag, counted in code only (comments are excluded).
 
-### 1.1 A measurement error worth recording
+The stripper understands C# verbatim (`@"…"`), interpolated, raw (`"""…"""`) and char literals,
+Kotlin triple-quoted strings, and TypeScript template literals. This is the same lexing problem that
+once broke the first pass (§1.1).
 
-The first cyclomatic pass bounded each method by brace-depth matching and reported
-`StepDefinitionFileBuilder.AppendToFile` at **CX=65 / 307 LOC** — by a wide margin the worst method
-in the repo.
+### 1.1 Measurement pitfalls
 
-That was wrong. `AppendToFile` starts at line 86 and the next method begins at line 139, so it is
-~53 lines. The brace matcher had over-run into three sibling methods, because the naive
-string-literal stripping used at that point could not handle escaped quotes or verbatim strings —
-and the file it was scanning is *itself* a hand-rolled C# lexer full of brace and quote characters.
-The measurement tool was defeated by exactly the code it was measuring.
-
-The second pass bounds each method by the start of the next declaration instead, which removes the
-brace-matching fragility. All figures below come from that pass.
-
-The conclusion happened to survive — `StepDefinitionFileBuilder` is still the top hot spot, via a
-different method in the same file (§3.1) — but the specific method named was wrong, and a reader
-acting on the first number would have refactored the wrong thing.
+- **Do not bound methods by brace matching.** A brace matcher with naive string stripping overran a
+  hand-written lexer's literal-heavy code and reported a 53-line method as 307 lines. Bounding by the
+  next declaration avoids this.
+- **Local functions and inline lambdas move the boundaries.** In C#, a `static` local function looks
+  like a member declaration, so `Program.ConfigureServer` is reported as a 231-line `Describe`. In
+  TypeScript, `registerCommand('…', async () => {` inside `activateCore` looks like a method. Check
+  any outlier against the language server's symbol span (Serena `find_symbol`). The figures for
+  `ConfigureServer` and `activateCore` below come from that check.
+- **`??` and `?:` inflate the proxy for defaulting code.** `HandleConnectionAsync` scores 33, and
+  about 8 of those points are `?? default` reads of optional JSON fields. Read the method before you
+  rank it.
+- **The history heuristic over-counts.** "Bindings previously discovered for this file" is a
+  description, not history. Treat the history column as an upper bound for triage. The issue-reference
+  count is exact.
 
 ---
 
-## 2. Overall shape: this is not a systemically complex codebase
+## 2. Overall shape
 
-Worth stating before the findings, so they are not over-corrected:
+| Area | Files | Lines | Methods | CX > 20 | CX ≥ 15 | Methods ≥ 100 LOC | Files ≥ 500 lines |
+|---|---|---|---|---|---|---|---|
+| `src/LSP` | 386 | 36,815 | 1,420 | 1 | 5 | 12 | 8 |
+| `src/Core` | 107 | 7,392 | 338 | 0 | 2 | 0 | 0 |
+| `src/VisualStudio` | 227 | 25,750 | 995 | 0 | 3 | 4 | 5 |
+| `src/VSCode/src` | 50 | 6,854 | 309 | 0 | 1 | 1 | 1 |
+| `src/Rider/src/main` | 88 | 9,047 | 453 | 0 | 5 | 1 | 2 |
+| **Total** | **858** | **85,858** | **3,515** | **1** | **16** | **18** | **16** |
 
-| Constructor dependencies | Classes |
+**One method in the whole product exceeds CX 20, and no file reaches 1,000 lines.** The largest file
+is `VsUtils.cs` at 938 lines. Method-level complexity is no longer the problem.
+
+The difficulty for a new contributor now comes from **breadth**: one feature is spread across many
+files, in three languages, and comments explain code by pointing at issue numbers (§5, §7).
+
+---
+
+## 3. Status of the previous findings
+
+| Previous finding | Where it is now |
 |---|---|
-| 13 | 2 |
-| 12 | 1 |
-| 10 | 3 |
-| 9 | 2 |
-| 8 | 5 |
-| 7 | 8 |
-| 6 | 10 |
-| 5 | 16 |
-| **< 5** | **143** |
-
-**143 of ~190 classes have fewer than 5 dependencies**, and only 6 methods in the entire repository
-exceed CX 20. The codebase has a small number of sharp hot spots, not pervasive complexity. The
-recommendations below are targeted, and deliberately short.
+| `StepDefinitionFileBuilder` hand-rolled C# lexer (CX 32) | Replaced with Roslyn. `MaskLiteralsAndComments` is gone and `AppendToFile` is CX 6 / 37 LOC |
+| `LspInterceptingPipe` god class (1,042 lines) | 418 lines. The frame codec (`LspFrameCodec`), correlation (`LspRequestCorrelator`), routing (`VsSessionRouter`) and pumps (`VsToServerPump`, `ServerToVsPump`) are separate types |
+| `CodeActionHandler.Handle` (179 LOC, CX 20) | 28 LOC, CX 3. `StepDefinitionTargetResolver` and the action builders took the work, and the class now has 11 constructor dependencies (§6) |
+| `RenameHandler.HandlePrepareRenameAsync` (143 LOC, CX 17) | 49 LOC, CX 9 |
+| `RunTestOutcomeBridge.TryGetOutcomeAsync` (CX 30) | 21 LOC, CX 5. The reflection work moved into `GetOrCreateProxyAsync` (CX 20, see §4) |
+| `FeatureStepTextBuilder.TryBuildViaRegex` (CX 27) | 20 LOC, CX 7 |
+| `BindingRegistryChangedHandler.RediscoverCsFilesAsync` (103 LOC, CX 16) | 35 LOC, CX 4. File selection moved to `CsFileReconciliationSelector.Collect` (CX 13) |
+| `SemanticTokensService.Encode` (134 LOC) | Split into `CollectOrderedEntries`, `ResolveOverlaps` and `DeltaEncode` |
 
 ---
 
-## 3. Tier 1 — Redesign candidates
+## 4. Method-level hot spots now
 
-These three are structural. Decomposition alone would move the complexity around rather than
-remove it.
+Short list. Only the first row is a clear decomposition candidate. The rest are listed so a reviewer
+knows they were looked at.
 
-### 3.1 `StepDefinitionFileBuilder` hand-rolls a C# lexer that Roslyn already provides ([#586](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/586))
+| Method | LOC | CX | Assessment |
+|---|---|---|---|
+| `TestOutcomeTcpListener.HandleConnectionAsync` (`LSP.Server/Features/TestOutcomes/TestOutcomeTcpListener.cs:212`) | 148 | 33 | **The only method above CX 20.** One method handles the whole NDJSON connection lifecycle: it parses the hello line and infers the reporter kind, dispatches `runStart`/`result`/`runComplete` messages, keeps per-run counters, sends telemetry, and finalizes aborted runs in `finally`. It carries ten mutable locals across those stages. The seam is a per-connection state object with `OnHello` / `OnMessage` / `OnClosed` methods, which leaves the listener with accept-and-dispatch only. About 8 points of the CX are `??` defaults, so the real branching is closer to 25. It still ranks first |
+| `RunTestRunner.run` / `runDotnetTest` / `detectDotnetTestMode` (Rider `testrunner/RunTestRunner.kt:69, :416, :587`) | 91 / 120 / 49 | 20 / 16 / 16 | Three of the five branchiest Kotlin methods are in this one 756-line file, the largest in the plugin. It also has the most history narrative of any file (§7). Branching comes from the test-runner mode (VSTest logger or MTP reporter) and from failure handling. A mode-strategy split would follow the existing `detectDotnetTestMode` result |
+| `RunTestOutcomeBridge.GetOrCreateProxyAsync` (VSSDK `RunTestCodeLens/RunTestOutcomeBridge.cs:138`) | 79 | 20 | **Mostly essential.** It is reflection interop against `internal` VS test-window types, and its contract is "never throws", so every reflection step needs a defensive check. Leave it as is |
+| `TestOutcomePersistence.ReadFile` (`LSP.Core/TestOutcomes/TestOutcomePersistence.cs:183`) | 49 | 19 | Reads the persisted outcome file: a format-version check, then validation of each entry before it is accepted. Dense but local |
+| `StepExpressionParameters.SlotLengthAt` (`LSP.Core/Rename/StepExpressionParameters.cs:37`) | 31 | 18 | Cucumber-expression slot scanning, with 18 decision points in 31 lines. It is short enough to read, and it needs good tests rather than a split |
+| `GenericOutProcReqnrollConnector.GetConnectorPath` (`LSP.Server/Discovery/Connector/AssemblyReflection/GenericOutProcReqnrollConnector.cs:49`) | 49 | 18 | Picks the connector for a target framework moniker. It is a lookup table written as conditionals |
 
-**`src/LSP/Reqnroll.IdeSupport.LSP.Core/Scaffolding/StepDefinitionFileBuilder.cs:139`**
-`MaskLiteralsAndComments` — **CX=32, the highest genuine complexity in the repository.**
+**Long, low-branch methods.** These are worth knowing about but are not complexity problems:
+`RenameHandler.HandleRenameAsync` (176 LOC, CX 12), `RenameStepCommand.ExecuteCommandAsync` (VS,
+153 / 14), `ConnectorBindingRegistryProvider.RunDiscoveryAsync` (158 / 8),
+`LspServerConnectionService.StartAsync` (VS, 158 / 9).
 
-The method is a hand-written lexer that walks the source character by character to mask out `//`
-comments, `/* */` blocks, verbatim strings (`@"…"` with `""` escapes), regular strings, and char
-literals — so that `FindMatchingCloseBrace` (`:224`) can locate a class's closing brace, and
-`DetectMemberIndent` (`:240`) can infer indentation, in order to append generated step-definition
-methods to an existing file.
+**VS Code `activateCore`** (`src/VSCode/src/extension.ts:182`) is 363 lines with CX 26. The CX is
+spread over 12 inline `registerCommand` handlers and the client setup around them. Handlers that grow past a few lines should move
+to `src/VSCode/src/commands/`, which already holds `renameStep.ts`, `stepCodeLens.ts` and
+`hookCodeLens.ts`.
 
-**None of this needs to exist.** `LSP.Core` already takes a direct dependency on Roslyn:
+---
 
-```xml
-<!-- src/LSP/Reqnroll.IdeSupport.LSP.Core/Reqnroll.IdeSupport.LSP.Core.csproj:23 -->
-<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+## 5. Breadth: one feature, many files
+
+File count by path name across all five areas. This undercounts, because helpers whose path does not
+contain the keyword are missed.
+
+| Path contains | Files | Lines | Server (`src/LSP`) | VS | VS Code | Rider | `src/Core` |
+|---|---|---|---|---|---|---|---|
+| `telemetry` | 76 | 6,063 | 1,445 | 1,105 | 1,016 | 1,103 | 1,394 |
+| `codelens` | 49 | 5,767 | 997 | **4,197** | 488 | 85 | — |
+| `definition` | 49 | 4,809 | 3,074 | 1,365 | 143 | 227 | — |
+| `rename` | 29 | 4,582 | 3,328 | 466 | 358 | 430 | — |
+| `testoutcome` | 32 | 4,373 | 1,768 | 731 | 1,574 | — | 300 |
+| `hook` | 38 | 3,134 | 1,055 | 1,470 | 172 | 378 | 59 |
+
+What this means for a contributor:
+
+- **Rename** is the deepest server feature. `Features/Rename` holds 14 files and 2,524 lines, and
+  `LSP.Core/Rename` adds 6 files and 804 lines. Each client then adds its own two-step "pick a target,
+  then apply" flow. `RenameHandler.cs`, at 770 lines and 13 dependencies, is the largest server file.
+  [features/rename.md](../features/rename.md) is the map across server and clients. Read it before
+  changing any one piece.
+- **CodeLens is mostly Visual Studio code.** 4,197 of 5,767 lines are VS-side. VS renders `.feature`
+  lenses through the classic `Language.CodeLens` data-point API (`VSSDKIntegration/*CodeLens/`)
+  rather than the LSP lens, so each lens kind (step, hook, run-test) has a provider, data point,
+  tagger, callback listener and result cache. That is a structural cost of the VS API, not
+  accidental duplication. [features/hooks-and-lenses.md](../features/hooks-and-lenses.md) describes
+  the shape.
+- **Telemetry** touches every area because each client has its own transmitter
+  (`TelemetryTransmitter.cs`, `RiderTelemetryTransmitter.kt`, `telemetry.ts`) over the shared event
+  catalogue in `src/Core`.
+
+The largest files per area: `VsUtils.cs` (938), `LspServerConnectionService.cs` (817),
+`RenameHandler.cs` (770), `VsProjectEventMonitor.cs` (767), `RunTestRunner.kt` (756),
+`StepDefinitionFileParser.cs` (715), `ReqnrollRequestSender.kt` (648), `Program.cs` (631),
+`extension.ts` (559).
+
+---
+
+## 6. Coupling
+
+Constructor dependencies, records and data classes excluded:
+
+| Deps | C# classes | Kotlin | TypeScript |
+|---|---|---|---|
+| ≥ 10 | 6 | 0 | 0 |
+| 7–9 | 24 | 0 | 0 |
+| 5–6 | 39 | 3 | 1 |
+| **< 5** | **268** | **21** | **11** |
+
+80% of C# classes take fewer than 5 dependencies. The Kotlin plugin takes its collaborators from
+`getInstance(project)` / `service<…>()` lookups (54 sites in 33 files) rather than constructors, so
+its column understates coupling.
+
+| Class | Deps | Note |
+|---|---|---|
+| `RenameHandler` | 13 | Unchanged. Rename breadth (§5) |
+| `BindingRegistryChangedHandler` | 13 | Unchanged after the three-event split. One class still implements `INotificationHandler` for all three notifications |
+| `ReqnrollLanguageClient` (VS) | 12 | The VS composition root for the language client |
+| `CodeActionHandler` | 11 | Up from 8. Decomposing `Handle` moved work into injected collaborators. That is the expected trade: smaller methods for a wider constructor |
+| `CompletionHandler` | 11 | |
+| `TextDocumentSyncHandler` | 10 | |
+
+The next tier (7–9) includes several positional value types that are not records
+(`StepUsageLocation`, `VsWizardContext`, `ProjectStepDefinitionBinding`, `StepBindingMatch`, the
+Gherkin AST nodes). Ignore those. As before, coupling is a lagging indicator, and no standalone
+action is proposed.
+
+---
+
+## 7. Comment hygiene: issue numbers and history in code
+
+[docs/README.md](../README.md) bans issue numbers and history narrative from documentation. The code
+comments do not follow that rule yet:
+
+| Area | Issue refs in comments | Files with ≥ 1 ref | History-phrase hits (upper bound) |
+|---|---|---|---|
+| `src/LSP` | 516 | 179 of 386 | 132 |
+| `src/VisualStudio` | 440 | 125 of 227 | 82 |
+| `src/Rider/src/main` | 215 | 76 of 88 | 47 |
+| `src/VSCode/src` | 167 | 40 of 50 | 16 |
+| `src/Core` | 78 | 26 of 107 | 20 |
+| **Total** | **1,416** | **446 of 858** | **297** |
+
+Rider and VS Code are the densest: 86% and 80% of their files cite an issue. 31 files carry ten or
+more references each.
+
+The typical patterns:
+
+- **The issue number stands in for the reason**, for example "reported (issue #621) and rethrown" or
+  "Renamed from the bare `Error` (issue #627)". The comment is only useful if the reader leaves the
+  repository.
+- **Fix-option shorthand**, for example "issue #722 suggested fix (c), made explicit". This means
+  nothing without the issue thread.
+- **"Used to" / "originally" / "previously registered as"**: history that git already keeps.
+
+Files with the most references, which are the best places to start:
+
+| File | Issue refs | History hits |
+|---|---|---|
+| `src/VSCode/src/extension.ts` | 33 | 0 |
+| `src/Core/…/Telemetry/TelemetryEvents.cs` | 31 | 3 |
+| `VisualStudio.Extension/LspInterception/LspInterceptingPipe.cs` | 25 | 1 |
+| `src/Rider/…/testrunner/RunTestRunner.kt` | 23 | 13 |
+| `LSP.Server/Features/Rename/RenameHandler.cs` | 22 | 6 |
+| `VisualStudio.Extension/LspInterception/LspServerConnectionService.cs` | 21 | 5 |
+| `src/Rider/…/lsp/ReqnrollRequestSender.kt` | 21 | 1 |
+| `VisualStudio.Extension/ReqnrollPluginPackage.cs` | 19 | 5 |
+| `LSP.Server/Discovery/Connector/ConnectorDiscoveryService.cs` | 17 | 5 |
+| `LSP.Server/Hosting/Program.cs` | 16 | 6 |
+
+**Recommendation:** apply the documentation content rules to comments. State the reason in the
+comment, keep a short *pitfall* where it prevents a repeat mistake, link an issue only while it is
+open, and leave the rest to `git blame`. This is mechanical, low-risk work that can be done file by
+file. It is the largest single readability gain available before the Beta. A rule that blocks new
+`#NNN` references in comments (an analyzer, or a CI `rg` check) would stop the count from growing
+back.
+
+---
+
+## 8. Per-IDE gating in the server
+
+The server is in good shape here. IDE identity is resolved once, and features read capability flags
+rather than asking "is this Visual Studio?".
+
+```mermaid
+flowchart LR
+    A["--ide argument<br/>or clientInfo.name"] --> B["ClientIdeContext<br/>(MapClientInfoNameToIde)"]
+    B --> C["IdeBehavioursResolver<br/>the only IDE-identity switch"]
+    C --> D["IdeBehaviours<br/>9 capability flags"]
+    D --> E["20 read sites<br/>in 11 server files"]
 ```
 
-Six other files in the same assembly already use it, including `Parsing/CSharp/StepDefinitionFileParser.cs`
-and `Parsing/CSharp/CSharpSyntaxTreeCache.cs` — the latter of which *caches parsed syntax trees*.
-Roslyn yields `ClassDeclarationSyntax.CloseBraceToken.SpanStart` directly, correct by construction
-for every literal form the hand-rolled masker enumerates by hand, plus raw string literals and
-interpolated strings it does not handle at all.
+**IDE identity is compared in only three places:** `ClientIdeContext.MapClientInfoNameToIde`
+(normalizes the client name), `IdeBehavioursResolver` (the single switch that builds the flags), and
+`IdeLogPrefix` (log-file prefix only). No `IsVisualStudio` / `IsRider` / `IsVsCode` checks remain in
+`src/LSP` or `src/Core`.
 
-**This is a deletion, not a refactoring** — roughly 150 lines of lexer replaced by a syntax-tree
-query, in an assembly that already has the parser loaded and cached.
-
-**It also has a downstream cost.** `AppendToFile` returns `null` when the brace structure is
-ambiguous, which silently degrades the "Define missing step" code action: the user gets only the
-"create new file" option rather than "append to the existing file." `CodeActionHandler` carries a
-whole `successfulAppends` pre-flight loop specifically to tolerate this failure (§3.3). Fixing this
-removes both the complexity and the failure mode it forced on its caller.
-
-**Highest value-to-effort ratio in this document.**
-
-### 3.2 `LspInterceptingPipe` is a god class assembled by incident ([#587](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/587))
-
-**`src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/LspInterception/LspInterceptingPipe.cs`**
-— **1042 lines, 35 methods, 9 fields.** The largest artifact in the repository.
-
-Its own section headers enumerate the responsibilities:
-
-| Line | Responsibility |
+| `IdeBehaviours` flag | Read sites (production code) |
 |---|---|
-| 69 | Owned request/response correlation |
-| 77 | Peer-session response routing (issue #395) |
-| 105 | Session termination (issue #555) |
-| 323 | Pump loops (bidirectional) |
-| 518 | LSP frame reader (wire protocol) |
-| 672 | Frame writer |
-| 710 | Interceptor pipeline |
-| 736 | Notification injection (VS → Server) |
-| 803 | Request injection and response correlation (VS → Server → back) |
-| 1000 | `IDisposable` |
+| `SupportsCodeLensResolve` | 10: `HookMatchCountCodeLensHandler` (5), `StepCodeLensHandler` (3), `Program`, `ClientIdeContext` |
+| `RequiresPushedSemanticTokens` | 2: `Program`, `SemanticTokensPushHandler` |
+| `AppliesRenameResponseEditNatively` | 2: `RenameHandler`, `RenamePostApplyCoordinator` |
+| `RejectsEmptyTriggerCompletion` | 1: `CompletionHandler` |
+| `RequestsCompletionAfterDeletion` | 1: `CompletionHandler` |
+| `UsesCustomCodeLensRefresh` | 1: `CodeLensRefreshRequester` |
+| `HonorsShowDocumentRequests` | 1: `DefineStepsTriggeredHandler` |
+| `NavigatesStepsViaFindStepDefinitions` | 1: `DefinitionHandler` |
+| `RunsVscodeOpenCommandLocally` | **0.** It is set for VS Code and asserted in tests, but no production code reads it |
 
-That is eight or nine distinct concerns in one type. **Three of the sections are named after
-incident numbers** (#395, #555) — the complexity accreted through bug fixes, each one bolting
-another responsibility onto the same class rather than finding it a home. `ReceivePumpAsync`
-(`:336`, LOC=91, CX=14) and `ShutdownServerAsync` in the sibling
-`LspServerConnectionService` (`:548`, LOC=80, CX=14) are the visible symptoms.
+Findings:
 
-Natural seams, in rough order of safety:
-
-1. **Frame codec** — the reader (`:518`) and writer (`:672`) are pure wire-protocol
-   serialization with no session state. Extractable with essentially no risk and independently
-   testable against captured frames.
-2. **Correlation/routing** — owned-request correlation (`:69`), peer-session routing (`:77`), and
-   request injection (`:803`) are one coherent concern: mapping responses back to whoever asked.
-   This is where #395 actually lived.
-3. **Pump loops** reduce to a thin orchestrator over the two above.
-
-This is the biggest payoff on the list and also the riskiest change: it sits on the live VS↔server
-data path, and its accumulated behaviour encodes at least two production incidents. It needs its
-own design pass and should not be attempted opportunistically. It is also **VS-only**, so it does
-not block any LSP server work.
-
-### 3.3 `CodeActionHandler.Handle` does six jobs in one method ([#588](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/588))
-
-**`src/LSP/Reqnroll.IdeSupport.LSP.Server/Features/CodeActions/CodeActionHandler.cs:85`**
-— **LOC=179, CX=20, 8 constructor dependencies.**
-
-In sequence, the method:
-
-1. guards (feature-file check, match-set lookup, cursor-actually-on-an-undefined-step);
-2. resolves snippet style from project configuration;
-3. derives target-file metadata — class name, default namespace, project folder, and a
-   collision-avoiding `Name2.cs`/`Name3.cs` suffix loop;
-4. ranks existing binding files as append candidates;
-5. builds the actions;
-6. assembles, caps at `MaxTargetedActions`, and emits telemetry.
-
-The obstacle to splitting it is step 5: a **40-line nested local function `BuildTargetedActions`**
-that performs file I/O (`ReadAllText`, `AppendToFile`) and closes over eight outer locals —
-`snippets`, `appendCandidates`, `className`, `@namespace`, `csharpConfig`, `indent`, `newLine`,
-`targetPath`. That capture set is precisely why it has never been extracted: pulling it out
-requires a parameter object or a dedicated collaborator to carry the context.
-
-Suggested shape: a `StepDefinitionTargetResolver` owning steps 2–4 (producing one context object),
-and a `DefineStepsActionBuilder` owning step 5, leaving `Handle` as guards + orchestration +
-telemetry. §3.1 should land first — it removes the `successfulAppends` failure-tolerance loop that
-makes step 5 as convoluted as it is.
+- `RunsVscodeOpenCommandLocally` is dead in production. Either wire it to the code action that emits
+  `vscode.open` (its doc comment describes that guard), or remove it together with its row in
+  [server-protocol.md](server-protocol.md).
+- `SupportsCodeLensResolve` is read five times inside one handler. A single "resolve now or defer"
+  helper on the handler would make the VS/non-VS lens difference visible in one place.
 
 ---
 
-## 4. Tier 2 — Decomposition candidates
+## 9. Explicitly not flagged
 
-Long and/or branchy, but structurally sound. These want splitting, not redesign.
-
-| Method | LOC | CX | Notes |
-|---|---|---|---|
-| [#589](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/589) `RenameHandler.HandlePrepareRenameAsync` (`Features/Rename/RenameHandler.cs:104`) | 143 | 17 | Two entirely separate flows — `.cs` cursor path and `.feature` cursor path — in one method, with ~12 early returns. Already refactored once (issue #139 / PR #140, 1063 → 477 lines) and still the second-worst method in the server. The two branches share nothing after the common validation prologue, so this is an unusually clean split. |
-| [#590](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/590) `RunTestOutcomeBridge.TryGetOutcomeAsync` (VSSDK, `RunTestCodeLens/RunTestOutcomeBridge.cs:74`) | 132 | 30 | Second-highest CX in the repo. **Much of this is essential** — it is reflection-based interop against `internal` VS test-window APIs with no compatibility guarantee, and its documented contract is "never throws," so a defensive check at every reflection step is the point, not an accident. Recommend splitting into acquire-proxy / invoke / map-result stages for testability rather than trying to reduce the branch count. |
-| [#591](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/591) `FeatureStepTextBuilder.TryBuildViaRegex` (`Rename/FeatureStepTextBuilder.cs:66`) | 70 | 27 | One of three fallback strategies for reconstructing feature step text after a rename (the caller chains `?? TryBuildViaOutlinePlaceholders ?? newExpression`). Dense capture-group/slot-injection logic. The sibling `DeriveExpressionFromEditedText` (`:264`, LOC=64, CX=12) is the same shape. |
-| [#592](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/592) `BindingRegistryChangedHandler.RediscoverCsFilesAsync` (`Pipeline/BindingRegistryChangedHandler.cs:390`) | 103 | 16 | Post-connector-run reconciliation: collects open buffers plus closed files newer than the output assembly, then Roslyn-parses each. Already within the blast radius of #577. |
-| [#593](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/593) `SemanticTokensService.Encode` (`Features/SemanticTokens/SemanticTokensService.cs:132`) | 134 | 13 | Long but mechanical — flattens a tag tree into the LSP 5-int delta encoding. Lowest priority in this tier. |
-
----
-
-## 5. Tier 3 — Coupling
-
-| Class | Ctor deps |
-|---|---|
-| `RenameHandler` | 13 |
-| `BindingRegistryChangedHandler` | 13 |
-| `ReqnrollLanguageClient` (VS) | 12 |
-| `TextDocumentSyncHandler` | 10 |
-| `CompletionHandler` | 10 |
-| `LineKeyedCodeLensTagger` (VSSDK) | 10 |
-
-Thirteen dependencies is approximately thirteen reasons to change.
-
-**No separate action is proposed for `BindingRegistryChangedHandler`.** Its dependency count is a
-symptom of the notification-contract problem already tracked in #577 — splitting
-`BindingRegistryChangedNotification` into three named events should let the handler split with it.
-Attacking the coupling directly, ahead of that, would fight the same problem twice.
-
-The other rows are recorded as context for reviewers, not as standalone work items. Coupling here
-is a lagging indicator: it drops when §3.3 and §4's decompositions land.
-
----
-
-## 6. Explicitly not flagged
-
-Recorded because a length-only metric would have fingered them, and because "we looked and decided
-no" is more useful to a future reader than silence.
+A length-only metric would flag these. They are recorded because "we looked and decided no" is more
+useful to a future reader than silence.
 
 | Item | Measurement | Why it is fine |
 |---|---|---|
-| `Program.ConfigureServer` (`Hosting/Program.cs:167`) | LOC=187, **CX=2** | A declarative registration manifest, essentially branchless. Splitting would scatter the server wiring across files for no comprehension gain. |
-| `LanguageServerOptionsExtensions.InitializeCustomProtocolRouting` (`:79`) | LOC=193, **CX=6** | Same — a routing table written as code. |
-| `ReqnrollPackageDetector.GetReqnrollPackage` / `SpecFlowPackageDetector.GetSpecFlowPackage` | LOC=54, CX=16 | Package detection has irreducible case analysis. Both are small, stable, and tested. |
-| `StepDefinitionFileParser.AttributeStringInfo` | LOC=94, **CX=1** | A data carrier, not logic. |
+| `Program.ConfigureServer` (`Hosting/Program.cs:217`) | 360 lines, **CX 3** | A declarative registration manifest. Its 12 `Apply…Capability` local functions each set one capability on the initialize response. It has grown, so new capabilities should keep using the local-function pattern rather than inline blocks |
+| `LanguageServerOptionsExtensions.InitializeCustomProtocolRouting` (`:85`) | 241 lines, **CX 6** | A routing table written as code |
+| `ReqnrollPackageDetector.GetReqnrollPackage` / `SpecFlowPackageDetector.GetSpecFlowPackage` | 49 LOC, CX 16 | Package detection has irreducible case analysis. Both are small, stable and tested |
+| `RunTestOutcomeBridge.GetOrCreateProxyAsync` | 79 LOC, CX 20 | Essential defensive reflection (§4) |
+| `StepDefinitionFileParser.AttributeStringInfo` | record | A data carrier, not logic |
 
-The first two are the clearest demonstration that **length without branching is not complexity** —
-both are longer than every method in Tier 1 and neither is a problem.
+The first two remain the clearest demonstration that **length without branching is not complexity**.
 
 ---
 
-## 7. Sequencing and tracked issues
+## 10. Candidate work (not yet tracked)
 
-Recommended order:
+None of these has been filed as an issue. In rough order of value for Beta readability:
 
-1. **§3.1 first.** Highest measured complexity, deletes code rather than moving it, removes a
-   latent correctness gap (unhandled raw/interpolated string literals), and de-risks §3.3.
-2. **§3.3 next**, once appends stop failing.
-3. **§4 items** are independent of each other and of the above — good background work.
-4. **§3.2 last**, or on its own schedule. Biggest payoff, highest risk, needs a design pass, and is
-   VS-only so it blocks nothing.
-
-Tier 1 and Tier 2 action items are tracked as individual issues:
-
-| Issue | Tier | Item |
-|---|---|---|
-| [#586](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/586) | 1 | Replace the hand-rolled C# lexer with Roslyn — **do first** |
-| [#588](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/588) | 1 | Decompose `CodeActionHandler.Handle` — after #586 |
-| [#587](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/587) | 1 | Decompose `LspInterceptingPipe` — own schedule, VS-only |
-| [#589](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/589) | 2 | Split `HandlePrepareRenameAsync` |
-| [#590](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/590) | 2 | Stage `RunTestOutcomeBridge.TryGetOutcomeAsync` |
-| [#591](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/591) | 2 | Simplify rename step-text reconstruction |
-| [#592](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/592) | 2 | Decompose `RediscoverCsFilesAsync` — coupled to #577 |
-| [#593](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/593) | 2 | Split `SemanticTokensService.Encode` — lowest priority |
-
-Tier 3 is intentionally untracked — see §5.
+1. **Comment hygiene pass** (§7), file by file starting with the table above, plus a check that
+   rejects new `#NNN` references in comments.
+2. **Split `TestOutcomeTcpListener.HandleConnectionAsync`** into a per-connection state object (§4).
+3. **Resolve `RunsVscodeOpenCommandLocally`**: wire it or delete it (§8).
+4. **Rider `RunTestRunner.kt`**: separate the runner modes (§4), together with its comment cleanup.
