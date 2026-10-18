@@ -255,6 +255,83 @@ public class StepRenameValidatorTests
         result.Should().BeNull();
     }
 
+    // ── Rule 4, parameter slots are syntax-aware (issue #960) ───────────────────
+
+    [Fact]
+    public void ValidateNewName_regex_dropping_a_non_capturing_group_passes()
+    {
+        // "(?:red|blue)" is not a parameter slot, so dropping it is not a parameter-count change.
+        StepRenameValidator.ValidateNewName(@"I have (?:red|blue) (.*) cukes", @"I have (.*) cukes")
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_dropping_a_named_capturing_group_still_fails()
+    {
+        var result = StepRenameValidator.ValidateNewName(@"I have (?<n>\d+) cukes", "I have cukes");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_dropping_a_real_capturing_group_still_fails()
+    {
+        var result = StepRenameValidator.ValidateNewName(@"I have (.*) cukes", "I have cukes");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+    }
+
+    [Fact]
+    public void ValidateNewName_regex_escaped_parens_are_not_parameters()
+    {
+        StepRenameValidator.ValidateNewName(@"I have \(literal\) (.*) cukes", @"I have (.*) cukes")
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_optional_text_dropped_passes()
+    {
+        // In a Cucumber Expression "(s)" is optional text, not a parameter.
+        StepRenameValidator.ValidateNewName("I have cucumber(s)", "I have cucumber").Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_optional_text_kept_passes()
+    {
+        StepRenameValidator.ValidateNewName("I have cucumber(s)", "I have gherkin(s)").Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_optional_text_added_alongside_a_placeholder_passes()
+    {
+        // The parentheses of matched optional text are syntax, not forbidden operators.
+        StepRenameValidator.ValidateNewName("I have {int} cukes", "I have {int} gherkin(s)").Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_unmatched_open_paren_still_fails_alongside_optional_text()
+    {
+        var result = StepRenameValidator.ValidateNewName("I have cucumber(s) {int}", "I have cucumber(s) {int} (");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("The non-parameter parts cannot contain expression operators");
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_empty_placeholder_does_not_block_rename()
+    {
+        // "{}" is a valid untyped Cucumber placeholder; it used to count as no slot and its
+        // braces were flagged as forbidden operators, rejecting every rename.
+        StepRenameValidator.ValidateNewName("I have {} cukes", "I have {} apples").Should().BeNull();
+    }
+
+    [Fact]
+    public void ValidateNewName_cucumber_dropping_a_real_parameter_still_fails()
+    {
+        var result = StepRenameValidator.ValidateNewName("I have {int} cukes", "I have cukes");
+        result.Should().NotBeNull();
+        result.Message.Should().Be("Parameter count mismatch");
+    }
+
     // ── ValidateProjectState ────────────────────────────────────────────────────
 
     [Fact]
