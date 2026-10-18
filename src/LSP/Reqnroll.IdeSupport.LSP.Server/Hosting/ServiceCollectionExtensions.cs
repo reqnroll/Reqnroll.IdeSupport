@@ -67,10 +67,11 @@ public static class ServiceCollectionExtensions
     /// Registers core infrastructure and cross-cutting services.
     /// </summary>
     public static IServiceCollection AddReqnrollLspCoreServices(this IServiceCollection services, string? clientIde,
-        TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off)
+        TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off,
+        string? clientSessionId = null)
     {
         return services
-            .AddSingleton(new ClientIdeContext(clientIde, logLevel))
+            .AddSingleton(new ClientIdeContext(clientIde, logLevel, clientSessionId))
             .AddSingleton<IIdeSupportLogger, LspIdeSupportLogger>()
             // Do NOT also register ILoggerFactory/ILogger<> here: Program.ConfigureServer's
             // options.ConfigureLogging(...) already establishes the real Microsoft.Extensions.Logging

@@ -57,7 +57,9 @@ import {
   executeForeignCommand,
   registerGuardedCommand,
   reportClientException,
+  setExtensionRoot,
 } from './clientExceptionTelemetry';
+import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_ARGUMENT } from './clientSession';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
@@ -154,6 +156,7 @@ export interface ReqnrollExtensionApi {
  * registers all Reqnroll commands.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
+  setExtensionRoot(context.extensionPath);
   // Client-side exception telemetry (issue #621): the reporter must exist before anything below can
   // throw, and an exception escaping activation is reported (then rethrown unchanged).
   try {
@@ -399,6 +402,8 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     args: [
       '--ide',
       'vscode',
+      CLIENT_SESSION_ID_ARGUMENT,
+      CLIENT_SESSION_ID,
       '--log-level',
       traceServerToLogLevel(),
       '--protocol-log-level',

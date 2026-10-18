@@ -107,6 +107,18 @@ class RiderTelemetryTransmitterTest {
         assertEquals("2024.3.5", props["IdeVersion"])
         assertEquals("1.2.3", props["ExtensionVersion"])
         assertEquals("x", props["Operation"])
+        assertEquals(ClientSession.id, props["ClientSessionId"])
+    }
+
+    @Test
+    fun `stampClientIdentity keeps a server-stamped ClientSessionId and the id is a stable GUID`() {
+        val props = linkedMapOf("ClientSessionId" to "from-server")
+
+        RiderTelemetryTransmitter.stampClientIdentity(props, "2024.3.5", "1.2.3")
+
+        assertEquals("from-server", props["ClientSessionId"])
+        assertEquals(ClientSession.id, ClientSession.id)
+        assertTrue(Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matches(ClientSession.id))
     }
 
     @Test

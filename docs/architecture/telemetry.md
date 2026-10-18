@@ -17,7 +17,7 @@ flowchart LR
         ERR["LspErrorTelemetryService<br/>(redacts paths)"]
         USE["IFeatureUsageCounters<br/>+ FeatureUsageFlushService"]
         PERF["IOperationDurationRecorder<br/>PerfSample"]
-        ID["IdentityStampingLspTelemetryService<br/>(IdeClient, ServerVersion, SessionId)"]
+        ID["IdentityStampingLspTelemetryService<br/>(IdeClient, ServerVersion, SessionId, ClientSessionId)"]
     end
     subgraph Client["IDE host"]
         INT["telemetry/event interceptor"]
@@ -65,7 +65,7 @@ sequenceDiagram
 | **Client-originated event** | An event that occurs before or independently of the server (install, upgrade, wizard) and is fired by the host. |
 | **Feature usage** | In-memory request counts flushed periodically as one `FeatureUsageSummary`, for passive features. |
 | **`PerfSample`** | A sampled duration event produced by the operation recorder. |
-| **Stamping** | Adding `IdeClient`, `ServerVersion`, `SessionId` (server) and `Ide`, `IdeVersion`, `ExtensionVersion` (host). |
+| **Stamping** | Adding `IdeClient`, `ServerVersion`, `SessionId`, `ClientSessionId` (server) and `Ide`, `IdeVersion`, `ExtensionVersion`, `ClientSessionId` (host). |
 
 ## 5. Key classes
 
@@ -86,8 +86,10 @@ sequenceDiagram
   in a release build, the development one in every other build, chosen at build time through `REQNROLL_TELEMETRY_ENV`.
 - **The Visual Studio host uses the standard `Microsoft.ApplicationInsights` SDK.** Rider POSTs directly to the
   ingestion REST endpoint through the JDK's `HttpClient`, since the Java SDK was not justified for one event type.
-- **Stamping is split:** the server stamps `IdeClient`, `ServerVersion` and `SessionId` on everything it emits; each host
-  stamps `Ide`, `IdeVersion` and `ExtensionVersion` on everything it transmits.
+- **Stamping is split:** the server stamps `IdeClient`, `ServerVersion`, `SessionId` and `ClientSessionId` on everything it emits; each host
+  stamps `Ide`, `IdeVersion`, `ExtensionVersion` and `ClientSessionId` on everything it transmits. `ClientSessionId` is the
+  client's own per-IDE-process GUID, handed to the server as `--client-session-id` (#1199), so a client-originated
+  exception joins to `ServerSessionStarted`.
 - **Usage counting is by catalogue.** A handler that records its operation label gets counted if the label is in
   `FeatureUsageCatalog`; no event code is needed. Completion *acceptance* is not observable through standard LSP, so
   counts are of requests.

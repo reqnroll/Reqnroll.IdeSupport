@@ -33,10 +33,26 @@ public sealed class ClientIdeContext
     private readonly Func<string?, string?, IdeBehaviours> _behaviourResolver;
 
     /// <summary>Initializes a new instance of the <see cref="ClientIdeContext"/> class.</summary>
-    public ClientIdeContext(string? ide, TraceLevel logLevel = TraceLevel.Warning)
+    public ClientIdeContext(string? ide, TraceLevel logLevel = TraceLevel.Warning, string? clientSessionId = null)
         : this(ide, IdeBehavioursResolver.Resolve, logLevel)
     {
+        ClientSessionId = NormalizeClientSessionId(clientSessionId);
     }
+
+    /// <summary>
+    /// The client's own per-IDE-session id from <c>--client-session-id</c> (issue #1199), or
+    /// <see langword="null"/> when the client passed none or passed something that is not a GUID.
+    /// Unlike the server's own <c>SessionId</c> it survives a server restart, and clients stamp it on the
+    /// events they send themselves, so a client exception joins to <c>ServerSessionStarted</c>.
+    /// </summary>
+    public string? ClientSessionId { get; }
+
+    /// <summary>
+    /// Client-controlled text is only trusted as an id when it parses as a GUID; returns the canonical
+    /// <c>D</c> form, or <see langword="null"/> otherwise.
+    /// </summary>
+    public static string? NormalizeClientSessionId(string? value)
+        => Guid.TryParse(value, out var guid) ? guid.ToString("D") : null;
 
     /// <summary>
     /// Test seam: builds a context whose <see cref="Behaviours"/> are forced to

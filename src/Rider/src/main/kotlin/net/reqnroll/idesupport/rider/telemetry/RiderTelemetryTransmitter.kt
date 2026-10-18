@@ -155,36 +155,49 @@ object RiderTelemetryTransmitter {
     fun transmit(eventName: String, properties: Map<String, Any?>) {
         val debugLog = RiderTelemetryDebugLog.fromEnvironment()
         val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
+        val stringProps = stampedProperties(properties)
 
         if (!enabled) {
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
-            debugLog.record("host", eventName, properties, enabled = false, transmitted = false)
+            debugLog.record("host", eventName, stringProps, enabled = false, transmitted = false)
             return
         }
 
         if (breaker.isOpen) {
-            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = "telemetry endpoint unreachable")
+            debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = "telemetry endpoint unreachable")
             return
         }
 
         try {
-            val stringProps = LinkedHashMap<String, String>()
-            properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
-            stampClientIdentity(stringProps, ideVersion(), extensionVersion())
-
             val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
             post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
-                debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = reason)
+                debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = reason)
             }
 
-            debugLog.record("host", eventName, properties, enabled = true, transmitted = true)
+            debugLog.record("host", eventName, stringProps, enabled = true, transmitted = true)
         } catch (ex: Exception) {
             // A telemetry failure must never break the plugin — same posture as VS's
             // TelemetryTransmitter.TransmitEvent catch-all.
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
             breaker.recordFailure(ex.message ?: ex.javaClass.simpleName)
-            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = ex.message)
+            debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = ex.message)
         }
+    }
+
+    /**
+     * The properties as transmitted: stringified with the host identity stamped (issue #844, #1199). The debug-log
+     * mirror records this too, so it shows `IdeClient`/`ClientSessionId` like the envelope does. A failure to read
+     * the IDE or plugin version falls back to the unstamped properties rather than failing the caller.
+     */
+    private fun stampedProperties(properties: Map<String, Any?>): Map<String, String> {
+        val stringProps = LinkedHashMap<String, String>()
+        properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
+        try {
+            stampClientIdentity(stringProps, ideVersion(), extensionVersion())
+        } catch (_: Exception) {
+            // Identity is best-effort; telemetry must never break the plugin.
+        }
+        return stringProps
     }
 
     /**
@@ -289,6 +302,7 @@ object RiderTelemetryTransmitter {
         properties["Ide"] = "JetBrains Rider"
         properties["IdeVersion"] = ideVersion
         properties["ExtensionVersion"] = extensionVersion
+        properties.putIfAbsent(ClientSession.PROPERTY_NAME, ClientSession.id) // issue #1199
     }
 
     private fun userId(): String {

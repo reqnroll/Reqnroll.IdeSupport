@@ -23,7 +23,7 @@ All files are in `queries/`. Each one starts with a header comment that lists it
   the `* command executed` events and `FeatureUsageSummary`.
 - **RID is derived** from `OperatingSystem` and `Architecture`; the client never sends a RID.
 - **Exceptions are events, not rows in the Application Insights `exceptions` table.** Client-side exceptions
-  (`ExceptionOrigin = "Client"`) carry no `SessionId`, so they cannot be attributed to a session; see the error-rates header.
+  (`ExceptionOrigin = "Client"`) carry no `SessionId` but do carry `ClientSessionId` (#1199), which every server event carries too: join on it to attribute a client exception to a session; see the error-rates header.
 - **Verification status.** All four queries were run on 2026-10-15/16 against the dev resource using the *classic*
   table and column names (see below) with Visual Studio and Rider data on Windows. Not yet verified: the `AppEvents`
   (workspace) forms, VS Code, macOS/Linux, and the `ServerStartFailed` / `ServerExitedUnexpectedly` / `ServerRestarted` paths.
