@@ -4,10 +4,8 @@ import com.intellij.formatting.service.AsyncDocumentFormattingService
 import com.intellij.formatting.service.AsyncFormattingRequest
 import com.intellij.formatting.service.FormattingService
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.psi.PsiFile
-import com.intellij.platform.lsp.util.applyTextEdits
 import net.reqnroll.idesupport.rider.actions.ReqnrollNotify
 import net.reqnroll.idesupport.rider.isFeatureExtension
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
@@ -89,12 +87,10 @@ class ReqnrollFormattingService : AsyncDocumentFormattingService() {
     }
 
     private fun applyEdits(original: String, outcome: FormatOutcome.Edits): String {
-        if (outcome.edits.isEmpty()) return original
-        val document = EditorFactory.getInstance().createDocument(original)
-        if (!applyTextEdits(document, outcome.edits)) {
+        // Pure string splice: this runs on a coroutine worker, where the platform Document helper asserts the EDT (#1200).
+        return TextEditApplier.apply(original, outcome.edits) ?: run {
             ReqnrollDebugLogger.warn("Reformat Code: the server's edits could not be applied; leaving the text unchanged")
-            return original
+            original
         }
-        return document.text
     }
 }
