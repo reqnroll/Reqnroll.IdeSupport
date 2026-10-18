@@ -42,12 +42,19 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         hash);
 
     private void GivenDiscoveryReturns(ProjectBindingRegistry registry, string hash)
+        => GivenDiscoveryReturns(ConnectorDiscoveryOutcome.Discovered(registry, hash));
+
+    /// <summary>The assembly is unchanged: discovery hands back the last-good (here initial) state.</summary>
+    private void GivenDiscoveryIsUnchanged()
+        => GivenDiscoveryReturns(ConnectorDiscoveryOutcome.Unchanged(ProjectBindingRegistry.Invalid, string.Empty));
+
+    private void GivenDiscoveryReturns(ConnectorDiscoveryOutcome outcome)
         => _discovery.RunDiscovery(
                 Arg.Any<IProjectScope>(),
                 Arg.Any<ProjectBindingRegistry>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
-            .Returns((registry, hash));
+            .Returns(outcome);
 
     // ── Initial state ──────────────────────────────────────────────────────────
 
@@ -107,7 +114,7 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
     public async Task TriggerRefresh_does_not_raise_event_when_hash_is_unchanged()
     {
         // Discovery returns the last-good registry with the same (empty) hash → no swap.
-        GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);
+        GivenDiscoveryIsUnchanged();
         var telemetry = Substitute.For<ILspTelemetryService>();
 
         // The hash-noop branch always ends in a telemetry send (see
@@ -128,11 +135,10 @@ public class ConnectorBindingRegistryProviderTests : IDisposable
         raised.Should().BeFalse();
         sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
         _discovery.ReceivedWithAnyArgs().RunDiscovery(default!, default!, default!, default);
-        // Issue #471: the hash-match no-op path is exactly the "no compiled DLL yet" case (see
-        // ConnectorDiscoveryService.RunDiscovery, which returns the unchanged lastHash whenever
-        // OutputAssemblyPath is unset or the file doesn't exist) -- HasSuccessfulConnectorRun must
-        // stay false here so CSharpBindingDiscoveryService keeps relying on didOpen/didChange as
-        // the only source of bindings for an unbuilt project.
+        // Issue #471: a run that swaps nothing in -- this no-op, or the Skipped "no compiled DLL
+        // yet" case (see TriggerRefresh_sends_no_discovery_telemetry_for_a_skipped_outcome) --
+        // must leave HasSuccessfulConnectorRun false so CSharpBindingDiscoveryService keeps relying
+        // on didOpen/didChange as the only source of bindings for an unbuilt project.
         sut.HasSuccessfulConnectorRun.Should().BeFalse();
     }
 
@@ -542,7 +548,7 @@ namespace S
     [Fact]
     public async Task TriggerRefresh_hash_noop_sends_no_ProjectCharacteristics()
     {
-        GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);
+        GivenDiscoveryIsUnchanged();
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sent = new TaskCompletionSource();
         telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
@@ -558,7 +564,7 @@ namespace S
     [Fact]
     public async Task TriggerRefresh_hash_noop_event_carries_the_same_base_keys_and_a_duration()
     {
-        GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);
+        GivenDiscoveryIsUnchanged();
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sent = new TaskCompletionSource();
         telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
@@ -604,7 +610,7 @@ namespace S
     [Fact]
     public async Task TriggerRefresh_emits_hash_noop_telemetry_when_hash_unchanged()
     {
-        GivenDiscoveryReturns(ProjectBindingRegistry.Invalid, string.Empty);
+        GivenDiscoveryIsUnchanged();
         var telemetry = Substitute.For<ILspTelemetryService>();
         var sent = new TaskCompletionSource();
         telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
@@ -619,6 +625,63 @@ namespace S
             Arg.Is<Dictionary<string, object?>>(d =>
                 "Connector".Equals(d["DiscoverySource"]) &&
                 true.Equals(d["HashMatched"])));
+    }
+
+    // Issue #939: a Failed outcome hands back the unchanged last-good hash, exactly like an
+    // Unchanged one; only the status tells them apart.
+    [Fact]
+    public async Task TriggerRefresh_reports_a_failed_outcome_as_a_failure_not_a_hash_noop()
+    {
+        GivenDiscoveryReturns(ConnectorDiscoveryOutcome.Failed(ProjectBindingRegistry.Invalid, string.Empty));
+        _discovery.LastRunTelemetry.Returns(new ConnectorRunTelemetry("2.1", "Generic", 1));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var sent = new TaskCompletionSource();
+        telemetry.When(t => t.SendEvent(Arg.Any<string>(), Arg.Any<Dictionary<string, object?>>()))
+            .Do(_ => sent.TrySetResult());
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        var raised = false;
+        sut.BindingRegistryChanged += (_, _) => raised = true;
+        sut.TriggerRefresh();
+        await Task.WhenAny(sent.Task, Task.Delay(5000));
+
+        telemetry.Received(1).SendEvent(
+            TelemetryEvents.ReqnrollDiscoveryExecuted,
+            Arg.Is<Dictionary<string, object?>>(d =>
+                "Connector".Equals(d["DiscoverySource"]) &&
+                "projectLoad".Equals(d["TriggerContext"]) &&
+                true.Equals(d["IsFailed"]) &&
+                !d.ContainsKey("HashMatched") &&
+                1.Equals(d["ConnectorExitCode"]) &&
+                d["DurationMs"] is long &&
+                d["DurationBucket"] is string));
+        raised.Should().BeFalse();
+        sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
+        sut.HasSuccessfulConnectorRun.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TriggerRefresh_sends_no_discovery_telemetry_for_a_skipped_outcome()
+    {
+        GivenDiscoveryReturns(ConnectorDiscoveryOutcome.Skipped(ProjectBindingRegistry.Invalid, string.Empty));
+        var telemetry = Substitute.For<ILspTelemetryService>();
+        var ran = new TaskCompletionSource();
+        _discovery.When(d => d.RunDiscovery(
+                Arg.Any<IProjectScope>(), Arg.Any<ProjectBindingRegistry>(),
+                Arg.Any<string>(), Arg.Any<CancellationToken>()))
+            .Do(_ => ran.TrySetResult());
+
+        var sut = CreateSutWithTelemetry(telemetry);
+        var raised = false;
+        sut.BindingRegistryChanged += (_, _) => raised = true;
+        sut.TriggerRefresh();
+        await Task.WhenAny(ran.Task, Task.Delay(5000));
+        await Task.Delay(300);
+
+        telemetry.DidNotReceiveWithAnyArgs().SendEvent(default!, default!);
+        raised.Should().BeFalse();
+        sut.Current.Should().BeSameAs(ProjectBindingRegistry.Invalid);
+        sut.HasSuccessfulConnectorRun.Should().BeFalse();
     }
 
     [Fact]

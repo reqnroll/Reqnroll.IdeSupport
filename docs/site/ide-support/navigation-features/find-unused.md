@@ -12,9 +12,9 @@ your cursor on anything first.
 ```{tab-item} Visual Studio
 :sync: vs
 
-**Extensions → Reqnroll → Find Unused Step Definitions**. There's no
-editor context-menu placement or keybinding for this one — it's a
-workspace-wide scan, not tied to a specific line.
+Right-click in a C# editor → **Find Unused Step Definitions in Projects**
+(in the Reqnroll group of the editor context menu). There's no keybinding for
+this one — it's a workspace-wide scan, not tied to a specific line.
 
 ![](find-unused/find-unused-vs.gif)
 ```
@@ -22,8 +22,7 @@ workspace-wide scan, not tied to a specific line.
 ```{tab-item} VS Code
 :sync: vscode
 
-Command Palette → **Reqnroll: Find Unused Step Definitions**. No
-context-menu placement or default keybinding.
+Right-click in a C# file → **Reqnroll: Find Unused Step Definitions in Projects**, or Command Palette → **Reqnroll: Find Unused Step Definitions in Projects**. There's no default keybinding.
 
 ![](find-unused/find-unused-vscode.gif)
 ```
@@ -31,8 +30,9 @@ context-menu placement or default keybinding.
 ```{tab-item} Rider
 :sync: rider
 
-**Tools → Reqnroll → Find Unused Step Definitions**. No editor
-context-menu placement or keybinding.
+Right-click in a C# editor → **Reqnroll: Find Unused Step Definitions in Projects**,
+or use **Reqnroll: Find Unused Step Definitions in Projects** from Find Action
+(Ctrl+Shift+A). No default keybinding.
 
 ![](find-unused/find-unused-rider.gif)
 ```

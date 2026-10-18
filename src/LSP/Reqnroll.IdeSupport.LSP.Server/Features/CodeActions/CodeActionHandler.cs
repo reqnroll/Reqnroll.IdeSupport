@@ -75,7 +75,7 @@ public sealed class CodeActionHandler : ICodeActionHandler
         _telemetryService = telemetryService;
         _recorder        = recorder ?? NullOperationDurationRecorder.Instance;
         _targetResolver  = new StepDefinitionTargetResolver(scopeManager, fileSystem);
-        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache);
+        _actionBuilder   = new DefineStepsActionBuilder(scaffoldService, fileSystem, csharpFileTextCache, logger);
         _parserErrorActionBuilder = new ParserErrorActionBuilder(completionService, errorTelemetryService);
     }
 

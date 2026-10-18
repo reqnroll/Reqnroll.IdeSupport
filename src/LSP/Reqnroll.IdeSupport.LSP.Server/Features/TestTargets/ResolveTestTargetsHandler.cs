@@ -13,7 +13,7 @@ using Reqnroll.IdeSupport.LSP.Server.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Features.TestTargets;
 
 /// <summary>
-/// Handles the custom <c>reqnroll/resolveTestTargets</c> request (design doc §4). Given a range in
+/// Handles the custom <c>reqnroll/resolveTestTargets</c> request (Test-Runner-Integration-Design ("LSP messages")). Given a range in
 /// a <c>.feature</c> file, resolves the generated C# test method(s) that the scenario/Outline/
 /// example row at that range corresponds to, by delegating to <see cref="IScenarioTestTargetResolver"/>.
 /// </summary>

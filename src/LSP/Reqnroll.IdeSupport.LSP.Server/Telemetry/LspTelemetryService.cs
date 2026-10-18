@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using Reqnroll.IdeSupport.Common.Lsp;
+using Reqnroll.IdeSupport.Common.Telemetry;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
