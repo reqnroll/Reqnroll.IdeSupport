@@ -1,6 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execFile } from 'child_process';
+import { logWarn } from '../logging/appNotify';
+import {
+  MsbuildExec,
+  MSBUILD_MAX_BUFFER_MB,
+  execDotnetMsbuild,
+  isMaxBufferOverflowError,
+} from '../util/msbuildProcess';
 
 /**
  * Result of evaluating a .csproj via dotnet msbuild.
@@ -186,33 +192,28 @@ function buildMsbuildArgs(projectFile: string, targetFramework?: string): string
   ];
 }
 
-function runDotnetMsbuild(args: readonly string[], projectFile: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const child = execFile(
-      'dotnet',
-      [...args],
-      {
-        timeout: 30_000,
-        maxBuffer: 1024 * 1024,
-        env: { ...process.env, MSYS_NO_PATHCONV: '1' },
-      },
-      (error, stdout, _stderr) => {
-        if (error) {
-          console.error(
-            `MsbuildEvaluator: dotnet msbuild failed for ${projectFile}: ${error.message}`,
-          );
-          resolve(null);
-          return;
-        }
-        resolve(stdout);
-      },
-    );
-
-    // Suppress error on EPIPE / child process crashes — handled in callback
-    child.on('error', () => {
-      /* handled in callback */
-    });
+export async function runDotnetMsbuild(
+  args: readonly string[],
+  projectFile: string,
+  exec: MsbuildExec = execDotnetMsbuild,
+): Promise<string | null> {
+  const { stdout, error } = await exec(args, {
+    timeoutMs: 30_000,
+    env: { ...process.env, MSYS_NO_PATHCONV: '1' },
   });
+  if (!error) return stdout;
+
+  // A large project's item JSON can exceed the buffer limit: warn loudly (issue #1008) rather
+  // than dropping the evaluation with no log at all.
+  if (isMaxBufferOverflowError(error)) {
+    // The curated "Reqnroll" output channel, not console.warn: that only reaches the Extension Host log.
+    logWarn(
+      `MsbuildEvaluator: msbuild output for ${projectFile} exceeded the ${MSBUILD_MAX_BUFFER_MB} MB buffer limit; evaluation dropped`,
+    );
+  } else {
+    console.error(`MsbuildEvaluator: dotnet msbuild failed for ${projectFile}: ${error.message}`);
+  }
+  return null;
 }
 
 /**

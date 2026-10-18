@@ -4,11 +4,13 @@ import nodeFs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { setAppLogChannel } from '../../logging/appNotify';
 import {
   activateMtpProjectStubs,
   buildStubXml,
   enumerateProjectFiles,
   detectReqnrollUsage,
+  evaluateViaMsBuild,
   projectsForAssetsFile,
   removeStub,
   resolveProjectExtensionsDirectory,
@@ -17,6 +19,7 @@ import {
   syncStubsForWorkspace,
   writeStub,
 } from '../../testOutcomes/mtpProjectStubs';
+import { MAX_BUFFER_OVERFLOW_CODE } from '../../util/msbuildProcess';
 
 /**
  * Records every `fs.readdirSync` call (still delegating to the real one) until `restore` — the
@@ -451,5 +454,32 @@ suite('mtpProjectStubs', () => {
       projectsForAssetsFile(path.join(dir, 'App', 'obj', 'project.assets.json')),
       [csproj],
     );
+  });
+
+  // ── MSBuild output exceeding the buffer (issue #1008) ───────────────────────────────────────
+
+  suite('evaluateViaMsBuild exceeding the buffer', () => {
+    teardown(() => setAppLogChannel(undefined));
+
+    test('warns and yields undefined instead of failing silently', async () => {
+      const warnings: string[] = [];
+      setAppLogChannel({
+        info: () => undefined,
+        warn: (message: string) => warnings.push(message),
+        error: () => undefined,
+      } as unknown as vscode.LogOutputChannel);
+      const overflow = Object.assign(new Error('stdout maxBuffer length exceeded'), {
+        code: MAX_BUFFER_OVERFLOW_CODE,
+      });
+
+      const result = await evaluateViaMsBuild('C:\\proj\\Big.csproj', () =>
+        Promise.resolve({ stdout: '', error: overflow }),
+      );
+
+      assert.strictEqual(result, undefined);
+      assert.strictEqual(warnings.length, 1, 'the dropped evaluation must be logged');
+      assert.match(warnings[0], /buffer limit/);
+      assert.match(warnings[0], /Big\.csproj/);
+    });
   });
 });
