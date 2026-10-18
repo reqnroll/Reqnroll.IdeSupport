@@ -149,7 +149,7 @@ public class TelemetryTransmitterTests
         _enableTelemetryCheckerStub.IsEnabled().Returns(false);
     }
 
-    private VsTelemetryTransmitter CreateSut()
+    private VsTelemetryTransmitter CreateSut(Action<TelemetryClient>? configureClient = null)
     {
         _enableTelemetryCheckerStub = Substitute.For<IEnableTelemetryChecker>();
         _telemetryChannel = new InMemoryTelemetryChannel();
@@ -159,6 +159,7 @@ public class TelemetryTransmitterTests
             ConnectionString = $"InstrumentationKey={Guid.NewGuid():N}"
         };
         var telemetryClient = new TelemetryClient(config);
+        configureClient?.Invoke(telemetryClient);
         var logger = Substitute.For<IIdeSupportLogger>();
         logger.Level.Returns(System.Diagnostics.TraceLevel.Verbose);
         logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(c =>
@@ -281,6 +282,19 @@ public class TelemetryTransmitterTests
         rec.Enabled.Should().BeTrue();
         rec.Transmitted.Should().BeTrue();
         rec.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void Should_MirrorToDebugLog_TheClientGlobalPropertiesItTransmits()
+    {
+        var sut = CreateSut(client => client.Context.GlobalProperties["ClientSessionId"] = "session-x");
+        GivenTelemetryEnabled();
+
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+
+        var props = _debugLog.Records.Should().ContainSingle().Which.Props
+            .Should().BeAssignableTo<IDictionary<string, object?>>().Which;
+        props.Should().Contain("ClientSessionId", "session-x");
     }
 
     [Fact]

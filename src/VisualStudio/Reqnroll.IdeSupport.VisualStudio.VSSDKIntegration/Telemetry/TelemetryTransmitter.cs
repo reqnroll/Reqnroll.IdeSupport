@@ -152,7 +152,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             {
                 // Mirror the event even when opted out — debugging needs to see what *would*
                 // have been sent — recording that it was gated and not transmitted.
-                _debugLog.Record("host", telemetryEvent.EventName, telemetryEvent.Properties,
+                _debugLog.Record("host", telemetryEvent.EventName, MirroredProperties(telemetryEvent.Properties.Select(p => new KeyValuePair<string, object?>(p.Key, p.Value))),
                     enabled: false, transmitted: false);
                 return;
             }
@@ -164,7 +164,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             }
             _telemetryClient.TrackEvent(eventTelemetry);
 
-            _debugLog.Record("host", telemetryEvent.EventName, telemetryEvent.Properties,
+            _debugLog.Record("host", telemetryEvent.EventName, MirroredProperties(telemetryEvent.Properties.Select(p => new KeyValuePair<string, object?>(p.Key, p.Value))),
                 enabled: true, transmitted: true);
         }
         catch (Exception ex)
@@ -173,7 +173,7 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
             // unreachable endpoint (#859). This catch is defensive only — the channel hands the
             // event off to a background sender and does not throw for an unreachable endpoint, so
             // in practice a dead endpoint shows up here only as a synchronous channel fault.
-            _debugLog.Record("host", telemetryEvent.EventName, telemetryEvent.Properties,
+            _debugLog.Record("host", telemetryEvent.EventName, MirroredProperties(telemetryEvent.Properties.Select(p => new KeyValuePair<string, object?>(p.Key, p.Value))),
                 enabled: enabled, transmitted: false, error: ex.Message);
         }
     }
@@ -238,8 +238,26 @@ public class TelemetryTransmitter : ITelemetryTransmitter, IAsyncDisposable
         // consistent with TransmitEvent. `error` is a *transmission* failure, distinct from
         // the reported exception's own message, which is carried in props.
         _debugLog.Record("host", $"(exception) {exception.GetType().Name}",
-            BuildExceptionProps(exception, additionalPropsArray),
+            MirroredProperties(BuildExceptionProps(exception, additionalPropsArray)),
             enabled: enabled, transmitted: transmitted, error: transmitError);
+    }
+
+    /// <summary>
+    /// What the debug-log mirror records: the event's own properties plus the client's global properties
+    /// (<c>IdeClient</c>, <c>ClientSessionId</c>, ...) that Application Insights adds at send time, so the log
+    /// shows what is transmitted. Per-event values win, as they do in Application Insights.
+    /// </summary>
+    private Dictionary<string, object?> MirroredProperties(IEnumerable<KeyValuePair<string, object?>> properties)
+    {
+        var mirrored = new Dictionary<string, object?>();
+        foreach (var property in properties)
+            mirrored[property.Key] = property.Value;
+        foreach (var global in _telemetryClient.Context.GlobalProperties)
+        {
+            if (!mirrored.ContainsKey(global.Key))
+                mirrored[global.Key] = global.Value;
+        }
+        return mirrored;
     }
 
     private static Dictionary<string, object?> BuildExceptionProps(
