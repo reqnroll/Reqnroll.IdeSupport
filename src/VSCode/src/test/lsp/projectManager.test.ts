@@ -78,6 +78,8 @@ interface RecordedNotification {
 function fakeClient(): { client: LanguageClient; notifications: RecordedNotification[] } {
   const notifications: RecordedNotification[] = [];
   const client = {
+    state: State.Running,
+    onDidChangeState: () => ({ dispose: () => undefined }),
     sendNotification: (method: unknown, params: unknown) => {
       notifications.push({ method, params: params as Record<string, unknown> });
       return Promise.resolve();
