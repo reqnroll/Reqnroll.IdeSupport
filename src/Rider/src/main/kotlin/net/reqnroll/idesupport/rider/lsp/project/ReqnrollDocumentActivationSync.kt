@@ -25,7 +25,7 @@ class ReqnrollDocumentActivationSync : ProjectActivity {
     override suspend fun execute(project: Project) {
         val dispatcher = DocumentActivationDispatcher(
             DocumentActivationState(),
-            whenRunning = { action -> ReqnrollLspServerReadiness.runWhenRunning(project, action) },
+            whenRunning = { action -> ReqnrollLspServerReadiness.runWhenRunning(project, action = action) },
             send = { path -> send(project, path) },
         )
 
