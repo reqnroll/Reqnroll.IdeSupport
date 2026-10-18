@@ -92,4 +92,47 @@ public class FormatDocumentCommandFilterTests
 
         FormatDocumentCommandFilter.IsSnapshotStale(requestSnapshot, currentSnapshot).Should().BeTrue();
     }
+
+    // ── Whole-line selection end adjustment (issue #1035) ─────────────────
+    //
+    // Format Selection derived its end line straight from selection.End's containing line, so a
+    // whole-line selection whose end sits at column 0 of the line AFTER the last selected line
+    // formatted one extra line — the same off-by-one Comment Toggle already corrects via
+    // SelectionLineRange.AdjustEndLineForWholeLineSelection. GetFormatLineRange is the pure seam
+    // Exec uses to apply that correction.
+
+    [Fact]
+    public void GetFormatLineRange_excludes_the_trailing_line_when_the_selection_ends_at_its_start()
+    {
+        // Dragging from the start of line 5 to column 0 of line 7 (visually selecting lines 5-6)
+        // must not format line 7.
+        var (startLine, endLine) = FormatDocumentCommandFilter.GetFormatLineRange(
+            startLine: 5, endLine: 7, endPositionIsAtLineStart: true);
+
+        startLine.Should().Be(5);
+        endLine.Should().Be(6);
+    }
+
+    [Fact]
+    public void GetFormatLineRange_keeps_the_trailing_line_when_the_selection_end_is_mid_line()
+    {
+        // Selection ends partway through line 7, which was genuinely selected.
+        var (startLine, endLine) = FormatDocumentCommandFilter.GetFormatLineRange(
+            startLine: 5, endLine: 7, endPositionIsAtLineStart: false);
+
+        startLine.Should().Be(5);
+        endLine.Should().Be(7);
+    }
+
+    [Fact]
+    public void GetFormatLineRange_does_not_adjust_a_single_line_selection()
+    {
+        // A single-line selection (start == end) is never adjusted, even when it ends at column 0
+        // of that line.
+        var (startLine, endLine) = FormatDocumentCommandFilter.GetFormatLineRange(
+            startLine: 5, endLine: 5, endPositionIsAtLineStart: true);
+
+        startLine.Should().Be(5);
+        endLine.Should().Be(5);
+    }
 }

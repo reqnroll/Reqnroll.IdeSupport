@@ -95,6 +95,21 @@ public class StepLiteralIndexTests
     }
 
     [Fact]
+    public void A_stray_bracket_inside_a_character_class_does_not_make_following_text_a_required_literal()
+    {
+        // [x)abc] is a single character class matching one of x, ), a, b, c -- the stray ')'
+        // inside it must not drop the nesting depth, or "abc" would be misread as a depth-0
+        // required literal even though the pattern never requires that text (issue #951).
+        var target = Binding(@"^[x)abc] step$");
+        var sut = CreateSut(target);
+
+        sut.GetCandidates("x step").Should().Contain(target);
+        sut.GetCandidates(") step").Should().Contain(target);
+        // A step genuinely lacking the trailing literal must still be excluded.
+        sut.GetCandidates("x nope").Should().NotContain(target);
+    }
+
+    [Fact]
     public void A_non_capturing_group_containing_nested_capturing_groups_does_not_leak_its_closing_paren_as_literal()
     {
         // (?:(cool)|(bad)) is what Cucumber Expression alternation compiles to when combined with
@@ -159,6 +174,19 @@ public class StepLiteralIndexTests
         sut.GetCandidates("bar count").Should().Contain(target);
     }
 
+    [Fact]
+    public void A_top_level_alternation_does_not_require_every_branch_as_literal()
+    {
+        // "^I have apples|I have pears$" -- a top-level (depth-0) "|" means the step need match
+        // only one branch, so neither "i have apples" nor "i have pears" is genuinely required
+        // text. Treating both as required literals wrongly excludes a step matching one branch.
+        var target = Binding(@"^I have apples|I have pears$");
+        var sut = CreateSut(target);
+
+        sut.GetCandidates("I have apples").Should().Contain(target);
+        sut.GetCandidates("I have pears").Should().Contain(target);
+    }
+
     // ── Multiple bindings sharing literals ───────────────────────────────────
 
     [Fact]
@@ -189,5 +217,74 @@ public class StepLiteralIndexTests
         var sut = CreateSut(invalid);
 
         sut.GetCandidates("anything at all").Should().Contain(invalid);
+    }
+
+    // ── Quantified characters: the quantified char itself must NOT be a required literal ──
+
+    [Fact]
+    public void An_optional_character_quantifier_does_not_make_that_character_a_required_literal()
+    {
+        // "cucumbers?" requires only "cucumber": the 's' the ? quantifies may be absent, so a
+        // step saying "cucumber" must still be a candidate for this binding (issue #947). The
+        // pre-fix behaviour required "cucumbers" verbatim and wrongly dropped the binding.
+        var target = Binding(@"^I have (-?\d+) cucumbers?$");
+        var sut = CreateSut(target);
+
+        target.Regex.IsMatch("I have 1 cucumber").Should().BeTrue();
+        sut.GetCandidates("I have 1 cucumber").Should().Contain(target);
+        sut.GetCandidates("I have 1 cucumbers").Should().Contain(target);
+    }
+
+    [Fact]
+    public void An_optional_character_in_the_middle_of_a_run_drops_only_that_character()
+    {
+        // "colou?r" requires "colo" and "r" -- the step "color" (no 'u') must still be a
+        // candidate; only the quantified character is dropped from the run, not the whole run.
+        var target = Binding(@"^colou?r$");
+        var sut = CreateSut(target);
+
+        target.Regex.IsMatch("color").Should().BeTrue();
+        sut.GetCandidates("color").Should().Contain(target);
+        sut.GetCandidates("colour").Should().Contain(target);
+    }
+
+    [Fact]
+    public void A_zero_or_more_character_quantifier_does_not_make_that_character_a_required_literal()
+    {
+        // "numbers*" requires only "number": the 's' may occur zero times, so "the number" must
+        // still be a candidate.
+        var target = Binding(@"^the numbers*$");
+        var sut = CreateSut(target);
+
+        target.Regex.IsMatch("the number").Should().BeTrue();
+        sut.GetCandidates("the number").Should().Contain(target);
+        sut.GetCandidates("the numbers").Should().Contain(target);
+    }
+
+    [Fact]
+    public void A_brace_quantifier_that_may_match_zero_occurrences_drops_the_quantified_character()
+    {
+        // "abcdef{0,1}" requires only "abcde" (the braced quantifier is {0,1}); "abcde" must
+        // still be a candidate. The pre-fix behaviour treated the 'f' as a required literal.
+        var target = Binding(@"^abcdef{0,1}$");
+        var sut = CreateSut(target);
+
+        target.Regex.IsMatch("abcde").Should().BeTrue();
+        sut.GetCandidates("abcde").Should().Contain(target);
+        sut.GetCandidates("abcdef").Should().Contain(target);
+    }
+
+    [Fact]
+    public void A_one_or_more_character_quantifier_keeps_the_quantified_character_as_required_literal()
+    {
+        // "ab+c" requires at least one 'b', so "ab" (and therefore "abc") is genuine required
+        // text and stays in the run -- contrast with ? / * / {n,0} where the character may be
+        // absent. This pins the deliberate + semantics so a future conservative tweak can't
+        // silently widen the index by dropping it too.
+        var target = Binding(@"^start ab+c end$");
+        var sut = CreateSut(target);
+
+        target.Regex.IsMatch("start abc end").Should().BeTrue();
+        sut.GetCandidates("start abc end").Should().Contain(target);
     }
 }

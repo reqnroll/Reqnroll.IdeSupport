@@ -280,6 +280,24 @@ namespace TestProject
     }
 
     [Fact]
+    public async Task Method_name_binding_with_a_verbatim_identifier_parameter_is_discovered()
+    {
+        // Issue #952: a parameter written as a verbatim identifier (e.g. @class) keeps the
+        // leading '@' in Identifier.Text, which was spliced straight into the named regex
+        // group ((?<@class>...)) -- an invalid group name that threw ArgumentException out of
+        // ParseBindings and dropped EVERY binding in the file. Identifier.ValueText returns
+        // the identifier's semantic name without the '@', so the group name is valid again.
+        var stepDefinitions = await ParseStepDefinitions(
+            @"[Given]
+              public void The_Value_Is_P0(string @class) { }");
+
+        var binding = stepDefinitions.Should().ContainSingle().Subject!;
+        binding.IsValid.Should().BeTrue();
+        binding.Regex!.IsMatch("the value is something").Should().BeTrue();
+        binding.Regex.Match("the value is something").Groups["class"].Value.Should().Be("something");
+    }
+
+    [Fact]
     public async Task Method_name_binding_ignores_a_parameter_not_reflected_in_the_method_name()
     {
         // Mirrors Reqnroll's SupportsExtraArguments (a trailing Table-typed parameter that
@@ -850,9 +868,10 @@ namespace TestProject
     }
 
     [Fact]
-    public async Task Combines_class_level_and_method_level_scope()
+    public async Task Treats_class_level_and_method_level_scope_as_alternatives()
     {
-        // Class scope @ui AND method scope @smoke -> only matches when both tags are present.
+        // Class scope @ui OR method scope @smoke (Reqnroll concatenates type and method scopes, #1133):
+        // matches when either tag is present.
         var content = @"
 namespace TestProject
 {
@@ -870,8 +889,9 @@ namespace TestProject
 
         var scope = bindings.StepDefinitions.Should().ContainSingle().Subject!.Scope;
         scope.Tag!.Evaluate(new[] { "@ui", "@smoke" }).Should().BeTrue();
-        scope.Tag!.Evaluate(new[] { "@ui" }).Should().BeFalse();
-        scope.Tag!.Evaluate(new[] { "@smoke" }).Should().BeFalse();
+        scope.Tag!.Evaluate(new[] { "@ui" }).Should().BeTrue();
+        scope.Tag!.Evaluate(new[] { "@smoke" }).Should().BeTrue();
+        scope.Tag!.Evaluate(new[] { "@other" }).Should().BeFalse();
     }
 
     [Fact]
@@ -1458,6 +1478,47 @@ namespace TestProject
     }
 
     [Fact]
+    public void HasExpressionChanges_returns_true_when_only_the_scope_changes()
+    {
+        // A [Scope] added to (or changed on) a step definition changes which scenarios it matches
+        // while leaving its expression untouched; without detecting it, the step-usage CodeLens
+        // stayed stale until a rebuild.
+        var before = new ProjectBindingRegistry(
+            new[] { BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath, scope: null) },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Pricing" }),
+            },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        ProjectBindingRegistry.HasExpressionChanges(before, after, FilePath).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasExpressionChanges_returns_false_when_the_scope_is_unchanged()
+    {
+        var before = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Pricing" }),
+            },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+        var after = new ProjectBindingRegistry(
+            new[]
+            {
+                BuildStepDefinition("^the first number is (.*)$", "Steps.Method", FilePath,
+                    scope: new BindingScope { FeatureTitle = "Pricing" }),
+            },
+            Array.Empty<ProjectHookBinding>(), projectHash: 0);
+
+        ProjectBindingRegistry.HasExpressionChanges(before, after, FilePath).Should().BeFalse();
+    }
+
+    [Fact]
     public void HasExpressionChanges_returns_true_when_a_binding_is_added()
     {
         var before = new ProjectBindingRegistry(
@@ -1556,8 +1617,8 @@ namespace TestProject
     }
 
     private static ProjectStepDefinitionBinding BuildStepDefinition(string regex, string method, string sourceFile,
-        ScenarioBlock stepDefinitionType = ScenarioBlock.Given, string? error = null) =>
-        new(stepDefinitionType, new Regex(regex), null,
+        ScenarioBlock stepDefinitionType = ScenarioBlock.Given, string? error = null, BindingScope? scope = null) =>
+        new(stepDefinitionType, new Regex(regex), scope,
             new ProjectBindingImplementation(method, Array.Empty<string>(), new SourceLocation(sourceFile, 0, 0)),
             error: error);
 

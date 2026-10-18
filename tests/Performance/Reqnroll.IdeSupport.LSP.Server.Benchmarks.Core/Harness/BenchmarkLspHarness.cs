@@ -229,7 +229,11 @@ public sealed class BenchmarkLspHarness : IAsyncDisposable
             projectFolder = corpusRoot,
             outputAssemblyPath = corpusAssemblyPath,
             targetFrameworkMoniker = ".NETCoreApp,Version=v10.0",
-            packageReferences = Array.Empty<object>(),
+            // The server only runs binding discovery for a Reqnroll test project (issue #731): it
+            // needs a Reqnroll package reference, or Reqnroll.dll beside the output assembly, which
+            // the corpus bin folder doesn't have. Report the reference the corpus csproj declares,
+            // as VS does.
+            packageReferences = new[] { new { packageId = "Reqnroll", version = "3.2.0", installPath = "" } },
         });
 
     // ── Timed request ───────────────────────────────────────────────────────────

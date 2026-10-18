@@ -1,7 +1,9 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
+import { State } from 'vscode-languageclient';
 import {
   LanguageClient,
+  StateChangeEvent,
   DidOpenTextDocumentNotification,
   DidChangeTextDocumentNotification,
   DidSaveTextDocumentNotification,
@@ -33,15 +35,33 @@ interface RecordedNotification {
   };
 }
 
-function fakeClient(): { client: LanguageClient; notifications: RecordedNotification[] } {
+function fakeClient(options: { rejectSends?: boolean } = {}): {
+  client: LanguageClient;
+  notifications: RecordedNotification[];
+  moveTo: (state: State) => void;
+} {
   const notifications: RecordedNotification[] = [];
+  let state = State.Running;
+  let stateListener: ((e: StateChangeEvent) => void) | undefined;
   const client = {
+    get state() {
+      return state;
+    },
+    onDidChangeState: (l: (e: StateChangeEvent) => void) => {
+      stateListener = l;
+      return { dispose: () => (stateListener = undefined) };
+    },
     sendNotification: (type: unknown, params: unknown) => {
       notifications.push({ type, params: params as RecordedNotification['params'] });
-      return Promise.resolve();
+      return options.rejectSends ? Promise.reject(new Error('client stopped')) : Promise.resolve();
     },
   } as unknown as LanguageClient;
-  return { client, notifications };
+  const moveTo = (newState: State) => {
+    const oldState = state;
+    state = newState;
+    stateListener?.({ oldState, newState });
+  };
+  return { client, notifications, moveTo };
 }
 
 type WorkspaceEventName =
@@ -129,6 +149,21 @@ suite('manualDocumentSync', () => {
 
     test('false for a path merely containing "cs" without the extension', () => {
       assert.strictEqual(isCSharpDocument(fakeDocument('file:///Discs.txt')), false);
+    });
+
+    // Issue #1006: only real on-disk files may be synced; virtual documents of other schemes
+    // (git: diff/HEAD views, untitled:) must not be treated as workspace .cs files, or a HEAD
+    // version could override the working file's live text on the server.
+    test('false for a .cs path with the git: scheme (diff view / HEAD version)', () => {
+      assert.strictEqual(isCSharpDocument(fakeDocument('git:///Steps.cs')), false);
+    });
+
+    test('false for a .cs path with the untitled: scheme', () => {
+      assert.strictEqual(isCSharpDocument(fakeDocument('untitled:Untitled-1.cs')), false);
+    });
+
+    test('true for a .cs path with the file scheme survived alongside the scheme check', () => {
+      assert.strictEqual(isCSharpDocument(fakeDocument('file:///Steps.cs')), true);
     });
   });
 
@@ -361,6 +396,19 @@ suite('manualDocumentSync', () => {
       });
     });
 
+    test('does not sync a .cs document whose scheme is not file (issue #1006)', () => {
+      withStubbedWorkspace([], (ws) => {
+        const { client, notifications } = fakeClient();
+        const sync = new ManualDocumentSync(client, isCSharpDocument);
+
+        ws.fireOpen(fakeDocument('git:///WorkingFile.cs'));
+        ws.fireOpen(fakeDocument('untitled:Untitled-1.cs'));
+        sync.dispose();
+
+        assert.strictEqual(notifications.length, 0);
+      });
+    });
+
     test('a change after dispose() is not forwarded (openUris was cleared)', () => {
       withStubbedWorkspace([], (ws) => {
         const { client, notifications } = fakeClient();
@@ -383,6 +431,75 @@ suite('manualDocumentSync', () => {
 
         assert.strictEqual(notifications.length, 0);
       });
+    });
+
+    // Issue #1005: the restarted server has no open documents, so every open .cs file is re-announced.
+    test('a server restart re-sends didOpen for documents that are still open', () => {
+      const open = fakeDocument('file:///Open.cs', { version: 7, text: 'class A {}' });
+      withStubbedWorkspace([open], () => {
+        const { client, notifications, moveTo } = fakeClient();
+        const sync = new ManualDocumentSync(client, isCSharpDocument);
+        notifications.length = 0;
+
+        moveTo(State.Stopped);
+        moveTo(State.Starting);
+        moveTo(State.Running);
+        sync.dispose();
+
+        assert.strictEqual(notifications.length, 1);
+        assert.strictEqual(notifications[0].type, DidOpenTextDocumentNotification.type);
+        assert.strictEqual(notifications[0].params.textDocument.uri, open.uri.toString());
+        assert.strictEqual(notifications[0].params.textDocument.version, 7);
+      });
+    });
+
+    test('a document closed before the restart is not re-opened, and edits still flow after it', () => {
+      const closed = fakeDocument('file:///Closed.cs');
+      const kept = fakeDocument('file:///Kept.cs');
+      const docs = [closed, kept];
+      withStubbedWorkspace(docs, (ws) => {
+        const { client, notifications, moveTo } = fakeClient();
+        const sync = new ManualDocumentSync(client, isCSharpDocument);
+        docs.splice(docs.indexOf(closed), 1);
+        ws.fireClose(closed);
+        notifications.length = 0;
+
+        moveTo(State.Stopped);
+        moveTo(State.Running);
+        assert.deepStrictEqual(
+          notifications.map((n) => n.params.textDocument.uri),
+          [kept.uri.toString()],
+        );
+
+        notifications.length = 0;
+        ws.fireChange({
+          document: kept,
+          contentChanges: [{}],
+          reason: undefined,
+        } as unknown as vscode.TextDocumentChangeEvent);
+        sync.dispose();
+
+        assert.strictEqual(notifications.length, 1);
+        assert.strictEqual(notifications[0].type, DidChangeTextDocumentNotification.type);
+      });
+    });
+
+    test('a rejected send is swallowed instead of becoming an unhandled rejection', async () => {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        withStubbedWorkspace([], (ws) => {
+          const { client } = fakeClient({ rejectSends: true });
+          const sync = new ManualDocumentSync(client, isCSharpDocument);
+          ws.fireOpen(fakeDocument('file:///Stopped.cs'));
+          sync.dispose();
+        });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+      assert.deepStrictEqual(unhandled, []);
     });
   });
 });

@@ -173,7 +173,7 @@ suite('renameStep', () => {
   suite('collapseActiveSelectionForFeatureStepRename', () => {
     const featureDocument = {
       uri: vscode.Uri.parse('file:///Steps.feature'),
-      languageId: 'gherkin',
+      languageId: 'reqnroll',
     } as vscode.TextDocument;
     const csDocument = {
       uri: vscode.Uri.parse('file:///Steps.cs'),
@@ -723,9 +723,9 @@ suite('renameStep', () => {
       assert.strictEqual(applyEditCalled, false);
     });
 
-    test('shows the server-provided error message when textDocument/rename rejects (issue #650)', async () => {
-      // The server now rejects an invalid rename with a real JSON-RPC error response instead of a
-      // null result — sendRequest surfaces that as a rejected promise, not a resolved null.
+    test('shows the server-provided reason in a modal when textDocument/rename is rejected (issue #650, #1132)', async () => {
+      // The server rejects an invalid rename with a real JSON-RPC error response (-32803) instead of
+      // a null result — sendRequest surfaces that as a rejected promise, not a resolved null.
       const client = fakeClient({
         sendRequest: (method: string) => {
           if (method === ReqnrollMethods.renameTargets) {
@@ -741,6 +741,7 @@ suite('renameStep', () => {
       });
 
       let shownError: string | undefined;
+      let shownOptions: unknown;
       await withStub(
         vscode.window,
         'showInputBox',
@@ -749,15 +750,57 @@ suite('renameStep', () => {
           withStub(
             vscode.window,
             'showErrorMessage',
-            (message: string) => {
+            (message: string, options?: unknown) => {
               shownError = message;
+              shownOptions = options;
               return Promise.resolve(undefined);
             },
             () => renameStepFromCSharp(client, fakeEditor()),
           ),
       );
 
-      assert.strictEqual(shownError, 'Reqnroll: Parameter count mismatch');
+      assert.strictEqual(shownError, 'Parameter count mismatch');
+      assert.deepStrictEqual(shownOptions, { modal: true });
+    });
+
+    test('shows only a generic message for any other rename failure', async () => {
+      const client = fakeClient({
+        sendRequest: (method: string) => {
+          if (method === ReqnrollMethods.renameTargets) {
+            return Promise.resolve({
+              targets: [{ label: 'Given a', expression: 'a', attributeIndex: 0 }],
+            });
+          }
+          if (method === 'textDocument/rename') {
+            return Promise.reject(
+              new ResponseError(-32603, 'internal detail: NullReferenceException'),
+            );
+          }
+          return Promise.resolve(null);
+        },
+      });
+
+      let shownError: string | undefined;
+      let shownOptions: unknown;
+      await withStub(
+        vscode.window,
+        'showInputBox',
+        () => Promise.resolve('a new name'),
+        () =>
+          withStub(
+            vscode.window,
+            'showErrorMessage',
+            (message: string, options?: unknown) => {
+              shownError = message;
+              shownOptions = options;
+              return Promise.resolve(undefined);
+            },
+            () => renameStepFromCSharp(client, fakeEditor()),
+          ),
+      );
+
+      assert.strictEqual(shownError, 'Reqnroll: Rename failed.');
+      assert.strictEqual(shownOptions, undefined, 'an unexpected failure is not a modal');
     });
   });
 });
