@@ -47,6 +47,16 @@ suite('stackSanitizer (#1199)', () => {
     assert.strictEqual(sanitizeStack(stack, root), 'go:3');
   });
 
+  test('a dependency inside the install directory is not the extensions own code', () => {
+    const stack = [
+      'Error: x',
+      `    at callFn (${ROOT}\\node_modules\\mocha\\lib\\runnable.js:360:23)`,
+      `    at run (${OWN}:5:9)`,
+    ].join('\n');
+
+    assert.strictEqual(sanitizeStack(stack, ROOT), `${EXTERNAL_PLACEHOLDER}\nrun:5`);
+  });
+
   test('a lookalike sibling directory is not the extension', () => {
     const stack = `Error: x\n    at go (${ROOT}-evil\\dist\\extension.js:3:4)`;
 

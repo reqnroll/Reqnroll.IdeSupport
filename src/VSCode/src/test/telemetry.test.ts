@@ -69,7 +69,7 @@ async function withStubbedSendTelemetryEvent(
   }
 }
 
-const IDENTITY_KEYS = ['IdeClient', 'Ide', 'IdeVersion', 'ExtensionVersion'];
+const IDENTITY_KEYS = ['IdeClient', 'Ide', 'IdeVersion', 'ExtensionVersion', 'ClientSessionId'];
 
 function withoutIdentity(properties?: Record<string, string>): Record<string, string> {
   return Object.fromEntries(

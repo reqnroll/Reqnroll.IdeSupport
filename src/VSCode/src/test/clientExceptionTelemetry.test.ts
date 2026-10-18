@@ -33,6 +33,7 @@ function recordingReporter(): { reporter: ClientExceptionReporter; sent: Sent[] 
 suite('clientExceptionTelemetry (#621)', () => {
   suite('payload', () => {
     test('uses the server UnhandledException schema plus ExceptionOrigin=Client and a closed Source', () => {
+      setExtensionRoot(undefined); // activation in the test host sets it; the schema is asserted without a stack
       const props = buildExceptionProperties('Activation', new TypeError('boom'));
 
       assert.deepStrictEqual(props, {

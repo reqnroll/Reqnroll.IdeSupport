@@ -8,7 +8,7 @@
  * (passed as `extensionRoot`); it is emitted as `<function>:<line>` — the function name restricted to
  * identifier characters, plus the line in the shipped bundle (resolvable against that version's source map).
  * File paths, file names, columns and the error message/header line are never emitted. Every run of frames
- * from anywhere else (Node, VS Code, other extensions) collapses to one {@link EXTERNAL_PLACEHOLDER}.
+ * from anywhere else (Node, VS Code, other extensions, `node_modules` packages) collapses to one {@link EXTERNAL_PLACEHOLDER}.
  * Without an extension root, or with no own frame, nothing is returned.
  */
 export const EXTERNAL_PLACEHOLDER = '[external]';
@@ -56,7 +56,8 @@ export function sanitizeStack(
       if (entries.length >= MAX_FRAMES) break;
       const match = FRAME.exec(line.replace(/\r$/, ''));
       if (!match) continue;
-      if (normalizePath(match[2]).startsWith(root)) {
+      const file = normalizePath(match[2]);
+      if (file.startsWith(root) && !file.includes('/node_modules/')) {
         sawOwnFrame = true;
         entries.push(`${frameName(match[1])}:${match[3]}`);
       } else if (entries[entries.length - 1] !== EXTERNAL_PLACEHOLDER) {
