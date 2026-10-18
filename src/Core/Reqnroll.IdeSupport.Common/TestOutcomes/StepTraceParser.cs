@@ -67,7 +67,7 @@ public sealed class StepTraceEntry
 /// Parses Reqnroll's default step trace (what <c>Reqnroll.Tracing.TestTracer</c> writes through
 /// <c>DefaultListener</c>: step lines as plain test output, outcomes as <c>-&gt; </c>-prefixed tool output)
 /// out of a test case's captured stdout. This — not the stack trace — is the reliable per-step signal
-/// (Test-Runner-Integration-Design §6: every step's <c>#line</c> is followed by <c>#line hidden</c>, so
+/// (Test-Runner-Integration-Design ("Recognising a failed step"): every step's <c>#line</c> is followed by <c>#line hidden</c>, so
 /// exception frames always point at the scenario's last step).
 /// </summary>
 /// <remarks>

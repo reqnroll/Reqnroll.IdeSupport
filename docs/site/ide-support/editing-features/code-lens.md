@@ -6,7 +6,7 @@ relevant line, without needing to run Find Usages manually:
 ## Step usage counts (C# side)
 
 Each C# step binding method (`[Given]`/`[When]`/`[Then]`) shows an inline
-annotation above its attribute reporting how many `.feature` steps
+annotation above the method declaration reporting how many `.feature` steps
 currently match it (e.g. "3 usages"). Clicking it opens the same results as
 [Find Step Definition Usages](../navigation-features/find-usages.md).
 

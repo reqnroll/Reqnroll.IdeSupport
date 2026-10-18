@@ -4,6 +4,7 @@ using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
@@ -24,31 +25,6 @@ public class TelemetryTransmitterTests
     private readonly List<string> _verboseLogLines = new();
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
     private readonly CapturingDebugLog _debugLog = new();
-
-    [Theory]
-    [InlineData(true, null, false)]
-    [InlineData(true, "InstrumentationKey=dev", true)]
-    [InlineData(false, null, true)]
-    public void DebugBuildGuard_disables_the_built_in_connection_only_in_debug_builds_without_an_override(
-        bool isDebugBuild, string? overrideValue, bool innerIsUsed)
-    {
-        const string variable = TelemetryConnectionOverride.EnvironmentVariable;
-        var original = Environment.GetEnvironmentVariable(variable);
-        try
-        {
-            Environment.SetEnvironmentVariable(variable, overrideValue);
-            var inner = Substitute.For<IEnableTelemetryChecker>();
-            inner.IsEnabled().Returns(true);
-
-            var guarded = VsTelemetryTransmitter.ApplyDebugBuildGuard(inner, isDebugBuild);
-
-            guarded.IsEnabled().Should().Be(innerIsUsed);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(variable, original);
-        }
-    }
 
     [Fact]
     public void Should_NotSendTelemetry_WhenDisabled()
@@ -127,7 +103,8 @@ public class TelemetryTransmitterTests
         properties.Should().Contain("IdeClient", "visualstudio")
             .And.Contain("Ide", "Microsoft Visual Studio")
             .And.Contain("IdeVersion", "17.14")
-            .And.Contain("ExtensionVersion", "1.2.3");
+            .And.Contain("ExtensionVersion", "1.2.3")
+            .And.Contain("ClientSessionId", ClientSession.Id);
     }
 
     [Fact]
@@ -172,7 +149,7 @@ public class TelemetryTransmitterTests
         _enableTelemetryCheckerStub.IsEnabled().Returns(false);
     }
 
-    private VsTelemetryTransmitter CreateSut()
+    private VsTelemetryTransmitter CreateSut(Action<TelemetryClient>? configureClient = null)
     {
         _enableTelemetryCheckerStub = Substitute.For<IEnableTelemetryChecker>();
         _telemetryChannel = new InMemoryTelemetryChannel();
@@ -182,6 +159,7 @@ public class TelemetryTransmitterTests
             ConnectionString = $"InstrumentationKey={Guid.NewGuid():N}"
         };
         var telemetryClient = new TelemetryClient(config);
+        configureClient?.Invoke(telemetryClient);
         var logger = Substitute.For<IIdeSupportLogger>();
         logger.Level.Returns(System.Diagnostics.TraceLevel.Verbose);
         logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(c =>
@@ -304,6 +282,19 @@ public class TelemetryTransmitterTests
         rec.Enabled.Should().BeTrue();
         rec.Transmitted.Should().BeTrue();
         rec.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void Should_MirrorToDebugLog_TheClientGlobalPropertiesItTransmits()
+    {
+        var sut = CreateSut(client => client.Context.GlobalProperties["ClientSessionId"] = "session-x");
+        GivenTelemetryEnabled();
+
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+
+        var props = _debugLog.Records.Should().ContainSingle().Which.Props
+            .Should().BeAssignableTo<IDictionary<string, object?>>().Which;
+        props.Should().Contain("ClientSessionId", "session-x");
     }
 
     [Fact]

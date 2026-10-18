@@ -14,9 +14,8 @@ import net.reqnroll.idesupport.rider.lsp.localPathToLspUri
 
 /**
  * Shared lens-computation logic for [RunTestCodeVisionProvider] — mirrors
- * [net.reqnroll.idesupport.rider.codevision.HookLensSupport]'s shape (design doc §5/§6, issue #262):
- * fetch scenario/Outline ranges via the standard `textDocument/documentSymbol` request (already
- * used by the Structure View — see [net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender.documentSymbol]),
+ * [net.reqnroll.idesupport.rider.codevision.HookLensSupport]'s shape (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262):
+ * fetch scenario/Outline ranges via the standard `textDocument/documentSymbol` request (see [net.reqnroll.idesupport.rider.lsp.ReqnrollRequestSender.documentSymbol]),
  * then resolve each one's generated test method(s) via the new custom `reqnroll/resolveTestTargets`
  * request. No PSI is used anywhere in this chain — see [RunTestCodeVisionProvider]'s doc comment for
  * why `RunLineMarkerContributor` (the design doc's original recommendation) isn't viable here.

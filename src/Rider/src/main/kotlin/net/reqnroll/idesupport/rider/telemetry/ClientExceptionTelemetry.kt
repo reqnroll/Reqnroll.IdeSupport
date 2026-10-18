@@ -28,8 +28,11 @@ import java.util.concurrent.CancellationException
  * client exception text is arbitrary): only the exception class name, a scrubbed message capped at
  * [MAX_MESSAGE_LENGTH] characters and a closed `Source` (the simple name of the topmost plugin class on the
  * stack) are sent. The message has every quoted substring dropped, URLs removed, and absolute, UNC, home,
- * relative and bare source/config file-name paths redacted. The stack trace itself is never sent
- * (issue #620 is open; assume not).
+ * relative and bare source/config file-name paths redacted. The stack is sent only as the sanitized
+ * `StackFrames` of [ClientStackSanitizer] (issue #1199: the plugin's own frames as `package.Class.method:line`,
+ * no file names, everything else collapsed), matching the server's contract; it rides on each event that is
+ * sent, so the dedupe and cap below bound how many distinct stacks that can be. `ClientSessionId` is added to
+ * every event by [RiderTelemetryTransmitter] (see [ClientSession]).
  *
  * Reporting must never throw into, or slow, the code it observes: it is wrapped, re-entrancy guarded,
  * handed to a pooled thread, deduplicated per session and capped. [RiderTelemetryTransmitter.transmit]
@@ -89,8 +92,8 @@ object ClientExceptionTelemetry {
     }
 
     /**
-     * Builds the `UnhandledException` properties for [throwable]; pure and exposed for tests. The stack is
-     * only consulted for the `Source` attribution, never transmitted.
+     * Builds the `UnhandledException` properties for [throwable]; pure and exposed for tests. The raw stack is
+     * never transmitted: it yields the `Source` attribution and the sanitized `StackFrames`.
      */
     internal fun buildProperties(throwable: Throwable): Map<String, String> {
         // Bound the raw text first so a huge message cannot make the scrub slow, then cap what is sent.
@@ -102,6 +105,7 @@ object ClientExceptionTelemetry {
             "ExceptionOrigin" to EXCEPTION_ORIGIN_CLIENT,
         )
         resolveSource(throwable)?.let { props["Source"] = it }
+        ClientStackSanitizer.sanitize(throwable)?.let { props["StackFrames"] = it }
         return props
     }
 

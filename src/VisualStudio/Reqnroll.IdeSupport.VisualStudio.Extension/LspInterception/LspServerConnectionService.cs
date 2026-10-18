@@ -490,7 +490,7 @@ internal sealed class LspServerConnectionService : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 CreateNoWindow         = true,
-                Arguments              = ServerArguments,
+                Arguments              = $"{ServerArguments} {ClientSession.ServerArgumentName} {ClientSession.Id}",
             };
 
             _serverProcess = _startProcess(psi)

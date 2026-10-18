@@ -27,7 +27,7 @@ internal enum RunTestOutcome
 /// Best-effort bridge to VS's own cached test outcome, for the Run CodeLens pass/fail glyph (issue
 /// #504 follow-up). This is the same mechanism VS's own built-in <c>TestStatusProvider</c> CodeLens
 /// uses — decompiled from <c>Microsoft.VisualStudio.TestWindow.Internal.dll</c>/<c>...CodeLens.dll</c>
-/// (design doc §6) — but <c>ICodeLensTestInformationService</c>, <c>CodeLensTestInformationProxy</c>,
+/// (Test-Outcomes-Pipeline, "Client rendering") — but <c>ICodeLensTestInformationService</c>, <c>CodeLensTestInformationProxy</c>,
 /// and <c>RemoteTestWindowServiceProvider</c> are all <c>internal</c> to that assembly: not part of
 /// the public extensibility surface, no compatibility guarantee, no deprecation notice if a VS
 /// servicing update reshapes or removes any of it.
@@ -217,7 +217,7 @@ internal static class RunTestOutcomeBridge
 
     /// <summary>
     /// Maps a resolved outcome to a glyph, mirroring VS's own <c>TestStatusProvider.ToImageId</c>
-    /// (decompiled, design doc §6) — unlike everything else in this class, <c>KnownMonikers</c> is a
+    /// (decompiled; see Test-Outcomes-Pipeline) — unlike everything else in this class, <c>KnownMonikers</c> is a
     /// fully public, stable VS SDK API, so this part needs no reflection and no fallback.
     /// </summary>
     public static ImageId ToImageId(RunTestOutcome outcome)

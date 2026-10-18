@@ -18,22 +18,54 @@ import org.eclipse.lsp4j.WorkspaceEdit
  * Rider included, is expected to apply the edit it gets back from the `rename` response itself.
  */
 object RenameWorkspaceEditApplier {
-    /** Resolves each touched URI's `Document` and applies its edits inside one write command. */
-    fun apply(project: Project, edit: WorkspaceEdit) {
+    /**
+     * Resolves each touched URI's `Document` and applies its edits inside one write command.
+     *
+     * @return `true` only when [edit] touches at least one URI and **every** one of them resolved
+     *   to a `Document` and had its edits applied. An empty edit, or any edit whose document could
+     *   not be resolved, returns `false` (issue #989): the caller must not tell the server the
+     *   rename was applied, or it commits a staged registry update for an edit that never reached a
+     *   file - the failure mode #670's `renameApplied` was added to prevent.
+     */
+    fun apply(project: Project, edit: WorkspaceEdit): Boolean {
         val byUri = editsByUri(edit)
-        if (byUri.isEmpty()) return
+        if (byUri.isEmpty()) return false
 
+        var allApplied = false
         WriteCommandAction.runWriteCommandAction(project) {
-            for ((uri, edits) in byUri) {
-                val document = documentForUri(uri)
-                if (document == null) {
-                    ReqnrollDebugLogger.warn(
-                        "RenameWorkspaceEditApplier: could not resolve document for $uri")
-                    continue
-                }
-                applyEdits(document, edits)
-            }
+            allApplied = applyEditsByUri(byUri, ::documentForUri, ::applyEdits)
         }
+        return allApplied
+    }
+
+    /**
+     * The core of [apply], split out so the "did every edit reach a file?" decision is unit-testable
+     * without a live `Project`/`Document` - the platform fixture a real [apply] needs cannot open a
+     * Project in this module's tests (see `ReqnrollFeatureFileTypeRegistrationTest`). `T` is a
+     * `Document` in production and a stand-in in tests.
+     *
+     * @return `true` only when [byUri] is non-empty and [resolveDocument] returns a non-null target
+     *   for every URI, invoking [applyForDocument] once per resolved URI.
+     */
+    internal fun <T> applyEditsByUri(
+        byUri: Map<String, List<TextEdit>>,
+        resolveDocument: (String) -> T?,
+        applyForDocument: (T, List<TextEdit>) -> Unit,
+    ): Boolean {
+        if (byUri.isEmpty()) return false
+
+        var allApplied = true
+        for ((uri, edits) in byUri) {
+            val document = resolveDocument(uri)
+            if (document == null) {
+                ReqnrollDebugLogger.warn(
+                    "RenameWorkspaceEditApplier: could not resolve document for $uri")
+                allApplied = false
+                continue
+            }
+            applyForDocument(document, edits)
+        }
+        return allApplied
     }
 
     /** `internal` so callers (e.g. [RenameStepRunner]) can reuse this URI-to-Document lookup. */

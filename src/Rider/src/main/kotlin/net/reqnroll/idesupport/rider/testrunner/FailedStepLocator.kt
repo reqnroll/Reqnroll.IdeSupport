@@ -12,7 +12,7 @@ import org.eclipse.lsp4j.SymbolKind
  * The trace's `failedStepIndex` is an execution index over every step Reqnroll traced, which is the
  * enclosing Background step(s) first and then the scenario's own steps. A stack trace cannot be
  * used for this: the generated code misattributes any failure to the scenario's last step
- * (design doc §6).
+ * (Test-Runner-Integration-Design ("Recognising a failed step")).
  */
 internal object FailedStepLocator {
     /**

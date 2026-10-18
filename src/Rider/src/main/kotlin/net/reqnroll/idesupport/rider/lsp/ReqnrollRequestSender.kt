@@ -7,7 +7,6 @@ import com.intellij.platform.lsp.api.LspServerManager
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
-import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import net.reqnroll.idesupport.rider.lsp.protocol.FindStepUsagesResponse
 import net.reqnroll.idesupport.rider.lsp.protocol.FindUnusedStepDefinitionsResponse
 import net.reqnroll.idesupport.rider.lsp.protocol.GetTestOutcomeParams
@@ -27,6 +26,7 @@ import org.eclipse.lsp4j.CodeLens
 import org.eclipse.lsp4j.CodeLensParams
 import org.eclipse.lsp4j.DocumentLink
 import org.eclipse.lsp4j.DocumentLinkParams
+import org.eclipse.lsp4j.DocumentFormattingParams
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams
 import org.eclipse.lsp4j.DocumentSymbol
 import org.eclipse.lsp4j.DocumentSymbolParams
@@ -71,6 +71,7 @@ object ReqnrollRequestSender {
     private const val FIND_HOOKS_TIMEOUT_MS = 10_000
     private const val FIND_MATCHING_SCENARIOS_TIMEOUT_MS = 10_000
     private const val TOGGLE_COMMENT_TIMEOUT_MS = 10_000
+    private const val FORMAT_TIMEOUT_MS = 10_000
     private const val RENAME_TARGETS_TIMEOUT_MS = 10_000
     private const val RENAME_TIMEOUT_MS = 10_000
     private const val DOCUMENT_SYMBOL_TIMEOUT_MS = 10_000
@@ -269,23 +270,100 @@ object ReqnrollRequestSender {
      * `Lsp4jClient.applyEdit` already applies natively (confirmed by decompiling — it's a `final`
      * method on the base class, not something [ReqnrollLspServerDescriptor.createLsp4jClient]'s
      * wrapping needs to add a consumer for), so this call's own return value is unused; callers
-     * only care whether the command was successfully dispatched.
+     * only care whether the command was dispatched, or rejected with a reason to show.
+     *
+     * Uses the suspend `sendRequest`, like [rename] (issue #655), because `sendRequestSync` would
+     * swallow the server's `-32803` rejection (the document is not open in the server) into an
+     * indistinguishable `null` — the shortcut would do nothing, silently (issue #1132). See [rename]
+     * for the `runBlockingCancellable`/`withTimeout` rationale; this must be called off the EDT.
      */
-    fun toggleComment(project: Project, uri: String, startLine: Int, endLine: Int): Boolean {
-        val server = firstRunningServer(project) ?: return false
+    fun toggleComment(project: Project, uri: String, startLine: Int, endLine: Int): ToggleCommentOutcome {
+        val server = firstRunningServer(project) ?: return ToggleCommentOutcome.Failed
         val params = ExecuteCommandParams("reqnroll.toggleComment", listOf(uri, startLine, endLine))
         return try {
-            server.sendRequestSync(TOGGLE_COMMENT_TIMEOUT_MS) { languageServer ->
-                languageServer.workspaceService.executeCommand(params)
+            runBlockingCancellable {
+                withTimeout(TOGGLE_COMMENT_TIMEOUT_MS.toLong()) {
+                    server.sendRequest { languageServer ->
+                        languageServer.workspaceService.executeCommand(params)
+                    }
+                }
             }
-            true
+            ToggleCommentOutcome.Dispatched
         } catch (ex: ProcessCanceledException) {
             throw ex
+        } catch (ex: TimeoutCancellationException) {
+            // Ahead of the generic handler: a TimeoutCancellationException is a CancellationException.
+            ReqnrollDebugLogger.warn("toggleComment: request timed out after ${TOGGLE_COMMENT_TIMEOUT_MS}ms", ex)
+            ToggleCommentOutcome.Failed
         } catch (ex: Exception) {
-            ReqnrollDebugLogger.warn("toggleComment: request failed", ex)
-            false
+            classifyToggleCommentFailure(ex)
         }
     }
+
+    /**
+     * Maps a failed `reqnroll.toggleComment` request to its outcome: a server rejection (`-32803`) to
+     * [ToggleCommentOutcome.Rejected] (the message is shown to the user), anything else to
+     * [ToggleCommentOutcome.Failed] (logged only). `internal` so it is testable without a live server.
+     */
+    internal fun classifyToggleCommentFailure(ex: Throwable): ToggleCommentOutcome {
+        val rejection = EditRejection.messageOf(ex)
+        if (rejection != null) {
+            // An error *response* is the server doing its job, not a plugin failure: no stack trace.
+            ReqnrollDebugLogger.info("toggleComment: rejected by server: $rejection")
+            return ToggleCommentOutcome.Rejected(rejection)
+        }
+        ReqnrollDebugLogger.warn("toggleComment: request failed", ex)
+        return ToggleCommentOutcome.Failed
+    }
+
+    /**
+     * Runs the standard `textDocument/formatting` request for [uri] on behalf of
+     * [net.reqnroll.idesupport.rider.formatting.ReqnrollFormattingService]. Uses the suspend
+     * `sendRequest` rather than `sendRequestSync` so a `-32803` rejection reaches the caller as
+     * [FormatOutcome.Rejected] (issue #1172); see [rename] for the `runBlockingCancellable`/`withTimeout`
+     * rationale. Must be called off the EDT.
+     */
+    fun formatDocument(project: Project, uri: String, tabSize: Int, insertSpaces: Boolean): FormatOutcome {
+        val server = firstRunningServer(project) ?: return FormatOutcome.Failed
+        val params = DocumentFormattingParams(
+            TextDocumentIdentifier(uri),
+            FormattingOptions(tabSize, insertSpaces),
+        )
+        return try {
+            val edits = runBlockingCancellable {
+                withTimeout(FORMAT_TIMEOUT_MS.toLong()) {
+                    server.sendRequest { languageServer ->
+                        languageServer.textDocumentService.formatting(params)
+                    }
+                }
+            }
+            FormatOutcome.Edits(edits.orEmpty())
+        } catch (ex: ProcessCanceledException) {
+            throw ex
+        } catch (ex: TimeoutCancellationException) {
+            ReqnrollDebugLogger.warn("formatDocument: request timed out after ${FORMAT_TIMEOUT_MS}ms", ex)
+            FormatOutcome.Failed
+        } catch (ex: Exception) {
+            classifyFormatFailure(ex)
+        }
+    }
+
+    /** Maps a failed `textDocument/formatting` request to its outcome; `internal` so it is testable without a live server. */
+    internal fun classifyFormatFailure(ex: Throwable): FormatOutcome {
+        val rejection = EditRejection.messageOf(ex)
+        if (rejection != null) {
+            ReqnrollDebugLogger.info("formatDocument: rejected by server: $rejection")
+            return FormatOutcome.Rejected(rejection)
+        }
+        ReqnrollDebugLogger.warn("formatDocument: request failed", ex)
+        return FormatOutcome.Failed
+    }
+
+    /** True when a Reqnroll LSP server is running for [project]. */
+    fun hasRunningServer(project: Project): Boolean =
+        LspServerManager.getInstance(project)
+            .getServersForProvider(ReqnrollLspServerSupportProvider::class.java)
+            .isNotEmpty()
 
     /** Runs `reqnroll/renameTargets` for the position (uri, line, character). Returns null if no Reqnroll LSP server is running, or on failure. */
     fun renameTargets(project: Project, uri: String, line: Int, character: Int): RenameTargetsResponse? {
@@ -310,9 +388,10 @@ object ReqnrollRequestSender {
      * by decompiling `LspServerDescriptor` — no `lspRenameSupport`-style customization exists),
      * so callers must apply the returned `WorkspaceEdit` themselves; see `RenameWorkspaceEditApplier`.
      *
-     * Returns [RenameOutcome.Failed] with the server's own human-readable reason (issue #650) when
-     * the server rejects the rename — e.g. a step-rename validation failure — rather than the
-     * blanket "request failed" `null` every other method in this file returns on any exception.
+     * Returns [RenameOutcome.Rejected] with the server's own human-readable reason (issue #650,
+     * #1132) when the server rejects the rename with `-32803` — e.g. a step-rename validation failure
+     * — rather than the blanket "request failed" `null` every other method in this file returns on
+     * any exception; any other failure is the generic [RenameOutcome.Failed].
      * A rejected rename follows a modal "pick a target, type a new expression" flow the user just
      * completed, so [RenameStepRunner] showing no explanation at all (like a routine navigation
      * miss would) is worse here than for the rest of this file's silently-null methods.
@@ -377,38 +456,30 @@ object ReqnrollRequestSender {
             ReqnrollDebugLogger.warn("rename: request timed out after ${RENAME_TIMEOUT_MS}ms", ex)
             RenameOutcome.Failed("The rename request timed out.")
         } catch (ex: Exception) {
-            val serverReason = extractResponseErrorMessage(ex)
-            if (serverReason != null) {
-                // An error *response* is the server doing its job — rejecting an invalid new
-                // expression, say — not a plugin failure, so no stack trace: the Reqnroll tool
-                // window prints throwables in full and auto-activates on Warning, which would put
-                // lsp4j internals in front of the user for an expected outcome (issue #655).
-                ReqnrollDebugLogger.info("rename: rejected by server: $serverReason")
-                RenameOutcome.Failed(serverReason)
-            } else {
-                ReqnrollDebugLogger.warn("rename: request failed", ex)
-                RenameOutcome.Failed("Rename failed — the new expression may be invalid, or nothing to rename.")
-            }
+            classifyRenameFailure(ex)
         }
     }
 
     /**
-     * Unwraps the server's human-readable reason (issue #650) from a failed `textDocument/rename`
-     * request, when the failure was a real JSON-RPC error response rather than some other
-     * exception (timeout, I/O error, cancellation). Returns null for any other kind of failure, so
-     * callers fall back to a generic message instead of showing something misleading.
-     *
-     * Checks the exception itself and one level of [Throwable.cause]. Since [rename] moved to the
-     * suspend `sendRequest` (issue #655), the direct case is the one that actually occurs:
-     * `kotlinx.coroutines.future.FutureKt.await` resumes with the cause already unwrapped out of
-     * `CompletionException`, so a [ResponseErrorException] arrives bare. The `cause` check is kept
-     * as cheap insurance against a future call site routing through something that wraps again —
-     * it is no longer covering for an undocumented platform guarantee, which is what the previous
-     * version of this comment recorded as unknown.
+     * Maps a failed `textDocument/rename` request to its outcome. Only a server rejection (`-32803`,
+     * issue #650/#1132) carries a reason meant for the user, as [RenameOutcome.Rejected]; any other
+     * failure — including a JSON-RPC error with another code — is unexpected, so it is logged and
+     * shown only as the generic [RenameOutcome.Failed] message. `internal` so it is testable without
+     * a live server.
      */
-    internal fun extractResponseErrorMessage(ex: Throwable): String? =
-        ((ex as? ResponseErrorException) ?: (ex.cause as? ResponseErrorException))
-            ?.responseError?.message
+    internal fun classifyRenameFailure(ex: Throwable): RenameOutcome {
+        val rejection = EditRejection.messageOf(ex)
+        if (rejection != null) {
+            // An error *response* is the server doing its job — rejecting an invalid new
+            // expression, say — not a plugin failure, so no stack trace: the Reqnroll tool
+            // window prints throwables in full and auto-activates on Warning, which would put
+            // lsp4j internals in front of the user for an expected outcome (issue #655).
+            ReqnrollDebugLogger.info("rename: rejected by server: $rejection")
+            return RenameOutcome.Rejected(rejection)
+        }
+        ReqnrollDebugLogger.warn("rename: request failed", ex)
+        return RenameOutcome.Failed("Rename failed — the new expression may be invalid, or nothing to rename.")
+    }
 
     /**
      * Runs the *standard* `textDocument/documentSymbol` request (Feature/Rule/Scenario/Step)
@@ -437,7 +508,7 @@ object ReqnrollRequestSender {
 
     /**
      * Runs `reqnroll/resolveTestTargets` for the range [(startLine, startChar), (endLine, endChar)]
-     * in a `.feature` file (design doc §3/§4, issue #262) — resolves the generated test method(s)
+     * in a `.feature` file (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — resolves the generated test method(s)
      * the scenario/Outline/example row at that range corresponds to. Returns null if no Reqnroll
      * LSP server is running, or on failure.
      */
@@ -546,5 +617,32 @@ object ReqnrollRequestSender {
  */
 sealed interface RenameOutcome {
     data class Success(val edit: WorkspaceEdit) : RenameOutcome
+
+    /** The server rejected the rename with a reason the user can fix (`-32803`); [message] is shown verbatim (issue #1132). */
+    data class Rejected(val message: String) : RenameOutcome
+
+    /** Any other failure; [message] is generic. */
     data class Failed(val message: String) : RenameOutcome
+}
+
+/**
+ * Outcome of [ReqnrollRequestSender.toggleComment]: [Dispatched] once the server accepted the command
+ * (the edit itself arrives separately via `workspace/applyEdit`), [Rejected] when it refused with a
+ * reason to show the user (`-32803`, issue #1132), or [Failed] for anything else (logged only).
+ */
+sealed interface ToggleCommentOutcome {
+    data object Dispatched : ToggleCommentOutcome
+    data class Rejected(val message: String) : ToggleCommentOutcome
+    data object Failed : ToggleCommentOutcome
+}
+
+/**
+ * Outcome of [ReqnrollRequestSender.formatDocument]: the [Edits] to apply (possibly none), a [Rejected]
+ * with a reason the server wants the user to see (`-32803`, issue #1132/#1172), or [Failed] for
+ * anything else (logged only).
+ */
+sealed interface FormatOutcome {
+    data class Edits(val edits: List<TextEdit>) : FormatOutcome
+    data class Rejected(val message: String) : FormatOutcome
+    data object Failed : FormatOutcome
 }

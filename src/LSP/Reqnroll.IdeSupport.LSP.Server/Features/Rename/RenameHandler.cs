@@ -15,6 +15,7 @@ using Reqnroll.IdeSupport.LSP.Server.Discovery.Roslyn;
 using Reqnroll.IdeSupport.LSP.Server.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Hosting;
 using Reqnroll.IdeSupport.LSP.Server.Performance;
+using Reqnroll.IdeSupport.LSP.Server.Protocol;
 using Reqnroll.IdeSupport.LSP.Server.Protocol.Documents;
 using Reqnroll.IdeSupport.LSP.Server.Registry;
 using Reqnroll.IdeSupport.Common.Telemetry;
@@ -358,7 +359,18 @@ public sealed class RenameHandler
         // For a .cs-invoked rename this is the attribute string literal; otherwise it falls back
         // to the registry expression. It anchors both the feature edits (static-segment
         // substitution) and the C# attribute edit.
-        var sourceLiteral = await _attributeLiteralResolver.FindAttributeLiteralAsync(uri, binding);
+        var literalResolution = await _attributeLiteralResolver.ResolveAttributeLiteralAsync(uri, binding);
+        if (literalResolution.IsAmbiguous)
+        {
+            // Issue #940: the method carries several same-type attributes and none can be
+            // identified as this binding's - refuse rather than rewrite one that may not be it.
+            SendRenameTelemetry(origin, started, erroneous: true, reason: "AttributeLiteralAmbiguous");
+            throw RenameFailedError(
+                "Could not tell which of the several step definition attributes on this method belongs to this step — save the file or rebuild the project so the step definitions are up to date, then rename again",
+                "rename");
+        }
+
+        var sourceLiteral = literalResolution.Literal;
         var sourceExpression = sourceLiteral?.Token.ValueText ?? expression;
 
         // Reconciles concrete step text (VS Code's native F2) against the binding's abstract
@@ -480,19 +492,9 @@ public sealed class RenameHandler
         _telemetryService?.SendEvent(TelemetryEvents.RenameStepCommandExecuted, properties);
     }
 
-    /// <summary>
-    /// Builds the <see cref="RpcErrorException"/> a <c>textDocument/rename</c> failure throws
-    /// (issue #650) so it reaches the client as a proper LSP <c>ResponseError</c> — code
-    /// <see cref="ErrorCodes.RequestFailed"/> ("the request was syntactically valid but could
-    /// not complete"), the human-readable reason as the error message, and
-    /// <paramref name="scope"/> (matching <see cref="ValidationError.Scope"/> where the failure
-    /// came from <see cref="StepRenameValidator"/>) as the error's <c>data</c> payload.
-    /// </summary>
+    // Rejections go through the shared EditRejected contract (issue #1132); see its remarks.
     private static RpcErrorException RenameFailedError(string message, string? scope = null) =>
-        // RpcErrorException's `error` parameter isn't nullable-annotated (it predates this
-        // codebase's NRT adoption), but a null `data` is handled fine at the wire level —
-        // ErrorMessage.Data is [JsonProperty(NullValueHandling = NullValueHandling.Ignore)].
-        new(ErrorCodes.RequestFailed, scope!, message);
+        EditRejected.Error(message, scope);
 
     /// <summary>
     /// Resolves the source location to search for feature-step usages of <paramref name="binding"/>:

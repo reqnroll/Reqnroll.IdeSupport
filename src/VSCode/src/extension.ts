@@ -39,6 +39,8 @@ import {
   renameStepFromCSharp,
 } from './commands/renameStep';
 import { createExecuteCommandDedupeMiddleware } from './lsp/executeCommandDedupe';
+import { createEditRejectionMiddleware } from './lsp/editRejection';
+import { registerSaveTracking } from './lsp/saveTracker';
 import { createCodeLensSuppressionMiddleware } from './lsp/codeLensSuppression';
 import {
   deferTelemetryTeardownUntil,
@@ -55,7 +57,9 @@ import {
   executeForeignCommand,
   registerGuardedCommand,
   reportClientException,
+  setExtensionRoot,
 } from './clientExceptionTelemetry';
+import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_ARGUMENT } from './clientSession';
 import { TableHighlightService } from './tableHighlightService';
 import { activateTestOutcomes } from './testOutcomes/testOutcomesService';
 import { activateMtpProjectStubs } from './testOutcomes/mtpProjectStubs';
@@ -152,6 +156,7 @@ export interface ReqnrollExtensionApi {
  * registers all Reqnroll commands.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
+  setExtensionRoot(context.extensionPath);
   // Client-side exception telemetry (issue #621): the reporter must exist before anything below can
   // throw, and an exception escaping activation is reported (then rethrown unchanged).
   try {
@@ -173,7 +178,8 @@ const registerCommand = <A extends unknown[], R>(
   handler: (...args: A) => R,
 ): vscode.Disposable => registerGuardedCommand(vscode.commands.registerCommand, commandId, handler);
 
-async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
+// Not `async`: nothing in here is awaited any more (issue #998), so it resolves the API itself.
+function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollExtensionApi> {
   const api: ReqnrollExtensionApi = { getClient: () => client };
 
   const notReady = (label: string) => () => {
@@ -202,9 +208,12 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   // Project-local MTP reporter stubs (issue #741): obj/<Project>.csproj.reqnroll-ide.targets for each
   // MTP-capable Reqnroll project, so any later build of it — including a `dotnet test` C# Dev Kit spawns —
   // compiles the reporter in. Runs early, before any test run could plausibly start, and independent
-  // of the LSP client, unlike `activateTestOutcomes` below. Awaited because its MTP-capability scan
-  // can shell out to `dotnet msbuild` (issue #722).
-  await activateMtpProjectStubs(context);
+  // of the LSP client, unlike `activateTestOutcomes` below. Not awaited: its workspace walk and its
+  // MTP-capability scan (which can shell out to `dotnet msbuild`, issue #722) must not hold up command
+  // registration or the client start (issue #998).
+  void activateMtpProjectStubs(context).catch((err) =>
+    appLogChannel.warn(`testOutcomes: setting up the MTP reporter stubs failed: ${String(err)}`),
+  );
 
   const traceChannel = createTraceChannel();
 
@@ -267,7 +276,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       await doFindUnusedStepDefinitions(client);
     }),
 
-    // Hook Navigation ("Go to Hooks"; invoked from the command palette, editor context menu,
+    // Hook Navigation ("Find Hooks"; invoked from the command palette, editor context menu,
     // or the hook-count CodeLens — issue #269). When invoked from a CodeLens the server passes
     // [uri, line, char, ownLevelOnly] as arguments, same convention as reqnroll.findStepUsages
     // plus the extra ownLevelOnly flag so the picker matches exactly what the lens counted.
@@ -280,7 +289,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
 
     registerCommand('reqnroll.goToHooks', async (...args: unknown[]) => {
       if (!client) {
-        notReady('Go to Hooks')();
+        notReady('Find Hooks')();
         return;
       }
       if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'number') {
@@ -355,7 +364,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     }),
 
     // F2 keybinding target (issue #506). F2 is the default C# rename-symbol shortcut, so unlike
-    // the explicit "Reqnroll: Rename Step" command above, a miss at the cursor (not on a binding
+    // the explicit "Rename Step..." command above, a miss at the cursor (not on a binding
     // expression, or a .cs file the Reqnroll server doesn't own at all) must fall through to VS
     // Code's own editor.action.rename rather than showing a Reqnroll-specific message — otherwise
     // F2 would stop renaming ordinary C# symbols everywhere in every .cs file.
@@ -388,7 +397,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
         );
       }
     });
-    return api;
+    return Promise.resolve(api);
   }
 
   // ── LSP client ─────────────────────────────────────────────────────────────
@@ -397,6 +406,8 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     args: [
       '--ide',
       'vscode',
+      CLIENT_SESSION_ID_ARGUMENT,
+      CLIENT_SESSION_ID,
       '--log-level',
       traceServerToLogLevel(),
       '--protocol-log-level',
@@ -410,6 +421,8 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
   // Permanent link styling for clickable tags (issue #921); fed by the tag-link middleware below.
   const tagLinkDecorations = new TagLinkDecorations().register();
   context.subscriptions.push(tagLinkDecorations);
+  // Lets the formatting middleware tell format-on-save from an explicit Format Document (issue #1132).
+  context.subscriptions.push(registerSaveTracking());
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: REQNROLL_LANGUAGE_ID, pattern: '**/*.feature' }],
@@ -431,6 +444,9 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
     middleware: {
       ...createManualSyncMiddleware(isCSharpDocument),
       ...createRenameMiddleware(() => client),
+      // Format Document / Format Selection: a server rejection (-32803) is shown in a modal instead of
+      // the platform's transient error toast (issue #1132).
+      ...createEditRejectionMiddleware(),
       // 'reqnroll.toggleComment' is registered as a VS Code command above (Ctrl+/ handler);
       // drop the server's redundant dynamic workspace/executeCommand registration for it so
       // vscode-languageclient never attempts a duplicate registerCommand call — see
@@ -524,7 +540,7 @@ async function activateCore(context: vscode.ExtensionContext): Promise<ReqnrollE
       void showError(`Reqnroll LSP server failed to start: ${msg}`);
     });
 
-  return api;
+  return Promise.resolve(api);
 }
 
 /** Extension teardown: disposes the project manager and stops the language client. */

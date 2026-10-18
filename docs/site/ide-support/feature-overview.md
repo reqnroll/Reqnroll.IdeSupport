@@ -20,15 +20,16 @@ what to expect and what to do about it.
 | [Syntax Highlighting](editing-features/syntax-highlighting.md) | ✅ | ✅ | ✅ |
 | [Diagnostics — Errors & Warnings](editing-features/diagnostics.md) | ✅ | ✅ | ✅ |
 | [Keyword & Step Completion](editing-features/completion.md) | ✅ | ✅ | ✅ |
-| [Document & Table Formatting](editing-features/formatting.md) | ✅ | ⚠️¹ | ✅ |
+| [Document & Table Formatting](editing-features/formatting.md) | ✅ | ✅ | ✅ |
 | [Comment / Uncomment](editing-features/comment-uncomment.md) | ✅ | ✅ | ✅ |
 | [Code Folding](editing-features/code-folding.md) | ✅ | ✅ | ✅ |
-| [Document Outline](editing-features/document-outline.md) | ✅ | ❌² | ✅ |
+| [Document Outline](editing-features/document-outline.md) | ✅ | ❌¹ | ✅ |
 | [Defining Steps](editing-features/defining-steps.md) | ✅ | ✅ | ✅ |
-| [Rename Step](editing-features/rename-step.md) | ⚠️³ | ✅ | ✅ |
+| [Rename Step](editing-features/rename-step.md) | ✅ | ✅ | ✅ |
 | [Code Lens — Step Usage Counts](editing-features/code-lens.md) | ✅ | ✅ | ✅ |
 | [Code Lens — Hook Matches](editing-features/code-lens.md) | ✅ | ✅ | ✅ |
 | [Inlay Hints — Bound Step Info](editing-features/inlay-hints.md) | ✅ | ✅ | ✅ |
+| [Clickable Tags](editing-features/clickable-tags.md) | ✅ | ✅ | ✅ |
 
 ## Navigation Features
 
@@ -48,52 +49,42 @@ the faster path since you don't have to invoke anything.
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
 | [Go to Step Definition](navigation-features/go-to-definition.md) | ✅ | ✅ | ✅ |
-| [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️⁴ | ✅ |
+| [Find Step Definition Usages](navigation-features/find-usages.md) | ✅ | ⚠️² | ✅ |
 | [Find Unused Step Definitions](navigation-features/find-unused.md) | ✅ | ✅ | ✅ |
-| [Hook Navigation ("Go to Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
+| [Hook Navigation ("Find Hooks")](navigation-features/hook-navigation.md) | ✅ | ✅ | ✅ |
 
 ## Running Scenarios
 
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
-| [Running Scenarios](running-scenarios.md) | ❌⁶ | ✅ | ⚠️⁷ |
+| [Running Scenarios](running-scenarios.md) | ❌⁴ | ✅ | ⚠️⁵ |
 
 ## Project Setup
 
 | Feature | VS Code | Visual Studio | Rider |
 |---|:---:|:---:|:---:|
-| [New Project / Item Templates](new-project-templates.md) | ❌⁵ | ✅ | ❌⁵ |
+| [New Project / Item Templates](new-project-templates.md) | ❌³ | ✅ | ❌³ |
 
 ---
 
-¹ Visual Studio ships its own built-in Gherkin formatting service, which
-can override on-type table formatting. If table alignment doesn't seem to
-be happening as you type, see
-[Document & Table Formatting](editing-features/formatting.md) for the fix.
-
-² Visual Studio's native Document Outline window doesn't support
+¹ Visual Studio's native Document Outline window doesn't support
 `.feature` files at all — a VS platform limitation, not something we can
 configure around. See [Document Outline](editing-features/document-outline.md).
 
-³ VS Code's rename doesn't yet support disambiguating a step bound to more
-than one candidate binding. See [Rename Step](editing-features/rename-step.md)
-for the workaround. Rider and Visual Studio both handle disambiguation
-directly.
+² Visual Studio's native **Find All References** (Shift+F12) does not
+route to Reqnroll bindings — use the **N step usages** CodeLens above the
+binding, or assign a keyboard shortcut to the **Find Step Usages** command (it
+has no menu entry). See [Find Step Definition Usages](navigation-features/find-usages.md).
 
-⁴ Visual Studio's native **Find All References** (Shift+F12) does not
-route to Reqnroll bindings — use the dedicated **Find Step Usages** command
-instead. See [Find Step Definition Usages](navigation-features/find-usages.md)
-for exactly where to find it.
+³ VS Code and Rider don't have an equivalent project wizard or file templates; create files with
+the IDE's normal New File command and use the *Define missing step* quick fix to scaffold bindings
+— see [New Project / Item Templates](new-project-templates.md).
 
-⁵ VS Code and Rider don't have an equivalent project wizard; use snippets
-(VS Code) or live templates (Rider) instead — see
-[New Project / Item Templates](new-project-templates.md).
-
-⁶ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
+⁴ VS Code has no Reqnroll-owned Run feature; install the **C# Dev Kit**
 extension and use its own Test Explorer/CodeLens instead — see
 [Running Scenarios](running-scenarios.md).
 
-⁷ Rider's lens can only run a scenario, not debug it, and doesn't appear in
+⁵ Rider's lens can only run a scenario, not debug it, and doesn't appear in
 Rider's native Unit Tests tool window. See
 [Running Scenarios](running-scenarios.md) for the details and the
 workaround for debugging.
