@@ -385,13 +385,13 @@ public class StepSkeletonRendererTests
     [Fact]
     public void Render_regex_does_not_re_escape_backslashes_in_the_verbatim_literal()
     {
-        var step       = MakeStep("I use (paren)", ScenarioBlock.When);
+        var step       = MakeStep("I use a.b", ScenarioBlock.When);
         var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
         var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
 
-        // EscapeForRegex produces '\(' then the capture-group pass yields "\(.*)";
-        // a verbatim literal keeps the backslash as-is (NOT doubled).
-        snippet.Should().Contain("[When(@\"I use \\(.*)\")]");
+        // EscapeForRegex produces "a\.b"; a verbatim literal keeps the backslash
+        // as-is (NOT doubled).
+        snippet.Should().Contain("[When(@\"I use a\\.b\")]");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
