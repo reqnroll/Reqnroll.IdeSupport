@@ -9,9 +9,9 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestTargets;
 /// generator calls this to turn a feature/scenario title into the C# identifier it emits
 /// (<c>reqnrollFeature.Name.ToIdentifier()</c> in <c>UnitTestFeatureGenerator</c>,
 /// <c>scenario.Name.ToIdentifier()</c> in <c>UnitTestMethodGenerator</c> — see
-/// docs/Test-Runner-Integration-Design.md §2). The resolver needs this exact algorithm to build
+/// docs/Test-Runner-Integration-Design.md (Generator naming rules)). The resolver needs this exact algorithm to build
 /// the search key it looks up in the genuinely-parsed generated <c>.feature.cs</c> — it does not
-/// predict the resolver's answer from this alone (see design doc §3).
+/// predict the resolver's answer from this alone (see Test-Runner-Integration-Design ("Mapping layer")).
 /// </summary>
 public static class ReqnrollIdentifierNaming
 {

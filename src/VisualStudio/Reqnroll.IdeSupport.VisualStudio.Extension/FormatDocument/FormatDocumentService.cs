@@ -55,9 +55,15 @@ internal sealed class FormatDocumentService
         _logger.LogTrace(
             "FormatDocumentService: sending {Method} params={ParamsJson}", method, paramsJson);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(method, paramsJson, cancellationToken)
+        var (result, error) = await _pipe
+            .SendRequestToServerWithErrorAsync(method, paramsJson, cancellationToken)
             .ConfigureAwait(false);
+
+        // A user-correctable rejection (-32803: e.g. the file has no parsable Feature) is surfaced to
+        // the caller to show; any other error keeps the old "no edits" contract (already logged by the
+        // pipe), so an unexpected failure or ContentModified never pops a dialog (issue #1132).
+        if (EditRejection.TryCreateException(error) is { } rejection)
+            throw rejection;
 
         _logger.LogTrace(
             "FormatDocumentService: raw server result = {Result}", result is null ? "<null>" : result.ToString());

@@ -64,14 +64,6 @@ is listed first.
 
 :::
 
-```{admonition} Rider — confirmed
-:class: note
-
-Works in Rider — it auto-negotiates via the platform's generic LSP
-code-action support (the same way diagnostics/completion do), no
-Rider-specific plugin code needed. Confirmed live; see
-[#437](https://github.com/reqnroll/Reqnroll.IdeSupport/issues/437).
-```
 
 See also [New Project / Item Templates](../new-project-templates.md) for
 scaffolding a brand-new `.feature` file or step definitions class (as

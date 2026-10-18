@@ -30,7 +30,7 @@ public sealed record PerfTarget(
     string Operation, double TargetMs, PerfTargetKind Kind, string Description, bool IncludesFixedDelay = false);
 
 /// <summary>
-/// The architecture's Performance Requirements table, as code (see LSP-IDE-Support-Architecture.md).
+/// The architecture's Performance Requirements table, as code (see docs/architecture/performance.md).
 /// The single source of truth for what the benchmark asserts on the reference machine.
 /// </summary>
 public static class PerfTargets

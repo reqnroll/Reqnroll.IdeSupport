@@ -1,1 +1,0 @@
-InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d20b

@@ -2,6 +2,7 @@
 
 using System.Text;
 using Reqnroll.IdeSupport.LSP.Core.Matching;
+using Reqnroll.IdeSupport.LSP.Core.Parsing.CSharp;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 
 
@@ -82,8 +83,8 @@ public static class StepSkeletonRenderer
 
         var keyword   = BlockToKeyword(descriptor.Block);
         var attrValue = useCucumber
-            ? $"(\"{descriptor.ExpressionText}\")"
-            : $"(@\"{descriptor.ExpressionText}\")";
+            ? $"({CSharpStringLiteral.Format(descriptor.ExpressionText, isVerbatim: false)})"
+            : $"({CSharpStringLiteral.Format(descriptor.ExpressionText, isVerbatim: true)})";
 
         var paramList = string.Join(", ", descriptor.Parameters.Select(p => $"{p.Type} {p.Name}"));
         var returnType = isAsync ? "async Task" : "void";
@@ -148,41 +149,70 @@ public static class StepSkeletonRenderer
     private static (string Expression, IReadOnlyList<(string Type, string Name)> Parameters)
         BuildRegexExpression(string stepText)
     {
-        var escaped = EscapeForRegex(stepText);
         var parameters = new List<(string, string)>();
         int paramIndex = 0;
+        var sb  = new StringBuilder();
+        int pos = 0;
 
-        // Replace (.*) capture groups with string parameters
-        var result = RegexGroupRegex.Replace(escaped, _ =>
+        // Substitute parameter groups on the RAW step text, then escape only the
+        // literal segments between groups. Escaping first would turn "(foo)" into
+        // "\(foo\)" and the group regex would consume the wrong span, producing an
+        // invalid pattern such as "\(.*)".
+        foreach (Match m in RegexGroupRegex.Matches(stepText))
         {
-            var name = $"p{paramIndex++}";
-            parameters.Add(("string", name));
-            return "(.*)";
-        });
+            if (m.Index > pos)
+                sb.Append(EscapeForRegex(stepText.Substring(pos, m.Index - pos)));
 
-        return (result, parameters.AsReadOnly());
+            parameters.Add(("string", $"p{paramIndex++}"));
+            sb.Append("(.*)");
+
+            pos = m.Index + m.Length;
+        }
+
+        if (pos < stepText.Length)
+            sb.Append(EscapeForRegex(stepText.Substring(pos)));
+
+        return (sb.ToString(), parameters.AsReadOnly());
     }
 
     // ── Escaping ──────────────────────────────────────────────────────────────────
 
     internal static string EscapeForCucumber(string text)
     {
-        // Order matters: backslash first to avoid double-escaping
+        // Cucumber Expressions treat ( ) { } / and \ as special: an unescaped ) or /
+        // would turn the text into an unbalanced group or an alternation, so the
+        // generated binding would no longer match its own step.
+        // Order matters: backslash first to avoid double-escaping.
         return text
             .Replace("\\", "\\\\")
             .Replace("(", "\\(")
-            .Replace("{", "\\{");
+            .Replace("{", "\\{")
+            .Replace(")", "\\)")
+            .Replace("/", "\\/");
     }
 
     internal static string EscapeForRegex(string text)
     {
+        // Escape the full set of .NET regex metacharacters (the set Regex.Escape
+        // covers: \ * + ? | { [ ( ) ^ $ . #) so the generated binding matches its
+        // own step text. Whitespace is deliberately left literal -- Regex.Escape also
+        // escapes spaces, but that only matters under RegexOptions.IgnorePatternWhitespace
+        // (which generated bindings do not use) and would hurt readability.
+        // Order matters: backslash first to avoid double-escaping.
         return text
             .Replace("\\", "\\\\")
-            .Replace("(", "\\(")
-            .Replace(")", "\\)")
-            .Replace("{", "\\{")
             .Replace(".", "\\.")
-            .Replace("|", "\\|");
+            .Replace("$", "\\$")
+            .Replace("^", "\\^")
+            .Replace("{", "\\{")
+            .Replace("[", "\\[")
+            .Replace("(", "\\(")
+            .Replace("|", "\\|")
+            .Replace(")", "\\)")
+            .Replace("*", "\\*")
+            .Replace("+", "\\+")
+            .Replace("?", "\\?")
+            .Replace("#", "\\#");
     }
 
     // ── Method name ───────────────────────────────────────────────────────────────

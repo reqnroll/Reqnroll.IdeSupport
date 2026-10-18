@@ -113,7 +113,9 @@ internal sealed class LspRequestCorrelator
             }
             else
             {
-                pending.Result.TrySetResult(body["result"]);
+                // A response with no "result" member is still an answer: normalise it to a JSON null token so a
+                // null Result can only mean "released/cancelled", never "answered" (LspRequestOutcome).
+                pending.Result.TrySetResult(body["result"] ?? JValue.CreateNull());
                 pending.Error.TrySetResult(null);
             }
 
