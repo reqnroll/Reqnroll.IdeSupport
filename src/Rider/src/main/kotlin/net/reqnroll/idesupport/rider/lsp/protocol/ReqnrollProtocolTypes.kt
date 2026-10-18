@@ -231,7 +231,7 @@ data class RenameAppliedParams(
 
 /**
  * Params for `reqnroll/resolveTestTargets` — mirrors ResolveTestTargetsParams.cs field-for-field
- * (design doc §3/§4, issue #262). A range within a scenario/Outline's own header or steps resolves
+ * (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262). A range within a scenario/Outline's own header or steps resolves
  * to every target for that scenario; a range within one specific `Examples:` row resolves to just
  * that row's target.
  */

@@ -105,7 +105,7 @@ object ReqnrollDebugLogger {
     /**
      * The fourth level in the project's shared Error/Warning/Info/Verbose vocabulary (already used
      * by the LSP server's `--log-level` and VS Code's `reqnroll.trace.server`/`traceServerToLogLevel`
-     * mapping) — for the per-request diagnostic call sites (folding, inlay hints, breadcrumbs,
+     * mapping) — for the per-request diagnostic call sites (folding, inlay hints,
      * per-viewport CodeLens/documentSymbol, project/document sync, telemetry) that fire far too
      * often to belong in the curated console (issue #662): [log] never forwards `Verbose` entries
      * to a [ReqnrollConsoleSink], only writes them to the file. This is a fixed threshold, not a

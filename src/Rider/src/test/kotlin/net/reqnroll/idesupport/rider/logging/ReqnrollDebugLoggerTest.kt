@@ -127,7 +127,7 @@ class ReqnrollDebugLoggerTest {
     fun `verbose (the per-request-chatter level) never reaches a registered console sink`() {
         // The threshold this asserts is fixed, not configurable — see verbose()'s doc comment
         // for why (issue #662, matching VsOutputPaneLogger's hardcoded TraceLevel.Info on the VS
-        // side): Verbose is where folding/inlay-hints/breadcrumbs/per-viewport-CodeLens/etc. log,
+        // side): Verbose is where folding/inlay-hints/per-viewport-CodeLens/etc. log,
         // and none of that belongs in the curated console.
         val sink = RecordingSink()
         ReqnrollDebugLogger.addConsoleSink(sink)

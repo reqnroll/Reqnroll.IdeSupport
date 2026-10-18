@@ -20,7 +20,7 @@ import javax.swing.JComponent
  * `TraceLevel.Info` default threshold) and the VS Code extension's "Reqnroll" output channel (#661).
  *
  * Deliberately not the full [ReqnrollDebugLogger] firehose: per-request diagnostic call sites
- * (folding, inlay hints, breadcrumbs, per-viewport CodeLens/documentSymbol, project/document sync,
+ * (folding, inlay hints, per-viewport CodeLens/documentSymbol, project/document sync,
  * telemetry, etc.) log at [ReqnrollDebugLogger.verbose] instead of `info`/`warn`, so they never
  * reach a [ReqnrollConsoleSink] — see that method's doc comment for the "lifecycle + command
  * outcome, not per-request chatter" bar (matching #658 on the VS side) driving which call sites

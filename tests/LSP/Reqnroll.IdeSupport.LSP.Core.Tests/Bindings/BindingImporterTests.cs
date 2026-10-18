@@ -909,4 +909,67 @@ public class BindingImporterTryGetMethodIdentifierLocationTests : IDisposable
 
         result!.Value.Line.Should().Be(4);
     }
+
+    private const string TwoGivenAttributes = """
+        public class Steps
+        {
+            [Given("a {int} item")]
+            [Given("a {word} item")]
+            public void AnItem(string x) { }
+        }
+        """;
+
+    [Fact]
+    public void With_an_expression_picks_the_attribute_whose_literal_equals_it()
+    {
+        var root = BindingImporter.TryParseSourceFile(WriteSource(TwoGivenAttributes), _fileSystem);
+
+        BindingImporter.TryGetAttributeSourceLine(root, "AnItem", ScenarioBlock.Given, "a {word} item")
+            .Should().Be(4);
+        BindingImporter.TryGetAttributeSourceLine(root, "AnItem", ScenarioBlock.Given, "a {int} item")
+            .Should().Be(3);
+    }
+
+    [Fact]
+    public void With_a_regex_projection_picks_the_attribute_with_the_same_static_text()
+    {
+        var root = BindingImporter.TryParseSourceFile(WriteSource("""
+            public class Steps
+            {
+                [Given("the number is {int}")]
+                [Given("the total is {int}")]
+                public void Number(int n) { }
+            }
+            """), _fileSystem);
+
+        BindingImporter.TryGetAttributeSourceLine(root, "Number", ScenarioBlock.Given, "^the total is (.*)$")
+            .Should().Be(4);
+    }
+
+    [Fact]
+    public void With_an_expression_that_singles_out_no_attribute_returns_null_instead_of_the_first_line()
+    {
+        var root = BindingImporter.TryParseSourceFile(WriteSource(TwoGivenAttributes), _fileSystem);
+
+        // Both literals have the same static text as the projection, so neither is "the" attribute.
+        BindingImporter.TryGetAttributeSourceLine(root, "AnItem", ScenarioBlock.Given, "a (.*) item")
+            .Should().BeNull();
+        BindingImporter.TryGetAttributeSourceLine(root, "AnItem", ScenarioBlock.Given, "something else entirely")
+            .Should().BeNull();
+    }
+
+    [Fact]
+    public void With_a_single_candidate_attribute_the_expression_does_not_matter()
+    {
+        var root = BindingImporter.TryParseSourceFile(WriteSource("""
+            public class Steps
+            {
+                [Given("a step")]
+                public void MyStep() { }
+            }
+            """), _fileSystem);
+
+        BindingImporter.TryGetAttributeSourceLine(root, "MyStep", ScenarioBlock.Given, "edited since the build")
+            .Should().Be(3);
+    }
 }

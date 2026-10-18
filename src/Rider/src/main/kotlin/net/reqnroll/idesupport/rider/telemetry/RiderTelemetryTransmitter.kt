@@ -32,10 +32,16 @@ import java.util.concurrent.TimeUnit
  */
 object RiderTelemetryTransmitter {
     // Same Application Insights resource VS's TelemetryTransmitter.cs and VS Code's telemetry.ts
-    // use (see src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt),
-    // so usage events from every Reqnroll IDE client land in the same place.
-    private const val INSTRUMENTATION_KEY = "3fd018ff-819d-4685-a6e1-6f09bc98d20b"
-    private const val INGESTION_ENDPOINT = "https://dc.services.visualstudio.com/v2/track"
+    // use (see TelemetryConnections.kt), so usage events from every Reqnroll IDE client land in the
+    // same place. Which resource (dev or prod) is fixed at build time (issue #1160), except that the
+    // `runIde` dev sandbox (`reqnroll.devSandbox`, see build.gradle.kts) is always dev.
+    private val ENVIRONMENT = effectiveEnvironment(TelemetryBuildConfig.ENVIRONMENT, System.getProperty("reqnroll.devSandbox") == "true")
+    private val INSTRUMENTATION_KEY = TelemetryConnections.instrumentationKey(ENVIRONMENT)
+    private val INGESTION_ENDPOINT = TelemetryConnections.ingestionEndpoint(ENVIRONMENT)
+
+    /** A dev sandbox is always `dev`, so a `prod` build setting never sends a developer's `runIde` session to prod. */
+    internal fun effectiveEnvironment(buildEnvironment: String, isDevSandbox: Boolean): String =
+        if (isDevSandbox) "dev" else buildEnvironment
 
     /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
     internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING"
@@ -51,14 +57,6 @@ object RiderTelemetryTransmitter {
      */
     internal fun resolveConnection(envValue: String?, onInvalid: (String) -> Unit = {}): Connection =
         parseOverride(envValue, onInvalid) ?: BUILT_IN_CONNECTION
-
-    /**
-     * Debug-build guard (issue #889): the `runIde` dev sandbox (`reqnroll.devSandbox`, see
-     * build.gradle.kts) must not send to the built-in production resource, so without a usable
-     * override it sends nothing.
-     */
-    internal fun isBuiltInBlocked(isDevSandbox: Boolean, envValue: String?): Boolean =
-        isDevSandbox && parseOverride(envValue) == null
 
     private fun parseOverride(envValue: String?, onInvalid: (String) -> Unit = {}): Connection? {
         val value = envValue?.trim()
@@ -156,38 +154,50 @@ object RiderTelemetryTransmitter {
      */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
         val debugLog = RiderTelemetryDebugLog.fromEnvironment()
-        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR)) &&
-            !isBuiltInBlocked(System.getProperty("reqnroll.devSandbox") == "true", System.getenv(CONNECTION_STRING_ENV_VAR))
+        val enabled = isEnabled(System.getenv(TELEMETRY_ENV_VAR))
+        val stringProps = stampedProperties(properties)
 
         if (!enabled) {
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: telemetry disabled; dropping $eventName")
-            debugLog.record("host", eventName, properties, enabled = false, transmitted = false)
+            debugLog.record("host", eventName, stringProps, enabled = false, transmitted = false)
             return
         }
 
         if (breaker.isOpen) {
-            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = "telemetry endpoint unreachable")
+            debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = "telemetry endpoint unreachable")
             return
         }
 
         try {
-            val stringProps = LinkedHashMap<String, String>()
-            properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
-            stampClientIdentity(stringProps, ideVersion(), extensionVersion())
-
             val body = buildEnvelope(eventName, userId(), stringProps, Instant.now(), connection.instrumentationKey)
             post(httpClient, URI.create(connection.endpoint), body, breaker) { reason ->
-                debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = reason)
+                debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = reason)
             }
 
-            debugLog.record("host", eventName, properties, enabled = true, transmitted = true)
+            debugLog.record("host", eventName, stringProps, enabled = true, transmitted = true)
         } catch (ex: Exception) {
             // A telemetry failure must never break the plugin — same posture as VS's
             // TelemetryTransmitter.TransmitEvent catch-all.
             ReqnrollDebugLogger.verbose("RiderTelemetryTransmitter: error preparing $eventName", ex)
             breaker.recordFailure(ex.message ?: ex.javaClass.simpleName)
-            debugLog.record("host", eventName, properties, enabled = true, transmitted = false, error = ex.message)
+            debugLog.record("host", eventName, stringProps, enabled = true, transmitted = false, error = ex.message)
         }
+    }
+
+    /**
+     * The properties as transmitted: stringified with the host identity stamped (issue #844, #1199). The debug-log
+     * mirror records this too, so it shows `IdeClient`/`ClientSessionId` like the envelope does. A failure to read
+     * the IDE or plugin version falls back to the unstamped properties rather than failing the caller.
+     */
+    private fun stampedProperties(properties: Map<String, Any?>): Map<String, String> {
+        val stringProps = LinkedHashMap<String, String>()
+        properties.forEach { (key, value) -> if (value != null) stringProps[key] = value.toString() }
+        try {
+            stampClientIdentity(stringProps, ideVersion(), extensionVersion())
+        } catch (_: Exception) {
+            // Identity is best-effort; telemetry must never break the plugin.
+        }
+        return stringProps
     }
 
     /**
@@ -292,6 +302,7 @@ object RiderTelemetryTransmitter {
         properties["Ide"] = "JetBrains Rider"
         properties["IdeVersion"] = ideVersion
         properties["ExtensionVersion"] = extensionVersion
+        properties.putIfAbsent(ClientSession.PROPERTY_NAME, ClientSession.id) // issue #1199
     }
 
     private fun userId(): String {

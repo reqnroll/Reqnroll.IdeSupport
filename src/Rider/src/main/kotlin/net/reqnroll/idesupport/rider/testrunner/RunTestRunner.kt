@@ -24,7 +24,7 @@ import java.nio.file.Path
 import java.util.concurrent.TimeUnit
 
 /**
- * Implements the "▶ Run" lens click (design doc §5/§6, issue #262) — Rider's own execution of
+ * Implements the "▶ Run" lens click (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — Rider's own execution of
  * `dotnet test --filter`, mirroring VS Code's already-shipped "Option 2" for this same issue
  * (this plugin has no native `com.intellij.execution`/Test Runner integration to delegate to
  * instead — see [RunTestCodeVisionProvider]'s doc comment).
@@ -43,8 +43,6 @@ import java.util.concurrent.TimeUnit
  * (implementation plan Phase 4) rather than becoming the only path immediately.
  */
 object RunTestRunner {
-    private const val TEST_TIMEOUT_SECONDS = 120L
-
     /** Mirrors ReqnrollIdeTestLogger's/TestLoggerRunSettings.cs's constants — the VS extension deliberately doesn't reference that assembly to avoid a second copy landing in its own output; same reasoning applies here. */
     internal const val LOGGER_FRIENDLY_NAME = "ReqnrollIde"
 
@@ -102,10 +100,15 @@ object RunTestRunner {
                 val reporterInjected = registration != null && mode != DotnetTestMode.VS_TEST &&
                     ReqnrollMtpReporterPathResolver.resolve() != null
 
-                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter, registration, loggerDirectory, mode)
+                val testOutcome = runDotnetTest(runnableProject.projectFilePath, filter, registration, loggerDirectory, mode) { indicator.isCanceled }
                 val fallbackResult = when (testOutcome) {
                     is DotnetTestOutcome.Failure -> {
                         notifyError(project, testOutcome.message)
+                        return
+                    }
+                    is DotnetTestOutcome.Cancelled -> {
+                        // The user pressed Cancel: not an error, so no notification.
+                        ReqnrollDebugLogger.info("RunTestRunner: dotnet test cancelled by the user")
                         return
                     }
                     is DotnetTestOutcome.Inconclusive -> {
@@ -163,12 +166,19 @@ object RunTestRunner {
      * `internal`ly testable without a platform fixture.
      */
     internal fun findOwningProjectPath(filePath: String, projectFilePaths: Collection<String>): String? {
+        // [lspUriToLocalPath] yields forward-slash paths ("W:/repo/A.feature") while the project model
+        // reports platform paths ("W:\repo\A.csproj" on Windows), so compare with both normalised to '/'.
+        // A prefix built from File.separatorChar never matched on Windows, which made every run from a
+        // .feature file fail with "Could not find the project that owns ..." (#1122).
+        val normalizedFile = filePath.replace('\\', '/')
         var best: String? = null
         var bestLen = 0
         for (projectFilePath in projectFilePaths) {
-            val folder = File(projectFilePath).parent ?: continue
-            val prefix = folder.trimEnd(File.separatorChar) + File.separatorChar
-            if (filePath.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
+            val normalized = projectFilePath.replace('\\', '/')
+            val slash = normalized.lastIndexOf('/')
+            if (slash < 0) continue
+            val prefix = normalized.substring(0, slash).trimEnd('/') + '/'
+            if (normalizedFile.startsWith(prefix, ignoreCase = true) && prefix.length > bestLen) {
                 best = projectFilePath
                 bestLen = prefix.length
             }
@@ -343,14 +353,27 @@ object RunTestRunner {
         return RunResult(outcome, rows)
     }
 
-    /** The pre-#700 result shape: one aggregate bit over every TRX row, no per-row detail. */
-    private fun trxResult(results: List<TrxUnitTestResult>): RunResult =
-        RunResult(if (results.any { it.outcome == "Failed" }) RunOutcome.FAILED else RunOutcome.PASSED)
+    /**
+     * The pre-#700 result shape: one aggregate bit over every TRX row, no per-row detail. Zero rows
+     * (a TRX with no `UnitTestResult` entries, or one [TrxParser] couldn't parse) proves nothing ran
+     * or was readable, so it is [RunOutcome.INCONCLUSIVE] rather than a vacuous pass (issue #983).
+     * `internal` for testability.
+     */
+    internal fun trxResult(results: List<TrxUnitTestResult>): RunResult = RunResult(
+        when {
+            results.isEmpty() -> RunOutcome.INCONCLUSIVE
+            results.any { it.outcome == "Failed" } -> RunOutcome.FAILED
+            else -> RunOutcome.PASSED
+        },
+    )
 
     /** The outcome of a [runDotnetTest] call — [Failure.message] is shown to the user verbatim, so it distinguishes an unresolvable `dotnet` CLI (issue #452) from every other launch failure. */
     private sealed class DotnetTestOutcome {
         data class Success(val results: List<TrxUnitTestResult>) : DotnetTestOutcome()
         data class Failure(val message: String) : DotnetTestOutcome()
+
+        /** The user cancelled the run (issue #981); the process tree has been killed. Deliberately silent at the call site. */
+        object Cancelled : DotnetTestOutcome()
 
         /**
          * No TRX was produced, but [looksLikeMtpProject] says this is an MTP-mode project our
@@ -396,6 +419,7 @@ object RunTestRunner {
         registration: RegisterTestRunResponse?,
         loggerDirectory: Path?,
         mode: DotnetTestMode,
+        isCanceled: () -> Boolean,
     ): DotnetTestOutcome {
         val resultsDir = Files.createTempDirectory("reqnroll-test-").toFile()
         val trxFileName = "result.trx"
@@ -467,10 +491,17 @@ object RunTestRunner {
                         "accessible to Rider, then retry."
                 )
             }
-            val completed = process.waitFor(TEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroyForcibly()
-                return DotnetTestOutcome.Failure("dotnet test failed to run for $projectFile.")
+            // The budget covers the build as well as the tests (`dotnet test` builds first), so it
+            // is overridable (see DotnetTestProcessWaiter.TIMEOUT_PROPERTY) and a timeout says so.
+            val timeoutSeconds = DotnetTestProcessWaiter.resolveTimeoutSeconds()
+            when (DotnetTestProcessWaiter.await(process, TimeUnit.SECONDS.toMillis(timeoutSeconds), isCanceled)) {
+                ProcessWaitResult.COMPLETED -> Unit
+                ProcessWaitResult.CANCELLED -> return DotnetTestOutcome.Cancelled
+                ProcessWaitResult.TIMED_OUT -> return DotnetTestOutcome.Failure(
+                    "dotnet test for $projectFile did not finish within $timeoutSeconds seconds and was stopped. " +
+                        "The time includes building the project, so a large solution may need longer: set the " +
+                        "-D${DotnetTestProcessWaiter.TIMEOUT_PROPERTY}=<seconds> JVM option to raise the limit."
+                )
             }
 
             if (mode != DotnetTestMode.VS_TEST) {

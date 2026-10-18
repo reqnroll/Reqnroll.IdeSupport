@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Threading;
+using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.StepCodeLens;
 
@@ -48,6 +49,12 @@ internal sealed class StepCodeLensResultCache
         public AsyncLazy<IReadOnlyList<StepLensItem>> Lazy { get; }
     }
 
+    /// <summary>How many times one caller restarts after the shared fetch failed with <see cref="LspContentModifiedException"/>.</summary>
+    internal const int MaxContentModifiedRestarts = 3;
+
+    /// <summary>Pause before restarting after <see cref="LspContentModifiedException"/>.</summary>
+    internal static readonly TimeSpan ContentModifiedRestartDelay = TimeSpan.FromMilliseconds(100);
+
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<StepLensItem>>> _inner;
     private readonly JoinableTaskFactory _joinableTaskFactory;
 
@@ -87,14 +94,31 @@ internal sealed class StepCodeLensResultCache
     /// </summary>
     public async Task<IReadOnlyList<StepLensItem>> GetLensesAsync(string fileUri, CancellationToken callerToken)
     {
-        var lazyEntry = _entries.AddOrUpdate(
-            fileUri,
-            addValueFactory: static (uri, self) => new Lazy<Entry>(() => self.CreateEntry(uri)),
-            updateValueFactory: static (uri, existing, self) => self.IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => self.CreateEntry(uri)),
-            factoryArgument: this);
+        for (var restarts = 0; ; restarts++)
+        {
+            var lazyEntry = _entries.AddOrUpdate(
+                fileUri,
+                addValueFactory: static (uri, self) => new Lazy<Entry>(() => self.CreateEntry(uri)),
+                updateValueFactory: static (uri, existing, self) => self.IsUsable(existing.Value) ? existing : new Lazy<Entry>(() => self.CreateEntry(uri)),
+                factoryArgument: this);
 
-        var entry = lazyEntry.Value;
-        return await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
+            var entry = lazyEntry.Value;
+            try
+            {
+                return await entry.Lazy.GetValueAsync(callerToken).ConfigureAwait(false);
+            }
+            catch (LspContentModifiedException) when (
+                !callerToken.IsCancellationRequested && restarts < MaxContentModifiedRestarts)
+            {
+                // The server's state changed under the fetch (issue #1017). Nothing re-asks on its
+                // own: the lens's element description is unchanged, so VS does not request the label
+                // again, and the blank result would stand until some later refresh. The faulted entry
+                // is not reused (IsUsable), so the next pass starts a fresh fetch; the short pause
+                // lets the burst of notifications that caused it finish first. Mirrors
+                // RunTestCodeLensResultCache.GetTargetsAsync.
+                await Task.Delay(ContentModifiedRestartDelay, callerToken).ConfigureAwait(false);
+            }
+        }
     }
 
     /// <summary>Drops the cached/in-flight result for <paramref name="fileUri"/>, if any.</summary>

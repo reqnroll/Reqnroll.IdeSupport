@@ -8,7 +8,6 @@ import com.intellij.platform.lsp.api.LspServerNotificationsHandler
 import com.intellij.platform.lsp.api.ProjectWideLspServerDescriptor
 import com.intellij.platform.lsp.api.customization.LspCommandsSupport
 import com.intellij.platform.lsp.api.customization.LspDiagnosticsSupport
-import com.intellij.platform.lsp.api.customization.LspFormattingSupport
 import com.intellij.platform.lsp.api.customization.LspSemanticTokensSupport
 import net.reqnroll.idesupport.rider.isCsExtension
 import net.reqnroll.idesupport.rider.isFeatureExtension
@@ -25,6 +24,7 @@ import org.eclipse.lsp4j.RangeFormattingCapabilities
 import org.eclipse.lsp4j.TextDocumentClientCapabilities
 import org.eclipse.lsp4j.WorkspaceClientCapabilities
 import org.eclipse.lsp4j.services.LanguageServer
+import net.reqnroll.idesupport.rider.telemetry.ClientSession
 
 /**
  * Central configuration point for the Reqnroll LSP server as far as Rider's generic
@@ -59,19 +59,12 @@ class ReqnrollLspServerDescriptor(project: Project) :
     // line. See com/reqnroll/ide/rider/lsp/diagnostics/ReqnrollLspDiagnosticsSupport.kt. (#176)
     override val lspDiagnosticsSupport: LspDiagnosticsSupport = ReqnrollLspDiagnosticsSupport()
 
-    // Enables the platform's built-in LspFormattingService (an AsyncDocumentFormattingService) for
-    // whole-document Reformat Code. Confirmed by decompiling LspFormattingService.canFormat that
-    // eligibility here is PSI-independent — unlike declarative inlay hints, it does NOT require a
-    // registered FormattingModelBuilder for .feature's language; it only needs this property
-    // non-null and requires !hasFormattingModelBuilder (true for .feature, since none is
-    // registered) plus the server advertising documentFormattingProvider (already true via
-    // GherkinFormattingHandler). The platform's LspFormattingTask sends the standard
-    // textDocument/formatting request and applies the returned edits itself — no client glue
-    // needed. Note: LspFormattingService.getFeatures() decompiles to emptySet(), so
-    // FormattingService.Feature.FORMAT_FRAGMENTS is not declared — Reformat Selection does not
-    // route through this path (whole-document only); on-type table-column realignment likewise
-    // has no generic platform hook and would need separate custom client glue.
-    override val lspFormattingSupport: LspFormattingSupport = LspFormattingSupport()
+    // Deliberately NO lspFormattingSupport: its presence enables the platform's LspFormattingService,
+    // whose formatting task uses sendRequestSync and so swallows the server's -32803 "edit rejected"
+    // error. Whole-document Reformat Code is handled by ReqnrollFormattingService instead (issue #1172).
+    // The dynamic-registration capabilities advertised in clientCapabilities below stay: they are
+    // harmless without the platform service, and the server registers its handlers dynamically.
+
 
     // Rider 2026.2 renders textDocument/codeLens natively and runs a clicked lens's command through
     // this; without it the server's client-side commands (reqnroll.findStepUsages, ...) go back to the
@@ -110,7 +103,7 @@ class ReqnrollLspServerDescriptor(project: Project) :
     // consumer for inlay hints to refresh (same "capability-name bookkeeping only" finding noted
     // elsewhere in this file). Since ReqnrollInlayHintRefreshInterceptor gives it a real one now,
     // advertise the capability truthfully rather than leaving the server's push silently gated off.
-    // Rider's generic LspFormattingService (see lspFormattingSupport above) only treats a server as
+    // Rider's generic LspFormattingService (no longer enabled, see the note on lspFormattingSupport above) only treated a server as
     // "explicitly wanting" to format a file when it finds a *dynamically registered*
     // textDocument/formatting capability whose DocumentSelector matches that file — confirmed by
     // decompiling LspServerImpl's private capability-lookup helper, which reads solely from
@@ -153,9 +146,10 @@ class ReqnrollLspServerDescriptor(project: Project) :
         val logLevel = resolveLogLevel(System.getProperty("reqnroll.devSandbox") == "true")
 
         ReqnrollDebugLogger.info(
-            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel")
+            "createCommandLine: launching $serverPath --ide rider --log-level $logLevel " +
+                "${ClientSession.SERVER_ARGUMENT_NAME} ${ClientSession.id}")
         return GeneralCommandLine(serverPath.toString())
-            .withParameters("--ide", "rider", "--log-level", logLevel)
+            .withParameters("--ide", "rider", "--log-level", logLevel, ClientSession.SERVER_ARGUMENT_NAME, ClientSession.id)
     }
 
     companion object {

@@ -78,11 +78,12 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// Runs discovery for <paramref name="scope"/>.
     /// </summary>
     /// <returns>
-    /// A new <see cref="ProjectBindingRegistry"/> and its content hash when discovery
-    /// succeeds.  Returns (<paramref name="lastGood"/>, <paramref name="lastHash"/>) unchanged
-    /// when the assembly is missing, unchanged, or the connector fails.
+    /// <see cref="ConnectorDiscoveryStatus.Discovered"/> with a new <see cref="ProjectBindingRegistry"/>
+    /// and its content hash when discovery succeeds. Otherwise <paramref name="lastGood"/> and
+    /// <paramref name="lastHash"/> unchanged, with a status saying why (see
+    /// <see cref="IConnectorDiscoveryService.RunDiscovery"/>).
     /// </returns>
-    public (ProjectBindingRegistry Registry, string Hash) RunDiscovery(
+    public ConnectorDiscoveryOutcome RunDiscovery(
         IProjectScope scope,
         ProjectBindingRegistry lastGood,
         string lastHash,
@@ -96,13 +97,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         if (string.IsNullOrEmpty(assemblyPath))
         {
             _logger.LogVerbose($"[{scope.ProjectName}] OutputAssemblyPath not set; skipping discovery.");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         if (!_fileSystem.File.Exists(assemblyPath))
         {
             _logger.LogInfo($"[{scope.ProjectName}] Output assembly not found (project not yet built?): {assemblyPath}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         // Gate the connector on the project actually being a Reqnroll *test* project -- one that
@@ -132,14 +133,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll test project; skipping binding discovery.");
             }
 
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         var currentHash = ComputeHash(_fileSystem, assemblyPath);
         if (currentHash == lastHash)
         {
             _logger.LogVerbose($"[{scope.ProjectName}] Assembly unchanged (hash match); skipping discovery.");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Unchanged(lastGood, lastHash);
         }
 
         ct.ThrowIfCancellationRequested();
@@ -158,7 +159,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {ex.Message}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
         }
         sw.Stop();
 
@@ -173,14 +174,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         {
             _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
                 $"{ConnectorPidSuffix(result)}: {result.ErrorMessage}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
         }
 
         var registry = BuildRegistry(scope, result);
         _logger.LogInfo(
             $"[{scope.ProjectName}] Discovery complete in {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
             $"{ConnectorPidSuffix(result)}: {registry.StepDefinitions.Length} step definition(s), {registry.Hooks.Length} hook(s).");
-        return (registry, currentHash);
+        return ConnectorDiscoveryOutcome.Discovered(registry, currentHash);
     }
 
     // ── Registry building ─────────────────────────────────────────────────────
@@ -218,9 +219,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return true;
         }
 
-        var stepDefinitions = (result.StepDefinitions ?? [])
-            .Where(sd => !IsStale(sd.SourceLocation))
-            .Select(sd => {
+        // The runtime registers one binding per [Scope], so an attribute with several scopes arrives as
+        // several DTOs. They are imported as one binding per attribute, their scopes reduced together
+        // by ScopeNormalizer -- the same reduction Roslyn discovery applies -- so both paths give the
+        // consumers the same shape (issues #953, #1133).
+        var stepDefinitions = BindingImporter.GroupByAttribute(result.StepDefinitions ?? [])
+            .Where(group => !IsStale(group.Binding.SourceLocation))
+            .Select(group => {
+                var sd = group.Binding;
                 // For connector-discovered bindings, backfill the attribute source line and the
                 // method identifier's own location from the source file using Roslyn syntax
                 // parsing. The attribute line enables exact AST-based matching in
@@ -241,7 +247,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 var root = TryGetParsedRoot(importer, sd.SourceLocation, sd.Method, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
                 var bareMethodName = BindingImporter.ExtractBareMethodName(sd.Method);
-                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock);
+                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock, sd.Expression);
                 var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
 
                 // The one case worth a warning even when a root parsed successfully: no method
@@ -263,7 +269,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                         "the method body rather than on its declaration line.");
                 }
 
-                return importer.ImportStepDefinition(sd, attrLine, methodLocation);
+                return importer.ImportStepDefinition(sd, attrLine, methodLocation, group.Scopes);
             })
             .Where(sd => sd is not null)
             .ToList();
@@ -273,16 +279,17 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // on its declaration -- and skipped the source-file resolution the backfill performs on the
         // way (issue #540 F2). Hooks carry no attribute line (ProjectHookBinding does not model one),
         // so only the identifier location is backfilled here.
-        var hooks = (result.Hooks ?? [])
-            .Where(h => !IsStale(h.SourceLocation))
-            .Select(h => {
+        var hooks = BindingImporter.GroupByAttribute(result.Hooks ?? [])
+            .Where(group => !IsStale(group.Binding.SourceLocation))
+            .Select(group => {
+                var h = group.Binding;
                 var root = TryGetParsedRoot(importer, h.SourceLocation, h.Method, parsedFiles, _fileSystem, _logger);
                 var bareMethodName = BindingImporter.ExtractBareMethodName(h.Method);
                 var methodLocation = root == null
                     ? null
                     : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
 
-                return importer.ImportHook(h, methodLocation);
+                return importer.ImportHook(h, methodLocation, group.Scopes);
             })
             .Where(h => h is not null)
             .ToList();

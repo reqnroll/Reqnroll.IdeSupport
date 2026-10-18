@@ -9,12 +9,27 @@ import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
-    kotlin("jvm") version "2.4.20"
+    kotlin("jvm") version "2.4.21"
     id("org.jetbrains.intellij.platform") version "2.19.0"
 }
 
 group = providers.gradleProperty("pluginGroup").get()
-version = providers.gradleProperty("pluginVersion").get()
+
+// CI passes -PpluginVersion=<ReqnrollIdeSupportMainVersion>.<run number>. A local build falls back to the
+// same <ReqnrollIdeSupportMainVersion>.99999 that build/Version.props gives the .NET projects, so a local
+// install always sorts newer than any CI build (issue #1163).
+val pluginVersionValue: String = providers.gradleProperty("pluginVersion").orNull
+    ?: run {
+        val versionProps = rootDir.resolve("../../build/Version.props").readText()
+        val mainVersion = Regex("<ReqnrollIdeSupportMainVersion>([^<]+)</ReqnrollIdeSupportMainVersion>")
+            .find(versionProps)?.groupValues?.get(1)?.trim()
+            ?: error("ReqnrollIdeSupportMainVersion not found in build/Version.props")
+        val buildNumber = Regex("<ReqnrollIdeSupportBuildNumber[^>]*>([^<]+)</ReqnrollIdeSupportBuildNumber>")
+            .find(versionProps)?.groupValues?.get(1)?.trim()
+            ?: error("ReqnrollIdeSupportBuildNumber default not found in build/Version.props")
+        "$mainVersion.$buildNumber"
+    }
+version = pluginVersionValue
 
 repositories {
     mavenCentral()
@@ -89,7 +104,7 @@ intellijPlatform {
         // Not "... for Rider": the Plugin Verifier rejects a plugin name containing the IDE name (same
         // rule as for the plugin ID, see gradle.properties). Rider's plugin list is Rider-only anyway.
         name = "Reqnroll Extension (Preview)"
-        version = providers.gradleProperty("pluginVersion")
+        version = pluginVersionValue
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
@@ -307,6 +322,22 @@ val publishMtpReporter by tasks.registering(Exec::class) {
     )
 }
 
+// CI hands the per-RID server over via artifact zips, which drop the Unix executable bit, and Gradle
+// copies preserve whatever mode the source had -- so the extensionless server/connector apphosts would
+// land in the plugin zip as 0644 and fail to spawn on Linux/macOS (issue #979). Force rwxr-xr-x on them
+// (harmless on Windows, where the binaries have .exe names and never match).
+fun CopySpec.makeServerBinariesExecutable() {
+    filesMatching(listOf("**/Reqnroll.IdeSupport.LSP.Server", "**/reqnroll-ide-connector")) {
+        permissions { unix("rwxr-xr-x") }
+    }
+}
+
+// The plugin zip is re-packed from the sandbox by buildPlugin, which writes entries with default modes
+// rather than the sandbox files' modes, so the executable bit has to be set on that task too.
+tasks.named("buildPlugin", Zip::class) {
+    makeServerBinariesExecutable()
+}
+
 // The IntelliJ Platform Gradle Plugin registers one PrepareSandboxTask per run/test entry point
 // (prepareSandbox, prepareSandbox_runIde, prepareSandbox_runIdeBackend, prepareSandbox_runIdeFrontend,
 // prepareTestSandbox, ...) — each populating its own separate sandbox directory. Configuring only the
@@ -322,6 +353,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
         dependsOn(publishServer)
         from(serverOutputDir) {
             into("${project.name}/server/$serverRid")
+            makeServerBinariesExecutable()
         }
     } else {
         allServerRids.forEach { rid ->
@@ -329,6 +361,7 @@ tasks.withType<PrepareSandboxTask>().configureEach {
             if (ridDir.exists()) {
                 from(ridDir) {
                     into("${project.name}/server/$rid")
+                    makeServerBinariesExecutable()
                 }
             }
         }
@@ -374,4 +407,53 @@ tasks {
 // code reads it and passes the corresponding --log-level through when it spawns the server).
 tasks.matching { it.name == "runIde" }.configureEach {
     (this as? JavaExec)?.systemProperty("reqnroll.devSandbox", "true")
+}
+
+// ── Built-in Application Insights resource (issue #1160) ──
+//
+// Which resource this build reports to is fixed at build time: `prod` for release builds, `dev`
+// (the default) for everything else. Select with -PtelemetryEnv=prod or REQNROLL_TELEMETRY_ENV=prod
+// (the same variable the VS and VS Code builds read). The per-environment keys live in
+// TelemetryConnections.kt; this task only generates TelemetryBuildConfig.ENVIRONMENT and refuses a
+// prod build while a PROD value is still a TODO placeholder.
+val telemetryEnv = (findProperty("telemetryEnv") as String? ?: System.getenv("REQNROLL_TELEMETRY_ENV"))
+    ?.trim()?.lowercase()?.ifEmpty { null } ?: "dev"
+require(telemetryEnv == "dev" || telemetryEnv == "prod") { "telemetryEnv must be 'dev' or 'prod' (was '$telemetryEnv')" }
+
+val telemetryConnectionsFile = layout.projectDirectory.file("src/main/kotlin/net/reqnroll/idesupport/rider/telemetry/TelemetryConnections.kt")
+val generatedTelemetryDir = layout.buildDirectory.dir("generated/telemetry/kotlin")
+
+val generateTelemetryBuildConfig by tasks.registering {
+    group = "reqnroll"
+    description = "Generates TelemetryBuildConfig (dev/prod Application Insights selection, issue #1160)."
+    inputs.property("telemetryEnv", telemetryEnv)
+    inputs.file(telemetryConnectionsFile)
+    outputs.dir(generatedTelemetryDir)
+
+    doLast {
+        if (telemetryEnv == "prod") {
+            val placeholder = telemetryConnectionsFile.asFile.readLines()
+                .any { it.contains("const val PROD_") && it.contains("TODO") }
+            check(!placeholder) {
+                "TelemetryConnections.kt: a PROD_ value is still a TODO placeholder; paste the real " +
+                    "Application Insights values before a prod build."
+            }
+        }
+        val dir = generatedTelemetryDir.get().asFile.resolve("net/reqnroll/idesupport/rider/telemetry")
+        dir.mkdirs()
+        dir.resolve("TelemetryBuildConfig.kt").writeText(
+            """
+            package net.reqnroll.idesupport.rider.telemetry
+
+            // Generated by the generateTelemetryBuildConfig Gradle task. Do not edit; not committed.
+            internal object TelemetryBuildConfig {
+                const val ENVIRONMENT = "$telemetryEnv"
+            }
+            """.trimIndent() + "\n",
+        )
+    }
+}
+
+kotlin.sourceSets.named("main") {
+    kotlin.srcDir(generateTelemetryBuildConfig)
 }

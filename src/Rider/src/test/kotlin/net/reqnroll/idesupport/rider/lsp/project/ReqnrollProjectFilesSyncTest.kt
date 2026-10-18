@@ -73,4 +73,35 @@ class ReqnrollProjectFilesSyncTest {
             sut.findOwningProject("$fooBar${sep}Steps.cs", folders),
         )
     }
+
+    // Issue #978: on Windows the folders are backslash-separated (File(...).parent) but
+    // VFileEvent.path is always "/"-separated. Pure string inputs, so these run on any OS.
+    @Test
+    fun `findOwningProject matches a slash event path against a backslash Windows folder (issue 978)`() {
+        val folders = listOf("C:\\proj" to "C:\\proj\\App.csproj")
+
+        assertEquals("C:\\proj\\App.csproj", sut.findOwningProject("C:/proj/F.feature", folders))
+        assertEquals("C:\\proj\\App.csproj", sut.findOwningProject("c:/PROJ/sub/F.feature", folders))
+    }
+
+    @Test
+    fun `findOwningProject matches a slash event path against a slash Linux folder (issue 978)`() {
+        val folders = listOf("/work/App" to "/work/App/App.csproj")
+
+        assertEquals("/work/App/App.csproj", sut.findOwningProject("/work/App/F.feature", folders))
+    }
+
+    @Test
+    fun `findOwningProject keeps the folder boundary for a sibling prefix with slash paths (issue 978)`() {
+        val folders = listOf("C:\\proj" to "C:\\proj\\App.csproj")
+
+        assertNull(sut.findOwningProject("C:/proj2/F.feature", folders))
+    }
+
+    @Test
+    fun `findOwningProject returns null for an unrelated slash event path (issue 978)`() {
+        val folders = listOf("C:\\proj" to "C:\\proj\\App.csproj")
+
+        assertNull(sut.findOwningProject("D:/other/F.feature", folders))
+    }
 }

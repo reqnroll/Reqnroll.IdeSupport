@@ -47,11 +47,16 @@ on:
 env:
   DOTNET_VERSION: '10.0.x'
   CONFIGURATION: Release
+  # Telemetry is off for every CI run (#1194): the cross-IDE kill switch (CONTRIBUTING.md > Telemetry)
+  # keeps tests, builds and any launched VS Code host from sending events to the dev or prod
+  # Application Insights resources. Tests that exercise telemetry set the variable themselves.
+  REQNROLL_TELEMETRY_ENABLED: '0'
+  # (A reusable workflow does not inherit the caller's workflow-level env, so it is repeated here.)
   # Build number injected into VersionPrefix (build/Version.props) and, from there, into
   # AssemblyInformationalVersion / ServerInfo.Version (see Program.GetServerVersion). The
   # GitHub Actions run number is monotonically increasing and never reused, so it sorts
   # consistently across builds — see reqnroll/Reqnroll.VisualStudio's ci.yml for the pattern.
-  BUILD_NUMBER_ARG: -p:ReqnrollBuildNumber=${{ github.run_number }}
+  BUILD_NUMBER_ARG: -p:ReqnrollIdeSupportBuildNumber=${{ github.run_number }}
   CONNECTOR_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Connector/Connector/Connector.csproj
   LSP_CORE_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Core/Reqnroll.IdeSupport.LSP.Core.csproj
   LSP_SERVER_PROJECT: src/LSP/Reqnroll.IdeSupport.LSP.Server/Reqnroll.IdeSupport.LSP.Server.csproj

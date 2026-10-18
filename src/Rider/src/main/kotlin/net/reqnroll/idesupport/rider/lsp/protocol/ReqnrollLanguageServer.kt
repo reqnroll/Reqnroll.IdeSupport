@@ -96,7 +96,7 @@ interface ReqnrollLanguageServer : LanguageServer {
 
     /**
      * Resolves the generated C# test method(s) that the scenario/Scenario Outline/example row at a
-     * `.feature` file range corresponds to (design doc §3/§4, issue #262) — see
+     * `.feature` file range corresponds to (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — see
      * ResolveTestTargetsHandler.cs. Used by [net.reqnroll.idesupport.rider.testrunner.RunLensSupport] to
      * build the Run CodeVision lens.
      */

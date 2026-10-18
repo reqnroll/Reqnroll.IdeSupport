@@ -29,11 +29,25 @@ class ClientExceptionTelemetryTest {
     }
 
     @Test
-    fun `never carries a stack trace`() {
+    fun `carries only the sanitized StackFrames and never raw stack text`() {
         val props = ClientExceptionTelemetry.buildProperties(IllegalStateException("x"))
 
+        // This test class sits in the skipped telemetry package, so no plugin frame remains: no StackFrames.
         assertTrue(props.keys.all { it in setOf("ExceptionType", "Message", "ExceptionOrigin", "Source") })
         assertTrue(props.values.none { it.contains("\tat ") || it.contains(".kt:") })
+
+        val fromPlugin = IllegalStateException("x").apply {
+            stackTrace = arrayOf(
+                StackTraceElement("net.reqnroll.idesupport.rider.formatting.ReqnrollFormattingService", "reformat", "ReqnrollFormattingService.kt", 88),
+                StackTraceElement("com.intellij.openapi.application.impl.ApplicationImpl", "assertIsDispatchThread", "ApplicationImpl.java", 1),
+            )
+        }
+        val sent = ClientExceptionTelemetry.buildProperties(fromPlugin)
+        assertEquals(
+            "net.reqnroll.idesupport.rider.formatting.ReqnrollFormattingService.reformat:88\n[external]",
+            sent["StackFrames"],
+        )
+        assertTrue(sent.values.none { it.contains(".kt") })
     }
 
     @Test

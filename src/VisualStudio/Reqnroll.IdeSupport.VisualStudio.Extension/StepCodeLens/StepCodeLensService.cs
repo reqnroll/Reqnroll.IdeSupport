@@ -62,18 +62,18 @@ internal sealed class StepCodeLensService
 
         _logger.LogDebug("StepCodeLensService: requesting {RequestMethod} for {FileUri}", LspStandardMethodNames.TextDocumentCodeLens, fileUri);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(LspStandardMethodNames.TextDocumentCodeLens, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogTrace(
-            "StepCodeLensService: raw result = {Result}", result is null ? "<null>" : result.ToString());
+        // Issue #1017: this result is cached per file until invalidated, so a failed request (server
+        // error incl. ContentModified, timeout, terminated server, cancellation) must fault rather
+        // than read as "no lenses": a faulted entry is retried by the next caller, an empty one is served.
+        if (!outcome.Succeeded)
+            _logger.LogDebug("StepCodeLensService: request failed for {FileUri} ({Status}) — not caching", fileUri, outcome.Status);
+        var result = outcome.GetResultOrThrow(LspStandardMethodNames.TextDocumentCodeLens, fileUri, cancellationToken);
 
-        if (result is null || result.Type == JTokenType.Null)
-        {
-            _logger.LogDebug("StepCodeLensService: server returned null — no lenses");
-            return System.Array.Empty<StepLensItem>();
-        }
+        _logger.LogTrace("StepCodeLensService: raw result = {Result}", result.ToString());
 
         if (result is JArray array)
         {
