@@ -119,6 +119,29 @@ public static class StepExpressionParameters
     }
 
     /// <summary>
+    /// Whether <paramref name="sourceExpression"/> and <paramref name="registryExpression"/> have
+    /// the same text around their parameter slots — e.g. <c>the number is {int}</c> and its regex
+    /// projection <c>the number is (.*)</c> — ignoring one leading <c>^</c> and trailing <c>$</c>.
+    /// </summary>
+    public static bool HasSameStaticText(string sourceExpression, string? registryExpression)
+    {
+        if (registryExpression == null)
+            return false;
+
+        return StaticSegments(TrimAnchors(sourceExpression))
+            .SequenceEqual(StaticSegments(TrimAnchors(registryExpression)), StringComparer.Ordinal);
+
+        static string TrimAnchors(string s)
+        {
+            if (s.StartsWith("^", StringComparison.Ordinal))
+                s = s.Substring(1);
+            if (s.EndsWith("$", StringComparison.Ordinal) && !s.EndsWith(@"\$", StringComparison.Ordinal))
+                s = s.Substring(0, s.Length - 1);
+            return s;
+        }
+    }
+
+    /// <summary>
     /// Splits <paramref name="expression"/> into its static (non-parameter) segments. An
     /// expression with N parameter slots yields N+1 segments (some possibly empty), in order.
     /// </summary>

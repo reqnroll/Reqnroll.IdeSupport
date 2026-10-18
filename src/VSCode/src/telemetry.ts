@@ -4,11 +4,21 @@ import { TelemetryReporter } from '@vscode/extension-telemetry';
 import { createTelemetryDebugLogFromEnvironment } from './logging/telemetryDebugLog';
 import { logInfo } from './logging/appNotify';
 import { TelemetryCircuitBreaker } from './telemetryCircuitBreaker';
+import { builtInConnectionString, TelemetryEnvironment } from './telemetryConnections';
+import { TELEMETRY_ENVIRONMENT } from './generated/telemetryEnvironment';
+import { CLIENT_SESSION_ID, CLIENT_SESSION_ID_PROPERTY } from './clientSession';
 
-// Same Application Insights resource VS's AnalyticsTransmitter uses (see
-// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.txt)
-// so usage events from every Reqnroll IDE client land in the same place.
-const CONNECTION_STRING = 'InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d20b';
+// Same Application Insights resource VS's TelemetryTransmitter uses (see
+// src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration/Telemetry/InstrumentationKey.*.txt)
+// so usage events from every Reqnroll IDE client land in the same place. Which resource (dev or
+// prod) is fixed at build time, except that an extension running from source (F5,
+// `ExtensionMode.Development`) is always dev; see telemetryConnections.ts.
+export function effectiveTelemetryEnvironment(
+  buildEnvironment: TelemetryEnvironment,
+  extensionMode: vscode.ExtensionMode,
+): TelemetryEnvironment {
+  return extensionMode === vscode.ExtensionMode.Development ? 'dev' : buildEnvironment;
+}
 
 /**
  * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
@@ -18,34 +28,21 @@ const CONNECTION_STRING = 'InstrumentationKey=3fd018ff-819d-4685-a6e1-6f09bc98d2
 export function resolveConnectionString(
   override: string | undefined,
   onInvalid?: (message: string) => void,
+  builtIn: string = builtInConnectionString(TELEMETRY_ENVIRONMENT),
 ): string {
   const value = override?.trim();
-  if (!value) return CONNECTION_STRING;
+  if (!value) return builtIn;
   if (!hasInstrumentationKey(value)) {
     onInvalid?.(
       'REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING has no InstrumentationKey; ignoring it.',
     );
-    return CONNECTION_STRING;
+    return builtIn;
   }
   return value;
 }
 
 function hasInstrumentationKey(value: string): boolean {
   return value.split(';').some((part) => /^\s*InstrumentationKey\s*=\s*\S/i.test(part));
-}
-
-/**
- * Debug-build guard (issue #889): an extension running from source (F5, `ExtensionMode.Development`)
- * must not send to the built-in production resource, so without a usable override it sends nothing.
- */
-export function isBuiltInConnectionBlocked(
-  extensionMode: vscode.ExtensionMode,
-  override: string | undefined,
-): boolean {
-  return (
-    extensionMode === vscode.ExtensionMode.Development &&
-    !hasInstrumentationKey(override?.trim() ?? '')
-  );
 }
 
 type TelemetryPropertyValue = string | number | boolean | null | undefined;
@@ -153,15 +150,13 @@ export function ensureTelemetryReporter(context: vscode.ExtensionContext): void 
   if (reporter || !isTelemetryEnabledByEnv()) return;
 
   const connectionOverride = process.env.REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING;
-  if (isBuiltInConnectionBlocked(context.extensionMode, connectionOverride)) {
-    logInfo(
-      'Telemetry is not sent from a development build unless REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING is set.',
-    );
-    return;
-  }
-
   breaker = newBreaker();
-  const created = new TelemetryReporter(resolveConnectionString(connectionOverride, logInfo));
+  const builtIn = builtInConnectionString(
+    effectiveTelemetryEnvironment(TELEMETRY_ENVIRONMENT, context.extensionMode),
+  );
+  const created = new TelemetryReporter(
+    resolveConnectionString(connectionOverride, logInfo, builtIn),
+  );
   reporter = created;
   context.subscriptions.push({
     dispose: () => afterTeardownGate(() => disposeReporterBounded(created)),
@@ -212,7 +207,7 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
 /**
  * Stringifies `properties` (dropping null/undefined) and stamps the host's client identity (issue
  * #844), matching what VS's `TelemetryTransmitter` and Rider's `RiderTelemetryTransmitter` stamp:
- * `Ide`/`IdeVersion`/`ExtensionVersion`, plus the canonical `IdeClient` (same vocabulary the LSP
+ * `Ide`/`IdeVersion`/`ExtensionVersion` and `ClientSessionId` (issue #1199), plus the canonical `IdeClient` (same vocabulary the LSP
  * server stamps on server-originated events). `IdeClient` is only added when absent so a
  * server-stamped value is never overridden. Exported for tests.
  */
@@ -224,6 +219,7 @@ export function withClientIdentity(
     if (value !== undefined && value !== null) stringProps[key] = String(value);
   }
   stringProps.IdeClient ??= 'vscode';
+  stringProps[CLIENT_SESSION_ID_PROPERTY] ??= CLIENT_SESSION_ID; // issue #1199
   stringProps.Ide = 'Visual Studio Code';
   stringProps.IdeVersion = vscode.version;
   stringProps.ExtensionVersion = extensionVersion();
@@ -231,7 +227,7 @@ export function withClientIdentity(
 }
 
 function extensionVersion(): string {
-  const packageJson = vscode.extensions.getExtension('reqnroll.reqnroll-ide-support')
+  const packageJson = vscode.extensions.getExtension('Reqnroll.reqnroll-ide-support')
     ?.packageJSON as { version?: unknown } | undefined;
   return typeof packageJson?.version === 'string' ? packageJson.version : 'unknown';
 }
@@ -257,19 +253,19 @@ export function sendTelemetryEvent(
 ): void {
   const enabled = isTelemetryEnabledByEnv();
   const debugLog = createTelemetryDebugLogFromEnvironment();
+  // The mirror records what would be transmitted, identity keys (IdeClient, ClientSessionId, ...) included.
+  const stringProps = withClientIdentity(properties);
 
   if (!reporter) {
-    debugLog.record('host', eventName, properties, enabled, false);
+    debugLog.record('host', eventName, stringProps, enabled, false);
     return;
   }
-
-  const stringProps = withClientIdentity(properties);
 
   if (breaker.isOpen) {
     debugLog.record(
       'host',
       eventName,
-      properties,
+      stringProps,
       enabled,
       false,
       'telemetry endpoint unreachable',
@@ -283,8 +279,8 @@ export function sendTelemetryEvent(
     // Telemetry must never surface to the user (#859): record it, open the breaker, carry on.
     const message = err instanceof Error ? err.message : String(err);
     breaker.recordFailure(message);
-    debugLog.record('host', eventName, properties, enabled, false, message);
+    debugLog.record('host', eventName, stringProps, enabled, false, message);
     return;
   }
-  debugLog.record('host', eventName, properties, enabled, true);
+  debugLog.record('host', eventName, stringProps, enabled, true);
 }

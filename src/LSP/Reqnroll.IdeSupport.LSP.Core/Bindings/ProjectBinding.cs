@@ -43,17 +43,21 @@ public class ProjectBinding
     }
 
     /// <summary>Checks whether this binding's <see cref="Scope"/> (tag expression, feature title, scenario title) matches the given context.</summary>
-    protected bool MatchScope(IGherkinDocumentContext context)
+    protected bool MatchScope(IGherkinDocumentContext context) => Scope == null || MatchScope(Scope, context);
+
+    // A scope with alternatives (several [Scope] attributes, issue #953) matches when any one
+    // alternative does; within one scope, tag, feature and scenario must all match.
+    private static bool MatchScope(BindingScope scope, IGherkinDocumentContext context)
     {
-        if (Scope != null)
-        {
-            if (Scope.Tag != null && !Scope.Tag.Evaluate(context.GetTagNames()))
-                return false;
-            if (Scope.FeatureTitle != null && context.AncestorOrSelfNode<Feature>()?.Name != Scope.FeatureTitle)
-                return false;
-            if (Scope.ScenarioTitle != null && context.AncestorOrSelfNode<Scenario>()?.Name != Scope.ScenarioTitle)
-                return false;
-        }
+        if (scope.Alternatives != null)
+            return scope.Alternatives.Any(alternative => MatchScope(alternative, context));
+
+        if (scope.Tag != null && !scope.Tag.Evaluate(context.GetTagNames()))
+            return false;
+        if (scope.FeatureTitle != null && context.AncestorOrSelfNode<Feature>()?.Name != scope.FeatureTitle)
+            return false;
+        if (scope.ScenarioTitle != null && context.AncestorOrSelfNode<Scenario>()?.Name != scope.ScenarioTitle)
+            return false;
 
         return true;
     }

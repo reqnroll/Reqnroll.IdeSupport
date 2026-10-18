@@ -60,19 +60,23 @@ public sealed class StepCodeLensHandler
     {
         var uri = request.TextDocument.Uri;
 
-        // Cache size at call time (issue #471 investigation): FindUsages below is an unindexed
-        // scan over the whole match-set cache, once per binding in this file, so this operation's
-        // cost is expected to track cacheSteps (and this file's binding count) — logging it here
-        // lets a climbing-duration pattern be confirmed/quantified from the PERF log directly.
-        var (cacheDocs, cacheSteps) = _matchService.GetCacheStats();
-        using var _perf = _recorder.Measure(
-            LspStandardMethodNames.TextDocumentCodeLens, uri, detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps}");
-
         if (!IsCSharp(uri))
         {
             _logger.LogVerbose($"StepCodeLensHandler: ignoring non-.cs URI {uri}");
             return Task.FromResult<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens[]>(Array.Empty<global::OmniSharp.Extensions.LanguageServer.Protocol.Models.CodeLens>());
         }
+
+        // Cache size at call time (issue #471 investigation): FindUsages below is an unindexed
+        // scan over the whole match-set cache, once per binding in this file, so this operation's
+        // cost is expected to track cacheSteps (and this file's binding count) — logging it here
+        // lets a climbing-duration pattern be confirmed/quantified from the PERF log directly.
+        //
+        // Measured only past the file-type guard (issue #941): each lens handler measures its own
+        // work, so a .feature request is no longer counted here, and a .cs file yields one
+        // measurement per lens kind that serves it (this one plus HookMatchCountCodeLensHandler).
+        var (cacheDocs, cacheSteps) = _matchService.GetCacheStats();
+        using var _perf = _recorder.Measure(
+            LspStandardMethodNames.TextDocumentCodeLens, uri, detail: $"cacheDocs={cacheDocs} cacheSteps={cacheSteps}");
 
         var filePath = uri.GetFileSystemPath();
         if (string.IsNullOrEmpty(filePath))

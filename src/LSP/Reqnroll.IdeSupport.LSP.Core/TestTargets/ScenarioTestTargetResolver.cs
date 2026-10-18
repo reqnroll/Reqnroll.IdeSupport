@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestTargets;
 /// <summary>
 /// Implements <see cref="IScenarioTestTargetResolver"/> by parsing the project's generated
 /// <c>&lt;feature&gt;.feature.cs</c> code-behind with Roslyn rather than predicting Reqnroll's
-/// naming rules blind — see docs/Test-Runner-Integration-Design.md §3.
+/// naming rules blind — see docs/Test-Runner-Integration-Design.md (Mapping layer).
 /// </summary>
 public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
 {
@@ -89,7 +89,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
     {
         var generatedFilePath = GetGeneratedFilePath(featureUri, projectFolder);
         if (generatedFilePath is null)
-            return null; // not built yet — see design doc §3's trade-off table
+            return null; // not built yet — see Test-Runner-Integration-Design, pitfall 1
 
         // Cached across calls within the same resolution pass (issue #491): resolving every
         // scenario/row in a large .feature file used to re-read and re-parse this same,
@@ -99,7 +99,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         // project doesn't pay for that work on every scenario in the file.
         var root = _syntaxTreeCache.GetOrParseFromDisk(generatedFilePath, _fileSystem);
         if (root is null)
-            return null; // not built yet — see design doc §3's trade-off table
+            return null; // not built yet — see Test-Runner-Integration-Design, pitfall 1
 
         if (tags.FirstOrDefault(t => t.Type == IdeSupportTagTypes.FeatureBlock)?.Data is not Feature feature)
             return null;
@@ -248,7 +248,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
     /// <summary>
     /// If <paramref name="range"/> lands within a specific <c>Examples:</c> row rather than the
     /// scenario's own header/steps, returns that block+row — the "resolve at an individual
-    /// Examples: row" case from design doc §3.
+    /// Examples: row" case from Test-Runner-Integration-Design ("Mapping layer").
     /// </summary>
     private static (Examples Examples, TableRow Row)? FindSelectedExamplesRow(
         IReadOnlyCollection<IdeSupportTag> tags, GherkinRange range)
@@ -310,7 +310,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
         // Row-tests mode. Correlate against the .feature file's own Examples rows only when the
         // counts line up (ordinary Outline) — never short-circuit to "0 targets" when they don't
         // (e.g. a Reqnroll.ExternalData-style AST-injected scenario with zero visible rows in the
-        // .feature file, design doc §2/§7 item 8): still report the row-attribute count, just
+        // .feature file, Test-Runner-Integration-Design, "Generator naming rules" and pitfall 2): still report the row-attribute count, just
         // without RowArguments.
         var featureRows = GetAllExamplesRows(scenarioData);
         var correlateByPosition = featureRows.Count == rowAttributeCount;
@@ -376,7 +376,7 @@ public sealed class ScenarioTestTargetResolver : IScenarioTestTargetResolver
     }
 
     /// <summary>
-    /// Ports design doc §2's individual-methods naming rule:
+    /// Ports Test-Runner-Integration-Design's "Generator naming rules" individual-methods naming rule:
     /// <c>{scenario.Name.ToIdentifier()}_{exampleSetIdentifier}_{variantName.ToIdentifier().TrimStart('_')}</c>,
     /// where <c>variantName</c> is the row's first cell value if every row's first cell is present
     /// and distinct <em>as an identifier</em> within its own <c>Examples:</c> block, else

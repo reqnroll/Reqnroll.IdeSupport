@@ -2,7 +2,10 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { isMtpCapable } from '../../testOutcomes/mtpProjectDetection';
+import * as vscode from 'vscode';
+import { setAppLogChannel } from '../../logging/appNotify';
+import { evaluateViaMsBuild, isMtpCapable } from '../../testOutcomes/mtpProjectDetection';
+import { MAX_BUFFER_OVERFLOW_CODE } from '../../util/msbuildProcess';
 
 /** Covers {@link isMtpCapable}, the TypeScript port of the VS/Rider ad hoc MTP-capability scan (issue #715 plan §5.7). */
 suite('isMtpCapable', () => {
@@ -159,6 +162,33 @@ suite('isMtpCapable', () => {
       );
 
       assert.strictEqual(await isMtpCapable(project, undefined, unreachableEvaluator), true);
+    });
+  });
+
+  // ── MSBuild output exceeding the buffer (issue #1008) ───────────────────────────────────────
+
+  suite('MSBuild output exceeding the buffer', () => {
+    teardown(() => setAppLogChannel(undefined));
+
+    test('warns and reports no evidence instead of failing silently', async () => {
+      const warnings: string[] = [];
+      setAppLogChannel({
+        info: () => undefined,
+        warn: (message: string) => warnings.push(message),
+        error: () => undefined,
+      } as unknown as vscode.LogOutputChannel);
+      const overflow = Object.assign(new Error('stdout maxBuffer length exceeded'), {
+        code: MAX_BUFFER_OVERFLOW_CODE,
+      });
+
+      const result = await evaluateViaMsBuild('C:\\proj\\Big.csproj', () =>
+        Promise.resolve({ stdout: '', error: overflow }),
+      );
+
+      assert.strictEqual(result, null);
+      assert.strictEqual(warnings.length, 1, 'the dropped evaluation must be logged');
+      assert.match(warnings[0], /buffer limit/);
+      assert.match(warnings[0], /Big\.csproj/);
     });
   });
 });

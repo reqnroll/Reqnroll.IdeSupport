@@ -67,10 +67,11 @@ public static class ServiceCollectionExtensions
     /// Registers core infrastructure and cross-cutting services.
     /// </summary>
     public static IServiceCollection AddReqnrollLspCoreServices(this IServiceCollection services, string? clientIde,
-        TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off)
+        TraceLevel logLevel = TraceLevel.Warning, InitializeTrace initialTrace = InitializeTrace.Off,
+        string? clientSessionId = null)
     {
         return services
-            .AddSingleton(new ClientIdeContext(clientIde, logLevel))
+            .AddSingleton(new ClientIdeContext(clientIde, logLevel, clientSessionId))
             .AddSingleton<IIdeSupportLogger, LspIdeSupportLogger>()
             // Do NOT also register ILoggerFactory/ILogger<> here: Program.ConfigureServer's
             // options.ConfigureLogging(...) already establishes the real Microsoft.Extensions.Logging
@@ -165,7 +166,7 @@ public static class ServiceCollectionExtensions
             .AddSingleton<IFeatureTagIndex, FeatureTagIndex>()
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
-            // Scenario -> generated-test-method mapping layer (design doc §3, issue #262).
+            // Scenario -> generated-test-method mapping layer (Test-Runner-Integration-Design ("Mapping layer"), issue #262).
             .AddSingleton<IScenarioTestTargetResolver, ScenarioTestTargetResolver>()
             .AddSingleton<IIdeSupportTagParser, IdeSupportTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch

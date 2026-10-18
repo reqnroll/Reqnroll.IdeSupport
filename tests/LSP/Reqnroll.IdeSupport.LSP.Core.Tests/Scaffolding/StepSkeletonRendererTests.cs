@@ -1,6 +1,9 @@
 ﻿#nullable enable
 
+using System.Text.RegularExpressions;
 using Gherkin;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Reqnroll.IdeSupport.Common.Configuration;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Scaffolding;
@@ -124,12 +127,23 @@ public class StepSkeletonRendererTests
         descriptor.MethodName.Should().Be("ThenTheWalrusSaidAndTheResultWas");
     }
 
+    [Fact]
+    public void Regex_parenthesised_group_excluded_from_method_name()
+    {
+        var step       = MakeStep("I use (paren) now", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.MethodName.Should().Be("WhenIUseNow");
+        descriptor.Parameters.Should().HaveCount(1);
+    }
+
     // ── Escaping — CucumberExpression ─────────────────────────────────────────
 
     [Theory]
-    [InlineData("I use (parenthesis)",          "I use \\(parenthesis)")]
+    [InlineData("I use (parenthesis)",          "I use \\(parenthesis\\)")]
     [InlineData("I use {curly braces}",         "I use \\{curly braces}")]
     [InlineData("I use \\ backslash",           "I use \\\\ backslash")]
+    [InlineData("yes/no maybe",                 "yes\\/no maybe")]
     public void Cucumber_expression_escapes_special_chars(string text, string expected)
     {
         var result = StepSkeletonRenderer.EscapeForCucumber(text);
@@ -143,10 +157,159 @@ public class StepSkeletonRendererTests
     [InlineData("I use {curly braces}",     "I use \\{curly braces}")]
     [InlineData("I use \\ backslash",       "I use \\\\ backslash")]
     [InlineData("I use . period",           "I use \\. period")]
+    [InlineData("Are you sure?",            "Are you sure\\?")]
+    [InlineData("2 * 3 + 4",                "2 \\* 3 \\+ 4")]
+    [InlineData("the range [0..9]",         "the range \\[0\\.\\.9]")]
+    [InlineData("start ^ and $ end",        "start \\^ and \\$ end")]
+    [InlineData("pipe | and # hash",        "pipe \\| and \\# hash")]
     public void Regex_expression_escapes_special_chars(string text, string expected)
     {
         var result = StepSkeletonRenderer.EscapeForRegex(text);
         result.Should().Be(expected);
+    }
+
+    // ── Round-trip — the escaped expression must match its own step text ──────
+
+    [Theory]
+    [InlineData("Are you sure?")]
+    [InlineData("I have 2 * 3 apples")]
+    [InlineData("a + b + c")]
+    [InlineData("the range [0..9]")]
+    [InlineData("start ^ and $ end")]
+    [InlineData("dot.dot and (paren)")]
+    [InlineData("pipe | char")]
+    [InlineData("curly {brace}")]
+    [InlineData("hash # tag")]
+    [InlineData("back\\slash")]
+    public void Regex_escaped_expression_matches_its_own_step_text(string stepText)
+    {
+        var escaped = StepSkeletonRenderer.EscapeForRegex(stepText);
+        Regex.IsMatch(stepText, "^" + escaped + "$")
+             .Should().BeTrue($"the escaped expression '{escaped}' must match its own step text");
+    }
+
+    // ── Regex mode — parameter group substitution ─────────────────────────────
+
+    [Fact]
+    public void Regex_parenthesised_step_text_is_substituted_before_escaping()
+    {
+        var step       = MakeStep("(foo)", ScenarioBlock.Given);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be("(.*)");
+        descriptor.Parameters.Should().HaveCount(1);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+    }
+
+    [Fact]
+    public void Regex_parenthesised_step_text_produces_valid_matching_regex()
+    {
+        var step       = MakeStep("I use (parenthesis)", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be("I use (.*)");
+        descriptor.Parameters.Should().HaveCount(1);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+
+        // The generated pattern must be a valid regex that matches its own step text.
+        var regex = new Regex(descriptor.ExpressionText);
+        regex.IsMatch(step.StepText).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Regex_multiple_parameter_groups_substituted_and_indexed()
+    {
+        var step       = MakeStep("(first) then (second)", ScenarioBlock.Then);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be("(.*) then (.*)");
+        descriptor.Parameters.Should().HaveCount(2);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+        descriptor.Parameters[1].Should().Be(("string", "p1"));
+
+        new Regex(descriptor.ExpressionText).IsMatch(step.StepText).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Regex_literal_segments_are_still_escaped_around_parameter_groups()
+    {
+        var step       = MakeStep("the value {a} (is) done.", ScenarioBlock.Then);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be(@"the value \{a} (.*) done\.");
+        descriptor.Parameters.Should().HaveCount(1);
+        descriptor.Parameters[0].Should().Be(("string", "p0"));
+    }
+
+    [Theory]
+    [InlineData("()",             "(.*)",            1)]
+    [InlineData("(a)(b)",         "(.*)(.*)",        2)]
+    [InlineData("(a) mid (b)",    "(.*) mid (.*)",   2)]
+    [InlineData("a ( b",          @"a \( b",         0)]
+    [InlineData("a ) b",          @"a \) b",         0)]
+    [InlineData("f(a(b)c)",       @"f(.*)c\)",       1)] // group ends at the first ')': pinned, not endorsed
+    public void Regex_parameter_group_edge_cases(string text, string expected, int parameterCount)
+    {
+        var step       = MakeStep(text, ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        descriptor.ExpressionText.Should().Be(expected);
+        descriptor.Parameters.Should().HaveCount(parameterCount);
+        new Regex(descriptor.ExpressionText).IsMatch(text).Should().BeTrue();
+    }
+
+    // Shared with the descriptor-level round-trip below: step texts mixing parameter
+    // groups with every kind of character the escaper or the C# literal must handle.
+    public static TheoryData<string> RegexRoundTripStepTexts => new()
+    {
+        "Are you sure?",
+        "I have 2 * 3 apples",
+        "the range [0..9]",
+        "start ^ and $ end",
+        "dot.dot and (paren)",
+        "pipe | char",
+        "curly {brace}",
+        "hash # tag",
+        "back\\slash",
+        "I say \"hi\" (x) a.b\\c",
+        "(first) then (second) and [third]",
+        "price is $5.00 (usd)",
+    };
+
+    [Theory]
+    [MemberData(nameof(RegexRoundTripStepTexts))]
+    public void Regex_descriptor_compiles_matches_its_step_and_has_one_group_per_parameter(string stepText)
+    {
+        var step       = MakeStep(stepText, ScenarioBlock.Then);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+
+        var regex = new Regex("^" + descriptor.ExpressionText + "$");
+        var match = regex.Match(stepText);
+
+        match.Success.Should().BeTrue($"'{descriptor.ExpressionText}' must match its own step text");
+        // Group 0 is the whole match; every remaining capture group is a method parameter.
+        (match.Groups.Count - 1).Should().Be(descriptor.Parameters.Count);
+    }
+
+    [Theory]
+    [MemberData(nameof(RegexRoundTripStepTexts))]
+    public void Regex_rendered_attribute_literal_evaluates_back_to_the_expression(string stepText)
+    {
+        var step       = MakeStep(stepText, ScenarioBlock.Then);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // The C# compiler's own reading of the verbatim literal must equal the
+        // expression the renderer meant to emit (#944 literal escaping + #946/#945
+        // regex escaping composed).
+        var tree    = CSharpSyntaxTree.ParseText("public class Snippet\n{\n" + snippet + "}\n");
+        var literal = tree.GetRoot().DescendantNodes()
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.AttributeArgumentSyntax>()
+            .Select(a => a.Expression)
+            .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax>()
+            .Single();
+
+        literal.Token.ValueText.Should().Be(descriptor.ExpressionText);
     }
 
     // ── Render — output format ────────────────────────────────────────────────
@@ -215,6 +378,102 @@ public class StepSkeletonRendererTests
 
         snippet.Should().Contain("[Given(\"the operand {int} has been entered\")]");
         snippet.Should().Contain("public void GivenTheOperandHasBeenEntered(int p0)");
+    }
+
+    // ── Render — C# literal escaping of the expression text (#944) ─────────────
+
+    [Theory]
+    [InlineData("a cart (empty)",        SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("I use {unmatched",      SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("I say \"hi",            SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("a \\ b",                SnippetExpressionStyle.CucumberExpression)]
+    [InlineData("I say \"hello\"",       SnippetExpressionStyle.RegularExpression)]
+    [InlineData("I use (paren)",         SnippetExpressionStyle.RegularExpression)]
+    [InlineData("I say \"hi\" (x) a.b\\c", SnippetExpressionStyle.RegularExpression)]
+    public void Rendered_snippet_has_no_csharp_syntax_errors(
+        string text, SnippetExpressionStyle style)
+    {
+        var step       = MakeStep(text, ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, style);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // Wrap the generated method body in a class and parse it. The escaping
+        // defect surfaces here as a lexer/parser error (CS1009 unrecognized
+        // escape sequence / CS1010 newline in constant / CS1039 unterminated
+        // literal) without needing a full semantic compilation.
+        var source = "public class Snippet\n{\n" + snippet + "}\n";
+        var errors = CSharpSyntaxTree.ParseText(source)
+            .GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToList();
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_parenthesis_for_the_csharp_literal()
+    {
+        var step       = MakeStep("a cart (empty)", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // Cucumber escaping turns '(' and ')' into '\(' and '\)'; the C# literal must
+        // then escape each backslash again -> "a cart \\(empty\\)" in the emitted source.
+        snippet.Should().Contain("[When(\"a cart \\\\(empty\\\\)\")]");
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_unmatched_brace_for_the_csharp_literal()
+    {
+        var step       = MakeStep("I use {unmatched", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        snippet.Should().Contain("[When(\"I use \\\\{unmatched\")]");
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_embedded_quote_for_the_csharp_literal()
+    {
+        var step       = MakeStep("I say \"hi", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        snippet.Should().Contain("[When(\"I say \\\"hi\")]");
+    }
+
+    [Fact]
+    public void Render_cucumber_escapes_backslash_for_the_csharp_literal()
+    {
+        var step       = MakeStep("a \\ b", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.CucumberExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // EscapeForCucumber doubles the backslash -> "a \\ b"; the C# literal then
+        // doubles each of those again -> "a \\\\ b" in the emitted source.
+        snippet.Should().Contain("[When(\"a \\\\\\\\ b\")]");
+    }
+
+    [Fact]
+    public void Render_regex_doubles_embedded_quotes_for_the_verbatim_literal()
+    {
+        var step       = MakeStep("I say \"hello\"", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        snippet.Should().Contain("[When(@\"I say \"\"hello\"\"\")]");
+    }
+
+    [Fact]
+    public void Render_regex_does_not_re_escape_backslashes_in_the_verbatim_literal()
+    {
+        var step       = MakeStep("I use a.b", ScenarioBlock.When);
+        var descriptor = StepSkeletonRenderer.BuildDescriptor(step, SnippetExpressionStyle.RegularExpression);
+        var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
+
+        // EscapeForRegex produces "a\.b"; a verbatim literal keeps the backslash
+        // as-is (NOT doubled).
+        snippet.Should().Contain("[When(@\"I use a\\.b\")]");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
