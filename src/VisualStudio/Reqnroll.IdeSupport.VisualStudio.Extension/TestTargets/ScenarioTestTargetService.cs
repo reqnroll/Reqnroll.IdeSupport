@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Extension.TestTargets;
 
 /// <summary>
 /// Sends the custom <c>reqnroll/resolveTestTargets</c> request to the LSP server and maps the
-/// result to <see cref="ScenarioTestTarget"/>s (design doc §3/§4, issue #262) — the VS-side
+/// result to <see cref="ScenarioTestTarget"/>s (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — the VS-side
 /// counterpart to <c>ResolveTestTargetsHandler</c>. Consumed by <c>RunTestCodeLensService</c> to
 /// build the classic Run CodeLens bridge's data.
 /// </summary>
@@ -45,11 +45,13 @@ internal sealed class ScenarioTestTargetService
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}",
             CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, range.Start.Line);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(CustomLspMethodNames.ReqnrollResolveTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        var mapped = MapResult(result as JObject);
+        // Issue #1017: a failure must fault, not read as "no targets" — RunTestCodeLensResultCache
+        // reuses a completed result but retries a faulted one (and restarts on ContentModified).
+        var mapped = MapResult(outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollResolveTestTargets, fileUri, cancellationToken) as JObject);
         _logger.LogDebug(
             "ScenarioTestTargetService: {TargetCount} target(s) returned for {FileUri}:{StartLine}",
             mapped.Count, fileUri, range.Start.Line);
@@ -73,11 +75,11 @@ internal sealed class ScenarioTestTargetService
             "ScenarioTestTargetService: querying {RequestMethod} for {FileUri}:{StartLine}-{EndLine}",
             CustomLspMethodNames.ReqnrollResolveContainerTestTargets, fileUri, containerRange.Start.Line, containerRange.End.Line);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        var mapped = MapResult(result as JObject);
+        var mapped = MapResult(outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollResolveContainerTestTargets, fileUri, cancellationToken) as JObject);
         _logger.LogDebug(
             "ScenarioTestTargetService: {TargetCount} target(s) returned for container {FileUri}:{StartLine}-{EndLine}",
             mapped.Count, fileUri, containerRange.Start.Line, containerRange.End.Line);

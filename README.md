@@ -2,23 +2,24 @@
 
 LSP-based IDE support for [Reqnroll](https://reqnroll.net/), the open-source Gherkin/BDD test
 framework for .NET. One shared LSP server drives Gherkin syntax highlighting, diagnostics,
-navigation, completions, formatting, and refactoring across multiple IDEs, replacing the legacy
+navigation, completions, formatting, and refactoring across multiple IDEs, intended to replace the legacy
 monolithic [`Reqnroll.VisualStudio`](https://github.com/reqnroll/Reqnroll.Visualstudio) VS
-extension with a design that works the same way in Visual Studio, VS Code, and Rider.
+extension and the legacy [`Reqnroll.Rider`](https://github.com/reqnroll/Reqnroll.Rider) plugin with a design
+that works the same way in Visual Studio, VS Code, and Rider.
 
 > **Status:** Preview / active development. The Visual Studio, VS Code, and Rider clients are all
 > functional and cover most of the planned feature set; none are yet published to their
 > respective marketplaces. See
-> [Open Questions & Risk Register](docs/LSP-IDE-Support-Open-Questions.md) for what's still
+> [Open Questions register](docs/LSP-IDE-Support-Open-Questions.md) for what's still
 > unresolved and the [Issues](../../issues) tab for tracked defects and to-dos. Not yet promoted
-> as the recommended replacement for the legacy extension — see
-> [Overview §5](docs/LSP-IDE-Support-Overview.md#5-release-strategy-and-migration-plan) for the
+> as the recommended replacement for the legacy extensions — see
+> [Overview §7](docs/LSP-IDE-Support-Overview.md#7-distribution-and-the-legacy-extensions) for the
 > promotion criteria.
 
 ## Why this exists
 
-The legacy `Reqnroll.VisualStudio` extension is a single VS-SDK codebase with no path to VS Code
-or Rider. This project extracts the Gherkin-editing intelligence (parsing, diagnostics, step
+The legacy `Reqnroll.VisualStudio` extension is a single VS-SDK codebase with no path to VS Code,
+and the legacy Rider plugin is a separate codebase with nothing shared between them. This project extracts the Gherkin-editing intelligence (parsing, diagnostics, step
 matching, navigation, formatting) into a standalone [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
 server, so each IDE only needs a thin client. See
 [docs/LSP-IDE-Support-Overview.md](docs/LSP-IDE-Support-Overview.md) for the full goals,
@@ -56,10 +57,10 @@ everything fits together.
 
 | Document | Read it for… |
 |---|---|
-| [Overview](docs/LSP-IDE-Support-Overview.md) | Scope, goals/non-goals, high-level architecture diagram, phased roadmap, release/migration strategy |
+| [Overview](docs/LSP-IDE-Support-Overview.md) | Scope, goals/non-goals, high-level architecture, feature index, distribution and the legacy extension |
 | [Architecture & Implementation Reference](docs/LSP-IDE-Support-Architecture.md) | Module design, server internals (workspace model, membership index, pipeline), per-IDE client details, cross-cutting concerns |
-| [Feature Designs](docs/LSP-IDE-Support-Feature-Designs.md) | Per-feature (F1–F20) design, sequence diagrams, as-built notes |
-| [Open Questions & Risk Register](docs/LSP-IDE-Support-Open-Questions.md) | Active open questions and risks — check here before assuming something is decided |
+| [Feature Designs](docs/features/README.md) | One design document per feature area, each with flows, glossary, key classes and pitfalls |
+| [Open Questions register](docs/LSP-IDE-Support-Open-Questions.md) | Open questions, accepted limitations and settled decisions — check here before assuming something is decided |
 
 `docs/Archive/` holds superseded or fully-implemented design/plan documents kept for historical
 reference — each doc's own status banner says whether it's active or archived-and-why.

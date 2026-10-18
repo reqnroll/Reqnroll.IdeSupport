@@ -9,6 +9,7 @@ using Reqnroll.IdeSupport.Common.ProjectSystem.Settings;
 using Reqnroll.IdeSupport.Common.Telemetry;
 using Microsoft.VisualStudio.Shell;
 using System.Collections.Concurrent;
+using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.IdeServices;
@@ -132,6 +133,13 @@ public class VsProjectScope : IProjectScope
                     new NuGetPackageReference(pmd.Id, new NuGetVersion(pmd.Version, pmd.RequestedRange),
                         pmd.InstallPath))
                 .ToArray();
+        }
+        catch (NuGetProjectNotReadyException e) when (e.TimedOut)
+        {
+            // Issue #1031: NuGet's brokered service stalled. Null means "not known yet", which the
+            // project-settings provider retries, same as for ProjectNotReady.
+            Logger.LogWarning($"Loading package references for {ProjectName} failed: {e.Message}");
+            return null;
         }
         catch (Exception e)
         {

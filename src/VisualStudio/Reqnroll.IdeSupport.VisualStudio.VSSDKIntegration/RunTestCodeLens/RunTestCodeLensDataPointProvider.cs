@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
 /// Classic <see cref="IAsyncCodeLensDataPointProvider"/> supplying the Run CodeLens on
-/// Scenario/Scenario Outline lines (design doc §5/§6, issue #262) — VS's own built-in test CodeLens
+/// Scenario/Scenario Outline lines (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — VS's own built-in test CodeLens
 /// (<c>TestStatusProvider</c>, `Microsoft.VisualStudio.TestWindow.CodeLens.dll`) is itself a
 /// provider in this exact API family, scoped to <c>CSharp</c>/<c>Basic</c>/<c>C/C++</c>; this is the
 /// same shape, scoped to <c>Gherkin</c> instead. Paired with <see cref="RunTestCodeLensTaggerProvider"/>.

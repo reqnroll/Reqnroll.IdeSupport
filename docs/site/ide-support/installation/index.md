@@ -1,5 +1,15 @@
 # Installation
 
+```{admonition} Upgrading from an earlier preview build
+:class: warning
+
+The extensions now have consolidated package identities, so Visual Studio, VS Code and Rider
+treat them as new packages rather than upgrades. **Uninstall any earlier preview build first.**
+The identities are `Reqnroll.IdeSupport.VisualStudio` (Visual Studio),
+`Reqnroll.reqnroll-ide-support` (VS Code, publisher `Reqnroll`) and `net.reqnroll.idesupport`
+(Rider).
+```
+
 :::{tab-set}
 
 ````{tab-item} Visual Studio
@@ -13,11 +23,6 @@ Reqnroll IDE Support for Visual Studio supports **Visual Studio 2022** and
 1. In Visual Studio, go to **Extensions → Manage Extensions**.
 2. Search for **"Reqnroll Extension for Visual Studio (Preview)"**.
 3. Install, then restart Visual Studio when prompted.
-
-TODO(media): 📷 screenshot of the Marketplace/"Manage Extensions" search
-results panel, with the Preview extension's listing visibly distinct from
-the existing "Reqnroll.VisualStudio" entry.
-**Target:** `index/index-vs-marketplace.png`
 
 ```{admonition} Don't confuse the two extensions
 :class: warning
@@ -47,10 +52,6 @@ for more.
 1. Open the Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`).
 2. Search for **"Reqnroll"** and install the Reqnroll extension.
 
-TODO(media): 📷 screenshot of the extension listing in the VS Code
-Marketplace panel.
-**Target:** `index/index-vscode-marketplace.png`
-
 ```{admonition} Replaces the "Cucumber" extension recommendation
 :class: note
 
@@ -77,17 +78,25 @@ work as expected with the Reqnroll extension active.
 :sync: rider
 
 1. In Rider, go to **Settings → Plugins → Marketplace**.
-2. Search for **"Reqnroll"** and install the plugin.
+2. Search for **"Reqnroll Extension (Preview)"** and install the plugin.
 3. Restart Rider when prompted.
 
-TODO(media): 📷 screenshot of the Marketplace search results panel showing
-the Reqnroll plugin listing.
-**Target:** `index/index-rider-marketplace.png`
+```{admonition} Don't confuse the two plugins
+:class: warning
+
+The Marketplace search for "Reqnroll" will also surface the existing, non-preview
+**Reqnroll for Rider** plugin. They are separate listings — install
+the one explicitly labeled **(Preview)** to get the LSP-based plugin
+described in these docs.
+```
 
 ```{admonition} Supported Rider version
 :class: note
 
-Verified against Rider 2024.3.5. The IntelliJ Platform LSP APIs this plugin
+The plugin declares compatibility with Rider 2024.3 through 2026.2 and is built against 2024.3.5.
+Some features depend on the Rider version: the Gherkin outline and breadcrumbs need a Rider whose
+native Structure view renders language-server outlines, and on Rider 2026.2 the inlay hints cannot
+be switched off (see [Inlay Hints](../editing-features/inlay-hints.md)). The IntelliJ Platform LSP APIs this plugin
 depends on are still marked `@Experimental` upstream, so behavior can shift
 on Rider SDK updates.
 ```
@@ -96,9 +105,7 @@ on Rider SDK updates.
 and check the Language Servers status widget for a **"Reqnroll"** entry
 confirming the server started.
 
-TODO(media): 📷 screenshot of the Rider Language Servers status widget
-showing the Reqnroll entry.
-**Target:** `index/index-rider-status-widget.png`
+![The Rider status bar widget listing Reqnroll under Language Services](index/index-rider-status-widget.png)
 ````
 
 :::

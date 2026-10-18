@@ -19,7 +19,7 @@ src/VisualStudio/
     ReqnrollPluginPackage.cs                         ← the VSSDK package (activation-recovery trigger, welcome dialog)
     Activation/                                      ← language-server activation signal + scratch-file recovery trigger
     Documents/                                       ← Gherkin/C# document types, RDT initialization, content-type guard
-    Menus/                                           ← ReqnrollMenu and the shell menu IDs
+    Menus/                                           ← ReqnrollContextMenu group and the shell menu IDs
     LspInterception/                                 ← LspServerConnectionService, LspInterceptingPipe,
                                                         per-message interceptors
     LspNotifications/                                ← VsProjectEventMonitor + preload-pipe pusher —
@@ -36,9 +36,9 @@ src/VisualStudio/
   Reqnroll.IdeSupport.VisualStudio.ProjectTemplate  ← VSIX template packaging
 ```
 
-Start with [docs/LSP-IDE-Support-Architecture.md §6.2](../../docs/LSP-IDE-Support-Architecture.md#62-visual-studio)
+Start with [docs/architecture/client-visualstudio.md](../../docs/architecture/client-visualstudio.md)
 for the as-built mechanism (extension activation, eager server startup, the LspInterceptingPipe
-send/receive pipelines). [docs/LSP-IDE-Support-Feature-Designs.md](../../docs/LSP-IDE-Support-Feature-Designs.md)
+send/receive pipelines). [docs/features/README.md](../../docs/features/README.md)
 covers each feature's VS-specific surfacing.
 
 ## Building
@@ -51,6 +51,14 @@ This **also republishes the LSP server** self-contained (win-x64, net10.0) into 
 `LSPServer/` (target `IncludeLspServerInVsix`). After any change to `src/LSP/`, rebuild this
 project to pick it up before testing in VS — a stale bundled server is a common source of "my fix
 doesn't seem to be running" confusion.
+
+### Telemetry resource (dev vs prod)
+
+The extension embeds one of `Telemetry/InstrumentationKey.Dev.txt` / `InstrumentationKey.Prod.txt`
+(from `Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration`) as the built-in Application Insights
+connection string. The default is **Dev**; for a release build pass `-p:TelemetryEnvironment=Prod`
+or set `REQNROLL_TELEMETRY_ENV=prod`; a **Debug** build is always Dev regardless. A Prod build fails while the Prod file still contains a
+`TODO` placeholder. See the root [CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
 
 ## Local install of a dev build
 
@@ -81,7 +89,7 @@ offers to update it in place. As with any manual VSIX install, uninstall via **E
 Extensions** when you're done testing, and restart VS afterward.
 
 VSIX Installer only treats an install as an update when the new `.vsix` has a **higher** manifest
-version (`<ReqnrollMainVersion>.<ReqnrollBuildNumber>`, from `build/Version.props`). CI builds use the
+version (`<ReqnrollIdeSupportMainVersion>.<ReqnrollIdeSupportBuildNumber>`, from `build/Version.props`). CI builds use the
 workflow run number; a local build defaults to `99999`, so it sorts above every CI build — once a
 local build is installed, uninstall it before installing a CI `.vsix`, or the installer will refuse
 it as a downgrade.
@@ -186,6 +194,14 @@ those scenarios test behavior that now lives server-side and is already covered 
 
 ## Conventions specific to this codebase
 
+- **A server rejection (`-32803`) is shown in a modal only for an explicit command** (issue #1132).
+  A format fired from the save sequence (a format-on-save extension, Code Cleanup on save) is logged,
+  never shown: `SaveTrackingRdtListener` (Extension) records `IVsRunningDocTableEvents3.OnBeforeSave`
+  into `RecentSaveTracker.Instance`, and `FormatDocumentCommandFilter` skips the dialog when a save of
+  that file began within the last 3 seconds (the format round trip is asynchronous, and RDT listeners
+  run in no guaranteed order, so a window is used rather than an in-progress flag). Format-on-type goes
+  through `textDocument/onTypeFormatting`, which the server never rejects. Not verified against a
+  real format-on-save extension.
 - **Gate every VS-specific workaround behind an `IdeBehaviours` flag** (`ClientIdeContext.Behaviours`,
   populated for VS by `IdeBehavioursResolver`), even in server-side code that happens to be triggered from here — a fix for a
   VS quirk should never silently change behavior for VS Code/Rider.
@@ -209,7 +225,7 @@ those scenarios test behavior that now lives server-side and is already covered 
 - **`LspServerConnectionService` starts the server process eagerly**, resolved from
   `ExtensionEntrypoint.OnInitializedAsync` rather than from `ReqnrollLanguageClient`'s constructor
   — the latter is only constructed when VS actually activates the `LanguageServerProvider` (i.e.
-  on `.feature`-file open), which turned out not to be early enough. See the as-built note in the
-  Architecture doc before changing this — the current design was arrived at after two rounds of
+  on `.feature`-file open), which turned out not to be early enough. See
+  docs/architecture/client-visualstudio.md before changing this — the current design was arrived at after two rounds of
   the "obvious" approach turning out not to actually be eager, verified against real VS session
   logs both times.

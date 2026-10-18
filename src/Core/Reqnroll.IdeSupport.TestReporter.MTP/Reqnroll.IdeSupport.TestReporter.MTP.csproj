@@ -4,7 +4,7 @@
        (ITestSessionLifetimeHandler + IDataConsumer) that streams the same NDJSON-over-TCP protocol the
        VSTest logger (Reqnroll.IdeSupport.TestLogger) already speaks, to the same LSP-server listener,
        so MTP-mode Reqnroll test projects get the same live per-row outcome pipeline. See
-       docs/MTP-Test-Outcomes-Implementation-Plan.md §4-§5.
+       docs/Test-Outcomes-Pipeline.md ("Getting a reporter into the test run").
 
        Issue #741: the IDEs no longer reference this assembly from a user's project. They ship the
        *source bundle* this project produces (ReporterSource\*.cs + Reqnroll.IdeSupport.TestReporter.MTP.targets,

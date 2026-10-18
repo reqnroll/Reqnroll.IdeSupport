@@ -1,21 +1,24 @@
 #nullable enable
 
+using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.Extensibility;
 using Microsoft.VisualStudio.Extensibility.Commands;
+using Microsoft.VisualStudio.Extensibility.Editor;
 using Reqnroll.IdeSupport.VisualStudio;
-using Reqnroll.IdeSupport.VisualStudio.Extension.Menus;
+using Reqnroll.IdeSupport.VisualStudio.Extension.Documents;
 using Reqnroll.IdeSupport.VisualStudio.Utilities;
 
 namespace Reqnroll.IdeSupport.VisualStudio.Extension.FindUnusedStepDefinitions;
 
 /// <summary>
-/// "Find Unused Step Definitions" command placed in the Reqnroll submenu under Extensions.
-/// Unlike Find Step Definition Usages, this command is not scoped to a C# editor — it is a workspace-wide operation
-/// available whenever the server is running.
+/// "Find Unused Step Definitions" command placed in the Reqnroll group of the editor context menu.
+/// It is a workspace-wide operation, not tied to the caret, and is offered from the C# editor
+/// context menu only (the Reqnroll group in a .feature editor offers Find Hooks and Rename Step...
+/// instead); available whenever the server is running.
 /// </summary>
 [VisualStudioContribution]
 internal sealed class FindUnusedStepDefinitionsCommand : Command
@@ -33,11 +36,12 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
     }
 
     /// <inheritdoc />
-    public override CommandConfiguration CommandConfiguration => new("Find Unused Step Definitions")
+    public override CommandConfiguration CommandConfiguration => new("Find Unused Step Definitions in Projects")
     {
         Icon = new CommandIconConfiguration(ImageMoniker.Custom("ReqnrollIcon"), IconSettings.IconAndText),
-        // No VisibleWhen constraint — available in any context once the server is running.
-        Placements = [],  // Placed via ReqnrollMenu only; no context-menu placement for this command.
+        // Shown in C# editors only; placed via ReqnrollContextMenu.cs.
+        VisibleWhen = ActivationConstraint.EditorContentType(CSharpDocumentType.CSharp),
+        Placements = [],
     };
 
     /// <inheritdoc />
@@ -54,7 +58,7 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
                 _logger.LogWarning(
                     "FindUnusedStepDefinitionsCommand: LSP server not yet initialized (service={ServiceState}, renderer={RendererState}).",
                     service is null ? "null" : "set", renderer is null ? "null" : "set");
-                VsUtils.ShowStatusBarMessage("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
+                await VsUtils.ShowStatusBarMessageAsync("Reqnroll: LSP server not yet initialized — open a .feature file to activate it.");
                 return;
             }
 
@@ -66,6 +70,16 @@ internal sealed class FindUnusedStepDefinitionsCommand : Command
             await renderer.RenderAsync(result, cancellationToken).ConfigureAwait(false);
 
             _logger.LogDebug("FindUnusedStepDefinitionsCommand: render complete.");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogDebug("FindUnusedStepDefinitionsCommand: cancelled.");
+        }
+        catch (Exception ex) when (LspRequestFailure.TryGetReason(ex, out var reason))
+        {
+            // Issue #1020: say the request failed, rather than present it as an empty answer.
+            _logger.LogWarning("FindUnusedStepDefinitionsCommand: request failed: {Reason}", reason);
+            await VsUtils.ShowStatusBarMessageAsync($"Reqnroll: Find Unused Step Definitions failed - {reason}.");
         }
         catch (Exception ex)
         {
