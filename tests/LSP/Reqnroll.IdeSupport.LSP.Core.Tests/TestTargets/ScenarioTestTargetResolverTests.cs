@@ -509,7 +509,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         result[0].MethodName.Should().Be("CheckValue_Variant1");
     }
 
-    // ── AST-transforming generator plugin regression (design doc §2/§7 item 8) ─
+    // ── AST-transforming generator plugin regression (Test-Runner-Integration-Design, "Generator naming rules" and pitfall 2) ─
 
     [Fact]
     public void Plain_scenario_with_no_visible_examples_still_reports_row_tests_when_generated_method_is_parameterized()

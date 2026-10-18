@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.TestTargets;
 /// Resolves the generated C# test method(s) that a <c>.feature</c> scenario or Scenario Outline
 /// (or one of its <c>Examples:</c> rows) corresponds to, by reading the project's generated
 /// <c>&lt;feature&gt;.feature.cs</c> code-behind rather than predicting Reqnroll's naming rules blind
-/// — see docs/Test-Runner-Integration-Design.md §3.
+/// — see docs/Test-Runner-Integration-Design.md (Mapping layer).
 /// </summary>
 public interface IScenarioTestTargetResolver
 {

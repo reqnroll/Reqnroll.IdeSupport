@@ -85,6 +85,16 @@ on:
       - '.github/workflows/test-lsp.yml'
       - '.github/actions/setup-rider-gradle-env/**'
   workflow_dispatch:
+    inputs:
+      telemetry_env:
+        description: >-
+          Application Insights resource the built VS/VS Code/Rider packages report to (#1160).
+          Use 'prod' only for a build that is meant to be released.
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
 
 # Cancel a superseded run (e.g. a new push to the same PR) rather than letting both finish.
 concurrency:
@@ -98,13 +108,21 @@ permissions:
 env:
   DOTNET_VERSION: '10.0.x'
   CONFIGURATION: Release
+  # Telemetry is off for every CI run (#1194): the cross-IDE kill switch (CONTRIBUTING.md > Telemetry)
+  # keeps tests, builds and any launched VS Code host from sending events to the dev or prod
+  # Application Insights resources. Tests that exercise telemetry set the variable themselves.
+  REQNROLL_TELEMETRY_ENABLED: '0'
+  # Selects the built-in Application Insights resource in every client build (#1160): read by the VS
+  # project (MSBuild picks up the environment variable), VS Code's precompile script and Rider's
+  # Gradle build. Every automatic run (push, PR) is dev; only a manual run can opt into prod.
+  REQNROLL_TELEMETRY_ENV: ${{ inputs.telemetry_env || 'dev' }}
   NODE_VERSION: '22.x'
   RIDER_DIR: src/Rider
   VSCODE_DIR: src/VSCode
   # See test-lsp.yml for what this feeds (VersionPrefix -> AssemblyInformationalVersion ->
   # ServerInfo.Version). Applied to every project built here so the whole run carries the
   # same build number.
-  BUILD_NUMBER_ARG: -p:ReqnrollBuildNumber=${{ github.run_number }}
+  BUILD_NUMBER_ARG: -p:ReqnrollIdeSupportBuildNumber=${{ github.run_number }}
   EXTENSION_PROJECT: src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/Reqnroll.IdeSupport.VisualStudio.Extension.csproj
   TESTS_PROJECT: tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Tests/Reqnroll.IdeSupport.VisualStudio.Tests.csproj
   WIZARDS_TESTS_PROJECT: tests/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Wizards.Tests/Reqnroll.IdeSupport.VisualStudio.Wizards.Tests.csproj
@@ -131,7 +149,7 @@ jobs:
         with:
           persist-credentials: false
 
-      # <ReqnrollMainVersion>.<run number> — the same version build/Version.props gives the .NET
+      # <ReqnrollIdeSupportMainVersion>.<run number> — the same version build/Version.props gives the .NET
       # projects via BUILD_NUMBER_ARG, computed once here so the VS Code and Rider packages (which
       # don't go through MSBuild) carry it too. Every IDE installs a package as an upgrade only when
       # its version is higher than the installed one, so each CI build must carry its run number
@@ -139,11 +157,18 @@ jobs:
       - name: Compute build version
         id: version
         run: |
-          main_version=$(sed -n 's:.*<ReqnrollMainVersion>\(.*\)</ReqnrollMainVersion>.*:\1:p' build/Version.props)
+          main_version=$(sed -n 's:.*<ReqnrollIdeSupportMainVersion>\(.*\)</ReqnrollIdeSupportMainVersion>.*:\1:p' build/Version.props)
           # Numeric major.minor only: the VSIX manifest needs a plain System.Version (no suffix), and
           # the result is spliced into later jobs' scripts, so reject anything else here.
           if ! [[ "$main_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::ReqnrollMainVersion in build/Version.props must be <major>.<minor>, got '$main_version'"
+            echo "::error::ReqnrollIdeSupportMainVersion in build/Version.props must be <major>.<minor>, got '$main_version'"
+            exit 1
+          fi
+          # The VS Code package.json carries the local-build default <main>.99999 (issue #1163); keep it
+          # in step with build/Version.props. CI overwrites it with `npm version` below.
+          vscode_version=$(sed -n 's|.*"version": "\(.*\)",|\1|p' src/VSCode/package.json | head -n1)
+          if [ "$vscode_version" != "$main_version.99999" ]; then
+            echo "::error::src/VSCode/package.json version is '$vscode_version', expected '$main_version.99999' (ReqnrollIdeSupportMainVersion in build/Version.props)"
             exit 1
           fi
           echo "build_version=$main_version.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
@@ -287,11 +312,19 @@ jobs:
           }
           Write-Host "VSIX Identity Version: $actual"
 
+      # The VSIX tooling names the file after the project; stage a copy under the consolidated
+      # package name (issue #911) so the artifact carries it.
+      - name: Stage VSIX under package name
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staged | Out-Null
+          Copy-Item "src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/${{ env.CONFIGURATION }}/net481/*.vsix" "staged/Reqnroll.IdeSupport.VisualStudio.${{ needs.changes.outputs.build_version }}.vsix"
+
       - name: Upload VSIX candidate artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-vs-extension-vsix-candidate
-          path: src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/bin/${{ env.CONFIGURATION }}/net481/*.vsix
+          name: reqnroll-ide-support-vs-candidate
+          path: staged/*.vsix
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -409,13 +442,13 @@ jobs:
       - name: Download VSIX candidate artifact
         uses: actions/download-artifact@v8
         with:
-          name: reqnroll-vs-extension-vsix-candidate
+          name: reqnroll-ide-support-vs-candidate
           path: vsix
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-vs-extension-vsix
+          name: reqnroll-ide-support-vs
           path: vsix/*.vsix
           if-no-files-found: error
 
@@ -541,12 +574,12 @@ jobs:
         working-directory: ${{ env.VSCODE_DIR }}
 
       - name: Package VSIX
-        run: npx @vscode/vsce package --out "reqnroll-ide-support-${{ github.sha }}.vsix"
+        run: npx @vscode/vsce package --out "Reqnroll.IdeSupport.VSCode.${{ needs.changes.outputs.build_version }}.vsix"
         working-directory: ${{ env.VSCODE_DIR }}
 
       - name: Verify VSIX version
         run: |
-          actual=$(unzip -p "reqnroll-ide-support-${{ github.sha }}.vsix" extension/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
+          actual=$(unzip -p "Reqnroll.IdeSupport.VSCode.${{ needs.changes.outputs.build_version }}.vsix" extension/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
           expected="${{ needs.changes.outputs.build_version }}"
           if [ "$actual" != "$expected" ]; then
             echo "::error::VSIX version is '$actual', expected '$expected'"
@@ -558,8 +591,8 @@ jobs:
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-ide-support-vsix
-          path: ${{ env.VSCODE_DIR }}/reqnroll-ide-support-*.vsix
+          name: reqnroll-ide-support-vscode
+          path: ${{ env.VSCODE_DIR }}/Reqnroll.IdeSupport.VSCode.*.vsix
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -698,6 +731,16 @@ jobs:
           name: testlogger
           path: ${{ env.RIDER_DIR }}/downloaded-testlogger
 
+      - name: Restore executable bit on downloaded server/connector binaries
+        # Artifact zips don't preserve the Unix executable bit (see the VS Code job's equivalent
+        # step, issue #252), so without this the plugin zip would ship non-executable
+        # linux/osx apphosts (issue #979). build.gradle.kts also forces the mode when copying.
+        run: |
+          find "downloaded-server/linux-x64" "downloaded-server/linux-arm64" "downloaded-server/osx-x64" "downloaded-server/osx-arm64" \
+            \( -name 'Reqnroll.IdeSupport.LSP.Server' -o -name 'reqnroll-ide-connector' \) \
+            -type f -exec chmod +x {} +
+        working-directory: ${{ env.RIDER_DIR }}
+
       # -PpluginVersion overrides gradle.properties' placeholder with the build version, so Rider
       # treats each CI build as an upgrade of the last (issue #746).
       - name: Build plugin
@@ -730,11 +773,19 @@ jobs:
           -PlspTestLoggerBuildDir="${{ github.workspace }}/${{ env.RIDER_DIR }}/downloaded-testlogger"
         working-directory: ${{ env.RIDER_DIR }}
 
+      # Gradle names the zip after the plugin; stage a copy under the consolidated package name
+      # (issue #911) so the artifact carries it.
+      - name: Stage plugin zip under package name
+        run: |
+          mkdir -p build/staged
+          cp build/distributions/*.zip "build/staged/Reqnroll.IdeSupport.Rider.${{ needs.changes.outputs.build_version }}.zip"
+        working-directory: ${{ env.RIDER_DIR }}
+
       - name: Upload plugin candidate artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-ide-support-rider-plugin-candidate
-          path: ${{ env.RIDER_DIR }}/build/distributions/*.zip
+          name: reqnroll-ide-support-rider-candidate
+          path: ${{ env.RIDER_DIR }}/build/staged/*.zip
           if-no-files-found: error
 
       # Only the raw Action log was available for a buildPlugin/verifyPlugin failure otherwise —
@@ -795,12 +846,12 @@ jobs:
       - name: Download plugin candidate artifact
         uses: actions/download-artifact@v8
         with:
-          name: reqnroll-ide-support-rider-plugin-candidate
+          name: reqnroll-ide-support-rider-candidate
           path: plugin
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v7
         with:
-          name: reqnroll-ide-support-rider-plugin
+          name: reqnroll-ide-support-rider
           path: plugin/*.zip
           if-no-files-found: error

@@ -68,6 +68,15 @@ There are two tracks, depending on what's already on your machine — pick one:
 If `src/Rider` is open as the VS Code workspace folder, `.vscode/tasks.json` wraps
 `./gradlew runIde` as the default build task (Ctrl+Shift+B / Cmd+Shift+B).
 
+### Telemetry resource (dev vs prod)
+
+The Gradle task `generateTelemetryBuildConfig` (a dependency of Kotlin compilation) writes
+`TelemetryBuildConfig.ENVIRONMENT`, which picks the dev or prod values in
+`TelemetryConnections.kt`. The default is `dev`; for a release build pass `-PtelemetryEnv=prod` or
+set `REQNROLL_TELEMETRY_ENV=prod` (e.g. `./gradlew buildPlugin -PtelemetryEnv=prod`); `runIde` is always dev regardless. A prod build
+fails while a `PROD_` value is a `TODO` placeholder. See the root
+[CONTRIBUTING.md](../../CONTRIBUTING.md#telemetry-dev-vs-prod-application-insights).
+
 ### Debugging from VS Code
 
 Gradle launches the sandbox in its own separate JVM/Rider process, so plain `runIde`
@@ -192,7 +201,7 @@ cd src/Rider
 This publishes the bundled LSP server and TestLogger, both `Release` (see "Bundling the LSP server"/
 "Bundling the TestLogger" above — `buildPlugin` always uses `Release`, unlike `runIde`'s `Debug`/
 `Verbose` build), the server for the host RID only, and produces
-`build/distributions/reqnroll-ide-support-rider-<version>.zip` (`<version>` from `gradle.properties`).
+`build/distributions/reqnroll-ide-support-rider-<version>.zip` (CI publishes it as `Reqnroll.IdeSupport.Rider.<version>.zip`) (`<version>` from `gradle.properties`).
 Cross-publish other server RIDs with `-PserverRid=<rid>` (e.g. `linux-x64`, `osx-arm64`) first if you
 need the plugin to run on a different OS than the one you built it on — the TestLogger needs no such
 step, since one build already covers every OS.

@@ -41,6 +41,27 @@ public class IdentityStampingLspTelemetryServiceTests
     }
 
     [Fact]
+    public void Stamps_the_client_session_id_when_the_client_supplied_one()
+    {
+        var id = "3f2b8c1e-0a4d-4e6f-9b7a-1c2d3e4f5a6b";
+
+        var sent = Send(new ClientIdeContext("vscode", clientSessionId: id.ToUpperInvariant()));
+
+        sent["ClientSessionId"].Should().Be(id);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-guid C:/Users/someone")]
+    public void Omits_the_client_session_id_unless_it_is_a_guid(string? raw)
+    {
+        var sent = Send(new ClientIdeContext("vscode", clientSessionId: raw));
+
+        sent.Should().NotContainKey("ClientSessionId");
+    }
+
+    [Fact]
     public void Omits_identity_values_that_are_not_known_yet()
     {
         var sent = Send(new ClientIdeContext(null));

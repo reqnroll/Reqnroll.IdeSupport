@@ -237,6 +237,32 @@ suite('stepNavigation', () => {
       assert.strictEqual(result, path.join('Sub', 'Steps.cs'));
     });
 
+    test('does not treat a sibling folder sharing a prefix as the containing folder (issue #1015)', () => {
+      // /w/Foo must not be seen as containing /w/FooBar/Steps.cs. Without a separator boundary
+      // this matched /w/Foo and returned ../RepoExtra/Steps.cs, a bogus relative path resolved
+      // against the wrong workspace folder.
+      const sibling = path.join(root, 'work', 'RepoExtra');
+      const file = path.join(sibling, 'Steps.cs');
+      const result = resolveRelativePathIn(vscode.Uri.file(file).toString(), [folder]);
+
+      assert.strictEqual(result, 'Steps.cs');
+    });
+
+    test('prefers the real owner folder when a prefix-sharing sibling is listed before it', () => {
+      const sibling = path.join(root, 'work', 'RepoExtra');
+      const file = path.join(sibling, 'Sub', 'Steps.cs');
+      const result = resolveRelativePathIn(vscode.Uri.file(file).toString(), [folder, sibling]);
+
+      assert.strictEqual(result, path.join('Sub', 'Steps.cs'));
+    });
+
+    test('resolves a file directly inside the workspace folder', () => {
+      const file = path.join(folder, 'Steps.cs');
+      const result = resolveRelativePathIn(vscode.Uri.file(file).toString(), [folder]);
+
+      assert.strictEqual(result, 'Steps.cs');
+    });
+
     test('matches case-insensitively when the file path is cased differently than the workspace folder (issue #324)', function () {
       // A .NET LSP server can normalize a file URI's casing (e.g. a lowercased Windows drive
       // letter, file:///c:/...) differently than the workspace folder's fsPath casing. That's a
