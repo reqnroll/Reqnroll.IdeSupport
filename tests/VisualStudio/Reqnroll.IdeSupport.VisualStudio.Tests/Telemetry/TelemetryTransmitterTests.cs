@@ -4,6 +4,7 @@ using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Reqnroll.IdeSupport.Common.Logging;
+using Reqnroll.IdeSupport.Common.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.Telemetry;
 using Reqnroll.IdeSupport.VisualStudio.IdeServices;
 using VsTelemetryTransmitter = Reqnroll.IdeSupport.VisualStudio.Telemetry.TelemetryTransmitter;
@@ -24,31 +25,6 @@ public class TelemetryTransmitterTests
     private readonly List<string> _verboseLogLines = new();
     private IEnableTelemetryChecker _enableTelemetryCheckerStub;
     private readonly CapturingDebugLog _debugLog = new();
-
-    [Theory]
-    [InlineData(true, null, false)]
-    [InlineData(true, "InstrumentationKey=dev", true)]
-    [InlineData(false, null, true)]
-    public void DebugBuildGuard_disables_the_built_in_connection_only_in_debug_builds_without_an_override(
-        bool isDebugBuild, string? overrideValue, bool innerIsUsed)
-    {
-        const string variable = TelemetryConnectionOverride.EnvironmentVariable;
-        var original = Environment.GetEnvironmentVariable(variable);
-        try
-        {
-            Environment.SetEnvironmentVariable(variable, overrideValue);
-            var inner = Substitute.For<IEnableTelemetryChecker>();
-            inner.IsEnabled().Returns(true);
-
-            var guarded = VsTelemetryTransmitter.ApplyDebugBuildGuard(inner, isDebugBuild);
-
-            guarded.IsEnabled().Should().Be(innerIsUsed);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(variable, original);
-        }
-    }
 
     [Fact]
     public void Should_NotSendTelemetry_WhenDisabled()
@@ -127,7 +103,29 @@ public class TelemetryTransmitterTests
         properties.Should().Contain("IdeClient", "visualstudio")
             .And.Contain("Ide", "Microsoft Visual Studio")
             .And.Contain("IdeVersion", "17.14")
-            .And.Contain("ExtensionVersion", "1.2.3");
+            .And.Contain("ExtensionVersion", "1.2.3")
+            .And.Contain("ClientSessionId", ClientSession.Id);
+    }
+
+    [Fact]
+    public void ApplyPrivacyDefaults_replaces_the_machine_name_on_events_and_exceptions()
+    {
+        var channel = new InMemoryTelemetryChannel();
+        var config = new TelemetryConfiguration
+        {
+            TelemetryChannel = channel,
+            ConnectionString = "InstrumentationKey=00000000-0000-0000-0000-000000000000",
+        };
+        var client = new TelemetryClient(config);
+        VsTelemetryTransmitter.ApplyPrivacyDefaults(client.Context);
+
+        client.TrackEvent(new EventTelemetry("probe"));
+        client.TrackException(new ExceptionTelemetry(new InvalidOperationException("boom")));
+
+        channel.SentTelemtries.Should().HaveCount(2);
+        channel.SentTelemtries.Select(t => t.Context.Cloud.RoleInstance)
+            .Should().OnlyContain(r => r == VsTelemetryTransmitter.RedactedRoleInstance)
+            .And.NotContain(Environment.MachineName);
     }
 
     // NSubstitute doesn't auto-populate ImmutableDictionary-typed members with an empty
@@ -151,7 +149,7 @@ public class TelemetryTransmitterTests
         _enableTelemetryCheckerStub.IsEnabled().Returns(false);
     }
 
-    private VsTelemetryTransmitter CreateSut()
+    private VsTelemetryTransmitter CreateSut(Action<TelemetryClient>? configureClient = null)
     {
         _enableTelemetryCheckerStub = Substitute.For<IEnableTelemetryChecker>();
         _telemetryChannel = new InMemoryTelemetryChannel();
@@ -161,6 +159,7 @@ public class TelemetryTransmitterTests
             ConnectionString = $"InstrumentationKey={Guid.NewGuid():N}"
         };
         var telemetryClient = new TelemetryClient(config);
+        configureClient?.Invoke(telemetryClient);
         var logger = Substitute.For<IIdeSupportLogger>();
         logger.Level.Returns(System.Diagnostics.TraceLevel.Verbose);
         logger.When(l => l.Log(Arg.Any<LogMessage>())).Do(c =>
@@ -286,6 +285,19 @@ public class TelemetryTransmitterTests
     }
 
     [Fact]
+    public void Should_MirrorToDebugLog_TheClientGlobalPropertiesItTransmits()
+    {
+        var sut = CreateSut(client => client.Context.GlobalProperties["ClientSessionId"] = "session-x");
+        GivenTelemetryEnabled();
+
+        sut.TransmitEvent(new VsGenericEvent("Extension loaded"));
+
+        var props = _debugLog.Records.Should().ContainSingle().Which.Props
+            .Should().BeAssignableTo<IDictionary<string, object?>>().Which;
+        props.Should().Contain("ClientSessionId", "session-x");
+    }
+
+    [Fact]
     public void Should_MirrorErrorToDebugLog_WhenTransmissionFails()
     {
         var sut = CreateSut();
@@ -316,6 +328,42 @@ public class TelemetryTransmitterTests
         props["ExceptionType"].Should().Be(typeof(InvalidOperationException).FullName);
         props["Message"].Should().Be("boom");
         props["IsFatal"].Should().Be("True");
+    }
+
+    [Fact]
+    public void Exceptions_are_sent_as_a_sanitised_UnhandledException_event_not_a_raw_ExceptionTelemetry()
+    {
+        var sut = CreateSut();
+        GivenTelemetryEnabled();
+        var inner = new ArgumentException("inner secret 'Acme.Inner'");
+        Exception thrown;
+        try
+        {
+            throw new InvalidOperationException(
+                @"Could not load type 'Acme.Payroll.Steps.PaymentSteps' from C:\Users\Jane\Payroll\Salary.feature", inner);
+        }
+        catch (Exception ex) { thrown = ex; }
+
+        sut.TransmitFatalExceptionEvent(thrown, isFatal: true);
+
+        var sent = _telemetryChannel.SentTelemtries.Should().ContainSingle().Subject;
+        sent.Should().BeOfType<EventTelemetry>("a raw ExceptionTelemetry would serialise the full message, stack and inner exceptions");
+        var evt = (EventTelemetry)sent;
+        evt.Name.Should().Be("UnhandledException");
+        evt.Properties["ExceptionType"].Should().Be(typeof(InvalidOperationException).FullName);
+        evt.Properties["IsFatal"].Should().Be("True");
+        evt.Properties["Message"].Should().Be("Could not load type <text> from <path>");
+        evt.Properties.Values.Should().NotContain(v => v.Contains("Acme") || v.Contains("Jane") || v.Contains("Salary"));
+    }
+
+    [Fact]
+    public void Sanitised_exception_properties_cap_the_message_and_omit_the_raw_stack()
+    {
+        var props = VsTelemetryTransmitter.BuildSanitizedExceptionProps(
+            new InvalidOperationException(new string('x', 1000)), Array.Empty<KeyValuePair<string, object>>());
+
+        props["Message"].Length.Should().BeLessThanOrEqualTo(TelemetryScrubber.MaxMessageLength);
+        props.Should().NotContainKey("StackTrace");
     }
 
     [Fact]

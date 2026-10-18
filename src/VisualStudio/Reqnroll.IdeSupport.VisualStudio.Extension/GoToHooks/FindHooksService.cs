@@ -50,6 +50,8 @@ internal sealed class FindHooksService
     /// (classic-CodeLens bridge, issue #372) so its Details popup shows exactly the hooks the lens
     /// counted, matching what <c>reqnroll.goToHooks</c>-invoking clients already do.
     /// </summary>
+    /// <exception cref="LspRequestFailedException">The request failed (server error, timeout, no server).</exception>
+    /// <exception cref="Reqnroll.IdeSupport.VisualStudio.Utilities.LspContentModifiedException">The server answered ContentModified.</exception>
     public async Task<FindHooksResult> FindHooksAsync(
         string            fileUri,
         int               line0,
@@ -64,12 +66,14 @@ internal sealed class FindHooksService
         _logger.LogTrace(
             "FindHooksService: sending {RequestMethod} params={ParamsJson}", CustomLspMethodNames.ReqnrollFindHooks, paramsJson);
 
-        var result = await _pipe
-            .SendRequestToServerAsync(CustomLspMethodNames.ReqnrollFindHooks, paramsJson, cancellationToken)
+        var outcome = await _pipe
+            .SendRequestAsync(CustomLspMethodNames.ReqnrollFindHooks, paramsJson, cancellationToken)
             .ConfigureAwait(false);
 
-        _logger.LogTrace(
-            "FindHooksService: raw server result = {Result}", result is null ? "<null>" : result.ToString());
+        // Issue #1020: a failed request throws rather than reading as "no hooks".
+        var result = outcome.GetResultOrThrow(CustomLspMethodNames.ReqnrollFindHooks, fileUri, cancellationToken);
+
+        _logger.LogTrace("FindHooksService: raw server result = {Result}", result.ToString());
 
         var mapped = MapResult(result);
         _logger.LogDebug("FindHooksService: {HookCount} hook(s) returned", mapped.Hooks.Count);

@@ -73,7 +73,7 @@ suite('goToHooks', () => {
         () => doGoToHooks(client, undefined, GoToHookSource.command),
       );
 
-      assert.match(shownMessage ?? '', /Go to Hooks failed.*boom/);
+      assert.match(shownMessage ?? '', /Find Hooks failed.*boom/);
     });
 
     test('shows an info message when no hooks are found', async () => {

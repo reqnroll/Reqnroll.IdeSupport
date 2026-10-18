@@ -121,7 +121,8 @@ completion.
 #### `traceability` section
 
 Enables traceability settings for scenarios, such as linking scenario tags
-to external issue trackers.
+to external issue trackers. How the resulting links behave in the editor is described in
+[Clickable Tags](editing-features/clickable-tags.md).
 
 * `tagLinks` (array) — defines patterns for tags and the corresponding
   external URLs. Each entry:
@@ -186,19 +187,34 @@ extension's contributed settings.
 
 ![](settings/settings-vscode.png)
 
-One setting of note: `reqnroll.testOutcomes.enabled` (off by default) turns on the read-only
-pass/fail CodeLens described in [Running Scenarios](running-scenarios.md#optional-read-only-passfail-codelens).
-Reload the window after changing it.
+The extension contributes three settings (reload the window after changing any of them):
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `reqnroll.trace.server` | `off` | Troubleshooting output level: `off`, `messages` or `verbose`. Set it when you are asked for logs to report a problem; `verbose` also saves a log file. |
+| `reqnroll.protocolLogLevel` | `Warning` | How much low-level detail the language server writes to its protocol log (`Off`, `Error`, `Warning`, `Info`, `Verbose`). Leave it unless asked. |
+| `reqnroll.testOutcomes.enabled` | `false` | Turns on the read-only pass/fail CodeLens described in [Running Scenarios](running-scenarios.md#optional-read-only-passfail-codelens). |
+
+The extension registers its own **Reqnroll** language id (`reqnroll`) for `.feature` files, so
+language-specific settings go under `"[reqnroll]"` rather than `"[gherkin]"`, and a
+`files.associations` entry mapping `*.feature` to `gherkin` should be removed.
+
+Project-level behaviour (formatting, tag links, step completion) is configured in
+`reqnroll.json` and `.editorconfig`, exactly as described on the Visual Studio tab.
 ```
 
 ```{tab-item} Rider
 :sync: rider
 
-**Settings → Languages & Frameworks → Reqnroll** (or the equivalent
-Reqnroll settings page).
-
-TODO(media): 📷 screenshot — the Rider settings page for Reqnroll.
-**Target:** `settings/settings-rider.png`
+The Rider plugin has no settings page of its own. Project behaviour — formatting, step
+completion, tag links, binding discovery — comes from the project's `reqnroll.json` and
+`.editorconfig` (see the `ide` section reference on the Visual Studio tab, which applies
+unchanged, and [Gherkin Formatting with EditorConfig](editorconfig.md)). Rider's own IDE
+settings (keymap, color scheme, inlay hints) apply to `.feature` files as they do to any
+other file; the Reqnroll-specific switches are Find Action commands such as
+**Reqnroll: Show Feature Inlay Hints**. The Reqnroll tool window (bottom of the IDE) shows
+the plugin's log; see [Troubleshooting](troubleshooting.md#where-are-the-logs-and-how-do-i-change-the-log-level)
+for log levels.
 ```
 
 :::
