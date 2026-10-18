@@ -173,6 +173,39 @@ public class ConnectorDiscoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public void RunDiscovery_imports_the_runtimes_one_entry_per_scope_as_one_binding_per_attribute()
+    {
+        // Reqnroll registers one binding per scope, so one attribute with two [Scope]s (or a hook with
+        // two tags) arrives as several otherwise identical DTOs (issues #953, #1133). The registry
+        // holds one binding whose scope is the alternatives, the same shape Roslyn discovery produces.
+        StepDefinition Step(StepScope scope) => new()
+        {
+            Type = "Given", Regex = "^pay$", Method = "MyApp.Steps.Pay", SourceLocation = "Steps.cs|10|5", Scope = scope
+        };
+        Hook HookFor(string tag) => new()
+        {
+            Type = "BeforeScenario", Method = "MyApp.Steps.Setup", SourceLocation = "Steps.cs|20|5", Scope = new StepScope { Tag = tag }
+        };
+        GivenConnectorReturns(new DiscoveryResult
+        {
+            StepDefinitions = [Step(new StepScope { Tag = "@web" }), Step(new StepScope { FeatureTitle = "Checkout" })],
+            Hooks = [HookFor("@web"), HookFor("@smoke")]
+        });
+
+        var (registry, _) = CreateSut().RunDiscovery(
+            MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, lastHash: string.Empty, CancellationToken.None);
+
+        var step = registry.StepDefinitions.Should().ContainSingle().Subject;
+        step.Scope!.Alternatives.Should().HaveCount(2);
+        step.Scope.ToString().Should().Be("(@web) or (Feature='Checkout')");
+        var hook = registry.Hooks.Should().ContainSingle().Subject;
+        hook.Scope!.Alternatives.Should().BeNull("tag-only scopes fold into one expression");
+        hook.Scope.Tag!.Evaluate(new[] { "@smoke" }).Should().BeTrue();
+        hook.Scope.Tag.Evaluate(new[] { "@web" }).Should().BeTrue();
+        hook.Scope.Tag.Evaluate(new[] { "@other" }).Should().BeFalse();
+    }
+
+    [Fact]
     public void RunDiscovery_invokes_the_factory_to_create_a_connector()
     {
         GivenConnectorReturns(SuccessfulResult());
@@ -352,6 +385,79 @@ public class ConnectorDiscoveryServiceTests : IDisposable
 
         registry.Should().BeSameAs(lastGood);
         hash.Should().Be("prev");
+    }
+
+    // ── Outcome status (issue #939) ───────────────────────────────────────────────
+    // Every path but a real discovery returns the caller's lastGood/lastHash, so the status is the
+    // only thing that tells an unchanged assembly apart from a failed or skipped run.
+
+    [Fact]
+    public void RunDiscovery_reports_Discovered_for_a_successful_run()
+    {
+        GivenConnectorReturns(SuccessfulResult());
+
+        CreateSut().RunDiscovery(MakeScope(_assemblyPath), ProjectBindingRegistry.Invalid, "prev", CancellationToken.None)
+            .Status.Should().Be(ConnectorDiscoveryStatus.Discovered);
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Unchanged_for_a_hash_match()
+    {
+        GivenConnectorReturns(SuccessfulResult());
+        var scope = MakeScope(_assemblyPath);
+        var sut = CreateSut();
+        var first = sut.RunDiscovery(scope, ProjectBindingRegistry.Invalid, string.Empty, CancellationToken.None);
+
+        sut.RunDiscovery(scope, first.Registry, first.Hash, CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Unchanged(first.Registry, first.Hash));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Failed_when_the_connector_reports_failure()
+    {
+        GivenConnectorReturns(new DiscoveryResult { ErrorMessage = "boom" });
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Failed_when_the_connector_throws()
+    {
+        _factory.Create(Arg.Any<IProjectScope>()).Returns(new ThrowingConnector());
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Failed(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Skipped_when_output_assembly_path_is_empty()
+    {
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeScope(string.Empty), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Skipped_when_output_assembly_missing_on_disk()
+    {
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(
+                MakeScope(Path.Combine(_projectFolder, "does-not-exist.dll")), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
+    }
+
+    [Fact]
+    public void RunDiscovery_reports_Skipped_for_a_non_reqnroll_test_project()
+    {
+        var lastGood = SuccessfulRegistry();
+
+        CreateSut().RunDiscovery(MakeNonReqnrollScope(_assemblyPath), lastGood, "prev", CancellationToken.None)
+            .Should().Be(ConnectorDiscoveryOutcome.Skipped(lastGood, "prev"));
     }
 
     private sealed class ThrowingConnector : OutProcReqnrollConnector

@@ -6,6 +6,7 @@ using Reqnroll.IdeSupport.LSP.Connector.Models;
 using Reqnroll.IdeSupport.LSP.Core.Bindings;
 using Reqnroll.IdeSupport.LSP.Core.Parsing.Gherkin;
 using Reqnroll.IdeSupport.LSP.Core.Discovery;
+using Reqnroll.IdeSupport.LSP.Core.Workspace;
 
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
@@ -78,11 +79,12 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     /// Runs discovery for <paramref name="scope"/>.
     /// </summary>
     /// <returns>
-    /// A new <see cref="ProjectBindingRegistry"/> and its content hash when discovery
-    /// succeeds.  Returns (<paramref name="lastGood"/>, <paramref name="lastHash"/>) unchanged
-    /// when the assembly is missing, unchanged, or the connector fails.
+    /// <see cref="ConnectorDiscoveryStatus.Discovered"/> with a new <see cref="ProjectBindingRegistry"/>
+    /// and its content hash when discovery succeeds. Otherwise <paramref name="lastGood"/> and
+    /// <paramref name="lastHash"/> unchanged, with a status saying why (see
+    /// <see cref="IConnectorDiscoveryService.RunDiscovery"/>).
     /// </returns>
-    public (ProjectBindingRegistry Registry, string Hash) RunDiscovery(
+    public ConnectorDiscoveryOutcome RunDiscovery(
         IProjectScope scope,
         ProjectBindingRegistry lastGood,
         string lastHash,
@@ -96,13 +98,13 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         if (string.IsNullOrEmpty(assemblyPath))
         {
             _logger.LogVerbose($"[{scope.ProjectName}] OutputAssemblyPath not set; skipping discovery.");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         if (!_fileSystem.File.Exists(assemblyPath))
         {
             _logger.LogInfo($"[{scope.ProjectName}] Output assembly not found (project not yet built?): {assemblyPath}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         // Gate the connector on the project actually being a Reqnroll *test* project -- one that
@@ -132,14 +134,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 _logger.LogVerbose($"[{scope.ProjectName}] Not a Reqnroll test project; skipping binding discovery.");
             }
 
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Skipped(lastGood, lastHash);
         }
 
         var currentHash = ComputeHash(_fileSystem, assemblyPath);
         if (currentHash == lastHash)
         {
             _logger.LogVerbose($"[{scope.ProjectName}] Assembly unchanged (hash match); skipping discovery.");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Unchanged(lastGood, lastHash);
         }
 
         ct.ThrowIfCancellationRequested();
@@ -158,7 +160,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning($"[{scope.ProjectName}] Connector invocation failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}: {ex.Message}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
         }
         sw.Stop();
 
@@ -173,14 +175,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         {
             _logger.LogWarning($"[{scope.ProjectName}] Discovery failed after {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
                 $"{ConnectorPidSuffix(result)}: {result.ErrorMessage}");
-            return (lastGood, lastHash);
+            return ConnectorDiscoveryOutcome.Failed(lastGood, lastHash);
         }
 
         var registry = BuildRegistry(scope, result);
         _logger.LogInfo(
             $"[{scope.ProjectName}] Discovery complete in {DurationFormatter.FormatMilliseconds(sw.Elapsed)}" +
             $"{ConnectorPidSuffix(result)}: {registry.StepDefinitions.Length} step definition(s), {registry.Hooks.Length} hook(s).");
-        return (registry, currentHash);
+        return ConnectorDiscoveryOutcome.Discovered(registry, currentHash);
     }
 
     // ── Registry building ─────────────────────────────────────────────────────
@@ -203,13 +205,16 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // path is inside this project's folder and did not resolve is therefore stale and is left
         // out. Paths outside the project folder (a NuGet package, a project reference, a container
         // or CI build) never had local source to begin with, so they are not stale and are kept.
+        // Issue #933: a shared project's files sit beside the project folder, not in it, so the
+        // workspace folder containing the project is owned too (see GetOwnedSourceRoots).
+        var ownedRoots = GetOwnedSourceRoots(scope);
         var staleSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var staleBindingCount = 0;
         bool IsStale(string sourceLocation)
         {
             var recordedPath = importer.GetRecordedSourcePath(sourceLocation);
             if (recordedPath == null
-                || !PathUtils.IsUnderFolder(recordedPath, scope.ProjectFolder)
+                || !ownedRoots.Any(root => PathUtils.IsUnderFolder(recordedPath, root))
                 || importer.ResolveSourceFilePath(sourceLocation) != null)
                 return false;
 
@@ -218,9 +223,14 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
             return true;
         }
 
-        var stepDefinitions = (result.StepDefinitions ?? [])
-            .Where(sd => !IsStale(sd.SourceLocation))
-            .Select(sd => {
+        // The runtime registers one binding per [Scope], so an attribute with several scopes arrives as
+        // several DTOs. They are imported as one binding per attribute, their scopes reduced together
+        // by ScopeNormalizer -- the same reduction Roslyn discovery applies -- so both paths give the
+        // consumers the same shape (issues #953, #1133).
+        var stepDefinitions = BindingImporter.GroupByAttribute(result.StepDefinitions ?? [])
+            .Where(group => !IsStale(group.Binding.SourceLocation))
+            .Select(group => {
+                var sd = group.Binding;
                 // For connector-discovered bindings, backfill the attribute source line and the
                 // method identifier's own location from the source file using Roslyn syntax
                 // parsing. The attribute line enables exact AST-based matching in
@@ -241,7 +251,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                 var root = TryGetParsedRoot(importer, sd.SourceLocation, sd.Method, parsedFiles, _fileSystem, _logger);
                 var scenarioBlock = Enum.TryParse<ScenarioBlock>(sd.Type, out var parsed) ? parsed : ScenarioBlock.Unknown;
                 var bareMethodName = BindingImporter.ExtractBareMethodName(sd.Method);
-                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock);
+                var attrLine = root == null ? null : BindingImporter.TryGetAttributeSourceLine(root, bareMethodName, scenarioBlock, sd.Expression);
                 var methodLocation = root == null ? null : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
 
                 // The one case worth a warning even when a root parsed successfully: no method
@@ -263,7 +273,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
                         "the method body rather than on its declaration line.");
                 }
 
-                return importer.ImportStepDefinition(sd, attrLine, methodLocation);
+                return importer.ImportStepDefinition(sd, attrLine, methodLocation, group.Scopes);
             })
             .Where(sd => sd is not null)
             .ToList();
@@ -273,21 +283,22 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // on its declaration -- and skipped the source-file resolution the backfill performs on the
         // way (issue #540 F2). Hooks carry no attribute line (ProjectHookBinding does not model one),
         // so only the identifier location is backfilled here.
-        var hooks = (result.Hooks ?? [])
-            .Where(h => !IsStale(h.SourceLocation))
-            .Select(h => {
+        var hooks = BindingImporter.GroupByAttribute(result.Hooks ?? [])
+            .Where(group => !IsStale(group.Binding.SourceLocation))
+            .Select(group => {
+                var h = group.Binding;
                 var root = TryGetParsedRoot(importer, h.SourceLocation, h.Method, parsedFiles, _fileSystem, _logger);
                 var bareMethodName = BindingImporter.ExtractBareMethodName(h.Method);
                 var methodLocation = root == null
                     ? null
                     : BindingImporter.TryGetMethodIdentifierLocation(root, bareMethodName);
 
-                return importer.ImportHook(h, methodLocation);
+                return importer.ImportHook(h, methodLocation, group.Scopes);
             })
             .Where(h => h is not null)
             .ToList();
 
-        ReportStaleBindings(scope, staleBindingCount, staleSourcePaths);
+        ReportStaleBindings(scope, ownedRoots, staleBindingCount, staleSourcePaths);
         ReportUnresolvedSourceFiles(scope, importer, staleSourcePaths);
 
         // Use a stable hash of the output path as the project hash so the registry
@@ -354,10 +365,45 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
     }
 
     /// <summary>
-    /// Reports, once per discovery run, the compiled bindings left out because their source file
-    /// under the project folder no longer exists (issue #930).
+    /// Returns the folders whose missing source files mark a compiled binding as stale: the project
+    /// folder (issue #930) and, when it contains the project folder, the workspace folder the client
+    /// reported the project under (issue #933).
     /// </summary>
-    private void ReportStaleBindings(IProjectScope scope, int staleBindingCount, ISet<string> staleSourcePaths)
+    /// <remarks>
+    /// The workspace folder is what covers a shared project (<c>.projitems</c>) beside the project
+    /// folder, e.g. <c>Quickstart\SharedProject1\Class1.cs</c> next to
+    /// <c>Quickstart\ReqnrollQuickstart.Specs\</c>. It is only used when it contains the project
+    /// folder (VS Code falls back to its first folder when none does, and to the project file when
+    /// none is open) and is not a file-system root, which would claim every path on the drive,
+    /// including a CI agent's. A path outside every owned root is kept, as before. The membership
+    /// index cannot answer this instead: a deleted file is no longer in it, and after a branch
+    /// switch the shared project itself is often gone.
+    /// </remarks>
+    private static IReadOnlyList<string> GetOwnedSourceRoots(IProjectScope scope)
+    {
+        var workspaceFolder = (scope as LspReqnrollProject)?.WorkspaceFolder;
+        if (string.IsNullOrEmpty(workspaceFolder)
+            || IsFileSystemRoot(workspaceFolder)
+            || PathUtils.IsSamePath(workspaceFolder, scope.ProjectFolder)
+            || !PathUtils.IsUnderFolder(scope.ProjectFolder, workspaceFolder))
+            return [scope.ProjectFolder];
+
+        return [scope.ProjectFolder, workspaceFolder];
+    }
+
+    private static bool IsFileSystemRoot(string folder)
+    {
+        // "C:\", "C:", "/" and "\\" all trim to something with no separator left.
+        var trimmed = folder.TrimEnd('\\', '/');
+        return trimmed.IndexOfAny(['\\', '/']) < 0;
+    }
+
+    /// <summary>
+    /// Reports, once per discovery run, the compiled bindings left out because their source file
+    /// under an owned folder no longer exists (issues #930, #933).
+    /// </summary>
+    private void ReportStaleBindings(
+        IProjectScope scope, IReadOnlyList<string> ownedRoots, int staleBindingCount, ISet<string> staleSourcePaths)
     {
         if (staleBindingCount == 0)
             return;
@@ -368,7 +414,7 @@ public sealed class ConnectorDiscoveryService : IConnectorDiscoveryService
         // output pane -- the server's app logger has no window/logMessage sink.
         _logger.LogWarning(
             $"[{scope.ProjectName}] Ignored {staleBindingCount} binding(s) in the compiled assembly whose " +
-            $"source file no longer exists under '{scope.ProjectFolder}' ({staleSourcePaths.Count} file(s), " +
+            $"source file no longer exists under '{string.Join("' or '", ownedRoots)}' ({staleSourcePaths.Count} file(s), " +
             $"e.g. '{staleSourcePaths.First()}'). The assembly is older than the working tree, for example " +
             "after a branch switch; rebuild the project to refresh it.");
 

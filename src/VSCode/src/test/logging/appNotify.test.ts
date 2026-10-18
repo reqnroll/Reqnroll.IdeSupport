@@ -1,6 +1,12 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { setAppLogChannel, showError, showInfo, showWarn } from '../../logging/appNotify';
+import {
+  setAppLogChannel,
+  showEditRejected,
+  showError,
+  showInfo,
+  showWarn,
+} from '../../logging/appNotify';
 
 /** Minimal stand-in for the subset of vscode.LogOutputChannel that appNotify.ts writes to. */
 function fakeChannel(): {
@@ -76,6 +82,28 @@ suite('appNotify', () => {
     );
 
     assert.deepStrictEqual(entries, [{ level: 'warn', message: 'Reqnroll: careful' }]);
+  });
+
+  test('showEditRejected shows a modal error and mirrors the reason to the app-log channel (issue #1132)', async () => {
+    const { channel, entries } = fakeChannel();
+    setAppLogChannel(channel);
+    let shownMessage: string | undefined;
+    let shownOptions: unknown;
+
+    await withStubbedWindow(
+      {
+        showErrorMessage: (msg: string, options?: unknown) => {
+          shownMessage = msg;
+          shownOptions = options;
+          return Promise.resolve(undefined);
+        },
+      },
+      () => showEditRejected('Parameter count mismatch'),
+    );
+
+    assert.strictEqual(shownMessage, 'Parameter count mismatch');
+    assert.deepStrictEqual(shownOptions, { modal: true });
+    assert.deepStrictEqual(entries, [{ level: 'warn', message: 'Parameter count mismatch' }]);
   });
 
   test('showError mirrors to the app-log channel at Error level and forwards extra items', async () => {
