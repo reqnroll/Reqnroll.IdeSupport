@@ -5,6 +5,7 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.ReadonlyStatusHandler
 import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
 import net.reqnroll.idesupport.rider.lsp.lspUriToLocalPath
 import org.eclipse.lsp4j.TextEdit
@@ -21,6 +22,15 @@ object RenameWorkspaceEditApplier {
     /**
      * Resolves each touched URI's `Document` and applies its edits inside one write command.
      *
+     * Before any document is touched, the read-only status of every target file is checked and the
+     * whole edit is abandoned (returning `false`) if any of them is read-only. Without that check a
+     * read-only file only failed when its own turn came to be written - *after* earlier documents
+     * in the same `WorkspaceEdit` had already been mutated - leaving a half-applied rename, and the
+     * exception propagated out of [apply] so the caller's `renameApplied=false` report was never
+     * sent and the server's staged update hung (issue #995). The write is additionally wrapped by
+     * [applyGuarded] so any other mid-apply failure (offset out of range, I/O error) also returns
+     * `false` instead of propagating.
+     *
      * @return `true` only when [edit] touches at least one URI and **every** one of them resolved
      *   to a `Document` and had its edits applied. An empty edit, or any edit whose document could
      *   not be resolved, returns `false` (issue #989): the caller must not tell the server the
@@ -31,18 +41,41 @@ object RenameWorkspaceEditApplier {
         val byUri = editsByUri(edit)
         if (byUri.isEmpty()) return false
 
-        var allApplied = false
-        WriteCommandAction.runWriteCommandAction(project) {
-            allApplied = applyEditsByUri(byUri, ::documentForUri, ::applyEdits)
-        }
-        return allApplied
+        return applyGuarded(
+            ensureWritable = { ensureTargetsWritable(project, byUri.keys) },
+            write = {
+                var allApplied = false
+                WriteCommandAction.runWriteCommandAction(project) {
+                    allApplied = applyEditsByUri(byUri, ::documentForUri, ::applyEdits)
+                }
+                allApplied
+            },
+        )
     }
 
     /**
-     * The core of [apply], split out so the "did every edit reach a file?" decision is unit-testable
-     * without a live `Project`/`Document` - the platform fixture a real [apply] needs cannot open a
-     * Project in this module's tests (see `ReqnrollFeatureFileTypeRegistrationTest`). `T` is a
-     * `Document` in production and a stand-in in tests.
+     * Runs [write] only after [ensureWritable] reports the targets writable, swallows any exception
+     * [write] throws, and returns whether the edit was applied ([write]'s result).
+     *
+     * `internal` so the read-only abort and the mid-apply-failure paths are unit-testable with plain
+     * lambdas, without a platform `Project` fixture - Rider's project services refuse to initialize
+     * in a bare fixture project (see `ReqnrollFeatureFileTypeRegistrationTest`).
+     */
+    internal fun applyGuarded(ensureWritable: () -> Boolean, write: () -> Boolean): Boolean {
+        if (!ensureWritable()) return false
+        return try {
+            write()
+        } catch (e: Exception) {
+            ReqnrollDebugLogger.warn(
+                "RenameWorkspaceEditApplier: applying the rename failed; reporting applied=false", e)
+            false
+        }
+    }
+
+    /**
+     * The core of the apply, split out so the "did every edit reach a file?" decision is
+     * unit-testable without a live `Project`/`Document`. `T` is a `Document` in production and a
+     * stand-in in tests.
      *
      * @return `true` only when [byUri] is non-empty and [resolveDocument] returns a non-null target
      *   for every URI, invoking [applyForDocument] once per resolved URI.
@@ -66,6 +99,33 @@ object RenameWorkspaceEditApplier {
             applyForDocument(document, edits)
         }
         return allApplied
+    }
+
+    /**
+     * True when every file the edit targets is (or can be made) writable. Files that can't be
+     * resolved in the VFS are ignored: [documentForUri] already skips an unresolvable document, and
+     * a read-only prompt must not be raised for a path we can't even see.
+     *
+     * [ReadonlyStatusHandler.ensureFilesWritable] is what surfaces the platform's own "clear
+     * read-only status?" prompt (and any project-level override); when even after that the file is
+     * still read-only it reports the remaining read-only files, which is our cue to abort.
+     */
+    private fun ensureTargetsWritable(project: Project, uris: Set<String>): Boolean {
+        val files = uris
+            .mapNotNull { uri -> lspUriToLocalPath(uri) }
+            .mapNotNull { path -> LocalFileSystem.getInstance().findFileByPath(path) }
+            .filter { it.isValid }
+            .toTypedArray()
+
+        if (files.isEmpty()) return true
+
+        val status = ReadonlyStatusHandler.getInstance(project).ensureFilesWritable(*files)
+        if (!status.hasReadonlyFiles()) return true
+
+        ReqnrollDebugLogger.warn(
+            "RenameWorkspaceEditApplier: refusing to apply rename; read-only target file(s): " +
+                status.readonlyFiles.joinToString { it.path })
+        return false
     }
 
     /** `internal` so callers (e.g. [RenameStepRunner]) can reuse this URI-to-Document lookup. */

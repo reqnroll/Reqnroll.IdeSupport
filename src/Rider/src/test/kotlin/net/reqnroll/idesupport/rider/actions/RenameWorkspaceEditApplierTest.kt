@@ -107,6 +107,42 @@ class RenameWorkspaceEditApplierTest {
     }
 
     @Test
+    fun `applyGuarded returns false and skips the write when a target is read-only`() {
+        var writeRan = false
+
+        val applied = RenameWorkspaceEditApplier.applyGuarded(
+            ensureWritable = { false },
+            write = { writeRan = true; true },
+        )
+
+        assertFalse(applied)
+        assertFalse(writeRan, "no document may be mutated once the read-only check fails")
+    }
+
+    @Test
+    fun `applyGuarded returns true when the targets are writable and the write succeeds`() {
+        var writeRan = false
+
+        val applied = RenameWorkspaceEditApplier.applyGuarded(
+            ensureWritable = { true },
+            write = { writeRan = true; true },
+        )
+
+        assertTrue(applied)
+        assertTrue(writeRan)
+    }
+
+    @Test
+    fun `applyGuarded returns false when the write throws mid-apply`() {
+        val applied = RenameWorkspaceEditApplier.applyGuarded(
+            ensureWritable = { true },
+            write = { throw IllegalStateException("offset out of range") },
+        )
+
+        assertFalse(applied)
+    }
+
+    @Test
     fun `applyEditsByUri returns false for an empty edit set`() {
         val ok = RenameWorkspaceEditApplier.applyEditsByUri<String>(emptyMap(), { null }, { _, _ -> })
 
