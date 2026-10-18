@@ -93,6 +93,7 @@
 
 ## Bug fixes:
 
+* Opening several `.feature`/`.cs` files while the Reqnroll LSP server is still starting now resends the project baseline once when the server is ready, instead of once per opened file (each one a full scan of the project folders); and a deferred project push is no longer lost if the server becomes ready at the moment it is queued (Rider) - see #987
 * Editing a `.csproj` is now re-evaluated: the VS Code project/solution file watcher previously handled only create and delete, so changing a project file (target framework, package references, `Include`/`Remove` globs, linked files) left the server's file-membership and binding data stale until a generated file changed or the window was reloaded (VS Code) - see #1009, @clrudolphi
 * A configuration file with an invalid value (for example a bad `reqnroll.version` in `reqnroll.json` or an invalid tag prefix in `specsync.json`) no longer discards every other configuration setting: only the offending file is skipped (with a warning in the log) and the settings from the remaining valid files still apply.
 * Closing a `.feature` file while it was still being parsed could leave the server treating it as open, so its step usages were not re-read from disk and Find Step Usages / Rename could see the editor's last (possibly discarded) text, or miss the file for other projects it is linked into; a parse that finishes after the file is closed is now discarded (LSP server) - see #938
