@@ -31,8 +31,8 @@ class RenameFeatureStepAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
         val uri = localPathToLspUri(file.path)
-        val position = editor.caretModel.logicalPosition
+        val position = lspCaretPosition(editor)
 
-        RenameStepRunner.run(project, uri, position.line, position.column)
+        RenameStepRunner.run(project, uri, position.line, position.character)
     }
 }

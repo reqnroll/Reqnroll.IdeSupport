@@ -29,10 +29,10 @@ class GoToHooksAction : AnAction() {
         val file = e.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
 
         val uri = localPathToLspUri(file.path)
-        val position = editor.caretModel.logicalPosition
+        val position = lspCaretPosition(editor)
 
         GoToHooksRunner.runAndShow(
-            project, uri, position.line, position.column,
+            project, uri, position.line, position.character,
             source = GoToHooksRunner.sourceForPlace(e.place),
         )
     }
