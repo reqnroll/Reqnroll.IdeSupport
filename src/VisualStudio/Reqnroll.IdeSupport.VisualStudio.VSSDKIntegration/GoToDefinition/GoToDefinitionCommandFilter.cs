@@ -17,7 +17,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 
 /// <summary>
 /// Intercepts the built-in Go To Definition command (F12) for <c>Gherkin</c> text views and
-/// redirects it to the Reqnroll LSP server via <see cref="GoToDefinitionRedirect"/> (issue #757).
+/// redirects it to the Reqnroll LSP server via <see cref="GoToDefinitionRedirect"/>.
 /// </summary>
 /// <remarks>
 /// VS's own LSP client handles Go To Definition correctly, but when a step has several matching
@@ -118,7 +118,7 @@ public sealed class GoToDefinitionCommandFilter : IOleCommandTarget
         var redirect = GoToDefinitionRedirect.GoToDefinitionAsync;
         var isGoToDefinition = commandGroup == CommandSet && commandId == CmdIdGoToDefinition;
 
-        // Say why VS's own "'{word}' declarations" window may appear instead of ours (issue #757).
+        // Say why VS's own "'{word}' declarations" window may appear instead of ours.
         if (isGoToDefinition && redirect is null)
             _logger.LogVerbose(
                 "GoToDefinitionCommandFilter: LSP server not initialized (no redirect set), forwarding Go To Definition to VS.");

@@ -78,7 +78,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     // ── Instance ──────────────────────────────────────────────────────────
 
     // Edit.ToggleLineComment is not in VSStd2K and has no VSConstants entry: it belongs to the
-    // editor's own command set (issue #747). See VsWellKnownIds for provenance; the pair is checked
+    // editor's own command set. See VsWellKnownIds for provenance; the pair is checked
     // against the running VS at package load by VsWellKnownIdsSelfCheck.
     internal static readonly Guid EditorCommandSet = VsWellKnownIds.EditorCommandSet;
     internal const uint CmdIdToggleLineComment = VsWellKnownIds.CmdIdToggleLineComment;
@@ -143,7 +143,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                 _logger.LogVerbose(
                     $"CommentToggleCommandFilter: redirecting command id={commandId} mode={mode} uri='{fileUri}' lines[{startLine}..{endLine}]");
 
-                // Same shape as GoToDefinitionCommandFilter (issue #766): a tracked, cancellable
+                // Same shape as GoToDefinitionCommandFilter: a tracked, cancellable
                 // JoinableTask instead of a bare Task.Run, so a newer press supersedes this one,
                 // VS shutdown cancels it, and FileAndForget reports a failure as a VS fault
                 // instead of only logging it.
@@ -167,7 +167,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
                     catch (EditRejectedException ex)
                     {
                         // The server could not toggle comments for a reason the user can act on
-                        // (issue #1132) — previously the shortcut just did nothing.
+                        // (it is shown to them; otherwise the shortcut would silently do nothing).
                         _logger.LogInfo($"CommentToggleCommandFilter: comment toggle rejected by server: {ex.Message}");
                         await VsUtils.ShowEditRejectedAsync(ex.Message, ct).ConfigureAwait(false);
                     }
@@ -225,7 +225,7 @@ public sealed class CommentToggleCommandFilter : IOleCommandTarget
     /// </summary>
     /// <remarks>
     /// Kept pure (no <c>ThreadHelper</c>) so the command IDs can be unit tested — hard-coded wrong
-    /// IDs once left this filter silently intercepting nothing (issue #747). Both VSStd2K spellings
+    /// IDs once left this filter silently intercepting nothing. Both VSStd2K spellings
     /// of Comment/Uncomment Selection are matched: <c>COMMENT_BLOCK</c>/<c>UNCOMMENT_BLOCK</c> is
     /// what <c>Edit.CommentSelection</c>/<c>Edit.UncommentSelection</c> dispatch today, and the
     /// older <c>COMMENTBLOCK</c>/<c>UNCOMMENTBLOCK</c> are still routed by some callers.

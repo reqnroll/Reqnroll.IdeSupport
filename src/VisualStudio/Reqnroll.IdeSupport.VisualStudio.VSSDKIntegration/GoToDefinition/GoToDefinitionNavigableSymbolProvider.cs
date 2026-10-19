@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 /// Intercepts Ctrl+Click / Ctrl+hover ("Go To Definition" via the navigable-symbol API) for
 /// <c>Gherkin</c> text views and redirects it to the Reqnroll LSP server via
 /// <see cref="GoToDefinitionRedirect"/> — the same bridge <see cref="GoToDefinitionCommandFilter"/>
-/// uses for F12 (issue #757).
+/// uses for F12.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -34,7 +34,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 /// <c>languageserver-base</c> (see <c>GherkinDocumentType</c>), so that provider applies to
 /// <c>.feature</c> files too, and its <c>NavigableSymbol.Navigate</c> calls
 /// <c>RemoteReferencesBroker.HandleDefinitionAsync</c> with the caret-word title — the same
-/// <c>'{word}' declarations</c> window issue #757 fixed for F12 (issue #761).
+/// <c>'{word}' declarations</c> window that the F12 command filter avoids.
 /// </para>
 /// <para>
 /// This provider is exported directly for <c>Gherkin</c> (more specific than VS's
@@ -46,7 +46,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.GoToDefinition;
 /// </para>
 /// <para>
 /// A symbol is offered only where the server reports a navigable binding
-/// (<see cref="GoToDefinitionRedirect.HasNavigableDefinitionAsync"/>, issue #898). Without that check every
+/// (<see cref="GoToDefinitionRedirect.HasNavigableDefinitionAsync"/>). Without that check every
 /// word in the file - tags with no link, keywords, descriptions - was underlined on Ctrl+hover although a
 /// click did nothing. VS's own provider applies the same rule (it offers a symbol only when
 /// <c>textDocument/definition</c> returns a location).
@@ -122,7 +122,7 @@ public sealed class GoToDefinitionNavigableSymbolProvider : INavigableSymbolSour
             var char0    = wordSpan.Start.Position - line.Start.Position;
             var lineText = line.GetText();
 
-            // Only underline where a click would go somewhere (issue #898). Our symbol outranks VS's own LSP
+            // Only underline where a click would go somewhere. Our symbol outranks VS's own LSP
             // provider, which makes the same check against textDocument/definition, so we must make it too.
             // A failed probe degrades to "no underline", never an error.
             try
