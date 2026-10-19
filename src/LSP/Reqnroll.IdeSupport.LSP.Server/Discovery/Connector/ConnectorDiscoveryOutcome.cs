@@ -28,7 +28,7 @@ public enum ConnectorDiscoveryStatus
 /// <remarks>
 /// Every status except <see cref="ConnectorDiscoveryStatus.Discovered"/> carries the caller's own
 /// last-good registry and hash back unchanged, so the hash alone cannot tell an unchanged assembly
-/// from a failed or skipped run; <see cref="Status"/> does (issue #939).
+/// from a failed or skipped run; <see cref="Status"/> does.
 /// </remarks>
 /// <param name="Status">How the run ended.</param>
 /// <param name="Registry">The new registry when discovered; otherwise the caller's last-good registry.</param>
@@ -53,8 +53,7 @@ public sealed record ConnectorDiscoveryOutcome(
         new(ConnectorDiscoveryStatus.Skipped, lastGood, lastHash);
 
     /// <summary>
-    /// Deconstructs into the registry and hash only, for callers that just want the resulting state
-    /// (the shape <see cref="IConnectorDiscoveryService.RunDiscovery"/> returned before issue #939).
+    /// Deconstructs into the registry and hash only, for callers that just want the resulting state.
     /// </summary>
     public void Deconstruct(out ProjectBindingRegistry registry, out string hash)
     {

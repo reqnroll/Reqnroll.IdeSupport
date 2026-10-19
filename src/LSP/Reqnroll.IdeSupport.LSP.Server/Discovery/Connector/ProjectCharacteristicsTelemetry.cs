@@ -6,12 +6,12 @@ using Reqnroll.IdeSupport.LSP.Server.Telemetry;
 namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 
 /// <summary>
-/// Builds the property set of the <c>ProjectCharacteristics</c> snapshot event (issues #258, #845):
+/// Builds the property set of the <c>ProjectCharacteristics</c> snapshot event:
 /// size counts of a project's bindings and feature files, sent once per successful connector
 /// discovery run. Counts only — no paths, class names or step text.
 /// </summary>
 /// <remarks>
-/// Deliberately excluded (maintainer decision on #258): step-occurrence count (needs a full scan),
+/// Deliberately excluded (maintainer decision): step-occurrence count (needs a full scan),
 /// step-argument-transformation count (dropped by <c>RunDiscovery</c>) and any reuse ratio.
 /// </remarks>
 internal static class ProjectCharacteristicsTelemetry

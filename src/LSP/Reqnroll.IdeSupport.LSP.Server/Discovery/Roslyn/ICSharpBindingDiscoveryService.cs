@@ -34,7 +34,7 @@ public interface ICSharpBindingDiscoveryService
     /// Passed straight through to <see cref="Registry.ConnectorBindingRegistryProvider.ApplyRoslynFileUpdateAsync"/>
     /// — see its remarks. <see cref="BindingRegistryChangedHandler.RediscoverCsFilesAsync"/> passes
     /// <see langword="false"/> since its caller already reparses and notifies unconditionally right
-    /// after it returns; every other caller keeps the default (issue #471).
+    /// after it returns; every other caller keeps the default.
     /// </param>
     Task UpdateFromSourceForProjectAsync(
         LspReqnrollProject project, string filePath, string text, CancellationToken cancellationToken,

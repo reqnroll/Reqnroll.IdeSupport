@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Discovery.Connector;
 /// <summary>
 /// The privacy-safe subset of an out-of-process connector run's
 /// <c>DiscoveryResult.TelemetryProperties</c> that is merged into the
-/// <c>ReqnrollDiscoveryExecuted</c> telemetry event (issue #846).
+/// <c>ReqnrollDiscoveryExecuted</c> telemetry event.
 /// </summary>
 /// <remarks>
 /// The connector's own dictionary is deliberately *not* forwarded wholesale: it also holds
