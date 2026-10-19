@@ -151,7 +151,7 @@ public class FeatureStepTextBuilderTests
         // Two literal backslashes before '(' is an *escaped backslash* followed by a genuine,
         // unescaped capturing group -- not an escaped '(' (which would be a single backslash).
         // A naive one-character-lookback escape check misclassifies this as escaped and skips
-        // the group entirely, silently leaving the captured value un-injected (issue #273).
+        // the group entirely, silently leaving the captured value un-injected.
         var result = FeatureStepTextBuilder.Build(
             @"value \\(is captured)", oldExpression: null,
             new Regex(@"^value (\d+)$"),

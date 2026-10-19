@@ -300,8 +300,8 @@ public class StepSkeletonRendererTests
         var snippet    = StepSkeletonRenderer.Render(descriptor, "    ", "\n");
 
         // The C# compiler's own reading of the verbatim literal must equal the
-        // expression the renderer meant to emit (#944 literal escaping + #946/#945
-        // regex escaping composed).
+        // expression the renderer meant to emit (C# literal escaping and regex
+        // escaping composed).
         var tree    = CSharpSyntaxTree.ParseText("public class Snippet\n{\n" + snippet + "}\n");
         var literal = tree.GetRoot().DescendantNodes()
             .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.AttributeArgumentSyntax>()
@@ -380,7 +380,7 @@ public class StepSkeletonRendererTests
         snippet.Should().Contain("public void GivenTheOperandHasBeenEntered(int p0)");
     }
 
-    // ── Render — C# literal escaping of the expression text (#944) ─────────────
+    // ── Render — C# literal escaping of the expression text ─────────────
 
     [Theory]
     [InlineData("a cart (empty)",        SnippetExpressionStyle.CucumberExpression)]
