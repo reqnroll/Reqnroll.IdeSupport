@@ -27,7 +27,7 @@ public sealed class LspTelemetryService : ILspTelemetryService
     /// The properties travel as a <see cref="JObject"/>, not a dictionary: the LSP serializer
     /// camelCases dictionary keys (<c>IdeClient</c> would arrive as <c>ideClient</c>), but never
     /// rewrites the names of a <see cref="JObject"/>, so every host forwards the PascalCase names
-    /// the schema documents (issue #844).
+    /// the schema documents.
     /// </summary>
     public void SendEvent(string eventName, Dictionary<string, object?> properties)
     {

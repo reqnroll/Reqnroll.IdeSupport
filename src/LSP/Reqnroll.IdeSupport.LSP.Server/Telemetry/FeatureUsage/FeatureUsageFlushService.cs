@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 /// <see cref="ResolveInterval"/> from <see cref="FlushIntervalEnvVar"/> (seconds) and the
 /// <see cref="EnabledByDefault"/>/<see cref="DefaultInterval"/> constants (on, every 10 minutes, unless
 /// overridden); a <c>null</c> interval disables the periodic flush entirely — counting stays in-memory only and no
-/// <c>FeatureUsageSummary</c> event is ever sent (issue #582's "Rollout and rollback": counting
+/// <c>FeatureUsageSummary</c> event is ever sent (counting
 /// itself is a few <c>Interlocked</c> adds and stays always-on).
 /// </summary>
 /// <remarks>
@@ -27,7 +27,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry.FeatureUsage;
 /// <para>
 /// Identity (<c>IdeClient</c>, <c>ServerVersion</c>, <c>SessionId</c>) is not set here: the
 /// <see cref="ILspTelemetryService"/> this service is given is the outermost identity-stamping
-/// decorator (issue #844).
+/// decorator.
 /// </para>
 /// <para>
 /// Privacy: only keys defined by <see cref="FeatureUsageCatalog"/> and their integer counts ever
@@ -44,7 +44,7 @@ public sealed class FeatureUsageFlushService : IFeatureUsageFlushService
     /// <summary>
     /// Whether the summary is sent when <see cref="FlushIntervalEnvVar"/> is unset. On: the event is
     /// aggregate counts from a closed catalogue, and the <c>REQNROLL_TELEMETRY_ENABLED</c> kill switch
-    /// still applies in every IDE host (issue #851 argued against env-var-only opt-in gates, which
+    /// still applies in every IDE host (an env-var-only opt-in gate would
     /// collect no field data). Set the env var to <c>0</c> to disable.
     /// </summary>
     public const bool EnabledByDefault = true;

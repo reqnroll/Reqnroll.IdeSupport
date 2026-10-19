@@ -24,7 +24,7 @@ public interface IOperationDurationRecorder
     /// <param name="uri">The document the operation concerns, if any.</param>
     /// <param name="detail">
     /// Optional free-form size/state tag (e.g. <c>"cacheDocs=50 cacheSteps=1350"</c>), captured at
-    /// call time and appended to the PERF log line. For issue #471-style investigations: lets a
+    /// call time and appended to the PERF log line. For performance investigations: lets a
     /// climbing-duration pattern be correlated against the state that grew, without adding a
     /// per-operation-type field to the recorder itself. Cheap to compute is the caller's
     /// responsibility — this sink does not gate or defer it.

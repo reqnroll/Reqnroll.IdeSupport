@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
 /// Decorates <see cref="ILspTelemetryService"/> so every server-originated event carries one
-/// canonical client identity, regardless of which IDE forwards it (issue #844). Stamping here, in
+/// canonical client identity, regardless of which IDE forwards it. Stamping here, in
 /// the server, keeps the three host forwarders dumb and guarantees identical behavior across them.
 /// <para>
 /// Stamped keys (<c>IdeClient</c>, <c>ServerVersion</c>, <c>SessionId</c>, <c>ClientSessionId</c>)
@@ -29,7 +29,7 @@ public sealed class IdentityStampingLspTelemetryService : ILspTelemetryService
     /// <summary>Random per-server-process identifier; not user-identifying.</summary>
     public const string SessionIdKey = "SessionId";
 
-    /// <summary>The client's own per-IDE-session id (issue #1199); clients stamp the same property on their own events.</summary>
+    /// <summary>The client's own per-IDE-session id; clients stamp the same property on their own events.</summary>
     public const string ClientSessionIdKey = "ClientSessionId";
 
     private readonly ILspTelemetryService _inner;

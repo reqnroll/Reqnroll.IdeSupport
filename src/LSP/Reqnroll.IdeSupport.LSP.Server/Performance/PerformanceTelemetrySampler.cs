@@ -58,7 +58,7 @@ public sealed class PerformanceTelemetrySampler : IPerformanceTelemetrySampler
     /// Resolves the effective sample rate from a raw env-var value (trimmed, case-insensitive):
     /// unset/empty/whitespace and <c>on</c>/<c>true</c>/<c>yes</c> give <see cref="DefaultSampleRate"/>;
     /// <c>off</c>/<c>false</c>/<c>no</c> and a finite negative number disable sampling (0, preserving the
-    /// pre-#862 meaning of "disabled"); a number in <c>[0,1]</c> is used as-is; anything else (not a
+    /// original meaning of "disabled"); a number in <c>[0,1]</c> is used as-is; anything else (not a
     /// number, NaN, +/-Infinity, or greater than 1) is <b>invalid</b> and falls back to the default with
     /// <paramref name="warning"/> set.
     /// </summary>

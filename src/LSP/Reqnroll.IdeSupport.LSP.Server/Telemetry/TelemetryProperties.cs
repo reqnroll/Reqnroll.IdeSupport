@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace Reqnroll.IdeSupport.LSP.Server.Telemetry;
 
 /// <summary>
-/// Property-key names for the characteristic properties command events carry (issue #849).
+/// Property-key names for the characteristic properties command events carry.
 /// Every value is a count, a bucket, a flag or a member of a small closed set — never a path or text.
 /// Keys that predate this class (<c>LocationCount</c>, <c>UsagesCount</c>, ...) remain literals at
 /// their emit sites; new keys are added here so a typo cannot silently fork a column.
@@ -27,8 +27,6 @@ public static class TelemetryProperties
     public const string TotalStepDefinitions = "TotalStepDefinitions";
     /// <summary>
     /// Project registries scanned by Find Unused Step Definitions (one per discovered project).
-    /// Renamed from the mislabelled <c>ScannedFeatureFiles</c>, which reported this same registry
-    /// count despite its name (issue #942).
     /// </summary>
     public const string ScannedProjects = "ScannedProjects";
     /// <summary>Compact key-sorted JSON object (string) of lookup-feature counts in a <c>FeatureUsageSummary</c> window.</summary>
@@ -71,7 +69,7 @@ public static class TelemetryProperties
     /// <summary>
     /// Up to 8 sanitized frames (<c>Namespace.Type.Method:line</c>, newline-separated, innermost first) of an
     /// <c>UnhandledException</c>'s stack: Reqnroll IDE-support frames only, everything else collapsed to
-    /// <c>[external]</c>; no paths, column numbers, parameters or generic arguments (issue #620, see
+    /// <c>[external]</c>; no paths, column numbers, parameters or generic arguments (see
     /// <see cref="Reqnroll.IdeSupport.Common.Telemetry.ExceptionStackSanitizer"/>). Attached to the first
     /// occurrence of each distinct stack per session only.
     /// </summary>
@@ -140,7 +138,7 @@ public static class TelemetryProperties
     }
 }
 
-/// <summary>Closed-set bucketing for numeric telemetry values (issue #849), so cardinality stays bounded.</summary>
+/// <summary>Closed-set bucketing for numeric telemetry values, so cardinality stays bounded.</summary>
 public static class TelemetryBuckets
 {
     /// <summary>
