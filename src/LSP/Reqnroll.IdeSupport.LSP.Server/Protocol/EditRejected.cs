@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Protocol;
 
 /// <summary>
 /// The single server-side way to reject an edit-producing request (rename, formatting, …) with a
-/// reason the user can act on (issue #1132).
+/// reason the user can act on.
 /// </summary>
 /// <remarks>
 /// <para>

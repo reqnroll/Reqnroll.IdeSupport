@@ -70,7 +70,7 @@ public static class SourceLocationExtensions
             {
                 var col = lines[i].IndexOf(simpleName, StringComparison.Ordinal);
                 // WithPosition, not the public constructor: keeps RecordedSourceFile/IsResolved, so a
-                // path remapped from a foreign build keeps its provenance (issue #540, #757).
+                // path remapped from a foreign build keeps its provenance.
                 if (col >= 0)
                     return loc.WithPosition(i + 1, col + 1, i + 1, col + simpleName.Length);
             }
@@ -82,7 +82,7 @@ public static class SourceLocationExtensions
             // original location. IOException alone was too narrow: loc.SourceFile is a path this
             // method never validated (it can come straight from a PDB written on another platform),
             // and the argument/permission failures that shape can produce were escaping into the
-            // definition handler and faulting the whole request (issue #540 F8).
+            // definition handler and faulting the whole request.
         }
 
         return loc;

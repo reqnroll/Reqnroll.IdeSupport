@@ -10,7 +10,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Parsing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Why this exists (issue #471): OmniSharp's dispatcher funnels every <c>[Serial]</c>-tagged
+/// Why this exists: OmniSharp's dispatcher funnels every <c>[Serial]</c>-tagged
 /// notification (<c>didOpen</c>/<c>didChange</c>/<c>didSave</c>) through one shared global FIFO
 /// lane for the entire server, and per its batch-barrier design an in-flight <c>[Serial]</c> item
 /// also blocks the *start* of newly-arriving <c>[Parallel]</c> requests. Awaiting a full

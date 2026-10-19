@@ -66,7 +66,7 @@ internal sealed class MembershipIndex
             // A binding-role file removed from the project (e.g. the user deletes a .cs
             // step-definition file) must also have its stale entries purged from the project's
             // binding registry -- otherwise the step keeps showing as bound until the next full
-            // build (issue #94). The membership index alone doesn't drive matching; the registry
+            // build. The membership index alone doesn't drive matching; the registry
             // does, so BindingRegistryChangedHandler is handed the removed paths to reconcile.
             var removedBindingPaths = parameters.Files
                 .Where(entry => !entry.Added && entry.Role == ProjectFileRole.Binding)
@@ -77,11 +77,11 @@ internal sealed class MembershipIndex
             // rename: the client's didClose/didOpen for the new URI typically reaches the server
             // before this delta does, so its first parse/diagnostics pass ran with zero owners).
             // Without this, that already-open buffer would show stale/empty diagnostics until
-            // the next full build or solution reload (issue #32).
+            // the next full build or solution reload.
             var deltaProject = _findProjectByKey(key);
             if (deltaProject is not null)
             {
-                // See BindingRegistryProviderRouter.OnProviderChanged (issue #477): discarding
+                // See BindingRegistryProviderRouter.OnProviderChanged: discarding
                 // the Publish Task would not actually defer it off this call stack.
                 // CancellationToken.None, not the incoming `cancellationToken`: that token is
                 // scoped to this notification's own request lifetime, which FireAndForget's
@@ -89,12 +89,12 @@ internal sealed class MembershipIndex
                 // publish get silently cancelled the moment the request completes -- before the
                 // backgrounded work even runs -- defeating the notification entirely.
                 //
-                // Two notifications, not one (issue #577): a delta always needs the re-attribution
+                // Two notifications, not one: a delta always needs the re-attribution
                 // reparse (BindingRegistryPatchedNotification) described above, and additionally
                 // needs the binding-file purge (ProjectBindingFilesRemovedNotification) only when
                 // this delta actually removed binding-role files. Awaited in this order within the
-                // one background continuation so the purge still completes before the reparse it
-                // used to precede in the old single-notification Handle method.
+                // one background continuation so the purge completes before the reparse it
+                // precedes.
                 FireAndForgetExtensions.FireAndForget(
                     async () =>
                     {
@@ -148,7 +148,7 @@ internal sealed class MembershipIndex
         var project = _findProjectByKey(key);
         if (project is not null)
         {
-            // See BindingRegistryProviderRouter.OnProviderChanged (issue #477): discarding
+            // See BindingRegistryProviderRouter.OnProviderChanged: discarding
             // the Publish Task would not actually defer it off this call stack.
             // CancellationToken.None -- see the delta branch above for why.
             FireAndForgetExtensions.FireAndForget(
@@ -157,7 +157,7 @@ internal sealed class MembershipIndex
         }
         else
         {
-            // The baseline raced ahead of `reqnroll/projectLoaded` (see issue #48): any .cs
+            // The baseline raced ahead of `reqnroll/projectLoaded`: any .cs
             // buffers already synced for this project were evaluated against zero known
             // owners and, absent this flag, would never be re-evaluated once the project
             // actually registers. LspWorkspaceScopeManager checks this flag (via
