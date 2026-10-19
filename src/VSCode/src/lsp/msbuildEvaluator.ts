@@ -203,7 +203,7 @@ export async function runDotnetMsbuild(
   });
   if (!error) return stdout;
 
-  // A large project's item JSON can exceed the buffer limit: warn loudly (issue #1008) rather
+  // A large project's item JSON can exceed the buffer limit: warn loudly rather
   // than dropping the evaluation with no log at all.
   if (isMaxBufferOverflowError(error)) {
     // The curated "Reqnroll" output channel, not console.warn: that only reaches the Extension Host log.

@@ -20,11 +20,11 @@ interface FindStepDefinitionsResponse {
 /**
  * Implements Go to Step Definition using the custom `reqnroll/findStepDefinitions` request — the
  * same bindings as `textDocument/definition` (both go through the server's
- * `StepAtPositionResolver`), plus the class, method and binding attribute of each (issue #757).
+ * `StepAtPositionResolver`), plus the class, method and binding attribute of each.
  * Navigates directly if there's exactly one binding, or shows a `QuickPick` of
  * `Class.Method` / `[Given("expression")]` / file:line — the same rows Visual Studio and Rider list,
  * which show why a step is ambiguous. A binding whose source isn't on this machine is listed and
- * explained rather than left out (issue #540). F12 / Peek Definition still use the standard request.
+ * explained rather than left out. F12 / Peek Definition still use the standard request.
  */
 export async function doGoToStepDefinition(client: LanguageClient): Promise<void> {
   const editor = vscode.window.activeTextEditor;
@@ -48,7 +48,7 @@ export async function doGoToStepDefinition(client: LanguageClient): Promise<void
 
   const bindings = distinctByPosition(response?.items ?? []);
 
-  // A genuine navigation (issue #899): the server counts reqnroll/findStepDefinitions as a lookup.
+  // A genuine navigation: the server counts reqnroll/findStepDefinitions as a lookup.
   // LocationCount is the navigable rows, 0 when there is nowhere to go.
   sendTelemetryEvent(TelemetryEvents.goToStepDefinitionCommandExecuted, {
     [TelemetryProperties.locationCount]: bindings.filter(isNavigable).length,
@@ -120,8 +120,8 @@ async function navigateTo(item: StepDefinitionItem): Promise<void> {
  * by the .NET LSP server can normalize a drive letter's case (e.g. `file:///c:/...`) differently
  * than a workspace folder's `fsPath` (cased as the user opened it), and a case-sensitive
  * comparison would then miss a folder that genuinely contains the file — silently falling through
- * to the less useful bare-filename label instead of erroring, so the mismatch was easy to miss
- * (issue #324). Pure function (folder paths passed in) so it's directly testable without a
+ * to the less useful bare-filename label instead of erroring, so the mismatch was easy to miss.
+ * Pure function (folder paths passed in) so it's directly testable without a
  * running Extension Host workspace — see stepNavigation.test.ts.
  */
 export function resolveRelativePathIn(uriStr: string, folderFsPaths: readonly string[]): string {
@@ -131,7 +131,7 @@ export function resolveRelativePathIn(uriStr: string, folderFsPaths: readonly st
     for (const folderFsPath of folderFsPaths) {
       // Require a path-separator boundary after the folder prefix, so a sibling folder that merely
       // shares a prefix (e.g. /w/Foo vs /w/FooBar) is not treated as containing the file and the
-      // label resolved against the wrong folder (issue #1015). A folder path can itself end in a
+      // label resolved against the wrong folder. A folder path can itself end in a
       // separator (a filesystem root, or a caller-supplied trailing separator), so only append one
       // when it is missing.
       const folderLower = folderFsPath.toLowerCase();

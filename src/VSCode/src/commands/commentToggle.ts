@@ -26,7 +26,7 @@ export async function doToggleComment(client: LanguageClient): Promise<void> {
     });
   } catch (err: unknown) {
     // A user-correctable rejection (-32803: e.g. the document is not open in the server) is shown
-    // in a modal (issue #1132); any other failure is unexpected — log the detail, show it generically.
+    // in a modal; any other failure is unexpected — log the detail, show it generically.
     const rejection = asEditRejection(err);
     if (rejection !== undefined) {
       void showEditRejected(rejection);

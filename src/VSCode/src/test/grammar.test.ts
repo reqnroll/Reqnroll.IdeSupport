@@ -232,7 +232,7 @@ suite('gherkin.tmLanguage.json', () => {
       assert.deepStrictEqual(tagTexts, ['@category:smoke', '@owner=bob', '@Jira:ABC-1', '@v1.2/x']);
     });
 
-    // Gherkin discards a trailing "# comment" on a tag line before parsing the tags (see #949), so
+    // Gherkin discards a trailing "# comment" on a tag line before parsing the tags, so
     // it is valid and should be scoped as a comment, with the tags before it unaffected.
     test('#1004: scopes a trailing # comment on a tag line as a comment', () => {
       const line = '@smoke @slow # flaky on CI';

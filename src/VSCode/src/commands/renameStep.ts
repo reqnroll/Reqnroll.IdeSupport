@@ -30,7 +30,7 @@ interface RenameTargetsResponse {
  * older server that doesn't implement it) — in either case the caller falls back to the normal
  * `prepareRename` flow.
  *
- * `requireAttributeLine` (issue #506): pass `true` for the F2-bound dispatcher, which must not
+ * `requireAttributeLine`: pass `true` for the F2-bound dispatcher, which must not
  * steal an ordinary C# rename-symbol away from a method or local identifier. Without it, the
  * server also matches a cursor anywhere on the bound method's declaration line (not just within
  * the binding attribute itself) — the correct, deliberately loose behavior for the explicit
@@ -97,7 +97,7 @@ export function selectRenameTarget(
     attributeIndex,
     // The position the picker was invoked at, so the server can resolve `attributeIndex` to the
     // binding it denotes while that candidate list is still current, rather than carrying a bare
-    // index across the rename prompt and re-applying it to a list rebuilt later (issue #671, R5).
+    // index across the rename prompt and re-applying it to a list rebuilt later.
     position: { line: position.line, character: position.character },
   });
 }
@@ -108,7 +108,7 @@ export function selectRenameTarget(
  * rename (issue #671, R3; see `RenamePostApplyCoordinator`).
  *
  * The server used to commit those updates unconditionally for every non-Visual-Studio client, on
- * the assumption the client would apply what it was handed. Rider disproved that (issue #670), and
+ * the assumption the client would apply what it was handed. Rider disproved that, and
  * the same exposure exists here now that edits are version-stamped (R2) and VS Code rejects ones
  * computed against a superseded document version.
  *
@@ -128,7 +128,7 @@ export function reportRenameApplied(
 
 /**
  * Collapses the active editor's text selection to a plain cursor before a `.feature` step rename
- * is invoked (issue #456). Must run BEFORE `editor.action.rename` starts — see the call site in
+ * is invoked. Must run BEFORE `editor.action.rename` starts — see the call site in
  * `extension.ts`'s `reqnroll.renameStep` command, not inside the `prepareRename` middleware below.
  *
  * For a `.feature`-triggered rename, `StepRenameHandler.HandlePrepareRenameAsync` seeds the
@@ -215,7 +215,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
       return next(document, position, token);
     },
 
-    // Confirms the staged server-side cache updates for a `.feature` rename (issue #671, R3).
+    // Confirms the staged server-side cache updates for a `.feature` rename.
     // Unlike `renameStepFromCSharp`, this path hands the edit back to VS Code, which applies it
     // itself — there is no `applyEdit` boolean to report back.
     //
@@ -237,7 +237,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
         edit = await next(document, position, newName, token);
       } catch (err) {
         // A server rejection (-32803) is shown in a modal and resolves to "no edit" so VS Code does
-        // not also show its own error toast; anything else is rethrown (issue #1132).
+        // not also show its own error toast; anything else is rethrown.
         return rejectedOrRethrow<vscode.WorkspaceEdit>(err);
       }
 
@@ -267,7 +267,7 @@ export function extractStepTextFromLabel(label: string): string {
 }
 
 /**
- * Runs the Step Rename refactoring from a `.cs` binding attribute (issue #457).
+ * Runs the Step Rename refactoring from a `.cs` binding attribute.
  *
  * VS Code's built-in rename UI can't be reused here the way it is for `.feature` files: the
  * language client's `documentSelector` deliberately excludes `csharp` (its `.cs` sync is driven
@@ -279,7 +279,7 @@ export function extractStepTextFromLabel(label: string): string {
  * step text with a plain input box pre-filled with the current expression, then send
  * `textDocument/rename` directly and apply the resulting `WorkspaceEdit` ourselves.
  *
- * `fallbackToNativeRename` (issue #506): when set, a miss at the cursor — not on a binding
+ * `fallbackToNativeRename`: when set, a miss at the cursor — not on a binding
  * expression, or not even a Reqnroll-owned file — delegates to VS Code's own `editor.action.rename`
  * instead of showing "No step definition found". This is what the F2 keybinding needs: F2 has to
  * work as an ordinary C# rename everywhere else in a `.cs` file (locals, methods, non-Reqnroll
@@ -329,10 +329,10 @@ export async function renameStepFromCSharp(
     });
   } catch (err) {
     // The server rejects an invalid/unmatchable rename with a real JSON-RPC error response
-    // (issue #650) instead of a null result — sendRequest rejects the promise with a ResponseError
+    // instead of a null result — sendRequest rejects the promise with a ResponseError
     // in that case (confirmed in vscode-jsonrpc's connection.js) rather than resolving to null.
     // A user-correctable rejection (-32803) carries a reason meant to be shown verbatim, in a
-    // modal (issue #1132); any other failure is unexpected, so log it and show only a generic message.
+    // modal; any other failure is unexpected, so log it and show only a generic message.
     const rejection = asEditRejection(err);
     if (rejection !== undefined) {
       void showEditRejected(rejection);

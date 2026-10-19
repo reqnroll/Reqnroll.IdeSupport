@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 /**
- * Proves/disproves Q9's leading hypothesis (issue #31): does `files.watcherExclude` suppress
+ * Proves/disproves Q9's leading hypothesis: does `files.watcherExclude` suppress
  * delivery of events from the exact `vscode.workspace.createFileSystemWatcher(new
  * vscode.RelativePattern(outputDir, '*.dll'))` construction `ProjectManager.watchProjectOutputPath`
  * uses (projectManager.ts:330-332)? Mirrors that construction against a throwaway bin/ directory

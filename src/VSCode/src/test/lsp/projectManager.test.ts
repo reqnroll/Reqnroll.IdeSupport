@@ -364,7 +364,7 @@ suite('ProjectManager', () => {
               countNotifications(notifications, ReqnrollMethods.projectLoaded, projectFile) === 1,
           );
 
-          // The bug (issue #1009): no onDidChange handler is wired for project/solution files,
+          // The bug: no onDidChange handler is wired for project/solution files,
           // so editing the .csproj sends nothing and the server's membership/binding data for
           // this project stays stale until some other event or a window reload.
           fireChange(uri);
@@ -622,7 +622,7 @@ suite('ProjectManager resend cancellation (issue #1010)', () => {
 
   function makeManager(sent: SentNotification[]): ProjectManager {
     // The manager only calls `sendNotification` plus the `state`/`onDidChangeState` pair that
-    // `onServerRestarted` reads on construction (issue #997), so a minimal stub is enough.
+    // `onServerRestarted` reads on construction, so a minimal stub is enough.
     const client = {
       state: State.Running,
       onDidChangeState: () => ({ dispose: () => undefined }),

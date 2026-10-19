@@ -5,7 +5,7 @@ import {
   isMaxBufferOverflowError,
 } from '../../util/msbuildProcess';
 
-/** Covers the shared msbuild process seam (issue #1008). */
+/** Covers the shared msbuild process seam. */
 suite('msbuildProcess', () => {
   test('raises the msbuild output buffer well above the old 1 MB limit', () => {
     assert.ok(

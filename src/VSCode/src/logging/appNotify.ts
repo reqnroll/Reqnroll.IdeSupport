@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 let appLogChannel: vscode.LogOutputChannel | undefined;
 
 /**
- * Wires the curated "Reqnroll" app-status channel (issue #661) that `showInfo`/`showWarn`/
+ * Wires the curated "Reqnroll" app-status channel that `showInfo`/`showWarn`/
  * `showError` below mirror every popup notification into, alongside the extension/LSP-client
  * lifecycle lines `extension.ts` and `statusBar.ts` write directly. Set once by `extension.ts`
  * during `activate()`; left unset when a command module is exercised directly by a unit test, in
@@ -37,7 +37,7 @@ export function showWarn(message: string, ...items: string[]): Thenable<string |
 
 /**
  * Shows the language server's reason for rejecting an edit (rename, format, comment toggle, …) in a
- * **modal** dialog, so it cannot be missed the way a transient toast can (issue #1132), and mirrors
+ * **modal** dialog, so it cannot be missed the way a transient toast can, and mirrors
  * it to the curated "Reqnroll" output channel. The single place edit rejections are presented.
  */
 export function showEditRejected(message: string): Thenable<string | undefined> {

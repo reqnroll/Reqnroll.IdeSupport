@@ -151,7 +151,7 @@ suite('renameStep', () => {
 
       assert.strictEqual(sentMethod, ReqnrollMethods.selectRenameTarget);
       // The position is what lets the server resolve attributeIndex to a specific binding while
-      // the candidate list it indexes into is still current (issue #671, R5).
+      // the candidate list it indexes into is still current.
       assert.deepStrictEqual(sentParams, {
         uri: 'file:///Steps.cs',
         version: 0,

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 
 /**
- * The id of this VS Code session as the extension sees it (issue #1199): one random GUID per extension-host
+ * The id of this VS Code session as the extension sees it: one random GUID per extension-host
  * process. It is stamped as `ClientSessionId` on every event this extension transmits and passed to the
  * language server as `--client-session-id`, which stamps it on the server's events too, so a client-originated
  * `UnhandledException` joins to `ServerSessionStarted`. Mirrors `ClientSession` in `Reqnroll.IdeSupport.Common`

@@ -17,7 +17,7 @@ interface MatchingScenarioLocation {
 }
 
 /**
- * Implements the hook-match-count CodeLens's click action (issue #373): queries the server for
+ * Implements the hook-match-count CodeLens's click action: queries the server for
  * every scenario the hook binding at `uri`/`line`/`char` matches and shows a `QuickPick` to
  * navigate to one — always, even for a single match, matching `doFindStepUsages`'s behavior
  * (issue #373 follow-up: an earlier version auto-navigated on exactly one match, which was

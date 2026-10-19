@@ -15,7 +15,7 @@ export function run(): Promise<void> {
   const mocha = new Mocha({ ui: 'tdd', color: true, timeout: 10000 });
   const testsRoot = path.resolve(__dirname);
 
-  // CI runs with REQNROLL_TELEMETRY_ENABLED=0 (#1194) so the real extension never reports to Application
+  // CI runs with REQNROLL_TELEMETRY_ENABLED=0 so the real extension never reports to Application
   // Insights, but the telemetry suites assert that events *are* forwarded to their stubbed reporter.
   // Pin the kill switch to enabled around every test so they do not depend on the ambient value;
   // a test that needs another value sets it itself and the original is restored afterwards.

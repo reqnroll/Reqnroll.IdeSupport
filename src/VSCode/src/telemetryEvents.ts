@@ -9,25 +9,25 @@
  * for events the VS Code client emits directly, where only the client is the source of truth.
  */
 export const TelemetryEvents = {
-  /** A genuine "Go to Step Definition" navigation via `doGoToStepDefinition` (issue #899); `LocationCount`. F12/Ctrl+click use `textDocument/definition`, which also fires on hover, so they are not reported (the server counts them as lookups). */
+  /** A genuine "Go to Step Definition" navigation via `doGoToStepDefinition`; `LocationCount`. F12/Ctrl+click use `textDocument/definition`, which also fires on hover, so they are not reported (the server counts them as lookups). */
   goToStepDefinitionCommandExecuted: 'GoToStepDefinition command executed',
-  /** A genuine "Go to Hooks" navigation via `doGoToHooks` (issue #698) — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
+  /** A genuine "Go to Hooks" navigation via `doGoToHooks` — emitted client-side because the server's `reqnroll/findHooks` handler also serves CodeLens prefetches. */
   goToHookCommandExecuted: 'GoToHook command executed',
-  /** A clickable tag's link was followed (issue #755), via `openTagLink`. No properties: the URL and tag text are never sent. */
+  /** A clickable tag's link was followed, via `openTagLink`. No properties: the URL and tag text are never sent. */
   tagLinkCommandExecuted: 'TagLink command executed',
-  /** The language server failed to start or complete its handshake (issue #845). `Reason`, `AttemptNumber`. */
+  /** The language server failed to start or complete its handshake. `Reason`, `AttemptNumber`. */
   serverStartFailed: 'ServerStartFailed',
-  /** A running language server stopped without the client asking it to (issue #845). `Reason`, `AttemptNumber`. */
+  /** A running language server stopped without the client asking it to. `Reason`, `AttemptNumber`. */
   serverExitedUnexpectedly: 'ServerExitedUnexpectedly',
-  /** The client started the language server again after a failure or exit (issue #845). `Reason`, `AttemptNumber`. */
+  /** The client started the language server again after a failure or exit. `Reason`, `AttemptNumber`. */
   serverRestarted: 'ServerRestarted',
-  /** An exception thrown in this extension's own code (issue #621): the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
+  /** An exception thrown in this extension's own code: the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
   unhandledException: 'UnhandledException',
   /** Extension activated (issue #875; VS's `Extension loaded`). */
   extensionLoaded: 'Extension loaded',
-  /** First activation ever for this user (issue #875). */
+  /** First activation ever for this user. */
   extensionInstalled: 'Extension installed',
-  /** First activation after the version increased (issue #875). `OldExtensionVersion`. */
+  /** First activation after the version increased. `OldExtensionVersion`. */
   extensionUpgraded: 'Extension upgraded',
 } as const;
 

@@ -165,7 +165,7 @@ suite('isMtpCapable', () => {
     });
   });
 
-  // ── MSBuild output exceeding the buffer (issue #1008) ───────────────────────────────────────
+  // ── MSBuild output exceeding the buffer ───────────────────────────────────────
 
   suite('MSBuild output exceeding the buffer', () => {
     teardown(() => setAppLogChannel(undefined));

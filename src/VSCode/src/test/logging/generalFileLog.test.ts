@@ -3,7 +3,7 @@ import type * as vscode from 'vscode';
 import { GeneralFileLogChannel, formatLine } from '../../logging/generalFileLog';
 
 // Portable subset of Reqnroll.IdeSupport.Common.Logging.LogLineFormatter.FormatPreamble shared
-// with the .NET side and the Rider plugin's ReqnrollDebugLogger.formatLine (issue #626).
+// with the .NET side and the Rider plugin's ReqnrollDebugLogger.formatLine.
 suite('formatLine', () => {
   test('renders a UTC ISO-8601 timestamp, a padded level, and the message', () => {
     const line = formatLine('Info', 'hello');

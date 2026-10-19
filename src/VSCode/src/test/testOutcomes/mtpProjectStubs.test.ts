@@ -456,7 +456,7 @@ suite('mtpProjectStubs', () => {
     );
   });
 
-  // ── MSBuild output exceeding the buffer (issue #1008) ───────────────────────────────────────
+  // ── MSBuild output exceeding the buffer ───────────────────────────────────────
 
   suite('evaluateViaMsBuild exceeding the buffer', () => {
     teardown(() => setAppLogChannel(undefined));

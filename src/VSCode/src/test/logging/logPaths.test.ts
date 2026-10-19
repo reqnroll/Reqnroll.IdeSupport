@@ -8,7 +8,7 @@ import {
 
 // resolveApplicationDirectory's per-OS branches mirror the Rider plugin's
 // ReqnrollDebugLogger.logDirectory and the .NET side's ReqnrollLogPaths.ResolveApplicationDirectory,
-// both of which are unit-tested against injected platform/env values (issue #625/#626). This module
+// both of which are unit-tested against injected platform/env values. This module
 // reads process.platform directly rather than taking it as a parameter — matching the convention
 // already in place before this file existed (the function it was extracted from,
 // lspInspectorLogger.ts's original private resolveLogDirectory, was never tested per-OS either) —

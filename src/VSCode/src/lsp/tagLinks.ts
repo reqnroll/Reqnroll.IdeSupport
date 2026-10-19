@@ -9,7 +9,7 @@ export const OPEN_TAG_LINK_COMMAND = 'reqnroll.openTagLink';
 
 /**
  * Schemes that execute script or embed content rather than navigate to a tracker: the target comes
- * from `reqnroll.json`, which a cloned repository controls, so these are refused (issue #755).
+ * from `reqnroll.json`, which a cloned repository controls, so these are refused.
  * `command:` in particular would run any VS Code command.
  */
 const BLOCKED_SCHEMES = new Set(['javascript:', 'vbscript:', 'data:', 'command:']);
@@ -43,7 +43,7 @@ export function retargetLink(link: vscode.DocumentLink): vscode.DocumentLink | u
 }
 
 /**
- * Keeps every clickable tag permanently styled as a link (issue #921). VS Code only underlines a
+ * Keeps every clickable tag permanently styled as a link. VS Code only underlines a
  * document link while Ctrl/Cmd is held over it, which hides which tags are links at all; this
  * remembers the ranges of the links the server returned for each document and paints them with a
  * link-coloured underline decoration. The ranges come from the same `provideDocumentLinks` pass
@@ -106,10 +106,10 @@ export class TagLinkDecorations implements vscode.Disposable {
 }
 
 /**
- * Middleware around the built-in `textDocument/documentLink` feature (issue #755): every returned
+ * Middleware around the built-in `textDocument/documentLink` feature: every returned
  * tag link is re-targeted by {@link retargetLink}, so clicking it runs {@link openTagLink}. When
  * `decorations` is given, the surviving links' ranges are also handed to it so they stay
- * permanently styled (issue #921).
+ * permanently styled.
  */
 export function createTagLinkMiddleware(decorations?: TagLinkDecorations): Middleware {
   return {

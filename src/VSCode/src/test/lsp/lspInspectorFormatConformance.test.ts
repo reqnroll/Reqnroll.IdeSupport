@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import { parseLspTraceMessage } from '../../lsp/lspInspectorLogger';
 
 /**
- * Cross-language conformance check (issue #628) between this file's `parseLspTraceMessage` and
+ * Cross-language conformance check between this file's `parseLspTraceMessage` and
  * the VS extension's independent reimplementation of the same
  * [lsp-viewer](https://lampepfl.github.io/lsp-viewer/) wire format,
  * `src/VisualStudio/Reqnroll.IdeSupport.VisualStudio.Extension/LspInterception/LspInspectorLogger.cs`.

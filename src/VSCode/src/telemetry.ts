@@ -21,7 +21,7 @@ export function effectiveTelemetryEnvironment(
 }
 
 /**
- * Developer override (issue #889): REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
+ * Developer override: REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING, shared with VS and Rider,
  * replaces the built-in connection string when it carries a non-empty `InstrumentationKey`.
  * Anything else is ignored (`onInvalid` is told why) so a typo never silently drops events.
  */
@@ -109,7 +109,7 @@ function afterTeardownGate(action: () => void | Thenable<void>): Thenable<void> 
 const DISPOSE_TIMEOUT_MS = 500;
 
 // One breaker per session (re-created by registerTelemetry): once the endpoint has failed, every
-// later event is dropped without touching the reporter, and the user sees a single notice (#859).
+// later event is dropped without touching the reporter, and the user sees a single notice.
 let breaker = newBreaker();
 
 function newBreaker(): TelemetryCircuitBreaker {
@@ -207,7 +207,7 @@ export function registerTelemetry(client: LanguageClient, context: vscode.Extens
 /**
  * Stringifies `properties` (dropping null/undefined) and stamps the host's client identity (issue
  * #844), matching what VS's `TelemetryTransmitter` and Rider's `RiderTelemetryTransmitter` stamp:
- * `Ide`/`IdeVersion`/`ExtensionVersion` and `ClientSessionId` (issue #1199), plus the canonical `IdeClient` (same vocabulary the LSP
+ * `Ide`/`IdeVersion`/`ExtensionVersion` and `ClientSessionId`, plus the canonical `IdeClient` (same vocabulary the LSP
  * server stamps on server-originated events). `IdeClient` is only added when absent so a
  * server-stamped value is never overridden. Exported for tests.
  */
@@ -244,7 +244,7 @@ function extensionVersion(): string {
  *
  * Also the single point every client-originated and server-relayed event passes through (the
  * notification forwarder in `registerTelemetry` calls this too), so mirroring the attempt here to
- * the local debug log (issue #799) — independent of `enabled`/whether a reporter exists, matching
+ * the local debug log — independent of `enabled`/whether a reporter exists, matching
  * VS's `TelemetryTransmitter.TransmitEvent` — covers both paths with one call site.
  */
 export function sendTelemetryEvent(
@@ -276,7 +276,7 @@ export function sendTelemetryEvent(
   try {
     reporter.sendTelemetryEvent(eventName, stringProps);
   } catch (err) {
-    // Telemetry must never surface to the user (#859): record it, open the breaker, carry on.
+    // Telemetry must never surface to the user: record it, open the breaker, carry on.
     const message = err instanceof Error ? err.message : String(err);
     breaker.recordFailure(message);
     debugLog.record('host', eventName, stringProps, enabled, false, message);

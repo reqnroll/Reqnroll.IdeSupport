@@ -98,11 +98,11 @@ suite('findUnusedStepDefinitions', () => {
 
       assert.strictEqual(quickPickItems?.length, 1);
       assert.match(quickPickItems[0].label, /MySteps\.GivenSomething/);
-      // The binding attribute as written on the method (issue #757).
+      // The binding attribute as written on the method.
       assert.strictEqual(quickPickItems[0].description, '[Given("I have something")]');
     });
 
-    // ── Unresolvable source paths (issue #540) ──────────────────────────────
+    // ── Unresolvable source paths ──────────────────────────────
 
     test('marks an entry whose source is not on this machine', async () => {
       const client = fakeClient(() =>

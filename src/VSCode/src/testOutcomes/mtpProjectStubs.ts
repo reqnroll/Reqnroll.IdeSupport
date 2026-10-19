@@ -41,7 +41,7 @@ const MSBUILD_EVAL_TIMEOUT_MS = 30_000;
 
 /**
  * How many projects are synced at once: each can shell out to `dotnet msbuild` (with a 20-30 s
- * timeout), so a large workspace must not spawn one process per project in parallel (issue #998).
+ * timeout), so a large workspace must not spawn one process per project in parallel.
  */
 const MAX_CONCURRENT_PROJECT_SYNCS = 4;
 
@@ -53,7 +53,7 @@ const ASSETS_LIBRARY_KEY = /"([^"/\\]+)\/\d[^"/]*"\s*:/g;
 
 /**
  * Enumerates every `.csproj` under `root`, pruning build-output/VCS/editor/dependency directories.
- * Asynchronous so a large workspace never blocks the extension host's event loop (issue #998).
+ * Asynchronous so a large workspace never blocks the extension host's event loop.
  * Exported for testing.
  */
 export async function enumerateProjectFiles(root: string): Promise<string[]> {
@@ -380,7 +380,7 @@ export function projectsForAssetsFile(assetsFile: string): string[] {
  * its Reqnroll use becomes known), or a Reqnroll package is added or removed. When disabled, removes any
  * stub this extension wrote earlier, so turning the feature off leaves no file of ours behind. Never throws.
  * The workspace walk is asynchronous and the msbuild-backed checks are bounded, so activation starts
- * this without awaiting it (issue #998).
+ * this without awaiting it.
  */
 export async function activateMtpProjectStubs(
   context: Pick<vscode.ExtensionContext, 'extensionMode' | 'extensionPath' | 'subscriptions'>,
@@ -436,7 +436,7 @@ export async function evaluateViaMsBuild(
   );
 
   if (error) {
-    // Warn when a project's evaluation output exceeds the buffer limit (issue #1008) rather than
+    // Warn when a project's evaluation output exceeds the buffer limit rather than
     // letting the caller fall back with no log at all.
     if (isMaxBufferOverflowError(error)) {
       logWarn(

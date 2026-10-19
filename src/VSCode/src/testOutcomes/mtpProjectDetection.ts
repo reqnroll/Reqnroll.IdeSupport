@@ -112,7 +112,7 @@ export async function evaluateViaMsBuild(
   const { stdout, error } = await exec(args, { timeoutMs: MSBUILD_EVAL_TIMEOUT_MS });
 
   if (error) {
-    // Warn when a project's evaluation output exceeds the buffer limit (issue #1008) rather than
+    // Warn when a project's evaluation output exceeds the buffer limit rather than
     // silently concluding "no evidence".
     if (isMaxBufferOverflowError(error)) {
       logWarn(

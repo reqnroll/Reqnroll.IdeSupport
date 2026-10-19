@@ -130,7 +130,7 @@ interface LspEntry {
   // file's "traceId" field: it reads a top-level "traceparent" property that only Visual Studio's
   // own Language Server Client platform ever stamps onto outgoing requests — nothing in
   // vscode-languageclient or this extension's own code ever writes one, so there is nothing for
-  // this side to extract (issue #633).
+  // this side to extract.
   latencyMs?: number;
 }
 
@@ -181,7 +181,7 @@ const HEAD_PATTERNS: { regex: RegExp; parse: (m: RegExpMatchArray) => ParsedHead
  * 'method - (id)'.") and optionally a body ("Params: {...}").  vscode-languageclient
  * joins them with \n before calling channel.trace(), so we receive the combined text.
  */
-// Exported for lspInspectorFormatConformance.test.ts (issue #628) - not used outside this module
+// Exported for lspInspectorFormatConformance.test.ts - not used outside this module
 // in production, but the cross-language wire-format check needs direct access to the parsed
 // envelope rather than going through the full FileLspTraceChannel/file-write path.
 export function parseLspTraceMessage(text: string): LspEntry | undefined {
@@ -268,7 +268,7 @@ export function traceServerToLogLevel(): 'Warning' | 'Info' | 'Verbose' {
  * argument, so VS Code users can control OmniSharp's own internal protocol diagnostics
  * (request dispatch, DryIoc, JSON-RPC plumbing) independently of `reqnroll.trace.server`.
  * Mirrors `traceServerToLogLevel()`: `reqnroll.trace.server` drives the server's `--log-level`,
- * and this setting drives the separate `--protocol-log-level` dial (issue #665).
+ * and this setting drives the separate `--protocol-log-level` dial.
  */
 export function protocolLogLevelToArg(): 'Off' | 'Error' | 'Warning' | 'Info' | 'Verbose' {
   const level = vscode.workspace

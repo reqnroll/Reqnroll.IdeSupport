@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import { formatBindingAttribute, formatMethodName } from '../../util/stepDefinitionItems';
 
-// Row format shared with the Visual Studio and Rider step-definition lists (issue #757).
+// Row format shared with the Visual Studio and Rider step-definition lists.
 suite('stepDefinitionItems', () => {
   const base = { sourceLine: 0, sourceChar: 0 };
 

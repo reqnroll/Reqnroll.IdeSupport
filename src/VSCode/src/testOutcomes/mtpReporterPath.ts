@@ -9,7 +9,7 @@ export const MTP_REPORTER_BUNDLE_TARGETS_FILE_NAME = 'Reqnroll.IdeSupport.TestRe
 export const MTP_REPORTER_SOURCE_DIRECTORY_NAME = 'ReporterSource';
 
 /**
- * Resolves the directory containing the bundled MTP reporter *source bundle* (issue #741) —
+ * Resolves the directory containing the bundled MTP reporter *source bundle* —
  * `Reqnroll.IdeSupport.TestReporter.MTP.targets` plus `ReporterSource/` — the same bundle the
  * Visual Studio extension (`MtpReporter/`) and the Rider plugin (`mtpreporter/`) ship, packaged here
  * under `mtpreporter/` too. Mirrors {@link resolveTestLoggerDirectory}'s production/development split;

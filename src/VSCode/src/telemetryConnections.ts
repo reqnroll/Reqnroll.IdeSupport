@@ -1,4 +1,4 @@
-// Built-in Application Insights connection strings (issue #1160). One resource per environment;
+// Built-in Application Insights connection strings. One resource per environment;
 // the build picks one via REQNROLL_TELEMETRY_ENV (see scripts/generate-telemetry-environment.mjs):
 // 'prod' for release builds, 'dev' (the default) for everything else. The other IDE clients carry
 // the same pair:

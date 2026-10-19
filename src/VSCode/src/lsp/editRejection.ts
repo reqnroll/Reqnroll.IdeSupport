@@ -4,8 +4,8 @@ import { logWarn, showEditRejected } from '../logging/appNotify';
 import { SaveTracker, saveTracker } from './saveTracker';
 
 /**
- * LSP `RequestFailed`: the server's code for an edit it refuses for a reason the user can fix
- * (issue #1132). Its message is meant to be shown verbatim; every other error code is an
+ * LSP `RequestFailed`: the server's code for an edit it refuses for a reason the user can fix.
+ * Its message is meant to be shown verbatim; every other error code is an
  * unexpected failure (log it, show at most a generic message), and `ContentModified` (-32801) is a
  * routine retryable cancellation that must never reach a dialog.
  */

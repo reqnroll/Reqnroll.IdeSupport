@@ -136,7 +136,7 @@ const defaultDeps: ProjectManagerDeps = {
  *     reverted to that canonical path; VS's `VsProjectEventMonitor` doesn't need any of this — it
  *     hooks `DTE.Events.BuildEvents.OnBuildDone` directly.
  * v6: re-registers every project when vscode-languageclient restarts a crashed server on the same
- *     client (issue #997) — the new server starts with no project state; see {@link onServerRestarted}.
+ *     client — the new server starts with no project state; see {@link onServerRestarted}.
  */
 export class ProjectManager {
   private readonly _client: LanguageClient;
@@ -146,7 +146,7 @@ export class ProjectManager {
   private readonly _outputAssemblyPaths = new Map<string, string>();
   private readonly _resendTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private _disposables: vscode.Disposable[] = [];
-  /** Bumped on each server restart; work started under an older value must not send (issue #997). */
+  /** Bumped on each server restart; work started under an older value must not send. */
   private _serverGeneration = 0;
   /**
    * Projects whose first registration is in flight, with the generation it runs under. `registerProject`
@@ -168,7 +168,7 @@ export class ProjectManager {
     this._watcher.onDidCreate((uri) => void this.onProjectCreated(uri));
     // Editing a .csproj (TFM, package references, Include/Remove globs, linked files) changes
     // what belongs to the project, so re-evaluate it through the same debounced resend path the
-    // .cs/.feature watcher uses below (issue #1009).
+    // .cs/.feature watcher uses below.
     this._watcher.onDidChange((uri) => this.scheduleResend(uri));
     this._watcher.onDidDelete((uri) => void this.onProjectDeleted(uri));
 
@@ -187,7 +187,7 @@ export class ProjectManager {
       ),
     );
 
-    // A restarted server knows nothing the old one was told; re-prime it (issue #997).
+    // A restarted server knows nothing the old one was told; re-prime it.
     this._disposables.push(onServerRestarted(client, () => this.onServerRestarted()));
 
     // Discover any projects already present in the workspace
@@ -287,7 +287,7 @@ export class ProjectManager {
 
   /**
    * Clears any pending debounced membership resend queued for `projectFile`, if one is queued.
-   * Used on unregister (issue #1010) so a timer armed before the project was removed can't fire
+   * Used on unregister so a timer armed before the project was removed can't fire
    * afterwards and re-announce it; also used by {@link scheduleResend} to coalesce a burst.
    */
   private clearResendTimer(projectFile: string): void {
@@ -327,7 +327,7 @@ export class ProjectManager {
     // A debounce timer may fire — or a resend may still be in flight — after the project was
     // unregistered or the manager was disposed. Never re-announce a project that is no longer
     // known: `sendProjectLoaded` sends even when MSBuild evaluation fails, so without this the
-    // removed project would be resurrected on the server's side (issue #1010).
+    // removed project would be resurrected on the server's side.
     if (!this._knownProjects.has(projectFile)) return;
 
     const generation = this._serverGeneration;
@@ -482,7 +482,7 @@ export class ProjectManager {
     if (!this._knownProjects.has(projectFile)) return;
 
     // Cancel any debounced membership resend queued for this project so a timer armed before
-    // the unload can't fire afterwards and re-announce the removed project (issue #1010).
+    // the unload can't fire afterwards and re-announce the removed project.
     this.clearResendTimer(projectFile);
 
     const params = { projectFile };

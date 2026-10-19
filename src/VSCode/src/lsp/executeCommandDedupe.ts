@@ -11,7 +11,7 @@ import {
  * already registers itself at activation (see `extension.ts`'s `vscode.commands.registerCommand`
  * calls, e.g. `reqnroll.toggleComment` for the Ctrl+/ keybinding).
  *
- * Why this exists (issue #415): `vscode-languageclient`'s `ExecuteCommandFeature` responds to a
+ * Why this exists: `vscode-languageclient`'s `ExecuteCommandFeature` responds to a
  * dynamic `workspace/executeCommand` registration by calling `vscode.commands.registerCommand`
  * for each advertised command name -- which throws ("command '...' already exists") when that id
  * is already taken. `client/registerCapability` bundles *every* dynamic registration for the
