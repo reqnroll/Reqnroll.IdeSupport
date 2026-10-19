@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests.Injection;
 
 /// <summary>
 /// A throwaway workspace (temp directory with a <c>.git</c> marker, so <c>WorkspaceRootLocator</c>
-/// resolves it as the workspace root) holding one project, plus the issue #741 project-local stub
+/// resolves it as the workspace root) holding one project, plus the project-local stub
 /// <c>obj/&lt;Project&gt;.csproj.reqnroll-ide.targets</c> that imports the source bundle this test
 /// project's build output carries (<c>Reqnroll.IdeSupport.TestReporter.MTP.targets</c> +
 /// <c>ReporterSource/*.cs</c>, flowed here as Content from the ProjectReference). Outside the repo on

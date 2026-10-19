@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.Common.Tests.ProjectSystem.Configuration;
 /// fresh default <see cref="IdeSupportConfiguration"/>, and
 /// <see cref="ProjectSystemIdeSupportConfigurationProvider.ConfigurationChanged"/> is never raised.
 /// Once solution-level loading is implemented, these assertions should start failing, signalling
-/// that this test needs to be updated to reflect the new behavior (issue #357).
+/// that this test needs to be updated to reflect the new behavior.
 /// </summary>
 public class ProjectSystemIdeSupportConfigurationProviderTests
 {

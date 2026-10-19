@@ -13,7 +13,7 @@ public class IdeSupportLoggerExtensionsTests
 
     // Every entry point below is called directly from this file, so Source should always resolve
     // to this test file's own name — proving the [CallerFilePath] capture reaches the real call
-    // site rather than IdeSupportLoggerExtensions.cs's own file (issue #626).
+    // site rather than IdeSupportLoggerExtensions.cs's own file.
     private const string ThisFile = nameof(IdeSupportLoggerExtensionsTests);
 
     [Fact]

@@ -61,9 +61,9 @@ public class SessionBreadcrumbMatcherTests : IDisposable
     public void ReadAll_skips_one_bad_file_and_still_returns_a_good_one_in_the_same_call()
     {
         // A top-level JSON array (not an object) makes JsonElement.TryGetProperty throw
-        // InvalidOperationException — a type TryRead's catch previously did NOT filter for (only
-        // IOException/UnauthorizedAccessException/JsonException were caught), so this one file used
-        // to escape TryRead, abort ReadAll's whole foreach, and discard every other breadcrumb —
+        // InvalidOperationException — a type TryRead must also catch (not only
+        // IOException/UnauthorizedAccessException/JsonException), or this one file would
+        // escape TryRead, abort ReadAll's whole foreach, and discard every other breadcrumb —
         // including a good one from another concurrently-open IDE window — in the same call.
         Directory.CreateDirectory(_dir);
         File.WriteAllText(Path.Combine(_dir, "100.json"), "[1,2,3]");
@@ -101,7 +101,7 @@ public class SessionBreadcrumbMatcherTests : IDisposable
     public void FindBestMatch_rejects_a_sibling_folder_that_merely_shares_a_string_prefix()
     {
         // "C:\Repo2" must not be treated as containing "C:\Repo2Extra" style ambiguity, and
-        // "C:\Repo" must not match a reporter root of "C:\Repo2" (issue #518-class boundary bug).
+        // "C:\Repo" must not match a reporter root of "C:\Repo2" (path-boundary check).
         var candidates = new[] { new SessionBreadcrumb("127.0.0.1:1", @"C:\Repo") };
 
         SessionBreadcrumbMatcher.FindBestMatch(@"C:\Repo2\Sub", candidates).Should().BeNull();
@@ -110,8 +110,8 @@ public class SessionBreadcrumbMatcherTests : IDisposable
     [Fact]
     public void FindBestMatch_deepest_match_wins_for_nested_workspaces()
     {
-        // Two LSP server sessions: one for the outer repo, one for a nested sub-solution. Issue #715
-        // plan §7 risk #3 — the reporter must pick the deepest (most specific) ancestor.
+        // Two LSP server sessions: one for the outer repo, one for a nested sub-solution.
+        // The reporter must pick the deepest (most specific) ancestor.
         var candidates = new[]
         {
             new SessionBreadcrumb("127.0.0.1:1", @"C:\repo"),

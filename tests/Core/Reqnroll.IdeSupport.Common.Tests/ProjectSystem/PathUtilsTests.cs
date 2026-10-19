@@ -80,7 +80,7 @@ public class PathUtilsTests
         PathUtils.IsUnderFolder(filePath, folder).Should().BeFalse();
     }
 
-    // ── NormalizeForComparison / IsSamePath (issue #540 F4, F5) ────────────────────────────
+    // ── NormalizeForComparison / IsSamePath ────────────────────────────
     // These run on windows-latest in CI (every .NET test job does), so Windows path shapes are
     // the shapes under test.
 
@@ -113,7 +113,7 @@ public class PathUtilsTests
         // "C:\workspaces\host-solution\Specs\Steps.cs" — rooted on whichever drive the server
         // process happens to be running from. That makes the normalized form process-dependent and
         // can manufacture a false match against a workspace that genuinely lives there. A path that
-        // is rooted but not fully qualified must keep its shape (issue #540 F5).
+        // is rooted but not fully qualified must keep its shape.
         var normalized = PathUtils.NormalizeForComparison(foreignPath);
 
         normalized.Should().NotContain(":");

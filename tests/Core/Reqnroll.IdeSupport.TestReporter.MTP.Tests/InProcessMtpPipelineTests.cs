@@ -11,7 +11,7 @@ using Reqnroll.IdeSupport.TestReporter.MTP.Tests.Mtp;
 namespace Reqnroll.IdeSupport.TestReporter.MTP.Tests;
 
 /// <summary>
-/// Issue #741 T0: the reporter driven through Microsoft.Testing.Platform's real in-process pipeline
+/// The reporter driven through Microsoft.Testing.Platform's real in-process pipeline
 /// (<c>TestApplication.CreateBuilderAsync</c> + a <see cref="FakeTestFramework"/>) rather than by calling
 /// its methods directly — covers extension enablement (<c>IsEnabledAsync</c>), the session lifetime
 /// hooks and message-bus delivery in seconds, with no <c>dotnet test</c> process or fixture project.
@@ -71,7 +71,7 @@ public class InProcessMtpPipelineTests
             Node("NotRun", "Not run", SkippedTestNodeStateProperty.CachedInstance),
             Node("TooSlow", "Too slow", new TimeoutTestNodeStateProperty("timed out")),
             Node("Crashed", "Crashed", new ErrorTestNodeStateProperty(new InvalidOperationException("crash"), "crash")),
-#pragma warning disable CS0618 // Obsolete, but some frameworks still emit it: the reporter must map it (issue #741 §2.2).
+#pragma warning disable CS0618 // Obsolete, but some frameworks still emit it: the reporter must map it.
             Node("Cancelled", "Cancelled", new CancelledTestNodeStateProperty("cancelled")),
 #pragma warning restore CS0618
             Node("AddingRows", "Adding rows(1,2,3)", PassedTestNodeStateProperty.CachedInstance, "System.String", "System.String[]"),

@@ -2,7 +2,7 @@ using Reqnroll.IdeSupport.Common.ProjectSystem;
 
 namespace Reqnroll.IdeSupport.Common.Tests.ProjectSystem;
 
-/// <summary>Covers shared-project classification (issue #735).</summary>
+/// <summary>Covers shared-project classification.</summary>
 public class ProjectFileTypesTests
 {
     [Theory]

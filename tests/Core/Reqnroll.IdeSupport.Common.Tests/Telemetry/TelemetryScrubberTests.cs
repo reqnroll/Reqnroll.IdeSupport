@@ -15,7 +15,7 @@ public class TelemetryScrubberTests
     public void RedactPaths_replaces_filesystem_paths(string message, string expected)
         => TelemetryScrubber.RedactPaths(message).Should().Be(expected);
 
-    // Adversarial shapes (issue #621): spaces in the user directory, token URLs, relative paths, bare file
+    // Adversarial shapes: spaces in the user directory, token URLs, relative paths, bare file
     // names, home/env-var forms, two paths in one message, and ordinary text that must survive.
     [Theory]
     [InlineData(@"EACCES C:\Users\John Smith\My Projects\Calc\a.feature denied", "EACCES <path> denied")]
@@ -52,7 +52,7 @@ public class TelemetryScrubberTests
         TelemetryScrubber.RedactPaths(once).Should().Be(once);
     }
 
-    // Issue #1139: quoted user text (class names, step expressions, feature text, tags, config values) must not leave.
+    // Quoted user text (class names, step expressions, feature text, tags, config values) must not leave.
     [Theory]
     [InlineData("Could not load type 'Acme.Payroll.Steps.PaymentSteps' from assembly 'Acme.Payroll, Version=1.0.0.0'", "Could not load type <text> from assembly <text>")]
     [InlineData("parsing \"(Acme payroll total (\\d+)\" - Not enough )'s.", "parsing <text> - Not enough )'s.")]

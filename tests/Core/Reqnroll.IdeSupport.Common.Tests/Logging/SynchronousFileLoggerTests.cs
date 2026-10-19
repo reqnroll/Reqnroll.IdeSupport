@@ -39,9 +39,9 @@ public class SynchronousFileLoggerTests : IDisposable
     [Fact]
     public void LogFilePath_date_segment_is_todays_UTC_date()
     {
-        // Regression test: the DEBUG build used to stamp the filename with DateTime.UtcNow while
-        // RELEASE used local DateTime.Now, so the two configurations rolled the file over at a
-        // different moment each day. Both must now agree on the UTC date (issue #625).
+        // Regression guard: the DEBUG and RELEASE builds must both stamp the filename with the UTC
+        // date (a DEBUG/RELEASE mismatch between UtcNow and local Now would roll the file over at a
+        // different moment each day).
         var logger = new SynchronousFileLogger("test", $"utcdate-{Guid.NewGuid():N}");
         try
         {
