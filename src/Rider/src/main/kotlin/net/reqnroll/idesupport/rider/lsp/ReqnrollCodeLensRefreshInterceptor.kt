@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture
  * [HookCodeVisionProvider.refreshOpenFeatureEditors]), and the Run lens
  * ([RunTestCodeVisionProvider]) before delegating.
  *
- * The Run lens wiring (issue #495) also clears [RunTestTargetCache] first — that cache is what
+ * The Run lens wiring also clears [RunTestTargetCache] first — that cache is what
  * lets `RunLensSupport.computeEntries` skip re-sending `reqnroll/resolveTestTargets` for a scenario
  * whose identity hasn't changed since the last recompute, and this notification is the real
  * staleness signal for when a *resolution* actually changed underneath an unchanged scenario name
@@ -33,7 +33,7 @@ import java.util.concurrent.CompletableFuture
  * [refreshCodeLenses] is invoked directly by `Lsp4jClient.refreshCodeLenses` on whatever thread
  * the underlying `workspace/codeLens/refresh` LSP message arrived on — confirmed live to be a
  * background "LSP Listener" thread, not the EDT. `StepUsagesCodeVisionProvider.refreshOpenCsEditors`
- * calls `CodeVisionHost.invalidateProvider` directly, which asserts EDT-only access (issue #166),
+ * calls `CodeVisionHost.invalidateProvider` directly, which asserts EDT-only access,
  * unlike the sibling folding/inlay-hint refresh paths ([ReqnrollInlayHintRefreshInterceptor]),
  * which dispatch onto a background thread via `executeOnPooledThread` before ever touching an
  * EDT-sensitive API and only return to the EDT to render. Here there's no LSP request to justify

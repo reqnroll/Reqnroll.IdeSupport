@@ -8,7 +8,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * Lists the files a project compiles from the shared projects it imports — the items of every
- * `.projitems` named by one of its `<Import>` elements (issue #736).
+ * `.projitems` named by one of its `<Import>` elements.
  *
  * A shared project's sources live outside the importing project's folder by definition, so
  * [ReqnrollProjectBaseline.sendProjectFilesBaseline]'s folder walk never finds them; this adds

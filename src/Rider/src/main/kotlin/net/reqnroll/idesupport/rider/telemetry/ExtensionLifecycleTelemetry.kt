@@ -15,7 +15,7 @@ interface LifecycleStore {
 }
 
 /**
- * Port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted` (issue #875):
+ * Port of the decision logic in VS's `WelcomeService.OnIdeScopeActivityStarted`:
  * `Extension loaded` on every start, `Extension installed` on the first ever, `Extension upgraded`
  * when the plugin version increased, and a `"{N} day usage"` heartbeat on the first start of each
  * new local day (not on the install day, like VS). Pure: store and sink are injected.

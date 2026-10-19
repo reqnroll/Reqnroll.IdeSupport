@@ -1,8 +1,8 @@
 package net.reqnroll.idesupport.rider.telemetry
 
 /**
- * Reduces a JVM stack to a privacy-safe, bounded attribution string (issue #1199), the Kotlin counterpart of
- * the server's `ExceptionStackSanitizer` (issue #620) and so the same `StackFrames` contract: innermost frame
+ * Reduces a JVM stack to a privacy-safe, bounded attribution string, the Kotlin counterpart of
+ * the server's `ExceptionStackSanitizer` and so the same `StackFrames` contract: innermost frame
  * first, one entry per line, at most [MAX_FRAMES] entries and [MAX_LENGTH] characters.
  *
  * Only frames of this plugin (`net.reqnroll.idesupport.rider.`) are named, as `package.Class.method:line`

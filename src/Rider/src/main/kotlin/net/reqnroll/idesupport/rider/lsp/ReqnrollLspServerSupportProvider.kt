@@ -44,7 +44,7 @@ class ReqnrollLspServerSupportProvider : LspServerSupportProvider {
      * ensureServerStarted only *initiates* startup — it returns well before the LSP
      * initialize/initialized handshake completes, while the server is still in
      * [com.intellij.platform.lsp.api.LspServerState.Initializing]. Pushing the baseline
-     * synchronously right after it (as this used to do) sent the notification before the server
+     * synchronously right after it would send the notification before the server
      * considered itself ready to receive anything, and the server correctly rejected it as an
      * "Unexpected notification" per the LSP spec — confirmed live: `reqnroll/projectLoaded`/
      * `projectFiles` showed up in OmniSharp's `LspServerReceiver` warning log, and the server's own
@@ -54,7 +54,7 @@ class ReqnrollLspServerSupportProvider : LspServerSupportProvider {
      * Coalesced: every `.feature`/`.cs` file opened while the server is still starting calls this,
      * and one deferred push covers them all because the push reads the runnable-projects snapshot
      * when it runs — without the key, N files opened during startup meant N full baseline disk
-     * walks once the server reached Running (issue #987).
+     * walks once the server reached Running.
      */
     private fun pushBaselineOnceRunning(project: Project) {
         ReqnrollLspServerReadiness.runWhenRunning(project, coalesceKey = "fileOpened.baseline") {

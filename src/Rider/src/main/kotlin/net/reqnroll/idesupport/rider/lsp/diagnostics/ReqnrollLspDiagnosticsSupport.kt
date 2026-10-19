@@ -14,7 +14,7 @@ import org.eclipse.lsp4j.Diagnostic
  * `LspDiagnosticsSupport.getTooltip` in `product.jar` (pinned Rider 2024.3.5), which shows it does
  * `return diagnostic.message` with no HTML conversion at all. `XmlStringUtil.wrapInHtmlLines` builds
  * `<html><nobr>line1</nobr><br><nobr>line2</nobr>...</html>`, giving each line its own row regardless
- * of client whitespace handling. See #176.
+ * of client whitespace handling.
  */
 class ReqnrollLspDiagnosticsSupport : LspDiagnosticsSupport() {
     override fun getTooltip(diagnostic: Diagnostic): String {

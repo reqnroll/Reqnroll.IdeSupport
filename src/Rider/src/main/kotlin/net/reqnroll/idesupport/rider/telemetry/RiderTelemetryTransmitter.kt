@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
  * `Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception.TelemetryEventInterceptor` +
  * `TelemetryTransmitter.cs`) and VS Code (`src/VSCode/src/telemetry.ts`), which both already
  * forward every server-emitted event to this same Application Insights resource — Rider was the
- * one client with no consumer for `telemetry/event` at all (see issue #255).
+ * one client with no consumer for `telemetry/event` at all.
  *
  * Posts directly to the public Application Insights ingestion REST endpoint via the JDK's built-in
  * `java.net.http.HttpClient` rather than pulling in the (Java, not Kotlin/Gradle-friendly)
@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit
 object RiderTelemetryTransmitter {
     // Same Application Insights resource VS's TelemetryTransmitter.cs and VS Code's telemetry.ts
     // use (see TelemetryConnections.kt), so usage events from every Reqnroll IDE client land in the
-    // same place. Which resource (dev or prod) is fixed at build time (issue #1160), except that the
+    // same place. Which resource (dev or prod) is fixed at build time, except that the
     // `runIde` dev sandbox (`reqnroll.devSandbox`, see build.gradle.kts) is always dev.
     private val ENVIRONMENT = effectiveEnvironment(TelemetryBuildConfig.ENVIRONMENT, System.getProperty("reqnroll.devSandbox") == "true")
     private val INSTRUMENTATION_KEY = TelemetryConnections.instrumentationKey(ENVIRONMENT)
@@ -43,7 +43,7 @@ object RiderTelemetryTransmitter {
     internal fun effectiveEnvironment(buildEnvironment: String, isDevSandbox: Boolean): String =
         if (isDevSandbox) "dev" else buildEnvironment
 
-    /** Developer override (issue #889), shared with VS and VS Code: an Application Insights connection string. */
+    /** Developer override, shared with VS and VS Code: an Application Insights connection string. */
     internal const val CONNECTION_STRING_ENV_VAR = "REQNROLL_DEBUG_TELEMETRY_CONNECTION_STRING"
 
     internal data class Connection(val instrumentationKey: String, val endpoint: String)
@@ -93,10 +93,10 @@ object RiderTelemetryTransmitter {
      */
     internal const val GO_TO_HOOK_COMMAND_EXECUTED = "GoToHook command executed"
 
-    /** A clickable tag's link was followed (issue #755). No properties: the URL and tag text are never sent. */
+    /** A clickable tag's link was followed. No properties: the URL and tag text are never sent. */
     internal const val TAG_LINK_COMMAND_EXECUTED = "TagLink command executed"
 
-    // Server-lifecycle events (issue #845): sent by the client because a dead server cannot report
+    // Server-lifecycle events: sent by the client because a dead server cannot report
     // itself. `Reason` is always one of the SERVER_FAILURE_REASON_* values below, `AttemptNumber` the
     // 1-based start attempt in this IDE session. Mirror of ServerLifecycleTelemetry.cs.
     internal const val SERVER_START_FAILED = "ServerStartFailed"
@@ -107,11 +107,11 @@ object RiderTelemetryTransmitter {
     internal const val SERVER_FAILURE_REASON_PROCESS_EXITED = "ProcessExited"
     internal const val SERVER_FAILURE_REASON_SESSION_ENDED = "SessionEnded"
 
-    /** Exception caught in the plugin's own code (issue #621); same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
+    /** Exception caught in the plugin's own code; same event the server sends for its exceptions. See [ClientExceptionTelemetry]. */
     internal const val UNHANDLED_EXCEPTION = "UnhandledException"
 
     /**
-     * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED] (issue #861): how the navigation was
+     * `Source` property of [GO_TO_HOOK_COMMAND_EXECUTED]: how the navigation was
      * started. Closed set shared with VS and VS Code (`GoToHookSources.cs` / `GoToHookSource` in
      * `telemetryEvents.ts`); keep the copies in sync. Event-scoped key: the LSP server's
      * `TelemetryProperties.Source` uses the same literal for a class name on `UnhandledException`.
@@ -121,7 +121,7 @@ object RiderTelemetryTransmitter {
     internal const val GO_TO_HOOK_SOURCE_CONTEXT_MENU = "ContextMenu"
     internal const val GO_TO_HOOK_SOURCE_CODE_LENS = "CodeLens"
 
-    // Extension lifecycle events (issue #875), parity with VS's WelcomeService. Mirror of the same
+    // Extension lifecycle events, parity with VS's WelcomeService. Mirror of the same
     // constants in TelemetryEvents.cs; the "{N} day usage" name is built by [ExtensionLifecycleTelemetry].
     internal const val EXTENSION_LOADED = "Extension loaded"
     internal const val EXTENSION_INSTALLED = "Extension installed"
@@ -133,7 +133,7 @@ object RiderTelemetryTransmitter {
     private val PLUGIN_ID = PluginId.getId("net.reqnroll.idesupport")
     private const val USER_ID_PROPERTY_KEY = "net.reqnroll.idesupport.telemetry.userId"
 
-    // Bounded timeouts (#859): without them a black-holed endpoint leaves one pending request and
+    // Bounded timeouts: without them a black-holed endpoint leaves one pending request and
     // socket per event until the OS gives up.
     internal val CONNECT_TIMEOUT: Duration = Duration.ofSeconds(5)
     internal val REQUEST_TIMEOUT: Duration = Duration.ofSeconds(5)
@@ -149,7 +149,7 @@ object RiderTelemetryTransmitter {
 
     /**
      * Transmits [eventName]/[properties] to Application Insights unless telemetry is disabled;
-     * always mirrors the attempt (sent or not) to the local debug log (issue #799), matching VS's
+     * always mirrors the attempt (sent or not) to the local debug log, matching VS's
      * `TelemetryTransmitter.TransmitEvent` and VS Code's `telemetry.ts#sendTelemetryEvent`.
      */
     fun transmit(eventName: String, properties: Map<String, Any?>) {
@@ -185,7 +185,7 @@ object RiderTelemetryTransmitter {
     }
 
     /**
-     * The properties as transmitted: stringified with the host identity stamped (issue #844, #1199). The debug-log
+     * The properties as transmitted: stringified with the host identity stamped. The debug-log
      * mirror records this too, so it shows `IdeClient`/`ClientSessionId` like the envelope does. A failure to read
      * the IDE or plugin version falls back to the unstamped properties rather than failing the caller.
      */
@@ -223,7 +223,7 @@ object RiderTelemetryTransmitter {
      * `GOAWAY`, TLS, timeout) and retryable statuses (see [isRetryableStatus]) are retried per
      * [retryPolicy]; once those are exhausted -- or for any non-retryable failure such as a proxy's
      * 403/407 -- [breaker] opens and [onFailure] is told, so an unreachable endpoint costs at most
-     * the first in-flight requests (#859). No retry is scheduled once the breaker is open.
+     * the first in-flight requests. No retry is scheduled once the breaker is open.
      */
     internal fun post(
         client: HttpClient,
@@ -288,7 +288,7 @@ object RiderTelemetryTransmitter {
     }
 
     /**
-     * Stamps the host's client identity on every event (issue #844). `IdeClient` is the canonical
+     * Stamps the host's client identity on every event. `IdeClient` is the canonical
      * cross-IDE key, also stamped by the LSP server on server-originated events with the same
      * `visualstudio`/`vscode`/`rider` vocabulary; it is only added when absent so a server-stamped
      * value is never overridden, and covers host-originated events (GoToHook) the server never sees.
@@ -302,7 +302,7 @@ object RiderTelemetryTransmitter {
         properties["Ide"] = "JetBrains Rider"
         properties["IdeVersion"] = ideVersion
         properties["ExtensionVersion"] = extensionVersion
-        properties.putIfAbsent(ClientSession.PROPERTY_NAME, ClientSession.id) // issue #1199
+        properties.putIfAbsent(ClientSession.PROPERTY_NAME, ClientSession.id) // identifies this IDE process
     }
 
     private fun userId(): String {

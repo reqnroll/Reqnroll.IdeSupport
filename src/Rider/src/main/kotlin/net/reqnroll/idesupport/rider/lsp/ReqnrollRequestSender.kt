@@ -56,7 +56,7 @@ import org.eclipse.lsp4j.Range as Lsp4jRange
  * dispatch.
  *
  * [rename] is the one exception: it uses the suspend `sendRequest` instead, because
- * `sendRequestSync` cannot surface the server's rejection reason (issue #655 — see that method's
+ * `sendRequestSync` cannot surface the server's rejection reason (see that method's
  * own documentation). It blocks its calling thread too, via [runBlockingCancellable], so the
  * background-thread requirement above applies to it identically.
  */
@@ -203,7 +203,7 @@ object ReqnrollRequestSender {
     }
 
     /**
-     * Runs the *standard* `textDocument/documentLink` request (clickable tags for `.feature` files, issue #755 -
+     * Runs the *standard* `textDocument/documentLink` request (clickable tags for `.feature` files -
      * see DocumentLinkHandler.cs). Standard LSP method, so - like [foldingRange] - no custom `@JsonRequest`
      * method or cast to `ReqnrollLanguageServer` is needed. Rider's generic client never sends it itself.
      */
@@ -246,7 +246,7 @@ object ReqnrollRequestSender {
         }
     }
 
-    /** Runs `reqnroll/findMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file (issue #373). Returns null if no Reqnroll LSP server is running, or on failure. */
+    /** Runs `reqnroll/findMatchingScenarios` for the hook-binding attribute at (uri, line, character) in a `.cs` file. Returns null if no Reqnroll LSP server is running, or on failure. */
     fun findMatchingScenarios(project: Project, uri: String, line: Int, character: Int): FindMatchingScenariosResponse? {
         val server = firstRunningServer(project) ?: return null
         val params = TextDocumentPositionParams(TextDocumentIdentifier(uri), Lsp4jPosition(line, character))
@@ -272,9 +272,9 @@ object ReqnrollRequestSender {
      * wrapping needs to add a consumer for), so this call's own return value is unused; callers
      * only care whether the command was dispatched, or rejected with a reason to show.
      *
-     * Uses the suspend `sendRequest`, like [rename] (issue #655), because `sendRequestSync` would
+     * Uses the suspend `sendRequest`, like [rename], because `sendRequestSync` would
      * swallow the server's `-32803` rejection (the document is not open in the server) into an
-     * indistinguishable `null` — the shortcut would do nothing, silently (issue #1132). See [rename]
+     * indistinguishable `null` — the shortcut would do nothing, silently. See [rename]
      * for the `runBlockingCancellable`/`withTimeout` rationale; this must be called off the EDT.
      */
     fun toggleComment(project: Project, uri: String, startLine: Int, endLine: Int): ToggleCommentOutcome {
@@ -320,7 +320,7 @@ object ReqnrollRequestSender {
      * Runs the standard `textDocument/formatting` request for [uri] on behalf of
      * [net.reqnroll.idesupport.rider.formatting.ReqnrollFormattingService]. Uses the suspend
      * `sendRequest` rather than `sendRequestSync` so a `-32803` rejection reaches the caller as
-     * [FormatOutcome.Rejected] (issue #1172); see [rename] for the `runBlockingCancellable`/`withTimeout`
+     * [FormatOutcome.Rejected]; see [rename] for the `runBlockingCancellable`/`withTimeout`
      * rationale. Must be called off the EDT.
      */
     fun formatDocument(project: Project, uri: String, tabSize: Int, insertSpaces: Boolean): FormatOutcome {
@@ -388,15 +388,15 @@ object ReqnrollRequestSender {
      * by decompiling `LspServerDescriptor` — no `lspRenameSupport`-style customization exists),
      * so callers must apply the returned `WorkspaceEdit` themselves; see `RenameWorkspaceEditApplier`.
      *
-     * Returns [RenameOutcome.Rejected] with the server's own human-readable reason (issue #650,
-     * #1132) when the server rejects the rename with `-32803` — e.g. a step-rename validation failure
+     * Returns [RenameOutcome.Rejected] with the server's own human-readable reason
+     * when the server rejects the rename with `-32803` — e.g. a step-rename validation failure
      * — rather than the blanket "request failed" `null` every other method in this file returns on
      * any exception; any other failure is the generic [RenameOutcome.Failed].
      * A rejected rename follows a modal "pick a target, type a new expression" flow the user just
      * completed, so [RenameStepRunner] showing no explanation at all (like a routine navigation
      * miss would) is worse here than for the rest of this file's silently-null methods.
      *
-     * **The only method here that does not use `sendRequestSync` (issue #655).** That API cannot
+     * **The only method here that does not use `sendRequestSync`.** That API cannot
      * deliver the reason above: `LspRequestExecutorImpl`'s private await helper catches the
      * `ExecutionException` carrying the server's `ResponseErrorException`, logs the cause at WARN
      * to `idea.log`, and returns `null` — indistinguishable from a legitimately empty response, so
@@ -421,8 +421,8 @@ object ReqnrollRequestSender {
      * One accepted regression: the sync helper called `Future.cancel(...)` on timeout, which makes
      * LSP4J send `$/cancelRequest`. Awaiting a `CompletionStage` does not cancel the underlying
      * future, so a timed-out rename keeps computing server-side. Tolerable because the server-side
-     * handler returns in single-digit milliseconds once the edit is built (the applyEdit push moved
-     * out of the request in #671/R1) and this timeout is a backstop, not a routine path.
+     * handler returns in single-digit milliseconds once the edit is built (the applyEdit push happens outside
+     * the request) and this timeout is a backstop, not a routine path.
      *
      * Deliberately not applied to the rest of this file: every other method's "null on any failure"
      * is the intended contract — a navigation miss or an empty folding response must not raise
@@ -451,8 +451,8 @@ object ReqnrollRequestSender {
         } catch (ex: TimeoutCancellationException) {
             // Caught ahead of the generic handler below: TimeoutCancellationException is a
             // CancellationException, so it would otherwise fall through and be reported as though
-            // the server had rejected the rename — exactly the misleading message issue #650 set
-            // out to remove.
+            // the server had rejected the rename — exactly the misleading message the rejection
+            // handling exists to avoid.
             ReqnrollDebugLogger.warn("rename: request timed out after ${RENAME_TIMEOUT_MS}ms", ex)
             RenameOutcome.Failed("The rename request timed out.")
         } catch (ex: Exception) {
@@ -461,8 +461,8 @@ object ReqnrollRequestSender {
     }
 
     /**
-     * Maps a failed `textDocument/rename` request to its outcome. Only a server rejection (`-32803`,
-     * issue #650/#1132) carries a reason meant for the user, as [RenameOutcome.Rejected]; any other
+     * Maps a failed `textDocument/rename` request to its outcome. Only a server rejection (`-32803`)
+     * carries a reason meant for the user, as [RenameOutcome.Rejected]; any other
      * failure — including a JSON-RPC error with another code — is unexpected, so it is logged and
      * shown only as the generic [RenameOutcome.Failed] message. `internal` so it is testable without
      * a live server.
@@ -473,7 +473,7 @@ object ReqnrollRequestSender {
             // An error *response* is the server doing its job — rejecting an invalid new
             // expression, say — not a plugin failure, so no stack trace: the Reqnroll tool
             // window prints throwables in full and auto-activates on Warning, which would put
-            // lsp4j internals in front of the user for an expected outcome (issue #655).
+            // lsp4j internals in front of the user for an expected outcome.
             ReqnrollDebugLogger.info("rename: rejected by server: $rejection")
             return RenameOutcome.Rejected(rejection)
         }
@@ -508,7 +508,7 @@ object ReqnrollRequestSender {
 
     /**
      * Runs `reqnroll/resolveTestTargets` for the range [(startLine, startChar), (endLine, endChar)]
-     * in a `.feature` file (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — resolves the generated test method(s)
+     * in a `.feature` file (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages")) — resolves the generated test method(s)
      * the scenario/Outline/example row at that range corresponds to. Returns null if no Reqnroll
      * LSP server is running, or on failure.
      */
@@ -534,8 +534,8 @@ object ReqnrollRequestSender {
 
     /**
      * Runs `reqnroll/resolveContainerTestTargets` for the full-body range of a Feature/Rule
-     * container [(startLine, startChar), (endLine, endChar)] in a `.feature` file (issue #744,
-     * "Run scenarios") — resolves the generated test method(s) for every Scenario/Outline the
+     * container [(startLine, startChar), (endLine, endChar)] in a `.feature` file
+     * ("Run scenarios") — resolves the generated test method(s) for every Scenario/Outline the
      * container holds, in one call. Returns null if no Reqnroll LSP server is running, or on failure.
      */
     fun resolveContainerTestTargets(
@@ -559,7 +559,7 @@ object ReqnrollRequestSender {
     }
 
     /**
-     * Runs `reqnroll/testOutcomes/registerRun` (LSP-server outcome pipeline, #700/#702). Returns
+     * Runs `reqnroll/testOutcomes/registerRun` (LSP-server outcome pipeline). Returns
      * null if no Reqnroll LSP server is running, or on failure — [RunTestRunner]
      * [net.reqnroll.idesupport.rider.testrunner.RunTestRunner] treats that the same as
      * [RegisterTestRunResponse.success] `false`: fall back to the TRX-only path for this run.
@@ -580,7 +580,7 @@ object ReqnrollRequestSender {
 
     /**
      * Runs `reqnroll/testOutcomes/getOutcome` for one generated test method (LSP-server outcome
-     * pipeline, #700/#702). [assemblyPath] must be the compiled test container path, matching
+     * pipeline). [assemblyPath] must be the compiled test container path, matching
      * what the bundled VSTest logger reports as `TestCase.Source` — not the `.csproj` path.
      * Returns null if no Reqnroll LSP server is running, or on failure.
      */
@@ -612,13 +612,13 @@ object ReqnrollRequestSender {
 /**
  * Outcome of [ReqnrollRequestSender.rename]: either a [WorkspaceEdit] to apply, or a reason it
  * couldn't be produced. Distinguishes "the server rejected this rename for an explainable reason"
- * (issue #650) from every other request in this file's blanket "something went wrong" `null`, so
+ * from every other request in this file's blanket "something went wrong" `null`, so
  * [net.reqnroll.idesupport.rider.actions.RenameStepRunner] can show the server's actual message.
  */
 sealed interface RenameOutcome {
     data class Success(val edit: WorkspaceEdit) : RenameOutcome
 
-    /** The server rejected the rename with a reason the user can fix (`-32803`); [message] is shown verbatim (issue #1132). */
+    /** The server rejected the rename with a reason the user can fix (`-32803`); [message] is shown verbatim. */
     data class Rejected(val message: String) : RenameOutcome
 
     /** Any other failure; [message] is generic. */
@@ -628,7 +628,7 @@ sealed interface RenameOutcome {
 /**
  * Outcome of [ReqnrollRequestSender.toggleComment]: [Dispatched] once the server accepted the command
  * (the edit itself arrives separately via `workspace/applyEdit`), [Rejected] when it refused with a
- * reason to show the user (`-32803`, issue #1132), or [Failed] for anything else (logged only).
+ * reason to show the user (`-32803`), or [Failed] for anything else (logged only).
  */
 sealed interface ToggleCommentOutcome {
     data object Dispatched : ToggleCommentOutcome
@@ -638,7 +638,7 @@ sealed interface ToggleCommentOutcome {
 
 /**
  * Outcome of [ReqnrollRequestSender.formatDocument]: the [Edits] to apply (possibly none), a [Rejected]
- * with a reason the server wants the user to see (`-32803`, issue #1132/#1172), or [Failed] for
+ * with a reason the server wants the user to see (`-32803`), or [Failed] for
  * anything else (logged only).
  */
 sealed interface FormatOutcome {

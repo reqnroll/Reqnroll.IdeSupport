@@ -3,7 +3,7 @@ package net.reqnroll.idesupport.rider.telemetry
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Best-effort delivery policy for telemetry (issue #859): after the first definitive failure to
+ * Best-effort delivery policy for telemetry: after the first definitive failure to
  * reach the analytics endpoint the transmitter stops touching the network for the rest of the
  * session and tells the user exactly once. Same behaviour and wording as VS's
  * `TelemetryCircuitBreaker.cs` and VS Code's `telemetryCircuitBreaker.ts`.

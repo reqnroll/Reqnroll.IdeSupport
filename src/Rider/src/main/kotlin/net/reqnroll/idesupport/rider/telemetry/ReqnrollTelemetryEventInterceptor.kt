@@ -8,7 +8,7 @@ import net.reqnroll.idesupport.rider.logging.ReqnrollDebugLogger
  * platform-provided [handler], except [telemetryEvent] — there it also forwards the event to
  * [RiderTelemetryTransmitter], mirroring what VS's `TelemetryEventInterceptor.cs` and VS Code's
  * `telemetry.ts` already do for the standard `telemetry/event` notification (see
- * `LspTelemetryService.cs`) — Rider previously had no consumer for it at all (issue #255).
+ * `LspTelemetryService.cs`) — Rider has no built-in consumer for it.
  *
  * `telemetryEvent` is confirmed (by fetching the pinned platform version, 2024.3.5 / branch `243`,
  * from JetBrains/intellij-community's public mirror) to be part of `LspServerNotificationsHandler`

@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicReference
  * A deferred action runs on the thread that moves the server to Running — in Rider 2024.3.5 that's
  * the `whenComplete` of the LSP `initialize` request's future, i.e. a platform background thread,
  * not the EDT. See [ServerReadinessGate] for the check-then-register race and the optional
- * per-project coalescing of pending actions (issue #987).
+ * per-project coalescing of pending actions.
  */
 object ReqnrollLspServerReadiness {
     private val GATE_KEY = Key.create<ServerReadinessGate>("Reqnroll.ServerReadinessGate")
@@ -96,7 +96,7 @@ internal interface ServerStateSource {
 }
 
 /**
- * Platform-free core of [ReqnrollLspServerReadiness.runWhenRunning] (issue #987).
+ * Platform-free core of [ReqnrollLspServerReadiness.runWhenRunning].
  *
  * The Running transition happens on a platform background thread (the `initialize` future's
  * `whenComplete`), while callers check the state from the EDT, so the transition can

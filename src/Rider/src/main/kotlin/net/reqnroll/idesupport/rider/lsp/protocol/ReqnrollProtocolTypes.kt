@@ -76,7 +76,7 @@ object ProjectFileRole {
     }
 }
 
-/** Payload for `reqnroll/documentActivated` (issue #85). */
+/** Payload for `reqnroll/documentActivated`. */
 data class DocumentActivatedParams(
     val uri: String,
 )
@@ -110,8 +110,8 @@ data class UnusedStepDefinitionItem(
     val isResolved: Boolean = true,
     val recordedSourceFile: String? = null,
     /**
-     * The binding's step keyword — `Given`, `When` or `Then` — shown as the attribute name
-     * (issue #757). Null when unknown or from an older server. A `[StepDefinition]` attribute is
+     * The binding's step keyword — `Given`, `When` or `Then` — shown as the attribute name.
+     * Null when unknown or from an older server. A `[StepDefinition]` attribute is
      * registered as one binding per keyword, so it reports whichever of the three this one is.
      */
     val stepDefinitionType: String? = null,
@@ -170,7 +170,7 @@ data class FindHookLocation(
     val methodName: String = "",
 )
 
-/** Response for `reqnroll/findMatchingScenarios` (issue #373) — mirrors FindMatchingScenariosResponse.cs field-for-field. */
+/** Response for `reqnroll/findMatchingScenarios` — mirrors FindMatchingScenariosResponse.cs field-for-field. */
 data class FindMatchingScenariosResponse(
     val scenarios: List<MatchingScenarioLocation> = emptyList(),
 )
@@ -209,7 +209,7 @@ data class SelectRenameTargetParams(
      * The position the disambiguation was invoked at — the same one passed to
      * `reqnroll/renameTargets`. Lets the server resolve [attributeIndex] to the binding it denotes
      * while that candidate list is still current, instead of carrying a bare index across the
-     * modal dialog and re-applying it to a list rebuilt later (issue #671, R5).
+     * modal dialog and re-applying it to a list rebuilt later.
      */
     val position: Position? = null,
 )
@@ -220,8 +220,8 @@ data class SelectRenameTargetParams(
  * Reports whether this client actually applied the `WorkspaceEdit` returned from
  * `textDocument/rename`. The server stages the binding-registry and match-cache updates the edit
  * implies and commits them only on [applied] `true`, so a rename we decline to apply (see
- * [net.reqnroll.idesupport.rider.actions.RenameStepRunner]'s staleness check) no longer leaves the
- * registry describing a step expression present in no file — issue #670, fixed under #671 R3.
+ * [net.reqnroll.idesupport.rider.actions.RenameStepRunner]'s staleness check) does not leave the
+ * registry describing a step expression present in no file.
  * Must be sent either way, so the server can drop staged updates promptly instead of holding them.
  */
 data class RenameAppliedParams(
@@ -231,7 +231,7 @@ data class RenameAppliedParams(
 
 /**
  * Params for `reqnroll/resolveTestTargets` — mirrors ResolveTestTargetsParams.cs field-for-field
- * (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262). A range within a scenario/Outline's own header or steps resolves
+ * (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"). A range within a scenario/Outline's own header or steps resolves
  * to every target for that scenario; a range within one specific `Examples:` row resolves to just
  * that row's target.
  */
@@ -256,7 +256,7 @@ data class ScenarioTestTargetItem(
 
 /**
  * Params for `reqnroll/resolveContainerTestTargets` — mirrors ResolveContainerTestTargetsParams.cs
- * field-for-field (issue #744, "Run scenarios" on Feature/Rule blocks). [range] is the container's
+ * field-for-field ("Run scenarios" on Feature/Rule blocks). [range] is the container's
  * *full body* range (not its header line alone), matching what the server expects: every
  * Scenario/Outline fully contained within it is resolved, including Rule-nested scenarios when the
  * range is the enclosing Feature's.
@@ -268,7 +268,7 @@ data class ResolveContainerTestTargetsParams(
 
 /**
  * Response for `reqnroll/resolveContainerTestTargets` — mirrors
- * ResolveContainerTestTargetsResponse.cs field-for-field (issue #744, "Run scenarios"); shares
+ * ResolveContainerTestTargetsResponse.cs field-for-field ("Run scenarios"); shares
  * [ScenarioTestTargetItem] with [ResolveTestTargetsResponse], so one target looks the same whether
  * it came from a single-scenario or a whole-container resolution.
  */

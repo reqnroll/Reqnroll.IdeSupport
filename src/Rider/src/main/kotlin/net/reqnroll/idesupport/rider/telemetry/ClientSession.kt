@@ -3,7 +3,7 @@ package net.reqnroll.idesupport.rider.telemetry
 import java.util.UUID
 
 /**
- * The id of this Rider session as the plugin sees it (issue #1199): one random GUID per IDE process. It is
+ * The id of this Rider session as the plugin sees it: one random GUID per IDE process. It is
  * stamped as `ClientSessionId` on every event the plugin transmits ([RiderTelemetryTransmitter]) and passed to
  * the LSP server as `--client-session-id`, which stamps it on the server's events too, so a client-originated
  * `UnhandledException` joins to `ServerSessionStarted`. Mirrors `ClientSession` in `Reqnroll.IdeSupport.Common`

@@ -3,8 +3,7 @@ package net.reqnroll.idesupport.rider.lsp
 /**
  * True when a document's live modification stamp no longer matches the stamp captured before an
  * async LSP request was sent -- i.e. the user edited the document while the request was in
- * flight, so any offsets in the response are no longer valid against the current text (issue
- * #326). Shared by [net.reqnroll.idesupport.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler] and
+ * flight, so any offsets in the response are no longer valid against the current text. Shared by [net.reqnroll.idesupport.rider.formatting.ReqnrollFeatureOnTypeFormattingHandler] and
  * [net.reqnroll.idesupport.rider.actions.RenameStepRunner], which both capture a document's
  * `modificationStamp` before firing a request and re-check it before applying the response.
  *

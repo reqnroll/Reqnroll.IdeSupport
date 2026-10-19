@@ -59,7 +59,7 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun findHooks(params: FindHooksRequestParams): CompletableFuture<FindHooksResponse>
 
     /**
-     * Hook-match-count CodeLens click action (issue #373) — the inverse of [findHooks]: returns
+     * Hook-match-count CodeLens click action — the inverse of [findHooks]: returns
      * every scenario, across the whole owning project(s), that the hook binding at a `.cs` file
      * position matches (see FindMatchingScenariosHandler.cs).
      */
@@ -67,7 +67,7 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun findMatchingScenarios(params: TextDocumentPositionParams): CompletableFuture<FindMatchingScenariosResponse>
 
     /**
-     * Step Rename disambiguation (issue #160) — returns every candidate binding attribute
+     * Step Rename disambiguation — returns every candidate binding attribute
      * renameable at a `.feature` or `.cs` file position (see RenameTargetsHandler.cs). Standard
      * `textDocument/prepareRename`/`textDocument/rename` handle the mechanical edit; this custom
      * request is only for picking which binding to rename when the position is ambiguous.
@@ -86,7 +86,7 @@ interface ReqnrollLanguageServer : LanguageServer {
     /**
      * Reports whether this client applied the `WorkspaceEdit` returned from `textDocument/rename`,
      * so the server can commit or drop the binding-registry/match-cache updates it staged for that
-     * rename (see RenamePostApplyCoordinator.CompletePendingCommitAsync — issue #671 R3). Unlike
+     * rename (see RenamePostApplyCoordinator.CompletePendingCommitAsync). Unlike
      * Visual Studio, which has the edit pushed to it via `workspace/applyEdit` and is confirmed
      * from that request's own `Applied` flag, Rider applies the returned edit itself and so must
      * report the outcome explicitly.
@@ -96,7 +96,7 @@ interface ReqnrollLanguageServer : LanguageServer {
 
     /**
      * Resolves the generated C# test method(s) that the scenario/Scenario Outline/example row at a
-     * `.feature` file range corresponds to (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262) — see
+     * `.feature` file range corresponds to (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages")) — see
      * ResolveTestTargetsHandler.cs. Used by [net.reqnroll.idesupport.rider.testrunner.RunLensSupport] to
      * build the Run CodeVision lens.
      */
@@ -105,7 +105,7 @@ interface ReqnrollLanguageServer : LanguageServer {
 
     /**
      * Resolves every generated C# test method under a Feature/Rule container's full body range
-     * (issue #744, "Run scenarios") — see ResolveContainerTestTargetsHandler.cs. Used by
+     * ("Run scenarios") — see ResolveContainerTestTargetsHandler.cs. Used by
      * [net.reqnroll.idesupport.rider.testrunner.RunLensSupport] to build the "Run Scenarios" CodeVision
      * lens on Feature/Rule header lines.
      */
@@ -113,8 +113,7 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun resolveContainerTestTargets(params: ResolveContainerTestTargetsParams): CompletableFuture<ResolveContainerTestTargetsResponse>
 
     /**
-     * LSP-server outcome pipeline (#700/#702, refactored out of a Visual Studio-only,
-     * in-proc pipeline): returns the listener's endpoint and a fresh run id to correlate with — no
+     * LSP-server outcome pipeline: returns the listener's endpoint and a fresh run id to correlate with — no
      * per-connection secret, see TestOutcomeTcpListener.cs's remarks. See RegisterTestRunHandler.cs.
      * Called by
      * [net.reqnroll.idesupport.rider.testrunner.RunTestRunner] before shelling to `dotnet test`, so the
@@ -125,7 +124,7 @@ interface ReqnrollLanguageServer : LanguageServer {
     fun registerTestRun(params: ReqnrollEmptyParams): CompletableFuture<RegisterTestRunResponse>
 
     /**
-     * LSP-server outcome pipeline (#700/#702) — the outcome lookup for one generated test method,
+     * LSP-server outcome pipeline — the outcome lookup for one generated test method,
      * including the staleness/trust-window logic server-side (see GetTestOutcomeHandler.cs).
      * Called by [net.reqnroll.idesupport.rider.testrunner.RunTestRunner] after a run completes; a
      * [GetTestOutcomeResponse.found] of `false` means the caller should fall back to its own
