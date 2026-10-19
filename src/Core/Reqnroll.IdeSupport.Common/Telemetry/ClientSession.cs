@@ -3,7 +3,7 @@ using System;
 namespace Reqnroll.IdeSupport.Common.Telemetry;
 
 /// <summary>
-/// The id of this IDE session as the client sees it (issue #1199): one random GUID per process of the IDE
+/// The id of this IDE session as the client sees it: one random GUID per process of the IDE
 /// that hosts the extension. Unlike the server's own <c>SessionId</c> (a server-process id that changes
 /// whenever the client restarts the server) it exists before the server does and outlives it. The client
 /// stamps it as <c>ClientSessionId</c> on every event it transmits and passes it to the server as

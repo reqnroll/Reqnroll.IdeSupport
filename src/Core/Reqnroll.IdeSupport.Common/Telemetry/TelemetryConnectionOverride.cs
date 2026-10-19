@@ -3,7 +3,7 @@ using System;
 namespace Reqnroll.IdeSupport.Common.Telemetry;
 
 /// <summary>
-/// Developer override for the Application Insights connection string (issue #889), read from
+/// Developer override for the Application Insights connection string, read from
 /// <see cref="EnvironmentVariable"/>. Mirrored by VS Code's <c>telemetry.ts</c> and Rider's
 /// <c>RiderTelemetryTransmitter.kt</c>.
 /// </summary>

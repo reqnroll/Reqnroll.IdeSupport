@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP;
 
 /// <summary>
 /// Resolves <c>&lt;Reqnroll application dir&gt;\test-outcomes\sessions</c> — the directory the LSP
-/// server's <c>TestOutcomeSessionBreadcrumb</c> (issue #715 phase 1) writes session breadcrumb
+/// server's <c>TestOutcomeSessionBreadcrumb</c> writes session breadcrumb
 /// files into.
 /// </summary>
 /// <remarks>
@@ -20,8 +20,8 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP;
 /// This intentionally mirrors <see cref="Reqnroll.IdeSupport.Common.Logging.ReqnrollLogPaths.ResolveApplicationDirectory()"/>,
 /// not <c>ResolveLogDirectory()</c> — session breadcrumbs are discovery state for the reporter, not
 /// logs, and must keep pointing at the same location <c>TestOutcomeSessionBreadcrumb</c> resolves on
-/// the server side, which issue #726 (relocating log files under a <c>logs</c> subfolder) left
-/// unchanged for exactly this reason.
+/// the server side. Log files live under a <c>logs</c> subfolder of that directory, but breadcrumbs
+/// stay in the application directory itself.
 /// </para>
 /// </remarks>
 internal static class SessionsDirectory

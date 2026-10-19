@@ -8,7 +8,7 @@ public interface IIdeSupportConfigurationProvider
 {
     /// <summary>Raised on any thread when configuration changes.</summary>
     /// <remarks>
-    /// No production subscriber currently exists (issue #579). The one place a subscription was
+    /// No production subscriber currently exists. The one place a subscription was
     /// ever attempted, <c>ProjectSettingsProvider</c>'s <c>WeakConfigurationChanged</c> wiring, is
     /// commented out in both directions (subscribe and unsubscribe) and is itself legacy
     /// infrastructure never wired into the LSP-based architecture — the LSP server's

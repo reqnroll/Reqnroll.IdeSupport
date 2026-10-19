@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <summary>
 /// Vocabulary shared by the client-originated server-lifecycle events
 /// (<see cref="TelemetryEvents.ServerStartFailed"/>, <see cref="TelemetryEvents.ServerExitedUnexpectedly"/>,
-/// <see cref="TelemetryEvents.ServerRestarted"/>, issue #845). A dead server cannot report itself, so each
+/// <see cref="TelemetryEvents.ServerRestarted"/>). A dead server cannot report itself, so each
 /// IDE client sends these. Property names and values are mirrored in
 /// <c>src/VSCode/src/telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>: keep all three in sync.
 /// </summary>
@@ -29,7 +29,7 @@ public static class ServerLifecycleTelemetry
             .Add(AttemptNumberKey, attemptNumber);
 }
 
-/// <summary>The closed set of <c>Reason</c> values for the server-lifecycle events (issue #845).</summary>
+/// <summary>The closed set of <c>Reason</c> values for the server-lifecycle events.</summary>
 public static class ServerFailureReason
 {
     /// <summary>The bundled server executable was not found on disk.</summary>

@@ -4,14 +4,12 @@ namespace Reqnroll.IdeSupport.Common.Logging;
 
 /// <summary>
 /// Renders the canonical, shared preamble every <see cref="IIdeSupportLogger"/> sink uses for a
-/// <see cref="LogMessage"/> (issue #626) — previously <see cref="SynchronousFileLogger"/> and
-/// <see cref="IdeSupportDebugLogger"/> each formatted lines independently and disagreed on shape
-/// (timestamp present or not, thread id present or not).
+/// <see cref="LogMessage"/>, so <see cref="SynchronousFileLogger"/> and
+/// <see cref="IdeSupportDebugLogger"/> produce lines of the same shape (timestamp, thread id).
 /// </summary>
 /// <remarks>
-/// The thread id is part of the .NET-specific shape only: it was added to help diagnose a real
-/// concurrency bug (issue #554) where telling genuinely concurrent operations apart from ones
-/// serialized onto the same thread mattered. The VS Code and Rider ports of this format (which
+/// The thread id is part of the .NET-specific shape only: it helps tell genuinely concurrent
+/// operations apart from ones serialized onto the same thread when diagnosing concurrency bugs. The VS Code and Rider ports of this format (which
 /// have no comparable multi-threaded-handler concurrency model) render everything but that
 /// segment — see <c>lspInspectorLogger.ts</c>'s general-log sink and
 /// <c>ReqnrollDebugLogger.kt</c>'s <c>formatTimestamp</c>/<c>formatLine</c>.

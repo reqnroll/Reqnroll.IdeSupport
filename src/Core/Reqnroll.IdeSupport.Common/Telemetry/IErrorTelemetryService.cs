@@ -7,12 +7,10 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// <para>
 /// Split out of <see cref="ITelemetryService"/> (which it extends) because that interface's other
 /// ~15 members are VS-host-lifecycle concerns (project wizards, welcome/upgrade dialogs) that
-/// <c>LSP.Core</c> has no business depending on — before this split, every <c>LSP.Core</c> class
-/// that only ever needed to report a parse exception (<c>IdeSupportGherkinParser</c>,
-/// <c>IdeSupportTagParser</c>, <c>CompletionContextResolver</c>) took a full <see cref="ITelemetryService"/>
-/// dependency, and every implementation of it (<c>NullLspTelemetryService</c>,
-/// <c>LspErrorTelemetryService</c>) had to stub out those ~15 unrelated members just to satisfy the
-/// interface (issue #255/#259).
+/// <c>LSP.Core</c> has no business depending on. Classes that only report a parse exception
+/// (<c>IdeSupportGherkinParser</c>, <c>IdeSupportTagParser</c>, <c>CompletionContextResolver</c>) depend on
+/// this narrow interface, and its implementations (<c>NullLspTelemetryService</c>,
+/// <c>LspErrorTelemetryService</c>) need not stub out ~15 unrelated members.
 /// </para>
 /// </summary>
 public interface IErrorTelemetryService

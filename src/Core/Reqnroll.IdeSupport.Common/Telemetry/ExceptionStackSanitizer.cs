@@ -8,7 +8,7 @@ using System.Text;
 namespace Reqnroll.IdeSupport.Common.Telemetry;
 
 /// <summary>
-/// Reduces an exception's stack to a privacy-safe, bounded attribution string for telemetry (issue #620).
+/// Reduces an exception's stack to a privacy-safe, bounded attribution string for telemetry.
 /// <para>
 /// Only frames whose declaring type is a product type (see <see cref="IsProductType"/>: namespace AND
 /// assembly both in the <c>Reqnroll.IdeSupport</c> tree) are named, as <c>Namespace.Type.Method</c> followed by
@@ -23,7 +23,7 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 /// Only the exception's own stack is read, never its message, type name or inner exceptions. Because the
 /// stack is read as the runtime reports it, frames the JIT inlined are absent, and the placeholder collapse
 /// plus the entry cap can push deeper product frames out. Reusable by any host that wants the same
-/// attribution on its own exception events (#621, #845).
+/// attribution on its own exception events.
 /// </para>
 /// </summary>
 public static class ExceptionStackSanitizer

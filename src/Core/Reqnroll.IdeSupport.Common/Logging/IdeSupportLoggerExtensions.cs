@@ -90,7 +90,7 @@ public static class IdeSupportLoggerExtensions
 
     /// <summary>
     /// Builds and logs a <see cref="LogMessage"/>, deriving <see cref="LogMessage.Source"/> from
-    /// the caller's source file name (issue #626) — every public method above is a thin wrapper
+    /// the caller's source file name — every public method above is a thin wrapper
     /// so the compiler-supplied <c>[CallerFilePath]</c>/<c>[CallerMemberName]</c> values always
     /// belong to the original call site, not to this file.
     /// </summary>

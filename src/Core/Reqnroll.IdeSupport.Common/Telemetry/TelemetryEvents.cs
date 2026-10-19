@@ -2,28 +2,24 @@ namespace Reqnroll.IdeSupport.Common.Telemetry;
 
 /// <summary>
 /// Catalog of every Reqnroll telemetry event name, in one place, covering all .NET layers of
-/// the solution (issue #797).
+/// the solution.
 /// <para>
 /// Two emitters use this catalog:
 /// </para>
 /// <list type="bullet">
 /// <item><description>
 /// <b>LSP server</b> — events sent via <c>ILspTelemetryService.SendEvent</c> as
-/// <c>telemetry/event</c> notifications (previously they lived in
-/// <c>Reqnroll.IdeSupport.LSP.Server.Telemetry.TelemetryEvents</c>). The server project was the
-/// original home of this catalog (issue #627), where each call site used to type its own
-/// literal with no consistent shape: most followed <c>"&lt;PascalCaseWord&gt; command executed"</c>,
-/// but one broke that with a bare space ("Reqnroll Discovery executed") and another was a
-/// single generic word ("Error") one collision away from swallowing every other error-shaped
-/// event in aggregate reporting. Referencing these constants instead of literals means a typo
-/// or an accidental rename shows up as a compile error, not a silently-orphaned telemetry event.
+/// <c>telemetry/event</c> notifications. Most names follow
+/// <c>"&lt;PascalCaseWord&gt; command executed"</c>; avoid bare generic words (such as "Error"), which
+/// risk colliding with and swallowing every other event of that shape in aggregate reporting.
+/// Referencing these constants instead of literals means a typo or an accidental rename shows up
+/// as a compile error, not a silently-orphaned telemetry event.
 /// </description></item>
 /// <item><description>
 /// <b>Visual Studio host</b> — events built as <c>VsGenericEvent</c>/<c>GenericEvent</c> and
 /// handed to <c>ITelemetryTransmitter</c> (install/upgrade lifecycle, project wizard telemetry,
 /// link clicks, the <c>VsWellKnownIdsSelfCheck</c> alert, and the client-originated "GoToHook
-/// command executed" navigation event). These previously were inline literals inside
-/// <c>TelemetryService.Monitor*</c> call sites across
+/// command executed" navigation event), sent from <c>TelemetryService.Monitor*</c> call sites across
 /// <c>Reqnroll.IdeSupport.VisualStudio.VSSDKIntegration</c> and the Extension project.
 /// </description></item>
 /// </list>
@@ -60,14 +56,14 @@ public static class TelemetryEvents
     /// (<c>Discovery.Connector.ConnectorBindingRegistryProvider</c>, triggered by project load or
     /// post-build refresh).
     /// </summary>
-    /// <remarks>Renamed from <c>"Reqnroll Discovery executed"</c> (issue #627) — see the schema note
-    /// in the design doc; historical App Insights data under the old name will not line up.</remarks>
+    /// <remarks>Earlier App Insights data was recorded under the old name <c>"Reqnroll Discovery executed"</c>
+    /// and will not line up with this one — see the schema note in the design doc.</remarks>
     public const string ReqnrollDiscoveryExecuted = "ReqnrollDiscoveryExecuted";
 
     /// <summary>Sent by <c>Telemetry.LspErrorTelemetryService.MonitorError</c> for every reported exception.</summary>
-    /// <remarks>Renamed from the bare, collision-prone <c>"Error"</c> (issue #627) — see the schema note
-    /// in the design doc. The message is scrubbed for filesystem paths before transmission. The VS Code and Rider
-    /// clients also send this event for exceptions in their own code (issue #621), marked <c>ExceptionOrigin = "Client"</c>;
+    /// <remarks>Earlier App Insights data was recorded under the bare, collision-prone name <c>"Error"</c>
+    /// — see the schema note in the design doc. The message is scrubbed for filesystem paths before transmission. The VS Code and Rider
+    /// clients also send this event for exceptions in their own code, marked <c>ExceptionOrigin = "Client"</c>;
     /// <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c> mirror the name.</remarks>
     public const string UnhandledException = "UnhandledException";
 
@@ -92,10 +88,8 @@ public static class TelemetryEvents
     /// prefetch, which calls the same handler on every lens render, not just on a click.
     /// </summary>
     /// <remarks>
-    /// Renamed from <c>"GoToHook command executed"</c> (issue #698): that name implied every
-    /// request was a genuine user navigation, which the CodeLens prefetch call is not — this
-    /// event now reports only that a findHooks lookup ran, honestly matching what the server
-    /// can actually observe. Real "the user navigated to a hook" telemetry is instead originated
+    /// This event reports only that a findHooks lookup ran, which is all the server can observe;
+    /// it must not be read as a genuine user navigation, since the CodeLens prefetch call is not one. Real "the user navigated to a hook" telemetry is instead originated
     /// client-side, at each IDE's own navigation-command call site (<see cref="GoToHookCommandExecuted"/>),
     /// since only the client knows whether a given call is a genuine navigation or a CodeLens data-fetch.
     /// </remarks>
@@ -104,13 +98,13 @@ public static class TelemetryEvents
     /// <summary>Sent by <c>Features.CodeActions.CodeActionHandler</c> when the "Define step" quick fix is offered.</summary>
     public const string DefineStepsCommandOffered = "DefineSteps command offered";
 
-    /// <summary>Sent by <c>Features.CodeActions.DefineStepsTriggeredHandler</c> when the client runs the command of a "Define step(s)" quick fix, i.e. the user picked it (issue #847).</summary>
+    /// <summary>Sent by <c>Features.CodeActions.DefineStepsTriggeredHandler</c> when the client runs the command of a "Define step(s)" quick fix, i.e. the user picked it.</summary>
     public const string DefineStepsCommandExecuted = "DefineSteps command executed";
 
     /// <summary>Sent by <c>Features.CodeActions.CodeActionHandler</c> when "Insert '&lt;keyword&gt;'" quick fixes are offered for a parser error.</summary>
     public const string InsertKeywordCommandOffered = "InsertKeyword command offered";
 
-    /// <summary>Sent by <c>Features.CodeActions.InsertKeywordTriggeredHandler</c> when the client runs the command of an "Insert '&lt;keyword&gt;'" quick fix, i.e. the user picked it (issue #877).</summary>
+    /// <summary>Sent by <c>Features.CodeActions.InsertKeywordTriggeredHandler</c> when the client runs the command of an "Insert '&lt;keyword&gt;'" quick fix, i.e. the user picked it.</summary>
     public const string InsertKeywordCommandExecuted = "InsertKeyword command executed";
 
     /// <summary>Sent by <c>Features.FindUnusedStepDefinitions.FindUnusedStepDefinitionsHandler</c> after handling a Find Unused Step Definitions request.</summary>
@@ -123,14 +117,14 @@ public static class TelemetryEvents
     /// Sent by <c>Features.References.FindStepUsagesHandler</c> (over the custom
     /// <c>reqnroll/findStepUsages</c> request) and by <c>Features.References.ReferencesHandler</c>
     /// (over the standard <c>textDocument/references</c> request) — two paths for the same user
-    /// command, one event so the usage-count metric isn't split across IDE clients (issue #581).
+    /// command, one event so the usage-count metric isn't split across IDE clients.
     /// </summary>
     public const string FindStepDefinitionUsagesCommandExecuted = "FindStepDefinitionUsages command executed";
 
     /// <summary>
     /// A genuine Go To Step Definition navigation, sent by the client: the Visual Studio client when the user runs
-    /// Go To Definition on a step (<c>GoToStepDefinitionPresenter</c>, issue #898) and the VS Code client for its
-    /// "Go to Step Definition" picker command (issue #899). VS Code's F12/Ctrl+click and Rider's go-to-declaration
+    /// Go To Definition on a step (<c>GoToStepDefinitionPresenter</c>) and the VS Code client for its
+    /// "Go to Step Definition" picker command. VS Code's F12/Ctrl+click and Rider's go-to-declaration
     /// use <c>textDocument/definition</c>, which also fires on hover, so they are not reported as navigations; the
     /// server counts them as <see cref="FindStepDefinitionsCommandExecuted"/>. Property: <c>LocationCount</c>.
     /// Mirrored verbatim in VS Code's <c>telemetryEvents.ts</c>.
@@ -139,34 +133,34 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent by <c>Features.Definition.FindStepDefinitionsHandler</c> for every <c>reqnroll/findStepDefinitions</c>
-    /// lookup (issue #757) and by <c>Features.Definition.DefinitionHandler</c> for every <c>textDocument/definition</c>
-    /// lookup from VS Code and Rider (issue #899; not Visual Studio, where that request is mostly the editor's hover fall-through).
+    /// lookup and by <c>Features.Definition.DefinitionHandler</c> for every <c>textDocument/definition</c>
+    /// lookup from VS Code and Rider (not Visual Studio, where that request is mostly the editor's hover fall-through).
     /// Visual Studio sends the custom request on Go To Definition and on every Ctrl+hover that checks whether a
-    /// word is navigable (issue #898), so read it as *lookups*, not navigations; the genuine navigation is
+    /// word is navigable, so read it as *lookups*, not navigations; the genuine navigation is
     /// <see cref="GoToStepDefinitionCommandExecuted"/>, sent by the client.
     /// </summary>
     public const string FindStepDefinitionsCommandExecuted = "FindStepDefinitions command executed";
 
-    /// <summary>Sent by <c>Workspace.LspWorkspaceScopeManager</c> the first time a Reqnroll project is discovered in a workspace (issue #581 finding 2).</summary>
+    /// <summary>Sent by <c>Workspace.LspWorkspaceScopeManager</c> the first time a Reqnroll project is discovered in a workspace.</summary>
     public const string OpenProjectCommandExecuted = "OpenProject command executed";
 
-    /// <summary>Sent by <c>Features.Rename.RenameTargetsHandler</c> after resolving the rename-target picker's candidate list (issue #581 finding 5).</summary>
+    /// <summary>Sent by <c>Features.Rename.RenameTargetsHandler</c> after resolving the rename-target picker's candidate list.</summary>
     public const string RenameTargetsResolved = "RenameTargets resolved";
 
     /// <summary>
     /// Sent by <c>Features.TestOutcomes.TestOutcomeTcpListener</c> when a test run's
     /// <c>runComplete</c> message arrives over the bundled VSTest-logger socket, or the connection
-    /// drops after the run started without one (sent as aborted, issue #848). Counts, flags, a
+    /// drops after the run started without one (sent as aborted). Counts, flags, a
     /// duration and the target framework only — no paths, no test names, no content — plus which reporter sent the run,
     /// so MTP's ephemeral source-compiled reporter's real-world adoption is visible in
-    /// aggregate (issue #722).
+    /// aggregate.
     /// </summary>
     public const string TestOutcomesRunCompleted = "TestOutcomesRunCompleted";
 
     /// <summary>
     /// Sent once per project, by <c>Features.Completions.FeatureTagIndex</c>, when the first tag-completion
     /// request has finished building that project's tag index — the one-time cost of scanning
-    /// every <c>.feature</c> file the project owns (issue #828). Counts and a duration only — no
+    /// every <c>.feature</c> file the project owns. Counts and a duration only — no
     /// project, file or tag names — so the real-world size of that scan, and how much of it was
     /// disk parsing, is visible in aggregate. Per-completion events are deliberately not sent
     /// (completion fires per keystroke); steady-state latency is covered by
@@ -176,7 +170,7 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent periodically, and once more at graceful shutdown, by
-    /// <c>Performance.FeatureUsageFlushService</c> (issue #582): in-process counts of high-volume
+    /// <c>Performance.FeatureUsageFlushService</c>: in-process counts of high-volume
     /// lookup and passive editor requests (completion, code actions, CodeLens, inlay hints, folding,
     /// outline, on-type formatting) that are too frequent to send as one event each. Discrete
     /// commands are not counted here — they send their own per-call events. Keys come from a closed
@@ -186,7 +180,7 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent once per server process by <c>Telemetry.ServerSessionTelemetry</c> after the LSP handshake
-    /// completes (issue #845): client version, OS family, CPU architecture, .NET runtime and
+    /// completes: client version, OS family, CPU architecture, .NET runtime and
     /// <c>StartupMs</c> (process start to ready). IDE-agnostic replacement for the VS-only
     /// <see cref="ExtensionLoaded"/> for analytics: per-IDE active-session counts come from
     /// <c>IdeClient</c> and <c>SessionId</c>, and install/upgrade/daily-use are derived from it in
@@ -195,7 +189,7 @@ public static class TelemetryEvents
     public const string ServerSessionStarted = "ServerSessionStarted";
 
     /// <summary>
-    /// Best-effort, sent once at graceful shutdown by <c>Telemetry.ServerSessionTelemetry</c> (issue #845)
+    /// Best-effort, sent once at graceful shutdown by <c>Telemetry.ServerSessionTelemetry</c>
     /// with <c>SessionSeconds</c>. Absence for a <c>SessionId</c> that has a <see cref="ServerSessionStarted"/>
     /// means the session ended abnormally (crash, force-quit); it follows the final <see cref="FeatureUsageSummary"/>.
     /// </summary>
@@ -203,7 +197,7 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent by <c>Discovery.Connector.ConnectorBindingRegistryProvider</c> after each successful
-    /// connector discovery run that changed the bindings (issue #845, from #258): one snapshot of
+    /// connector discovery run that changed the bindings: one snapshot of
     /// step, hook (total and per hook type), binding-class and feature-file counts plus the target
     /// framework. Counts only; deliberately separate from <see cref="ReqnrollDiscoveryExecuted"/> so
     /// that event's schema stays stable.
@@ -253,7 +247,7 @@ public static class TelemetryEvents
     /// <summary>Sent by the VS extension (<c>TelemetryService.MonitorWelcomeDialogDismissed</c>) when the welcome dialog is dismissed.</summary>
     public const string WelcomeDialogDismissed = "Welcome dialog dismissed";
 
-    /// <summary>Sent by the VS extension (<c>VsWellKnownIdsSelfCheck</c>) when the startup self-check finds hard-coded well-known command IDs that do not resolve in this Visual Studio version (issue #779).</summary>
+    /// <summary>Sent by the VS extension (<c>VsWellKnownIdsSelfCheck</c>) when the startup self-check finds hard-coded well-known command IDs that do not resolve in this Visual Studio version.</summary>
     public const string VsWellKnownIdsSelfCheckMismatch = "VsWellKnownIdsSelfCheckMismatch";
 
     // ── Client-originated events (one logical event, one copy per IDE) ─────────────────────
@@ -263,13 +257,13 @@ public static class TelemetryEvents
     /// (<c>GoToHooksCommand</c>), VS Code (<c>src/VSCode/src/commands/goToHooks.ts</c>) and Rider
     /// (<c>GoToHooksRunner</c>) — for a genuine user navigation, as opposed to
     /// <see cref="FindHooksCommandExecuted"/>, which the server sends for every <c>reqnroll/findHooks</c>
-    /// lookup including CodeLens prefetches (issue #698). Mirrored verbatim in
+    /// lookup including CodeLens prefetches. Mirrored verbatim in
     /// <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>: keep the three copies in sync.
     /// </summary>
     public const string GoToHookCommandExecuted = "GoToHook command executed";
 
     /// <summary>
-    /// Sent by each IDE client when the user opens a clickable Gherkin tag's link (issue #755) - VS
+    /// Sent by each IDE client when the user opens a clickable Gherkin tag's link - VS
     /// (<c>TagLinkNavigableSymbolProvider</c>, Ctrl+Click), VS Code (<c>openTagLink</c>) and Rider
     /// (<c>ReqnrollFeatureTagLinkController</c>, Ctrl+Click). Only the client knows a link was actually followed:
     /// the server just answers <c>textDocument/documentLink</c> (counted as the passive <c>DocumentLink</c>
@@ -279,8 +273,8 @@ public static class TelemetryEvents
     public const string TagLinkCommandExecuted = "TagLink command executed";
 
     /// <summary>
-    /// Sent by each IDE client when the language server fails to start or to finish its handshake
-    /// (issue #845): VS (<c>LspServerConnectionService</c>), VS Code (language-client start failure)
+    /// Sent by each IDE client when the language server fails to start or to finish its handshake:
+    /// VS (<c>LspServerConnectionService</c>), VS Code (language-client start failure)
     /// and Rider (<c>ReqnrollServerLifecycleListener</c>, from <c>LspServerManagerListener</c> state changes). A dead server cannot report itself, so the client does.
     /// Properties: <c>Reason</c> (closed enum, see <c>ServerFailureReason</c>) and <c>AttemptNumber</c>.
     /// Mirrored verbatim in <c>telemetryEvents.ts</c> and <c>RiderTelemetryTransmitter.kt</c>.
@@ -289,14 +283,14 @@ public static class TelemetryEvents
 
     /// <summary>
     /// Sent by each IDE client when a running language server stops without the client having asked
-    /// it to (issue #845). Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c> (restarts so far).
-    /// Client-side exception capture is separate (#621). Mirrored in the TS and Kotlin catalogs.
+    /// it to. Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c> (restarts so far).
+    /// Client-side exception capture is separate. Mirrored in the TS and Kotlin catalogs.
     /// </summary>
     public const string ServerExitedUnexpectedly = "ServerExitedUnexpectedly";
 
     /// <summary>
     /// Sent by each IDE client when it restarts the language server after a failure or unexpected
-    /// exit (issue #845). Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c>.
+    /// exit. Properties: <c>Reason</c> (closed enum) and <c>AttemptNumber</c>.
     /// Mirrored in the TS and Kotlin catalogs.
     /// </summary>
     public const string ServerRestarted = "ServerRestarted";

@@ -15,13 +15,13 @@ namespace Reqnroll.IdeSupport.TestReporter.MTP;
 /// MTP composite extension (<see cref="ITestSessionLifetimeHandler"/> + <see cref="IDataConsumer"/>)
 /// that streams every <see cref="TestNodeUpdateMessage"/> — including one per Scenario Outline example
 /// row — to the LSP server that owns this workspace, over the same NDJSON-over-TCP-loopback protocol
-/// <c>Reqnroll.IdeSupport.TestLogger</c> already speaks (issue #715, MTP phase of #700/#702's pipeline).
+/// <c>Reqnroll.IdeSupport.TestLogger</c> already speaks.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Unlike the VSTest logger — which the IDE registers per run via runsettings, handing it the
 /// endpoint directly — this reporter is compiled into the test host with no per-run configuration
-/// channel available (MTP has none; see the implementation plan §3). It discovers where to connect
+/// channel available (MTP has none). It discovers where to connect
 /// itself: resolve this assembly's own workspace root (<see cref="WorkspaceRootLocator"/>), read the
 /// LSP server's session breadcrumb files (<see cref="SessionBreadcrumbMatcher"/>), and connect to the
 /// deepest matching one. No match, or a connection failure, leaves it inert — the same "can't reach
@@ -64,7 +64,7 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     public string Description => "Streams Microsoft.Testing.Platform test outcomes to the Reqnroll IDE Support LSP server.";
 
     /// <summary>
-    /// Issue #741 §2.4a: enabled only when an IDE session breadcrumb matches this test project's
+    /// Enabled only when an IDE session breadcrumb matches this test project's
     /// workspace. With no IDE session there is nothing to report to, so MTP never activates this
     /// extension at all (no data-consumer subscription, no session hooks) — the same "disable yourself
     /// in IsEnabledAsync" pattern Tyrrrz/GitHubActionsTestLogger uses. Only the breadcrumb lookup
@@ -165,7 +165,7 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     /// <summary>
     /// Breadcrumb discovery: resolve this assembly's own workspace root, read the LSP servers' session
     /// breadcrumbs and pick the deepest match. When the reporter is compiled into the user's test
-    /// assembly (issue #741), "this assembly" is that test assembly, so the lookup starts from the test
+    /// assembly, "this assembly" is that test assembly, so the lookup starts from the test
     /// project's own output directory. Every failure is swallowed and means "no session".
     /// </summary>
     internal static string? FindSessionEndpoint()
@@ -220,12 +220,12 @@ internal sealed class ReqnrollMtpReporter : ITestSessionLifetimeHandler, IDataCo
     /// <summary>
     /// One and only one <see cref="TestNodeStateProperty"/>-derived property is set per terminal
     /// <see cref="TestNodeUpdateMessage"/>. Maps onto the same outcome vocabulary
-    /// <c>TrxUnitTestResult.Outcome</c> already uses (issue #715 plan §4): Error/Timeout both collapse
+    /// <c>TrxUnitTestResult.Outcome</c> already uses: Error/Timeout both collapse
     /// to "Failed" — this codebase's IDE-facing <c>TestOutcomeKind</c> has no separate states for them,
     /// same as the VSTest logger's own outcome mapping. <c>CancelledTestNodeStateProperty</c> is
     /// obsolete (frameworks now signal cancellation via <see cref="OperationCanceledException"/>), but
     /// frameworks that still emit it would otherwise get no outcome at all, so it is mapped to
-    /// "Skipped" inside a narrow CS0618 suppression (issue #741 §2.2 — a pragma removes the warning
+    /// "Skipped" inside a narrow CS0618 suppression (a pragma removes the warning
     /// before TreatWarningsAsErrors/WarningsAsErrors can promote it, including in a user's project the
     /// sources are compiled into); in-progress/discovered states and any other unrecognized state
     /// return a null outcome so the caller skips sending a "result" for a non-terminal update.

@@ -3,13 +3,10 @@ using System;
 namespace Reqnroll.IdeSupport.Common.Logging;
 
 /// <summary>
-/// Formats elapsed durations for log lines with one consistent unit and precision (issue #627):
-/// previously <c>OperationDurationRecorder</c> logged tenths of a millisecond (<c>F1</c>),
-/// <c>ConnectorDiscoveryService</c> and <c>IdeSupportTagParser</c> logged whole milliseconds
-/// truncated rather than rounded (<c>Stopwatch.ElapsedMilliseconds</c>), and
-/// <c>IdeSupportLoggerExtensions.Trace(logger, Stopwatch, ...)</c> logged a full
-/// <see cref="TimeSpan"/> (<c>hh:mm:ss.fffffff</c>, tick precision) — four different shapes for
-/// the same underlying concept.
+/// Formats elapsed durations for log lines with one consistent unit and precision, so every
+/// caller (operation recorders, discovery timing, stopwatch traces) renders the same shape rather
+/// than a mix of tenths of a millisecond, truncated whole milliseconds and full
+/// <see cref="TimeSpan"/> ticks.
 /// </summary>
 public static class DurationFormatter
 {

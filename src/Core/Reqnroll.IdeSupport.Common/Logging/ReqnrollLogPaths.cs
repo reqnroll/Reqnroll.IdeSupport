@@ -9,7 +9,7 @@ namespace Reqnroll.IdeSupport.Common.Logging;
 /// stale log files in the latter — shared by every .NET process (VS extension, LSP server,
 /// Connector) so they agree on one directory per OS with the VS Code extension's
 /// <c>resolveLogDirectory</c>/<c>resolveApplicationDirectory</c> (<c>logPaths.ts</c>) and the Rider
-/// plugin's <c>ReqnrollDebugLogger.logDirectory</c> (issue #625).
+/// plugin's <c>ReqnrollDebugLogger.logDirectory</c>.
 /// </summary>
 /// <remarks>
 /// <see cref="Environment.SpecialFolder.LocalApplicationData"/> already matches the desired
@@ -28,7 +28,7 @@ public static class ReqnrollLogPaths
     /// Resolves the Reqnroll application directory for the current OS (<c>%LOCALAPPDATA%\Reqnroll</c>
     /// on Windows, etc.) — the shared root that also holds non-log state such as
     /// <c>test-outcomes.json</c> and the telemetry <c>userid</c> file. Log files themselves live one
-    /// level deeper, under <see cref="ResolveLogDirectory()"/> (issue #726) — use this instead of
+    /// level deeper, under <see cref="ResolveLogDirectory()"/> — use this instead of
     /// that when what's being resolved isn't actually a log.
     /// </summary>
     public static string ResolveApplicationDirectory()
@@ -39,10 +39,9 @@ public static class ReqnrollLogPaths
 
     /// <summary>
     /// Resolves the Reqnroll <c>logs</c> directory for the current OS and prunes stale log files in
-    /// it. This is <see cref="ResolveApplicationDirectory()"/> plus a <c>logs</c> segment (issue
-    /// #726) — before that issue, log files were written directly into the application directory
-    /// alongside unrelated persisted state (test outcomes, the telemetry user id), making that
-    /// directory's contents hard to tell apart at a glance.
+    /// it. This is <see cref="ResolveApplicationDirectory()"/> plus a <c>logs</c> segment, which keeps log
+    /// files apart from unrelated persisted state (test outcomes, the telemetry user id) in the
+    /// application directory.
     /// </summary>
     public static string ResolveLogDirectory()
     {
