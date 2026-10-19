@@ -8,7 +8,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToHooks;
 /// <summary>
 /// Maps applicable hooks onto Find All References window rows
 /// (<see cref="HookLocationsMapper.BuildLocations"/>), used when Go To Hooks resolves several
-/// hooks at the caret instead of showing the NavigationPickerDialog modal popup (issue #315).
+/// hooks at the caret instead of showing the NavigationPickerDialog modal popup.
 /// </summary>
 public class GoToHooksCommandBuildLocationsTests
 {

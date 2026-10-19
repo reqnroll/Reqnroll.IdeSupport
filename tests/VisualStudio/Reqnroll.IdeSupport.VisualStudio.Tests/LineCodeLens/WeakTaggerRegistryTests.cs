@@ -6,8 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LineCodeLens;
 
 /// <summary>
 /// Unit tests for <see cref="WeakTaggerRegistry{TTagger}"/> — the per-file, weakly-held tagger
-/// tracking shared by every Reqnroll classic CodeLens feature (issue #372/#262 follow-up
-/// extraction). <c>TTagger</c> is constrained only to <see langword="class"/>, so a plain fake
+/// tracking shared by every Reqnroll classic CodeLens feature. <c>TTagger</c> is constrained only to <see langword="class"/>, so a plain fake
 /// stands in for the real <c>LineKeyedCodeLensTagger{TEntry}</c> — the registry itself has no
 /// dependency on VS editor types.
 /// </summary>

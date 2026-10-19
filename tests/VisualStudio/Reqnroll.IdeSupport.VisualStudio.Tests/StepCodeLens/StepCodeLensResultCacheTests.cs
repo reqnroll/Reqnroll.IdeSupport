@@ -19,7 +19,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.StepCodeLens;
 
 /// <summary>
-/// Unit tests for <see cref="StepCodeLensResultCache"/> (issue #552 follow-up): mirrors
+/// Unit tests for <see cref="StepCodeLensResultCache"/> mirrors
 /// <c>RunTestCodeLensResultCacheTests</c>, whose subject fixed the same class of problem first —
 /// VS.Extensibility calling once per code element, all wanting the same shared result.
 /// </summary>

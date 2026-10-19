@@ -6,8 +6,8 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.WellKnownIds;
 
 /// <summary>
-/// Source-level guards against the class of bug behind issues #747 and #774: a hand-typed VS
-/// identifier that compiles fine but names the wrong thing. Scans the checked-in sources of the
+/// Source-level guards against the class of bug where a hand-typed VS
+/// identifier compiles fine but names the wrong thing. Scans the checked-in sources of the
 /// Extension and VSSDKIntegration projects, so it needs no VS install.
 /// </summary>
 /// <remarks>
@@ -35,7 +35,7 @@ public class MagicValueSourceGuardTests
         @"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}", RegexOptions.Compiled);
 
     // A numeric literal as any argument of a COM property accessor — e.g. GetProperty(0x0000000B, …)
-    // (issue #774) or GetProperty(itemId, -8005, …). Property IDs must come from the SDK enums.
+    // or GetProperty(itemId, -8005, …). Property IDs must come from the SDK enums.
     // The argument list may contain one level of parentheses, e.g. a "(int)__VSHPROPID.X" cast.
     private static readonly Regex NumericPropertyId = new(
         @"\b(Get|Set)(Guid)?Property\s*\((?<args>(?:[^()]|\([^()]*\))*)\)", RegexOptions.Compiled);

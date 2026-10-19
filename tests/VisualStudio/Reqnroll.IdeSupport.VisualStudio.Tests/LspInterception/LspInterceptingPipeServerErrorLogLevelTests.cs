@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.VisualStudio.Utilities;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Covers the level a server-rejected request is logged at (issue #800 follow-up): ContentModified
+/// Covers the level a server-rejected request is logged at: ContentModified
 /// is routine and retried, so it must not surface as a Warning in the Output pane.
 /// </summary>
 public class LspInterceptingPipeServerErrorLogLevelTests

@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
 /// Client-side mapping of a <c>reqnroll/findStepDefinitions</c> result into step-definition rows
-/// (<see cref="FindStepDefinitionsService.MapResult"/>, issue #757).
+/// (<see cref="FindStepDefinitionsService.MapResult"/>).
 /// </summary>
 public class FindStepDefinitionsServiceMapResultTests
 {

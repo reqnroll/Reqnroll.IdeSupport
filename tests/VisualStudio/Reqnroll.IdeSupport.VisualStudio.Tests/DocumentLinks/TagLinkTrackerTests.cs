@@ -9,7 +9,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.DocumentLinks;
 
 /// <summary>
-/// Coverage for the permanent link styling of clickable tags (issue #921): the pure position mapping of
+/// Coverage for the permanent link styling of clickable tags: the pure position mapping of
 /// <see cref="TagLinkTracker"/>, and the MEF metadata that makes the classifier and the hover source apply to
 /// Gherkin buffers only. The live behaviour (underline in the editor, the hover tooltip) needs a running Visual Studio.
 /// </summary>

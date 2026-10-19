@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.ProjectSystem;
 
 /// <summary>
 /// <see cref="VsUtils.QueryInstalledNuGetPackagesAsync"/>: the bounded NuGet brokered-service query
-/// behind <see cref="VsUtils.GetInstalledNuGetPackages"/> (issue #1031). The RPC is supplied as a
+/// behind <see cref="VsUtils.GetInstalledNuGetPackages"/>. The RPC is supplied as a
 /// delegate so a NuGet service that never answers can be simulated without a VS host.
 /// </summary>
 #pragma warning disable VSTHRD003 // Avoid awaiting foreign Tasks -- no JoinableTaskFactory/UI thread in these tests

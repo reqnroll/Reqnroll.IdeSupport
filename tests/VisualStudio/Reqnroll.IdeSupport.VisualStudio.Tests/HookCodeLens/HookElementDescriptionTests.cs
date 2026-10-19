@@ -9,15 +9,15 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.HookCodeLens;
 /// Unit tests for <see cref="HookCodeLensTaggerProvider.EncodeElementDescription"/> (the
 /// hook-feature-specific revision-key formatting) and <see cref="LineElementDescription"/> (the
 /// shared pipe-delimited envelope it's built on) — the string the in-process tagger smuggles
-/// through <c>ICodeLensDescriptor.ElementDescription</c> to the out-of-process data point providers
-/// (issue #372), reworked in issue #400 to identify a <em>line</em> rather than an individual lens,
-/// and split into a shared envelope plus per-feature formatting in the issue #262 follow-up refactor.
+/// through <c>ICodeLensDescriptor.ElementDescription</c> to the out-of-process data point providers.
+/// The encoding identifies a <em>line</em> rather than an individual lens, and is split into a
+/// shared envelope plus per-feature formatting.
 /// </summary>
 /// <remarks>
 /// The revision component is load-bearing rather than cosmetic: <c>LineKeyedCodeLensTagger{TEntry}</c>
 /// reuses a tag instance for as long as its <c>ElementDescription</c> is unchanged, so if the
 /// encoding failed to vary with a line's lens content, a changed hook-match count would never reach
-/// the editor — the same class of silent-staleness bug as issue #400 itself.
+/// the editor — the same class of silent-staleness bug a stale descriptor would cause.
 /// </remarks>
 public class HookElementDescriptionTests
 {
@@ -47,7 +47,7 @@ public class HookElementDescriptionTests
     [Fact]
     public void Encode_of_a_line_carrying_both_lens_kinds_still_decodes_to_that_one_line()
     {
-        // The whole point of the issue #400 rework: one descriptor per line, shared by the
+        // The point of the line-level encoding: one descriptor per line, shared by the
         // own-level and step-hooks providers.
         var encoded = HookCodeLensTaggerProvider.EncodeElementDescription(1, new[]
         {

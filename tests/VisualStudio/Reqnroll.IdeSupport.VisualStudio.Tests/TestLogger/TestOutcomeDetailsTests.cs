@@ -7,12 +7,11 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestLogger;
 
 /// <summary>
-/// Phase 2 of the implementation plan: the step trace carried in each result's stdout becomes per-row
+/// The step trace carried in each result's stdout becomes per-row
 /// failed-step information and renders as the Run CodeLens details table. The trace-parsing and
-/// store/handler side of this (previously covered here via a local <c>TestOutcomeStore</c> and
-/// <c>RunTestCodeLensCallbackListener.ToEntry</c>) moved to
-/// <c>Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes.GetTestOutcomeHandlerTests</c> along
-/// with the store and handler themselves (LSP-server outcome pipeline refactor). What's left here is
+/// store/handler side of this is covered by
+/// <c>Reqnroll.IdeSupport.LSP.Server.Tests.Features.TestOutcomes.GetTestOutcomeHandlerTests</c>
+/// along with the store and handler themselves. What's covered here is
 /// purely the OOP DTO's rendering into the Details popup table, which stays VS-side.
 /// </summary>
 public class TestOutcomeDetailsTests
@@ -48,8 +47,8 @@ public class TestOutcomeDetailsTests
         RunTestCodeLensDataPoint.BuildOutcomeTable(new RunTestOutcomeEntry("None", Array.Empty<RunTestOutcomeRow>(), DateTime.UtcNow)).Headers.Should().BeEmpty();
     }
 
-    // ── BuildTooltip: the lens's own inline hover (previously always unset, falling back to VS's
-    // generic keybinding hint, e.g. "Alt+1" — the failure detail only ever reached the Details popup) ──
+    // ── BuildTooltip: the lens's own inline hover (without it VS falls back to its
+    // generic keybinding hint, e.g. "Alt+1", and the failure detail only reaches the Details popup) ──
 
     [Fact]
     public void Tooltip_is_null_without_an_outcome()
@@ -93,10 +92,10 @@ public class TestOutcomeDetailsTests
         RunTestCodeLensDataPoint.BuildTooltip(entry).Should().Be("Passed");
     }
 
-    // ── AggregateOutcomes: the Feature/Rule "Run Scenarios" glyph (issue #744) combines every
+    // ── AggregateOutcomes: the Feature/Rule "Run Scenarios" glyph combines every
     // scenario's own outcome the same worst-wins way Test Explorer aggregates a hierarchical node —
-    // regression coverage for issue #789 live testing, where only the first scenario's outcome ever
-    // reached the glyph and a failing later scenario still rendered green ──
+    // regression guard: a failing later scenario must not render green because only the first
+    // scenario's outcome reached the glyph ──
 
     private static RunTestOutcomeEntry Outcome(string aggregate) => new(aggregate, Array.Empty<RunTestOutcomeRow>(), DateTime.UtcNow);
 

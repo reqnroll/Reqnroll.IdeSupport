@@ -12,7 +12,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.StepCodeLens;
 
 /// <summary>
-/// Issue #1017: a failed or timed-out <c>textDocument/codeLens</c> request must not be cached as
+/// A failed or timed-out <c>textDocument/codeLens</c> request must not be cached as
 /// "no lenses". Drives the real <see cref="StepCodeLensService"/> and its result cache over a real
 /// <c>LspInterceptingPipe</c> talking to a scripted in-memory server.
 /// </summary>
@@ -36,7 +36,7 @@ public class StepCodeLensServiceTests
         server.ReplyWithResult(OneLens);
         var sut = CreateSut(server);
 
-        // VS never asks again for an unchanged lens, so the cache retries ContentModified itself (#1017).
+        // VS never asks again for an unchanged lens, so the cache retries ContentModified itself.
         var lenses = await sut.GetLensesAsync(FileUri, CancellationToken.None);
 
         lenses.Should().ContainSingle().Which.Title.Should().Be("2 step usages");

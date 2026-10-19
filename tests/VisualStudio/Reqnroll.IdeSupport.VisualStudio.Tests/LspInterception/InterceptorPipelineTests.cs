@@ -12,8 +12,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// The interceptor list's own rules (issue #587, step 3). Before the extraction these were only
-/// reachable by running a pump; the fault-tolerance rule in particular is what keeps a buggy
+/// The interceptor list's own rules, testable without running a pump. The fault-tolerance rule in particular is what keeps a buggy
 /// interceptor from severing a live VS ↔ server connection.
 /// </summary>
 public class InterceptorPipelineTests
@@ -117,7 +116,7 @@ public class InterceptorPipelineTests
     [Fact]
     public async Task An_interceptor_cancelled_with_the_message_is_skipped_without_a_warning()
     {
-        // Issue #898: an abandoned Ctrl+hover lookup cancels its token while LspInspectorLogger waits on its
+        // An abandoned Ctrl+hover lookup cancels its token while LspInspectorLogger waits on its
         // gate. That is ordinary cancellation, not a buggy interceptor, so it must not log a Warning + stack.
         using var cts = new CancellationTokenSource();
         cts.Cancel();

@@ -7,9 +7,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
 /// Unit tests for <see cref="LspParamsBuilder"/> — the shared JSON-object builder for outbound
-/// custom <c>reqnroll/*</c>/standard LSP request params, replacing the near-identical
-/// <c>BuildParams</c> method duplicated across every LSP-calling service in the Extension project
-/// (issue #447).
+/// custom <c>reqnroll/*</c>/standard LSP request params, used by every LSP-calling service in the Extension project
+/// instead of per-service <c>BuildParams</c> methods.
 /// </summary>
 /// <remarks>
 /// Assertions parse the built string back through <see cref="Newtonsoft.Json.Linq.JObject"/> rather

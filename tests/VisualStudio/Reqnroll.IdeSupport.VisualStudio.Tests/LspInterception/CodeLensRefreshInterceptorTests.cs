@@ -13,7 +13,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// <summary>
 /// <see cref="CodeLensRefreshInterceptor"/> only reacts to a <c>reqnroll/refreshCodeLens</c>
 /// (receive); every other message, including a <c>.cs</c> <c>textDocument/didChange</c> (send) —
-/// whose per-edit invalidation was removed for issue #156/#318 — must pass through untouched.
+/// whose per-edit invalidation is disabled because CodeLens.Invalidate() can provoke a client reconnect — must pass through untouched.
 /// </summary>
 /// <remarks>
 /// Every message is expected to return <see cref="LspInterceptorResult.PassThrough"/>, so asserting
@@ -30,7 +30,7 @@ public class CodeLensRefreshInterceptorTests
 
     // Upper bound for *presence* checks. The debounce is a System.Threading.Timer, whose callback is
     // queued to the thread pool; on a loaded net481 CI runner, with the pool busy with parallel test
-    // classes, that callback can land well after the 400ms window (issue #725). WaitForFirst returns
+    // classes, that callback can land well after the 400ms window. WaitForFirst returns
     // as soon as the signal arrives, so this ceiling costs nothing on a passing run.
     private const int InvalidationArrivalTimeoutMs = 15_000;
 
@@ -93,7 +93,7 @@ public class CodeLensRefreshInterceptorTests
     [Fact]
     public async Task A_didChange_on_a_cs_file_passes_through_without_invalidating()
     {
-        // Per-.cs-edit invalidation is disabled (issue #156/#318) — a .cs didChange is now just
+        // Per-.cs-edit invalidation is disabled (CodeLens.Invalidate() can provoke a client reconnect) — a .cs didChange is now just
         // another pass-through, no different from a non-.cs file, testable directly (no VS host
         // needed) since it no longer reaches any UI-thread CodeLens.Invalidate() call.
         var result = await Create().InterceptAsync(
@@ -137,11 +137,11 @@ public class CodeLensRefreshInterceptorTests
         result.Should().Be(LspInterceptorResult.PassThrough);
     }
 
-    // ── Invalidation scheduling (issue #343) ──────────────────────────────────
+    // ── Invalidation scheduling ──────────────────────────────────
 
     [Theory]
     [InlineData(true)]   // rebuild / full binding-registry replacement
-    [InlineData(false)]  // incremental Roslyn patch — acted on since #343
+    [InlineData(false)]  // incremental Roslyn patch — acted on too
     [InlineData(null)]   // field absent, e.g. an older/mismatched payload
     public async Task A_refreshCodeLens_eventually_invalidates_regardless_of_isFullReplacement(bool? isFullReplacement)
     {
@@ -159,7 +159,7 @@ public class CodeLensRefreshInterceptorTests
     public async Task Invalidation_is_deferred_rather_than_synchronous()
     {
         // The debounce is what keeps a burst of per-project signals from becoming a burst of
-        // CodeLens.Invalidate() calls, each of which can provoke the #156 client reconnect.
+        // CodeLens.Invalidate() calls, each of which can provoke a client reconnect.
         var spy = new InvalidationSpy();
         using var sut = Create(spy.Action);
 

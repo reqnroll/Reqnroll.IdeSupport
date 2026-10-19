@@ -6,10 +6,9 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Issue #395's routing rule, tested directly. The point of extracting
-/// <see cref="VsSessionRouter"/> from <c>LspInterceptingPipe</c> (issue #587, step 2) is that this
-/// no longer needs a live pipe, two sessions and a race to exercise — the incident's failure shape
-/// is now a function call.
+/// The response-routing rule, tested directly. <see cref="VsSessionRouter"/> is separate from
+/// <c>LspInterceptingPipe</c> so that this does not need a live pipe, two sessions and a race to exercise — the incident's failure shape
+/// is a function call.
 /// </summary>
 public class VsSessionRouterTests
 {
@@ -31,7 +30,7 @@ public class VsSessionRouterTests
     [Fact]
     public void A_response_for_an_abandoned_session_is_dropped()
     {
-        // The captured #395 repro: id=143's shutdown response from session #1 arriving 71ms after
+        // The captured repro: id=143's shutdown response from session #1 arriving 71ms after
         // the swap to session #2. Delivering it hands VS's JsonRpc a response to a request it never
         // sent, which it treats as a fatal protocol violation and closes the new connection over.
         var router = new VsSessionRouter();
@@ -73,7 +72,7 @@ public class VsSessionRouterTests
     [Fact]
     public void An_untracked_response_id_is_dropped_rather_than_forwarded()
     {
-        // The policy inversion (design §3.5). Every VS request passes through the send pump, which
+        // Only tracked response ids are delivered. Every VS request passes through the send pump, which
         // records it before forwarding — so an untracked response id is either a straggler whose
         // session is gone or an id VS never sent. Both are unmatched responses as far as VS's
         // JsonRpc is concerned, and it closes the connection over one of those.

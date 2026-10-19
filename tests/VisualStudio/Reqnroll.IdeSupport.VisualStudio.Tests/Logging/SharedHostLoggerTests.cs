@@ -9,7 +9,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.Logging;
 
 /// <summary>
-/// Issue #748: each process must have exactly one <see cref="SynchronousFileLogger"/> per log file.
+/// Each process must have exactly one <see cref="SynchronousFileLogger"/> per log file.
 /// Two instances on the same file each serialize only with their own lock, so concurrent writes hit
 /// a sharing violation and a line is silently dropped. These pin the two shared instances that
 /// replace the four ad-hoc ones: <see cref="ExtensionHostLogger"/> (devenv.exe, both composition

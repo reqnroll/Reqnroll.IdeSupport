@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.GoToStepDefinition;
 
 /// <summary>
 /// The Find All References window title for Go To Definition with several matching step
-/// definitions (<see cref="StepDefinitionsWindowTitle.Build"/>, issue #757).
+/// definitions (<see cref="StepDefinitionsWindowTitle.Build"/>).
 /// </summary>
 public class StepDefinitionsWindowTitleTests
 {

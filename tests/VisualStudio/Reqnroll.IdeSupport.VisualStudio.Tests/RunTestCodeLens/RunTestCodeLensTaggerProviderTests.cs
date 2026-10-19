@@ -8,9 +8,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 /// <summary>
 /// Unit tests for <see cref="RunTestCodeLensTaggerProvider.EncodeElementDescription"/> — the
 /// Run-CodeLens-specific revision-key formatting built on the shared
-/// <see cref="LineElementDescription"/> envelope (issue #262 follow-up refactor; re-scoped by issue
-/// #495 to key off <see cref="RunTestLensLocation"/> instead of the resolved
-/// <see cref="RunTestTargetEntry"/>, since the tagger no longer resolves targets at all — see
+/// <see cref="LineElementDescription"/> envelope (keyed off <see cref="RunTestLensLocation"/> rather than the resolved
+/// <see cref="RunTestTargetEntry"/>, since the tagger does not resolve targets at all — see
 /// <see cref="RunTestCodeLensTaggerProvider.FetchAsync"/>). Mirrors <c>HookElementDescriptionTests</c>'s
 /// shape for <c>HookCodeLensTaggerProvider</c>'s counterpart.
 /// </summary>

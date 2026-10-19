@@ -113,7 +113,7 @@ public class DocumentActivationTrackingInterceptorTests
     [Fact]
     public async Task Activation_pending_didOpen_does_not_corrupt_state_via_the_pipes_own_reentrant_logging_call()
     {
-        // Issue #187: LspInterceptingPipe.SendNotificationToServerAsync (used below to re-forward
+        // LspInterceptingPipe.SendNotificationToServerAsync (used below to re-forward
         // didOpen) re-runs the full send-interceptor pipeline on a synthetic copy of what it just
         // wrote, purely so the injected message shows up in the inspector log — which calls this
         // very interceptor's InterceptAsync a second time, re-entrantly, on the same didOpen.

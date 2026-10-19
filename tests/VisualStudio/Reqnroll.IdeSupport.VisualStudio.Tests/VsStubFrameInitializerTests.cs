@@ -22,7 +22,7 @@ public sealed class ThreadHelperUiThreadCollection
 }
 
 /// <summary>
-/// Issue #1022: <c>IVsRunningDocumentTable.GetDocumentInfo</c> hands back an AddRef'd
+/// <c>IVsRunningDocumentTable.GetDocumentInfo</c> hands back an AddRef'd
 /// <c>IUnknown</c> in <c>ppunkDocData</c> (the shell's own <c>RunningDocumentTable</c> wrapper
 /// releases it after use), so the RDT scan must release it for every document it visits.
 /// </summary>

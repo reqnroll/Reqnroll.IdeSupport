@@ -18,8 +18,8 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.RunTestCodeLens;
 
 /// <summary>
-/// Coverage for issue #262's follow-up fix, re-scoped by issue #495:
-/// <see cref="RunTestCodeLensService.GetTargetsForLineAsync"/> is now called once per visible
+/// Coverage for the per-line result cache:
+/// <see cref="RunTestCodeLensService.GetTargetsForLineAsync"/> is called once per visible
 /// Scenario line rather than once per file for the whole document, so this cache de-dupes concurrent
 /// callers for the same <c>(fileUri, line)</c> instead of just <c>fileUri</c>.
 /// </summary>
@@ -82,11 +82,10 @@ public class RunTestCodeLensResultCacheTests
     [Fact]
     public async Task A_completed_result_is_reused_indefinitely_without_recomputing()
     {
-        // Regression coverage (live report, 2026-08-26): this cache used to expire a completed
-        // result after a fixed few-second TTL, so any caller arriving after that window forced an
-        // entirely new full-document walk — one slow enough on a large corpus (30-45s) to reliably
-        // outlive VS's own per-data-point timeout, even though nothing had actually changed.
-        // There's no time-based expiry any more: a completed result is valid until an explicit
+        // Regression guard: expiring a completed result after a fixed few-second TTL would make any
+        // caller arriving after that window force an entirely new full-document walk — one slow
+        // enough on a large corpus (30-45s) to reliably outlive VS's own per-data-point timeout,
+        // even though nothing had changed. There is no time-based expiry: a completed result is valid until an explicit
         // InvalidateFile/InvalidateAll (see the next test), never merely because time passed.
         var resolver = new CountingResolver();
         var sut = CreateSut(resolver);
@@ -164,7 +163,7 @@ public class RunTestCodeLensResultCacheTests
     [Fact]
     public async Task A_caller_whose_computation_is_invalidated_mid_flight_gets_the_recomputed_result()
     {
-        // Regression coverage (issue #78, seen live at startup): reqnroll/refreshCodeLens arrived
+        // Regression guard (seen live at startup): reqnroll/refreshCodeLens arrived
         // while the first Run lens request was still resolving. The invalidation cancelled the shared
         // computation, the waiting caller failed, and since the lens's element description had not
         // changed VS never asked again, so the Run lens stayed empty for the session.
@@ -185,7 +184,7 @@ public class RunTestCodeLensResultCacheTests
     [Fact]
     public async Task A_result_from_an_invalidated_computation_is_discarded_even_when_cancellation_was_swallowed()
     {
-        // Seen live (issue #78): the symbol request below the cache turned the invalidation's
+        // Seen live: the symbol request below the cache turned the invalidation's
         // cancellation into an empty answer, so the computation "completed" with 0 entries and the
         // Run lens for a real scenario line stayed blank.
         var release = new TaskCompletionSource<bool>();
@@ -214,7 +213,7 @@ public class RunTestCodeLensResultCacheTests
     [Fact]
     public async Task A_lookup_that_hits_ContentModified_is_restarted_instead_of_failing()
     {
-        // Issue #800 follow-up: the symbol request below the cache now throws when ContentModified
+        // The symbol request below the cache throws when ContentModified
         // survives its own retry, instead of answering "no symbols". The cache must recompute.
         var callCount = 0;
         Task<IReadOnlyList<RunTestTargetEntry>> Resolver(string uri, int line, CancellationToken ct) =>

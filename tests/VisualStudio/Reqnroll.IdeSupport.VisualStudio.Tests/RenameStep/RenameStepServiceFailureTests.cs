@@ -12,7 +12,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.RenameStep;
 
 /// <summary>
-/// Issue #1019: a rename that timed out, was cancelled or hit a dead server must not be reported as
+/// A rename that timed out, was cancelled or hit a dead server must not be reported as
 /// "Step renamed successfully", and a failed target lookup must not read as "no step definition found".
 /// </summary>
 public class RenameStepServiceFailureTests

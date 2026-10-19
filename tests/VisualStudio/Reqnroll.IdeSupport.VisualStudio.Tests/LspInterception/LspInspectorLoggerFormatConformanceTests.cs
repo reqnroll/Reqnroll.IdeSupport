@@ -6,7 +6,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.LspInterception;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 
 /// <summary>
-/// Cross-language conformance check (issue #628) between this file's <see cref="LspInspectorLogger"/>
+/// Cross-language conformance check between this file's <see cref="LspInspectorLogger"/>
 /// and the VS Code extension's independent reimplementation of the same
 /// <see href="https://lampepfl.github.io/lsp-viewer/">lsp-viewer</see> wire format,
 /// <c>src/VSCode/src/lsp/lspInspectorLogger.ts</c>'s <c>parseLspTraceMessage</c>.
@@ -24,9 +24,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// </para>
 /// <para>
 /// Deliberately excluded from the comparison: <c>timestamp</c> (wall-clock, inherently different
-/// per run) and <c>traceId</c> (issue #633 found this can't be ported to VS Code — it reads a
+/// per run) and <c>traceId</c> (this can't be ported to VS Code — it reads a
 /// <c>traceparent</c> property that nothing on the VS Code side ever writes). <c>latencyMs</c>
-/// <b>is</b> compared below (added to the VS Code side in #633): both implementations compute it
+/// <b>is</b> compared below (the VS Code side computes it too): both implementations compute it
 /// from different sources — this class from actual wall-clock deltas between a tracked request and
 /// its matching response, the VS Code side by parsing the round-trip time vscode-languageclient's
 /// own trace text already reports — so the conformance test constructs a request/response pair

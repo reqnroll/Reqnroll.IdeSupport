@@ -23,7 +23,7 @@ public class SelectionLineRangeTests
     [Fact]
     public void Excludes_the_trailing_line_when_the_selection_end_sits_at_that_lines_start()
     {
-        // Reproduces issue #322: dragging from the start of line 5 to the start of line 7
+        // Regression guard: dragging from the start of line 5 to the start of line 7
         // (visually selecting lines 5-6) must exclude line 7.
         SelectionLineRange.AdjustEndLineForWholeLineSelection(
             startLine: 5, endLine: 7, endPositionIsAtLineStart: true).Should().Be(6);

@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.VisualStudio.CommentToggle;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
-/// Coverage for issue #565: <see cref="CommentToggleCommandFilter.GetTextBufferFileUri"/> is the
+/// Coverage for <see cref="CommentToggleCommandFilter.GetTextBufferFileUri"/> is the
 /// one member of this filter that never touches <c>ThreadHelper</c>/COM directly, so — unlike
 /// <c>Exec</c>/<c>QueryStatus</c>, which require a real VS UI thread — it can be exercised here
 /// with plain NSubstitute fakes. The constructor and this method were widened from private to
@@ -59,10 +59,10 @@ public class CommentToggleCommandFilterTests
         uri.Should().Be(string.Empty);
     }
 
-    // ── Command → mode mapping (issue #747) ──────────────────────────────
+    // ── Command → mode mapping ──────────────────────────────
     //
-    // The IDs are written out as literals rather than taken from VSConstants on purpose: the bug
-    // was a filter matching the wrong numbers, so the test pins the numbers VS actually dispatches.
+    // The IDs are written out as literals rather than taken from VSConstants on purpose: a filter
+    // matching the wrong numbers would claim unrelated commands, so the test pins the numbers VS actually dispatches.
     // VSStd2K 136/137 (and legacy 98/99) = Edit.CommentSelection/UncommentSelection;
     // {160961B3-...}:48 = Edit.ToggleLineComment (from VS's editor CommandBindings, not VSConstants).
 
@@ -88,7 +88,7 @@ public class CommentToggleCommandFilterTests
 
     public static TheoryData<Guid, uint> OtherCommands => new()
     {
-        { VsStd2K, 145u },          // FINAL — one of the IDs the filter wrongly claimed before #747
+        { VsStd2K, 145u },          // FINAL — one of the IDs the filter must not claim
         { VsStd2K, 146u },          // ECMD_DECREASEFILTER — likewise
         { VsStd2K, 147u },
         { VsStd2K, 143u },          // FORMATDOCUMENT — owned by FormatDocumentCommandFilter

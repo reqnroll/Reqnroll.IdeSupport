@@ -13,7 +13,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestTargets;
 
 /// <summary>
-/// Issue #1017: a failed or timed-out resolve request must surface as an exception (so the Run
+/// A failed or timed-out resolve request must surface as an exception (so the Run
 /// CodeLens cache, which retries faulted entries, never stores it) rather than as "no targets".
 /// </summary>
 public class ScenarioTestTargetServiceTests

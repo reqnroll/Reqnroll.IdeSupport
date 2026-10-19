@@ -10,7 +10,7 @@ using Reqnroll.IdeSupport.VisualStudio.Extension.Activation;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
-/// Covers the parts of the scratch-file activation trigger (issue #533) that run without VS: the
+/// Covers the parts of the scratch-file activation trigger that run without VS: the
 /// activation signal, the decision rules and the scratch file itself.
 /// </summary>
 public class ScratchFileActivationTriggerTests : IDisposable

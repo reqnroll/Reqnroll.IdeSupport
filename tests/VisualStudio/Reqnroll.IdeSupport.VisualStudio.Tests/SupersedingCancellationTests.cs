@@ -7,7 +7,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests;
 
 /// <summary>
 /// <see cref="SupersedingCancellation"/>: the per-view "newer press cancels the older one" coordination
-/// behind <see cref="GoToDefinitionCommandFilter"/> (issue #757), tested here because the filter's
+/// behind <see cref="GoToDefinitionCommandFilter"/>, tested here because the filter's
 /// <c>Exec</c> itself needs VS's UI thread.
 /// </summary>
 public class SupersedingCancellationTests

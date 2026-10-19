@@ -9,8 +9,8 @@ using Reqnroll.IdeSupport.VisualStudio.ProjectSystem;
 namespace Reqnroll.IdeSupport.VisualStudio.Tests.ProjectSystem;
 
 /// <summary>
-/// Traversal rules behind <c>VsUtils.GetAllProjects</c> (issue #729): a flat walk of the solution's
-/// top level drops every project nested in a solution folder, which left the LSP server with no
+/// Traversal rules behind <c>VsUtils.GetAllProjects</c>: a flat walk of the solution's
+/// top level would drop every project nested in a solution folder, leaving the LSP server with no
 /// binding registry for those projects.
 /// </summary>
 public class ProjectHierarchyWalkerTests
@@ -45,8 +45,8 @@ public class ProjectHierarchyWalkerTests
     [Fact]
     public void Returns_projects_nested_in_a_solution_folder()
     {
-        // The #729 regression case: SmokeTests lived under a "Tests" solution folder and was
-        // never sent to the server.
+        // Regression guard: a project nested under a "Tests" solution folder (SmokeTests) must
+        // still be sent to the server.
         var solution = new[]
         {
             Node.Project("Core.csproj"),

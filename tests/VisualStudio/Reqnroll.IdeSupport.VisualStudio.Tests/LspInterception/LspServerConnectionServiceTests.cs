@@ -21,7 +21,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.LspInterception;
 /// <c>CodeLensRefreshInterceptorTests</c>). <see cref="LspServerConnectionService.ResolveServerExePath"/>
 /// was extracted as a pure static method specifically so the one piece of testable logic (bundled
 /// server exe path resolution) has coverage independent of process/VS-host concerns.
-/// The start-failure cleanup test (issue #1024) uses the internal constructor's launch seams instead:
+/// The start-failure cleanup test uses the internal constructor's launch seams instead:
 /// a stand-in <c>cmd.exe</c> for the server and a pipe factory that throws.
 /// </summary>
 public class LspServerConnectionServiceTests
@@ -65,7 +65,7 @@ public class LspServerConnectionServiceTests
     // disposed, shutdownObserved, pipeTerminated, expected
     [InlineData(false, false, false, true)]   // process died with the pipe still live: a crash
     [InlineData(false, true, false, false)]   // VS's client sent shutdown first: a normal end
-    [InlineData(false, false, true, false)]   // exit already went out (pipe marked terminated): a normal end (issue #555)
+    [InlineData(false, false, true, false)]   // exit already went out (pipe marked terminated): a normal end
     [InlineData(true, false, false, false)]   // we are disposing: our own teardown, not a failure
     public void IsUnexpectedExit_only_flags_a_dead_server_the_client_did_not_ask_to_stop(
         bool disposed, bool shutdownObserved, bool pipeTerminated, bool expected)

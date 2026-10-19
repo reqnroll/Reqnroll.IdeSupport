@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.NavigationBar;
 
 /// <summary>
 /// Covers recognising Git Changes compare-window panes so they stand down instead of retrying
-/// to attach a drop-down bar they can never have (issue #907).
+/// to attach a drop-down bar they can never have.
 /// </summary>
 public class DiffViewDetectorTests
 {

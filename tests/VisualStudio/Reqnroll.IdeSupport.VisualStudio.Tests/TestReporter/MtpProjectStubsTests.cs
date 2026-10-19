@@ -12,7 +12,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.Tests.TestReporter;
 
 /// <summary>
 /// Covers <see cref="MtpProjectStubs"/> — the project-local <c>obj\&lt;Project&gt;.csproj.reqnroll-ide.targets</c>
-/// stub (issue #741) that replaced the per-user <c>ImportAfter</c> file-drop. What the stub's import
+/// stub (which replaces the legacy per-user <c>ImportAfter</c> file-drop). What the stub's import
 /// actually does to a build is covered by <c>SourceInjectionBuildTests</c> in
 /// Reqnroll.IdeSupport.TestReporter.MTP.Tests; this covers where and when the VS extension writes it.
 /// </summary>
@@ -268,7 +268,7 @@ public sealed class MtpProjectStubsTests : IDisposable
         MtpProjectStubs.TryRemoveLegacyImportAfterFile(_logger, importAfter).Should().BeFalse("nothing left to remove");
     }
 
-    // ── Evaluated-directory cache (issue #1037) ─────────────────────────────
+    // ── Evaluated-directory cache ─────────────────────────────
 
     [Fact]
     public void A_transient_failed_evaluation_is_not_cached_so_a_later_call_retries()
