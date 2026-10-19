@@ -3,7 +3,7 @@
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
-/// One Run-lens tag placement (issue #495): just enough to place the classic CodeLens tag on the
+/// One Run-lens tag placement: just enough to place the classic CodeLens tag on the
 /// right line and know when its content has changed — never triggers a
 /// <c>reqnroll/resolveTestTargets</c> call. Built purely from the symbol tree
 /// (<c>RunTestCodeLensService.GetTagLocationsAsync</c>), unlike <see cref="RunTestTargetEntry"/>,

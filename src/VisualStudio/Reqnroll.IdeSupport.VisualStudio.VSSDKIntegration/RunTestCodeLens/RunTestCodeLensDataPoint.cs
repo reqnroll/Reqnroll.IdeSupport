@@ -17,7 +17,7 @@ using Reqnroll.IdeSupport.Common.Logging;
 namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
-/// A single Run CodeLens data point (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262): resolves the "Run" label and,
+/// A single Run CodeLens data point (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step")): resolves the "Run" label and,
 /// on request, wires the Details popup's Run/Debug actions to VS's own internal Test Explorer
 /// commands via <see cref="TestExplorerCommandIds"/> — no VS-specific run/debug invocation logic is
 /// needed, Test Explorer does the actual work once handed the right <see cref="TestMethodIdentifier"/>.
@@ -26,7 +26,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 /// Runs out-of-process; reaches the LSP bridge via <see cref="ICodeLensCallbackService"/> calling
 /// back into <see cref="RunTestCodeLensCallbackListener"/> (see <see cref="RunTestCodeLensDataPointProvider"/>'s
 /// remarks). <b>Deadlock avoidance</b> follows the exact pattern <c>HookCodeLensDataPoint</c>
-/// documents at length (found live via a captured process dump debugging issue #372): VS blocks the
+/// documents at length (found live via a captured process dump): VS blocks the
 /// UI thread synchronously on <see cref="GetDetailsAsync"/> without pumping the message queue, so
 /// that method must never make its own callback round-trip. <see cref="GetDataAsync"/> — which
 /// always runs first, on a normal async path — pre-fetches and caches the resolved
@@ -98,7 +98,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         // single-element list, matching Test-Runner-Integration-Design ("Scenario Outlines", the "free" case). For individual-methods mode
         // (allowRowTests = false) this naturally becomes a multi-element array, the same shape the
         // Feature/Rule container lens already sends (Test-Runner-Integration-Design, "Scenario Outlines"); the server resolver
-        // supplies every variant method (issue #454). Live confirmation that Test Explorer runs every
+        // supplies every variant method. Live confirmation that Test Explorer runs every
         // element for an individual-methods Outline is still outstanding.
         _cachedMethods = onThisLine
             .Select(e => new TestMethodIdentifier(e.OutputAssemblyPath, $"{e.DeclaringTypeFullName}.{e.MethodName}", e.DeclaringTypeFullName, e.MethodName))
@@ -112,13 +112,12 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
 
         // Pass/fail glyph. Source of truth is the LSP server's TestOutcomeStore, fed by the bundled
         // VSTest logger (implementation plan §4.2) — it sees every result of an IDE-triggered run, including
-        // each Scenario Outline row (issue #702). Only when the store has never heard of a given method
+        // each Scenario Outline row. Only when the store has never heard of a given method
         // (no run yet this session, or a project the logger can't reach — e.g. Microsoft.Testing.Platform)
         // do we fall back to RunTestOutcomeBridge's reflection into VS's own TestStore, which degrades
         // to "no glyph" on any failure. Every cached method is resolved and combined via
-        // AggregateOutcomes — issue #789 live testing found a Feature/Rule "Run Scenarios" lens (issue
-        // #744) always rendered green because only _cachedMethods[0] was ever consulted, so a later
-        // scenario's failure never reached the glyph.
+        // AggregateOutcomes: consulting only _cachedMethods[0] would let a Feature/Rule "Run Scenarios"
+        // lens render green while a later scenario's failure never reached the glyph.
         var perMethodOutcomes = new List<RunTestOutcomeEntry?>(_cachedMethods.Count);
         foreach (var method in _cachedMethods)
             perMethodOutcomes.Add(await ResolveMethodOutcomeAsync(method, token).ConfigureAwait(false));
@@ -178,7 +177,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
         {
             commands.Add(BuildCommand("Run", TestExplorerCommandIds.RunCommandId, methods));
             commands.Add(BuildCommand("Debug", TestExplorerCommandIds.DebugCommandId, methods));
-            // Reveals the test in the Test Explorer tool window (issue #504 follow-up) — the
+            // Reveals the test in the Test Explorer tool window — the
             // supported way to reach the native pass/fail glyph and run history VS's own
             // TestStatusProvider CodeLens already shows on the generated .feature.cs method,
             // without this extension needing the internal ICodeLensTestInformationService itself.
@@ -274,7 +273,7 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
 
     /// <summary>
     /// Resolves one method's outcome: the store first, falling back to <see cref="RunTestOutcomeBridge"/>
-    /// exactly as the pre-#789-fix single-method path did. A stale store entry (see
+    /// exactly as a single-method lens does. A stale store entry (see
     /// <c>RunTestCodeLensCallbackListener.IsStale</c>'s remarks) returns <see langword="null"/> — say
     /// nothing rather than something outdated — without consulting the bridge, which would just repeat
     /// VS's own possibly-stale TestStore value.
@@ -300,9 +299,8 @@ internal sealed class RunTestCodeLensDataPoint : IAsyncCodeLensDataPoint
     /// hierarchical (Feature/Rule/class) node: a run in flight always wins (spinner); otherwise any
     /// failure wins (red); otherwise an unresolved method (not yet run, or stale) means say nothing
     /// rather than a false green; otherwise Skipped beats Passed; Passed only when every method agrees.
-    /// Fixes issue #789 live testing — the Feature/Rule "Run Scenarios" lens (issue #744) previously
-    /// only ever consulted <c>_cachedMethods[0]</c>, so a later scenario's failure never reached the
-    /// glyph and it rendered green regardless.
+    /// Needed because consulting only <c>_cachedMethods[0]</c> would let a Feature/Rule "Run Scenarios"
+    /// lens render green while a later scenario's failure never reached the glyph.
     /// </summary>
     internal static RunTestOutcomeEntry? AggregateOutcomes(IReadOnlyList<RunTestOutcomeEntry?> outcomes)
     {

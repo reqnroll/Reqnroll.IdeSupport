@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
 /// One resolved generated-test-method target for a <c>.feature</c> scenario/Scenario Outline line
-/// (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages"), issue #262), as consumed by the classic Run CodeLens bridge.
+/// (Test-Runner-Integration-Design ("Mapping layer" and "LSP messages")), as consumed by the classic Run CodeLens bridge.
 /// </summary>
 public sealed record RunTestTargetEntry(
     /// <summary>0-based line the target's scenario/Outline header is on.</summary>

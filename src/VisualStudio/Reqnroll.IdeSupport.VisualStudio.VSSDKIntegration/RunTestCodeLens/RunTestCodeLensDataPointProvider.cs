@@ -17,14 +17,14 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 
 /// <summary>
 /// Classic <see cref="IAsyncCodeLensDataPointProvider"/> supplying the Run CodeLens on
-/// Scenario/Scenario Outline lines (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step"), issue #262) — VS's own built-in test CodeLens
+/// Scenario/Scenario Outline lines (Test-Runner-Integration-Design ("Run and Debug per IDE" and "Recognising a failed step")) — VS's own built-in test CodeLens
 /// (<c>TestStatusProvider</c>, `Microsoft.VisualStudio.TestWindow.CodeLens.dll`) is itself a
 /// provider in this exact API family, scoped to <c>CSharp</c>/<c>Basic</c>/<c>C/C++</c>; this is the
 /// same shape, scoped to <c>Gherkin</c> instead. Paired with <see cref="RunTestCodeLensTaggerProvider"/>.
 /// </summary>
 /// <remarks>
 /// Runs out-of-process, in the CodeLens ServiceHub host — same confirmed process boundary as
-/// <c>HookCodeLensDataPointProvider</c> (issue #372). Reaches the LSP bridge via
+/// <c>HookCodeLensDataPointProvider</c>. Reaches the LSP bridge via
 /// <see cref="ICodeLensCallbackService"/> calling back into <see cref="RunTestCodeLensCallbackListener"/>,
 /// not the static <see cref="RunTestCodeLensRedirect"/> (invisible across the process boundary).
 /// </remarks>
@@ -33,7 +33,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.RunTestCodeLens;
 [ContentType(VsWellKnownIds.GherkinContentType)]
 // Lower Priority sorts first (Microsoft.VisualStudio.Utilities.PriorityAttribute) — 100 puts Run
 // ahead of the hook-count lenses (200/300 below), mirroring VS's own TestStatusProvider, which uses
-// Priority(100) so its pass/fail glyph always leads on ordinary C# test methods (issue #504 follow-up).
+// Priority(100) so its pass/fail glyph always leads on ordinary C# test methods.
 [Priority(100)]
 [LocalizedName(typeof(CodeLensResources), nameof(CodeLensResources.RunTestProviderName))]
 internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPointProvider
@@ -46,9 +46,8 @@ internal sealed class RunTestCodeLensDataPointProvider : IAsyncCodeLensDataPoint
     // points run out-of-process (ServiceHub.Host, confirmed live via tasklist for the sibling Hook
     // lens provider), a different PID than devenv.exe, so they can't share the extension's
     // IIdeSupportLogger instance. Shared with RunTestOutcomeBridge rather than each owning a
-    // logger for the same file (issue #748). Added while investigating a live report of the Run
-    // CodeLens rendering but its Details popup never appearing on click — there was no prior
-    // instrumentation anywhere in this OOP data-point path.
+    // logger for the same file. It also logs this OOP data-point path, where a Run
+    // CodeLens that renders but whose Details popup never appears on click would otherwise leave no trace.
     private static IIdeSupportLogger Logger => CodeLensHostLogger.Instance;
 
     [ImportingConstructor]
