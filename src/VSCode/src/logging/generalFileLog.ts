@@ -23,8 +23,8 @@ export function formatLine(level: string, message: string): string {
  *
  * Closes a real gap: VS's SynchronousFileLogger and Rider's ReqnrollDebugLogger both
  * give client diagnostics a durable, general-purpose log file, but VS Code's own general
- * "Reqnroll LSP" output channel previously only reached the Output panel — gone the moment the
- * window closed, unlike its two sibling IDEs.
+ * "Reqnroll LSP" output channel otherwise only reaches the Output panel — gone the moment the
+ * window closes, unlike its two sibling IDEs.
  *
  * trace() is deliberately NOT teed here — that's the LSP wire-message stream, already captured
  * separately by `lspInspectorLogger.ts`'s own file tee in lsp-viewer format.

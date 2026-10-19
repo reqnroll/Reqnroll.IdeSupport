@@ -9,7 +9,7 @@ export interface StepDefinitionItem {
   className?: string;
   methodName?: string;
   bindingExpression?: string;
-  /** `Given`/`When`/`Then`; absent when unknown or from a server predating issue #757. */
+  /** `Given`/`When`/`Then`; absent when unknown or from an older server that does not send it. */
   stepDefinitionType?: string;
   /** Absent when the binding's source file does not exist on this machine — see `isResolved`. */
   sourceFile?: string;

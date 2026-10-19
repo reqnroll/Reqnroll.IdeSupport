@@ -39,7 +39,7 @@ export interface MsbuildExecOptions {
 
 /**
  * Runs one `dotnet msbuild` invocation. Injected into the evaluators so their failure handling
- * (including the issue #1008 buffer-overflow warning) is unit-testable without spawning a real
+ * (including the buffer-overflow warning) is unit-testable without spawning a real
  * child process. Never rejects — a spawn failure (e.g. `dotnet` not on PATH) lands in `error`.
  */
 export type MsbuildExec = (

@@ -15,7 +15,7 @@ import {
 } from './mtpReporterPath';
 
 /**
- * Project-local MTP reporter stubs — issue #741, the VS Code counterpart of the Visual Studio
+ * Project-local MTP reporter stubs — the VS Code counterpart of the Visual Studio
  * extension's `MtpProjectStubs.cs` and the Rider plugin's `MtpProjectStubs.kt`.
  *
  * For every MTP-capable C# project in the workspace that uses Reqnroll (see {@link detectReqnrollUsage}),
@@ -24,8 +24,8 @@ import {
  * through `$(MSBuildProjectExtensionsPath)$(MSBuildProjectFile).*.targets` (the mechanism NuGet's own
  * `obj/<Project>.csproj.nuget.g.targets` uses), and the imported file compiles the reporter's sources
  * into that project's own test assembly. So it reaches every build of that project — including the
- * `dotnet test` C# Dev Kit spawns — without depending on environment-variable inheritance (the
- * never-live-verified risk #2 of the previous `CustomAfterMicrosoftCommonTargets` design) and without
+ * `dotnet test` C# Dev Kit spawns — without depending on environment-variable inheritance (which a
+ * `CustomAfterMicrosoftCommonTargets` design would depend on) and without
  * touching any other project or any global state.
  */
 
@@ -235,7 +235,7 @@ export type StubSyncResult =
  * Brings one project's stub in line with whether it uses Reqnroll: written or refreshed for an
  * MTP-capable Reqnroll project, removed from a restored project that does not use Reqnroll, untouched
  * while the project has no restore output yet. The cheap Reqnroll check runs first, so `isCapable`
- * (which can shell out to `dotnet msbuild`, issue #722) runs only for Reqnroll projects. Never throws.
+ * (which can shell out to `dotnet msbuild`) runs only for Reqnroll projects. Never throws.
  * Exported for testing.
  */
 export async function syncStub(

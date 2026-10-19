@@ -41,7 +41,7 @@ export function sourceForArgs(args: readonly unknown[]): GoToHookSource {
  * to hooks native to the resolved context level, so the picker matches exactly what the lens
  * counted rather than the fuller cumulative list a manual invocation returns.
  *
- * `alwaysShowPicker` (also set only by CodeLens-sourced invocations — issue #372 follow-up) shows
+ * `alwaysShowPicker` (also set only by CodeLens-sourced invocations) shows
  * the `QuickPick` even for a single match, so clicking a lens always lets the user see which hook
  * it refers to rather than jumping straight there; the keybinding/command-palette path keeps the
  * original single-match shortcut.

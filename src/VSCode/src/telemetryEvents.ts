@@ -23,7 +23,7 @@ export const TelemetryEvents = {
   serverRestarted: 'ServerRestarted',
   /** An exception thrown in this extension's own code: the same event the server sends for its exceptions; `ExceptionOrigin = "Client"` marks client-side ones. */
   unhandledException: 'UnhandledException',
-  /** Extension activated (issue #875; VS's `Extension loaded`). */
+  /** Extension activated (VS's `Extension loaded`). */
   extensionLoaded: 'Extension loaded',
   /** First activation ever for this user. */
   extensionInstalled: 'Extension installed',

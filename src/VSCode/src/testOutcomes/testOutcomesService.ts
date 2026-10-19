@@ -33,7 +33,7 @@ import { resolveTestLoggerDirectory } from './testLoggerPath';
  * confirmed VS Code event for "a test run is about to start" that this extension could hook to
  * refresh the runsettings file's content just beforehand — `vscode.tests` exports no such signal,
  * and C# Dev Kit's own run lifecycle isn't observable from outside it (same "no cross-controller"
- * finding recorded in docs/Test-Runner-Integration-Design.md for issue #504). Registration happens
+ * finding recorded in docs/Test-Runner-Integration-Design.md). Registration happens
  * once per extension activation instead (effectively: once per VS Code window session, refreshed on
  * reload/restart) and is merged into a Reqnroll-managed runsettings file that
  * `dotnet.unitTests.runSettingsPath` then points at for the rest of that session. This works safely
@@ -50,15 +50,13 @@ import { resolveTestLoggerDirectory } from './testLoggerPath';
  * setting *value* itself does change, which is enough of a visible side effect on shared state to
  * warrant requiring explicit opt-in rather than defaulting to on.
  *
- * **Opt-out cleanup and per-workspace file naming.** Turning the feature off used to
- * leave the setting pointing at the generated file forever — there was no record of what the
- * setting held before this module first took it over, so there was nothing to restore it to, and
- * the file itself was shared by every open workspace (one fixed name under
- * `resolveApplicationDirectory()`), so two windows on different workspaces stomped on each other's
- * registration (whichever activated last "won", and the other's VSTest runs silently reported into
- * the wrong window). Both are fixed together: the generated file's name is now keyed by a hash of
- * the first workspace folder's path (`generatedFileName` below), so each
- * workspace gets its own file and windows on different workspaces stop colliding, and the setting's
+ * **Opt-out cleanup and per-workspace file naming.** Turning the feature off must not
+ * leave the setting pointing at the generated file forever, and the file must not be shared by
+ * every open workspace (one fixed name under `resolveApplicationDirectory()` would let two windows
+ * on different workspaces stomp on each other's registration: whichever activated last "wins",
+ * and the other's VSTest runs silently report into the wrong window). So the generated file's name
+ * is keyed by a hash of the first workspace folder's path (`generatedFileName` below), giving each
+ * workspace its own file, and the setting's
  * value *before* this module ever wrote to it — including "it was unset" as a distinct state from
  * "it held path X" — is recorded once in `context.workspaceState` (`PRIOR_SETTING_STATE_KEY`) and
  * replayed back when the feature is next found disabled at activation, after which the recorded
@@ -127,7 +125,7 @@ interface RegisterTestRunResponse {
  * this runs unprompted at activation and a popup would be disproportionate to a background,
  * opt-in convenience feature.
  *
- * When the feature is disabled, this now also undoes a prior opt-in: if the setting
+ * When the feature is disabled, this also undoes a prior opt-in: if the setting
  * still points at our generated file, the value recorded before this module first took it over is
  * restored (or the key is cleared entirely if it was unset back then), and the generated file is
  * removed. See {@link cleanupRunSettingsOnOptOut}.
@@ -352,8 +350,7 @@ export interface GetTestOutcomeResponse {
  * response with `found: false`, which means "no run has reported this method yet."
  *
  * Called from `testOutcomeCodeLens.ts`'s read-only outcome lens — see that module's doc comment
- * for why it carries no Run/Debug action (issue #504's history of reverted `.feature`-file UI
- * surfaces).
+ * for why it carries no Run/Debug action (C# Dev Kit already owns running tests).
  */
 export async function getTestOutcome(
   client: LanguageClient,

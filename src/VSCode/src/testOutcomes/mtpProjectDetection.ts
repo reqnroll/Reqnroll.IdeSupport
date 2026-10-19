@@ -10,7 +10,7 @@ import {
 
 /**
  * Ad hoc, narrow detection of whether a project is Microsoft.Testing.Platform (MTP)-capable —
- * issue #715 plan §5.7, ported identically from the Rider plugin's `RunTestRunner.detectDotnetTestMode`
+ * ported identically from the Rider plugin's `RunTestRunner.detectDotnetTestMode`
  * (Kotlin) and the Visual Studio extension's `MtpProjectDetection.cs`. VS Code needs only this one
  * signal (like VS): C# Dev Kit always drives an MTP-capable project through its own testing-platform
  * pipeline regardless of `dotnet test`'s own CLI redirect mode, so the three-way VsTest/MtpCompat/
@@ -20,8 +20,8 @@ import {
  * to the nearest `.git` is the fast path, but it misses a project made MTP-capable only through an
  * *imported* `.props`/`.targets` file — e.g. referencing the full `xunit.v3` runner package pulls in
  * `Microsoft.Testing.Platform.MSBuild`, which sets `IsTestingPlatformApplication=true` from its own
- * props, never appearing as literal text anywhere a scan would look (issue #722, live-verified
- * against `xUnit.v3.MTP.Sample`: this silently fell back to the classic VSTest logger path instead
+ * props, never appearing as literal text anywhere a scan would look (live-verified
+ * against `xUnit.v3.MTP.Sample`: without the fallback below this silently fell back to the classic VSTest logger path instead
  * of the MTP reporter). When the text scan finds nothing but the project text itself already looks
  * like a test project (references `Microsoft.NET.Test.Sdk`), this falls back to a real
  * `dotnet msbuild -getProperty` evaluation — mirroring the VS extension's own fix for the identical

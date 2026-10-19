@@ -17,7 +17,7 @@ import { sanitizeStack } from './stackSanitizer';
  * events are told apart from server ones by `ExceptionOrigin = "Client"` (absent on server events);
  * `IdeClient` (stamped by `sendTelemetryEvent`) says which IDE.
  *
- * Privacy contract (same bar as the server's `UnhandledException`, issues #620/#843): only the
+ * Privacy contract (same bar as the server's `UnhandledException`): only the
  * exception type name, a scrubbed (quoted text, URLs and paths removed) and 128-character-capped message, a closed `Source`
  * and a sanitized `StackFrames` are sent. `StackFrames` names only this extension's own functions with
  * their bundle line numbers, no paths or file names (see `stackSanitizer.ts`); it rides on each event that is sent, and

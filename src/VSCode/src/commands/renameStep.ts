@@ -105,11 +105,11 @@ export function selectRenameTarget(
 /**
  * Reports whether this client applied the `WorkspaceEdit` returned from `textDocument/rename`, so
  * the server can commit — or drop — the binding-registry and match-cache updates it staged for that
- * rename (issue #671, R3; see `RenamePostApplyCoordinator`).
+ * rename (see `RenamePostApplyCoordinator`).
  *
- * The server used to commit those updates unconditionally for every non-Visual-Studio client, on
- * the assumption the client would apply what it was handed. Rider disproved that, and
- * the same exposure exists here now that edits are version-stamped (R2) and VS Code rejects ones
+ * The server must not commit those updates unconditionally for non-Visual-Studio clients: a client
+ * may not apply what it was handed (Rider does not always), and
+ * the same exposure exists here now that edits are version-stamped and VS Code rejects ones
  * computed against a superseded document version.
  *
  * Failures are swallowed deliberately: a dropped confirmation costs a stale registry entry that the
@@ -148,8 +148,8 @@ export function reportRenameApplied(
  * live, that case already selects the whole placeholder, the correct/intended default.
  *
  * Rather than changing what `Placeholder` contains (which would fix the highlight at the cost of
- * exposing raw parameter values in the common, already-correct no-selection case — see the design
- * discussion on issue #456), collapse the pre-existing selection to the cursor right before
+ * exposing raw parameter values in the common, already-correct no-selection case), collapse the
+ * pre-existing selection to the cursor right before
  * `editor.action.rename` runs, so VS Code takes its own safe "no selection" path for a `.feature`
  * step specifically. A no-op for `.cs` files (and when there's no active selection), where the
  * preserved-selection behavior is already correct.
@@ -219,14 +219,15 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
     // Unlike `renameStepFromCSharp`, this path hands the edit back to VS Code, which applies it
     // itself — there is no `applyEdit` boolean to report back.
     //
-    // Now that edits carry real document versions (R2), VS Code rejects one computed against a
+    // Edits carry real document versions, so VS Code rejects one computed against a
     // superseded version, so "we produced an edit" is no longer the same as "it was applied".
     // `TextDocument.version` is the very counter `vscode-languageclient` reports to the server as
     // the LSP document version, so comparing it across the request reproduces the decision VS Code
-    // is about to make. Reporting `true` regardless would reintroduce #670 on this path.
+    // is about to make. Reporting `true` regardless would let the server commit registry updates for an edit that was
+    // never applied.
     //
     // Covers the invoked document only — the one whose version the user can plausibly move during
-    // the round trip. That matches the guard Rider applies (R4) and the window it protects: the
+    // the round trip. That matches the guard Rider applies and the window it protects: the
     // server computes the edit inside a Serial-dispatched request, so any edit made while the
     // rename UI was open is already reflected in the offsets.
     provideRenameEdits: async (document, position, newName, token, next) => {
@@ -257,7 +258,7 @@ export function createRenameMiddleware(getClient: () => LanguageClient | undefin
 /**
  * Splits a `reqnroll/renameTargets` label of the form `"Given step text"` at the first space,
  * returning everything after the keyword prefix — the fallback source text for the rename input
- * box when `RenameTargetItem.expression` is empty (method-name-style bindings, issue #344).
+ * box when `RenameTargetItem.expression` is empty (method-name-style bindings).
  * Mirrors `RenameStepLabelParser.ExtractStepTextFromLabel` in the Visual Studio extension.
  */
 export function extractStepTextFromLabel(label: string): string {
