@@ -16,7 +16,7 @@ public static class ProcessHelper
     /// <param name="logger">
     /// Optional sink for best-effort failures that don't affect the returned result (e.g. a failed
     /// attempt to kill an already-timed-out process) — falls back to <see cref="Debug.WriteLine(object)"/>
-    /// when omitted, which is invisible outside a debugger and left no trace at all before (issue #626).
+    /// when omitted, which is invisible outside a debugger and left no trace at all before.
     /// </param>
     /// <returns>The captured exit code, standard output, and standard error, or a failure result if <paramref name="throwException"/> is false and an error occurred.</returns>
     public static RunProcessResult RunProcess(string workingDirectory, string executablePath,
@@ -132,7 +132,7 @@ public static class ProcessHelper
         public int ExitCode { get; }
         /// <summary>
         /// The OS process ID the executable ran under, or <see langword="null"/> if the process
-        /// never started (issue #637) — e.g. lets a caller point a reader at the matching
+        /// never started — e.g. lets a caller point a reader at the matching
         /// <c>reqnroll-*-connector-*-{pid}.log</c> file for a Connector invocation.
         /// </summary>
         public int? ProcessId { get; }

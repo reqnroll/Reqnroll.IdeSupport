@@ -78,7 +78,7 @@ public static class ServiceCollectionExtensions
             // pipeline (SetMinimumLevel, AddLanguageProtocolLogging, ProtocolLoggerProvider) in this
             // same IServiceCollection, before this method runs. A later AddSingleton<ILoggerFactory>
             // here would win the last-registration-wins resolution and silently replace it — which
-            // is exactly what happened here originally: OmniSharp-internal ILogger<T> messages leaked
+            // makes OmniSharp-internal ILogger<T> messages leak
             // into the app-level "server" log file gated by --log-level instead of their own
             // "protocol" file gated by the independent --protocol-log-level. Any new code that wants
             // ILogger<T> gets the correctly-configured one for free from that existing pipeline.
@@ -91,7 +91,7 @@ public static class ServiceCollectionExtensions
             // the debug log is unconfigured the sink is a no-op and it simply forwards.
             .AddSingleton<ITelemetryDebugLog>(_ => TelemetryDebugLog.FromEnvironment())
             .AddSingleton<LspTelemetryService>()
-            // Outermost decorator stamps the canonical client identity (#844) so the debug-log
+            // Outermost decorator stamps the canonical client identity so the debug-log
             // mirror below records exactly what is transmitted, identity included.
             .AddSingleton<ILspTelemetryService>(sp => new IdentityStampingLspTelemetryService(
                 new FileLoggingLspTelemetryService(
@@ -101,14 +101,13 @@ public static class ServiceCollectionExtensions
             // ITelemetryService is the VS-host-lifecycle contract; LspErrorTelemetryService only
             // meaningfully implements MonitorError (forwarded to ILspTelemetryService as an "UnhandledException"
             // telemetry/event) — every other member is a no-op (VS/host-UI-only concerns the server
-            // has no equivalent of). Previously registered as NullLspTelemetryService, which silently
-            // dropped LSP.Core exceptions (e.g. Gherkin parse errors) — issue #255.
+            // has no equivalent of). A NullLspTelemetryService here would silently
+            // drop LSP.Core exceptions (e.g. Gherkin parse errors).
             .AddSingleton<ITelemetryService>(sp => new LspErrorTelemetryService(
                 sp.GetRequiredService<ILspTelemetryService>()))
             // IErrorTelemetryService is the actual LSP.Core-facing contract (IdeSupportGherkinParser,
             // IdeSupportTagParser, CompletionContextResolver depend on this narrow interface, not the
-            // full ITelemetryService above) — same singleton, resolved via interface inheritance
-            // (issue #255/#259's ISP split).
+            // full ITelemetryService above) — same singleton, resolved via interface inheritance.
             .AddSingleton<IErrorTelemetryService>(sp => sp.GetRequiredService<ITelemetryService>())
             .AddSingleton<IIdeSupportConfigurationProvider, ProjectSystemIdeSupportConfigurationProvider>()
             .AddSingleton<IEditorConfigOptionsProvider>(sp =>
@@ -117,7 +116,7 @@ public static class ServiceCollectionExtensions
             // PERF lines to the log and emits sampled PerfSample telemetry (default 5%;
             // REQNROLL_PERF_TELEMETRY_SAMPLE overrides the rate, 0 disables). Singleton so the sampler's RNG is shared across handlers.
             .AddSingleton<IPerformanceTelemetrySampler>(sp => PerformanceTelemetrySampler.FromEnvironment(logger: sp.GetRequiredService<IIdeSupportLogger>()))
-            // Feature-usage counting (issue #582): in-memory counters incremented by the recorder
+            // Feature-usage counting: in-memory counters incremented by the recorder
             // below for a closed set of discrete commands, drained and emitted periodically by
             // FeatureUsageFlushService instead of per-invocation telemetry. Singleton so counts
             // accumulate across the whole session.
@@ -127,7 +126,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IIdeSupportLogger>(),
                 sp.GetRequiredService<ILspTelemetryService>(),
                 FeatureUsageFlushService.ResolveIntervalFromEnvironment()))
-            // Server lifecycle telemetry (issue #845): ServerSessionStarted after the handshake,
+            // Server lifecycle telemetry: ServerSessionStarted after the handshake,
             // best-effort ServerSessionEnded at shutdown. Singleton so the session clock spans the process.
             .AddSingleton(sp => new ServerSessionTelemetry(
                 sp.GetRequiredService<ILspTelemetryService>(),
@@ -160,13 +159,13 @@ public static class ServiceCollectionExtensions
             // each feature file is resolved against only its own project's bindings.
             .AddSingleton<BindingRegistryProviderRouter>()
             .AddSingleton<IProjectBindingRegistryLookup>(sp => sp.GetRequiredService<BindingRegistryProviderRouter>())
-            // Per-project tag index feeding tag completion (issue #828): tags in use across the
+            // Per-project tag index feeding tag completion: tags in use across the
             // owning project's feature files, kept current from open buffers + disk, cached per
             // file and re-validated on access (no event wiring needed).
             .AddSingleton<IFeatureTagIndex, FeatureTagIndex>()
             // Roslyn/C# source-level binding discovery for .cs edits.
             .AddSingleton<ICSharpBindingDiscoveryService, CSharpBindingDiscoveryService>()
-            // Scenario -> generated-test-method mapping layer (Test-Runner-Integration-Design ("Mapping layer"), issue #262).
+            // Scenario -> generated-test-method mapping layer (Test-Runner-Integration-Design ("Mapping layer")).
             .AddSingleton<IScenarioTestTargetResolver, ScenarioTestTargetResolver>()
             .AddSingleton<IIdeSupportTagParser, IdeSupportTagParser>()
             // Debounces the closed-feature-file rescan triggered by an incremental Roslyn patch
@@ -178,7 +177,7 @@ public static class ServiceCollectionExtensions
             // can't debounce anything.
             .AddSingleton<IRefreshDebouncer, RefreshDebouncer>()
             // Gets didOpen/didChange's own reparse off the shared Serial dispatch lane while
-            // preserving correctness for pull handlers with no refresh capability (issue #471) —
+            // preserving correctness for pull handlers with no refresh capability —
             // see IParseCoordinator's remarks. Singleton for the same reason as
             // IRefreshDebouncer above: the per-URI pending-work state must outlive any single
             // transient handler instance.
@@ -193,7 +192,7 @@ public static class ServiceCollectionExtensions
         return services
             .AddSingleton<IDocumentBufferService, DocumentBufferService>()
             .AddSingleton<ICSharpFileTextCache, CSharpFileTextCache>()
-            // Shared cache of parsed C# syntax trees, keyed by file path (issue #491) — avoids
+            // Shared cache of parsed C# syntax trees, keyed by file path — avoids
             // re-parsing the same unchanged file (e.g. a generated <feature>.feature.cs code-behind,
             // or a step-definition file with several attributes on one method) once per caller within
             // the same logical operation. Consumed by ScenarioTestTargetResolver and

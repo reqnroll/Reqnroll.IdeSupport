@@ -11,7 +11,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Hosting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Identity has two sources (issue #709).</b> The primary source is the <c>--ide</c> process
+/// <b>Identity has two sources.</b> The primary source is the <c>--ide</c> process
 /// argument each IDE's glue component passes when spawning the server — it is available before the
 /// client connects, which is why the log file prefix and the capability decisions in
 /// <see cref="Program.ConfigureServer"/> can depend on it. The secondary source is
@@ -40,7 +40,7 @@ public sealed class ClientIdeContext
     }
 
     /// <summary>
-    /// The client's own per-IDE-session id from <c>--client-session-id</c> (issue #1199), or
+    /// The client's own per-IDE-session id from <c>--client-session-id</c>, or
     /// <see langword="null"/> when the client passed none or passed something that is not a GUID.
     /// Unlike the server's own <c>SessionId</c> it survives a server restart, and clients stamp it on the
     /// events they send themselves, so a client exception joins to <c>ServerSessionStarted</c>.
@@ -120,8 +120,8 @@ public sealed class ClientIdeContext
     /// <summary>
     /// <c>InitializeParams.ClientInfo.Version</c> as self-reported by the client, or
     /// <see langword="null"/> when absent. Passed to <see cref="IdeBehavioursResolver"/> so a behaviour can be
-    /// narrowed by version, though no rule does today (issue #709 deliberately does not narrow the VS
-    /// semantic-tokens workaround by version); also logged so the log carries the exact client build.
+    /// narrowed by version, though no rule does today (the VS
+    /// semantic-tokens workaround is deliberately not narrowed by version); also logged so the log carries the exact client build.
     /// </summary>
     public string? ClientVersion { get; private set; }
 
