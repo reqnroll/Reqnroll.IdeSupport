@@ -18,7 +18,7 @@ public record ConnectorOptions(bool DebugMode)
             commandArgsList.RemoveAt(debugArgIndex);
         }
 
-        // --file-log (issue #637) is only read by Program.cs, directly off the raw args, before
+        // --file-log is only read by Program.cs, directly off the raw args, before
         // this method ever runs — the logger has to exist before parsing does, so it can log a
         // parse failure. It's stripped here purely so it doesn't get misread as a positional
         // argument (assembly/config path) below, the same reason --debug is stripped above.

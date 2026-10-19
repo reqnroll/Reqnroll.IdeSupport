@@ -9,7 +9,7 @@ public abstract class ConnectorResult
     /// <summary>Gets or sets the connector type.</summary>
     public string ConnectorType { get; set; }
     /// <summary>
-    /// The OS process ID of the Connector process that produced this result (issue #637) — set by
+    /// The OS process ID of the Connector process that produced this result — set by
     /// the LSP server after the process exits, from <c>ProcessHelper.RunProcessResult.ProcessId</c>,
     /// not part of the connector's own JSON output (same pattern as <see cref="ConnectorType"/>
     /// above, which the server also overwrites after deserializing). Lets a reader of the server's

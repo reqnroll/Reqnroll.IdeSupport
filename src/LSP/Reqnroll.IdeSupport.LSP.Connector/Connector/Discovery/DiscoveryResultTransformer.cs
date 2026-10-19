@@ -81,7 +81,7 @@ internal class DiscoveryResultTransformer
             // a missing expression into a regex-derived fallback here. A null Expression is the
             // signal that this is a method-name-style binding (no explicit attribute string);
             // ProjectStepDefinitionBinding on the server already derives the same fallback text
-            // from Regex when needed for matching, and issue #344's display fix depends on this
+            // from Regex when needed for matching, and the UI's display of method-name-style bindings depends on this
             // signal surviving the wire so ProjectStepDefinitionBinding.SpecifiedExpression is
             // null for these bindings the same way syntax-based (Roslyn) discovery already leaves
             // it null.

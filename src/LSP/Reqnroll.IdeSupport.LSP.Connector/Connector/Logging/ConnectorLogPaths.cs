@@ -2,7 +2,7 @@ namespace ReqnrollConnector.Logging;
 
 /// <summary>
 /// Resolves the per-OS Reqnroll <c>logs</c> directory and prunes stale log files in it, for
-/// <see cref="FileLogger"/> (issue #628, issue #726).
+/// <see cref="FileLogger"/>.
 /// </summary>
 /// <remarks>
 /// This deliberately duplicates <c>Reqnroll.IdeSupport.Common.Logging.ReqnrollLogPaths</c> rather
