@@ -7,7 +7,7 @@ public class FileLoggerTests
     [Fact]
     public void Info_only_logs_never_touch_disk_by_default()
     {
-        // The core of issue #637: a routine, uneventful discovery run leaves no file behind.
+        // Regression guard: a routine, uneventful discovery run leaves no file behind.
         var logger = new FileLogger(alwaysWrite: false, "test-ide", $"quiet-{Guid.NewGuid():N}");
 
         logger.Log(new Log(LogLevel.Info, "loading assembly"));

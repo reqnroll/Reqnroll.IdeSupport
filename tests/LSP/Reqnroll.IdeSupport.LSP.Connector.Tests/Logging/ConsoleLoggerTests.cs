@@ -22,8 +22,8 @@ public class ConsoleLoggerTests : IDisposable
     {
         // Critical invariant: Runner.PrintResult sends the discovery JSON result to the LSP server
         // via Info(), which the server parses off this process's captured stdout - it must never
-        // gain a preamble or any other alteration (issue #628 added exception support to Error,
-        // not Info, precisely to avoid touching this channel).
+        // gain a preamble or any other alteration (exception support lives on Error, not Info,
+        // precisely to avoid touching this channel).
         var sut = new ConsoleLogger();
         var stdout = new StringWriter();
         Console.SetOut(stdout);
