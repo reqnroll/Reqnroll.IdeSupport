@@ -39,7 +39,7 @@ class LspUriUtilTest {
         assertNull(lspUriToLocalPath(""))
     }
 
-    // localPathToLspUri (#909): must equal what Rider's LspServerDescriptor.getFileUri sends for didOpen.
+    // localPathToLspUri: must equal what Rider's LspServerDescriptor.getFileUri sends for didOpen.
 
     @Test
     fun `builds a three-slash uri for a unix path`() {

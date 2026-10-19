@@ -41,12 +41,12 @@ class GoToHooksRunnerTest {
         )
     }
 
-    // Regression tests for issue #372 follow-up: clicking a hook-count CodeVision lens should
+    // Regression tests: clicking a hook-count CodeVision lens should
     // always show the picker, even for a single match, so the user can see which hook it refers
     // to rather than being jumped straight there. The manual "Go to Hooks" action keeps the
     // direct-navigate shortcut for a single match.
 
-    // Issue #861: the entry point reported as the closed Source enum shared with VS and VS Code.
+    // The entry point reported as the closed Source enum shared with VS and VS Code.
 
     // The property bag the runner transmits per entry point, pinned to the literals shared with
     // VS and VS Code: the action maps its event place, the lens passes CodeLens.

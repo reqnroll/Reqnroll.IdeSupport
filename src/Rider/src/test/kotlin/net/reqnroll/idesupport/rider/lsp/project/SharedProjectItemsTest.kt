@@ -8,7 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-// Issue #736. The .projitems/.csproj content below uses backslashes on purpose — that is how
+// The .projitems/.csproj content below uses backslashes on purpose — that is how
 // Visual Studio writes them — so these also prove the separator normalization on Linux runners.
 class SharedProjectItemsTest {
     private val root: File = Files.createTempDirectory("reqnroll-736-").toFile()

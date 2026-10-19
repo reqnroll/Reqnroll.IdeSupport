@@ -84,7 +84,7 @@ class RiderTelemetryTransmitterTest {
 
     @Test
     fun `buildEnvelope carries a FeatureUsageSummary counts string as an escaped JSON string value`() {
-        // The server sends per-kind counts as a compact JSON string (#582) because Rider's
+        // The server sends per-kind counts as a compact JSON string because Rider's
         // value.toString() would render a nested Gson map as {key=1.0}.
         val json = RiderTelemetryTransmitter.buildEnvelope(
             eventName = "FeatureUsageSummary",

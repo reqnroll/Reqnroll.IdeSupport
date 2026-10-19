@@ -61,7 +61,7 @@ class FindUnusedStepDefinitionsActionTest {
         )
     }
 
-    // ── Unresolvable source paths (issue #540) ──────────────────────────────────
+    // ── Unresolvable source paths ──────────────────────────────────
 
     @Test
     fun `renderLabel marks an entry whose source is not on this machine`() {
@@ -88,7 +88,7 @@ class FindUnusedStepDefinitionsActionTest {
 
     @Test
     fun `renderLabel leaves a resolved entry unmarked`() {
-        // Also covers back-compat: a response from a server predating issue #540 omits isResolved,
+        // Also covers back-compat: a response from an older server omits isResolved,
         // and the data class default keeps those rows rendering exactly as before.
         val item = UnusedStepDefinitionItem(
             className = "CalculatorSteps",
@@ -102,7 +102,7 @@ class FindUnusedStepDefinitionsActionTest {
         )
     }
 
-    // ── Binding attribute (issue #757) ──────────────────────────────────────────
+    // ── Binding attribute ──────────────────────────────────────────
 
     @Test
     fun `renderAttribute shows the attribute with its expression`() {

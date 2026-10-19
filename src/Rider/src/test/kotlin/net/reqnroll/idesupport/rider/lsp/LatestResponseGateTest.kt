@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Issue #990: refreshes run their LSP request on a pooled thread and render on the EDT, so two
+ * Refreshes run their LSP request on a pooled thread and render on the EDT, so two
  * overlapping refreshes can complete in either order. These tests drive both "threads" by hand,
  * so the completion order is chosen by the test rather than by the scheduler.
  */

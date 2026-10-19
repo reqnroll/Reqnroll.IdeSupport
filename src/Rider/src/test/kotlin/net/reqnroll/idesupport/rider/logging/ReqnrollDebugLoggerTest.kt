@@ -14,7 +14,7 @@ class ReqnrollDebugLoggerTest {
         // Instant has no timezone of its own; formatTimestamp must render it in UTC even if the
         // JVM's default timezone (java.util.TimeZone.getDefault) is something else entirely —
         // otherwise a log collected from a machine in an unknown timezone couldn't be correlated
-        // with the UTC timestamps the LSP server and VS extension write (issue #625).
+        // with the UTC timestamps the LSP server and VS extension write.
         assertEquals(
             "2026-09-06T14:02:11.123Z",
             ReqnrollDebugLogger.formatTimestamp(Instant.parse("2026-09-06T14:02:11.123Z")),
@@ -23,8 +23,8 @@ class ReqnrollDebugLoggerTest {
 
     @Test
     fun `formatLine pads the level to a fixed width and matches the dotnet side's shape`() {
-        // Portable subset of Reqnroll.IdeSupport.Common.Logging.LogLineFormatter.FormatPreamble
-        // (issue #626): "<UTC timestamp> [<level padded to 7>] <message>" - no thread id, no
+        // Portable subset of Reqnroll.IdeSupport.Common.Logging.LogLineFormatter.FormatPreamble:
+        // "<UTC timestamp> [<level padded to 7>] <message>" - no thread id, no
         // source/caller segment (see the class doc comment for why those don't port here).
         assertEquals(
             "2026-09-06T14:02:11.123Z [Info   ] hello",
@@ -88,7 +88,7 @@ class ReqnrollDebugLoggerTest {
         )
     }
 
-    // Console-sink dispatch (issue #662) — the "Reqnroll" tool window's own mirroring mechanism.
+    // Console-sink dispatch — the "Reqnroll" tool window's own mirroring mechanism.
     // These exercise the real info/warn/error entry points (unlike the pure-function tests above)
     // since the sink dispatch happens inside `log()`; the file write itself stays best-effort/
     // exception-swallowed either way, so this doesn't risk failing the test on a read-only CI
@@ -126,7 +126,7 @@ class ReqnrollDebugLoggerTest {
     @Test
     fun `verbose (the per-request-chatter level) never reaches a registered console sink`() {
         // The threshold this asserts is fixed, not configurable — see verbose()'s doc comment
-        // for why (issue #662, matching VsOutputPaneLogger's hardcoded TraceLevel.Info on the VS
+        // for why (matching VsOutputPaneLogger's hardcoded TraceLevel.Info on the VS
         // side): Verbose is where folding/inlay-hints/per-viewport-CodeLens/etc. log,
         // and none of that belongs in the curated console.
         val sink = RecordingSink()
