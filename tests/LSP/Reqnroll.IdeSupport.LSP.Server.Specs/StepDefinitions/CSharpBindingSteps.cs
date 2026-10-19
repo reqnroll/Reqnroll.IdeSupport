@@ -103,7 +103,7 @@ public sealed class CSharpBindingSteps
     /// cold-start rationale as <see cref="ThenTheFeatureStepIsReportedAsBoundWithin"/>, for a
     /// scenario that gates on a step becoming *unbound* (e.g. a step the connector's fixture
     /// deliberately doesn't define, used as a positive signal that connector discovery has
-    /// landed - issue #817) rather than bound.
+    /// landed) rather than bound.
     /// </summary>
     [Then(@"the feature step ""([^""]*)"" is reported as unbound within (\d+) seconds")]
     public async Task ThenTheFeatureStepIsReportedAsUnboundWithin(string stepText, int seconds)

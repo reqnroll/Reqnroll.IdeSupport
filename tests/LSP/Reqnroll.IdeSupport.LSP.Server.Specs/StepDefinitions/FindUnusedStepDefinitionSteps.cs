@@ -44,7 +44,7 @@ public sealed class FindUnusedStepDefinitionSteps
     /// Asserts which project an unused row is credited to. The same binding legitimately appears
     /// in more than one registry — a linked <c>.cs</c>, or a referenced assembly's bindings picked
     /// up by the referencing project's own discovery — and the rows are deduplicated to one, so
-    /// which project survives is a deliberate rule (issue #547) rather than enumeration order.
+    /// which project survives is a deliberate rule rather than enumeration order.
     /// </summary>
     [Then(@"the unused step definition ""([^""]*)"" is attributed to project ""([^""]*)""")]
     public void ThenTheUnusedStepDefinitionIsAttributedToProject(string expression, string projectName)

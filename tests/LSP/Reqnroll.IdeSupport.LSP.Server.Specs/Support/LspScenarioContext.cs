@@ -52,7 +52,7 @@ public sealed class LspScenarioContext
     public TextEdit[]? LastFormattingEdits { get; set; }
 
     /// <summary>
-    /// The exception a rejected formatting request threw client-side (issue #1132): the server's
+    /// The exception a rejected formatting request threw client-side: the server's
     /// <c>EditRejected</c> error response, surfaced by OmniSharp's client as an exception.
     /// </summary>
     public Exception? LastFormattingError { get; set; }
@@ -68,7 +68,7 @@ public sealed class LspScenarioContext
     public RenameTargetsResponse? LastRenameTargets { get; set; }
     public OmniSharp.Extensions.LanguageServer.Protocol.Models.RangeOrPlaceholderRange? LastPrepareRenameRange { get; set; }
     /// <summary>
-    /// The exception a failed <c>textDocument/rename</c> request threw client-side (issue #650):
+    /// The exception a failed <c>textDocument/rename</c> request threw client-side:
     /// OmniSharp's client turns the server's <c>RpcErrorException</c>/<c>ResponseError</c> into a
     /// <see cref="OmniSharp.Extensions.JsonRpc.Server.JsonRpcException"/>, not a null result.
     /// </summary>
@@ -151,7 +151,7 @@ public sealed class LspScenarioContext
     }
 
     /// <summary>
-    /// Looks up a project by the same string a step used to name it — either the workspace-relative
+    /// Looks up a project by the same string a step names it — either the workspace-relative
     /// path it was registered with, or a bare file name when that name identifies exactly one
     /// registered project. A project a scenario never registered resolves to one rooted at the
     /// workspace folder, which is what keeps single-project scenarios — where
@@ -189,8 +189,8 @@ public sealed class LspScenarioContext
     /// <param name="PackageIds">
     /// NuGet package ids announced with the project. Only the ids matter to the specs (they feed
     /// <c>ProjectSettingsProvider</c>'s Reqnroll/test-framework detection), so versions are left
-    /// empty. The test-target resolver no longer reads them at all — it counts row attributes in
-    /// the generated code-behind directly (issue #455).
+    /// empty. The test-target resolver does not read them — it counts row attributes in
+    /// the generated code-behind directly.
     /// </param>
     public sealed record SpecProject(
         string ProjectFile,

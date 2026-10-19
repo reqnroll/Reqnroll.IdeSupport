@@ -38,7 +38,7 @@ public sealed class RenameStepsSteps
         catch (Exception ex)
         {
             // A failed rename now surfaces client-side as the JSON-RPC error response the server
-            // threw (RpcErrorException), not as a null result (issue #650).
+            // threw (RpcErrorException), not as a null result.
             _ctx.LastRenameError = ex;
         }
     }
@@ -145,7 +145,7 @@ public sealed class RenameStepsSteps
             $"a text edit for '{fileName}' should contain '{expectedText}'");
     }
 
-    // ── Then: change-annotation assertions (issue #70) ─────────────────────────
+    // ── Then: change-annotation assertions ─────────────────────────
 
     [Then("the workspace edit uses annotated document changes")]
     public void ThenTheWorkspaceEditUsesAnnotatedDocumentChanges()

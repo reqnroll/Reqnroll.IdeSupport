@@ -80,8 +80,8 @@ public sealed class CompletionSteps
             $"a completion with label '{label}' should not be present");
     }
 
-    // Issue #561: a keyword completion's textEdit used to replace the whole trimmed line, so
-    // accepting it deleted any text the user had already typed to the right of the caret (e.g. a
+    // Regression guard: a keyword completion's textEdit must not replace the whole trimmed line, or
+    // accepting it deletes any text the user had already typed to the right of the caret (e.g. a
     // scenario title). Every returned item's replacement range must stop at the requested column.
     [Then(@"every completion's textEdit range does not extend past column (\d+)")]
     public void ThenEveryCompletionsTextEditRangeDoesNotExtendPastColumn(int column)
