@@ -115,7 +115,7 @@ public class GherkinRangeTests
         }
     }
 
-    // Mirrors ResolveOffset's pre-#471 implementation, kept here only as an independent oracle
+    // Mirrors ResolveOffset's linear-scan semantics, kept here only as an independent oracle
     // for the test above -- not the production code path.
     private static (int Line, int Character) ReferenceLinearScan(IGherkinTextSnapshot snapshot, int offset)
     {

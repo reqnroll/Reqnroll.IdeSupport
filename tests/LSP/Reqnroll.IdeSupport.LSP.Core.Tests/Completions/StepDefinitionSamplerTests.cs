@@ -5,7 +5,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Completions;
 public class StepDefinitionSamplerTests
 {
     // specifiedExpression mirrors regex here so these bindings represent an authored expression
-    // (issue #344 gave SpecifiedExpression == null a real meaning: "method-name-style binding" —
+    // (SpecifiedExpression == null means "method-name-style binding" —
     // see the dedicated test below for that case).
     private static ProjectStepDefinitionBinding Binding(string regex, params string[] parameterTypes)
         => new(ScenarioBlock.Given,
@@ -84,7 +84,7 @@ public class StepDefinitionSamplerTests
     [Fact]
     public void Falls_back_to_empty_for_method_name_style_bindings()
     {
-        // Issue #344: a method-name-style binding (no explicit attribute expression) derives a
+        // A method-name-style binding (no explicit attribute expression) derives a
         // regex from the method name/parameters that's correct for matching but not valid Gherkin
         // step text — sampling it would offer/insert garbage, so it's short-circuited instead.
         // (In practice CompletionService filters these out before ever calling this method — see

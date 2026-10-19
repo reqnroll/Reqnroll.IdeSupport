@@ -102,7 +102,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
 
     /// <summary>Wraps a real <see cref="CSharpSyntaxTreeCache"/>, counting how many times a
     /// disk-mode parse was actually requested — used to confirm <see cref="ScenarioTestTargetResolver"/>
-    /// goes through the shared cache rather than parsing the generated file itself (issue #491).</summary>
+    /// goes through the shared cache rather than parsing the generated file itself.</summary>
     private sealed class CountingSyntaxTreeCache : ICSharpSyntaxTreeCache
     {
         private readonly CSharpSyntaxTreeCache _inner = new();
@@ -124,9 +124,9 @@ public class ScenarioTestTargetResolverTests : IDisposable
     [Fact]
     public void Resolving_the_same_file_twice_reuses_the_cached_parse_instead_of_re_reading_disk()
     {
-        // Regression coverage for issue #491: RunTestCodeLensService calls Resolve once per
-        // scenario/row in a file, which used to re-read and re-parse the same generated .feature.cs
-        // from scratch on every single call. The resolver must go through the shared cache so a
+        // Regression guard: RunTestCodeLensService calls Resolve once per
+        // scenario/row in a file, so re-reading and re-parsing the same generated .feature.cs
+        // from scratch on every call is too costly. The resolver must go through the shared cache so a
         // second resolution against the same, unchanged file is a cache hit.
         var text = "Feature: Calculator\nScenario: Add two numbers\n    Given a step\n";
         var tags = ParseTags(text);
@@ -259,8 +259,8 @@ public class ScenarioTestTargetResolverTests : IDisposable
     [InlineData("Xunit.InlineData")]  // namespace-qualified form
     public void RowTests_are_detected_from_the_generated_attributes_alone_regardless_of_provider(string attributeName)
     {
-        // Issue #455: the resolver used to pick one row attribute to count based on the project's
-        // direct package references, so a row-tests Outline whose framework package arrived
+        // Regression guard: the resolver must not pick one row attribute to count based on the project's
+        // direct package references, or a row-tests Outline whose framework package arrived
         // transitively (or wasn't announced at all) collapsed to a single unparameterized target.
         // The generated code-behind is the ground truth — any known provider's row attribute counts.
         var tags = ParseTags(RowTestsFeatureText);
@@ -650,7 +650,7 @@ public class ScenarioTestTargetResolverTests : IDisposable
         result[0].MethodName.Should().Be("AddTwoNumbers");
     }
 
-    // ── ResolveAll ("Run scenarios" on a Feature/Rule block — issue #744) ──────────
+    // ── ResolveAll ("Run scenarios" on a Feature/Rule block) ──────────
 
     private static GherkinRange RangeOfTag(IReadOnlyCollection<IdeSupportTag> tags, string type) =>
         tags.First(t => t.Type == type).Range;

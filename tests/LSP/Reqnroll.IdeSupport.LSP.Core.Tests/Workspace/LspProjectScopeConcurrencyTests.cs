@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Workspace;
 
 /// <summary>
-/// Issue #568: <see cref="LspProjectScope.AddOrUpdateProject"/> already documents the race it
+/// <see cref="LspProjectScope.AddOrUpdateProject"/> already documents the race it
 /// guards against — two concurrent calls for the same project both seeing <c>TryGetValue</c>
 /// return <see langword="false"/>, constructing separate <see cref="LspReqnrollProject"/> instances,
 /// with the losing one's background work never disposed — and fixed it with

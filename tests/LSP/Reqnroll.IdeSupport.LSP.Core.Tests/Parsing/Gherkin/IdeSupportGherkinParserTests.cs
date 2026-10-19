@@ -4,7 +4,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Parsing.Gherkin;
 public class IdeSupportGherkinParserTests
 {
     // The parser must advertise TagLine on a blank / whitespace-only / tag-only line sitting above
-    // a Feature, Rule or Scenario line: tag completion (issue #828) relies on it, so a missing
+    // a Feature, Rule or Scenario line: tag completion relies on it, so a missing
     // popup there is a client-trigger problem, never a parser-state one.
     [Theory]
     [InlineData("\nFeature: F\n", 0)]
@@ -92,10 +92,10 @@ Scenario: Add two numbers
         result.Should().BeFalse();
     }
 
-    // Regression tests for issue #955. `_astBuilder` is assigned in Parse() only after the dialect
+    // Regression guard: an unsupported default feature language must not break error recovery. `_astBuilder` is assigned in Parse() only after the dialect
     // provider / TokenMatcher are constructed, and the error-recovery paths re-enter the builder
     // (GetResultOfInvalid -> GetResult) without guarding it. With an unsupported configured default
-    // language the dialect resolution fails at parse time, and the unguarded recovery call used to
+    // language the dialect resolution fails at parse time, and an unguarded recovery call would
     // let a non-parser exception ("Stack empty" / NullReferenceException) escape
     // ParseAndCollectErrors; callers swallowed it, so the user saw an empty result instead of a
     // reported parser error.

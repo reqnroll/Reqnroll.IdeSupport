@@ -3,10 +3,10 @@ using System.Threading.Tasks;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Parsing.CSharp;
 
 /// <summary>
-/// Issue #568: <see cref="CSharpSyntaxTreeCache"/>'s check-then-parse-then-store-then-evict
+/// <see cref="CSharpSyntaxTreeCache"/>'s check-then-parse-then-store-then-evict
 /// sequence in <c>Store</c>/<c>EvictIfNeeded</c> is not atomic across threads — <c>EvictIfNeeded</c>
 /// snapshots <c>_entries.OrderBy(LastAccess)</c> and removes while another thread can be mid-
-/// <c>Store</c>, the same non-atomic-cache shape that caused #554. These tests exercise concurrent
+/// <c>Store</c>, the same non-atomic-cache shape that once let the binding match cache's usage counts drift. These tests exercise concurrent
 /// callers rather than the sequential-only coverage in <see cref="CSharpSyntaxTreeCacheTests"/>.
 /// </summary>
 public class CSharpSyntaxTreeCacheConcurrencyTests

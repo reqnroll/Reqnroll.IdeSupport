@@ -108,7 +108,7 @@ public class CompletionServiceKeywordTests
     {
         // The real tag candidates (built-in @ignore plus project tags) are served by
         // GetTagCompletions; the keyword path only keeps a bare "@" for the parser-error
-        // quick fix (issue #828).
+        // quick fix.
         var result = _sut.GetKeywordCompletions(new[] { TokenType.TagLine }, EnDialect());
 
         result.Entries.Select(e => e.Label).Should().Contain("@");

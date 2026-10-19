@@ -70,7 +70,7 @@ public class DocumentSymbolServiceTests
         result[0].Children.Should().BeEmpty();
     }
 
-    // Regression test (issue #959): an untitled "Feature:" (no text after the colon) is the
+    // Regression guard: an untitled "Feature:" (no text after the colon) is the
     // transient state of a Feature line while it is being typed. The Gherkin parser gives it
     // Name = "" (not null), so the old "feature.Name ?? feature.Keyword.Trim()" fallback never
     // applied and an empty symbol Name reached the LSP response, which clients reject
@@ -106,7 +106,7 @@ public class DocumentSymbolServiceTests
     {
         // Kind alone collapses to LSP SymbolKind.Method for both Scenario and Scenario Outline
         // (DocumentSymbolHandler.ToSymbolKind) — Detail is what a consumer like the VS Run CodeLens
-        // reads to tell them apart (issue #262 follow-up).
+        // reads to tell them apart.
         var tags = ParseTags("Feature: F\nScenario: Add\n    Given a step\n");
         var result = CreateSut().BuildSymbols(tags);
         result[0].Children[0].Detail.Should().Be("Scenario");
@@ -132,7 +132,7 @@ public class DocumentSymbolServiceTests
 
     // Regression test: an untitled "Scenario:" (no text after the colon) is valid Gherkin and is
     // also the transient state of a Scenario line while it's being typed. The Gherkin parser gives
-    // it Name = "" (not null), which used to flow straight through to the LSP response, violating
+    // it Name = "" (not null), which would flow straight through to the LSP response, violating
     // the protocol's requirement that DocumentSymbol.name be non-empty — vscode-languageclient
     // rejects the whole response client-side ("name must not be falsy"), blanking the entire
     // Outline view rather than just this one symbol.
@@ -240,7 +240,7 @@ public class DocumentSymbolServiceTests
         rule.Children[0].Kind.Should().Be(GherkinSymbolKind.Scenario);
     }
 
-    // Regression test (issue #959): same class of bug as
+    // Regression guard: same class of bug as
     // Untitled_feature_symbol_name_falls_back_to_keyword, for an untitled "Rule:".
     [Fact]
     public void Untitled_rule_symbol_name_falls_back_to_keyword()

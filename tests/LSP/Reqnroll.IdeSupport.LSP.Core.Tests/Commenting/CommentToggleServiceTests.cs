@@ -8,7 +8,7 @@ public class CommentToggleServiceTests
 {
     private static CommentToggleService CreateSut() => new();
 
-    // ── Resolved direction (issue #861) ───────────────────────────────────
+    // ── Resolved direction ───────────────────────────────────
 
     [Theory]
     [InlineData("Given a step\n", CommentToggleMode.Toggle, false)]
@@ -127,7 +127,7 @@ public class CommentToggleServiceTests
         result.Edits[2].NewText.Should().Be("# # Then step3");
     }
 
-    // ── Explicit Comment mode (VS Edit.CommentSelection, issue #747) ──────
+    // ── Explicit Comment mode (VS Edit.CommentSelection) ──────
 
     [Fact]
     public void Comment_mode_adds_another_hash_even_when_every_line_is_commented()
@@ -147,7 +147,7 @@ public class CommentToggleServiceTests
             .Which.NewText.Should().Be("# Given a step");
     }
 
-    // ── Explicit Uncomment mode (VS Edit.UncommentSelection, issue #747) ──
+    // ── Explicit Uncomment mode (VS Edit.UncommentSelection) ──
 
     [Fact]
     public void Uncomment_mode_uncomments_only_commented_lines_in_a_mixed_selection()

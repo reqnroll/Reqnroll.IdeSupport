@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.LSP.Core.Tests.Completions;
 
 /// <summary>
 /// Tests for <see cref="CompletionService.GetTagCompletions"/> — the built-in @ignore plus the
-/// project's already-used tags, ranked and filtered (issue #828).
+/// project's already-used tags, ranked and filtered.
 /// </summary>
 public class CompletionServiceTagTests
 {

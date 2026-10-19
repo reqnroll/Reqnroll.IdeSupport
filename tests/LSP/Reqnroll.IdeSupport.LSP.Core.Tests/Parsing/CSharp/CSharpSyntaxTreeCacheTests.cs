@@ -7,7 +7,7 @@ using Xunit;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.Parsing.CSharp;
 
 /// <summary>
-/// Coverage for issue #491's root-cause fix: repeated resolutions against the same unchanged
+/// Coverage for the parse cache: repeated resolutions against the same unchanged
 /// file must reuse one Roslyn parse rather than re-parsing from scratch on every call, while a
 /// genuine change to the file (a rebuild regenerating code-behind, or a live text edit) must
 /// still be picked up.
@@ -68,7 +68,7 @@ public class CSharpSyntaxTreeCacheTests : IDisposable
 
         // Write the new content first, then bump the mtime -- File.WriteAllText itself sets the
         // file's last-write-time to the real current time as part of the write, so setting it
-        // beforehand (as this test used to) gets silently undone by the write that follows it,
+        // beforehand gets silently undone by the write that follows it,
         // leaving no guaranteed distinct mtime on filesystems with coarse resolution.
         File.WriteAllText(path, "public class Steps { public void Second() { } }");
         File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddSeconds(2));

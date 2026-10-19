@@ -66,7 +66,7 @@ public class InlayHintServiceTests
     [Fact]
     public void Defined_step_with_a_connector_supplied_signature_embedded_in_Method_still_produces_a_clean_hint()
     {
-        // Reflection-based connector discovery (issue #389) embeds the parameter list in Method
+        // Reflection-based connector discovery embeds the parameter list in Method
         // itself, e.g. "CalculatorStepDefinitions.WhenTheThreeNumbersAreAdded(Minimal.StepDefinitions.Verb)"
         // — the namespace-qualified parameter type's own dots must not corrupt the short-name split.
         var registry = RegistryWith(Binding(
@@ -91,7 +91,7 @@ public class InlayHintServiceTests
         // IdeSupportTagParser -> ProjectBindingRegistry.MatchStep -> GetScenarioOutlineStepsWithContexts
         // substitutes each Examples row into the step text and matches it independently, so two
         // rows that are each unambiguously bound to a *different* step definition should merge into
-        // a single "{n} bindings" Templated hint (see issue #392's investigation).
+        // a single "{n} bindings" Templated hint.
         var rowA = Binding("the second number is 30", "N.RowA.M");
         var rowB = Binding("the second number is five", "N.RowB.M");
         var registry = RegistryWith(rowA, rowB);

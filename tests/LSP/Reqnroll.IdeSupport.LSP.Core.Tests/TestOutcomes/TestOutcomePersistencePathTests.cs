@@ -4,7 +4,7 @@ using Reqnroll.IdeSupport.Common.TestOutcomes;
 namespace Reqnroll.IdeSupport.LSP.Core.Tests.TestOutcomes;
 
 /// <summary>
-/// Issue #714: <c>REQNROLL_TEST_OUTCOMES_PATH</c> is the seam the performance benchmarks use to keep the
+/// <c>REQNROLL_TEST_OUTCOMES_PATH</c> is the seam the performance benchmarks use to keep the
 /// outcome store off the developer's real 30-day history. It must win when set and be inert otherwise.
 /// </summary>
 [Collection("REQNROLL_TEST_OUTCOMES_PATH environment variable")]
