@@ -7,8 +7,8 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
-/// Handles all three binding-registry-change events (issue #577) by re-pushing binding-validation
-/// diagnostics (issue #514) for every currently-open <c>.cs</c> file owned by the affected
+/// Handles all three binding-registry-change events by re-pushing binding-validation
+/// diagnostics for every currently-open <c>.cs</c> file owned by the affected
 /// project. This is the sole trigger for <c>.cs</c> diagnostics — see
 /// <see cref="ICSharpDiagnosticsPublisher"/>'s remarks for the two cases folded into this one
 /// republish: a live doc-sync edit (including one that changes only a binding's validity, not
@@ -29,11 +29,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// separately: this handler wants "anything about the registry changed", not any of the finer
 /// distinctions (replaced vs. patched vs. files removed) the split exists to expose to other
 /// consumers. One consequence worth being explicit about: a membership delta that both removes
-/// binding files and patches the registry now publishes <see cref="ProjectBindingFilesRemovedNotification"/>
+/// binding files and patches the registry publishes <see cref="ProjectBindingFilesRemovedNotification"/>
 /// and <see cref="BindingRegistryPatchedNotification"/> as two separate notifications (see
-/// <see cref="Workspace.MembershipIndex"/>'s remarks) where the pre-split single notification
-/// carried both facts at once — this handler is idempotent (issue #578) by construction, so
-/// running twice for what was previously one event is wasted work, not a correctness risk.
+/// <see cref="Workspace.MembershipIndex"/>'s remarks), so this handler runs twice for one delta;
+/// it is idempotent by construction, so that is wasted work, not a correctness risk.
 /// </para>
 /// </remarks>
 public sealed class CSharpDiagnosticsRegistryChangedHandler :

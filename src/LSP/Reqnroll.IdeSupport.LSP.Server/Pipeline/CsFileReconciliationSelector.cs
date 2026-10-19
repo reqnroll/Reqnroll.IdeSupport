@@ -12,7 +12,7 @@ internal sealed record CsFileToReconcile(string FilePath, string Text);
 
 /// <summary>
 /// Selects the <c>.cs</c> files <see cref="BindingRegistryChangedHandler"/> should
-/// Roslyn-reconcile after a full registry replacement (issue #592), separating the selection
+/// Roslyn-reconcile after a full registry replacement, separating the selection
 /// policy from the reconciliation call itself:
 /// <list type="bullet">
 ///   <item>every open, project-owned <c>.cs</c> buffer — unsaved edits always win over the

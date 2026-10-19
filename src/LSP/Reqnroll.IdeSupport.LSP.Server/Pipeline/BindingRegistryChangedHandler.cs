@@ -19,7 +19,7 @@ using Reqnroll.IdeSupport.LSP.Core.Workspace;
 namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 
 /// <summary>
-/// Handles the three binding-registry-change events (issue #577) by re-parsing feature files
+/// Handles the three binding-registry-change events by re-parsing feature files
 /// that belong to the affected project, then publishing a <see cref="MatchCacheChangedNotification"/>
 /// for each open file so that semantic tokens are refreshed against the new binding registry.
 /// </summary>
@@ -107,9 +107,9 @@ public class BindingRegistryChangedHandler :
         CancellationToken cancellationToken)
     {
         // Performance Verification (Layer 4): time the binding-registry reconciliation —
-        // the pipeline behind several cross-project binding-ownership bugs (issue #113).
+        // the pipeline behind several cross-project binding-ownership bugs.
         // Manual Stopwatch (not Measure's using-scope) because the file/step counts below — the
-        // issue #471 investigation's "what grew" tag — are only known once the scan/reparse calls
+        // PERF-line "what grew" tag — are only known once the scan/reparse calls
         // return, not at the top of this method.
         var startTimestamp = Stopwatch.GetTimestamp();
         var scannedFileCount = 0;
@@ -188,7 +188,7 @@ public class BindingRegistryChangedHandler :
     }
 
     /// <summary>
-    /// Handles binding files leaving a project's membership (issue #94) by purging their stale
+    /// Handles binding files leaving a project's membership by purging their stale
     /// entries from the project's registry.
     /// </summary>
     public async Task Handle(
@@ -212,10 +212,10 @@ public class BindingRegistryChangedHandler :
 
     /// <summary>
     /// Purges the given binding-role <c>.cs</c> files from <paramref name="project"/>'s registry
-    /// (issue #94). Called for files removed via a <c>reqnroll/projectFiles</c> delta -- e.g. the
+    ///. Called for files removed via a <c>reqnroll/projectFiles</c> delta -- e.g. the
     /// user deletes a step-definition file in the IDE. Visual Studio never sends
     /// <c>workspace/didChangeWatchedFiles</c> for this, so <see cref="WatchedFilesHandler"/>'s
-    /// deletion path (the one place removal was previously wired up) never fires for it; this
+    /// deletion path (the one other place removal is wired up) never fires for it; this
     /// project-files-driven removal is what actually reaches VS. Uses
     /// <see cref="ICSharpBindingDiscoveryService.UpdateFromSourceForProjectAsync"/> (not
     /// <c>RemoveFileAsync</c>) because the membership index has already dropped the file by the
@@ -254,26 +254,25 @@ public class BindingRegistryChangedHandler :
             _languageServer, _clientIde, _logger, project.ProjectName, isFullReplacement, cancellationToken);
 
     /// <summary>
-    /// Hard cap on how many closed feature files one full-replacement scan will process (issue
-    /// #580). On a workspace with more closed feature files than this, the excess files simply
+    /// Hard cap on how many closed feature files one full-replacement scan will process. On a workspace with more closed feature files than this, the excess files simply
     /// keep whatever match-cache state they already had (stale cached usage counts until the
-    /// next full rebuild) rather than the scan growing unbounded with workspace size — this was
-    /// previously the only unbounded loop in the reconciliation pipeline, confirmed live to peg
-    /// a CPU core on a stress corpus with ~1,300 scenario nodes in a single file (a different
+    /// next full rebuild) rather than the scan growing unbounded with workspace size — an
+    /// unbounded loop here would be the only one in the reconciliation pipeline, and one was
+    /// confirmed live to peg a CPU core on a stress corpus with ~1,300 scenario nodes in a single file (a different
     /// axis of size than this cap addresses, but the same class of problem: nothing bounded the
     /// worst case).
     /// </summary>
     internal const int MaxClosedFeatureFilesPerScan = 2000;
 
     /// <summary>
-    /// Wall-clock budget for one full-replacement scan (issue #580), independent of file count —
+    /// Wall-clock budget for one full-replacement scan, independent of file count —
     /// bounds the cost even when file count is modest but reads are slow (e.g. a network drive).
     /// Backstop, not a substitute for <see cref="MaxClosedFeatureFilesPerScan"/>: the two bound
     /// different failure shapes (too many files vs. slow individual reads).
     /// </summary>
     internal static readonly TimeSpan MaxScanDuration = TimeSpan.FromSeconds(30);
 
-    /// <summary>Returns the number of closed feature files actually attempted, for the caller's PERF-line size tag (issue #471 investigation) — may be less than the full closed-file set if the #580 cap or timeout below cut the scan short.</summary>
+    /// <summary>Returns the number of closed feature files actually attempted, for the caller's PERF-line size tag — may be less than the full closed-file set if the cap or timeout below cut the scan short.</summary>
     private async Task<int> ScanAllFeatureFilesAsync(
         LspReqnrollProject project,
         CancellationToken cancellationToken)
@@ -325,7 +324,7 @@ public class BindingRegistryChangedHandler :
 
         // Linked to the caller's own token so genuine external cancellation still propagates;
         // CancelAfter is this method's own backstop against a slow scan, not a replacement for
-        // that (issue #580 — this loop previously had no way to bound its own wall-clock cost).
+        // that (without it this loop would have no way to bound its own wall-clock cost).
         // A cancellation here breaks the loop rather than throwing: the caller (Handle) still
         // needs to reparse open files and request a code-lens refresh afterward regardless of
         // whether the closed-file scan finished, timed out, or was externally cancelled.
@@ -369,10 +368,10 @@ public class BindingRegistryChangedHandler :
         return attempted;
     }
 
-    /// <summary>Returns the number of open feature files scheduled for reparse, for the caller's PERF-line size tag (issue #471 investigation).</summary>
+    /// <summary>Returns the number of open feature files scheduled for reparse, for the caller's PERF-line size tag.</summary>
     /// <remarks>
     /// Routes each buffer's reparse through <see cref="IParseCoordinator"/> instead of
-    /// awaiting it inline (issue #471): this reconciliation is already reached via a detached,
+    /// awaiting it inline: this reconciliation is already reached via a detached,
     /// unawaited path (<c>BindingRegistryProviderRouter.OnProviderChanged</c>'s <c>_ =
     /// _mediator.Publish(...)</c>), so routing through the coordinator here isn't about freeing a
     /// dispatch lane -- it's so <c>FoldingRangeHandler</c>/<c>DocumentSymbolHandler</c>'s
@@ -419,7 +418,7 @@ public class BindingRegistryChangedHandler :
 
     /// <summary>
     /// Whether <paramref name="project"/> is the <em>primary</em> owner of <paramref name="uri"/> —
-    /// the only owner whose registry change can affect this open document (issue #554).
+    /// the only owner whose registry change can affect this open document.
     /// </summary>
     /// <remarks>
     /// A feature file linked into several projects has one owner per project, but an <em>open</em>
@@ -471,7 +470,7 @@ public class BindingRegistryChangedHandler :
     /// re-runs Roslyn source-level discovery on the <c>.cs</c> files <see cref="CsFileReconciliationSelector"/>
     /// selects, so that source edited <em>since the last build</em> overrides the stale compiled
     /// bindings. Files unchanged since the build are faithfully represented by the DLL and are
-    /// skipped to bound the cost (issue #592: selection policy lives in the selector, this method
+    /// skipped to bound the cost (selection policy lives in the selector, this method
     /// owns only the reconciliation call and its notify-suppression/error-handling per file).
     /// Reconciliation is delegated to <see cref="ICSharpBindingDiscoveryService"/>, which patches
     /// the project's registry directly without consulting the membership index (the baseline may
@@ -499,7 +498,7 @@ public class BindingRegistryChangedHandler :
                 // from the connector's just-loaded reflection-based extraction -- which it
                 // essentially always does, real edit or not -- fired a second, fully independent
                 // registry-change notification that redundantly reparsed the same feature files
-                // again moments later (issue #471).
+                // again moments later.
                 await _csharpDiscoveryService
                     .UpdateFromSourceForProjectAsync(project, file.FilePath, file.Text, ct, notify: false)
                     .ConfigureAwait(false);

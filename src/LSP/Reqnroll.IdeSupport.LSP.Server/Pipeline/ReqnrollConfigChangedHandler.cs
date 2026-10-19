@@ -15,22 +15,20 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// (and any other consumers) are refreshed.
 /// </summary>
 /// <remarks>
-/// Routes each buffer's reparse through <see cref="IParseCoordinator"/> (issue #576) rather than
+/// Routes each buffer's reparse through <see cref="IParseCoordinator"/> rather than
 /// awaiting it inline, matching every other open-document reparse path
 /// (<see cref="Features.TextSync.TextDocumentSyncHandler"/>,
 /// <see cref="BindingRegistryChangedHandler.ReparseOpenFilesAsync"/>). Without this, a
 /// <c>reqnroll.json</c>/<c>.editorconfig</c> save landing while a <c>didChange</c> reparse is
 /// already in flight for the same URI could run two concurrent <c>ParseAsync</c> calls against
-/// the same document — the shape issue #554 fixed for the didChange/registry-cascade paths, but
-/// which this handler had never been routed through. It also means
+/// the same document — the shape the coordinator prevents for the didChange/registry-cascade paths. It also means
 /// <see cref="Features.Folding.FoldingRangeHandler"/>/<see cref="Features.DocumentOutline.DocumentSymbolHandler"/>'s
 /// <c>WaitForReadyAsync</c> calls — the only guard those two refresh-incapable pull handlers have
 /// against reading a stale buffer — now see a pending entry for a config-driven reparse, not just
 /// a direct-edit one.
 /// <para>
 /// The actual parse-then-publish pair is delegated to <see cref="IFeatureDocumentReparser"/>
-/// (issue #578) rather than implemented here directly — this class previously carried its own
-/// copy of the same two lines every other reparse-triggering handler also carried.
+/// rather than implemented here directly, so the pair is not duplicated across reparse-triggering handlers.
 /// </para>
 /// </remarks>
 public class ReqnrollConfigChangedHandler : INotificationHandler<ReqnrollConfigChangedNotification>

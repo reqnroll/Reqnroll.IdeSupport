@@ -11,13 +11,10 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is one of three events that previously shared a single
-/// <c>BindingRegistryChangedNotification</c> type, discriminated by an <c>IsFullReplacement</c>
-/// flag and an optional <c>RemovedBindingFilePaths</c> payload (issue #577). Splitting them gives
-/// each producer's intent an honest name instead of a flag value a reader has to trace back to
-/// its source to interpret. See <see cref="BindingRegistryPatchedNotification"/> for the
-/// incremental counterpart and <see cref="ProjectBindingFilesRemovedNotification"/> for the
-/// binding-file-removal command that used to ride along as an optional field on this one.
+/// This is one of three registry-change events, each named for its producer's intent instead of
+/// being a flag value a reader has to trace back to its source to interpret. See
+/// <see cref="BindingRegistryPatchedNotification"/> for the incremental counterpart and
+/// <see cref="ProjectBindingFilesRemovedNotification"/> for the binding-file-removal command.
 /// </para>
 /// <para>
 /// Consumers should re-parse <em>all</em> workspace feature files that belong to
@@ -26,7 +23,7 @@ namespace Reqnroll.IdeSupport.LSP.Server.Pipeline;
 /// References.
 /// </para>
 /// <para>
-/// <b>Consumers must be idempotent (issue #578):</b> handling the same notification twice for the
+/// <b>Consumers must be idempotent:</b> handling the same notification twice for the
 /// same <see cref="Project"/> must leave the same observable end state as handling it once.
 /// </para>
 /// </remarks>
