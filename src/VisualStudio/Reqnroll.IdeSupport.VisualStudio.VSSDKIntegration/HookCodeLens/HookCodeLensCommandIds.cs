@@ -6,7 +6,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 /// <summary>
 /// The command group/id the hook-match-count lens's Details popup entries invoke to navigate to a
-/// hook (issue #372) — routed through <c>ReqnrollPluginPackage</c>'s <c>IOleCommandTarget</c>,
+/// hook — routed through <c>ReqnrollPluginPackage</c>'s <c>IOleCommandTarget</c>,
 /// mirroring Microsoft's <c>CodeLensOopSample</c>.
 /// </summary>
 public static class HookCodeLensCommandIds

@@ -18,13 +18,11 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 /// <summary>
 /// Classic MEF <see cref="ITaggerProvider"/> supplying <see cref="ICodeLensTag"/>s for
-/// <c>Gherkin</c> buffers (hook-match-count CodeLens — issue #372, unblocking #269 for
-/// Visual Studio). Content-type scoped, like <c>GherkinDropdownBarTextViewCreationListener</c> —
+/// <c>Gherkin</c> buffers (hook-match-count CodeLens).
+/// Content-type scoped, like <c>GherkinDropdownBarTextViewCreationListener</c> —
 /// no code-element/Roslyn model is needed for this API, unlike VS.Extensibility's
 /// <c>ICodeLensProvider</c>. Constructs the shared <see cref="LineKeyedCodeLensTagger{TEntry}"/>,
-/// supplying only this feature's fetch/group/encode functions (issue #262 follow-up — this used to
-/// construct its own bespoke <c>HookCodeLensTagger</c>, near-identical to
-/// <c>RunTestCodeLensTaggerProvider</c>'s).
+/// supplying only this feature's fetch/group/encode functions.
 /// </summary>
 [Export(typeof(ITaggerProvider))]
 [ContentType(VsWellKnownIds.GherkinContentType)]

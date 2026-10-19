@@ -10,20 +10,17 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
 /// <summary>
 /// Describes one line-keyed classic-CodeLens lens location — shared by every Reqnroll classic
-/// CodeLens feature (hook-match-count, Run test — issue #372/#262), since none of them have a
+/// CodeLens feature (hook-match-count, Run test), since none of them have a
 /// code-element/symbol model behind a <c>.feature</c> line; the owning
 /// <see cref="LineKeyedCodeLensTagger{TEntry}"/> supplies the span itself from live server data.
-/// Extracted from what were two near-identical copies (<c>HookCodeLensDescriptor</c>,
-/// <c>RunTestCodeLensDescriptor</c>).
 /// </summary>
 /// <remarks>
 /// Also implements <see cref="ICodeLensDescriptorContextProvider"/> for itself. VS's classic-CodeLens
-/// host (<c>CodeLensRpcDataPointProviderWrapper.TryCreateDataPointAsync</c>, decompiled while
-/// debugging issue #372's "Unsupported CodeLens descriptor" exception) only resolves a descriptor's
+/// host (<c>CodeLensRpcDataPointProviderWrapper.TryCreateDataPointAsync</c>, decompiled) only resolves a descriptor's
 /// context — and therefore only ever calls a provider's <c>CanCreateDataPointAsync</c>/
 /// <c>CreateDataPointAsync</c> — when the owning <see cref="ICodeLensTag"/> is an
 /// <see cref="ICodeLensTag2"/> exposing a <see cref="DescriptorContextProvider"/>. A plain
-/// <see cref="ICodeLensTag"/> (v1) has no resolution path in that build at all and always throws.
+/// <see cref="ICodeLensTag"/> (v1) has no resolution path in that build at all and always throws an "Unsupported CodeLens descriptor" exception.
 /// </remarks>
 internal sealed class LineCodeLensDescriptor : ICodeLensDescriptor, ICodeLensDescriptorContextProvider
 {

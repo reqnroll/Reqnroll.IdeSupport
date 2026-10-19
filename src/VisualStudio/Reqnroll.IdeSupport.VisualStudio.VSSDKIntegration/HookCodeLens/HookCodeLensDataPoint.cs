@@ -13,7 +13,7 @@ using Microsoft.VisualStudio.Threading;
 namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 /// <summary>
-/// A single hook-match-count CodeLens data point (issue #372): resolves the label ("N hooks") and,
+/// A single hook-match-count CodeLens data point: resolves the label ("N hooks") and,
 /// on request, the Details popup listing each matching hook with a navigation command.
 /// </summary>
 /// <remarks>

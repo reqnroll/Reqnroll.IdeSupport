@@ -17,7 +17,7 @@ public readonly record struct TagLinkEntry(int StartLine, int StartChar, int End
 
 /// <summary>
 /// Static bridge that the Extension project populates so the VSSDK navigable-symbol provider (which has
-/// no reference to <c>LspInterceptingPipe</c>) can offer Ctrl+Click on clickable tags (issue #755).
+/// no reference to <c>LspInterceptingPipe</c>) can offer Ctrl+Click on clickable tags.
 /// VS's own LSP client never sends <c>textDocument/documentLink</c>, so the extension requests it itself.
 /// </summary>
 /// <remarks>Set by <c>ReqnrollLanguageClient</c> once the server connection is established; cleared on dispose.</remarks>
@@ -45,7 +45,7 @@ public static class TagLinkRedirect
     /// </summary>
     public static Action? LinkOpened { get; set; }
 
-    /// <summary>The trackers of every open <c>.feature</c> buffer, so a server-side change can make them re-request their links (issue #921).</summary>
+    /// <summary>The trackers of every open <c>.feature</c> buffer, so a server-side change can make them re-request their links.</summary>
     internal static readonly WeakTaggerRegistry<TagLinkTracker> TrackerRegistry = new(tracker => tracker.RequestRefresh());
 
     /// <summary>

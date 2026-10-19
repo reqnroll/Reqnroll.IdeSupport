@@ -17,8 +17,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// <summary>
 /// Generic classic-CodeLens <see cref="ITagger{T}"/>: supplies one <see cref="ICodeLensTag"/> per
 /// line, built from a live-fetched, line-grouped entry list — the tagger-side half of every
-/// Reqnroll classic CodeLens feature (issue #372/#262). Extracted from what were two near-identical
-/// copies (<c>HookCodeLensTagger</c>, <c>RunTestCodeLensTagger</c>); each feature now only supplies
+/// Reqnroll classic CodeLens feature. Each feature only supplies
 /// the fetch/group/encode functions, not the tag-lifecycle machinery itself.
 /// </summary>
 /// <remarks>
@@ -41,7 +40,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 /// every scroll.
 /// </para>
 /// <para>
-/// Deliberately not <see cref="IDisposable"/> (issue #1028). The tagger providers hand every consumer
+/// Deliberately not <see cref="IDisposable"/>. The tagger providers hand every consumer
 /// of a buffer the same instance (a singleton in <see cref="ITextBuffer.Properties"/>), and VS's tag
 /// aggregator disposes each <see cref="IDisposable"/> tagger it got from a provider when that
 /// aggregator goes away (its view closes) or the buffer's content type changes, regardless of who
@@ -114,7 +113,7 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
     }
 
     /// <summary>
-    /// Test seam (issue #1032): invoked by <see cref="RequestRefresh"/> on the calling thread right after
+    /// Test seam: invoked by <see cref="RequestRefresh"/> on the calling thread right after
     /// it finds another refresh already in flight, before it returns. Lets a test complete that in-flight
     /// refresh at exactly this point to drive the lost-wakeup interleaving deterministically. Always
     /// <see langword="null"/> in production.
@@ -136,9 +135,9 @@ internal sealed class LineKeyedCodeLensTagger<TEntry> : ITagger<ICodeLensTag>
     /// </summary>
     /// <remarks>
     /// The request is recorded in <c>_refreshPending</c> <em>before</em> trying to claim
-    /// <c>_refreshInFlight</c> (issue #1032). Recording it only after a failed claim left a window in
+    /// <c>_refreshInFlight</c>. Recording it only after a failed claim would leave a window in
     /// which the in-flight refresh could clear <c>_refreshInFlight</c>, find nothing pending and stop,
-    /// and only then would the pending flag be set, with no one left to act on it. Now a failed claim
+    /// and only then would the pending flag be set, with no one left to act on it. A failed claim
     /// means the owner had not yet cleared <c>_refreshInFlight</c>, so its later read of
     /// <c>_refreshPending</c> (all accesses are interlocked, so fully ordered) is bound to see this
     /// request. The caller that does claim the slot clears the flag before fetching: its fetch starts

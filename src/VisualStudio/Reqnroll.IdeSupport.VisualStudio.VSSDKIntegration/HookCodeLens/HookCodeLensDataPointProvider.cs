@@ -14,7 +14,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 /// <summary>
 /// Classic <see cref="IAsyncCodeLensDataPointProvider"/> supplying the own-level hook-match-count
-/// CodeLens (Feature:/Scenario: lines, issue #372, unblocking #269 for Visual Studio) — the
+/// CodeLens (Feature:/Scenario: lines) — the
 /// counterpart to <see cref="StepHooksCodeLensDataPointProvider"/>, which renders the step-hooks
 /// lens that shares a Scenario: line with it. Paired with <see cref="HookCodeLensTaggerProvider"/>,
 /// which supplies the tag positions.
@@ -38,7 +38,7 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 [ContentType(VsWellKnownIds.GherkinContentType)]
 // Lower Priority sorts first (Microsoft.VisualStudio.Utilities.PriorityAttribute) — 200 sits between
 // Run (100, RunTestCodeLensDataPointProvider) and the step-hooks count (300,
-// StepHooksCodeLensDataPointProvider) (issue #504 follow-up).
+// StepHooksCodeLensDataPointProvider).
 [Priority(200)]
 [LocalizedName(typeof(CodeLensResources), nameof(CodeLensResources.HookMatchCountProviderName))]
 internal sealed class HookCodeLensDataPointProvider : IAsyncCodeLensDataPointProvider

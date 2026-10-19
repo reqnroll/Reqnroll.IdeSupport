@@ -7,10 +7,9 @@ namespace Reqnroll.IdeSupport.VisualStudio.LineCodeLens;
 
 /// <summary>
 /// Marks the location where a line-keyed classic-CodeLens indicator should render — shared by every
-/// Reqnroll classic CodeLens feature (issue #372/#262). An ordinary editor tag — <see cref="ICodeLensTag"/>
+/// Reqnroll classic CodeLens feature. An ordinary editor tag — <see cref="ICodeLensTag"/>
 /// requires no code-element/Roslyn model, only an <see cref="Microsoft.VisualStudio.Text.Tagging.ITagger{T}"/>
-/// targeting the buffer's content type. Extracted from what were two near-identical copies
-/// (<c>HookCodeLensTag</c>, <c>RunTestCodeLensTag</c>).
+/// targeting the buffer's content type.
 /// </summary>
 /// <remarks>
 /// Implements <see cref="ICodeLensTag2"/>, not just <see cref="ICodeLensTag"/> — see

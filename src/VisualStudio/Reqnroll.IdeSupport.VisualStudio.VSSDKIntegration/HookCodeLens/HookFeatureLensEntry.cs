@@ -4,8 +4,8 @@ namespace Reqnroll.IdeSupport.VisualStudio.HookCodeLens;
 
 /// <summary>
 /// One hook-match-count lens entry for a <c>.feature</c> line, as returned by the LSP server's
-/// <c>textDocument/codeLens</c> (<c>HookCodeLensHandler</c>, issue #269) and consumed by the
-/// classic-CodeLens bridge (issue #372).
+/// <c>textDocument/codeLens</c> (<c>HookCodeLensHandler</c>) and consumed by the
+/// classic-CodeLens bridge.
 /// </summary>
 public sealed record HookFeatureLensEntry(
     /// <summary>0-based line the lens should render above.</summary>

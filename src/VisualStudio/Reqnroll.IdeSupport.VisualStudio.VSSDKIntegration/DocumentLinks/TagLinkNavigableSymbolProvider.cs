@@ -17,7 +17,7 @@ using Reqnroll.IdeSupport.VisualStudio.WellKnownIds;
 namespace Reqnroll.IdeSupport.VisualStudio.DocumentLinks;
 
 /// <summary>
-/// Ctrl+Click on a clickable Gherkin tag (issue #755): when the pointer is on a tag that matches a configured
+/// Ctrl+Click on a clickable Gherkin tag: when the pointer is on a tag that matches a configured
 /// <c>Traceability.TagLinks</c> pattern, offers a symbol that opens the tag's URL in the browser.
 /// </summary>
 /// <remarks>
@@ -92,7 +92,7 @@ public sealed class TagLinkNavigableSymbolProvider : INavigableSymbolSourceProvi
 
                 // A blocked-scheme target is refused by Navigate, so offering a symbol for it would put a
                 // Ctrl+hover underline on the tag (winning over Go To Definition) that does nothing when
-                // clicked. Keep the provider in step with the styling (TagLinkTracker) and Navigate (#1036).
+                // clicked. Keep the provider in step with the styling (TagLinkTracker) and Navigate.
                 if (!TagLinkRedirect.IsOpenableUrl(link.Value.Target))
                 {
                     _logger.LogVerbose(
